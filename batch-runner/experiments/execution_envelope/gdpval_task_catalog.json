@@ -3,7 +3,7 @@
   "dataset_repo_id": "openai/gdpval",
   "dataset_revision": "11e7900cdcac61bc4daf59e65feb238acda98fbf",
   "holds_no_scores": "Only task numbers, industries, jobs, expert answer file types, reference file paths and types, a fingerprint of the task wording, how many scoring lines each task is marked against and how long its longest one is are recorded. No score, grade, or verdict is present, and no scoring line is reproduced — only its length.",
-  "reference_file_path_note": "In this dataset each reference file sits in a folder named after the first 32 hexadecimal characters of that file's SHA-256 fingerprint, so a fingerprint written into the plan can be checked against the path without downloading anything.",
+  "reference_file_path_note": "In this dataset every reference file sits in a folder whose name is 32 hexadecimal characters, and some of those folders are the first 32 characters of that file's SHA-256 fingerprint. Not all of them: measured on the pinned revision, 160 of these 261 paths, and none at all of the 248 under deliverable_files/. So a folder name that agrees with a fingerprint written into the plan confirms 32 of its 64 characters without downloading anything, while one that disagrees says only that they disagree — it cannot tell a wrong fingerprint from a folder that was never named after its file.",
   "schema_version": "gdpval-task-catalog-v2",
   "tasks": [
     {

@@ -22,6 +22,17 @@ them would force anything asking "is anything else wrong?" to either fail on a
 build server or filter by guesswork, and a filter that could swallow a
 disagreement would undo the whole check.
 
+The third thing is what a folder name is allowed to prove. The folder half of
+the rule above was itself built on a premise the dataset does not honour: that
+a folder of 32 hexadecimal characters is the start of its file's fingerprint.
+Measured on the pinned revision, that is true of 200 of its 549 files and false
+of the other 349 — every one of the 248 under ``deliverable_files/`` among
+them. The two shapes are identical on the page, so a *match* between folder and
+written value is evidence and a *mismatch* is not evidence of anything. The
+tests below hold the check to that asymmetry: it keeps the 32 characters when
+they agree, and when they disagree it reports the disagreement, blocks the run,
+and names no culprit.
+
 Nothing here calls a model, downloads anything, or spends anything.
 """
 
@@ -46,6 +57,7 @@ from core.execution_envelope_preflight import (  # noqa: E402
 )
 from core.execution_envelope_tasks import (  # noqa: E402
     DATASET_DATA_FILE,
+    HOW_TO_GET_THE_FILES,
     INPUT_FILE_DISAGREED,
     INPUT_FILE_FOLDER_NAME_ONLY,
     INPUT_FILE_NOT_CHECKED,
@@ -54,9 +66,10 @@ from core.execution_envelope_tasks import (  # noqa: E402
     CatalogTask,
     TaskCatalog,
     check_input_file_versions,
+    folder_name_agrees_with,
     load_task_catalog,
     locate_input_file,
-    path_carries_its_own_fingerprint,
+    path_folder_is_shaped_like_a_fingerprint,
     reference_files_for,
     sha256_of_file,
     verify_input_file_versions,
@@ -83,12 +96,38 @@ UNRELATED_FINGERPRINT = (
 
 
 def _write_reference_file(root: Path, name: str, body: bytes) -> str:
-    """Put a file where this dataset keeps it, and return its path."""
+    """Put a file in a folder this dataset really did name after it.
+
+    Two hundred of the pinned revision's 549 files are like this. Only these
+    ones can have 32 characters of their fingerprint confirmed without a copy.
+    """
     fingerprint = hashlib.sha256(body).hexdigest()
     folder = root / "reference_files" / fingerprint[:REFERENCE_PATH_FINGERPRINT_LENGTH]
     folder.mkdir(parents=True, exist_ok=True)
     (folder / name).write_bytes(body)
     return f"reference_files/{fingerprint[:REFERENCE_PATH_FINGERPRINT_LENGTH]}/{name}"
+
+
+def _write_file_in_an_opaque_folder(root: Path, name: str, body: bytes) -> str:
+    """Put a file in a 32-character folder that is *not* named after it.
+
+    The other 349 of the pinned revision's 549 files are like this, including
+    every one of the 248 under ``deliverable_files/``. On the page the path
+    looks exactly like the one above — 32 hexadecimal characters either way —
+    which is the whole reason the shape cannot be read as provenance:
+
+        reference_files/4e6e2b8d17f751e483aad52c109813b4/Fall Music Tour Ref File.xlsx
+
+    really hashes to ``3d0ebb81…`` at the pinned revision, and nothing about
+    the path says so.
+    """
+    folder_name = hashlib.sha256(b"named after something else: " + name.encode())
+    folder_name = folder_name.hexdigest()[:REFERENCE_PATH_FINGERPRINT_LENGTH]
+    assert not hashlib.sha256(body).hexdigest().startswith(folder_name)
+    folder = root / "reference_files" / folder_name
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / name).write_bytes(body)
+    return f"reference_files/{folder_name}/{name}"
 
 
 def _task(task_id: str, paths: tuple[str, ...]) -> CatalogTask:
@@ -138,6 +177,43 @@ def small_benchmark(tmp_path):
         second: sha256_of_file(root / second),
     }
     return root, catalog, ("task-one",), written
+
+
+@pytest.fixture
+def opaque_benchmark(tmp_path):
+    """The same benchmark, with one file in a folder not named after it.
+
+    Both written fingerprints are correct. The only difference between the two
+    files is one nobody can see from the path: one folder repeats the start of
+    its file's fingerprint and the other does not, exactly as 200 and 349 of
+    the pinned revision's files respectively do.
+    """
+    root = tmp_path / "dataset"
+    root.mkdir()
+    honest = _write_reference_file(root, "Costs.xlsx", b"one hundred widgets\n")
+    opaque = _write_file_in_an_opaque_folder(
+        root, "Notes.docx", b"a note about widgets\n"
+    )
+
+    data_file = root / DATASET_DATA_FILE
+    data_file.parent.mkdir(parents=True, exist_ok=True)
+    data_file.write_bytes(b"a stand-in for the benchmark's own data file\n")
+
+    catalog = TaskCatalog(
+        schema_version="gdpval-task-catalog-v1",
+        dataset_repo_id="example/benchmark",
+        dataset_revision="d" * 40,
+        dataset_file_sha256=sha256_of_file(data_file),
+        tasks=(_task("task-one", (honest, opaque)),),
+    )
+    written = {
+        f"{catalog.dataset_repo_id}@{catalog.dataset_revision}": (
+            catalog.dataset_file_sha256
+        ),
+        honest: sha256_of_file(root / honest),
+        opaque: sha256_of_file(root / opaque),
+    }
+    return root, catalog, ("task-one",), written, honest, opaque
 
 
 @pytest.fixture
@@ -225,10 +301,38 @@ def test_the_report_says_how_to_get_the_missing_files_for_nothing(
 ):
     result = _verify(small_benchmark, root=tmp_path / "nowhere")
 
-    assert any(
-        "huggingface-cli download" in note for note in result.missing_copies
-    )
+    assert any("hf download" in note for note in result.missing_copies)
     assert any("--dataset-root" in note for note in result.missing_copies)
+
+
+def test_the_command_the_report_names_is_one_this_machine_can_run():
+    """A pointer a reader cannot follow is worse than none: it reads as a fact.
+
+    ``huggingface-cli`` was named here until the pinned huggingface-hub stopped
+    shipping it as anything but a message saying it "is deprecated and no
+    longer works" — which it prints on the way to exiting without downloading
+    a byte. Nothing is downloaded here either; the command is only asked
+    whether it exists, with ``--help``.
+
+    A machine that does not have the program at all is skipped rather than
+    failed. Not being able to ask is not the same answer as asking and being
+    told no, which is the distinction this whole module is about.
+    """
+    import shlex
+    import shutil
+    import subprocess
+
+    quoted = HOW_TO_GET_THE_FILES[HOW_TO_GET_THE_FILES.index("`") + 1 :]
+    program = shlex.split(quoted[: quoted.index("`")])[0]
+    if shutil.which(program) is None:
+        pytest.skip(f"{program} is not on this machine, so it cannot be asked")
+
+    finished = subprocess.run(
+        [program, "--help"], capture_output=True, text=True, timeout=120
+    )
+
+    assert finished.returncode == 0, finished.stderr
+    assert "no longer works" not in (finished.stdout + finished.stderr)
 
 
 def test_a_missing_copy_says_how_much_of_the_fingerprint_went_unchecked(
@@ -257,10 +361,16 @@ def test_a_fingerprint_nobody_could_compare_is_never_called_fully_checked(
     assert len(result.not_fully_checked) == len(result.checks)
 
 
-def test_the_second_half_is_still_checked_when_the_first_half_cannot_be(
+def test_the_folder_disagreeing_still_stops_the_run_without_naming_a_culprit(
     small_benchmark, tmp_path
 ):
-    """A missing copy must not turn into a free pass for the folder rule."""
+    """A missing copy must not turn into a free pass for the folder rule.
+
+    It must not turn into a verdict either. The folder and the written value
+    disagree; that is reported, it blocks, and which of the two is wrong is
+    left unsaid, because in this dataset a folder that is not named after its
+    file disagrees with a *correct* fingerprint exactly like this.
+    """
     dataset_root, catalog, task_ids, honest = small_benchmark
     path = sorted(key for key in honest if key.startswith("reference_files/"))[0]
     tampered = dict(honest)
@@ -269,8 +379,65 @@ def test_the_second_half_is_still_checked_when_the_first_half_cannot_be(
     result = verify_input_file_versions(
         tampered, task_ids, catalog, tmp_path / "nowhere"
     )
+    gate = check_input_file_versions(
+        tampered, task_ids, catalog, tmp_path / "nowhere"
+    )
+    check = {item.path: item for item in result.checks}[path]
 
-    assert any("describes some other file" in note for note in result.problems)
+    assert any(path in note for note in result.missing_copies)
+    assert any("does not repeat the first 32" in note for note in result.all_notes)
+    assert gate != []
+    # not filed as a verdict, and not filed as work that was done
+    assert not any("describes some other file" in note for note in result.all_notes)
+    assert check.state == INPUT_FILE_NOT_CHECKED
+    assert check.characters_compared == 0
+
+
+def test_the_old_folder_verdict_would_be_caught_if_it_came_back(
+    small_benchmark, tmp_path
+):
+    """Proof the test above can fail, by rebuilding what the check used to say.
+
+    Until this was fixed the branch appended a problem reading "the fingerprint
+    written for <path> does not match the folder the dataset keeps that file
+    in, so the written value describes some other file", and recorded the file
+    as ``folder name only`` with 32 of 64 characters compared. Both are
+    reconstructed here so the assertions above are shown to be load-bearing.
+    """
+    dataset_root, catalog, task_ids, honest = small_benchmark
+    path = sorted(key for key in honest if key.startswith("reference_files/"))[0]
+    tampered = dict(honest)
+    tampered[path] = UNRELATED_FINGERPRINT
+
+    result = verify_input_file_versions(
+        tampered, task_ids, catalog, tmp_path / "nowhere"
+    )
+    as_it_used_to_be = dataclasses.replace(
+        result,
+        problems=result.problems
+        + (
+            f"the fingerprint written for {path} does not match the folder the "
+            "dataset keeps that file in, so the written value describes some "
+            "other file",
+        ),
+        checks=tuple(
+            dataclasses.replace(
+                check,
+                state=INPUT_FILE_FOLDER_NAME_ONLY,
+                characters_compared=REFERENCE_PATH_FINGERPRINT_LENGTH,
+            )
+            if check.path == path
+            else check
+            for check in result.checks
+        ),
+    )
+    was = {item.path: item for item in as_it_used_to_be.checks}[path]
+
+    assert any(
+        "describes some other file" in note for note in as_it_used_to_be.all_notes
+    )
+    assert was.characters_compared == REFERENCE_PATH_FINGERPRINT_LENGTH
+    assert was.state == INPUT_FILE_FOLDER_NAME_ONLY
 
 
 def test_a_missing_copy_is_not_filed_as_a_disagreement(
@@ -316,6 +483,149 @@ def test_both_lists_are_reasons_not_to_start(small_benchmark, tmp_path):
     assert gate != []
 
 
+# ── A folder shaped like a fingerprint is not a fingerprint ────────────────
+#
+# The check used to read a path's *shape*: a folder of 32 hexadecimal
+# characters was taken to be the first half of that file's own fingerprint. It
+# is true of 200 of the pinned revision's 549 files and false of the other 349,
+# including every one of the 248 under ``deliverable_files/``, and the two look
+# identical on the page.
+#
+# Two things followed. A correct fingerprint for one of the 349 was filed as
+# "the written value describes some other file" — a verdict the check had no
+# basis for. And a file nothing had compared was recorded as 32 of 64
+# characters checked, which is never-measured published as half-measured.
+
+
+def test_the_shape_of_a_path_is_not_read_as_a_promise_about_its_contents():
+    """The predicate says what it can see, and its name says so too.
+
+    Both of these paths are the same shape. One folder is the start of its
+    file's fingerprint and the other is not, and no reading of the path can
+    tell them apart — which is why the answer here is only "worth comparing",
+    and the comparing is done elsewhere against a real value.
+    """
+    body = b"one hundred widgets\n"
+    real = hashlib.sha256(body).hexdigest()
+    named_after_it = f"reference_files/{real[:32]}/Costs.xlsx"
+    named_after_nothing = f"reference_files/{'0123456789abcdef' * 2}/Costs.xlsx"
+
+    assert path_folder_is_shaped_like_a_fingerprint(named_after_it)
+    assert path_folder_is_shaped_like_a_fingerprint(named_after_nothing)
+
+    assert folder_name_agrees_with(named_after_it, real)
+    assert not folder_name_agrees_with(named_after_nothing, real)
+    assert not folder_name_agrees_with("inputs/Costs.xlsx", real)
+
+
+def test_a_correct_fingerprint_under_an_opaque_folder_is_not_accused(
+    opaque_benchmark, tmp_path
+):
+    """The false accusation, gone. This is the regression itself.
+
+    Both fingerprints in this plan are correct. One file's folder happens to be
+    named after it and the other's is not — the arrangement 349 of the pinned
+    revision's 549 files are in. Before this fix the second one was reported as
+    a written value that "describes some other file".
+    """
+    _, catalog, task_ids, written, honest, opaque = opaque_benchmark
+
+    result = verify_input_file_versions(
+        written, task_ids, catalog, tmp_path / "nowhere"
+    )
+
+    assert result.problems == ()
+    assert not any(
+        "describes some other file" in note for note in result.all_notes
+    )
+    assert any(opaque in note for note in result.missing_copies)
+
+
+def test_an_opaque_folder_is_recorded_as_nothing_compared_not_half_compared(
+    opaque_benchmark, tmp_path
+):
+    """The second harm: effort that was never spent, written down as spent."""
+    _, catalog, task_ids, written, honest, opaque = opaque_benchmark
+
+    result = verify_input_file_versions(
+        written, task_ids, catalog, tmp_path / "nowhere"
+    )
+    by_path = {check.path: check for check in result.checks}
+
+    assert by_path[opaque].state == INPUT_FILE_NOT_CHECKED
+    assert by_path[opaque].characters_compared == 0
+    # and the file whose folder really does agree still gets its 32 characters,
+    # because 32 hexadecimal characters do not line up by accident
+    assert by_path[honest].state == INPUT_FILE_FOLDER_NAME_ONLY
+    assert by_path[honest].characters_compared == REFERENCE_PATH_FINGERPRINT_LENGTH
+
+
+def test_withdrawing_the_accusation_does_not_withdraw_the_gate(
+    opaque_benchmark, tmp_path
+):
+    """Fail closed. Saying less must not mean stopping less.
+
+    ``problems`` is now empty for this plan, and the run must still refuse to
+    start. It does because the note goes to ``missing_copies``, which the
+    preflight folds back into its own problems — being unable to check a
+    fingerprint has always been a reason not to start.
+    """
+    _, catalog, task_ids, written, honest, opaque = opaque_benchmark
+
+    gate = check_input_file_versions(
+        written, task_ids, catalog, tmp_path / "nowhere"
+    )
+    result = verify_input_file_versions(
+        written, task_ids, catalog, tmp_path / "nowhere"
+    )
+
+    assert gate != []
+    assert any(opaque in note for note in gate)
+    assert not result.everything_was_read
+    assert gate == list(result.all_notes)
+
+
+def test_a_copy_under_an_opaque_folder_that_disagrees_is_not_called_tampering(
+    opaque_benchmark
+):
+    """With the bytes in hand the same restraint applies, for the same reason.
+
+    A copy sitting in a folder nobody proved was named after it could be any
+    revision. The two disagree; which one is wrong is not knowable from here.
+    The stronger sentence is kept for the file whose folder the bytes or the
+    written value confirm.
+    """
+    dataset_root, catalog, task_ids, written, honest, opaque = opaque_benchmark
+    (dataset_root / opaque).write_bytes(b"some other revision of the note\n")
+
+    result = verify_input_file_versions(written, task_ids, catalog, dataset_root)
+    check = {item.path: item for item in result.checks}[opaque]
+
+    assert check.state == INPUT_FILE_DISAGREED
+    assert check.characters_compared == 64
+    assert any("do not describe the same file" in note for note in result.problems)
+    assert not any(
+        "describes some other file" in note for note in result.problems
+    )
+
+
+def test_both_files_pass_when_the_copies_are_there_and_agree(opaque_benchmark):
+    """The opaque folder is not being treated as a fault of its own.
+
+    Nothing about a folder that is not named after its file is wrong. It is
+    only unhelpful, and the check must say nothing at all about it when the
+    bytes are readable and match.
+    """
+    dataset_root, catalog, task_ids, written, _, _ = opaque_benchmark
+
+    result = verify_input_file_versions(written, task_ids, catalog, dataset_root)
+
+    assert result.problems == ()
+    assert result.missing_copies == ()
+    assert result.everything_was_read
+    assert result.everything_agreed
+
+
 # ── The path shape that used to be waved through ───────────────────────────
 
 
@@ -342,7 +652,7 @@ def test_a_path_that_says_nothing_about_its_contents_is_not_waved_through(
 
     result = verify_input_file_versions(written, ("task-one",), catalog, tmp_path)
 
-    assert not path_carries_its_own_fingerprint("inputs/Costs.xlsx")
+    assert not path_folder_is_shaped_like_a_fingerprint("inputs/Costs.xlsx")
     by_path = {check.path: check for check in result.checks}
     assert by_path["inputs/Costs.xlsx"].state == INPUT_FILE_NOT_CHECKED
     assert by_path["inputs/Costs.xlsx"].characters_compared == 0
@@ -379,7 +689,7 @@ def test_a_folder_named_on_purpose_is_preferred_over_the_download_cache(
 def test_a_copy_in_a_named_folder_is_read_rather_than_refused(small_benchmark):
     """A file sitting right there is evidence, and refusing it helps nobody."""
     dataset_root, catalog, _, _ = small_benchmark
-    assert not path_carries_its_own_fingerprint(DATASET_DATA_FILE)
+    assert not path_folder_is_shaped_like_a_fingerprint(DATASET_DATA_FILE)
 
     found = locate_input_file(DATASET_DATA_FILE, catalog, dataset_root)
 
@@ -877,7 +1187,7 @@ def test_a_copy_that_was_only_pointed_at_also_records_the_disagreement(
     result = verify_input_file_versions(written, ("task-one",), catalog, elsewhere)
     check = {item.path: item for item in result.checks}[path]
 
-    assert not path_carries_its_own_fingerprint(path)
+    assert not path_folder_is_shaped_like_a_fingerprint(path)
     assert check.state == INPUT_FILE_DISAGREED
     assert any("do not describe the same file" in note for note in result.problems)
 

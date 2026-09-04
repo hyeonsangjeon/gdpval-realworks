@@ -236,10 +236,16 @@ def build_catalog(parquet_path: Path) -> dict:
             "length."
         ),
         "reference_file_path_note": (
-            "In this dataset each reference file sits in a folder named after "
-            "the first 32 hexadecimal characters of that file's SHA-256 "
-            "fingerprint, so a fingerprint written into the plan can be "
-            "checked against the path without downloading anything."
+            "In this dataset every reference file sits in a folder whose name "
+            "is 32 hexadecimal characters, and some of those folders are the "
+            "first 32 characters of that file's SHA-256 fingerprint. Not all "
+            "of them: measured on the pinned revision, 160 of these 261 paths, "
+            "and none at all of the 248 under deliverable_files/. So a folder "
+            "name that agrees with a fingerprint written into the plan "
+            "confirms 32 of its 64 characters without downloading anything, "
+            "while one that disagrees says only that they disagree — it cannot "
+            "tell a wrong fingerprint from a folder that was never named after "
+            "its file."
         ),
         "tasks": tasks,
     }
