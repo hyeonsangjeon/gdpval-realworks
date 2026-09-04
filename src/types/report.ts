@@ -18,7 +18,12 @@ export interface TaskResult {
   qa_issues: string[]
   qa_suggestion: string
   deliverable_summary?: string
-  latency_ms: number
+  /**
+   * How long this task took. `null` on a task that failed before anything was
+   * timed — never measured, not measured at zero. Both task tables already
+   * render a falsy value as an em dash, so the honest value renders honestly.
+   */
+  latency_ms: number | null
   error?: string
   grading_score?: number | null
   grading_feedback?: string | null

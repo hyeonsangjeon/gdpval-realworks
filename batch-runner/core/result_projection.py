@@ -42,7 +42,11 @@ def project_result_row(task_meta: dict, result: dict) -> dict:
         "model": result.get("model"),
         "usage": result.get("usage"),
         "observability": result.get("observability", {}),
-        "latency_ms": result.get("latency_ms", 0),
+        # Not a 0. Step 2 writes ``latency_ms: None`` for a task that failed
+        # before anything was timed, and an older payload may not carry the key
+        # at all; both mean "never measured". A 0 here is a duration, and the
+        # report prints durations in a column of real ones.
+        "latency_ms": result.get("latency_ms"),
         "timestamp": result.get("timestamp"),
         "qa_passed": qa.get("passed"),
         "qa_score": qa.get("score"),

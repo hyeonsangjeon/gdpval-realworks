@@ -520,6 +520,25 @@ def _report_cost_ledger(data: dict, *, publishing: bool) -> dict | None:
     return staged
 
 
+def _task_latency_cell(value, absent: str) -> str:
+    """Render one task's latency, or say plainly that it was never measured.
+
+    Step 2 writes ``latency_ms: None`` for a task that failed before anything
+    was timed — a reference-integrity failure, or an exception raised on the
+    way to the call. That is a deliberate "not measured", and the two task
+    tables used to hand it straight to ``f"{value:.0f}ms"``, which raises
+    TypeError and takes the whole report down with it. The ``qa_score`` cell
+    beside this one has always said ``-`` for the same situation.
+
+    An absent key gets the same answer rather than a 0: a column where every
+    other row is a real measurement is the last place to print a number nobody
+    took. Rows that were measured keep their exact previous text.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return absent
+    return f"{value:.0f}ms"
+
+
 def _build_task_results(data: dict, manifest=None) -> tuple[list[dict], list[dict]]:
     task_results = []
     error_tasks = []
@@ -536,7 +555,7 @@ def _build_task_results(data: dict, manifest=None) -> tuple[list[dict], list[dic
             "qa_passed": r.get("qa_passed"),
             "qa_issues": r.get("qa_issues", []),
             "qa_suggestion": r.get("qa_suggestion", ""),
-            "latency_ms": r.get("latency_ms", 0),
+            "latency_ms": r.get("latency_ms"),
             "observability": r.get("observability", {}),
             "deliverable_summary": (r.get("deliverable_text") or "")[:300],
             # task context fields (for detail modal)
@@ -1106,12 +1125,13 @@ def _build_markdown(rd: dict) -> str:
         status_icon = "✅" if r["status"] == "success" else ("⚠️" if r["status"] == "qa_failed" else "❌")
         retry_str = "Yes" if r["retried"] else "-"
         qa_str = f"{r['qa_score']}/10" if r["qa_score"] is not None else "-"
+        latency_str = _task_latency_cell(r["latency_ms"], absent="-")
         task_short = (r["task_id"] or "")[:8] + "…" if len(r.get("task_id", "")) > 8 else r.get("task_id", "")
         occ_short = (r["occupation"] or "")[:18]
         lines.append(
             f"| {i} | `{task_short}` | {r['sector'][:22]} | {occ_short} | "
             f"{status_icon} {r['status']} | {retry_str} | {r['files_count']} | "
-            f"{qa_str} | {r['latency_ms']:.0f}ms |"
+            f"{qa_str} | {latency_str} |"
         )
     lines.append("")
 
@@ -1247,6 +1267,7 @@ def _build_html(rd: dict) -> str:
         status_icon = "✅" if r["status"] == "success" else ("⚠️" if r["status"] == "qa_failed" else "❌"
         )
         qa_str = f"{r['qa_score']}/10" if r["qa_score"] is not None else "—"
+        latency_str = _task_latency_cell(r["latency_ms"], absent="—")
         retry_str = "Yes" if r["retried"] else "—"
         task_short = (r["task_id"] or "")[:10]
         occ_short = (r["occupation"] or "")[:20]
@@ -1256,7 +1277,7 @@ def _build_html(rd: dict) -> str:
             f"<td>{esc(r['sector'][:25])}</td><td>{esc(occ_short)}</td>"
             f"<td>{status_icon} {esc(r['status'])}</td>"
             f"<td>{retry_str}</td><td>{r['files_count']}</td>"
-            f"<td>{qa_str}</td><td>{r['latency_ms']:.0f}ms</td></tr>\n"
+            f"<td>{qa_str}</td><td>{latency_str}</td></tr>\n"
         )
 
     # QA issues section

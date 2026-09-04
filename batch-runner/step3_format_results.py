@@ -403,13 +403,24 @@ def format_results():
         status_icon = "✅" if r["status"] == "success" else ("⚠️" if r["status"] == "qa_failed" else "❌")
         retry_str = f"R{r['resume_round']}" if r["retried"] else "-"
         qa_str = f"{r['qa_score']}/10" if r["qa_score"] is not None else "-"
-        latency = r.get("latency_ms") or 0
+        # Not ``or 0``. Step 2 writes ``latency_ms: None`` for a task that failed
+        # before anything was timed, and the 0 that stood here printed ``0ms`` --
+        # a duration, in a column of real ones. Same answer the ``qa_str`` above
+        # has always given for the same absence, on the same row. Guarded the way
+        # ``step6_report._task_latency_cell`` guards the other task table; a
+        # measured row, including one that really took 0ms, is unchanged.
+        latency = r.get("latency_ms")
+        lat_str = (
+            f"{latency:.0f}ms"
+            if isinstance(latency, (int, float)) and not isinstance(latency, bool)
+            else "-"
+        )
         sector_short = r["sector"][:20] if r["sector"] else ""
         occ_short = r["occupation"][:15] if r["occupation"] else ""
         md_lines.append(
             f"| {i} | `{r['task_id'][:8]}…` | {sector_short} | "
             f"{occ_short} | {status_icon} {r['status']} | "
-            f"{retry_str} | {r['deliverable_files_count']} | {qa_str} | {latency:.0f}ms |"
+            f"{retry_str} | {r['deliverable_files_count']} | {qa_str} | {lat_str} |"
         )
 
     # Sector breakdown
