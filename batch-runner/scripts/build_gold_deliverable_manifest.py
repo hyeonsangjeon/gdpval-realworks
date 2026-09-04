@@ -29,7 +29,7 @@ file still matches, without writing anything.
 
 Getting the bytes, once and free:
 
-    huggingface-cli download openai/gdpval --repo-type dataset \\
+    hf download openai/gdpval --repo-type dataset \\
         --revision <sha> --include 'deliverable_files/*' --local-dir DIR
 """
 
@@ -104,7 +104,7 @@ def _resolve_source_file(dataset_root: Path, source_path: str) -> Path:
     if not candidate.is_file():
         raise SystemExit(
             f"no copy of {source_path} under {dataset_root}. Download the "
-            f"pinned revision first: huggingface-cli download {DATASET_REPO_ID} "
+            f"pinned revision first: hf download {DATASET_REPO_ID} "
             f"--repo-type dataset --revision {DATASET_REVISION} "
             "--include 'deliverable_files/*' --local-dir <dir>"
         )

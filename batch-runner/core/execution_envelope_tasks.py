@@ -724,10 +724,13 @@ def selection_matches(
     ]
 
 
-# Each reference file in this dataset lives in a folder named after the first
-# 32 hexadecimal characters of that file's SHA-256 fingerprint. That folder name
-# is worth something when no copy of the file can be read — but it is only half
-# the fingerprint, so on its own it leaves the other half unchecked.
+# Every file in this dataset sits in a folder whose name is 32 hexadecimal
+# characters, and *some* of those folders are the first 32 characters of the
+# file's own SHA-256 fingerprint. Not all of them. Measured on the pinned
+# revision: 200 of 549 files, and 0 of the 248 under ``deliverable_files/``.
+# So the shape of a path proves nothing, and a folder name that agrees with a
+# written fingerprint is worth exactly the 32 characters it repeats — never the
+# other 32, and never a verdict on a file nobody read.
 REFERENCE_PATH_FINGERPRINT_LENGTH = 32
 
 # The one data file the pinned dataset revision ships its tasks in.
@@ -742,17 +745,23 @@ INPUT_FILE_READ = "read the file"
 #: saying "read the file, 64 of 64 characters compared" and nothing else reads
 #: as a pass, and this is the opposite of a pass.
 INPUT_FILE_DISAGREED = "read the file and it disagreed"
-#: No copy of the file was reachable, so only the 32 characters the folder name
-#: repeats could be compared. The other 32 stand unchecked.
+#: No copy of the file was reachable, but the folder it sits in turned out to
+#: repeat the first 32 characters of the written fingerprint. Thirty-two
+#: hexadecimal characters do not agree by accident, so this really is 32 of the
+#: 64 compared. The other 32 stand unchecked.
 INPUT_FILE_FOLDER_NAME_ONLY = "folder name only"
 #: Nothing was compared. This is not the same answer as "it matched".
 INPUT_FILE_NOT_CHECKED = "not checked"
 
 # How to get the missing bytes, free and once. Named in the report so a person
-# reading it knows what to do rather than being told only that they failed.
+# reading it knows what to do rather than being told only that they failed. The
+# command is checked by a test, because a pointer a reader cannot follow is
+# worse than none: it reads as a fact. `huggingface-cli` was that pointer until
+# the pinned huggingface-hub stopped shipping it as anything but a message
+# saying it "is deprecated and no longer works".
 HOW_TO_GET_THE_FILES = (
     "download the pinned revision once with "
-    f"`huggingface-cli download {DATASET_REPO_ID} --repo-type dataset "
+    f"`hf download {DATASET_REPO_ID} --repo-type dataset "
     f"--revision {DATASET_REVISION}` (no charge), or point the check at a copy "
     "you already have with --dataset-root"
 )
@@ -813,10 +822,15 @@ class InputFileVerification:
 
     checks: tuple[InputFileCheck, ...]
     problems: tuple[str, ...]
-    """Ways the written fingerprints and the real files disagree.
+    """Ways the written fingerprints and the real files are known to disagree.
 
-    A defect in the plan. It says the same thing on every machine, because it
-    is about what was written down, not about what happens to be lying around.
+    A defect in the plan, and it reads the same on any machine that can see the
+    file. A machine that cannot is not entitled to the same sentence: with no
+    bytes to hash, a written value disagreeing with the folder name is not
+    evidence of anything, because most of this dataset's folders are not named
+    after their file's contents. That case is filed under
+    :attr:`missing_copies` — still enough to stop the run, but not a verdict on
+    a plan nobody was able to check.
     """
     missing_copies: tuple[str, ...] = ()
     """Files no copy of which is on this machine, so nothing could be read.
@@ -893,20 +907,40 @@ def _is_hexadecimal(value: str) -> bool:
     )
 
 
-def path_carries_its_own_fingerprint(path: str) -> bool:
-    """Whether this file's own folder name is the start of its fingerprint.
+def path_folder_is_shaped_like_a_fingerprint(path: str) -> bool:
+    """Whether this file's folder name *could* be half of a fingerprint.
 
-    The dataset files under ``reference_files/`` are kept in a folder named
-    after the first 32 characters of the file's fingerprint, so a copy found at
-    such a path can only be the file the plan means. Paths of any other shape
-    carry no such promise, and a copy found at one of them may belong to some
-    other revision of the dataset.
+    Shape only, and shape is not provenance. Every file in this dataset sits in
+    a 32-hexadecimal-character folder, so this is true of all of them, and only
+    some of those folders are named after their file's contents — 200 of 549 at
+    the pinned revision, none at all under ``deliverable_files/``. A true answer
+    here therefore means "worth comparing against", never "checked out".
+
+    Whether a folder really is named after its file is not knowable from the
+    path. It is knowable from a fingerprint that agrees with it, because 32
+    hexadecimal characters do not agree by accident, and from real bytes whose
+    digest starts with it. Both of those are used below; this is not.
     """
     folder = Path(path).parent.name.lower()
     return (
         len(folder) == REFERENCE_PATH_FINGERPRINT_LENGTH
         and _is_hexadecimal(folder)
     )
+
+
+def folder_name_agrees_with(path: str, fingerprint: str) -> bool:
+    """Whether the folder repeats the first 32 characters of ``fingerprint``.
+
+    An agreement is evidence and a disagreement is not. Thirty-two hexadecimal
+    characters cannot line up by chance, so agreement means this folder is named
+    after its contents *and* the written value has its first half right. A
+    disagreement is two indistinguishable stories — a wrong fingerprint, or a
+    folder that was never named after anything — and the path cannot say which.
+    """
+    if not path_folder_is_shaped_like_a_fingerprint(path):
+        return False
+    folder = Path(path).parent.name.lower()
+    return fingerprint.strip().lower().startswith(folder)
 
 
 def _copy_in_the_download_cache(
@@ -949,16 +983,19 @@ def _locate_with_provenance(
     Nothing is downloaded. A folder named by the person running the check is
     preferred over the download cache, because it was named on purpose. The
     second value says whether the copy is the pinned revision's *by
-    construction*: true for a copy the download cache holds under that exact
-    revision, and true for a file whose own path repeats the first half of its
-    fingerprint. False for a copy found in a named folder that could hold any
-    revision — such a copy is still worth reading, but a fingerprint that
-    disagrees with it means something weaker.
+    construction*: true only for a copy the download cache holds under that
+    exact revision, which is the one provenance a path can carry on its own.
+
+    A copy found in a named folder gets ``False``. Such a folder could hold any
+    revision, and the shape of the path inside it settles nothing — most of this
+    dataset's folders are not named after their file's contents. That question
+    is asked again once the bytes are in hand, where a digest or a written
+    fingerprint that begins with the folder can answer it.
     """
     if dataset_root is not None:
         candidate = Path(dataset_root) / path
         if candidate.is_file():
-            return candidate, path_carries_its_own_fingerprint(path)
+            return candidate, False
     cached = _copy_in_the_download_cache(
         catalog.dataset_repo_id, catalog.dataset_revision, path
     )
@@ -1002,9 +1039,24 @@ def _check_one_written_fingerprint(
 
     found = _locate_with_provenance(path, catalog, dataset_root)
     if found is not None:
-        copy, pinned_by_construction = found
+        copy, pinned_by_revision = found
         real = sha256_of_file(copy)
-        if real != fingerprint and pinned_by_construction:
+        folder = Path(path).parent.name.lower()
+        # Whether the folder this file sits in is one the dataset named after
+        # its contents — because only then does a disagreement point at the
+        # written value rather than at the copy. The download cache answers it
+        # by revision. Otherwise it takes 32 characters of evidence from one
+        # side or the other: a digest that begins with the folder, or a written
+        # fingerprint that does. Thirty-two hexadecimal characters do not line
+        # up by chance, and the shape of the folder on its own is not evidence
+        # at all — most of this dataset's folders are not named after their file.
+        certainly_that_file = (
+            pinned_by_revision
+            or (path_folder_is_shaped_like_a_fingerprint(path)
+                and real.startswith(folder))
+            or folder_name_agrees_with(path, fingerprint)
+        )
+        if real != fingerprint and certainly_that_file:
             problems.append(
                 f"the fingerprint written for {path} is {fingerprint}, but the "
                 f"copy of that {what_it_is} on this machine is {real}, so the "
@@ -1042,14 +1094,7 @@ def _check_one_written_fingerprint(
             note=f"read from {copy}",
         )
 
-    folder = Path(path).parent.name.lower()
-    if path_carries_its_own_fingerprint(path):
-        if not fingerprint.startswith(folder):
-            problems.append(
-                f"the fingerprint written for {path} does not match the folder "
-                "the dataset keeps that file in, so the written value describes "
-                "some other file"
-            )
+    if folder_name_agrees_with(path, fingerprint):
         missing_copies.append(
             f"no copy of {path} at the pinned revision is on this machine, so "
             f"only {REFERENCE_PATH_FINGERPRINT_LENGTH} of its 64 fingerprint "
@@ -1062,6 +1107,36 @@ def _check_one_written_fingerprint(
             state=INPUT_FILE_FOLDER_NAME_ONLY,
             characters_compared=REFERENCE_PATH_FINGERPRINT_LENGTH,
             note="the folder name repeats the first half of the fingerprint",
+        )
+
+    folder = Path(path).parent.name.lower()
+    if path_folder_is_shaped_like_a_fingerprint(path):
+        # The folder is the right shape and does not match. That used to be
+        # filed as proof the written value "describes some other file" — but it
+        # is not proof of anything, because most of this dataset's folders are
+        # not named after their file's contents (349 of 549 at the pinned
+        # revision, including every one under deliverable_files/). A correct
+        # fingerprint for one of those disagrees with its folder exactly like a
+        # wrong one does. So the disagreement is reported, the run still stops
+        # on it, and nothing is claimed about which of the two is at fault.
+        missing_copies.append(
+            f"no copy of {path} at the pinned revision is on this machine, and "
+            f"the folder it sits in does not repeat the first "
+            f"{REFERENCE_PATH_FINGERPRINT_LENGTH} characters of the written "
+            "fingerprint. Not every folder in this dataset is named after its "
+            "file's contents, so that disagreement does not say which of the "
+            "two is wrong, and none of the 64 characters could be checked "
+            f"against the file itself; {HOW_TO_GET_THE_FILES}"
+        )
+        return InputFileCheck(
+            path=path,
+            written=fingerprint,
+            state=INPUT_FILE_NOT_CHECKED,
+            characters_compared=0,
+            note=(
+                f"the folder name {folder} disagrees with the written value, "
+                "which in this dataset may mean either one is wrong"
+            ),
         )
 
     missing_copies.append(
