@@ -12,6 +12,48 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Changed
+- **The grader's fingerprint covered half of its own install graph.**
+  `compute_grader_source_hash` hashed `batch-runner/requirements.txt` and stopped
+  there. That file's fourth line is `-r requirements-renderer.txt`, and the
+  included file is where `PyMuPDF`, `openpyxl`, `python-pptx`, `python-docx` and
+  `Pillow` are declared — every one of them a capability the judge's
+  `read_deliverable` needs in order to see a deliverable at all. Measured at
+  `af0f001` with `gold_ceiling_185_v2_sol_max.yaml`: touching the entry file
+  moved the fingerprint, and **deleting `PyMuPDF>=1.21.0` from the included file
+  did not**. Two graders that could not read the same PDFs claimed the same
+  identity, and a shard merge compares exactly that value before joining
+  partials.
+
+  The hash now walks the include graph the way pip does — `-r`, `-c`,
+  `--requirement`, `--constraint`, in every spelling pip accepts, with comments
+  stripped by pip's rule (a `#` at line start or after whitespace, which leaves
+  `#egg=` fragments alone), diamonds hashed once and cycles terminated. It fails
+  closed: an include that is missing, symlinked or outside `batch-runner/` raises
+  and names the file that asked for it, because a fingerprint that quietly
+  skipped a file pip reads would be the same defect wearing an exception handler.
+  Files hashed go **108 → 109**, and the fingerprint moves as intended —
+  `gold_ceiling_185_v2_sol_max.yaml` `06a1b80c…` → `fbffad9c…`,
+  `default_v2_sol_max.yaml` `1a46fc66…` → `85aadf17…`.
+
+  The same file list is mirrored in four places, and **all four read the graph as
+  a single file**: the hash itself, the merge-freeze predicate in
+  `check_grader_hash_freeze.py`, the `paths:` filter in `grader-hash-freeze.yml`,
+  and the input pin in both copies of `grade-run.yml`. The first two were caught
+  by existing coupling tests that went red on their own. The fourth was not:
+  `test_the_pin_covers_everything_the_source_hash_covers` documented itself as
+  "derived from the real hash function, not from a list typed twice" while its
+  body was a list typed twice, so a pull request touching only the include could
+  have merged into a live grading run. That test now spies on what the function
+  actually reads.
+
+  Timing, stated rather than assumed: this was held open as an owner decision on
+  the sole ground that fixing it moves the fingerprint. That cost is currently
+  zero — #419 moved the fingerprint earlier the same day and no run was
+  dispatched at `06a1b80c…`, so deferring would mean paying the same price
+  twice. Follow-up 9 in `tasks/rebuilding_grading_task/PR3_REPORT.md` is struck,
+  and `321-the-question-the-probe-asked.md` keeps the original deferral text with
+  the reversal appended. 32 new contract tests, 16 of 16 planted mutations
+  caught, **no model calls and no cost**.
 - **Three follow-ups that named a gap kept naming it after the gap closed.**
   PR3's follow-up list carried items 1, 2 and 3 — Word/PDF page geometry,
   listening inside an archive, and the empty-read disclaimer — as open, with

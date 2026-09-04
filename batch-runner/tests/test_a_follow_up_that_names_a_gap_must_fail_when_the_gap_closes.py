@@ -37,14 +37,20 @@ that a probe is only as honest as the question it asks, so the reader it uses no
 walks the same include chain pip does.
 
 Item 9 came out of verifying that correction. ``compute_grader_source_hash``
-makes the same one-file-for-a-graph move: it hashes ``requirements.txt`` and not
+made the same one-file-for-a-graph move: it hashed ``requirements.txt`` and not
 the file that ``requirements.txt`` includes, so the identity two paid runs are
-pinned to does not cover the declaration of PyMuPDF, openpyxl, python-pptx,
+pinned to did not cover the declaration of PyMuPDF, openpyxl, python-pptx,
 python-docx or Pillow. Measured, not read off the source -- deleting PyMuPDF
-from the included file leaves the fingerprint byte-identical while appending one
-comment to the entry file changes it. It answers ``False`` today, so the
-``False`` direction of the contract is exercised by a live item as well as by
-the negative control over the comparison itself.
+from the included file left the fingerprint byte-identical while appending one
+comment to the entry file changed it. It was closed on 2026-09-04, once ``#419``
+had already moved the fingerprint that day for an unrelated reason and no run
+had been dispatched at the new value, which put the marginal cost of the move at
+zero. The hash now walks the include chain pip walks; the regression lives in
+``test_the_fingerprint_must_cover_the_whole_install_graph.py``.
+
+With 9 closed, no live item exercises the ``False`` direction of the contract
+again, and the negative control over the comparison itself is once more the only
+thing holding that half of the rule up.
 
 Measured evidence for the three closures — the paid runs on either side of #260,
 compared item by item — is in ``tasks/rebuilding_grading_task/320-three-gaps-that-closed.md``.
@@ -396,9 +402,13 @@ def _probe_identity_covers_the_install_graph(tmp_path: Path) -> bool:
     it to ``0247c9e0...``. This is the same one-file-for-a-graph mistake probe 8
     made, sitting inside the identity rather than inside a test.
 
-    Fixing it means editing ``step8_grade.py``, which moves the fingerprint for
-    every future run -- a real cost, and the owner's call. The item stays open
-    and this probe stays ``False`` until then.
+    Closed on 2026-09-04. The item was held open because fixing it moves the
+    fingerprint for every future run; the marginal cost of that fell to zero
+    when ``#419`` moved the fingerprint the same day for an unrelated reason
+    and no run was dispatched at the new value. ``compute_grader_source_hash``
+    now walks the include chain pip walks, so this probe returns ``True``:
+    108 files hashed became 109, and the ``gold_ceiling_185_v2_sol_max``
+    fingerprint moved ``06a1b80c...`` -> ``fbffad9c...``.
     """
     entry = REPO_ROOT / "batch-runner/requirements.txt"
     assert entry.is_file(), "probe 9 cannot find batch-runner/requirements.txt"
@@ -464,11 +474,11 @@ def _mismatch(number: int, exists: bool, struck: bool) -> str | None:
 
     Returns the complaint, or ``None`` when the document and the capability
     agree. Kept separate from the test below so the rule can be fed all four
-    combinations directly. Item 9 is open, so ``struck and not exists`` is
-    reachable today by striking it -- but that is a fact about the current
-    contents of the report, not about the rule, and it stops being true the day
-    item 9 closes. Between item 8 closing and item 9 opening it was not true at
-    all, and nothing said so.
+    combinations directly. No live case exercises ``struck and not exists``
+    today: item 9 provided one while it was open, item 8 before it, and between
+    those two there was none at all and nothing said so. The parametrised test
+    below cannot pin a direction no entry is currently in, which is exactly why
+    the negative control is not optional.
     """
     if exists and not struck:
         return (
@@ -498,11 +508,12 @@ def test_a_follow_up_is_struck_exactly_when_its_capability_exists(number, tmp_pa
 def test_both_directions_of_the_contract_actually_fail():
     """Negative control over the comparison itself.
 
-    Item 9 exercises the ``False`` direction with a live case today, but that
-    is a temporary state -- it holds only until someone decides the fingerprint
-    is worth moving. This test does not depend on any item being open: it feeds
-    the rule all four combinations directly, so the direction stays pinned on
-    the day the last open item closes rather than going quietly dead.
+    Item 9 exercised the ``False`` direction with a live case until it closed on
+    2026-09-04. Every registered item now answers ``True``, so this is again the
+    only thing checking that half of the rule. It does not depend on any item
+    being open: it feeds the rule all four combinations directly, so the
+    direction stays pinned rather than going quietly dead between one item
+    closing and the next one opening.
 
     The second direction is the one worth pinning hardest: a capability that was
     reverted while its item stayed struck would leave the list claiming a gap

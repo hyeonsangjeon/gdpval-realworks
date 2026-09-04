@@ -560,6 +560,7 @@ jobs:
             batch-runner/experiments
             batch-runner/grading_configs
             batch-runner/prompts
+            batch-runner/requirements-renderer.txt
             batch-runner/requirements.txt
             batch-runner/schemas
             batch-runner/scripts
@@ -819,6 +820,7 @@ jobs:
             batch-runner/experiments
             batch-runner/grading_configs
             batch-runner/prompts
+            batch-runner/requirements-renderer.txt
             batch-runner/requirements.txt
             batch-runner/schemas
             batch-runner/scripts

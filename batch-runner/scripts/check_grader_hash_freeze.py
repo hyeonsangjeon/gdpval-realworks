@@ -78,6 +78,11 @@ _EXACT_HASHED_FILES = frozenset(
         "batch-runner/step8_grade.py",
         "batch-runner/schemas/grade.schema.json",
         "batch-runner/requirements.txt",
+        # requirements.txt reaches this one with `-r`, and the hash follows the
+        # include. Listing only the entry file would let a pull request that
+        # drops PyMuPDF -- a capability the judge reads deliverables with --
+        # merge into a live run without ever tripping the freeze.
+        "batch-runner/requirements-renderer.txt",
         "batch-runner/scripts/download_inference_from_hf.py",
     }
 )

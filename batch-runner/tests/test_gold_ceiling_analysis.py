@@ -1400,7 +1400,11 @@ def test_a_fired_penalty_is_a_miss_under_both_counts():
 
 
 def test_an_excluded_item_leaves_the_denominator():
-    """`step8_grade.py:1386` counts only `not score_excluded`.
+    """`step8_grade.py`'s `_tally_item` counts only `not score_excluded`.
+
+    Named rather than cited by line: the number that used to sit here pointed
+    at an unrelated docstring, because the file moved underneath it and nothing
+    said so.
 
     An excluded item is one the grader declined to score, so leaving it in the
     denominator would put an item there that no deliverable could have moved.

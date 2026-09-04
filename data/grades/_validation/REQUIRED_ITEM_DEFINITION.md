@@ -259,10 +259,11 @@ python scripts/analyze_required_item_definition.py \
 python scripts/analyze_required_item_definition.py ../data/grades
 ```
 
-The tool lives outside `compute_grader_source_hash`'s input set
-(`step8_grade.py:159-200` covers `step8_grade.py`, `core/**/*.py`, the grade
-schema, `requirements.txt`, `scripts/download_inference_from_hf.py`, the prompt
-templates and the config file — no other file under `batch-runner/scripts/`), so
+The tool lives outside `compute_grader_source_hash`'s input set (that function
+covers `step8_grade.py`, `core/**/*.py`, the grade schema, the whole
+`requirements.txt` install graph — the entry file **and** every file it reaches
+through `-r`/`-c` — `scripts/download_inference_from_hf.py`, the prompt
+templates and the config file; no other file under `batch-runner/scripts/`), so
 running or changing it moves no grader fingerprint and invalidates no published
 grade.
 

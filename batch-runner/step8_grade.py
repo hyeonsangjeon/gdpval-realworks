@@ -158,6 +158,74 @@ def _checked_repository_config_file(
     return relative.as_posix(), candidate
 
 
+#: pip's two include directives, in every spelling pip accepts. ``-r`` pulls in
+#: another requirements file; ``-c`` pulls in a constraints file, which decides
+#: *which version* of a package gets installed. Both change what ends up in the
+#: environment, so both are part of the grader's identity.
+_REQUIREMENT_INCLUDE = re.compile(
+    r"""^(?:
+            (?:-r|-c)                                # -r x, -r=x, -rx
+          | (?:--requirement|--constraint)(?=[\s=])  # long form needs a separator
+        )
+        \s*=?\s*(\S+)$""",
+    re.VERBOSE,
+)
+
+
+def _requirements_closure(batch_root: Path, entry: Path) -> list[Path]:
+    """Every file ``pip install -r entry`` reads, not only the one it is handed.
+
+    ``requirements.txt`` is not a flat list. Its fourth line is
+    ``-r requirements-renderer.txt``, and that included file is where
+    ``PyMuPDF``, ``openpyxl``, ``python-pptx``, ``python-docx`` and ``Pillow``
+    are declared -- every one of them a capability the judge's
+    ``read_deliverable`` tools need in order to see a deliverable at all.
+
+    Hashing the entry file alone left the grader's identity blind to half of
+    its own install graph. Measured at ``94ea015`` and again at ``af0f001``:
+    deleting ``PyMuPDF>=1.21.0`` from the included file left the fingerprint
+    byte-identical, so two runs that could not read the same PDFs both claimed
+    to be the same grader -- and a merge compares exactly that value before
+    joining their partials. Reading a graph as a single file is the mistake;
+    following the include is the fix.
+
+    Fails closed rather than skipping: an include that is missing, symlinked or
+    outside ``batch-runner/`` raises, because a fingerprint that quietly
+    omitted a file pip reads would be the same defect wearing an exception
+    handler.
+    """
+    ordered: list[Path] = []
+    seen: set[Path] = set()
+    pending: list[tuple[Path, str | None]] = [(entry, None)]
+
+    while pending:
+        current, includer = pending.pop(0)
+        try:
+            relative, resolved = _checked_grader_source_file(batch_root, current)
+        except ValueError as exc:
+            if includer is None:
+                raise
+            # Which file asked for it matters: "requirements-renderer.txt is
+            # missing" and "something in requirements.txt points at a file
+            # nobody has" send a reader to two different places.
+            raise ValueError(f"{exc} (pulled in by {includer})") from exc
+        if resolved in seen:
+            # Two files including a third is pip-legal and must hash once; a
+            # cycle is pip's problem to report, not a reason to hang here.
+            continue
+        seen.add(resolved)
+        ordered.append(resolved)
+
+        for raw in resolved.read_text(encoding="utf-8").splitlines():
+            # pip treats '#' as a comment at line start or after whitespace,
+            # which leaves '#egg=' fragments inside URLs alone.
+            line = re.sub(r"(^|\s)#.*$", "", raw).strip()
+            include = _REQUIREMENT_INCLUDE.match(line) if line else None
+            if include:
+                pending.append((resolved.parent / include.group(1), relative))
+    return ordered
+
+
 def compute_grader_source_hash(config_path: str | Path, config: dict) -> str:
     batch_root = _batch_runner_root()
     core_root = batch_root / "core"
@@ -179,7 +247,10 @@ def compute_grader_source_hash(config_path: str | Path, config: dict) -> str:
         batch_root / "step8_grade.py",
         *core_python_files,
         batch_root / "schemas" / "grade.schema.json",
-        batch_root / "requirements.txt",
+        # The whole install graph, not just the file pip is handed. See
+        # _requirements_closure: the include is where the judge's file-reading
+        # capabilities are declared.
+        *_requirements_closure(batch_root, batch_root / "requirements.txt"),
         batch_root / "scripts" / "download_inference_from_hf.py",
         Path(config["prompt"]["template"]),
     ]
