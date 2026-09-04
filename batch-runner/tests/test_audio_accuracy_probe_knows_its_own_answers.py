@@ -15,8 +15,8 @@ against each other, off the same samples the model will hear.
 The other half is the scorer. A measurement instrument that reports a good
 number when handed garbage is worse than no instrument, so the negative
 controls here are as load-bearing as the positive ones: a model that answers
-``pass`` to all twelve criteria scores 50% accuracy on this balanced corpus,
-and the test that matters is the one asserting its discrimination is **zero**.
+``pass`` to every criterion scores 50% accuracy on this balanced corpus, and
+the test that matters is the one asserting its discrimination is **zero**.
 """
 
 from __future__ import annotations
@@ -24,6 +24,7 @@ from __future__ import annotations
 import io
 import json
 import math
+import re
 import struct
 import sys
 import wave
@@ -742,6 +743,80 @@ def test_no_criterion_is_a_substring_of_another() -> None:
                 assert inner not in outer, (inner, outer)
 
 
+def test_the_workflow_states_the_corpus_it_actually_has() -> None:
+    """The paid entry point restates these counts, so they have to be checked.
+
+    ``audio-accuracy-probe.yml`` is the only way this measurement gets bought,
+    and four places in it say how big the corpus is: the header comment, the
+    ``repeats`` input description a dispatcher reads, and two lines of the
+    approval record. None of them can read ``CLAIMS`` -- the gate job has no
+    checkout, and a comment cannot compute -- so all four are restatements.
+
+    They rotted once already. The corpus went from twelve criteria to twenty
+    and the workflow kept saying twelve, which put ``calls = 36`` on the
+    approval record for a run that would make sixty. A wrong call count on a
+    paid gate is the specific kind of wrong this repository cares about: the
+    record that says what was authorised disagreed with what was spent.
+
+    So the restatements are pinned rather than trusted. This test is the
+    reason it is safe to restate them at all.
+    """
+    text = (
+        probe.REPO_ROOT / ".github" / "workflows" / "audio-accuracy-probe.yml"
+    ).read_text(encoding="utf-8")
+
+    claims = len(probe.CLAIMS)
+    true_claims = sum(1 for claim in probe.CLAIMS if claim.holds)
+    false_claims = claims - true_claims
+    clips = len(probe.CLIPS)
+
+    words = {
+        "five": 5,
+        "six": 6,
+        "nine": 9,
+        "ten": 10,
+        "twelve": 12,
+        "twenty": 20,
+    }
+
+    # The header comment: "Twenty criteria, ten true and ten false, matched in
+    # pairs on nine clips".
+    header = re.search(
+        r"(\w+) criteria, (\w+) true and\n#\s*(\w+) false, matched in pairs on "
+        r"(\w+) clips",
+        text,
+    )
+    assert header, "the header comment no longer states the corpus size"
+    assert words[header.group(1).lower()] == claims
+    assert words[header.group(2).lower()] == true_claims
+    assert words[header.group(3).lower()] == false_claims
+    assert words[header.group(4).lower()] == clips
+
+    # The dispatch input description, which is what someone reads before
+    # deciding whether to spend.
+    formula = re.search(r"Total calls = (\d+) criteria x repeats", text)
+    assert formula, "the repeats input no longer states the call formula"
+    assert int(formula.group(1)) == claims
+
+    # The approval record, both lines of it.
+    record = re.search(r"criteria\s+= (\d+) \((\d+) true / (\d+) false\)", text)
+    assert record, "the approval record no longer states the criteria count"
+    assert int(record.group(1)) == claims
+    assert int(record.group(2)) == true_claims
+    assert int(record.group(3)) == false_claims
+
+    calls = re.search(r"calls\s+= \$\(\((\d+) \* PROBE_REPEATS\)\)", text)
+    assert calls, "the approval record no longer computes the call count"
+    assert int(calls.group(1)) == claims
+
+    # The permutation figures in the paid summary are *derived* from the
+    # report rather than restated, which is why they are not checked above.
+    # This asserts they stayed derived: a literal here would be the next thing
+    # to rot, and it would misdescribe what the design can support.
+    for stale in ("six pairs", "64 relabellings", "0.01 is out of reach"):
+        assert stale not in text, stale
+
+
 # --------------------------------------------------------------------------
 # The scorer, including the ways it must refuse to flatter
 # --------------------------------------------------------------------------
@@ -805,7 +880,7 @@ def test_judge_error_is_not_an_answer_in_either_direction() -> None:
 def test_a_model_that_always_says_pass_scores_zero_discrimination() -> None:
     """The control this whole metric exists for.
 
-    Accuracy is 50% -- it got all six true claims right -- and that 50% is
+    Accuracy is 50% -- it got every true claim right -- and that 50% is
     worth nothing, because the same answer was given without listening. J is
     what says so.
     """
