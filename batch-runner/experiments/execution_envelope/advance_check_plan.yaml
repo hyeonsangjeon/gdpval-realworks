@@ -190,10 +190,24 @@ model_run_conditions:
     #
     # The first entry pins the benchmark dataset itself, at the same revision
     # this repository's published grades were produced against. The other two
-    # pin the reference files the chosen tasks ship with. In this dataset each
-    # reference file sits in a folder named after the first 32 characters of
-    # its own fingerprint, so the free check can confirm each value below
-    # matches its file without downloading anything.
+    # pin the reference files the chosen tasks ship with.
+    #
+    # Every file in this dataset sits in a folder whose name is 32 hexadecimal
+    # characters, and *some* of those folders are the first 32 characters of
+    # the file's own fingerprint. Not all of them. At the pinned revision the
+    # dataset holds 549 files — 301 under `reference_files/` and 248 under
+    # `deliverable_files/` — and the folder name repeats the fingerprint for
+    # 200 of them, not one of which is a deliverable file. Both entries pinned
+    # below are among the 200, which is why a machine holding no copy of the
+    # dataset can still check half of each written value for free.
+    #
+    # Half is all it is worth, and the check says so rather than rounding up.
+    # The other 32 characters stand unchecked until the file itself is read.
+    # A folder name that disagrees is recorded as unchecked too — with most of
+    # this dataset's folders not named after their contents, a correct
+    # fingerprint disagrees with its folder exactly like a wrong one does, so
+    # the disagreement does not say which of the two is at fault. Either way
+    # the run stops on it; none of these states is a pass.
     input_file_versions:
       "openai/gdpval@11e7900cdcac61bc4daf59e65feb238acda98fbf": "f8422fab9b21d90c0ee5f0659842ab666d418cb8940842918f9f4b0df7ae0202"
       "reference_files/bb09ca2a9999b404d7fced9202b42949/Work Time Study - Source.xlsx": "bb09ca2a9999b404d7fced9202b42949cd9f142f39554e254bac77b3686dae9e"

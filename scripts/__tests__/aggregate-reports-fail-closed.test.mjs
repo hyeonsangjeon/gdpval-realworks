@@ -60,9 +60,26 @@ function reportFixture(overrides = {}) {
       total_tasks: 10,
       success_count: 9,
       retried_count: 0,
+      // The six below were absent from this fixture until
+      // validateReportSummary started refusing a report that leaves them out.
+      // Every real report carries them; a fixture that did not was quietly
+      // testing a payload shape the dashboard never receives.
+      error_count: 1,
+      min_qa_score: 5,
+      max_qa_score: 9,
+      avg_latency_ms: 1200,
+      max_latency_ms: 3000,
+      total_latency_ms: 12000,
     },
     sector_breakdown: [
-      { sector: 'Retail', success_rate_pct: 90, avg_qa_score: 7.5, success: 9, total: 10 },
+      {
+        sector: 'Retail',
+        success_rate_pct: 90,
+        avg_qa_score: 7.5,
+        avg_latency_ms: 1200,
+        success: 9,
+        total: 10,
+      },
     ],
     task_results: [{ task_id: 't1', qa_score: 7.5 }],
     ...overrides,
@@ -345,7 +362,14 @@ test('every report readable publishes all of them and exits 0', async () => {
   const second = reportFixture();
   second.meta.date = '2026-02-01';
   second.sector_breakdown = [
-    { sector: 'Health Care', success_rate_pct: 50, avg_qa_score: 5, success: 5, total: 10 },
+    {
+      sector: 'Health Care',
+      success_rate_pct: 50,
+      avg_qa_score: 5,
+      avg_latency_ms: 900,
+      success: 5,
+      total: 10,
+    },
   ];
 
   const root = await scratchTree({ exp901_good: reportFixture(), exp902_good: second });
