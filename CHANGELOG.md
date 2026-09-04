@@ -564,6 +564,65 @@ entries land under a fresh dated heading the day they merge to `main`.
   because none of them can run.
 
 ### Fixed
+- **A scope that matched nothing was reported as a file with no text.**
+  `read_deliverable` takes a `scope`: `{"sheet": ...}` for a workbook,
+  `{"page_start": ...}` for a PDF. Name a sheet the workbook does not have, or
+  open a window that begins past the last page, and the selection came back
+  empty — and an empty selection was indistinguishable from an empty file. The
+  read then carried `_EMPTY_READ_DISCLAIMER`: *"an empty text read means this
+  file carries no extractable text."* An absence produced by the **question**
+  was handed to the judge as an absence in the **document**.
+
+  The same file already refused this three other ways. `scope={"member": ...}`
+  on a non-zip is refused; an out-of-range page or slide is refused by
+  `_render_pdf_page`/`_render_pptx_slide` *naming the range that exists*; an
+  unknown `scope` key is refused by `_validate_scope_keys`. All three are on
+  the render and dispatch paths. Neither `sheet` nor `page_start`/`page_end`
+  had it on the read path, so the one shape of the mistake a grading judge is
+  most likely to make was the one shape that failed quietly.
+
+  Both now raise `InvalidScope`, which the envelope already surfaces as
+  `error_type: "bad_scope"` — the retryable kind, so a caller that guessed a
+  sheet name gets a turn to name a real one instead of a dead end. Each refusal
+  names what exists: the workbook's sheets, the document's page range, the keys
+  the op accepts. `MAX_SHEETS` no longer silently drops a sheet that was asked
+  for by name; that cap bounds a whole-workbook read and was never a statement
+  about reachability. A file that genuinely holds no text still gets the
+  disclaimer, unchanged — three tests hold that line from the other side, on an
+  empty `.docx`, a glyph-free PDF and a PNG.
+
+  Measured on the 185-task gold-ceiling payload, model-free: **15 rubric items
+  across 9 tasks** were graded `fail` at **0.0 of 29.0** with that sentence as
+  their entire evidence. Reading all 10 files they name with `scope={}` returns
+  **346 to 200,000 characters** from every one; none is missing from disk. This
+  closes the question `320-three-gaps-that-closed.md` recorded as unanswered —
+  *"왜 같은 파일이 3단계에서 비어서 돌아왔는지는 이 조사에서 확인하지 않았다"* —
+  and both tasks it named as unexplained pass→fail flips, `7d7fc9a7` and
+  `dfb4e0cd`, are inside the 15.
+
+  That document publishes 23 where this says 15, and both are right about what
+  they counted: the judge did not always quote the note whole, so the whole
+  sentence matches 17 items, the tail alone 23, the union 24. Restricted to
+  office files every rule gives the same 15 and the same 0.0 of 29.0 — the
+  entire spread is nine items on two `.mp4` deliverables, which is a routing
+  question and stays open. All three rules are pinned so the figure cannot
+  drift with its own definition, and both documents' counts are re-derived from
+  the payload rather than restated.
+
+  What this does **not** claim: `judge_raw_response` is null and `tools_used`
+  keeps call names without arguments, so the payload preserves *that* the tool
+  was called three times, not *what was asked*. The mechanism reproduces
+  model-free; per-item attribution does not, and a test asserts the record is
+  that thin so no later document can quietly assume otherwise.
+
+  32 tests, 17 mutations planted and 17 caught. No model calls, no regrade,
+  $0. **This moves the grader source fingerprint**, since
+  `core/tools/read_deliverable.py` is one of its inputs:
+  `7b2bd7d97125c38337e77b4aaa3c08891bf2d7b7ac4c773d144a81fbccebed40` →
+  `06a1b80c8787b9aeea485dabb89a21344baac4fbbb182c78f5e60ea9fd29cb41`, measured
+  by running the hash twice against `gold_ceiling_185_v2_sol_max.yaml` with only
+  this file swapped. Already-published grades are unaffected; the next run at
+  this fingerprint is not comparable to one before it.
 - **The report prompt ordered a paid model to headline the heuristic the owner
   had just retired.** `core/narrative_analyzer.py` was the one surface the
   2026-09-03 ruling had not reached, and it is the surface where a model is

@@ -127,6 +127,23 @@ _SCOPE_MEMBER_CONTRACT = (
     "container of files this tool already reads, not an unreadable binary."
 )
 
+#: The content half of the same contract. Neither schema named a single
+#: content-scope key, so a judge that wanted one sheet of a workbook had to
+#: guess the key *and* the value, and a miss on either came back as
+#: ``"this file carries no extractable text"`` -- a claim about the file,
+#: produced by the query. Naming the keys here is the cheap half of the fix;
+#: refusing a key or value that cannot be satisfied is the other half.
+_SCOPE_KEY_CONTRACT = (
+    "Content scope is per op and per file kind. read_content takes "
+    "{\"sheet\": \"<exact sheet name>\"} on .xlsx and "
+    "{\"page_start\": 1, \"page_end\": 3} on .pdf; inspect_formatting takes "
+    "{\"sheet\": \"<exact sheet name>\"} on .xlsx; every other kind takes no "
+    "content scope. Any other key is refused, not ignored. A sheet or page "
+    "that does not exist is refused with the list of the ones that do -- it "
+    "is never reported as an empty file. Sheet names match exactly, case "
+    "included; read them from inspect_structure first."
+)
+
 #: Full six-op schema retained for public API compatibility and direct
 #: harness tests. Do not send this schema to the main model.
 READ_DELIVERABLE_TOOL_SCHEMA: Dict[str, Any] = {
@@ -163,9 +180,10 @@ READ_DELIVERABLE_TOOL_SCHEMA: Dict[str, Any] = {
             "scope": {
                 "type": ["object", "null"],
                 "description": (
-                    "Optional op-specific scope, e.g. "
-                    "{'workbook_page': 1}, {'slide': 1}, {'page': 1}, or "
-                    "{'page_start': 1, 'page_end': 3}. "
+                    "Optional op-specific scope. "
+                    + _SCOPE_KEY_CONTRACT
+                    + " render_to_image takes {'workbook_page': 1} on .xlsx, "
+                    "{'slide': 1} on .pptx, or {'page': 1} on .pdf. "
                     + _SCOPE_MEMBER_CONTRACT
                 ),
                 "additionalProperties": True,
@@ -226,6 +244,7 @@ MODEL_READ_DELIVERABLE_TOOL_SCHEMA: Dict[str, Any] = {
                 "type": ["object", "null"],
                 "description": (
                     "Optional op-specific content/formatting scope. "
+                    + _SCOPE_KEY_CONTRACT + " "
                     + _SCOPE_MEMBER_CONTRACT
                 ),
                 "additionalProperties": True,
@@ -869,15 +888,42 @@ def _inspect_notebook(p: Path) -> Dict[str, Any]:
 # ── read_content ─────────────────────────────────────────────────────
 
 
+def _sheets_in_scope(scope: Dict[str, Any], sheetnames: List[str]) -> List[str]:
+    """The sheets a scope selects, or a refusal naming the sheets that exist.
+
+    A ``sheet`` naming no sheet in the workbook used to select nothing, and
+    selecting nothing produced an empty read, which this tool then reported as
+    ``"no extractable text -- an empty text read means this file carries no
+    extractable text"``. That sentence is about the file. The file was never
+    the problem: the filter was. In the 185-task gold run 15 rubric items were
+    graded against that sentence on ``.xlsx``/``.docx`` deliverables holding
+    346 to 200,000 characters, and all 15 scored fail at 0.0.
+
+    ``member`` has always refused this way -- ``no member 'x' in archive;
+    members: [...]`` -- and ``render_to_image`` refuses an out-of-range page
+    and slide. ``sheet`` now refuses like its siblings, naming what does
+    exist so the caller can name it correctly on the next call.
+    """
+    target = scope.get("sheet")
+    if target is None:
+        return list(sheetnames[:MAX_SHEETS])
+    if target not in sheetnames:
+        raise InvalidScope(
+            f"no sheet {target!r} in workbook; "
+            f"sheets: {list(sheetnames[:MAX_SHEETS])}"
+        )
+    # A named sheet is not subject to the all-sheets cap. That cap bounds how
+    # much a whole workbook may return; it is not a statement about whether
+    # the one sheet the caller asked for can be reached.
+    return [target]
+
+
 def _read_xlsx_text(p: Path, scope: Dict[str, Any]) -> str:
     import openpyxl  # type: ignore
 
     wb = openpyxl.load_workbook(p, data_only=True, read_only=True)
-    target = scope.get("sheet")
     parts: List[str] = []
-    for name in wb.sheetnames[:MAX_SHEETS]:
-        if target is not None and name != target:
-            continue
+    for name in _sheets_in_scope(scope, wb.sheetnames):
         ws = wb[name]
         rows = []
         for row in ws.iter_rows(values_only=True):
@@ -932,10 +978,22 @@ def _pdf_table_blocks(page: Any, page_number: int) -> List[str]:
 def _read_pdf_text(p: Path, scope: Dict[str, Any]) -> str:
     import pdfplumber  # type: ignore
 
-    page_start = int(scope.get("page_start", 1))
-    page_end = int(scope.get("page_end", MAX_PAGES_DEFAULT))
+    page_start = _positive_int(scope.get("page_start", 1), "page_start")
+    page_end = _positive_int(scope.get("page_end", MAX_PAGES_DEFAULT), "page_end")
+    if page_end < page_start:
+        raise InvalidScope(
+            f"page_end {page_end} is before page_start {page_start}"
+        )
     parts: List[str] = []
     with pdfplumber.open(p) as pdf:
+        # A window that begins past the last page selects nothing, and the
+        # empty result used to be reported as "this PDF has no text layer" --
+        # a claim about the document, made from a fact about the request.
+        # ``_render_pdf_page`` has always refused this; so does this now.
+        if page_start > len(pdf.pages):
+            raise InvalidScope(
+                f"page_start {page_start} out of range 1..{len(pdf.pages)}"
+            )
         for i, page in enumerate(pdf.pages, 1):
             if i < page_start or i > page_end:
                 continue
@@ -1382,8 +1440,31 @@ def has_only_source_code_content(path: Union[str, Path]) -> Optional[bool]:
     return any(_is_source(entry) for entry in entries)
 
 
+#: Scope keys each content op implements, by file kind. Anything outside the
+#: set for the op and kind in hand is refused rather than dropped.
+#:
+#: Dropping it is the quieter failure and the worse one: the caller asked for
+#: a part of the file, the whole file came back, and nothing in the response
+#: says the narrowing never happened -- so evidence gets quoted against a page
+#: or a sheet that was never selected. ``render_to_image`` has always refused
+#: an unknown key (``_validate_scope_keys``) and the dispatcher has always
+#: refused ``member`` on a non-archive. These two ops were the gap.
+_READ_CONTENT_SCOPE_KEYS: Dict[str, set] = {
+    "xlsx": {"sheet"},
+    "pdf": {"page_start", "page_end"},
+}
+_INSPECT_FORMATTING_SCOPE_KEYS: Dict[str, set] = {
+    "xlsx": {"sheet"},
+}
+
+
 def _op_read_content(p: Path, scope: Dict[str, Any]) -> Dict[str, Any]:
     kind = _kind_of(p)
+    _validate_scope_keys(
+        scope,
+        allowed=_READ_CONTENT_SCOPE_KEYS.get(kind, set()),
+        source_kind=f"read_content on {kind}",
+    )
     if kind == "xlsx":
         text = _read_xlsx_text(p, scope)
     elif kind == "pdf":
@@ -1512,11 +1593,8 @@ def _format_xlsx(p: Path, scope: Dict[str, Any]) -> Dict[str, Any]:
 
     wb = openpyxl.load_workbook(p, data_only=False)
     default_font_color = _workbook_default_font_color(wb)
-    target = scope.get("sheet")
     sheets_meta = []
-    for name in wb.sheetnames[:MAX_SHEETS]:
-        if target is not None and name != target:
-            continue
+    for name in _sheets_in_scope(scope, wb.sheetnames):
         ws = wb[name]
         merged = [str(r) for r in ws.merged_cells.ranges]
         col_widths = {k: (d.width if d.width is not None else None)
@@ -1699,6 +1777,11 @@ def _format_pptx(p: Path, _scope: Dict[str, Any]) -> Dict[str, Any]:
 
 def _op_inspect_formatting(p: Path, scope: Dict[str, Any]) -> Dict[str, Any]:
     kind = _kind_of(p)
+    _validate_scope_keys(
+        scope,
+        allowed=_INSPECT_FORMATTING_SCOPE_KEYS.get(kind, set()),
+        source_kind=f"inspect_formatting on {kind}",
+    )
     if kind == "xlsx":
         return _format_xlsx(p, scope)
     if kind == "docx":
