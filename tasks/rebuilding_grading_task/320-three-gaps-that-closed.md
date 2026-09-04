@@ -71,27 +71,34 @@ _EMPTY_READ_DISCLAIMER       df473c0 (#260)
 정답에는 `inspect_structure`까지 가는 `.docx`가 없다는 뜻이고, 따라서 약 15점 중
 Word 몫이 얼마인지는 **아직 측정된 적이 없다.**
 
-### 뒤집은 것은 두 자리 중 한 자리다 (→ 새 후속 8번)
+### 뒤집은 것은 두 자리 중 한 자리다 (→ 새 후속 8번, 나중에 정정됨)
 
 `_pdf_geometry`를 부르는 자리는 **둘**이다. 이 뒤집기를 만든 것은 그중 하나뿐이다.
 
 | 부르는 자리 | 대체 경로 | 실제 실행 환경에서 |
 |---|---|---|
 | `_inspect_pdf` (`inspect_structure`) | PyMuPDF → **`pdfplumber`** | **닿는다** |
-| `_op_inspect_formatting` (`inspect_formatting`) | 없음 | `note: "PyMuPDF not available"` |
+| `_op_inspect_formatting` (`inspect_formatting`) | 없음 | **닿는다** (아래 정정) |
 
 판정기가 1단계에서 인용한 증거가 `"kind": "pdf", "page_count": 1` — `_inspect_pdf`의
 모양이다. 그래서 뒤집은 자리는 `inspect_structure` 쪽이고, 그쪽은 PyMuPDF가 없어도
 `pdfplumber`로 같은 블록을 만든다(직접 확인했다 — 두 경로의 출력이 같다).
 
-`inspect_formatting` 쪽 분기는 다르다. `ImportError`면 기하도 폰트도 없이 note
-하나를 돌려준다. 그리고 **PyMuPDF는 `requirements-renderer.txt`에만 적혀 있다** —
-`backend-tests.yml`도 `grade-run.yml`도 `requirements.txt`만 설치한다. 즉 이 분기는
-**두 유료 실행을 포함해 이 저장소가 돌리는 모든 환경에서 note만 돌려줬다.**
+`inspect_formatting` 쪽 분기는 대체 경로가 없다. `ImportError`면 기하도 폰트도 없이
+note 하나를 돌려준다. 이 문서는 처음에 **PyMuPDF가 `requirements-renderer.txt`에만
+있으니 그 분기가 모든 환경에서 note만 돌려줬다**고 적었고, 그 위에 후속 8번을
+열었다.
+
+> **정정 (`321`).** 그 결론이 틀렸다. `requirements.txt` 4번째 줄이
+> `-r requirements-renderer.txt`이므로 `requirements.txt`를 설치하면 PyMuPDF도
+> 설치된다. 위 표의 "닿는가" 칸은 두 줄 다 **닿는다**가 맞다. 3단계 유료 실행에
+> `fonts` 목록을 인용한 PDF 항목이 3개 있는 것이 그 증거다. 세부는
+> [`321`](./321-the-question-the-probe-asked.md).
 
 이 사실은 1번을 다시 열지 않는다 — 1번이 요구한 능력은 배달됐고 판정을 뒤집었다.
-그러나 절반은 배포되지 않은 셈이므로 **후속 8번으로 번호를 붙였다.** 커밋 메시지에
-적고 마는 것이 이 문서가 고치려는 바로 그 습관이다.
+남는 것은 **두 자리의 비대칭**뿐이다: 같은 파일 안에서 한 자리는 `pdfplumber`
+대체 경로를 갖고 다른 자리는 갖지 않는다. 지금 우리가 돌리는 환경에서는 어느 쪽도
+실행되지 않는 차이라서, 채점기 지문을 움직여 가며 맞출 이유가 없다고 판단했다.
 
 ---
 
@@ -225,9 +232,13 @@ actually read
 - 문서에 있는 **모든** 번호가 표에 있어야 한다 — 새 번호가 생기면 시험이 먼저 안다
 
 그리고 그 규칙은 **이 조사 안에서 이미 한 번 걸렸다.** 1번 탐침을 쓰다가 나온
-`inspect_formatting` 쪽 절반이 **8번**이 됐고, 8번의 탐침은 지금 **거짓**을
-돌려준다. 그래서 위의 두 방향 중 "거짓인데 취소선이 있으면 실패" 쪽은 심어 놓은
-변이뿐 아니라 **살아 있는 항목 하나로도** 돌아가고 있다.
+`inspect_formatting` 쪽 절반이 **8번**이 됐다. 다만 8번을 연 근거 자체가 틀렸고
+([`321`](./321-the-question-the-probe-asked.md)), 8번은 정정되어 닫혔다 — 잡힌 것은
+능력의 공백이 아니라 **탐침이 던진 질문의 결함**이었다. 그리고 그 정정을 검증하다가
+**9번**이 나왔다 — 채점기 지문이 같은 방식으로 설치 그래프의 절반만 덮는다. 그래서
+위의 두 방향 중 "거짓인데 취소선이 있으면 실패" 쪽은 지금 **살아 있는 항목 하나로
+실제로 돌고 있다.** 그래도 그 방향은 **비교 규칙 자체를 향한 음성 대조군**으로 한 번
+더 지킨다 — 9번도 언젠가 닫히고, 그날 이 방향이 조용히 죽으면 안 되기 때문이다.
 
 이제 능력이 닫히는 순간 문서가 **틀리는 게 아니라 붉어진다.**
 

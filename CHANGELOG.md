@@ -70,25 +70,81 @@ entries land under a fresh dated heading the day they merge to `main`.
   default and a note added without a `!` negation is correct only in the
   worktree that wrote it.
 
-  Writing probe 1 turned up a second half of the same gap, now recorded as
-  **follow-up 8, open**. `_pdf_geometry` has two call sites, and only one of them
-  produced the flip above. `_inspect_pdf`, behind `inspect_structure`, prefers
-  PyMuPDF and falls back to `pdfplumber` — which is what the judge actually
-  called, since the stage-1 evidence it cited is that function's shape.
-  `_op_inspect_formatting`'s PDF branch has no fallback: on `ImportError` it
-  returns `{"kind": "pdf", "note": "PyMuPDF not available"}`, with no geometry
-  and no fonts. PyMuPDF is declared only in `requirements-renderer.txt`, and
-  `backend-tests.yml` and `grade-run.yml` both install `requirements.txt`, so
-  that branch has returned the note in every environment this repository runs,
-  including both paid gold-ceiling runs. Follow-up 1 stays closed — the
-  capability it asked for was delivered and did flip a verdict — but half of it
-  is not reachable where we ship, which is a numbered item rather than a remark
-  in a commit message. Its probe is deliberately static: it reads
-  `requirements.txt` and the branch's source instead of attempting
-  `import fitz`, because a probe that answers `True` on a developer box with
-  PyMuPDF and `False` in CI cannot hold a document to anything. It answers
-  `False` today, so the `False` direction of the contract above is now exercised
-  by a live item and not only by planted mutations.
+  Writing probe 1 turned up what looked like a second half of the same gap, and
+  it was recorded as **follow-up 8, open**: `_op_inspect_formatting`'s PDF branch
+  has no fallback, so on `ImportError` it returns
+  `{"kind": "pdf", "note": "PyMuPDF not available"}` with no geometry and no
+  fonts, and PyMuPDF is declared in `requirements-renderer.txt` rather than in
+  `requirements.txt`. **That reading was wrong, and is corrected below.**
+  `requirements.txt` pulls the renderer file in with `-r` on its fourth line, so
+  every workflow that installs it installs PyMuPDF too. Probe 8 did not follow
+  the include, so it reported a shipped capability as an open gap. Both the item
+  and the probe are fixed in the same release;
+  `tasks/rebuilding_grading_task/321-the-question-the-probe-asked.md` carries the
+  evidence.
+
+- **A probe answered its question correctly and still gave the wrong answer.**
+  Follow-up 8, opened above, claimed `inspect_formatting`'s PDF branch returned
+  `note: "PyMuPDF not available"` in every environment this repository runs,
+  including both paid gold-ceiling runs. It does not. `requirements.txt` line 4
+  is `-r requirements-renderer.txt`, and that file declares `PyMuPDF>=1.21.0`;
+  the include and the declaration arrived together in `fa8bf4f` (2026-07-15),
+  six weeks before either paid run. `backend-tests.yml`, `grade-run.yml`,
+  `batch-run.yml` and `audio-accuracy-probe.yml` all install `requirements.txt`,
+  so all four install PyMuPDF.
+
+  The stage-3 payload confirms it from the other end. Three items cite a PDF font
+  list, and `ae0c1093`'s evidence reads
+  `"page_size_uniform": true, "orientation": "portrait", "fonts": [...]` — the
+  fitz branch's exact return shape, which `_inspect_pdf` never produces because
+  it emits `metadata`, not `fonts`. On `788d2bc6` that font list decided a
+  verdict (*"No more than two distinct font families are used across the deck"*,
+  failed against seven). Stage 1 shows no such evidence not because the
+  capability was missing but because none of its 1,433 rubric items asked about a
+  font; stage 3 asked in 11 of 8,715.
+
+  What was defective was the question the probe asked — "is this package named in
+  this file", where the shipped behaviour depends on "does `pip install -r` end
+  up installing it". The requirements reader now walks the `-r` / `--requirement`
+  chain the way pip does, breaks include cycles, strips comments by pip's rule,
+  and **raises** rather than returning `False` when an included file is missing,
+  since a broken install graph is a different finding from an absent package.
+  That behaviour is pinned by its own regression: two packages `requirements.txt`
+  does not name (`PyMuPDF`, `openpyxl`) must still be visible through the
+  include, and the test fails loudly if either is later named directly, because
+  it would then no longer distinguish a reader that follows `-r` from one that
+  does not.
+
+  Follow-up 8 is struck. The remaining asymmetry between the two `_pdf_geometry`
+  call sites is documented and deliberately not changed: the branch does not
+  execute in any environment we run, closing it would move the grader
+  fingerprint, and the two engines do not agree on fonts (measured on one 2-page
+  PDF, page rects match exactly while PyMuPDF reports a declared font pdfplumber
+  does not), so a fallback filling the same `fonts` key would make one field name
+  mean two things by environment.
+
+- **The grader identity makes the same one-file-for-a-graph move, and is now
+  registered as follow-up 9, open.** Found while proving the correction above did
+  not move the fingerprint. `compute_grader_source_hash` hashes
+  `requirements.txt` and not the `requirements-renderer.txt` that
+  `requirements.txt` includes, so the identity both paid runs are pinned to does
+  not cover the declaration of `PyMuPDF`, `openpyxl`, `python-pptx`,
+  `python-docx` or `Pillow` — every package the judge's `read_deliverable`
+  depends on. What the judge can see could change while the identity says
+  nothing did, and that identity is what a merged shard set and a published grade
+  cite. Measured rather than read off the source, at `94ea015` with
+  `gold_ceiling_185_v2_sol_max.yaml`: deleting `PyMuPDF>=1.21.0` from the
+  included file leaves the fingerprint byte-identical at `7b2bd7d9…`, while
+  appending a single comment line to the entry file moves it to `0247c9e0…`. The
+  hash reads 108 files and none of them is an include target. **Not fixed** — the
+  fix lives in `step8_grade.py` and would move the fingerprint of every run after
+  it, which costs merge freezes and reproducibility, so it is left as an owner
+  decision. Probe 9 holds that state by observing which files the hash function
+  actually reads rather than grepping the source for a filename, since grepping
+  for a filename is precisely what went wrong in follow-up 8. It also restores a
+  live `False` case to the contract, which item 8's closure had removed; the
+  explicit negative control over the comparison rule stays regardless, because
+  item 9 will close one day too. No model calls; grader source untouched.
 
 - **A way into an archive that only one of two schemas mentioned.** PR3 follow-up
   4. A stage-1 gold answer — five WAV stems inside one `.zip` — scored 2 of 62
