@@ -19,19 +19,21 @@ agrees with itself. It does not tell you the model is listening.
 So this script builds its own corpus, out of nothing but arithmetic.
 
 Every clip here is synthesised from a segment list -- a start time, an end
-time, and either a frequency or silence -- by :func:`render_clip`, using only
-``wave`` and ``math`` from the standard library. There is no recording, no
-asset, no download, and nothing committed as bytes. What is in the clip is
-what the segment list says is in it, and the accompanying test decodes the
-rendered samples back and checks that the waveform really has the onsets, the
-gaps, the beep count and the pitch order the segments claim. **The ground
-truth is not asserted in prose; it is measured off the same bytes the model
-hears.**
+time, and either silence or a frequency, optionally with further frequencies
+sounding alongside it -- by :func:`render_clip`, using only ``wave`` and
+``math`` from the standard library. There is no recording, no asset, no
+download, and nothing committed as bytes. What is in the clip is what the
+segment list says is in it, and the accompanying test decodes the rendered
+samples back and checks that the waveform really has the onsets, the gaps, the
+beep count, the pitch order, the scale degrees, the chord tones, the overtones
+and the semitone transposition the segments claim. **The ground truth is not
+asserted in prose; it is measured off the same bytes the model hears.**
 
-Against those clips it puts twelve criteria, six of which are true and six of
-which are false, matched in pairs so that each clip carries one of each. The
-criteria are written the way the gold rubric writes them, and the families
-they fall into are the families that actually failed on the gold run:
+Against those clips it puts twenty criteria, ten of which are true and ten of
+which are false, matched in pairs so that each pair sits on one clip and
+carries one of each. The criteria are written the way the gold rubric writes
+them, and the families they fall into are the families that actually failed on
+the gold run:
 
 * ``timing``       -- a tone stops partway through; a criterion says it does
                       not. This is the exact shape of the 0.95-vs-0.96
@@ -44,6 +46,36 @@ they fall into are the families that actually failed on the gold run:
   61-89 token answer. Whether a claim at that resolution is answerable at all
   is a question this family exists to answer.
 * ``pitch_order``  -- low then high, and a criterion claiming high then low.
+
+Those six are beeps, and beeps were the first version's admitted limit: the
+gold run's audio criteria are about film and music tracks, and what this
+corpus could get wrong was "how many beeps" rather than anything musical. Four
+more families answer that. Three of them are the questions the gold run's
+failed criteria actually asked -- a key (G major), a modulation (an A-flat
+bridge) and a timbre ("bass synth") -- and the fourth, chord quality, is what
+a key claim rests on and the only one of the four that needs two notes to
+sound at the same instant:
+
+* ``key``        -- an ascending G major scale, and a criterion placing it in
+                    E-flat major. Decidable on one note: the melody plays
+                    F-sharp, which E-flat major does not have.
+* ``triad``      -- three notes sounding at once, and a criterion calling a
+                    major chord minor. The difference is B4 against B-flat4,
+                    493.88 Hz against 466.16 Hz, and it is in the spectrum.
+* ``modulation`` -- an arpeggio that transposes up a semitone halfway, and a
+                    criterion saying the key never changes. The ground truth
+                    is a frequency *ratio*, 2 ** (1/12), measured off the two
+                    halves of the decoded waveform.
+* ``timbre``     -- a low note carrying its first five overtones, and a
+                    criterion calling it a plain sine. This is "bass synth"
+                    reduced to something a spectrum settles.
+
+These are music, not speech, and the distinction is worth stating plainly:
+intelligible speech cannot be synthesised from ``wave`` and ``math``, so a
+speech corpus would need a committed recording, which is exactly what this
+script refuses to have. The speech half of "speech or music with certain
+ground truth" is therefore still open, and nothing here should be read as
+having closed it.
 
 What comes out is not one number but three, and the third is the one that
 matters:
@@ -65,15 +97,17 @@ matters:
     cannot tell a listener from a coin, and a balanced corpus is exactly where
     that failure hides.
 
-The significance of J is taken by *exhaustive* enumeration of the 64 ways the
-six true/false labels could be swapped within their pairs -- not sampling, so
-the p-value is exact and the script has no random state to pin. That design
+The significance of J is taken by *exhaustive* enumeration of the 1024 ways
+the ten true/false labels could be swapped within their pairs -- not sampling,
+so the p-value is exact and the script has no random state to pin. That design
 has a floor, and the floor is reported rather than left for a reader to
-discover: with six pairs the smallest p this can ever produce is 1/64 =
-0.015625. A perfect result is significant at 0.05 and can never reach 0.01.
-Saying so here is the same discipline as ``is_informative: false`` on the
-repeat-variation interval -- the number is published *with* the bound on what
-it can support.
+discover: with ten pairs the smallest p this can ever produce is 1/1024 =
+0.000977. The first version of this corpus had six pairs and a floor of 1/64 =
+0.015625, which could never reach 0.01 however well the model did; four more
+pairs is what removed that bound, and they are musical pairs, so the two
+limits the card recorded are lifted by the same change. Saying so here is the
+same discipline as ``is_informative: false`` on the repeat-variation interval
+-- the number is published *with* the bound on what it can support.
 
 The identity is not chosen here. It is read out of the grading config the
 repeat runs used, so the accuracy figure is measured on the same deployment,
@@ -172,11 +206,28 @@ class Segment:
     ``frequency_hz`` of ``None`` means digital silence -- samples of exactly
     zero, not low-level noise, so "is anything audible here" has an answer
     that survives any encoder.
+
+    ``partials`` is what makes a chord and a timbre expressible, and it is the
+    whole difference between a beep and music. Each entry is
+    ``(frequency_hz, weight)`` and sounds *at the same time* as the
+    fundamental: a triad is three frequencies at once, and a synth bass is a
+    fundamental plus its harmonics. Weights are relative -- the fundamental is
+    1.0 -- and their total is normalised back to :data:`TONE_AMPLITUDE` when
+    the segment is rendered, so a six-voice segment is as loud as a one-voice
+    one and neither clips.
+
+    A segment with no partials renders through exactly the path it always did,
+    at exactly the amplitude it always did: the normaliser divides by 1.0 and
+    the addition loop never runs. That is deliberate rather than incidental.
+    The published "discrimination 0" result was measured on five clips that
+    carry no partials, and it stays re-derivable only if those clips still
+    render to the same bytes. A test decodes them and checks sample by sample.
     """
 
     start_s: float
     end_s: float
     frequency_hz: Optional[float]
+    partials: tuple[tuple[float, float], ...] = ()
 
     @property
     def duration_s(self) -> float:
@@ -186,11 +237,24 @@ class Segment:
     def is_silent(self) -> bool:
         return self.frequency_hz is None
 
+    @property
+    def frequencies_hz(self) -> tuple[float, ...]:
+        """Every frequency sounding here at once, fundamental first."""
+        if self.frequency_hz is None:
+            return ()
+        return (self.frequency_hz, *(freq for freq, _weight in self.partials))
+
+    @property
+    def weight_total(self) -> float:
+        """Fundamental (1.0) plus every partial, for loudness normalisation."""
+        return 1.0 + sum(weight for _freq, weight in self.partials)
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "start_s": round(self.start_s, 6),
             "end_s": round(self.end_s, 6),
             "frequency_hz": self.frequency_hz,
+            "partials": [[freq, weight] for freq, weight in self.partials],
         }
 
 
@@ -216,7 +280,10 @@ class Clip:
 
 
 def _tone_samples(
-    frequency_hz: float, count: int, phase_offset: int
+    frequency_hz: float,
+    count: int,
+    phase_offset: int,
+    amplitude: float = TONE_AMPLITUDE,
 ) -> Iterator[float]:
     """A sine at ``frequency_hz``, continuous across segment boundaries.
 
@@ -225,10 +292,14 @@ def _tone_samples(
     the previous one left it instead of restarting at zero. Restarting would
     put a click at every boundary, and a click is an audible event this corpus
     has not declared.
+
+    ``amplitude`` defaults to the value every single-voice segment has always
+    used, so a caller that does not ask for anything else gets the identical
+    float back.
     """
     step = 2.0 * math.pi * frequency_hz / CLIP_SAMPLE_RATE_HZ
     for index in range(count):
-        yield TONE_AMPLITUDE * math.sin(step * (phase_offset + index))
+        yield amplitude * math.sin(step * (phase_offset + index))
 
 
 def clip_samples(clip: Clip) -> list[float]:
@@ -237,6 +308,21 @@ def clip_samples(clip: Clip) -> list[float]:
     Anything the segment list does not cover is silence. That is deliberate:
     a clip is defined by what it *contains*, and the space between two beeps
     should not need its own entry to be quiet.
+
+    The fundamental is *assigned* into the buffer and the partials are *added*
+    to it, so a one-voice segment takes the same statement it always took. In
+    IEEE-754 the accumulating form would give bit-identical results here --
+    ``x * 1.0`` and ``0.0 + x`` are both exact -- so this is a readability
+    choice rather than a correctness one, and it is worth being exact about
+    which: the single-voice path being visibly unchanged is what makes the
+    byte-identity test a check rather than a hope.
+
+    The identity itself does not rest on that choice. It rests on the scale:
+    with no partials ``weight_total`` is 1.0, so the scale is
+    ``TONE_AMPLITUDE / 1.0``, and the loop over partials runs zero times. The
+    published "discrimination 0" result was measured on five clips that go
+    down this path, and a test recomputes all five the pre-partials way and
+    demands exact equality.
     """
     total = int(round(clip.duration_s * CLIP_SAMPLE_RATE_HZ))
     samples = [0.0] * total
@@ -248,10 +334,16 @@ def clip_samples(clip: Clip) -> list[float]:
         if stop <= start:
             continue
         assert segment.frequency_hz is not None
+        scale = TONE_AMPLITUDE / segment.weight_total
         for offset, value in enumerate(
-            _tone_samples(segment.frequency_hz, stop - start, start)
+            _tone_samples(segment.frequency_hz, stop - start, start, scale)
         ):
             samples[start + offset] = value
+        for frequency_hz, weight in segment.partials:
+            for offset, value in enumerate(
+                _tone_samples(frequency_hz, stop - start, start, scale * weight)
+            ):
+                samples[start + offset] += value
     return samples
 
 
@@ -271,6 +363,59 @@ def render_clip(clip: Clip, path: Path) -> str:
         handle.setframerate(CLIP_SAMPLE_RATE_HZ)
         handle.writeframes(frames)
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+# --------------------------------------------------------------------------
+# Pitches, so a musical claim is arithmetic rather than taste
+# --------------------------------------------------------------------------
+
+#: Equal temperament, A4 = MIDI 69 = 440 Hz.
+A4_HZ = 440.0
+A4_MIDI = 69
+
+#: The ratio one semitone is. Every musical claim below reduces to this
+#: number or to a membership test over :data:`NOTE`, which is the point: "the
+#: bridge modulates up a semitone" is checkable off the waveform as a
+#: frequency ratio, and "taste" never enters it.
+SEMITONE_RATIO = 2.0 ** (1.0 / 12.0)
+
+
+def pitch_hz(midi_note: int) -> float:
+    """Frequency of an equal-tempered MIDI note number."""
+    return A4_HZ * (2.0 ** ((midi_note - A4_MIDI) / 12.0))
+
+
+#: MIDI numbers for the notes used below, so the segment lists read as music
+#: and the frequencies are derived rather than typed. ``Fs`` is F-sharp, ``b``
+#: is flat. ``Bb4`` and ``F5`` are never played -- they are here because they
+#: are what the *false* claims would require, and the test asserts they are
+#: absent from the waveform.
+NOTE = {
+    "C2": 36,
+    "G4": 67,
+    "Ab4": 68,
+    "A4": 69,
+    "Bb4": 70,
+    "B4": 71,
+    "C5": 72,
+    "D5": 74,
+    "Eb5": 75,
+    "E5": 76,
+    "F5": 77,
+    "Fs5": 78,
+    "G5": 79,
+    "Ab5": 80,
+}
+
+
+def hz(name: str) -> float:
+    """Frequency of a named note, e.g. ``hz("Fs5")``."""
+    return pitch_hz(NOTE[name])
+
+
+#: The overtones the buzzy bass carries, and the falling strengths that make
+#: it read as a synth rather than a sine. 1/n is the sawtooth series.
+BASS_HARMONICS = (2, 3, 4, 5, 6)
 
 
 CLIPS: tuple[Clip, ...] = (
@@ -324,6 +469,81 @@ CLIPS: tuple[Clip, ...] = (
         description=(
             "A 220 Hz tone for two seconds, one second of silence, then a "
             "880 Hz tone for two seconds -- two octaves up."
+        ),
+    ),
+    # ----------------------------------------------------------------------
+    # Musical material. Everything above is a beep; the criteria that actually
+    # failed on the gold run were about key, chord quality, tempo and timbre,
+    # and a corpus of beeps cannot ask those. These four clips are still
+    # arithmetic -- every frequency comes out of pitch_hz -- but they are
+    # arithmetic arranged as music.
+    # ----------------------------------------------------------------------
+    Clip(
+        clip_id="g_major_scale",
+        duration_s=3.4,
+        segments=tuple(
+            Segment(index * 0.4, index * 0.4 + 0.35, hz(name))
+            for index, name in enumerate(
+                ("G4", "A4", "B4", "C5", "D5", "E5", "Fs5", "G5")
+            )
+        ),
+        description=(
+            "Eight notes rising -- G4 A4 B4 C5 D5 E5 F-sharp5 G5 -- each 350 "
+            "ms with a 50 ms gap. That is the G major scale, and the F-sharp "
+            "is what makes it G major rather than any flat key."
+        ),
+    ),
+    Clip(
+        clip_id="major_triad",
+        duration_s=3.0,
+        segments=(
+            Segment(
+                0.2,
+                2.8,
+                hz("G4"),
+                partials=((hz("B4"), 1.0), (hz("D5"), 1.0)),
+            ),
+        ),
+        description=(
+            "One sustained chord: G4, B4 and D5 sounding together for 2.6 "
+            "seconds, which is a G major triad. The minor version of this "
+            "chord would put B-flat4 where the B4 is."
+        ),
+    ),
+    Clip(
+        clip_id="modulating_arpeggio",
+        duration_s=5.0,
+        segments=tuple(
+            Segment(index * 0.6, index * 0.6 + 0.5, hz(name))
+            for index, name in enumerate(
+                ("G4", "B4", "D5", "G5", "Ab4", "C5", "Eb5", "Ab5")
+            )
+        ),
+        description=(
+            "A G major arpeggio -- G4 B4 D5 G5 -- for the first 2.4 seconds, "
+            "then the same shape one semitone higher in A-flat major. The key "
+            "changes exactly halfway through."
+        ),
+    ),
+    Clip(
+        clip_id="buzzy_bass",
+        duration_s=3.0,
+        segments=(
+            Segment(
+                0.2,
+                2.8,
+                hz("C2"),
+                partials=tuple(
+                    (hz("C2") * harmonic, 1.0 / harmonic)
+                    for harmonic in BASS_HARMONICS
+                ),
+            ),
+        ),
+        description=(
+            "One low note -- C2, about 65.4 Hz -- carrying its first five "
+            "overtones at falling strength, which is what makes a synth bass "
+            "buzz instead of hum. A pure sine at the same pitch has none of "
+            "them."
         ),
     ),
 )
@@ -504,6 +724,111 @@ CLAIMS: tuple[Claim, ...] = (
         holds=False,
         because="220 Hz precedes 880 Hz, so the order is the other way round",
     ),
+    # ----------------------------------------------------------------------
+    # The musical families. Three of them are shapes the gold run actually
+    # failed on -- the criteria it marked wrong named a key (G major), a
+    # modulation (an A-flat bridge) and a timbre ("bass synth"). The fourth,
+    # chord quality, is what a key claim rests on. The tempo the gold run also
+    # named is already asked above, of the click track. Each pair here is one
+    # of those questions put to a waveform that answers it.
+    # ----------------------------------------------------------------------
+    Claim(
+        claim_id="key_true",
+        clip_id="g_major_scale",
+        family="key",
+        criterion="Every note in the melody belongs to the G major scale.",
+        holds=True,
+        because=(
+            "the eight notes are G4 A4 B4 C5 D5 E5 F-sharp5 G5, which is "
+            "exactly the G major scale"
+        ),
+    ),
+    Claim(
+        claim_id="key_false",
+        clip_id="g_major_scale",
+        family="key",
+        criterion="Every note in the melody belongs to the E-flat major scale.",
+        holds=False,
+        because=(
+            "E-flat major has E-flat, A-flat and B-flat and no F-sharp; this "
+            "melody plays B natural and F-sharp"
+        ),
+    ),
+    Claim(
+        claim_id="triad_true",
+        clip_id="major_triad",
+        family="triad",
+        criterion="The clip is one sustained chord, and that chord is major.",
+        holds=True,
+        because=(
+            "the chord is G4 + B4 + D5, and B4 is four semitones above G4, "
+            "which is a major third"
+        ),
+    ),
+    Claim(
+        claim_id="triad_false",
+        clip_id="major_triad",
+        family="triad",
+        criterion="The clip is one sustained chord, and that chord is minor.",
+        holds=False,
+        because=(
+            "a minor chord would sound B-flat4 at 466.16 Hz where this one "
+            "sounds B4 at 493.88 Hz"
+        ),
+    ),
+    Claim(
+        claim_id="modulation_true",
+        clip_id="modulating_arpeggio",
+        family="modulation",
+        criterion=(
+            "The music changes key partway through, so the second half is in "
+            "a different key from the first."
+        ),
+        holds=True,
+        because=(
+            "the first four notes spell G major and the last four spell "
+            "A-flat major, one semitone higher"
+        ),
+    ),
+    Claim(
+        claim_id="modulation_false",
+        clip_id="modulating_arpeggio",
+        family="modulation",
+        criterion=(
+            "The music stays in one key from beginning to end, with no change "
+            "of key anywhere in it."
+        ),
+        holds=False,
+        because="the second half is transposed up a semitone from the first",
+    ),
+    Claim(
+        claim_id="timbre_true",
+        clip_id="buzzy_bass",
+        family="timbre",
+        criterion=(
+            "The bass note is a bright, buzzy synth tone with clearly audible "
+            "overtones above its fundamental."
+        ),
+        holds=True,
+        because=(
+            "the segment sounds harmonics 2 through 6 of its 65.4 Hz "
+            "fundamental at falling strength"
+        ),
+    ),
+    Claim(
+        claim_id="timbre_false",
+        clip_id="buzzy_bass",
+        family="timbre",
+        criterion=(
+            "The bass note is a plain sine tone with nothing sounding above "
+            "its fundamental."
+        ),
+        holds=False,
+        because=(
+            "harmonics 2 through 6 of the fundamental are all present in the "
+            "segment"
+        ),
+    ),
 )
 
 
@@ -572,7 +897,7 @@ class Tally:
         """Calls that produced a verdict, hedges included.
 
         A hedge answered; it just did not decide. Excluding it from the
-        denominator would let a model that hedged eleven times out of twelve
+        denominator would let a model that hedged nineteen times out of twenty
         and guessed the last one report 100% accuracy.
         """
         return self.correct + self.false_fail + self.false_pass + self.hedged
@@ -600,8 +925,8 @@ def discrimination(
     """Youden's J over ``(holds, verdict)`` pairs: P(pass|true) - P(pass|false).
 
     The point of this number is that accuracy on a balanced corpus cannot
-    distinguish a listener from a constant. Answer ``pass`` to all twelve
-    criteria and accuracy is 50%; answer ``fail`` to all twelve and accuracy
+    distinguish a listener from a constant. Answer ``pass`` to all twenty
+    criteria and accuracy is 50%; answer ``fail`` to all twenty and accuracy
     is 50%. Both give J = 0. Only a verdict that moves with the audio gives
     J > 0.
 
@@ -622,7 +947,7 @@ def permute_within_pairs(
 ) -> dict[str, Any]:
     """Exact p-value for J, by swapping the labels inside each matched pair.
 
-    Six pairs, so 2^6 = 64 relabellings, enumerated in full rather than
+    Ten pairs, so 2^10 = 1024 relabellings, enumerated in full rather than
     sampled. Exhaustive enumeration is what makes the p exact and what leaves
     this script with no random state to seed -- the same input gives the same
     number, forever, which is what the repeat-variation work needed and did
@@ -635,10 +960,13 @@ def permute_within_pairs(
     null anyone wants to reject.
 
     The floor is reported alongside the p, because it is a property of the
-    design and not of the result: the smallest value obtainable from 64
-    assignments is 1/64 = 0.015625. **This experiment cannot produce evidence
-    at the 0.01 level no matter how well the model does.** Adding repeats does
-    not change that; only more pairs would.
+    design and not of the result: the smallest value obtainable from 1024
+    assignments is 1/1024 = 0.000977. The first version of this corpus had six
+    pairs, a floor of 1/64 = 0.015625, and could not produce evidence at the
+    0.01 level however well the model did. Adding repeats never changed that
+    -- only more pairs could, and four more pairs is what this now has. The
+    floor is still published rather than assumed: a reader is told what the
+    design can support at the same moment they are told what it found.
     """
     pairs = sorted({call["pair_id"] for call in calls})
     observed = discrimination([(c["holds"], c["verdict"]) for c in calls])
@@ -998,8 +1326,8 @@ def build_report(
         "calls": calls,
         "accuracy": summarise(calls),
         "cost": {
-            # Two numbers, because a dry run makes 36 calls and is billed for
-            # none of them. Collapsing them would put a "billable_calls: 36"
+            # Two numbers, because a dry run makes 60 calls and is billed for
+            # none of them. Collapsing them would put a "billable_calls: 60"
             # into a free run's report, and that is exactly the figure someone
             # copies into a cost record.
             "model_calls": model_calls,
