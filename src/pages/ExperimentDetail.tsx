@@ -201,7 +201,7 @@ function ExperimentDetail() {
         sortKey === 'qa_score'
           ? a.qa_score ?? -1
           : sortKey === 'latency_ms'
-            ? a.latency_ms
+            ? a.latency_ms ?? -1
             : sortKey === 'task_wall_time_ms'
               ? a.observability?.execution_metrics?.task_wall_time_ms ?? -1
             : sortKey === 'problem_solving_cost'
@@ -213,7 +213,7 @@ function ExperimentDetail() {
         sortKey === 'qa_score'
           ? b.qa_score ?? -1
           : sortKey === 'latency_ms'
-            ? b.latency_ms
+            ? b.latency_ms ?? -1
             : sortKey === 'task_wall_time_ms'
               ? b.observability?.execution_metrics?.task_wall_time_ms ?? -1
             : sortKey === 'problem_solving_cost'
