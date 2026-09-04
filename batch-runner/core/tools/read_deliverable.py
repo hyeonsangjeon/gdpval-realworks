@@ -1292,6 +1292,11 @@ def has_extractable_text(path: Union[str, Path]) -> Optional[bool]:
     ``False`` is a positive claim and is only returned when the whole file was
     examined. Anything unexamined, unsupported, or broken is ``None``: routing
     must not escalate on a guess, and the caller treats the two differently.
+
+    The claim is about what *this module* yields, not about what the bytes
+    contain. A video whose container carries a subtitle stream still answers
+    ``False``, because nothing here extracts subtitles and a ``True`` would
+    hand the criterion to a reader that gets nothing.
     """
     p = Path(path)
     if not p.is_file():
@@ -1314,10 +1319,34 @@ def has_extractable_text(path: Union[str, Path]) -> Optional[bool]:
             return bool(p.read_text(encoding="utf-8", errors="replace").strip())
         if kind == "notebook":
             return bool(_read_notebook_text(p, {}).strip())
+        if kind == "video":
+            # The premise this branch used to rest on has moved. While video
+            # could not be rendered, ``False`` here would have escalated a
+            # criterion to VISUAL, found no target, and returned
+            # ``required_visual_render_target_unavailable`` -- so ``None`` was
+            # the honest answer and this sat with audio and zip below.
+            #
+            # Video renders now, as a contact sheet, and the only route from a
+            # criterion whose wording carries no visual keyword to the vision
+            # path is the TEXT -> VISUAL escalation -- which reads exactly this
+            # probe. ``None`` on both of its signals makes that escalation
+            # unreachable for a video-only deliverable, so "the turbine blades
+            # are clearly visible" went to a judge that had read the
+            # container's metadata, found no turbine in it, and marked the
+            # criterion *failed*. An assertion of absence, and worse than the
+            # honest exclusion the keyword-visual items on the same task got.
+            #
+            # Asked of the container rather than of the extension for the
+            # reason its sibling below is: ``_render_video_contact_sheet``
+            # needs the same PyAV this does and raises when there is no video
+            # stream, so a blanket ``False`` would escalate a host without the
+            # decoder, or a container that is sound only, into a render that
+            # cannot happen.
+            return _video_has_no_readable_text(p)
     except Exception:  # noqa: BLE001
         return None
-    # audio, video, zip, unknown: text is not the medium, and "this file has
-    # no text" would be read as a finding about a file nothing can read here.
+    # audio, zip, unknown: text is not the medium, and "this file has no text"
+    # would be read as a finding about a file nothing can read here.
     return None
 
 
@@ -2495,6 +2524,43 @@ def _video_audio_track_count(p: Path) -> Optional[int]:
         return None
     try:
         return len(container.streams.audio)
+    except Exception:  # noqa: BLE001
+        return None
+    finally:
+        container.close()
+
+
+def _video_has_no_readable_text(p: Path) -> Optional[bool]:
+    """``False`` when a video's content is pictures nothing here can read.
+
+    The counterpart to :func:`_video_audio_track_count`, and it exists for the
+    same reason: routing asks what medium the answer is written in, and an
+    extension is a fact about packaging. This one is asked by
+    ``has_extractable_text``, whose ``False`` is what lets a criterion escalate
+    off the text path and onto the contact sheet.
+
+    Deliberately never ``True``. A container may carry a subtitle stream, but
+    no op in this module extracts one, and the question is what *this module*
+    yields. ``True`` would suppress the escalation and hand the criterion to a
+    reader that comes back with nothing -- the defect this helper closes, put
+    back from the other side.
+
+    ``None`` covers the two states where the picture is out of reach as well:
+    no decoder installed, and a container that opens but holds no video
+    stream. ``_render_video_contact_sheet`` needs the same PyAV and raises on
+    the same empty stream list, so claiming ``False`` in either case would
+    escalate into a render that cannot happen.
+    """
+    try:
+        import av  # type: ignore
+    except ImportError:
+        return None
+    try:
+        container = av.open(str(p))
+    except Exception:  # noqa: BLE001
+        return None
+    try:
+        return False if container.streams.video else None
     except Exception:  # noqa: BLE001
         return None
     finally:
