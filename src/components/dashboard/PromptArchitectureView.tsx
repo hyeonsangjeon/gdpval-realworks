@@ -2,6 +2,27 @@ import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ChevronDown, ChevronRight, FileText, Code2, Shield, Settings, AlertTriangle } from 'lucide-react'
 import type { PromptArchitecture } from '../../hooks/useExperimentPrompt'
+import type { PromptArchitectureReading } from './promptArchitectureReading'
+
+/**
+ * What the panel shows instead of nothing.
+ *
+ * The button offering "System · User Prompt · QA · Execution Config" opens
+ * whether or not there is an architecture behind it, so the empty case has to
+ * say which of the three empties it is rather than draw a blank the reader can
+ * only read as "this run had no prompt settings".
+ */
+export function PromptArchitectureNotice({ reading }: { reading: PromptArchitectureReading }) {
+  return (
+    <div className="flex items-start gap-2.5 px-1 py-2">
+      <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-dash-text-muted" />
+      <div className="space-y-1">
+        <p className="text-xs font-semibold text-dash-heading">{reading.title}</p>
+        <p className="text-[11px] text-dash-text-secondary leading-relaxed max-w-[620px]">{reading.detail}</p>
+      </div>
+    </div>
+  )
+}
 
 /** Highlight template variables like {occupation} and {task_prompt} */
 function Hl({ text }: { text: string }) {
