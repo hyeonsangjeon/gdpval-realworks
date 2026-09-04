@@ -822,10 +822,15 @@ class InputFileVerification:
 
     checks: tuple[InputFileCheck, ...]
     problems: tuple[str, ...]
-    """Ways the written fingerprints and the real files disagree.
+    """Ways the written fingerprints and the real files are known to disagree.
 
-    A defect in the plan. It says the same thing on every machine, because it
-    is about what was written down, not about what happens to be lying around.
+    A defect in the plan, and it reads the same on any machine that can see the
+    file. A machine that cannot is not entitled to the same sentence: with no
+    bytes to hash, a written value disagreeing with the folder name is not
+    evidence of anything, because most of this dataset's folders are not named
+    after their file's contents. That case is filed under
+    :attr:`missing_copies` — still enough to stop the run, but not a verdict on
+    a plan nobody was able to check.
     """
     missing_copies: tuple[str, ...] = ()
     """Files no copy of which is on this machine, so nothing could be read.
