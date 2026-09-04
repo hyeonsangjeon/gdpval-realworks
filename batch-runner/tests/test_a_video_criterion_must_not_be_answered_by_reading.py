@@ -22,13 +22,19 @@ returned ``required_visual_render_target_unavailable``. Video is renderable now
 -- ``_render_video_contact_sheet`` tiles twelve timestamped stills into one
 image -- so the premise moved and the answer did not.
 
-What that cost, measured on the two gold tasks that ship an ``.mp4``: 47
+What that cost, measured on the two gold tasks that ship an ``.mp4``: 48
 criteria routed to the reader, **38 of them scored fail**. Not excluded --
 failed. "The visuals include at least one shot clearly depicting wind turbines"
 went to a judge holding the container's metadata, which contains no turbine,
 and the judge said so. An assertion of absence produced by the question rather
 than by the work, and worse than the honest exclusion the four keyword-visual
 items on the same tasks received.
+
+(This paragraph said 47 until 2026-09-04. The set is ``fail`` 38, ``pass`` 9
+and ``partial`` 1; the original total enumerated the first two and added them
+up. Nothing in this file asserted the number, which is how it drifted -- it is
+now recomputed from the committed payload in
+``test_the_count_of_items_the_judge_was_holding.py``. See ``322`` §11.)
 
 The distinction that matters is again ``False`` versus ``None``, but the burden
 runs the other way here. ``False`` sends the item somewhere; the somewhere has
