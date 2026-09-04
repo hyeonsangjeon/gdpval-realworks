@@ -55,6 +55,7 @@ from core.execution_envelope_tasks import (  # noqa: E402
     DATASET_REVISION,
     FORMAT_TEXT_ONLY,
     FULL_RUN_TASK_COUNT,
+    INPUT_FILE_READ,
     TRIAL_RUN_TASK_COUNT,
     catalog_sha256,
     check_catalog_carries_no_scores,
@@ -505,15 +506,40 @@ def test_a_reference_file_left_unpinned_is_reported(plan, catalog):
 
 
 def test_a_fingerprint_that_belongs_to_another_file_is_reported(plan, catalog):
+    """A tampered fingerprint is always reported, in the wording it can support.
+
+    How strongly the report is allowed to put it depends on what this machine
+    can see. Where a copy of the file is present its digest settles the matter,
+    and the note says the written value describes some other file. Where no copy
+    is present, all that is visible is that the folder name and the written value
+    disagree — and in this dataset most folders are not named after their file's
+    contents, so that disagreement cannot say which of the two is at fault.
+
+    This used to assert the strong wording unconditionally, and passed on a
+    machine with nothing downloaded only because the check made that claim from
+    the shape of the path. Tampering with the fingerprint destroys the very
+    evidence that this folder is one of the content-derived ones, so a machine
+    without the bytes genuinely cannot tell the tampering from a correct value
+    under an opaque folder. What holds everywhere is that it is reported, that
+    the run stops, and that the file is never recorded as one that was read and
+    agreed.
+    """
     conditions = conditions_from_plan(plan)
     entry = conditions["host_python_process"]
     tampered = dict(entry.input_file_versions)
     target = sorted(reference_files_for(entry.task_ids, catalog))[0]
     tampered[target] = "0" * 64
 
-    problems = check_input_file_versions(tampered, entry.task_ids, catalog)
+    verification = verify_input_file_versions(tampered, entry.task_ids, catalog)
+    notes = [note for note in verification.all_notes if target in note]
 
-    assert any("describes some other file" in note for note in problems)
+    assert notes, f"{target} was tampered with and the report said nothing"
+    assert any(
+        "describes some other file" in note or "does not repeat the first" in note
+        for note in notes
+    ), notes
+    check = next(one for one in verification.checks if one.path == target)
+    assert check.state != INPUT_FILE_READ, "a tampered value was recorded as read"
 
 
 def test_a_dataset_fingerprint_that_does_not_match_is_reported(plan, catalog):
