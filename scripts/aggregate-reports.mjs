@@ -168,6 +168,133 @@ export function withProjectedCost(report) {
   };
 }
 
+// What a report says about itself, checked before a dashboard reads it as a
+// number.
+//
+// `src/types/report.ts` has always described this payload exactly: five
+// counters that are always measured, and six figures where `null` carries a
+// meaning the file spells out beside them -- "null means never measured, not
+// measured at zero. A run whose tasks all errored has no average to report".
+// Nothing enforced any of it. An interface describes what a value will be once
+// it arrives; it cannot describe what arrives, and every report on this build
+// arrives over the unauthenticated HuggingFace fetch above.
+//
+// The line that made the gap visible is `retried_count || 0` in
+// generateCrossExperiment below. A report that never recorded a retry count was
+// published as one that retried nothing -- `||` cannot tell those apart, and
+// they are not the same fact. That fallback is removed now this check exists,
+// because a fallback that can no longer fire is a claim nobody reads.
+//
+// Absence is refused rather than folded into null, for the reason the grade
+// path gives at aggregate-grades.mjs: `undefined === null` is false, so a field
+// that is simply gone slips past a null check and reaches every reader that
+// treats the two alike.
+//
+// Measured against all 26 published reports and all 208 sector rows before it
+// was written: every field below is already present and numeric on every one of
+// them, so no figure on the dashboard moves.
+const SUMMARY_COUNTS = ['total_tasks', 'success_count', 'error_count', 'retried_count'];
+const SUMMARY_MEASURED_OR_NULL = [
+  'avg_qa_score',
+  'min_qa_score',
+  'max_qa_score',
+  'avg_latency_ms',
+  'max_latency_ms',
+  'total_latency_ms',
+];
+const SECTOR_COUNTS = ['total', 'success'];
+const SECTOR_MEASURED_OR_NULL = ['avg_qa_score', 'avg_latency_ms'];
+
+function isRecord(value) {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+// NaN and Infinity both serialise to `null`, so a plain JSON.stringify would
+// name a value the payload does not hold -- and `null` is the one word this
+// check exists to keep honest. Absent prints as absent for the same reason.
+function shown(value) {
+  if (typeof value === 'number') return String(value);
+  return JSON.stringify(value) ?? 'undefined';
+}
+
+function checkCount(problems, where, holder, field) {
+  const value = holder[field];
+  if (!Number.isInteger(value) || value < 0) {
+    problems.push(`${where}.${field} must be a whole count, not ${shown(value)}`);
+  }
+}
+
+function checkPercent(problems, where, holder, field) {
+  const value = holder[field];
+  if (!Number.isFinite(value) || value < 0 || value > 100) {
+    problems.push(`${where}.${field} must be a percentage from 0 to 100, not ${shown(value)}`);
+  }
+}
+
+function checkMeasuredOrNull(problems, where, holder, field) {
+  if (!(field in holder)) {
+    problems.push(`${where}.${field} is absent -- write null to record that it was never measured`);
+    return;
+  }
+  const value = holder[field];
+  if (value === null || Number.isFinite(value)) return;
+  problems.push(`${where}.${field} must be a number, or null for never measured, not ${shown(value)}`);
+}
+
+export function validateReportSummary(report) {
+  const summary = report?.summary;
+  if (!isRecord(summary)) {
+    throw new Error(`report summary is missing or is not an object: ${shown(summary)}`);
+  }
+
+  const problems = [];
+  for (const field of SUMMARY_COUNTS) checkCount(problems, 'summary', summary, field);
+  checkPercent(problems, 'summary', summary, 'success_rate_pct');
+  for (const field of SUMMARY_MEASURED_OR_NULL) {
+    checkMeasuredOrNull(problems, 'summary', summary, field);
+  }
+
+  // The one arithmetic check here. Everything else is a shape the type already
+  // states, but a success_count above total_tasks is a leaderboard row that
+  // reads 12/10, and no shape rule catches it.
+  if (
+    Number.isInteger(summary.total_tasks)
+    && Number.isInteger(summary.success_count)
+    && summary.success_count > summary.total_tasks
+  ) {
+    problems.push(
+      `summary.success_count (${summary.success_count}) is above `
+        + `summary.total_tasks (${summary.total_tasks})`,
+    );
+  }
+
+  const breakdown = report?.sector_breakdown;
+  if (!Array.isArray(breakdown)) {
+    problems.push(`sector_breakdown must be an array of sectors, not ${shown(breakdown)}`);
+  } else {
+    breakdown.forEach((row, index) => {
+      const where = `sector_breakdown[${index}]`;
+      if (!isRecord(row)) {
+        problems.push(`${where} must be an object, not ${shown(row)}`);
+        return;
+      }
+      if (typeof row.sector !== 'string' || row.sector.trim() === '') {
+        problems.push(`${where}.sector must name a sector, not ${shown(row.sector)}`);
+      }
+      for (const field of SECTOR_COUNTS) checkCount(problems, where, row, field);
+      checkPercent(problems, where, row, 'success_rate_pct');
+      for (const field of SECTOR_MEASURED_OR_NULL) checkMeasuredOrNull(problems, where, row, field);
+    });
+  }
+
+  if (problems.length > 0) {
+    throw new Error(
+      'report does not match the contract src/types/report.ts publishes:\n'
+        + problems.map((problem) => `    - ${problem}`).join('\n'),
+    );
+  }
+}
+
 // Load all reports
 async function loadAllReports(deps = {}) {
   const subdirs = await readdir(RESULTS_DIR, { withFileTypes: true });
@@ -217,6 +344,10 @@ async function loadAllReports(deps = {}) {
       // the directory. Outside it, a throw here would take down the build
       // without saying which of the twenty-six reports caused it.
       data = withProjectedCost(data);
+      // Same reasoning, same place: a payload whose counts and scores do not
+      // match the contract the dashboard renders them under is a report that
+      // could not be loaded, not one to publish and hope about.
+      validateReportSummary(data);
     } catch (err) {
       failures.push(`  ${dirName}: ${err.message}`);
       continue;
@@ -278,7 +409,11 @@ function generateCrossExperiment(reports) {
     avg_qa_score: r.summary.avg_qa_score,
     total_tasks: r.summary.total_tasks,
     success_count: r.summary.success_count,
-    retried_count: r.summary.retried_count || 0,
+    // No `|| 0`. validateReportSummary has already refused a report that does
+    // not carry this count, so the fallback could only ever have fired for a
+    // payload the build no longer accepts -- and while it was there, silence
+    // and "nothing was retried" reached the leaderboard as the same number.
+    retried_count: r.summary.retried_count,
     date: r.meta.date,
     duration: r.meta.duration,
     report_scope: r.meta.report_scope,
