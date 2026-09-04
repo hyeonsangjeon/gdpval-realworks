@@ -10,13 +10,13 @@ export interface PromptArchitecture {
     codegen_core: PromptSource
     suffix: PromptSource | null
   }
-  qa_prompt: { enabled: boolean; min_score?: number; max_retries?: number; content: string | null }
+  qa_prompt: { enabled: boolean; min_score?: number | null; max_retries?: number | null; content: string | null }
   execution_config: {
     mode: string
     tokens: Record<string, number> | null
     timeout: number | null
     resume_max_rounds: number | null
-    max_retries: number
+    max_retries: number | null
     install_libreoffice: boolean
     metrics?: { enabled?: boolean }
   }
