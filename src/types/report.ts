@@ -290,9 +290,17 @@ export interface Narrative {
 }
 
 export interface FileGeneration {
-  needs_files_total: number
-  files_succeeded: number
-  files_failed: number
+  /**
+   * File-required tasks in scope — the denominator every rate below is taken
+   * over. `null` when `step6_report` could not read `validate_stats.json` and
+   * wrote the all-`null` block, and `0` when the run genuinely owed no file.
+   * The three states are not interchangeable: only a positive count supports a
+   * percentage, which is why `readFileGenerationRate` exists rather than a
+   * `> 0 ? … : 0` at each call site.
+   */
+  needs_files_total: number | null
+  files_succeeded: number | null
+  files_failed: number | null
   /**
    * File-required tasks the submission carries no row for, so their
    * deliverables were never looked at. Neither a success nor a failure: folding
@@ -302,7 +310,7 @@ export interface FileGeneration {
    */
   files_absent?: number | null
   absent_task_ids?: string[]
-  dummy_files_created: number
+  dummy_files_created: number | null
   dummy_task_ids: string[]
 }
 

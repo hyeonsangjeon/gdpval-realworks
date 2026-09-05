@@ -785,6 +785,30 @@ def _cost_money(value) -> str:
     return "no record" if value is None else f"${value:,.4f}"
 
 
+#: What the file-generation row says when no task in the run owed a file.
+#: ``0 (0.0%)`` is the value a run earns by failing every file it was asked
+#: for, so it cannot also be the value for a run that was asked for none.
+NO_FILE_TASKS_IN_SCOPE = "n/a — no task in this run required a file"
+
+
+def _file_generation_generated(succeeded, total) -> str:
+    """The ``Successfully generated`` cell, and whether it may hold a rate.
+
+    A rate needs a denominator. ``total`` of zero has none, and the old form --
+    ``round(succeeded / total * 100, 1) if total else 0.0`` -- answered that by
+    printing the worst value on the scale. Four full 220-task runs published
+    ``0 (0.0%)`` that way: ``exp013``, ``exp014``, ``exp025`` and ``exp026``,
+    none of which generated a file badly, because none was asked to generate
+    one at all.
+
+    A genuine zero still prints as ``0 (0.0%)``: with a denominator to divide
+    by, that is a measurement and not an absence.
+    """
+    if not total:
+        return NO_FILE_TASKS_IN_SCOPE
+    return f"{succeeded} ({round(succeeded / total * 100, 1)}%)"
+
+
 def _failed_task_cost(cost: dict) -> str:
     """``N (amount)`` for failed work, with the amount honestly qualified.
 
@@ -1025,14 +1049,17 @@ def _build_markdown(rd: dict) -> str:
         # step5 counted them, where it means no record rather than none — which
         # is why the row and the note below appear only when there are some.
         absent = fg.get("files_absent") or 0
-        pct = round(succeeded / total_fg * 100, 1) if total_fg else 0.0
         rows = [
             f"| Tasks requiring files | {total_fg} |",
-            f"| Successfully generated | {succeeded} ({pct}%) |",
+            f"| Successfully generated | {_file_generation_generated(succeeded, total_fg)} |",
             f"| Failed (empty outputs preserved) | {failed} |",
         ]
         note = []
         if absent:
+            # Reachable only with a denominator: a task can be absent from the
+            # submission only if the manifest said it owed a file, so the
+            # percentage this sentence quotes is always a measured one.
+            pct = round(succeeded / total_fg * 100, 1)
             rows.append(f"| Absent from submission (never checked) | {absent} |")
             note = [
                 f"> {absent} of these {total_fg} tasks have no row in the "
@@ -1214,7 +1241,23 @@ def _build_html(rd: dict) -> str:
             f'<div class="sub">{fg_sub}</div>'
             f'</div>'
         )
+    elif fg_total == 0:
+        # Dropping the card here is what the markdown and the HTML used to
+        # disagree about: the same payload printed ``0 (0.0%)`` in one artefact
+        # and nothing at all in the other, and a missing card is not readable
+        # as "there was no rate" — a reader cannot tell it from a run whose
+        # card simply scrolled off. Say it on the card the other runs get.
+        fg_card = (
+            '<div class="card">'
+            '<div class="label">File Gen Rate</div>'
+            '<div class="value">n/a</div>'
+            '<div class="sub">no task in this run required a file</div>'
+            '</div>'
+        )
     else:
+        # ``None``: step5 wrote no stats for this run, so there is no record of
+        # a rate either way. The markdown omits the section for the same
+        # payload, and the two stay in step.
         fg_card = ""
 
     # Reflection metric card

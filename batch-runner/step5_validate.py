@@ -352,10 +352,39 @@ def validate(data_dir: str = None) -> bool:
                 f": {_id_sample(text_only_absent)}"
             )
 
+        # A ✓ is a verdict on something that was looked at. With no
+        # file-required task in scope nothing was, and ``All 0 … ✓`` reads as
+        # the clean result a run earns by generating every file it owed — the
+        # one claim this arrangement cannot support.
+        #
+        # On a full run it is worse than uninformative. The manifest is built
+        # from the source parquet under a digest check and states its own
+        # count in ``_summary.needs_files``; the canonical corpus puts that at
+        # 185. A full run that counted none of them did not read the manifest
+        # the count is supposed to come from, so it fails rather than passing
+        # quietly with a checkmark.
+        declared_needs_files = manifest.get("_summary", {}).get("needs_files")
+        if needs_files_total == 0:
+            if (
+                selected_scope is None
+                and isinstance(declared_needs_files, int)
+                and declared_needs_files > 0
+            ):
+                errors.append(
+                    "No file-required tasks were counted, but the manifest's "
+                    f"_summary declares {declared_needs_files} — the tasks map "
+                    "this run read does not carry the requirement its own "
+                    "summary states, so file generation went unchecked"
+                )
+            else:
+                warnings.append(
+                    "No file-required tasks in scope — file generation was "
+                    "not measured for this run (not a 0% generation rate)"
+                )
         # Says what was observed, and only when everything was. The two lists
         # being empty is the same statement as succeeded == total; written this
         # way so the claim and its evidence cannot drift apart.
-        if not needs_files_missing and not needs_files_absent:
+        elif not needs_files_missing and not needs_files_absent:
             warnings.append(
                 f"All {needs_files_total} file-required tasks have deliverable files ✓"
             )
