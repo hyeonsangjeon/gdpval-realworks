@@ -354,6 +354,56 @@ entries land under a fresh dated heading the day they merge to `main`.
   "Critical item pass rate" into the report prompt — is closed under **Fixed**.
 
 ### Added
+- **The audio judge described a clear human voice, at confidence 0.98, in a file
+  where every sample is zero.** The doubled probe corpus was put to
+  `gpt-audio-1.5` for the first time — 20 criteria on 9 synthesised clips, 10
+  true and 10 false in matched pairs, 3 repeats, **60 calls** — and the result
+  is a clean negative. Accuracy **51.85%** on 54 answered calls; discrimination
+  (Youden's J) **0.011** per call and **−0.1** by per-claim majority; exhaustive
+  within-pair permutation `p = 0.5`, meaning 512 of the 1024 relabellings do as
+  well as what was observed. 46 of 54 answered calls said `fail`, and seven of
+  ten families land on exactly "six answered, three correct" — the arithmetic of
+  answering the same word every time.
+
+  This is the measurement #427 was built to make possible and it cleared its own
+  bar: the floor is `1/1024 = 0.00098`, so a judge that was listening could have
+  been shown to be listening at `p < 0.001`. It was not. The earlier
+  12-criterion run recorded below reached the same conclusion and could be
+  answered with "the corpus is beeps"; that answer is now gone, and the
+  conclusion is not.
+
+  Three exhibits, quoted verbatim from the report rather than summarised. On
+  `pure_silence` the judge reported *"A clear, natural human voice is heard
+  speaking throughout the 30s clip"* at 0.98 and, in another repeat, *"30s of
+  complete silence"* at 0.98. On a clip holding exactly three beeps, six calls
+  returned four different counts — one, three, five, four. And on clicks spaced
+  exactly 0.5 s apart, the judge "measured" 0.5 s whenever the criterion
+  proposed 120 BPM and 1.0 s whenever the sibling criterion proposed 60 BPM, all
+  three repeats, passing both — while the ±1 BPM criteria on the same file
+  produced 0.7 s, 0.8 s, "~110 clicks in 30s" and "about 58 BPM", and failed
+  every time. **The verdict follows the shape of the question, not the sound.**
+  16 of 20 claims got an identical verdict in all three repeats, which is the
+  "consistency is not correctness" the 19.35% flip rate could not settle.
+
+  Recorded in
+  `tasks/rebuilding_grading_task/324-the-speech-it-heard-in-silence.md` with the
+  raw report committed beside it, and `test_324_quotes_the_run_it_measured.py`
+  re-derives every percentage, every decimal, both tables, all 60 verdicts and
+  each quoted fragment from that JSON — 19 tests, 35 planted mutations caught 35
+  times, including a dropped minus sign on the negative J and a `p` restated as
+  0.05 three sections from where it was measured. The sweep also earned its
+  keep: corrupting the *second* copy of `512 of 1024` survived a containment
+  check that only asked whether the document mentioned the number anywhere, so a
+  test was added that reads the counter instead and requires every relabelling
+  count in the prose to be one the report enumerated. Six calls returned
+  `provider_error:JSONDecodeError` and are counted as unanswered rather than
+  scored zero. Speech is still not measured and the document says so:
+  intelligible speech cannot be synthesised from `wave` and `math`, so this is
+  the music half. **Cost: 60 billable calls, amount `미등록` —
+  `gpt-audio-1.5` has no published price, so the report emits
+  `pricing_complete: false` and `estimated_cost_usd: null`. That is not `$0`.**
+  No grade was written, no published number moved, and the grader fingerprint is
+  unchanged across all 14 grading configs.
 - **How much of a published average was decided by the audio sub-judge is now
   on screen — and for most runs the honest answer is "not recorded".** The
   audio route was measured against synthetic clips whose answers were known and

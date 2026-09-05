@@ -1,0 +1,2043 @@
+{
+  "what_this_measures": "Whether the audio sub-judge's verdict is correct, on clips whose contents are known by construction. The repeat runs measured consistency (19.35% of audio verdict pairs disagree, against 2.12% on text). Consistency is not correctness and neither implies the other.",
+  "measured": true,
+  "pins": {
+    "config": "gold_audio_repeat_v2_sol_max.yaml",
+    "audio_model": "gpt-audio-1.5",
+    "audio_deployment": "gpt-audio-1.5",
+    "audio_clip_seconds": 30,
+    "audio_call_cap_per_task": 32,
+    "provider": "azure_openai",
+    "clip_sample_rate_hz": 16000,
+    "grader_resample_rate_hz": 16000,
+    "repeats": 3,
+    "claims": 20,
+    "clips": 9,
+    "true_claims": 10,
+    "false_claims": 10
+  },
+  "clips": [
+    {
+      "clip_id": "tone_stops_early",
+      "duration_s": 6.0,
+      "description": "A 1000 Hz tone for the first two seconds, then four seconds of silence.",
+      "segments": [
+        {
+          "start_s": 0.0,
+          "end_s": 2.0,
+          "frequency_hz": 1000.0,
+          "partials": []
+        }
+      ]
+    },
+    {
+      "clip_id": "pure_silence",
+      "duration_s": 6.0,
+      "description": "Six seconds of digital silence; every sample is zero.",
+      "segments": []
+    },
+    {
+      "clip_id": "three_beeps",
+      "duration_s": 5.0,
+      "description": "Three 150 ms beeps at 1000 Hz, at 0.5 s, 2.0 s and 3.5 s, silence in between.",
+      "segments": [
+        {
+          "start_s": 0.5,
+          "end_s": 0.65,
+          "frequency_hz": 1000.0,
+          "partials": []
+        },
+        {
+          "start_s": 2.0,
+          "end_s": 2.15,
+          "frequency_hz": 1000.0,
+          "partials": []
+        },
+        {
+          "start_s": 3.5,
+          "end_s": 3.65,
+          "frequency_hz": 1000.0,
+          "partials": []
+        }
+      ]
+    },
+    {
+      "clip_id": "clicks_120bpm",
+      "duration_s": 8.0,
+      "description": "Sixteen 30 ms clicks spaced exactly 0.5 s apart across eight seconds, which is 120 beats per minute.",
+      "segments": [
+        {
+          "start_s": 0.0,
+          "end_s": 0.03,
+          "frequency_hz": 1000.0,
+          "partials": []
+        },
+        {
+          "start_s": 0.5,
+          "end_s": 0.53,
+          "frequency_hz": 1000.0,
+          "partials": []
+        },
+        {
+          "start_s": 1.0,
+          "end_s": 1.03,
+          "frequency_hz": 1000.0,
+          "partials": []
+        },
+        {
+          "start_s": 1.5,
+          "end_s": 1.53,
+          "frequency_hz": 1000.0,
+          "partials": []
+        },
+        {
+          "start_s": 2.0,
+          "end_s": 2.03,
+          "frequency_hz": 1000.0,
+          "partials": []
+        },
+        {
+          "start_s": 2.5,
+          "end_s": 2.53,
+          "frequency_hz": 1000.0,
+          "partials": []
+        },
+        {
+          "start_s": 3.0,
+          "end_s": 3.03,
+          "frequency_hz": 1000.0,
+          "partials": []
+        },
+        {
+          "start_s": 3.5,
+          "end_s": 3.53,
+          "frequency_hz": 1000.0,
+          "partials": []
+        },
+        {
+          "start_s": 4.0,
+          "end_s": 4.03,
+          "frequency_hz": 1000.0,
+          "partials": []
+        },
+        {
+          "start_s": 4.5,
+          "end_s": 4.53,
+          "frequency_hz": 1000.0,
+          "partials": []
+        },
+        {
+          "start_s": 5.0,
+          "end_s": 5.03,
+          "frequency_hz": 1000.0,
+          "partials": []
+        },
+        {
+          "start_s": 5.5,
+          "end_s": 5.53,
+          "frequency_hz": 1000.0,
+          "partials": []
+        },
+        {
+          "start_s": 6.0,
+          "end_s": 6.03,
+          "frequency_hz": 1000.0,
+          "partials": []
+        },
+        {
+          "start_s": 6.5,
+          "end_s": 6.53,
+          "frequency_hz": 1000.0,
+          "partials": []
+        },
+        {
+          "start_s": 7.0,
+          "end_s": 7.03,
+          "frequency_hz": 1000.0,
+          "partials": []
+        },
+        {
+          "start_s": 7.5,
+          "end_s": 7.53,
+          "frequency_hz": 1000.0,
+          "partials": []
+        }
+      ]
+    },
+    {
+      "clip_id": "low_then_high",
+      "duration_s": 5.0,
+      "description": "A 220 Hz tone for two seconds, one second of silence, then a 880 Hz tone for two seconds -- two octaves up.",
+      "segments": [
+        {
+          "start_s": 0.0,
+          "end_s": 2.0,
+          "frequency_hz": 220.0,
+          "partials": []
+        },
+        {
+          "start_s": 3.0,
+          "end_s": 5.0,
+          "frequency_hz": 880.0,
+          "partials": []
+        }
+      ]
+    },
+    {
+      "clip_id": "g_major_scale",
+      "duration_s": 3.4,
+      "description": "Eight notes rising -- G4 A4 B4 C5 D5 E5 F-sharp5 G5 -- each 350 ms with a 50 ms gap. That is the G major scale, and the F-sharp is what makes it G major rather than any flat key.",
+      "segments": [
+        {
+          "start_s": 0.0,
+          "end_s": 0.35,
+          "frequency_hz": 391.99543598174927,
+          "partials": []
+        },
+        {
+          "start_s": 0.4,
+          "end_s": 0.75,
+          "frequency_hz": 440.0,
+          "partials": []
+        },
+        {
+          "start_s": 0.8,
+          "end_s": 1.15,
+          "frequency_hz": 493.8833012561241,
+          "partials": []
+        },
+        {
+          "start_s": 1.2,
+          "end_s": 1.55,
+          "frequency_hz": 523.2511306011972,
+          "partials": []
+        },
+        {
+          "start_s": 1.6,
+          "end_s": 1.95,
+          "frequency_hz": 587.3295358348151,
+          "partials": []
+        },
+        {
+          "start_s": 2.0,
+          "end_s": 2.35,
+          "frequency_hz": 659.2551138257398,
+          "partials": []
+        },
+        {
+          "start_s": 2.4,
+          "end_s": 2.75,
+          "frequency_hz": 739.9888454232688,
+          "partials": []
+        },
+        {
+          "start_s": 2.8,
+          "end_s": 3.15,
+          "frequency_hz": 783.9908719634985,
+          "partials": []
+        }
+      ]
+    },
+    {
+      "clip_id": "major_triad",
+      "duration_s": 3.0,
+      "description": "One sustained chord: G4, B4 and D5 sounding together for 2.6 seconds, which is a G major triad. The minor version of this chord would put B-flat4 where the B4 is.",
+      "segments": [
+        {
+          "start_s": 0.2,
+          "end_s": 2.8,
+          "frequency_hz": 391.99543598174927,
+          "partials": [
+            [
+              493.8833012561241,
+              1.0
+            ],
+            [
+              587.3295358348151,
+              1.0
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "clip_id": "modulating_arpeggio",
+      "duration_s": 5.0,
+      "description": "A G major arpeggio -- G4 B4 D5 G5 -- for the first 2.4 seconds, then the same shape one semitone higher in A-flat major. The key changes exactly halfway through.",
+      "segments": [
+        {
+          "start_s": 0.0,
+          "end_s": 0.5,
+          "frequency_hz": 391.99543598174927,
+          "partials": []
+        },
+        {
+          "start_s": 0.6,
+          "end_s": 1.1,
+          "frequency_hz": 493.8833012561241,
+          "partials": []
+        },
+        {
+          "start_s": 1.2,
+          "end_s": 1.7,
+          "frequency_hz": 587.3295358348151,
+          "partials": []
+        },
+        {
+          "start_s": 1.8,
+          "end_s": 2.3,
+          "frequency_hz": 783.9908719634985,
+          "partials": []
+        },
+        {
+          "start_s": 2.4,
+          "end_s": 2.9,
+          "frequency_hz": 415.3046975799451,
+          "partials": []
+        },
+        {
+          "start_s": 3.0,
+          "end_s": 3.5,
+          "frequency_hz": 523.2511306011972,
+          "partials": []
+        },
+        {
+          "start_s": 3.6,
+          "end_s": 4.1,
+          "frequency_hz": 622.2539674441618,
+          "partials": []
+        },
+        {
+          "start_s": 4.2,
+          "end_s": 4.7,
+          "frequency_hz": 830.6093951598903,
+          "partials": []
+        }
+      ]
+    },
+    {
+      "clip_id": "buzzy_bass",
+      "duration_s": 3.0,
+      "description": "One low note -- C2, about 65.4 Hz -- carrying its first five overtones at falling strength, which is what makes a synth bass buzz instead of hum. A pure sine at the same pitch has none of them.",
+      "segments": [
+        {
+          "start_s": 0.2,
+          "end_s": 2.8,
+          "frequency_hz": 65.40639132514966,
+          "partials": [
+            [
+              130.8127826502993,
+              0.5
+            ],
+            [
+              196.21917397544897,
+              0.3333333333333333
+            ],
+            [
+              261.6255653005986,
+              0.25
+            ],
+            [
+              327.0319566257483,
+              0.2
+            ],
+            [
+              392.43834795089793,
+              0.16666666666666666
+            ]
+          ]
+        }
+      ]
+    }
+  ],
+  "clip_sha256": {
+    "tone_stops_early": "faf3dccfe7d12ce0d9f1d2269ddd813d3a99350b0089f7ab144ddefb2df94c37",
+    "pure_silence": "47b589098cc9e4b92774cd5b6a57ccca0713c02396bf755b2318f7e81cdc534e",
+    "three_beeps": "cae888fe815e3b9fb04224d37e3e85b67b259e5da34791b04bfe57c9c8eae33d",
+    "clicks_120bpm": "3b9b578f67cac2b349828327f417f5b0d83bc3ee8afdedaecc162fc9a40f124a",
+    "low_then_high": "2c6ad8c68ac482a81cf327dc54a92a8fba058ce102936bc953fef3cff19a4d65",
+    "g_major_scale": "a774176e91e88c69f9e5050f2734a24e04c24e36a72827f86e6fd20040a91931",
+    "major_triad": "1aabbe55fd590a1db4a71244f733fa9504de218e11460ee3ddab776bc55bed13",
+    "modulating_arpeggio": "41f529f5931ecaae21353a042bb4c4581ba97da48a85e96b52f780958178433d",
+    "buzzy_bass": "99c0413453268ef2d9e077a197f0638e1ffdcdf2bdf2d44a95a296deab442792"
+  },
+  "claims": [
+    {
+      "claim_id": "timing_true",
+      "clip_id": "tone_stops_early",
+      "family": "timing",
+      "criterion": "A sustained tone is audible from the beginning of the clip and stops before the clip ends, leaving an audible stretch of silence at the end.",
+      "holds": true,
+      "because": "the tone occupies 0.0-2.0 s of a 6.0 s clip",
+      "pair_id": "timing"
+    },
+    {
+      "claim_id": "timing_false",
+      "clip_id": "tone_stops_early",
+      "family": "timing",
+      "criterion": "A sustained tone is audible continuously for the whole clip, with no stretch of silence anywhere in it.",
+      "holds": false,
+      "because": "4.0 s of the 6.0 s clip is digital silence",
+      "pair_id": "timing"
+    },
+    {
+      "claim_id": "presence_true",
+      "clip_id": "pure_silence",
+      "family": "presence",
+      "criterion": "Nothing is audible in the clip: no speech, music, tone or noise.",
+      "holds": true,
+      "because": "every sample in the clip is exactly zero",
+      "pair_id": "presence"
+    },
+    {
+      "claim_id": "presence_false",
+      "clip_id": "pure_silence",
+      "family": "presence",
+      "criterion": "A human voice speaking is audible in the clip.",
+      "holds": false,
+      "because": "every sample in the clip is exactly zero",
+      "pair_id": "presence"
+    },
+    {
+      "claim_id": "count_true",
+      "clip_id": "three_beeps",
+      "family": "count",
+      "criterion": "Exactly three short beeps are audible, each separated from the next by silence.",
+      "holds": true,
+      "because": "the segment list has three tone bursts",
+      "pair_id": "count"
+    },
+    {
+      "claim_id": "count_false",
+      "clip_id": "three_beeps",
+      "family": "count",
+      "criterion": "Exactly seven short beeps are audible, each separated from the next by silence.",
+      "holds": false,
+      "because": "the segment list has three tone bursts, not seven",
+      "pair_id": "count"
+    },
+    {
+      "claim_id": "tempo_coarse_true",
+      "clip_id": "clicks_120bpm",
+      "family": "tempo_coarse",
+      "criterion": "The clicks are evenly spaced at a tempo of about 120 beats per minute.",
+      "holds": true,
+      "because": "clicks are 0.5 s apart, which is exactly 120 BPM",
+      "pair_id": "tempo_coarse"
+    },
+    {
+      "claim_id": "tempo_coarse_false",
+      "clip_id": "clicks_120bpm",
+      "family": "tempo_coarse",
+      "criterion": "The clicks are evenly spaced at a tempo of about 60 beats per minute.",
+      "holds": false,
+      "because": "60 BPM would be 1.0 s apart; these are 0.5 s apart",
+      "pair_id": "tempo_coarse"
+    },
+    {
+      "claim_id": "tempo_fine_true",
+      "clip_id": "clicks_120bpm",
+      "family": "tempo_fine",
+      "criterion": "The tempo of the clicks is 120 beats per minute, within a tolerance of one beat per minute.",
+      "holds": true,
+      "because": "clicks are 0.5 s apart, which is exactly 120 BPM",
+      "pair_id": "tempo_fine"
+    },
+    {
+      "claim_id": "tempo_fine_false",
+      "clip_id": "clicks_120bpm",
+      "family": "tempo_fine",
+      "criterion": "The tempo of the clicks is 132 beats per minute, within a tolerance of one beat per minute.",
+      "holds": false,
+      "because": "132 BPM would be 0.4545 s apart; these are 0.5 s apart",
+      "pair_id": "tempo_fine"
+    },
+    {
+      "claim_id": "pitch_order_true",
+      "clip_id": "low_then_high",
+      "family": "pitch_order",
+      "criterion": "The clip opens with a lower-pitched tone and closes with a higher-pitched one.",
+      "holds": true,
+      "because": "220 Hz precedes 880 Hz",
+      "pair_id": "pitch_order"
+    },
+    {
+      "claim_id": "pitch_order_false",
+      "clip_id": "low_then_high",
+      "family": "pitch_order",
+      "criterion": "The clip opens with a higher-pitched tone and closes with a lower-pitched one.",
+      "holds": false,
+      "because": "220 Hz precedes 880 Hz, so the order is the other way round",
+      "pair_id": "pitch_order"
+    },
+    {
+      "claim_id": "key_true",
+      "clip_id": "g_major_scale",
+      "family": "key",
+      "criterion": "Every note in the melody belongs to the G major scale.",
+      "holds": true,
+      "because": "the eight notes are G4 A4 B4 C5 D5 E5 F-sharp5 G5, which is exactly the G major scale",
+      "pair_id": "key"
+    },
+    {
+      "claim_id": "key_false",
+      "clip_id": "g_major_scale",
+      "family": "key",
+      "criterion": "Every note in the melody belongs to the E-flat major scale.",
+      "holds": false,
+      "because": "E-flat major has E-flat, A-flat and B-flat and no F-sharp; this melody plays B natural and F-sharp",
+      "pair_id": "key"
+    },
+    {
+      "claim_id": "triad_true",
+      "clip_id": "major_triad",
+      "family": "triad",
+      "criterion": "The clip is one sustained chord, and that chord is major.",
+      "holds": true,
+      "because": "the chord is G4 + B4 + D5, and B4 is four semitones above G4, which is a major third",
+      "pair_id": "triad"
+    },
+    {
+      "claim_id": "triad_false",
+      "clip_id": "major_triad",
+      "family": "triad",
+      "criterion": "The clip is one sustained chord, and that chord is minor.",
+      "holds": false,
+      "because": "a minor chord would sound B-flat4 at 466.16 Hz where this one sounds B4 at 493.88 Hz",
+      "pair_id": "triad"
+    },
+    {
+      "claim_id": "modulation_true",
+      "clip_id": "modulating_arpeggio",
+      "family": "modulation",
+      "criterion": "The music changes key partway through, so the second half is in a different key from the first.",
+      "holds": true,
+      "because": "the first four notes spell G major and the last four spell A-flat major, one semitone higher",
+      "pair_id": "modulation"
+    },
+    {
+      "claim_id": "modulation_false",
+      "clip_id": "modulating_arpeggio",
+      "family": "modulation",
+      "criterion": "The music stays in one key from beginning to end, with no change of key anywhere in it.",
+      "holds": false,
+      "because": "the second half is transposed up a semitone from the first",
+      "pair_id": "modulation"
+    },
+    {
+      "claim_id": "timbre_true",
+      "clip_id": "buzzy_bass",
+      "family": "timbre",
+      "criterion": "The bass note is a bright, buzzy synth tone with clearly audible overtones above its fundamental.",
+      "holds": true,
+      "because": "the segment sounds harmonics 2 through 6 of its 65.4 Hz fundamental at falling strength",
+      "pair_id": "timbre"
+    },
+    {
+      "claim_id": "timbre_false",
+      "clip_id": "buzzy_bass",
+      "family": "timbre",
+      "criterion": "The bass note is a plain sine tone with nothing sounding above its fundamental.",
+      "holds": false,
+      "because": "harmonics 2 through 6 of the fundamental are all present in the segment",
+      "pair_id": "timbre"
+    }
+  ],
+  "calls": [
+    {
+      "repeat": 1,
+      "claim_id": "timing_true",
+      "pair_id": "timing",
+      "clip_id": "tone_stops_early",
+      "family": "timing",
+      "holds": true,
+      "verdict": "judge_error",
+      "outcome": "unanswered",
+      "confidence": 0.0,
+      "evidence": "",
+      "judge_error": "provider_error:JSONDecodeError",
+      "api_call_count": 1,
+      "input_tokens": 195,
+      "output_tokens": 59,
+      "latency_ms": 2440.346,
+      "usage_complete": true
+    },
+    {
+      "repeat": 1,
+      "claim_id": "timing_false",
+      "pair_id": "timing",
+      "clip_id": "tone_stops_early",
+      "family": "timing",
+      "holds": false,
+      "verdict": "fail",
+      "outcome": "correct",
+      "confidence": 0.75,
+      "evidence": "Noticeable pauses with no sound interrupt the tone",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 187,
+      "output_tokens": 61,
+      "latency_ms": 1442.881,
+      "usage_complete": true
+    },
+    {
+      "repeat": 1,
+      "claim_id": "presence_true",
+      "pair_id": "presence",
+      "clip_id": "pure_silence",
+      "family": "presence",
+      "holds": true,
+      "verdict": "fail",
+      "outcome": "false_fail",
+      "confidence": 0.97,
+      "evidence": "Clear speech is audible throughout the clip.",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 183,
+      "output_tokens": 60,
+      "latency_ms": 1634.235,
+      "usage_complete": true
+    },
+    {
+      "repeat": 1,
+      "claim_id": "presence_false",
+      "pair_id": "presence",
+      "clip_id": "pure_silence",
+      "family": "presence",
+      "holds": false,
+      "verdict": "pass",
+      "outcome": "false_pass",
+      "confidence": 0.98,
+      "evidence": "A clear, natural human voice is heard speaking throughout the 30s clip.",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 177,
+      "output_tokens": 67,
+      "latency_ms": 1335.039,
+      "usage_complete": true
+    },
+    {
+      "repeat": 1,
+      "claim_id": "count_true",
+      "pair_id": "count",
+      "clip_id": "three_beeps",
+      "family": "count",
+      "holds": true,
+      "verdict": "fail",
+      "outcome": "false_fail",
+      "confidence": 0.93,
+      "evidence": "Only one short beep is audible, followed by silence and no additional beeps.",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 173,
+      "output_tokens": 81,
+      "latency_ms": 1633.958,
+      "usage_complete": true
+    },
+    {
+      "repeat": 1,
+      "claim_id": "count_false",
+      "pair_id": "count",
+      "clip_id": "three_beeps",
+      "family": "count",
+      "holds": false,
+      "verdict": "fail",
+      "outcome": "correct",
+      "confidence": 0.98,
+      "evidence": "Only three beeps were audible in 30 seconds, each followed by silence.",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 173,
+      "output_tokens": 67,
+      "latency_ms": 1621.403,
+      "usage_complete": true
+    },
+    {
+      "repeat": 1,
+      "claim_id": "tempo_coarse_true",
+      "pair_id": "tempo_coarse",
+      "clip_id": "clicks_120bpm",
+      "family": "tempo_coarse",
+      "holds": true,
+      "verdict": "pass",
+      "outcome": "correct",
+      "confidence": 0.95,
+      "evidence": "Clearly audible clicks occur every 0.5 seconds, consistent and evenly spaced.",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 203,
+      "output_tokens": 71,
+      "latency_ms": 1672.11,
+      "usage_complete": true
+    },
+    {
+      "repeat": 1,
+      "claim_id": "tempo_coarse_false",
+      "pair_id": "tempo_coarse",
+      "clip_id": "clicks_120bpm",
+      "family": "tempo_coarse",
+      "holds": false,
+      "verdict": "pass",
+      "outcome": "false_pass",
+      "confidence": 0.92,
+      "evidence": "Clicks occur once per second, consistently spaced",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 203,
+      "output_tokens": 69,
+      "latency_ms": 1533.545,
+      "usage_complete": true
+    },
+    {
+      "repeat": 1,
+      "claim_id": "tempo_fine_true",
+      "pair_id": "tempo_fine",
+      "clip_id": "clicks_120bpm",
+      "family": "tempo_fine",
+      "holds": true,
+      "verdict": "fail",
+      "outcome": "false_fail",
+      "confidence": 0.93,
+      "evidence": "The clicks occur roughly every 0.7s, closer to 86 BPM than 120 BPM.",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 208,
+      "output_tokens": 80,
+      "latency_ms": 1626.658,
+      "usage_complete": true
+    },
+    {
+      "repeat": 1,
+      "claim_id": "tempo_fine_false",
+      "pair_id": "tempo_fine",
+      "clip_id": "clicks_120bpm",
+      "family": "tempo_fine",
+      "holds": false,
+      "verdict": "fail",
+      "outcome": "correct",
+      "confidence": 0.91,
+      "evidence": "The clicks are spaced about 0.8 seconds apart, suggesting around 75 bpm, far from 132 bpm.",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 208,
+      "output_tokens": 75,
+      "latency_ms": 1559.462,
+      "usage_complete": true
+    },
+    {
+      "repeat": 1,
+      "claim_id": "pitch_order_true",
+      "pair_id": "pitch_order",
+      "clip_id": "low_then_high",
+      "family": "pitch_order",
+      "holds": true,
+      "verdict": "judge_error",
+      "outcome": "unanswered",
+      "confidence": 0.0,
+      "evidence": "",
+      "judge_error": "provider_error:JSONDecodeError",
+      "api_call_count": 1,
+      "input_tokens": 175,
+      "output_tokens": 21,
+      "latency_ms": 1075.463,
+      "usage_complete": true
+    },
+    {
+      "repeat": 1,
+      "claim_id": "pitch_order_false",
+      "pair_id": "pitch_order",
+      "clip_id": "low_then_high",
+      "family": "pitch_order",
+      "holds": false,
+      "verdict": "fail",
+      "outcome": "correct",
+      "confidence": 0.91,
+      "evidence": "The pitch remains steady throughout the 30s, no audible rise at start or drop at end.",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 175,
+      "output_tokens": 81,
+      "latency_ms": 1868.779,
+      "usage_complete": true
+    },
+    {
+      "repeat": 1,
+      "claim_id": "key_true",
+      "pair_id": "key",
+      "clip_id": "g_major_scale",
+      "family": "key",
+      "holds": true,
+      "verdict": "fail",
+      "outcome": "false_fail",
+      "confidence": 0.79,
+      "evidence": "A note sounded outside G major scale, such as a C#.",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 153,
+      "output_tokens": 69,
+      "latency_ms": 1497.004,
+      "usage_complete": true
+    },
+    {
+      "repeat": 1,
+      "claim_id": "key_false",
+      "pair_id": "key",
+      "clip_id": "g_major_scale",
+      "family": "key",
+      "holds": false,
+      "verdict": "fail",
+      "outcome": "correct",
+      "confidence": 0.83,
+      "evidence": "Around 14s, a C# note is heard, which is outside the E-flat major scale.",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 154,
+      "output_tokens": 77,
+      "latency_ms": 1683.67,
+      "usage_complete": true
+    },
+    {
+      "repeat": 1,
+      "claim_id": "triad_true",
+      "pair_id": "triad",
+      "clip_id": "major_triad",
+      "family": "triad",
+      "holds": true,
+      "verdict": "fail",
+      "outcome": "false_fail",
+      "confidence": 0.96,
+      "evidence": "The audio contains spoken words and no sustained musical chord can be heard.",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 150,
+      "output_tokens": 75,
+      "latency_ms": 1662.414,
+      "usage_complete": true
+    },
+    {
+      "repeat": 1,
+      "claim_id": "triad_false",
+      "pair_id": "triad",
+      "clip_id": "major_triad",
+      "family": "triad",
+      "holds": false,
+      "verdict": "fail",
+      "outcome": "correct",
+      "confidence": 0.86,
+      "evidence": "Chord consists of major intervals rather than minor, creating a brighter sound.",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 150,
+      "output_tokens": 65,
+      "latency_ms": 1249.134,
+      "usage_complete": true
+    },
+    {
+      "repeat": 1,
+      "claim_id": "modulation_true",
+      "pair_id": "modulation",
+      "clip_id": "modulating_arpeggio",
+      "family": "modulation",
+      "holds": true,
+      "verdict": "fail",
+      "outcome": "false_fail",
+      "confidence": 0.89,
+      "evidence": "The music maintained the same tonal center throughout; no audible key change occurred",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 178,
+      "output_tokens": 70,
+      "latency_ms": 1366.826,
+      "usage_complete": true
+    },
+    {
+      "repeat": 1,
+      "claim_id": "modulation_false",
+      "pair_id": "modulation",
+      "clip_id": "modulating_arpeggio",
+      "family": "modulation",
+      "holds": false,
+      "verdict": "fail",
+      "outcome": "correct",
+      "confidence": 0.77,
+      "evidence": "Around 15s, the tonal center shifts, indicating a modulation to a different key.",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 177,
+      "output_tokens": 73,
+      "latency_ms": 1766.64,
+      "usage_complete": true
+    },
+    {
+      "repeat": 1,
+      "claim_id": "timbre_true",
+      "pair_id": "timbre",
+      "clip_id": "buzzy_bass",
+      "family": "timbre",
+      "holds": true,
+      "verdict": "fail",
+      "outcome": "false_fail",
+      "confidence": 0.82,
+      "evidence": "The bass note sounds dull and lacks a buzzy, bright character or discernible overtones.",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 157,
+      "output_tokens": 71,
+      "latency_ms": 1462.681,
+      "usage_complete": true
+    },
+    {
+      "repeat": 1,
+      "claim_id": "timbre_false",
+      "pair_id": "timbre",
+      "clip_id": "buzzy_bass",
+      "family": "timbre",
+      "holds": false,
+      "verdict": "fail",
+      "outcome": "correct",
+      "confidence": 0.82,
+      "evidence": "The bass note has audible harmonic overtones above the fundamental.",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 152,
+      "output_tokens": 68,
+      "latency_ms": 1333.172,
+      "usage_complete": true
+    },
+    {
+      "repeat": 2,
+      "claim_id": "timing_true",
+      "pair_id": "timing",
+      "clip_id": "tone_stops_early",
+      "family": "timing",
+      "holds": true,
+      "verdict": "judge_error",
+      "outcome": "unanswered",
+      "confidence": 0.0,
+      "evidence": "",
+      "judge_error": "provider_error:JSONDecodeError",
+      "api_call_count": 1,
+      "input_tokens": 195,
+      "output_tokens": 26,
+      "latency_ms": 1082.22,
+      "usage_complete": true
+    },
+    {
+      "repeat": 2,
+      "claim_id": "timing_false",
+      "pair_id": "timing",
+      "clip_id": "tone_stops_early",
+      "family": "timing",
+      "holds": false,
+      "verdict": "fail",
+      "outcome": "correct",
+      "confidence": 0.96,
+      "evidence": "There are intervals where no tone can be heard, resulting in silence.",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 187,
+      "output_tokens": 67,
+      "latency_ms": 1735.379,
+      "usage_complete": true
+    },
+    {
+      "repeat": 2,
+      "claim_id": "presence_true",
+      "pair_id": "presence",
+      "clip_id": "pure_silence",
+      "family": "presence",
+      "holds": true,
+      "verdict": "fail",
+      "outcome": "false_fail",
+      "confidence": 0.9,
+      "evidence": "Faint background noise and occasional speech detected in the clip",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 183,
+      "output_tokens": 62,
+      "latency_ms": 1471.029,
+      "usage_complete": true
+    },
+    {
+      "repeat": 2,
+      "claim_id": "presence_false",
+      "pair_id": "presence",
+      "clip_id": "pure_silence",
+      "family": "presence",
+      "holds": false,
+      "verdict": "judge_error",
+      "outcome": "unanswered",
+      "confidence": 0.0,
+      "evidence": "",
+      "judge_error": "provider_error:JSONDecodeError",
+      "api_call_count": 1,
+      "input_tokens": 177,
+      "output_tokens": 24,
+      "latency_ms": 1080.878,
+      "usage_complete": true
+    },
+    {
+      "repeat": 2,
+      "claim_id": "count_true",
+      "pair_id": "count",
+      "clip_id": "three_beeps",
+      "family": "count",
+      "holds": true,
+      "verdict": "fail",
+      "outcome": "false_fail",
+      "confidence": 0.83,
+      "evidence": "Only one short beep heard, followed by silence, with no subsequent beeps.",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 173,
+      "output_tokens": 71,
+      "latency_ms": 1443.917,
+      "usage_complete": true
+    },
+    {
+      "repeat": 2,
+      "claim_id": "count_false",
+      "pair_id": "count",
+      "clip_id": "three_beeps",
+      "family": "count",
+      "holds": false,
+      "verdict": "fail",
+      "outcome": "correct",
+      "confidence": 0.88,
+      "evidence": "Only five short beeps with silence in between are audible.",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 173,
+      "output_tokens": 64,
+      "latency_ms": 1669.077,
+      "usage_complete": true
+    },
+    {
+      "repeat": 2,
+      "claim_id": "tempo_coarse_true",
+      "pair_id": "tempo_coarse",
+      "clip_id": "clicks_120bpm",
+      "family": "tempo_coarse",
+      "holds": true,
+      "verdict": "pass",
+      "outcome": "correct",
+      "confidence": 0.95,
+      "evidence": "Regular clicks occur nearly every 0.5 seconds, indicating a consistent 120 BPM tempo.",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 203,
+      "output_tokens": 74,
+      "latency_ms": 1469.065,
+      "usage_complete": true
+    },
+    {
+      "repeat": 2,
+      "claim_id": "tempo_coarse_false",
+      "pair_id": "tempo_coarse",
+      "clip_id": "clicks_120bpm",
+      "family": "tempo_coarse",
+      "holds": false,
+      "verdict": "pass",
+      "outcome": "false_pass",
+      "confidence": 0.98,
+      "evidence": "Audible clicks occur roughly once every second with consistent spacing between them.",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 203,
+      "output_tokens": 66,
+      "latency_ms": 1511.554,
+      "usage_complete": true
+    },
+    {
+      "repeat": 2,
+      "claim_id": "tempo_fine_true",
+      "pair_id": "tempo_fine",
+      "clip_id": "clicks_120bpm",
+      "family": "tempo_fine",
+      "holds": true,
+      "verdict": "fail",
+      "outcome": "false_fail",
+      "confidence": 0.84,
+      "evidence": "30s clip contains ~110 clicks, corresponding to about 110 BPM, not 120 BPM",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 208,
+      "output_tokens": 72,
+      "latency_ms": 1461.464,
+      "usage_complete": true
+    },
+    {
+      "repeat": 2,
+      "claim_id": "tempo_fine_false",
+      "pair_id": "tempo_fine",
+      "clip_id": "clicks_120bpm",
+      "family": "tempo_fine",
+      "holds": false,
+      "verdict": "fail",
+      "outcome": "correct",
+      "confidence": 0.87,
+      "evidence": "Clicks sound spaced as if around 120 BPM, slower than 132 BPM benchmark.",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 208,
+      "output_tokens": 73,
+      "latency_ms": 1738.376,
+      "usage_complete": true
+    },
+    {
+      "repeat": 2,
+      "claim_id": "pitch_order_true",
+      "pair_id": "pitch_order",
+      "clip_id": "low_then_high",
+      "family": "pitch_order",
+      "holds": true,
+      "verdict": "judge_error",
+      "outcome": "unanswered",
+      "confidence": 0.0,
+      "evidence": "",
+      "judge_error": "provider_error:JSONDecodeError",
+      "api_call_count": 1,
+      "input_tokens": 175,
+      "output_tokens": 23,
+      "latency_ms": 1162.035,
+      "usage_complete": true
+    },
+    {
+      "repeat": 2,
+      "claim_id": "pitch_order_false",
+      "pair_id": "pitch_order",
+      "clip_id": "low_then_high",
+      "family": "pitch_order",
+      "holds": false,
+      "verdict": "fail",
+      "outcome": "correct",
+      "confidence": 0.88,
+      "evidence": "Pitch remains consistent throughout; no discernible shift from higher to lower pitch at the end.",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 175,
+      "output_tokens": 77,
+      "latency_ms": 1651.818,
+      "usage_complete": true
+    },
+    {
+      "repeat": 2,
+      "claim_id": "key_true",
+      "pair_id": "key",
+      "clip_id": "g_major_scale",
+      "family": "key",
+      "holds": true,
+      "verdict": "fail",
+      "outcome": "false_fail",
+      "confidence": 0.88,
+      "evidence": "At 0:12, a C natural note (outside G major scale) was clearly audible against the melody.",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 153,
+      "output_tokens": 80,
+      "latency_ms": 1368.161,
+      "usage_complete": true
+    },
+    {
+      "repeat": 2,
+      "claim_id": "key_false",
+      "pair_id": "key",
+      "clip_id": "g_major_scale",
+      "family": "key",
+      "holds": false,
+      "verdict": "fail",
+      "outcome": "correct",
+      "confidence": 0.92,
+      "evidence": "An audible note outside the E-flat major scale was heard, specifically an F#.",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 154,
+      "output_tokens": 73,
+      "latency_ms": 1387.227,
+      "usage_complete": true
+    },
+    {
+      "repeat": 2,
+      "claim_id": "triad_true",
+      "pair_id": "triad",
+      "clip_id": "major_triad",
+      "family": "triad",
+      "holds": true,
+      "verdict": "fail",
+      "outcome": "false_fail",
+      "confidence": 0.84,
+      "evidence": "Clip contains a continuous chord but it sounds minor, with a flattened third, not a major chord.",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 150,
+      "output_tokens": 84,
+      "latency_ms": 1498.961,
+      "usage_complete": true
+    },
+    {
+      "repeat": 2,
+      "claim_id": "triad_false",
+      "pair_id": "triad",
+      "clip_id": "major_triad",
+      "family": "triad",
+      "holds": false,
+      "verdict": "fail",
+      "outcome": "correct",
+      "confidence": 0.93,
+      "evidence": "Audio consists of random speech sounds, not a sustained musical chord.",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 150,
+      "output_tokens": 66,
+      "latency_ms": 1364.993,
+      "usage_complete": true
+    },
+    {
+      "repeat": 2,
+      "claim_id": "modulation_true",
+      "pair_id": "modulation",
+      "clip_id": "modulating_arpeggio",
+      "family": "modulation",
+      "holds": true,
+      "verdict": "fail",
+      "outcome": "false_fail",
+      "confidence": 0.93,
+      "evidence": "The melody remained in the same key throughout the 30-second segment with no audible modulation.",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 178,
+      "output_tokens": 73,
+      "latency_ms": 1356.755,
+      "usage_complete": true
+    },
+    {
+      "repeat": 2,
+      "claim_id": "modulation_false",
+      "pair_id": "modulation",
+      "clip_id": "modulating_arpeggio",
+      "family": "modulation",
+      "holds": false,
+      "verdict": "fail",
+      "outcome": "correct",
+      "confidence": 0.75,
+      "evidence": "Within 30s clip, the music shifts from one tonal center to another noticeably.",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 177,
+      "output_tokens": 76,
+      "latency_ms": 1313.124,
+      "usage_complete": true
+    },
+    {
+      "repeat": 2,
+      "claim_id": "timbre_true",
+      "pair_id": "timbre",
+      "clip_id": "buzzy_bass",
+      "family": "timbre",
+      "holds": true,
+      "verdict": "fail",
+      "outcome": "false_fail",
+      "confidence": 0.83,
+      "evidence": "The bass note heard is dull and lacks any noticeable buzz or overtones, sounding flat.",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 157,
+      "output_tokens": 73,
+      "latency_ms": 1638.929,
+      "usage_complete": true
+    },
+    {
+      "repeat": 2,
+      "claim_id": "timbre_false",
+      "pair_id": "timbre",
+      "clip_id": "buzzy_bass",
+      "family": "timbre",
+      "holds": false,
+      "verdict": "fail",
+      "outcome": "correct",
+      "confidence": 0.89,
+      "evidence": "Audible overtones and harmonics can be heard above the fundamental tone.",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 152,
+      "output_tokens": 64,
+      "latency_ms": 1356.793,
+      "usage_complete": true
+    },
+    {
+      "repeat": 3,
+      "claim_id": "timing_true",
+      "pair_id": "timing",
+      "clip_id": "tone_stops_early",
+      "family": "timing",
+      "holds": true,
+      "verdict": "fail",
+      "outcome": "false_fail",
+      "confidence": 0.92,
+      "evidence": "No sustained tone was heard and no silence before the end of the clip was present.",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 195,
+      "output_tokens": 69,
+      "latency_ms": 1553.449,
+      "usage_complete": true
+    },
+    {
+      "repeat": 3,
+      "claim_id": "timing_false",
+      "pair_id": "timing",
+      "clip_id": "tone_stops_early",
+      "family": "timing",
+      "holds": false,
+      "verdict": "fail",
+      "outcome": "correct",
+      "confidence": 0.97,
+      "evidence": "There were multiple silent gaps where no tone was heard.",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 187,
+      "output_tokens": 58,
+      "latency_ms": 1371.785,
+      "usage_complete": true
+    },
+    {
+      "repeat": 3,
+      "claim_id": "presence_true",
+      "pair_id": "presence",
+      "clip_id": "pure_silence",
+      "family": "presence",
+      "holds": true,
+      "verdict": "pass",
+      "outcome": "correct",
+      "confidence": 0.98,
+      "evidence": "30s of complete silence with no speech, music, or noise.",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 183,
+      "output_tokens": 65,
+      "latency_ms": 1674.118,
+      "usage_complete": true
+    },
+    {
+      "repeat": 3,
+      "claim_id": "presence_false",
+      "pair_id": "presence",
+      "clip_id": "pure_silence",
+      "family": "presence",
+      "holds": false,
+      "verdict": "judge_error",
+      "outcome": "unanswered",
+      "confidence": 0.0,
+      "evidence": "",
+      "judge_error": "provider_error:JSONDecodeError",
+      "api_call_count": 1,
+      "input_tokens": 177,
+      "output_tokens": 48,
+      "latency_ms": 1364.91,
+      "usage_complete": true
+    },
+    {
+      "repeat": 3,
+      "claim_id": "count_true",
+      "pair_id": "count",
+      "clip_id": "three_beeps",
+      "family": "count",
+      "holds": true,
+      "verdict": "fail",
+      "outcome": "false_fail",
+      "confidence": 0.91,
+      "evidence": "Only one short beep heard at the start; the expected three beeps separated by silence were not present.",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 173,
+      "output_tokens": 75,
+      "latency_ms": 32760.928,
+      "usage_complete": true
+    },
+    {
+      "repeat": 3,
+      "claim_id": "count_false",
+      "pair_id": "count",
+      "clip_id": "three_beeps",
+      "family": "count",
+      "holds": false,
+      "verdict": "fail",
+      "outcome": "correct",
+      "confidence": 0.98,
+      "evidence": "Only four beeps are heard, each separated by silence.",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 173,
+      "output_tokens": 61,
+      "latency_ms": 1440.505,
+      "usage_complete": true
+    },
+    {
+      "repeat": 3,
+      "claim_id": "tempo_coarse_true",
+      "pair_id": "tempo_coarse",
+      "clip_id": "clicks_120bpm",
+      "family": "tempo_coarse",
+      "holds": true,
+      "verdict": "pass",
+      "outcome": "correct",
+      "confidence": 0.93,
+      "evidence": "Consistent clicks occur roughly every 0.5 seconds, matching 120 BPM.",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 203,
+      "output_tokens": 76,
+      "latency_ms": 1439.257,
+      "usage_complete": true
+    },
+    {
+      "repeat": 3,
+      "claim_id": "tempo_coarse_false",
+      "pair_id": "tempo_coarse",
+      "clip_id": "clicks_120bpm",
+      "family": "tempo_coarse",
+      "holds": false,
+      "verdict": "pass",
+      "outcome": "false_pass",
+      "confidence": 0.94,
+      "evidence": "Each click is roughly one second apart, maintaining a consistent tempo.",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 203,
+      "output_tokens": 69,
+      "latency_ms": 1543.017,
+      "usage_complete": true
+    },
+    {
+      "repeat": 3,
+      "claim_id": "tempo_fine_true",
+      "pair_id": "tempo_fine",
+      "clip_id": "clicks_120bpm",
+      "family": "tempo_fine",
+      "holds": true,
+      "verdict": "fail",
+      "outcome": "false_fail",
+      "confidence": 0.91,
+      "evidence": "The clicks occur roughly every 0.8 seconds, about 75 BPM, not near 120 BPM.",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 208,
+      "output_tokens": 71,
+      "latency_ms": 1600.953,
+      "usage_complete": true
+    },
+    {
+      "repeat": 3,
+      "claim_id": "tempo_fine_false",
+      "pair_id": "tempo_fine",
+      "clip_id": "clicks_120bpm",
+      "family": "tempo_fine",
+      "holds": false,
+      "verdict": "fail",
+      "outcome": "correct",
+      "confidence": 0.67,
+      "evidence": "Measured around 29 clicks in 30s, indicating about 58 BPM, far from 132.",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 208,
+      "output_tokens": 68,
+      "latency_ms": 1369.638,
+      "usage_complete": true
+    },
+    {
+      "repeat": 3,
+      "claim_id": "pitch_order_true",
+      "pair_id": "pitch_order",
+      "clip_id": "low_then_high",
+      "family": "pitch_order",
+      "holds": true,
+      "verdict": "fail",
+      "outcome": "false_fail",
+      "confidence": 0.91,
+      "evidence": "Pitch remained consistently high without a lower-pitched opening.",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 175,
+      "output_tokens": 60,
+      "latency_ms": 1393.744,
+      "usage_complete": true
+    },
+    {
+      "repeat": 3,
+      "claim_id": "pitch_order_false",
+      "pair_id": "pitch_order",
+      "clip_id": "low_then_high",
+      "family": "pitch_order",
+      "holds": false,
+      "verdict": "fail",
+      "outcome": "correct",
+      "confidence": 0.86,
+      "evidence": "Pitch remains consistently high throughout the clip; no noticeable lowering at the end.",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 175,
+      "output_tokens": 70,
+      "latency_ms": 1388.559,
+      "usage_complete": true
+    },
+    {
+      "repeat": 3,
+      "claim_id": "key_true",
+      "pair_id": "key",
+      "clip_id": "g_major_scale",
+      "family": "key",
+      "holds": true,
+      "verdict": "fail",
+      "outcome": "false_fail",
+      "confidence": 0.98,
+      "evidence": "A distinct C natural note was heard, which is outside the G major scale that requires C#.",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 153,
+      "output_tokens": 71,
+      "latency_ms": 1485.332,
+      "usage_complete": true
+    },
+    {
+      "repeat": 3,
+      "claim_id": "key_false",
+      "pair_id": "key",
+      "clip_id": "g_major_scale",
+      "family": "key",
+      "holds": false,
+      "verdict": "fail",
+      "outcome": "correct",
+      "confidence": 0.87,
+      "evidence": "Several notes, such as a natural A, do not belong to the E-flat major scale",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 154,
+      "output_tokens": 89,
+      "latency_ms": 1470.342,
+      "usage_complete": true
+    },
+    {
+      "repeat": 3,
+      "claim_id": "triad_true",
+      "pair_id": "triad",
+      "clip_id": "major_triad",
+      "family": "triad",
+      "holds": true,
+      "verdict": "fail",
+      "outcome": "false_fail",
+      "confidence": 0.96,
+      "evidence": "Multiple distinct notes and silence interruptions were heard, not a single sustained chord.",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 150,
+      "output_tokens": 69,
+      "latency_ms": 1467.99,
+      "usage_complete": true
+    },
+    {
+      "repeat": 3,
+      "claim_id": "triad_false",
+      "pair_id": "triad",
+      "clip_id": "major_triad",
+      "family": "triad",
+      "holds": false,
+      "verdict": "fail",
+      "outcome": "correct",
+      "confidence": 0.91,
+      "evidence": "The chord heard is sustained but has a major tonality, not minor.",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 150,
+      "output_tokens": 72,
+      "latency_ms": 1414.472,
+      "usage_complete": true
+    },
+    {
+      "repeat": 3,
+      "claim_id": "modulation_true",
+      "pair_id": "modulation",
+      "clip_id": "modulating_arpeggio",
+      "family": "modulation",
+      "holds": true,
+      "verdict": "fail",
+      "outcome": "false_fail",
+      "confidence": 0.92,
+      "evidence": "The melody maintains the same tonal center throughout the 30s; no key change is audible.",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 178,
+      "output_tokens": 74,
+      "latency_ms": 1377.994,
+      "usage_complete": true
+    },
+    {
+      "repeat": 3,
+      "claim_id": "modulation_false",
+      "pair_id": "modulation",
+      "clip_id": "modulating_arpeggio",
+      "family": "modulation",
+      "holds": false,
+      "verdict": "fail",
+      "outcome": "correct",
+      "confidence": 0.88,
+      "evidence": "At around 15s a noticeable modulation shifts the tonal center.",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 177,
+      "output_tokens": 67,
+      "latency_ms": 1480.25,
+      "usage_complete": true
+    },
+    {
+      "repeat": 3,
+      "claim_id": "timbre_true",
+      "pair_id": "timbre",
+      "clip_id": "buzzy_bass",
+      "family": "timbre",
+      "holds": true,
+      "verdict": "fail",
+      "outcome": "false_fail",
+      "confidence": 0.92,
+      "evidence": "The bass note sounds dull and lacks the bright, buzzy character or audible overtones.",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 157,
+      "output_tokens": 71,
+      "latency_ms": 1489.578,
+      "usage_complete": true
+    },
+    {
+      "repeat": 3,
+      "claim_id": "timbre_false",
+      "pair_id": "timbre",
+      "clip_id": "buzzy_bass",
+      "family": "timbre",
+      "holds": false,
+      "verdict": "fail",
+      "outcome": "correct",
+      "confidence": 0.92,
+      "evidence": "The bass note includes audible overtones, not just the fundamental sine tone.",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 152,
+      "output_tokens": 67,
+      "latency_ms": 1209.76,
+      "usage_complete": true
+    }
+  ],
+  "accuracy": {
+    "overall": {
+      "calls": 60,
+      "answered": 54,
+      "correct": 28,
+      "false_fail": 22,
+      "false_pass": 4,
+      "hedged": 0,
+      "unanswered": 6,
+      "accuracy": 0.5185185185185185
+    },
+    "on_true_claims": {
+      "calls": 30,
+      "answered": 26,
+      "correct": 4,
+      "false_fail": 22,
+      "false_pass": 0,
+      "hedged": 0,
+      "unanswered": 4,
+      "accuracy": 0.15384615384615385,
+      "false_fail_rate": 0.8461538461538461
+    },
+    "on_false_claims": {
+      "calls": 30,
+      "answered": 28,
+      "correct": 24,
+      "false_fail": 0,
+      "false_pass": 4,
+      "hedged": 0,
+      "unanswered": 2,
+      "accuracy": 0.8571428571428571,
+      "false_pass_rate": 0.14285714285714285
+    },
+    "by_family": {
+      "count": {
+        "calls": 6,
+        "answered": 6,
+        "correct": 3,
+        "false_fail": 3,
+        "false_pass": 0,
+        "hedged": 0,
+        "unanswered": 0,
+        "accuracy": 0.5
+      },
+      "key": {
+        "calls": 6,
+        "answered": 6,
+        "correct": 3,
+        "false_fail": 3,
+        "false_pass": 0,
+        "hedged": 0,
+        "unanswered": 0,
+        "accuracy": 0.5
+      },
+      "modulation": {
+        "calls": 6,
+        "answered": 6,
+        "correct": 3,
+        "false_fail": 3,
+        "false_pass": 0,
+        "hedged": 0,
+        "unanswered": 0,
+        "accuracy": 0.5
+      },
+      "pitch_order": {
+        "calls": 6,
+        "answered": 4,
+        "correct": 3,
+        "false_fail": 1,
+        "false_pass": 0,
+        "hedged": 0,
+        "unanswered": 2,
+        "accuracy": 0.75
+      },
+      "presence": {
+        "calls": 6,
+        "answered": 4,
+        "correct": 1,
+        "false_fail": 2,
+        "false_pass": 1,
+        "hedged": 0,
+        "unanswered": 2,
+        "accuracy": 0.25
+      },
+      "tempo_coarse": {
+        "calls": 6,
+        "answered": 6,
+        "correct": 3,
+        "false_fail": 0,
+        "false_pass": 3,
+        "hedged": 0,
+        "unanswered": 0,
+        "accuracy": 0.5
+      },
+      "tempo_fine": {
+        "calls": 6,
+        "answered": 6,
+        "correct": 3,
+        "false_fail": 3,
+        "false_pass": 0,
+        "hedged": 0,
+        "unanswered": 0,
+        "accuracy": 0.5
+      },
+      "timbre": {
+        "calls": 6,
+        "answered": 6,
+        "correct": 3,
+        "false_fail": 3,
+        "false_pass": 0,
+        "hedged": 0,
+        "unanswered": 0,
+        "accuracy": 0.5
+      },
+      "timing": {
+        "calls": 6,
+        "answered": 4,
+        "correct": 3,
+        "false_fail": 1,
+        "false_pass": 0,
+        "hedged": 0,
+        "unanswered": 2,
+        "accuracy": 0.75
+      },
+      "triad": {
+        "calls": 6,
+        "answered": 6,
+        "correct": 3,
+        "false_fail": 3,
+        "false_pass": 0,
+        "hedged": 0,
+        "unanswered": 0,
+        "accuracy": 0.5
+      }
+    },
+    "by_claim": {
+      "timing_true": {
+        "holds": true,
+        "family": "timing",
+        "verdicts": [
+          "judge_error",
+          "judge_error",
+          "fail"
+        ],
+        "majority": "fail",
+        "stable": false,
+        "majority_outcome": "false_fail"
+      },
+      "timing_false": {
+        "holds": false,
+        "family": "timing",
+        "verdicts": [
+          "fail",
+          "fail",
+          "fail"
+        ],
+        "majority": "fail",
+        "stable": true,
+        "majority_outcome": "correct"
+      },
+      "presence_true": {
+        "holds": true,
+        "family": "presence",
+        "verdicts": [
+          "fail",
+          "fail",
+          "pass"
+        ],
+        "majority": "fail",
+        "stable": false,
+        "majority_outcome": "false_fail"
+      },
+      "presence_false": {
+        "holds": false,
+        "family": "presence",
+        "verdicts": [
+          "pass",
+          "judge_error",
+          "judge_error"
+        ],
+        "majority": "pass",
+        "stable": false,
+        "majority_outcome": "false_pass"
+      },
+      "count_true": {
+        "holds": true,
+        "family": "count",
+        "verdicts": [
+          "fail",
+          "fail",
+          "fail"
+        ],
+        "majority": "fail",
+        "stable": true,
+        "majority_outcome": "false_fail"
+      },
+      "count_false": {
+        "holds": false,
+        "family": "count",
+        "verdicts": [
+          "fail",
+          "fail",
+          "fail"
+        ],
+        "majority": "fail",
+        "stable": true,
+        "majority_outcome": "correct"
+      },
+      "tempo_coarse_true": {
+        "holds": true,
+        "family": "tempo_coarse",
+        "verdicts": [
+          "pass",
+          "pass",
+          "pass"
+        ],
+        "majority": "pass",
+        "stable": true,
+        "majority_outcome": "correct"
+      },
+      "tempo_coarse_false": {
+        "holds": false,
+        "family": "tempo_coarse",
+        "verdicts": [
+          "pass",
+          "pass",
+          "pass"
+        ],
+        "majority": "pass",
+        "stable": true,
+        "majority_outcome": "false_pass"
+      },
+      "tempo_fine_true": {
+        "holds": true,
+        "family": "tempo_fine",
+        "verdicts": [
+          "fail",
+          "fail",
+          "fail"
+        ],
+        "majority": "fail",
+        "stable": true,
+        "majority_outcome": "false_fail"
+      },
+      "tempo_fine_false": {
+        "holds": false,
+        "family": "tempo_fine",
+        "verdicts": [
+          "fail",
+          "fail",
+          "fail"
+        ],
+        "majority": "fail",
+        "stable": true,
+        "majority_outcome": "correct"
+      },
+      "pitch_order_true": {
+        "holds": true,
+        "family": "pitch_order",
+        "verdicts": [
+          "judge_error",
+          "judge_error",
+          "fail"
+        ],
+        "majority": "fail",
+        "stable": false,
+        "majority_outcome": "false_fail"
+      },
+      "pitch_order_false": {
+        "holds": false,
+        "family": "pitch_order",
+        "verdicts": [
+          "fail",
+          "fail",
+          "fail"
+        ],
+        "majority": "fail",
+        "stable": true,
+        "majority_outcome": "correct"
+      },
+      "key_true": {
+        "holds": true,
+        "family": "key",
+        "verdicts": [
+          "fail",
+          "fail",
+          "fail"
+        ],
+        "majority": "fail",
+        "stable": true,
+        "majority_outcome": "false_fail"
+      },
+      "key_false": {
+        "holds": false,
+        "family": "key",
+        "verdicts": [
+          "fail",
+          "fail",
+          "fail"
+        ],
+        "majority": "fail",
+        "stable": true,
+        "majority_outcome": "correct"
+      },
+      "triad_true": {
+        "holds": true,
+        "family": "triad",
+        "verdicts": [
+          "fail",
+          "fail",
+          "fail"
+        ],
+        "majority": "fail",
+        "stable": true,
+        "majority_outcome": "false_fail"
+      },
+      "triad_false": {
+        "holds": false,
+        "family": "triad",
+        "verdicts": [
+          "fail",
+          "fail",
+          "fail"
+        ],
+        "majority": "fail",
+        "stable": true,
+        "majority_outcome": "correct"
+      },
+      "modulation_true": {
+        "holds": true,
+        "family": "modulation",
+        "verdicts": [
+          "fail",
+          "fail",
+          "fail"
+        ],
+        "majority": "fail",
+        "stable": true,
+        "majority_outcome": "false_fail"
+      },
+      "modulation_false": {
+        "holds": false,
+        "family": "modulation",
+        "verdicts": [
+          "fail",
+          "fail",
+          "fail"
+        ],
+        "majority": "fail",
+        "stable": true,
+        "majority_outcome": "correct"
+      },
+      "timbre_true": {
+        "holds": true,
+        "family": "timbre",
+        "verdicts": [
+          "fail",
+          "fail",
+          "fail"
+        ],
+        "majority": "fail",
+        "stable": true,
+        "majority_outcome": "false_fail"
+      },
+      "timbre_false": {
+        "holds": false,
+        "family": "timbre",
+        "verdicts": [
+          "fail",
+          "fail",
+          "fail"
+        ],
+        "majority": "fail",
+        "stable": true,
+        "majority_outcome": "correct"
+      }
+    },
+    "discrimination_j": {
+      "per_call": 0.010989010989011005,
+      "per_claim_majority": -0.1,
+      "meaning": "P(pass|true) - P(pass|false). 0 means the verdict does not depend on the audio; accuracy alone cannot show that."
+    },
+    "permutation": {
+      "scheme": "within_pair",
+      "pairs": 10,
+      "assignments": 1024,
+      "observed_j": 0.010989010989011005,
+      "at_least_observed": 512,
+      "p_one_sided": 0.5,
+      "smallest_attainable_p": 0.0009765625
+    },
+    "mean_confidence": {
+      "correct": 0.8850000000000001,
+      "false_fail": 0.8986363636363638,
+      "false_pass": 0.955
+    },
+    "stability": {
+      "claims": 20,
+      "identical_across_repeats": 16,
+      "no_majority": 0
+    }
+  },
+  "cost": {
+    "model_calls": 60,
+    "billable_calls": 60,
+    "models": [
+      "gpt-audio-1.5"
+    ],
+    "pricing_complete": false,
+    "unpriced_models": [
+      "gpt-audio-1.5"
+    ],
+    "estimated_cost_usd": null,
+    "note": "gpt-audio-1.5 is absent from the price table, so the cost of this run is unknown rather than zero. null, not $0."
+  }
+}
