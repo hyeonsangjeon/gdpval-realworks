@@ -11,6 +11,7 @@ import { parseTraceback } from '../../utils/tracebackParser'
 import InfoTooltip from '../common/InfoTooltip'
 import SectionHint from '../common/SectionHint'
 import { tooltipTexts, sectionHintTexts } from '../../data/tooltipTexts'
+import { readFileGenerationCount, readFileGenerationRate } from './fileGenerationReading'
 
 /* ─── props ─── */
 interface ErrorAnalysisViewProps {
@@ -279,9 +280,12 @@ export default function ErrorAnalysisView({ experiments, reports }: ErrorAnalysi
               const r = reports.find((rr) => rr.short_id === exp.short_id)
               const fg = r?.file_generation
               if (!fg) return null
-              const failRate = fg.needs_files_total > 0
-                ? ((fg.files_failed / fg.needs_files_total) * 100).toFixed(1)
-                : '0'
+              // A failure rate needs a denominator. Four published 220-task
+              // runs record none, and the old form here — `needs_files_total >
+              // 0 ? … : '0'` — gave them a 0% failure bar, which is the same
+              // glyph a run earns by generating every file it owed. The reading
+              // rule keeps "nothing was asked for" apart from "nothing failed".
+              const failReading = readFileGenerationRate(fg, 'failed')
               // Tasks with no row in the submission at all. They are in the
               // denominator above but were never looked at, so a failure rate
               // computed without saying so reads as a clean result.
@@ -292,19 +296,19 @@ export default function ErrorAnalysisView({ experiments, reports }: ErrorAnalysi
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <div>
                       <div className="text-[10px] text-dash-text-muted">Needed</div>
-                      <div className="font-mono font-semibold text-dash-text">{fg.needs_files_total}</div>
+                      <div className="font-mono font-semibold text-dash-text">{readFileGenerationCount(fg.needs_files_total)}</div>
                     </div>
                     <div>
                       <div className="text-[10px] text-dash-text-muted">Succeeded</div>
-                      <div className="font-mono font-semibold text-emerald-400">{fg.files_succeeded}</div>
+                      <div className="font-mono font-semibold text-emerald-400">{readFileGenerationCount(fg.files_succeeded)}</div>
                     </div>
                     <div>
                       <div className="text-[10px] text-dash-text-muted">Failed</div>
-                      <div className="font-mono font-semibold text-red-400">{fg.files_failed}</div>
+                      <div className="font-mono font-semibold text-red-400">{readFileGenerationCount(fg.files_failed)}</div>
                     </div>
                     <div>
                       <div className="text-[10px] text-dash-text-muted">Dummy Created</div>
-                      <div className="font-mono font-semibold text-amber-400">{fg.dummy_files_created}</div>
+                      <div className="font-mono font-semibold text-amber-400">{readFileGenerationCount(fg.dummy_files_created)}</div>
                     </div>
                     {absent > 0 && (
                       <div className="col-span-2">
@@ -316,12 +320,31 @@ export default function ErrorAnalysisView({ experiments, reports }: ErrorAnalysi
                   <div>
                     <div className="flex justify-between text-[10px] mb-0.5">
                       <span className="text-dash-text-muted">Failure Rate</span>
-                      <span className="font-mono font-semibold text-red-400">{failRate}%</span>
+                      <span
+                        className={`font-mono font-semibold ${
+                          failReading.standing === 'measured' ? 'text-red-400' : 'text-dash-text-muted'
+                        }`}
+                      >
+                        {failReading.value}
+                      </span>
                     </div>
                     <div className="w-full h-1.5 rounded-full bg-dash-card-hover overflow-hidden">
-                      <div className="h-full rounded-full bg-red-500/60 transition-all duration-500" style={{ width: `${failRate}%` }} />
+                      {/* No fill when there is no rate. A zero-length bar is
+                          read off the track as a clean run, which is the one
+                          thing an unmeasured run does not support. */}
+                      {failReading.fraction !== null && (
+                        <div
+                          className="h-full rounded-full bg-red-500/60 transition-all duration-500"
+                          style={{ width: `${(failReading.fraction * 100).toFixed(1)}%` }}
+                        />
+                      )}
                     </div>
-                    {absent > 0 && (
+                    {failReading.caveat && (
+                      <div className="mt-1 text-[10px] leading-snug text-dash-text-muted">
+                        {failReading.caveat}
+                      </div>
+                    )}
+                    {failReading.standing === 'measured' && absent > 0 && (
                       <div className="mt-1 text-[10px] leading-snug text-amber-400/90">
                         {absent} of these tasks were never checked, so this rate is out of a
                         denominator that includes them.
