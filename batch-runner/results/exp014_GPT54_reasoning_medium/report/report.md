@@ -45,8 +45,14 @@ Average latency was 86,505 ms, with meaningful sector variation. Information was
 | Metric | Value |
 |--------|-------|
 | Tasks requiring files | 0 |
-| Successfully generated | 0 (0.0%) |
+| Successfully generated | n/a — no task in this run required a file |
 | Failed → dummy created | 0 |
+
+> **Corrected 2026-09-05.** This cell previously read `0 (0.0%)`. No task in
+> this run required a file, so the denominator is zero and file generation was
+> never measured — it was not a 0% generation rate. The value now shown is what
+> `step6_report.py` emits for a zero denominator (renderer fixed in #430). Only
+> this one cell changed; no run data was regenerated.
 
 ### Resume Rounds
 
