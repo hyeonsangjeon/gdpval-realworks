@@ -44,6 +44,7 @@ import {
   RubricSeverityCurve,
   HealthStrip,
 } from '../components/wow'
+import { readGraderConsistency } from '../components/grades/consistencyReading'
 import InfoTooltip from '../components/common/InfoTooltip'
 import { tooltipTexts } from '../data/tooltipTexts'
 import {
@@ -185,16 +186,10 @@ function GradeDetail() {
     ].filter((d) => d.value > 0)
   }, [grade])
 
-  // Grader consistency data
-  const consistencyData = useMemo(() => {
-    if (!grade) return { agree: 0, disagree: 0 }
-    const graded = grade.tasks.filter((t) => !t.error && t.scores.length > 0)
-    const agree = graded.filter((t) => {
-      const unique = new Set(t.scores)
-      return unique.size === 1
-    }).length
-    return { agree, disagree: graded.length - agree }
-  }, [grade])
+  // Grader consistency. Read over the tasks that actually carried more than one
+  // score — a task judged once is neither agreement nor disagreement, and the
+  // denominator is never substituted. See components/grades/consistencyReading.
+  const consistency = useMemo(() => readGraderConsistency(grade?.tasks), [grade])
 
   // Filtered tasks
   const filteredTasks = useMemo(() => {
@@ -264,6 +259,14 @@ function GradeDetail() {
   }
 
   const s = grade.summary
+
+  // `inconsistent_grades` is documented by the producer as "Always 0 for
+  // single-judge runs". A run where nothing was compared has no disagreement
+  // count to show — the 0 is the absence of a comparison, not a finding of
+  // none. Shown when a comparison happened, or when the count is positive and
+  // therefore claims one did.
+  const inconsistentIsRecorded =
+    consistency.standing === 'measured' || s.inconsistent_grades > 0
 
   return (
     <motion.div
@@ -407,8 +410,12 @@ function GradeDetail() {
               icon={AlertCircle}
               label="Inconsistent"
               tooltip={TERM_DEFINITIONS.inconsistent}
-              value={String(s.inconsistent_grades)}
-              sub={`${((s.inconsistent_grades / s.total_tasks) * 100).toFixed(1)}%`}
+              value={inconsistentIsRecorded ? String(s.inconsistent_grades) : '—'}
+              sub={
+                inconsistentIsRecorded
+                  ? `${((s.inconsistent_grades / s.total_tasks) * 100).toFixed(1)}%`
+                  : 'not recorded'
+              }
               color="text-purple-500"
               bg="bg-purple-500/10"
             />
@@ -483,71 +490,84 @@ function GradeDetail() {
                 <p className="text-sm text-muted-foreground">Agreement across multiple graders</p>
               </CardHeader>
               <CardContent>
-                <div className="flex items-center justify-center gap-4 md:gap-8">
-                  {/* Agree side */}
-                  <div className="text-center flex-1">
-                    <motion.p
-                      className="text-4xl font-bold text-emerald-500"
-                      initial={{ opacity: 0, scale: 0.5 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ duration: 0.5, delay: 0.3 }}
-                    >
-                      {consistencyData.agree}
-                    </motion.p>
-                    <p className="text-sm text-muted-foreground mt-1">Agree</p>
-                    <p className="text-xs text-muted-foreground">
-                      ({((consistencyData.agree / (consistencyData.agree + consistencyData.disagree || 1)) * 100).toFixed(1)}%)
+                {consistency.standing === 'measured' &&
+                consistency.agreeFraction !== null &&
+                consistency.disagreeFraction !== null ? (
+                  <>
+                    <div className="flex items-center justify-center gap-4 md:gap-8">
+                      {/* Agree side */}
+                      <div className="text-center flex-1">
+                        <motion.p
+                          className="text-4xl font-bold text-emerald-500"
+                          initial={{ opacity: 0, scale: 0.5 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ duration: 0.5, delay: 0.3 }}
+                        >
+                          {consistency.agree}
+                        </motion.p>
+                        <p className="text-sm text-muted-foreground mt-1">Agree</p>
+                        <p className="text-xs text-muted-foreground">({consistency.agreeValue})</p>
+                      </div>
+
+                      {/* VS badge */}
+                      <motion.div
+                        initial={{ scale: 0, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        transition={{ duration: 0.3, delay: 0.35 }}
+                        className="bg-primary text-primary-foreground rounded-full w-10 h-10 flex items-center justify-center font-bold text-xs shadow-lg flex-shrink-0"
+                      >
+                        VS
+                      </motion.div>
+
+                      {/* Disagree side */}
+                      <div className="text-center flex-1">
+                        <motion.p
+                          className="text-4xl font-bold text-amber-500"
+                          initial={{ opacity: 0, scale: 0.5 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ duration: 0.5, delay: 0.4 }}
+                        >
+                          {consistency.disagree}
+                        </motion.p>
+                        <p className="text-sm text-muted-foreground mt-1">Disagree</p>
+                        <p className="text-xs text-muted-foreground">({consistency.disagreeValue})</p>
+                      </div>
+                    </div>
+
+                    {/* Consistency bar */}
+                    <div className="mt-6">
+                      <div className="flex h-3 w-full rounded-full overflow-hidden bg-muted">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${consistency.agreeFraction * 100}%` }}
+                          transition={{ duration: 0.8, ease: 'easeOut', delay: 0.3 }}
+                          className="bg-emerald-500 h-full"
+                        />
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${consistency.disagreeFraction * 100}%` }}
+                          transition={{ duration: 0.8, ease: 'easeOut', delay: 0.4 }}
+                          className="bg-amber-500 h-full"
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-2 text-center">
+                        {consistency.caveat ??
+                          `Over the ${consistency.compared} task${consistency.compared === 1 ? '' : 's'} judged more than once.`}
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  /* Nothing was compared, so there is no agreement rate to print.
+                     A task judged once is not a task its graders agreed on. */
+                  <div className="flex flex-col items-center justify-center text-center py-6">
+                    <p className="text-4xl font-bold text-muted-foreground">—</p>
+                    <p className="text-sm text-muted-foreground mt-1">Not recorded</p>
+                    <p className="text-xs text-muted-foreground mt-3 max-w-xs">
+                      {consistency.caveat ??
+                        'Not recorded: agreement between graders was not measured on this run.'}
                     </p>
                   </div>
-
-                  {/* VS badge */}
-                  <motion.div
-                    initial={{ scale: 0, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    transition={{ duration: 0.3, delay: 0.35 }}
-                    className="bg-primary text-primary-foreground rounded-full w-10 h-10 flex items-center justify-center font-bold text-xs shadow-lg flex-shrink-0"
-                  >
-                    VS
-                  </motion.div>
-
-                  {/* Disagree side */}
-                  <div className="text-center flex-1">
-                    <motion.p
-                      className="text-4xl font-bold text-amber-500"
-                      initial={{ opacity: 0, scale: 0.5 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ duration: 0.5, delay: 0.4 }}
-                    >
-                      {consistencyData.disagree}
-                    </motion.p>
-                    <p className="text-sm text-muted-foreground mt-1">Disagree</p>
-                    <p className="text-xs text-muted-foreground">
-                      ({((consistencyData.disagree / (consistencyData.agree + consistencyData.disagree || 1)) * 100).toFixed(1)}%)
-                    </p>
-                  </div>
-                </div>
-
-                {/* Consistency bar */}
-                <div className="mt-6">
-                  <div className="flex h-3 w-full rounded-full overflow-hidden bg-muted">
-                    <motion.div
-                      initial={{ width: 0 }}
-                      animate={{
-                        width: `${(consistencyData.agree / (consistencyData.agree + consistencyData.disagree || 1)) * 100}%`,
-                      }}
-                      transition={{ duration: 0.8, ease: 'easeOut', delay: 0.3 }}
-                      className="bg-emerald-500 h-full"
-                    />
-                    <motion.div
-                      initial={{ width: 0 }}
-                      animate={{
-                        width: `${(consistencyData.disagree / (consistencyData.agree + consistencyData.disagree || 1)) * 100}%`,
-                      }}
-                      transition={{ duration: 0.8, ease: 'easeOut', delay: 0.4 }}
-                      className="bg-amber-500 h-full"
-                    />
-                  </div>
-                </div>
+                )}
 
                 {/* Pie chart */}
                 <div className="mt-6 flex justify-center">
