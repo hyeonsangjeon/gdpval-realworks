@@ -15,8 +15,8 @@ against each other, off the same samples the model will hear.
 The other half is the scorer. A measurement instrument that reports a good
 number when handed garbage is worse than no instrument, so the negative
 controls here are as load-bearing as the positive ones: a model that answers
-``pass`` to all twelve criteria scores 50% accuracy on this balanced corpus,
-and the test that matters is the one asserting its discrimination is **zero**.
+``pass`` to every criterion scores 50% accuracy on this balanced corpus, and
+the test that matters is the one asserting its discrimination is **zero**.
 """
 
 from __future__ import annotations
@@ -24,6 +24,7 @@ from __future__ import annotations
 import io
 import json
 import math
+import re
 import struct
 import sys
 import wave
@@ -122,6 +123,43 @@ def zero_crossing_hz(samples: Sequence[float], rate: int) -> float:
         if (first < 0) != (second < 0)
     )
     return crossings / (len(samples) / rate) / 2.0
+
+
+def magnitude_at(samples: Sequence[float], rate: int, frequency_hz: float) -> float:
+    """Amplitude of one frequency component, by quadrature correlation.
+
+    :func:`zero_crossing_hz` answers "what note is this" and is enough for a
+    beep, but it is meaningless the moment two notes sound at once: a triad
+    crosses zero at a rate that is not any of its three pitches, and a bass
+    note carrying five overtones crosses far more often than its fundamental.
+    Every musical claim in this corpus is about *simultaneous* content, so the
+    measurement has to be per-frequency.
+
+    This correlates the signal against a sine and a cosine at the frequency
+    asked about and takes the magnitude, which is one bin of a DFT evaluated
+    where it is wanted rather than on a grid. For a pure tone of amplitude A
+    at exactly this frequency it returns A; for a frequency that is not in the
+    signal it returns leakage, which over these window lengths is two orders
+    of magnitude smaller. Standard library only, and no third bin is computed
+    that nothing asks for.
+
+    Absence is the harder half of every claim here -- the false criteria are
+    what the model must *not* confirm -- so a helper that could only find
+    things would leave each pair half-checked.
+    """
+    if not samples:  # pragma: no cover - a window that decoded to nothing
+        return 0.0
+    step = 2.0 * math.pi * frequency_hz / rate
+    real = sum(value * math.cos(step * index) for index, value in enumerate(samples))
+    imag = sum(value * math.sin(step * index) for index, value in enumerate(samples))
+    return 2.0 * math.sqrt(real * real + imag * imag) / len(samples)
+
+
+def window(
+    samples: Sequence[float], rate: int, start_s: float, end_s: float
+) -> list[float]:
+    """The samples between two times, so a claim is measured where it applies."""
+    return list(samples[int(start_s * rate) : int(end_s * rate)])
 
 
 # --------------------------------------------------------------------------
@@ -223,6 +261,285 @@ def test_low_then_high_goes_low_then_high(tmp_path: Path) -> None:
     assert second > first * 3
 
 
+# --------------------------------------------------------------------------
+# The musical clips, where the ground truth is a frequency rather than a count
+# --------------------------------------------------------------------------
+
+
+def test_the_scale_really_is_g_major_and_really_is_not_e_flat(
+    tmp_path: Path,
+) -> None:
+    """``key``: eight notes, and the one note that settles the question.
+
+    G major and E-flat major share nothing useful to argue over; what decides
+    it in one note is F-sharp, which G major has and E-flat major does not.
+    So the assertion is not "the melody sounds like G major" -- that is taste
+    -- but that 739.99 Hz is in the waveform and 698.46 Hz is not, measured in
+    the window where the seventh note sounds.
+
+    The peak is also located rather than merely detected: of the three
+    candidate semitones around it, F-sharp is the loudest by a wide margin. A
+    threshold alone could be met by spectral leakage from a neighbour; a peak
+    cannot.
+    """
+    clip = probe.CLIPS_BY_ID["g_major_scale"]
+    samples, rate = decode(clip, tmp_path)
+
+    runs = loud_runs(samples, rate)
+    assert len(runs) == 8, runs
+    for index, (start, end) in enumerate(runs):
+        assert abs(start - index * 0.4) < 0.05, runs
+        assert 0.30 < end - start < 0.40, runs
+
+    # The seventh note, index 6, sounds from 2.4 s to 2.75 s.
+    seventh = window(samples, rate, 2.45, 2.70)
+    f_sharp = magnitude_at(seventh, rate, probe.hz("Fs5"))
+    f_natural = magnitude_at(seventh, rate, probe.hz("F5"))
+    assert f_sharp > 0.4, f_sharp
+    assert f_natural < 0.05, f_natural
+    assert f_sharp > f_natural * 8
+    assert f_sharp > magnitude_at(seventh, rate, probe.hz("G5"))
+
+    # Every scale degree, in the window where it sounds, at full amplitude.
+    for index, name in enumerate(("G4", "A4", "B4", "C5", "D5", "E5", "Fs5", "G5")):
+        note = window(samples, rate, index * 0.4 + 0.05, index * 0.4 + 0.30)
+        assert magnitude_at(note, rate, probe.hz(name)) > 0.4, name
+
+
+def test_the_triad_is_three_notes_at_once_and_the_third_is_major(
+    tmp_path: Path,
+) -> None:
+    """``triad``: major against minor is B4 against B-flat4, and it is measurable.
+
+    This is the claim that could not be posed at all before -- a chord needs
+    simultaneous frequencies, and every earlier clip was one voice at a time.
+    The false criterion says the chord is minor, so the test has to show both
+    that the major third is present and that the minor third is absent;
+    showing only the first would leave the model free to be right by accident.
+
+    The three voices are also checked to be equal and simultaneous. A chord
+    whose fifth was twice as loud as its third, or which arpeggiated instead
+    of sustaining, would be a different musical claim than the criterion makes.
+    """
+    clip = probe.CLIPS_BY_ID["major_triad"]
+    samples, rate = decode(clip, tmp_path)
+    body = window(samples, rate, 0.3, 2.7)
+
+    root = magnitude_at(body, rate, probe.hz("G4"))
+    third = magnitude_at(body, rate, probe.hz("B4"))
+    fifth = magnitude_at(body, rate, probe.hz("D5"))
+    minor_third = magnitude_at(body, rate, probe.hz("Bb4"))
+
+    for name, value in (("G4", root), ("B4", third), ("D5", fifth)):
+        assert value > 0.15, (name, value)
+    assert minor_third < 0.02, minor_third
+    assert third > minor_third * 10
+
+    # Equal voices: normalisation divides by the weight total, so no one note
+    # dominates and the chord is a chord rather than a note with two ghosts.
+    assert max(root, third, fifth) - min(root, third, fifth) < 0.02
+
+    # Sustained, not arpeggiated: all three are present in the first tenth of
+    # the chord and in the last tenth of it.
+    for start, end in ((0.3, 0.55), (2.45, 2.7)):
+        slice_ = window(samples, rate, start, end)
+        for name in ("G4", "B4", "D5"):
+            assert magnitude_at(slice_, rate, probe.hz(name)) > 0.12, (name, start)
+
+    # And it never clips, so the encoder is not deciding what the model hears.
+    assert max(abs(value) for value in samples) < 0.95
+
+
+def test_the_arpeggio_changes_key_by_exactly_one_semitone(tmp_path: Path) -> None:
+    """``modulation``: the ground truth is a ratio, not a key signature.
+
+    "The key changes partway through" is decidable without naming either key:
+    the second four notes are the first four multiplied by the same constant,
+    and that constant is the twelfth root of two. Measuring the ratio rather
+    than the keys keeps the test on ground the waveform actually settles.
+
+    The constant also has to be the *same* for all four, which is what makes
+    it a transposition rather than four unrelated notes. A drift there would
+    mean the second half is in no key at all.
+    """
+    clip = probe.CLIPS_BY_ID["modulating_arpeggio"]
+    samples, rate = decode(clip, tmp_path)
+
+    runs = loud_runs(samples, rate)
+    assert len(runs) == 8, runs
+
+    first_half = ("G4", "B4", "D5", "G5")
+    second_half = ("Ab4", "C5", "Eb5", "Ab5")
+    ratios = []
+    for index, (low, high) in enumerate(zip(first_half, second_half)):
+        before = window(samples, rate, index * 0.6 + 0.05, index * 0.6 + 0.45)
+        after = window(
+            samples, rate, (index + 4) * 0.6 + 0.05, (index + 4) * 0.6 + 0.45
+        )
+        assert magnitude_at(before, rate, probe.hz(low)) > 0.4, low
+        assert magnitude_at(after, rate, probe.hz(high)) > 0.4, high
+        # The transposed note is genuinely a different pitch, not the same one.
+        assert magnitude_at(after, rate, probe.hz(low)) < 0.05, (low, high)
+        ratios.append(probe.hz(high) / probe.hz(low))
+
+    for ratio in ratios:
+        assert ratio == pytest.approx(2.0 ** (1.0 / 12.0)), ratios
+    assert max(ratios) - min(ratios) < 1e-9
+
+
+def test_the_bass_carries_overtones_a_plain_sine_does_not(tmp_path: Path) -> None:
+    """``timbre``: "bass synth" reduced to something a spectrum settles.
+
+    The false criterion calls this a plain sine, so the test needs a plain
+    sine to compare against. It builds one -- same pitch, same duration, same
+    renderer, no partials -- and shows that the five overtones present in one
+    are absent from the other. Without the control, "the second harmonic is
+    present" would be a claim about the measurement rather than the clip.
+
+    The falling 1/n weights are checked too. A synth whose sixth harmonic was
+    as loud as its second would still be buzzy, but it would not be the
+    sawtooth-like tone the criterion describes.
+    """
+    clip = probe.CLIPS_BY_ID["buzzy_bass"]
+    samples, rate = decode(clip, tmp_path)
+    body = window(samples, rate, 0.3, 2.7)
+
+    control_clip = probe.Clip(
+        clip_id="control_pure_sine",
+        duration_s=clip.duration_s,
+        segments=(probe.Segment(0.2, 2.8, probe.hz("C2")),),
+        description="Not part of the corpus: a control this test renders itself.",
+    )
+    control, control_rate = decode(control_clip, tmp_path)
+    control_body = window(control, control_rate, 0.3, 2.7)
+
+    fundamental = probe.hz("C2")
+    assert magnitude_at(body, rate, fundamental) > 0.2
+    assert magnitude_at(control_body, control_rate, fundamental) > 0.5
+
+    strengths = []
+    for harmonic in probe.BASS_HARMONICS:
+        here = magnitude_at(body, rate, fundamental * harmonic)
+        there = magnitude_at(control_body, control_rate, fundamental * harmonic)
+        assert here > 0.03, (harmonic, here)
+        assert there < 0.01, (harmonic, there)
+        assert here > there * 5, (harmonic, here, there)
+        strengths.append(here)
+
+    # 1/n, so each overtone is quieter than the one below it.
+    assert strengths == sorted(strengths, reverse=True), strengths
+    assert strengths[0] > strengths[-1] * 2
+
+    # Louder is not the difference: normalisation keeps the two comparable.
+    assert max(abs(value) for value in samples) < 0.95
+
+
+def test_the_original_five_clips_render_byte_for_byte_as_they_did(
+    tmp_path: Path,
+) -> None:
+    """The published "discrimination 0" was measured on these. It must stay re-derivable.
+
+    Adding partials meant touching the renderer every clip goes through, and a
+    renderer that quietly changed the old waveforms would leave the earlier
+    result describing audio that no longer exists. The report publishes a
+    sha256 per clip precisely so a reader can re-derive it; a shifted sample
+    breaks that without breaking anything that would be noticed.
+
+    So this recomputes the five single-voice clips the way the renderer worked
+    *before* partials existed -- one sine, amplitude ``TONE_AMPLITUDE``,
+    assigned rather than accumulated -- and demands exact equality. Local
+    recomputation rather than a hard-coded digest, because ``math.sin`` is the
+    platform's libm and a pinned hash would fail on a different CI host for a
+    reason that has nothing to do with this change.
+
+    The mechanism that makes it hold is arithmetic, not care: with no partials
+    the scale is ``TONE_AMPLITUDE / 1.0``, which is ``TONE_AMPLITUDE``, and
+    the loop that adds partials runs zero times.
+    """
+    original = (
+        "tone_stops_early",
+        "pure_silence",
+        "three_beeps",
+        "clicks_120bpm",
+        "low_then_high",
+    )
+    for clip_id in original:
+        clip = probe.CLIPS_BY_ID[clip_id]
+        assert all(not segment.partials for segment in clip.segments), clip_id
+
+        total = int(round(clip.duration_s * probe.CLIP_SAMPLE_RATE_HZ))
+        expected = [0.0] * total
+        for segment in clip.segments:
+            if segment.frequency_hz is None:
+                continue
+            start = int(round(segment.start_s * probe.CLIP_SAMPLE_RATE_HZ))
+            stop = min(
+                total, int(round(segment.end_s * probe.CLIP_SAMPLE_RATE_HZ))
+            )
+            step = (
+                2.0
+                * math.pi
+                * segment.frequency_hz
+                / probe.CLIP_SAMPLE_RATE_HZ
+            )
+            for index in range(start, stop):
+                expected[index] = probe.TONE_AMPLITUDE * math.sin(step * index)
+
+        assert probe.clip_samples(clip) == expected, clip_id
+
+    # The same statement one level down, where the amplitude default lives.
+    assert list(probe._tone_samples(440.0, 5, 0)) == list(
+        probe._tone_samples(440.0, 5, 0, probe.TONE_AMPLITUDE)
+    )
+
+
+def test_a_partial_free_segment_is_normalised_by_exactly_one(tmp_path: Path) -> None:
+    """Why the clip above is safe, stated as the property rather than the result.
+
+    ``weight_total`` is the divisor. If it were ever anything but 1.0 for a
+    segment with no partials, every previously published clip would come out
+    at a different amplitude -- and the test above would fail for a reason
+    that is hard to read off a sample mismatch.
+    """
+    assert probe.Segment(0.0, 1.0, 440.0).weight_total == 1.0
+    assert probe.Segment(0.0, 1.0, None).weight_total == 1.0
+    assert probe.Segment(0.0, 1.0, 440.0).frequencies_hz == (440.0,)
+    assert probe.Segment(0.0, 1.0, None).frequencies_hz == ()
+
+    chord = probe.Segment(0.0, 1.0, 100.0, partials=((200.0, 1.0), (300.0, 0.5)))
+    assert chord.weight_total == 2.5
+    assert chord.frequencies_hz == (100.0, 200.0, 300.0)
+
+
+def test_equal_temperament_is_the_ratio_it_claims_to_be() -> None:
+    """``pitch_hz`` underwrites every musical claim, so it is checked directly."""
+    assert probe.pitch_hz(probe.A4_MIDI) == pytest.approx(440.0)
+    assert probe.hz("A4") == pytest.approx(440.0)
+    assert probe.hz("G4") == pytest.approx(391.995, abs=0.01)
+    assert probe.hz("B4") == pytest.approx(493.883, abs=0.01)
+    assert probe.hz("Bb4") == pytest.approx(466.164, abs=0.01)
+    assert probe.hz("C2") == pytest.approx(65.406, abs=0.01)
+    # An octave doubles, and twelve semitones make an octave.
+    assert probe.hz("G5") == pytest.approx(probe.hz("G4") * 2.0)
+    assert probe.hz("Ab4") / probe.hz("G4") == pytest.approx(probe.SEMITONE_RATIO)
+
+
+def test_the_notes_the_false_claims_need_are_never_played() -> None:
+    """``Bb4`` and ``F5`` exist in the table only to be shown absent.
+
+    A false criterion is only false if the corpus does not accidentally
+    contain what it asks for. These two are the pitches the minor-chord and
+    E-flat-major claims would require, and no segment anywhere sounds them.
+    """
+    sounding: set[float] = set()
+    for clip in probe.CLIPS:
+        for segment in clip.segments:
+            sounding.update(segment.frequencies_hz)
+    for absent in ("Bb4", "F5"):
+        for played in sounding:
+            assert abs(played - probe.hz(absent)) > 1.0, (absent, played)
+
+
 def test_every_clip_fits_the_window_the_grader_would_cut() -> None:
     """No clip is long enough to be trimmed, so nothing is measured on a stub.
 
@@ -260,6 +577,18 @@ def test_the_ground_truth_survives_the_graders_own_re_encode(
 
     So the check runs on the encoder's output: three beeps still three, the
     clicks still 120 BPM, the silence still silent.
+
+    The musical clips need this more than the beeps did, not less. A count of
+    beeps survives almost any resampler; a chord does not have to. The minor
+    third the ``triad`` pair turns on is 27.7 Hz from the major third, and the
+    bass overtones run up to 392 Hz on a 65 Hz fundamental -- both are things
+    a resampler can smear, and neither is visible in a beep count. Every clip
+    is therefore re-measured here at the frequency its criterion names, on the
+    bytes the model is actually sent.
+
+    The trailing ``else`` is the point of the branch structure. A clip added
+    to the corpus without a branch here would be encoded, sent, judged and
+    never checked, which is the failure this whole file exists to prevent.
     """
     from core.perception.audio import _trim_audio_bytes
 
@@ -292,6 +621,46 @@ def test_the_ground_truth_survives_the_graders_own_re_encode(
                 samples[int(3.2 * rate) : int(4.8 * rate)], rate
             )
             assert high > low * 3, (low, high)
+        elif clip.clip_id == "g_major_scale":
+            assert len(loud_runs(samples, rate)) == 8
+            seventh = window(samples, rate, 2.45, 2.70)
+            assert magnitude_at(seventh, rate, probe.hz("Fs5")) > 0.4
+            assert magnitude_at(seventh, rate, probe.hz("F5")) < 0.05
+        elif clip.clip_id == "major_triad":
+            body = window(samples, rate, 0.3, 2.7)
+            for name in ("G4", "B4", "D5"):
+                assert magnitude_at(body, rate, probe.hz(name)) > 0.15, name
+            assert magnitude_at(body, rate, probe.hz("Bb4")) < 0.02
+        elif clip.clip_id == "modulating_arpeggio":
+            assert len(loud_runs(samples, rate)) == 8
+            for index, (low_name, high_name) in enumerate(
+                zip(("G4", "B4", "D5", "G5"), ("Ab4", "C5", "Eb5", "Ab5"))
+            ):
+                before = window(
+                    samples, rate, index * 0.6 + 0.05, index * 0.6 + 0.45
+                )
+                after = window(
+                    samples,
+                    rate,
+                    (index + 4) * 0.6 + 0.05,
+                    (index + 4) * 0.6 + 0.45,
+                )
+                assert magnitude_at(before, rate, probe.hz(low_name)) > 0.4
+                assert magnitude_at(after, rate, probe.hz(high_name)) > 0.4
+                assert magnitude_at(after, rate, probe.hz(low_name)) < 0.05
+        elif clip.clip_id == "buzzy_bass":
+            body = window(samples, rate, 0.3, 2.7)
+            fundamental = probe.hz("C2")
+            assert magnitude_at(body, rate, fundamental) > 0.2
+            for harmonic in probe.BASS_HARMONICS:
+                assert (
+                    magnitude_at(body, rate, fundamental * harmonic) > 0.03
+                ), harmonic
+        else:  # pragma: no cover - reached only by an unchecked new clip
+            pytest.fail(
+                f"{clip.clip_id} is sent to the model but nothing here checks "
+                f"that its ground truth survives the re-encode"
+            )
 
 
 # --------------------------------------------------------------------------
@@ -300,17 +669,21 @@ def test_the_ground_truth_survives_the_graders_own_re_encode(
 
 
 def test_corpus_is_balanced_and_paired() -> None:
-    """Six true, six false, matched one-of-each on the same clip.
+    """Ten true, ten false, matched one-of-each on the same clip.
 
     Balance is what makes Youden's J readable; pairing is what makes the
     permutation null contain only corpora that could actually have existed.
+
+    The pair count is also the whole p-floor: ten pairs is what puts the best
+    attainable p below 0.01, and six could not. Asserting it here means the
+    floor cannot be lowered by deleting a pair without a test saying so.
     """
-    assert sum(1 for c in probe.CLAIMS if c.holds) == 6
-    assert sum(1 for c in probe.CLAIMS if not c.holds) == 6
+    assert sum(1 for c in probe.CLAIMS if c.holds) == 10
+    assert sum(1 for c in probe.CLAIMS if not c.holds) == 10
     pairs: dict[str, list[probe.Claim]] = {}
     for claim in probe.CLAIMS:
         pairs.setdefault(claim.pair_id, []).append(claim)
-    assert len(pairs) == 6
+    assert len(pairs) == 10
     for pair_id, members in pairs.items():
         assert len(members) == 2, pair_id
         assert {m.holds for m in members} == {True, False}, pair_id
@@ -347,6 +720,101 @@ def test_no_criterion_accidentally_asks_for_a_listening_window() -> None:
 def test_claim_ids_are_unique() -> None:
     ids = [claim.claim_id for claim in probe.CLAIMS]
     assert len(ids) == len(set(ids))
+
+
+def test_no_criterion_is_a_substring_of_another() -> None:
+    """``TruthfulStub`` matches on the first ``criterion in text`` hit.
+
+    That is fine while the criteria are distinct strings and silently wrong
+    the moment one contains another: the stub would answer the shorter claim's
+    ground truth for the longer claim, and a dry run would go green while
+    measuring the wrong thing. The corpus doubled in this change and the two
+    ``triad`` criteria differ by one word, so the property is worth asserting
+    rather than assuming.
+
+    This constrains the *fixture*, not the model. A real judge reads the whole
+    prompt; only the stub matches by substring.
+    """
+    criteria = [claim.criterion for claim in probe.CLAIMS]
+    assert len(criteria) == len(set(criteria))
+    for outer in criteria:
+        for inner in criteria:
+            if inner != outer:
+                assert inner not in outer, (inner, outer)
+
+
+def test_the_workflow_states_the_corpus_it_actually_has() -> None:
+    """The paid entry point restates these counts, so they have to be checked.
+
+    ``audio-accuracy-probe.yml`` is the only way this measurement gets bought,
+    and four places in it say how big the corpus is: the header comment, the
+    ``repeats`` input description a dispatcher reads, and two lines of the
+    approval record. None of them can read ``CLAIMS`` -- the gate job has no
+    checkout, and a comment cannot compute -- so all four are restatements.
+
+    They rotted once already. The corpus went from twelve criteria to twenty
+    and the workflow kept saying twelve, which put ``calls = 36`` on the
+    approval record for a run that would make sixty. A wrong call count on a
+    paid gate is the specific kind of wrong this repository cares about: the
+    record that says what was authorised disagreed with what was spent.
+
+    So the restatements are pinned rather than trusted. This test is the
+    reason it is safe to restate them at all.
+    """
+    text = (
+        probe.REPO_ROOT / ".github" / "workflows" / "audio-accuracy-probe.yml"
+    ).read_text(encoding="utf-8")
+
+    claims = len(probe.CLAIMS)
+    true_claims = sum(1 for claim in probe.CLAIMS if claim.holds)
+    false_claims = claims - true_claims
+    clips = len(probe.CLIPS)
+
+    words = {
+        "five": 5,
+        "six": 6,
+        "nine": 9,
+        "ten": 10,
+        "twelve": 12,
+        "twenty": 20,
+    }
+
+    # The header comment: "Twenty criteria, ten true and ten false, matched in
+    # pairs on nine clips".
+    header = re.search(
+        r"(\w+) criteria, (\w+) true and\n#\s*(\w+) false, matched in pairs on "
+        r"(\w+) clips",
+        text,
+    )
+    assert header, "the header comment no longer states the corpus size"
+    assert words[header.group(1).lower()] == claims
+    assert words[header.group(2).lower()] == true_claims
+    assert words[header.group(3).lower()] == false_claims
+    assert words[header.group(4).lower()] == clips
+
+    # The dispatch input description, which is what someone reads before
+    # deciding whether to spend.
+    formula = re.search(r"Total calls = (\d+) criteria x repeats", text)
+    assert formula, "the repeats input no longer states the call formula"
+    assert int(formula.group(1)) == claims
+
+    # The approval record, both lines of it.
+    record = re.search(r"criteria\s+= (\d+) \((\d+) true / (\d+) false\)", text)
+    assert record, "the approval record no longer states the criteria count"
+    assert int(record.group(1)) == claims
+    assert int(record.group(2)) == true_claims
+    assert int(record.group(3)) == false_claims
+
+    calls = re.search(r"calls\s+= \$\(\((\d+) \* PROBE_REPEATS\)\)", text)
+    assert calls, "the approval record no longer computes the call count"
+    assert int(calls.group(1)) == claims
+
+    # The permutation figures in the paid summary are *derived* from the
+    # report rather than restated, which is why they are not checked above.
+    # This asserts they stayed derived: a literal here would be the next thing
+    # to rot, and it would misdescribe what the design can support.
+    for stale in ("six pairs", "64 relabellings", "0.01 is out of reach"):
+        assert stale not in text, stale
 
 
 # --------------------------------------------------------------------------
@@ -412,7 +880,7 @@ def test_judge_error_is_not_an_answer_in_either_direction() -> None:
 def test_a_model_that_always_says_pass_scores_zero_discrimination() -> None:
     """The control this whole metric exists for.
 
-    Accuracy is 50% -- it got all six true claims right -- and that 50% is
+    Accuracy is 50% -- it got every true claim right -- and that 50% is
     worth nothing, because the same answer was given without listening. J is
     what says so.
     """
@@ -456,26 +924,40 @@ def test_rates_are_none_not_zero_when_there_is_nothing_to_divide_by() -> None:
 # --------------------------------------------------------------------------
 
 
-def test_permutation_is_exhaustive_over_sixty_four_relabellings() -> None:
+def test_permutation_is_exhaustive_over_one_thousand_relabellings() -> None:
     result = probe.permute_within_pairs(_calls(lambda c: "pass" if c.holds else "fail"))
-    assert result["pairs"] == 6
-    assert result["assignments"] == 64
+    assert result["pairs"] == 10
+    assert result["assignments"] == 1024
 
 
-def test_the_best_possible_p_is_reported_and_is_worse_than_one_percent() -> None:
+def test_the_best_possible_p_now_clears_one_percent_and_says_so() -> None:
     """The design's own ceiling, published with the number rather than after it.
 
-    Six pairs give 64 assignments, so nothing this experiment can produce
-    reaches 0.01. Stating it here is the same discipline as
+    This assertion used to run the other way. Six pairs gave 64 assignments
+    and a floor of 1/64 = 0.015625, so *nothing* the first version of this
+    experiment could produce reached 0.01 -- however well the model listened,
+    and however many repeats were bought. Repeats never touched it; only pairs
+    could, because the floor is 1 / 2**pairs and repeats are not in it.
+
+    Four musical pairs is what removed the bound. Both numbers are asserted,
+    the live one and the one it replaced, so that the arithmetic linking them
+    is on the record rather than in a commit message: a pair deleted from the
+    corpus puts the floor back above 0.01 and this test says which side of the
+    line it landed on.
+
+    Publishing the floor beside the p is the same discipline as
     ``is_informative: false`` on the repeat-variation interval: the reader is
     told what the measurement *cannot* support at the moment they are told
     what it found.
     """
     result = probe.permute_within_pairs(_calls(lambda c: "pass" if c.holds else "fail"))
-    assert result["smallest_attainable_p"] == pytest.approx(1.0 / 64.0)
-    assert result["p_one_sided"] == pytest.approx(1.0 / 64.0)
-    assert result["smallest_attainable_p"] > 0.01
-    assert result["smallest_attainable_p"] < 0.05
+    assert result["smallest_attainable_p"] == pytest.approx(1.0 / 1024.0)
+    assert result["p_one_sided"] == pytest.approx(1.0 / 1024.0)
+    assert result["smallest_attainable_p"] < 0.01
+    # The floor this replaced, and the reason it could not be fixed by paying
+    # for more repeats: 2 ** 6 == 64, and 1/64 is on the wrong side of 0.01.
+    assert 1.0 / (2.0 ** 6) > 0.01
+    assert result["smallest_attainable_p"] == pytest.approx(1.0 / (2.0 ** 10))
 
 
 def test_a_constant_answer_is_not_significant() -> None:
@@ -494,16 +976,20 @@ def test_permutation_is_deterministic() -> None:
 
 
 def test_labels_are_swapped_within_pairs_not_across_the_corpus() -> None:
-    """Every relabelling must leave the corpus balanced, and 64 of them exist.
+    """Every relabelling must leave the corpus balanced, and 1024 of them exist.
 
-    A free shuffle over twelve labels would build null corpora that could not
+    A free shuffle over twenty labels would build null corpora that could not
     have existed -- both criteria about the silent clip true at once -- and
-    would enumerate C(12,6) = 924 of them, putting the p-floor at 1/924 and
-    quietly claiming a resolution the design does not have. Two observable
-    consequences pin the within-pair scheme: the assignment count is exactly
-    64, and a perfect listener's p is exactly 1/64 rather than 1/924.
+    would enumerate C(20,10) = 184,756 of them, putting the p-floor two orders
+    of magnitude lower and quietly claiming a resolution the design does not
+    have. That temptation grew with the corpus rather than shrinking: at six
+    pairs a free shuffle bought 924 against 64, and at ten it buys 184,756
+    against 1024, so the gap between the honest floor and the flattering one
+    is now 180x. Two observable consequences pin the within-pair scheme: the
+    assignment count is exactly 1024, and a perfect listener's p is exactly
+    1/1024 rather than 1/184,756.
 
-    The count also has to be 64 *including* degenerate answers -- if any
+    The count also has to be 1024 *including* degenerate answers -- if any
     relabelling produced an all-true corpus, J would be ``None`` there and the
     denominator would silently shrink.
     """
@@ -513,15 +999,18 @@ def test_labels_are_swapped_within_pairs_not_across_the_corpus() -> None:
         lambda c: "fail" if c.holds else "pass",
     ):
         result = probe.permute_within_pairs(_calls(verdict_for))
-        assert result["assignments"] == 64
-        assert 1 <= result["at_least_observed"] <= 64
+        assert result["assignments"] == 1024
+        assert 1 <= result["at_least_observed"] <= 1024
         assert result["p_one_sided"] == pytest.approx(
-            result["at_least_observed"] / 64
+            result["at_least_observed"] / 1024
         )
+    # The free-shuffle count, spelled out so the comparison above is checkable
+    # rather than asserted: 184,756 is not what this enumerates.
+    assert math.comb(20, 10) == 184756
 
 
 def test_the_perfect_and_inverted_ends_of_the_null_are_where_they_should_be() -> None:
-    """One assignment beats a perfect listener; all 64 beat an inverted one."""
+    """One assignment beats a perfect listener; all 1024 beat an inverted one."""
     perfect = probe.permute_within_pairs(
         _calls(lambda c: "pass" if c.holds else "fail")
     )
@@ -529,7 +1018,7 @@ def test_the_perfect_and_inverted_ends_of_the_null_are_where_they_should_be() ->
     inverted = probe.permute_within_pairs(
         _calls(lambda c: "fail" if c.holds else "pass")
     )
-    assert inverted["at_least_observed"] == 64
+    assert inverted["at_least_observed"] == 1024
     assert inverted["p_one_sided"] == pytest.approx(1.0)
 
 
@@ -631,9 +1120,9 @@ def test_dry_run_reports_a_perfect_score_and_says_it_measured_nothing(
     assert report["cost"]["estimated_cost_usd"] is None
     assert report["cost"]["pricing_complete"] is True
     assert report["cost"]["unpriced_models"] == []
-    # 12 calls went out to the stub and none of them were billed. A report
-    # that said "billable_calls: 12" here is the figure someone copies.
-    assert report["cost"]["model_calls"] == 12
+    # 20 calls went out to the stub and none of them were billed. A report
+    # that said "billable_calls: 20" here is the figure someone copies.
+    assert report["cost"]["model_calls"] == 20
     assert report["cost"]["billable_calls"] == 0
 
 
@@ -736,10 +1225,10 @@ def test_main_dry_run_exits_zero(capsys: pytest.CaptureFixture[str]) -> None:
     assert code == 0
     report = json.loads(capsys.readouterr().out)
     assert report["measured"] is False
-    assert report["pins"]["claims"] == 12
-    assert report["pins"]["true_claims"] == 6
-    assert report["pins"]["false_claims"] == 6
-    assert len(report["calls"]) == 12
+    assert report["pins"]["claims"] == 20
+    assert report["pins"]["true_claims"] == 10
+    assert report["pins"]["false_claims"] == 10
+    assert len(report["calls"]) == 20
 
 
 def test_main_rejects_a_repeat_count_below_one() -> None:
@@ -751,7 +1240,7 @@ def test_main_writes_the_report_where_it_is_told(tmp_path: Path) -> None:
     out = tmp_path / "nested" / "report.json"
     assert probe.main(["--dry-run", "--repeats", "1", "--quiet", "--out", str(out)]) == 0
     written = json.loads(out.read_text(encoding="utf-8"))
-    assert written["accuracy"]["overall"]["calls"] == 12
+    assert written["accuracy"]["overall"]["calls"] == 20
 
 
 def test_main_refuses_a_config_whose_model_and_deployment_disagree(

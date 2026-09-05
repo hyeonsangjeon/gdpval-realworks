@@ -9,10 +9,16 @@ name: Audio Accuracy Probe
 # whose own correctness is one of the two open readings the card names.
 #
 # This workflow runs the one measurement that separates them, on clips whose
-# contents are arithmetic rather than opinion. Twelve criteria, six true and
-# six false, matched in pairs on five clips synthesised from a segment list at
+# contents are arithmetic rather than opinion. Twenty criteria, ten true and
+# ten false, matched in pairs on nine clips synthesised from a segment list at
 # run time. Nothing is downloaded and no audio is committed; the clips are
 # rendered from `wave` and `math` and their digests go into the report.
+#
+# The corpus counts above are not restated by hand anywhere a run can read
+# them: a test asserts that every number this file states matches the corpus
+# the script actually holds. The first version of this workflow said "twelve
+# criteria" and kept saying it after the corpus doubled, which put a call
+# count of 36 on an approval record for a run that made 60.
 #
 # What it does NOT do, deliberately:
 #   * It does not grade anything. No task, no rubric, no deliverable, no
@@ -45,7 +51,7 @@ on:
         type: boolean
         default: false
       repeats:
-        description: 'How many times each criterion is put to the model. 3 matches the repeat runs, so stability here is comparable with the 19.35%. Total calls = 12 criteria x repeats.'
+        description: 'How many times each criterion is put to the model. 3 matches the repeat runs, so stability here is comparable with the 19.35%. Total calls = 20 criteria x repeats.'
         required: false
         type: number
         default: 3
@@ -148,6 +154,11 @@ jobs:
     environment:
       name: grading
     steps:
+      # The criteria count is restated here because this job has no checkout --
+      # it is a gate, and giving it the repository to read would be more
+      # machinery than a log line is worth. What keeps the restatement true is
+      # test_the_workflow_states_the_corpus_it_actually_has, which fails if
+      # this number and the corpus disagree.
       - name: Record approved request
         env:
           PROBE_REPEATS: ${{ inputs.repeats }}
@@ -155,9 +166,9 @@ jobs:
           printf '%s\n' \
             "Approved paid audio accuracy probe:" \
             "  model      = gpt-audio-1.5 (read from gold_audio_repeat_v2_sol_max.yaml)" \
-            "  criteria   = 12 (6 true / 6 false)" \
+            "  criteria   = 20 (10 true / 10 false)" \
             "  repeats    = $PROBE_REPEATS" \
-            "  calls      = $((12 * PROBE_REPEATS))" \
+            "  calls      = $((20 * PROBE_REPEATS))" \
             "  grades     = none. This does not write a grade or touch a corpus."
 
   # ---------------------------------------------------------------------------
@@ -270,9 +281,15 @@ jobs:
           print("**J = 0 would mean the verdict does not depend on the audio.** A model")
           print("answering `pass` to everything scores 50% accuracy on this balanced")
           print("corpus and J = 0; accuracy alone cannot tell a listener from a coin.\n")
-          print(f"This design cannot produce a p below "
-                f"{perm['smallest_attainable_p']} — six pairs, 64 relabellings. "
-                "Significant at 0.05 is the ceiling; 0.01 is out of reach.\n")
+          floor = perm["smallest_attainable_p"]
+          print(f"This design cannot produce a p below {floor} — "
+                f"{perm['pairs']} pairs, {perm['assignments']} relabellings, "
+                f"so the floor is 1/{perm['assignments']}. Repeats do not move "
+                "it; only pairs do.\n")
+          reachable = [t for t in (0.05, 0.01, 0.001) if floor < t]
+          print("Thresholds this design can reach: "
+                + (", ".join(str(t) for t in reachable) if reachable else "none")
+                + ".\n")
           print("### Cost\n")
           print(f"- billable calls: {report['cost']['billable_calls']}")
           print(f"- pricing complete: `{json.dumps(report['cost']['pricing_complete'])}`")
@@ -287,7 +304,7 @@ jobs:
                     f"{row['false_fail']} | {row['false_pass']} | {row['hedged']} |")
           PY
 
-      # Artifact, not a commit. These are verdicts on five synthetic clips and
+      # Artifact, not a commit. These are verdicts on synthetic clips and
       # they are not grades; putting them in data/grades would make them show
       # up on the dashboard as if they were.
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
