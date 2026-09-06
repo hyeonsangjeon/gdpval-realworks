@@ -97,6 +97,13 @@ EXPECTED_ADVANCE_CHECK_TASKS = (
 # once here rather than typed into each of them.
 UNPRICED_SOUND_MODEL = "gpt-audio-1.5"
 
+# The committed plan declares ``same_generated_code_rerun``, and the three run
+# places it names each send a differently named prompt file. Several tests below
+# have to name that finding to set it aside, so the phrase is written once here.
+# What it means, and why it is set aside rather than made to go away, is in
+# ``_apart_from_the_sound_model_and_absent_inputs``.
+THE_THREE_ARE_NOT_ASKED_THE_SAME_THING = "these places are not asked the same thing"
+
 # How many renders marking may spend on one task, read from the settings that
 # decide it rather than restated. The plan's picture line is a ceiling only if
 # it is the ceiling marking is actually configured to allow, and while both
@@ -232,6 +239,25 @@ def _apart_from_the_sound_model_and_absent_inputs(result):
     ``InputFileVerification.problems``. A written fingerprint that disagrees
     with the file it names is a fault in the plan, says the same thing on every
     machine, and must fail these tests wherever they run.
+
+    **A third thing is set aside from 2026-09-06, and it is a fault in the
+    plan.** The other two are gaps nothing could settle; this one is a finding,
+    it is true, and it blocks the run on purpose. The plan declares
+    ``same_generated_code_rerun``, and until now the only check of that claim
+    compared ``model_run_conditions.shared``'s two wording blocks — one value
+    each, written once, inherited by all three places, so three copies of one
+    string were held against each other and could not disagree. The plan says in
+    its own words that the first of them is never sent. Measuring instead of
+    reading shows the three places send three differently named prompt files
+    whose first requests come to 3,533, 3,867 and 7,307 characters.
+
+    It is set aside rather than fixed because fixing it is a decision about the
+    experiment, not about this code: either the three are made to send one first
+    request, or the plan records a comparison other than
+    ``same_generated_code_rerun``. Neither is a test's to choose. It is named
+    here, asserted on by name in the test below, and held in place by
+    tests/test_the_three_run_places_are_asked_the_same_thing.py. Weakening the
+    check to make it disappear would put the repository back where it was.
     """
     return [
         note
@@ -239,6 +265,7 @@ def _apart_from_the_sound_model_and_absent_inputs(result):
         if note not in result.grading_ceiling_problems
         and note not in result.missing_input_file_problems
         and UNPRICED_SOUND_MODEL not in note
+        and THE_THREE_ARE_NOT_ASKED_THE_SAME_THING not in note
     ]
 
 
@@ -261,7 +288,7 @@ def test_a_ready_plan_reports_the_marking_gap_and_nothing_of_its_own(plan):
         for note in result.all_problems
         if note not in result.missing_input_file_problems
     ]
-    assert len(set_aside) == 4
+    assert len(set_aside) == 5
 
     about_the_sound_model = [
         note
@@ -271,12 +298,19 @@ def test_a_ready_plan_reports_the_marking_gap_and_nothing_of_its_own(plan):
     about_the_input_figure = [
         note for note in set_aside if "input per marking call" in note
     ]
+    about_the_three_prompts = [
+        note for note in set_aside if THE_THREE_ARE_NOT_ASKED_THE_SAME_THING in note
+    ]
     assert len(about_the_sound_model) == 4
     # The plan now states what one marking call can carry, so nothing is set
     # aside on that account any more.
     assert about_the_input_figure == []
-    # Nothing else. Every set-aside note is about the sound model.
-    assert len(about_the_sound_model) == len(set_aside)
+    # The one finding that is a fault in the plan rather than a gap nothing
+    # could settle. It names all three run places and what each really sends.
+    assert len(about_the_three_prompts) == 1
+    assert "same_generated_code_rerun" in about_the_three_prompts[0]
+    # Nothing else. Every set-aside note is one of those two.
+    assert len(about_the_sound_model) + len(about_the_three_prompts) == len(set_aside)
 
 
 def test_only_files_that_are_absent_are_ever_set_aside(plan):
@@ -1607,8 +1641,16 @@ def test_record_only_cost_findings_do_not_block_the_owner_approved_run(plan):
     assert result.cost_findings
     assert set(result.cost_findings).isdisjoint(result.all_problems)
     assert result.readiness.paid_model_calls_approved is True
+    # Nothing about money is left in ``all_problems`` — that is what this test
+    # is about. What is left is the absent input files and the one finding that
+    # the three run places are not asked the same thing, which is a technical
+    # inconsistency and blocks under every cost policy there is. Setting a cost
+    # policy has never been able to wave one of those through, and this test
+    # would be claiming it could if it kept saying "input files only".
     assert all(
-        note in result.missing_input_file_problems for note in result.all_problems
+        note in result.missing_input_file_problems
+        or THE_THREE_ARE_NOT_ASKED_THE_SAME_THING in note
+        for note in result.all_problems
     ), result.all_problems
 
 

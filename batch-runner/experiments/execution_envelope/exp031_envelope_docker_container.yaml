@@ -14,8 +14,21 @@
 # that one character by character. Editing anything below that the plan also
 # fixes will stop the run rather than quietly change the comparison.
 #
-# No model has been called with this file. It is a draft awaiting approval to
-# spend money.
+# This file has been used to call a model. On 2026-09-01 the three files ran
+# five tasks each: the server process finished 3 of 5, the container 4 of 5,
+# and the Azure code interpreter 0 of 5, every one of those five refused with
+# http 403 by the project route. The header here said "no model has been called
+# with this file" until 2026-09-06, which is what a written-down claim does when
+# nothing re-reads it.
+#
+# What "agree on everything except where the code runs" does not yet cover: the
+# prompt. Each of the three sends the prompt file its own runner class declares,
+# and the three are different files. Measured through the builders a real
+# attempt uses, the first requests come to 3,533, 3,867 and 7,307 characters.
+# The free check reports this and will not start the comparison under the name
+# same_generated_code_rerun while it holds. Which way to settle it — one prompt
+# for all three, or a different name for the comparison — is a decision about
+# the experiment and has not been made here.
 
 experiment:
   id: "exp031_envelope_docker_container"
