@@ -525,6 +525,13 @@ entries land under a fresh dated heading the day they merge to `main`.
   a warning that prints on every run is decoration. Verified by rendering the
   paid summary against both shapes offline.
 
+  One label in the pre-registration was corrected in the same pass, before any
+  spend: the primary test's row read `n = 20` while the rule two paragraphs
+  below it removes hedged majorities from the denominator. It now reads
+  `n ≤ 20`. Nothing about the design changed — the exclusion was always there —
+  but a table cell saying `n = 20` is how a run with n = 14 gets written up as
+  a twenty-item test.
+
   330 section 3 pre-registered four stop conditions and nothing enforced them.
   They are now `SPEECH_STOP_RULES`, checked after each call, with a test that
   fails if the constants and the document drift apart: 20 minutes wall clock,

@@ -2807,7 +2807,11 @@ def test_the_primary_test_is_the_one_the_document_calls_primary() -> None:
         probe.REPO_ROOT / "tasks" / "rebuilding_grading_task"
         / "330-speech-diagnostic-prereg.md"
     ).read_text(encoding="utf-8")
-    assert "이항검정 (n = 20, p = 0.5)" in doc
+    # ``n <= 20``, not ``n = 20``. The hedged-majority exclusion was always in
+    # the document; the label was not, and a table cell reading "n = 20" is
+    # what a run with n = 14 gets written up as.
+    assert "이항검정 (n ≤ 20, p = 0.5)" in doc
+    assert "이항검정 (n = 20" not in doc
     assert "`accuracy.permutation`" in doc
     step = _step("measure", "Summarise")
     assert "pre-registered primary" in step["run"]
