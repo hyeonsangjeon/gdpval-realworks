@@ -63,6 +63,7 @@ from core.execution_envelope_preflight import (  # noqa: E402
     _measure_first_requests,
     _prompt_files_a_run_place_might_send,
     conditions_from_plan,
+    describe_first_requests,
     load_plan,
     run_envelope_preflight,
 )
@@ -107,7 +108,7 @@ def plan():
 
 def _problems(plan, *, comparison=None, root=BATCH_RUNNER_ROOT, catalog=None):
     """Run the rule alone, the way ``run_envelope_preflight`` runs it."""
-    return _check_every_run_place_is_asked_the_same_thing(
+    problems, _measurements = _check_every_run_place_is_asked_the_same_thing(
         conditions_from_plan(plan),
         comparison=(
             str(plan.get("comparison") or COMPARISON_SAME_GENERATED_CODE)
@@ -118,6 +119,7 @@ def _problems(plan, *, comparison=None, root=BATCH_RUNNER_ROOT, catalog=None):
         root=root,
         catalog=CATALOG if catalog is None else catalog,
     )
+    return problems
 
 
 def _measured(plan, *, root=BATCH_RUNNER_ROOT):
@@ -456,16 +458,13 @@ def test_two_places_pinned_to_one_prompt_file_are_passed(plan, tmp_path):
     assert unmeasurable == {}
     assert {request.prompt_name for request in measured.values()} == {pinned_to}
 
-    assert (
-        _check_every_run_place_is_asked_the_same_thing(
-            both,
-            comparison=COMPARISON_SAME_GENERATED_CODE,
-            plan=plan,
-            root=tmp_path,
-            catalog=CATALOG,
-        )
-        == []
-    )
+    assert _check_every_run_place_is_asked_the_same_thing(
+        both,
+        comparison=COMPARISON_SAME_GENERATED_CODE,
+        plan=plan,
+        root=tmp_path,
+        catalog=CATALOG,
+    )[0] == []
 
 
 def test_one_added_sentence_in_a_shared_prompt_is_enough_to_be_refused(
@@ -499,7 +498,7 @@ def test_one_added_sentence_in_a_shared_prompt_is_enough_to_be_refused(
         environment: conditions[environment]
         for environment in ("host_python_process", "azure_code_interpreter")
     }
-    problems = _check_every_run_place_is_asked_the_same_thing(
+    problems, _measurements = _check_every_run_place_is_asked_the_same_thing(
         both,
         comparison=COMPARISON_SAME_GENERATED_CODE,
         plan=plan,
@@ -569,7 +568,7 @@ def test_a_place_no_runner_serves_is_refused_rather_than_left_out(plan, tmp_path
     plan["experiment_files"] = {
         A_RUN_PLACE_NO_RUNNER_SERVES: "experiments/nowhere.yaml"
     }
-    problems = _check_every_run_place_is_asked_the_same_thing(
+    problems, _measurements = _check_every_run_place_is_asked_the_same_thing(
         {A_RUN_PLACE_NO_RUNNER_SERVES: conditions["docker_container"]},
         comparison=COMPARISON_SAME_GENERATED_CODE,
         plan=plan,
@@ -587,7 +586,7 @@ def test_a_single_measurable_place_is_not_reported_as_agreement(plan, tmp_path):
     plan["experiment_files"] = {"host_python_process": kept}
     conditions = conditions_from_plan(plan)
 
-    problems = _check_every_run_place_is_asked_the_same_thing(
+    problems, _measurements = _check_every_run_place_is_asked_the_same_thing(
         {"host_python_process": conditions["host_python_process"]},
         comparison=COMPARISON_SAME_GENERATED_CODE,
         plan=plan,
@@ -656,3 +655,100 @@ def test_the_finding_is_a_technical_inconsistency_and_not_a_cost_finding(
         "these places are not asked the same thing" in note
         for note in result.cost_findings
     )
+
+
+# ---------------------------------------------------------------------------
+# Saying so, rather than falling silent
+# ---------------------------------------------------------------------------
+#
+# The rule above speaks only when the places differ. That is right for a list
+# of problems and wrong for a report: "no problem was raised" is exactly what a
+# reader saw during the whole period when nothing compared these requests at
+# all, and it is what they would see now that all three send one file. The
+# report has to be able to tell those two apart, so the measurement is carried
+# on the result and printed.
+
+
+def test_the_report_states_what_the_three_are_asked_rather_than_falling_silent(plan):
+    result = run_envelope_preflight(plan, root=BATCH_RUNNER_ROOT)
+    lines = describe_first_requests(result)
+    said = "\n".join(lines)
+
+    assert f"prompts/{SHARED_PROMPT_NAME}.yaml" in said
+    assert "all 3 send" in said
+    for environment in THE_THREE_RUN_PLACES:
+        assert environment in said, f"{environment} is not named in the report"
+
+    width = {request.characters for request in result.first_requests.values()}
+    assert len(width) == 1
+    assert str(next(iter(width))) in said, (
+        "the width is measured but not printed, so a reader cannot check it"
+    )
+
+
+def test_the_report_carries_the_measurement_and_not_a_number_from_the_plan(plan):
+    """Every figure printed is one the check built, not one the plan wrote."""
+    result = run_envelope_preflight(plan, root=BATCH_RUNNER_ROOT)
+    assert set(result.first_requests) == set(THE_THREE_RUN_PLACES)
+
+    built, _unmeasurable = _measured(plan)
+    assert {
+        environment: request.wording_identity()
+        for environment, request in result.first_requests.items()
+    } == {
+        environment: request.wording_identity()
+        for environment, request in built.items()
+    }
+
+    written_in_the_plan = plan["cost"]["assumptions"]["instruction_character_count"]
+    assert all(
+        request.characters != written_in_the_plan
+        for request in result.first_requests.values()
+    ), (
+        "the printed width happens to equal the plan's ceiling, so this test "
+        "can no longer tell a measurement from a number read back"
+    )
+
+
+def test_an_unmeasured_report_says_so_instead_of_claiming_agreement(plan):
+    """Nothing built is not the same finding as three that agree.
+
+    ``tool_built_in_features`` does not hold the wording still, so the rule
+    takes no measurement under it. A report that answered "they agree" there
+    would be answering a question nobody asked.
+    """
+    result = run_envelope_preflight(plan, root=BATCH_RUNNER_ROOT)
+    result.first_requests = {}
+    said = "\n".join(describe_first_requests(result))
+    assert "not measured" in said
+    # It must not merely leave agreement unsaid; a reader who has seen the
+    # agreeing version of this line needs the difference pointed at.
+    assert "not a finding that the three agree" in said
+    assert "nothing was built, so nothing was compared" in said
+    assert f"prompts/{SHARED_PROMPT_NAME}.yaml" not in said, (
+        "a prompt file is named as though one had been measured"
+    )
+
+
+def test_places_agreeing_on_width_but_not_on_what_was_left_out_each_speak(plan):
+    """``silent`` is not part of the identity, so this can pass the rule.
+
+    Two places can be asked the same thing and have different reasons for what
+    their runners did not build. Printing one place's reasons under "part for
+    part the same" would put a reason on a run place that does not hold it.
+    """
+    result = run_envelope_preflight(plan, root=BATCH_RUNNER_ROOT)
+    one = sorted(result.first_requests)[0]
+    same_width = result.first_requests[one]
+    result.first_requests = dict(result.first_requests)
+    result.first_requests[one] = replace(
+        same_width,
+        silent=(("contract", "this run place alone did not lay it out"),),
+    )
+
+    said = "\n".join(describe_first_requests(result))
+    assert "part for part the same" not in said
+    assert "differ in what was left out and why" in said
+    assert "this run place alone did not lay it out" in said
+    for environment in THE_THREE_RUN_PLACES:
+        assert environment in said
