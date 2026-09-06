@@ -1425,6 +1425,49 @@ def test_pinned_config_is_the_audio_repeat_config() -> None:
     assert probe.PINNED_CONFIG.name == "gold_audio_repeat_v2_sol_max.yaml"
 
 
+def test_the_fingerprint_330_pins_is_the_one_this_head_computes() -> None:
+    """The pre-registration pins a grader fingerprint and nothing checked it.
+
+    ``8bb8360a…`` appears in exactly two places, both of them prose. It is the
+    hash of the grader source and config the paid run will use, and it is the
+    field that decides whether the run describes the same grader the 19.35%
+    came off. Written by hand and never recomputed, it says whatever it said
+    on the day it was typed: edit anything the hash covers -- ``core/**.py``,
+    ``step8_grade.py``, the schema, the requirements closure, the prompt
+    template -- and the document still claims this one, for a run that is no
+    longer the run it describes.
+
+    Same shape as every other defect in this file: the document names a
+    safeguard, and the safeguard is a sentence.
+
+    The equality is required **only while nothing has been bought.** After the
+    run, the pin stops being a promise and becomes a record of what actually
+    executed, and making a record track a moved ``HEAD`` to keep CI green is
+    falsifying it. So the check keys on 330's own unspent marker, and what it
+    asks for before the run is: re-pin §2, do not delete this test.
+    """
+    from step8_grade import compute_grader_source_hash
+
+    doc = (
+        probe.REPO_ROOT / "tasks" / "rebuilding_grading_task"
+        / "330-speech-diagnostic-prereg.md"
+    ).read_text(encoding="utf-8")
+    stated = re.search(r"채점기 지문 \| `([0-9a-f]{64})`", doc)
+    assert stated, "330 §2 no longer states a grader fingerprint"
+
+    if "아직 한 푼도 안 썼다" not in doc:
+        return
+
+    config_path = probe.PINNED_CONFIG
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    assert compute_grader_source_hash(config_path, config) == stated.group(1), (
+        "330 §2's grader fingerprint is not what this HEAD computes. The run "
+        "has not happened yet, so the fix is to re-pin §2 to the value above "
+        "-- something the hash covers moved, and a pre-registration that "
+        "names a grader which no longer exists is not pinning anything."
+    )
+
+
 # --------------------------------------------------------------------------
 # The dry run: whole path, no network, no cost
 # --------------------------------------------------------------------------

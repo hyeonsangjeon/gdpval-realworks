@@ -532,6 +532,19 @@ entries land under a fresh dated heading the day they merge to `main`.
   but a table cell saying `n = 20` is how a run with n = 14 gets written up as
   a twenty-item test.
 
+  The twelfth is the grader fingerprint the pre-registration pins. It existed
+  in exactly two places, both prose, and nothing recomputed it. That one string
+  covers `core/**.py`, `step8_grade.py`, the grade schema, the requirements
+  closure and the prompt template, so any of them moving leaves the document
+  pinning a grader that no longer exists — while still reading like a pin. A
+  test now recomputes it from `compute_grader_source_hash` and compares. It
+  requires equality **only while nothing has been bought**: after the run the
+  same string stops being a promise and becomes the record of what executed,
+  and editing a record to track a moved `HEAD` is falsifying it to keep CI
+  green. So the check keys on 330's own unspent marker and retires itself. When
+  it fails before the run it says what to do — re-pin section 2, do not delete
+  the test.
+
   330 section 3 pre-registered four stop conditions and nothing enforced them.
   They are now `SPEECH_STOP_RULES`, checked after each call, with a test that
   fails if the constants and the document drift apart: 20 minutes wall clock,
