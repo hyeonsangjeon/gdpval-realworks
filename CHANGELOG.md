@@ -428,7 +428,7 @@ entries land under a fresh dated heading the day they merge to `main`.
   Nothing under `core/perception/**`, `core/tool_calling_judge.py` or any
   grading config is touched; all 14 grader fingerprints are unmoved, verified by
   running `compute_grader_source_hash` itself and intersecting the files it
-  hashes against this diff's ten — empty. The 120-call paid run is pre-registered
+  hashes against this diff's eleven — empty. The 120-call paid run is pre-registered
   and not yet bought; when it is, `gpt-audio-1.5` still has no published price,
   so it will report `pricing_complete: false` and `estimated_cost_usd: null`.
   **That is not `$0`.**
