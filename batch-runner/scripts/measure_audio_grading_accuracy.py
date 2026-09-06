@@ -183,7 +183,9 @@ import tempfile
 import wave
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Iterable, Iterator, Optional, Sequence
+from typing import (
+    Any, Callable, Iterable, Iterator, Mapping, Optional, Sequence,
+)
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -937,6 +939,20 @@ class SpeechCorpus:
     @property
     def digests(self) -> dict[str, str]:
         return {clip.clip_id: clip.sha256 for clip in self.clips}
+
+    @property
+    def durations(self) -> dict[str, float]:
+        """Clip id to delivered length, for the delivery record.
+
+        Clips whose manifest entry carries no length are left out rather than
+        given a placeholder: an absent duration cannot disagree with what was
+        sent, and a placeholder would disagree with everything.
+        """
+        return {
+            clip.clip_id: float(clip.seconds)
+            for clip in self.clips
+            if clip.seconds is not None
+        }
 
     @property
     def total_seconds(self) -> float:
@@ -1898,6 +1914,7 @@ def delivery_section(
     *,
     measured: bool,
     clips: Sequence[Clip] = CLIPS,
+    durations: Optional[Mapping[str, float]] = None,
 ) -> Optional[dict[str, Any]]:
     """Did the audio reach the model, and did it reach it intact?
 
@@ -1918,7 +1935,13 @@ def delivery_section(
     wired = [c for c in calls if isinstance(c.get("wire"), dict)]
     if not wired:
         return None
-    durations = {clip.clip_id: clip.duration_s for clip in clips}
+    # ``durations`` overrides ``clips`` because the speech corpus is not made
+    # of ``Clip``. Without it the tone durations would be compared against
+    # speech clip ids, every lookup would miss, and every clip would be
+    # reported as "sent duration differs" -- a false alarm on the one line a
+    # reader is told to check before reading the accuracy.
+    if durations is None:
+        durations = {clip.clip_id: clip.duration_s for clip in clips}
 
     by_clip: dict[str, set[str]] = {}
     for call in wired:
@@ -1981,6 +2004,19 @@ def delivery_section(
         "response_models": models,
         "audio_tokens_reported": sum(
             1 for c in wired if c["wire"].get("audio_tokens") is not None
+        ),
+        # Null, not zero, when nothing reported it. Zero is a claim -- "the
+        # provider metered no audio", which is how a request that never
+        # carried the sound looks -- and it must not be indistinguishable
+        # from "the provider did not tell us". The pre-registered stop rule
+        # in 330 fires on a real zero, so the two have to stay apart.
+        "audio_tokens_total": (
+            sum(
+                c["wire"]["audio_tokens"] for c in wired
+                if c["wire"].get("audio_tokens") is not None
+            )
+            if any(c["wire"].get("audio_tokens") is not None for c in wired)
+            else None
         ),
         "prompt_token_vs_clip_seconds": {
             "n": len(paired),
@@ -2291,7 +2327,9 @@ def build_report(
         },
     }
 
-    delivery = delivery_section(calls, measured=measured)
+    delivery = delivery_section(
+        calls, measured=measured, durations=speech.durations if speech else None
+    )
     if delivery is not None:
         report["delivery"] = delivery
 

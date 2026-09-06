@@ -50,6 +50,27 @@ name: Audio Accuracy Probe
 #     reasoning. It is what lets a reader tell a judge that answered badly from
 #     a request that never carried the sound.
 #
+# A second corpus arrived after that, and it asks a different question:
+#
+#   * `corpus`. `tones` is everything above -- clicks, beeps and sine waves,
+#     ground truth by arithmetic. It answers "does the verdict depend on the
+#     audio at all". It cannot answer the question the graded corpus turns on,
+#     because none of the 31 audio deliverables is a sine wave: they are all
+#     people talking. `speech` runs the same machinery against ten synthesised
+#     sentences with a known transcript, twenty criteria in matched pairs, and
+#     answers "does it hear words". The two are reported separately and their
+#     numbers are not comparable; a system that counts three beeps has shown
+#     that sound arrived, not that it was understood.
+#
+#     The speech clips are not committed -- eSpeak NG is GPL-3.0-or-later and
+#     nothing of it is redistributed here -- so the run rebuilds them and
+#     checks them against the digests committed in
+#     tasks/rebuilding_grading_task/330-speech-verification-manifest.json.
+#     If the runner's eSpeak has moved, the rebuild produces different bytes,
+#     the comparison fails, and the run stops before spending. That is the
+#     intended behaviour: the pre-registration in 330 names those digests, and
+#     a run whose audio it does not describe is not the run that was approved.
+#
 # It still spends money, so the paid half sits behind the same `grading`
 # environment gate every other paid path in this repository uses. A gate that
 # is reused rather than duplicated is one fewer approval surface to audit.
@@ -81,11 +102,27 @@ on:
           - production
           - observation
           - both
+      corpus:
+        description: 'Which sounds. tones = clicks, beeps and sine waves; answers whether the verdict depends on the audio at all. speech = ten synthesised sentences with a known transcript; answers whether it hears words. speech rebuilds its clips and refuses to run if they do not match the committed digests, and accepts the production arm only.'
+        required: false
+        type: choice
+        default: tones
+        options:
+          - tones
+          - speech
 
 # Read-only by default. The paid job adds id-token for OIDC and nothing else:
 # there is no commit, no release, and no dispatch to make.
 permissions:
   contents: read
+
+# The committed pin and the directory the rebuild writes into, named once so
+# the free job and the paid job cannot drift apart. The free job proves the
+# rebuild reproduces the pin; if these two paths differed between the jobs,
+# that proof would be about a different set of files than the one bought.
+env:
+  SPEECH_MANIFEST: ${{ github.workspace }}/tasks/rebuilding_grading_task/330-speech-verification-manifest.json
+  SPEECH_CLIPS: ${{ github.workspace }}/speech-set
 
 # One at a time. Two concurrent probes would interleave their calls against the
 # same deployment's TPM budget and each would measure the other's throttling.
@@ -130,6 +167,28 @@ jobs:
           cd batch-runner
           python -m pytest tests/test_audio_accuracy_probe_knows_its_own_answers.py -q
 
+      # Only for the speech corpus, and it runs on the free job as well as the
+      # paid one -- so a rebuild that no longer reproduces the pin is found
+      # before a reviewer is asked to approve anything.
+      #
+      # eSpeak NG is deliberately not version-pinned here. Pinning the apt
+      # version would be a pin that lies: the thing that has to be reproduced
+      # is the *bytes*, and the manifest holds their digests. If the runner's
+      # eSpeak has moved, --expect-manifest fails and says which end moved,
+      # the synthesiser or the encoder. Silently accepting different audio
+      # would be worse than stopping.
+      - name: Build and verify the pinned speech set
+        if: ${{ inputs.corpus == 'speech' }}
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends espeak-ng
+          espeak-ng --version
+          cd batch-runner
+          python scripts/build_speech_verification_set.py \
+            --out-dir "$SPEECH_CLIPS" \
+            --expect-manifest "$SPEECH_MANIFEST"
+
       # The arm and the delivery record are exercised here too. A dispatch that
       # asks for `both` should discover a broken interleave on the free run,
       # not after buying half of it.
@@ -137,12 +196,15 @@ jobs:
         run: |
           set -euo pipefail
           cd batch-runner
-          python scripts/measure_audio_grading_accuracy.py \
-            --dry-run \
-            --repeats "${{ inputs.repeats }}" \
-            --prompt-arm "${{ inputs.prompt_arm }}" \
-            --out "$GITHUB_WORKSPACE/audio-accuracy-dry-run.json" \
-            --delivery-out "$GITHUB_WORKSPACE/audio-accuracy-dry-run-delivery.json"
+          ARGS=(--dry-run
+                --repeats "${{ inputs.repeats }}"
+                --prompt-arm "${{ inputs.prompt_arm }}"
+                --out "$GITHUB_WORKSPACE/audio-accuracy-dry-run.json"
+                --delivery-out "$GITHUB_WORKSPACE/audio-accuracy-dry-run-delivery.json")
+          if [ "${{ inputs.corpus }}" = "speech" ]; then
+            ARGS+=(--speech-set "$SPEECH_MANIFEST" --speech-clips "$SPEECH_CLIPS")
+          fi
+          python scripts/measure_audio_grading_accuracy.py "${ARGS[@]}"
 
       # A dry run reports 100% accuracy, because the stub answers from the
       # segment list. That is a shape check and not a result, and the report
@@ -159,6 +221,7 @@ jobs:
           print("from the segment list, so a perfect score here means the pipeline")
           print("works, not that the model listens.\n")
           print(f"- `measured`: `{json.dumps(report['measured'])}`")
+          print(f"- corpus: `{report['corpus']}`")
           print(f"- prompt arms: {', '.join(report['pins']['prompt_arms'])}")
           # cost.model_calls, not accuracy.overall.calls: the accuracy block
           # covers the production arm alone, so on a `both` dispatch it is half
@@ -209,6 +272,7 @@ jobs:
         env:
           PROBE_REPEATS: ${{ inputs.repeats }}
           PROBE_ARM: ${{ inputs.prompt_arm }}
+          PROBE_CORPUS: ${{ inputs.corpus }}
         run: |
           set -euo pipefail
           # `both` asks every criterion twice. The record has to say so: the
@@ -216,9 +280,15 @@ jobs:
           # run would spend, it was off by a factor and nobody noticed until
           # afterwards.
           if [ "$PROBE_ARM" = "both" ]; then PROBE_ARMS=2; else PROBE_ARMS=1; fi
+          # Defaulted because this job has no checkout and is executed
+          # directly by a test that sets only the two variables above. The
+          # two corpora have the same criteria count and differ only in clips.
+          CORPUS="${PROBE_CORPUS:-tones}"
+          if [ "$CORPUS" = "speech" ]; then CLIPS=10; else CLIPS=9; fi
           printf '%s\n' \
             "Approved paid audio accuracy probe:" \
             "  model      = gpt-audio-1.5 (read from gold_audio_repeat_v2_sol_max.yaml)" \
+            "  corpus     = $CORPUS ($CLIPS clips)" \
             "  criteria   = 20 (10 true / 10 false)" \
             "  repeats    = $PROBE_REPEATS" \
             "  prompt_arm = $PROBE_ARM ($PROBE_ARMS arm(s))" \
@@ -285,6 +355,23 @@ jobs:
           cd batch-runner
           python scripts/azure_oidc_identity_preflight.py --verify-session
 
+      # Rebuilt here rather than carried over from the free job. An artifact
+      # handed between jobs is one more thing that can be the wrong artifact,
+      # and the rebuild is two minutes -- cheaper than the ambiguity. Both
+      # jobs check against the same committed digests, so agreeing with the
+      # pin is what makes them the same audio, not having travelled together.
+      - name: Build and verify the pinned speech set
+        if: ${{ inputs.corpus == 'speech' }}
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends espeak-ng
+          espeak-ng --version
+          cd batch-runner
+          python scripts/build_speech_verification_set.py \
+            --out-dir "$SPEECH_CLIPS" \
+            --expect-manifest "$SPEECH_MANIFEST"
+
       # Same route profile and the same identity assertions the grading run
       # uses. The point of this measurement is to describe the audio path the
       # 19.35% came off; reaching it by a different route would describe
@@ -298,11 +385,14 @@ jobs:
         run: |
           set -euo pipefail
           cd batch-runner
-          python scripts/measure_audio_grading_accuracy.py \
-            --repeats "${{ inputs.repeats }}" \
-            --prompt-arm "${{ inputs.prompt_arm }}" \
-            --out "$GITHUB_WORKSPACE/audio-accuracy-measured.json" \
-            --delivery-out "$GITHUB_WORKSPACE/audio-accuracy-measured-delivery.json"
+          ARGS=(--repeats "${{ inputs.repeats }}"
+                --prompt-arm "${{ inputs.prompt_arm }}"
+                --out "$GITHUB_WORKSPACE/audio-accuracy-measured.json"
+                --delivery-out "$GITHUB_WORKSPACE/audio-accuracy-measured-delivery.json")
+          if [ "${{ inputs.corpus }}" = "speech" ]; then
+            ARGS+=(--speech-set "$SPEECH_MANIFEST" --speech-clips "$SPEECH_CLIPS")
+          fi
+          python scripts/measure_audio_grading_accuracy.py "${ARGS[@]}"
 
       - name: Summarise
         if: always()
@@ -321,10 +411,33 @@ jobs:
 
           print("## Audio accuracy probe — measured\n")
           print(f"Model `{report['pins']['audio_deployment']}`, "
+                f"corpus `{report['corpus']}`, "
                 f"{report['pins']['claims']} criteria x {report['pins']['repeats']} repeats "
                 f"x {len(report['pins']['prompt_arms'])} arm(s) "
                 f"= {report['cost']['model_calls']} calls "
                 f"({', '.join(report['pins']['prompt_arms'])}).\n")
+          speech = report.get("speech_set")
+          if speech:
+              print("**This is the speech corpus.** It asks whether the judge hears")
+              print("words. The tone corpus asks whether the verdict depends on the")
+              print("audio at all. The two numbers are not comparable and must not be")
+              print("averaged or presented as one figure.\n")
+              print(f"- {speech['limits']['reading']}")
+              print(f"- clips rebuilt and checked against "
+                    f"`{os.path.basename(speech['manifest'])}`")
+              print(f"- expected audio tokens: {speech['expected_audio_tokens']} "
+                    f"({speech['expected_audio_tokens_basis']})")
+              delivered = (report.get("delivery") or {}).get("audio_tokens_total")
+              if delivered is not None:
+                  expected = speech["expected_audio_tokens"]
+                  drift = None if not expected else abs(delivered - expected) / expected
+                  print(f"- audio tokens actually billed: {delivered}"
+                        + (f" ({drift * 100:.1f}% from expected)" if drift is not None else ""))
+                  if drift is not None and drift > 0.10:
+                      print("\n**The billed audio is more than 10% away from the "
+                            "pre-registered figure.** Either different sound was sent or "
+                            "the metering changed; read that before reading the accuracy.\n")
+              print()
           if len(report["pins"]["prompt_arms"]) > 1:
               print("The table below is the **production arm alone** — the prompt the")
               print("grader actually runs. The alternative prompt is never folded in,")

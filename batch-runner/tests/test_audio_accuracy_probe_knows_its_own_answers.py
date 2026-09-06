@@ -1861,3 +1861,265 @@ def test_a_speech_set_that_cannot_be_loaded_exits_three_not_traceback(
         "--speech-clips", str(clip_dir),
     ]) == 3
     assert "::error::" in capsys.readouterr().err
+
+
+# ── The paid entry point has to be able to ask for the speech corpus ─────
+#
+# Everything above is about the script. These are about the only file that
+# can spend money with it: a corpus the workflow cannot select is a corpus
+# nobody can buy, and a corpus it selects without verifying is worse.
+
+
+SPEECH_MANIFEST_REPO_PATH = (
+    "tasks/rebuilding_grading_task/330-speech-verification-manifest.json"
+)
+
+
+def test_the_workflow_can_ask_for_either_corpus() -> None:
+    """A choice input, defaulting to the cheap and already-run one.
+
+    ``speech`` installs a synthesiser and rebuilds ten clips before it calls
+    anything, so it is a deliberate selection rather than something inherited
+    from a default nobody looked at.
+    """
+    inputs = _workflow()[True]["workflow_dispatch"]["inputs"]
+    corpus = inputs["corpus"]
+    assert corpus["type"] == "choice"
+    assert sorted(corpus["options"]) == ["speech", "tones"]
+    assert corpus["default"] == "tones"
+
+
+@pytest.mark.parametrize("job", ["dry-run", "measure"])
+def test_both_jobs_rebuild_the_speech_set_against_the_committed_pin(
+    job: str,
+) -> None:
+    """The check is the point, not the rebuild.
+
+    Regenerating clips is easy and proves nothing on its own -- a newer eSpeak
+    regenerates them happily, into different bytes, and the run would measure
+    audio the pre-registration does not describe. ``--expect-manifest`` is
+    what turns the rebuild into evidence, and it has to be on both jobs: the
+    free one so the failure is found before a reviewer is asked, the paid one
+    so the audio actually sent is the audio that was checked.
+    """
+    step = _step(job, "Build and verify the pinned speech set")
+    assert step["if"].strip() == "${{ inputs.corpus == 'speech' }}"
+    assert "--expect-manifest" in step["run"]
+    assert "$SPEECH_MANIFEST" in step["run"]
+    assert "--out-dir" in step["run"]
+    assert "$SPEECH_CLIPS" in step["run"]
+    assert "espeak-ng" in step["run"]
+
+
+def test_the_manifest_path_the_workflow_names_is_the_committed_one() -> None:
+    """A path typed into a workflow is not checked by anything until it runs.
+
+    If it were wrong, the failure would land after the espeak install, on the
+    paid job, having already passed the gate.
+    """
+    workflow = _workflow()
+    manifest = workflow["env"]["SPEECH_MANIFEST"]
+    assert manifest.endswith(SPEECH_MANIFEST_REPO_PATH)
+    assert (probe.REPO_ROOT / SPEECH_MANIFEST_REPO_PATH).is_file()
+
+
+@pytest.mark.parametrize("job,step_name", [
+    ("dry-run", "Dry run"),
+    ("measure", "Measure"),
+])
+def test_both_runs_forward_the_speech_flags_together(
+    job: str, step_name: str
+) -> None:
+    """The script refuses a lone flag, so a half-forwarded pair fails loudly.
+
+    What it would not catch is a run step that forwards neither: that one
+    silently measures tones under an approval record that says speech.
+    """
+    run = _step(job, step_name)["run"]
+    assert "--speech-set" in run
+    assert "--speech-clips" in run
+    assert "inputs.corpus" in run
+
+
+@pytest.mark.parametrize("corpus,clips", [("tones", 9), ("speech", 10)])
+def test_the_approval_record_names_the_corpus_it_authorised(
+    corpus: str, clips: int
+) -> None:
+    """Run the gate's own shell, as the call-count test does.
+
+    Both corpora hold twenty criteria, so the call count alone cannot tell a
+    reader which sounds were bought. The clip count can, and it is the one
+    number that differs.
+    """
+    bash = shutil.which("bash")
+    if bash is None:  # pragma: no cover - CI and dev boxes both have bash
+        pytest.skip("no bash to run the gate's own script with")
+
+    result = subprocess.run(
+        [bash, "-c", _step("approve-paid", "Record approved request")["run"]],
+        env={
+            **os.environ,
+            "PROBE_REPEATS": "3",
+            "PROBE_ARM": "production",
+            "PROBE_CORPUS": corpus,
+        },
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert f"corpus     = {corpus} ({clips} clips)" in result.stdout
+    # Still the same criteria count, which is why the clip count had to be
+    # added rather than relied upon to differ.
+    assert "criteria   = 20" in result.stdout
+
+
+def test_the_gate_states_the_clip_counts_the_corpora_actually_have() -> None:
+    """The gate has no checkout, so those two numbers are restatements.
+
+    Same failure mode as ``calls = 36``: a record that says what was
+    authorised, disagreeing with what exists.
+    """
+    run = _step("approve-paid", "Record approved request")["run"]
+    tone_clips = re.search(r"else CLIPS=(\d+)", run)
+    speech_clips = re.search(r'if \[ "\$CORPUS" = "speech" \]; then CLIPS=(\d+)', run)
+    assert tone_clips and speech_clips
+    assert int(tone_clips.group(1)) == len(probe.CLIPS)
+    published = json.loads(
+        (probe.REPO_ROOT / SPEECH_MANIFEST_REPO_PATH).read_text(encoding="utf-8")
+    )
+    assert int(speech_clips.group(1)) == len(published["clips"])
+
+
+def test_the_paid_summary_refuses_to_pool_the_two_corpora() -> None:
+    """Two capabilities, one heading, is how a beep count becomes a claim
+    about speech. The summary has to say they are separate where it prints
+    them, not only in a document."""
+    summary = _step("measure", "Summarise")["run"]
+    assert "not comparable" in summary
+    assert "speech_set" in summary
+    assert "expected_audio_tokens" in summary
+
+
+def _wire_call(clip_id: str, *, seconds: float, tokens: object = "absent") -> dict:
+    """A call log entry shaped like the one ``summarise_wire`` produces."""
+    wire: dict[str, Any] = {
+        "requests_with_audio": 1,
+        "audio_sha256": f"sha-{clip_id}",
+        "audio_duration_s": seconds,
+        "audio_format": "wav",
+        "audio_sample_rate_hz": AUDIO_SAMPLE_RATE_HZ,
+        "audio_channels": 1,
+        "response_model": "gpt-audio-1.5",
+    }
+    if tokens != "absent":
+        wire["audio_tokens"] = tokens
+    return {
+        "repeat": 1,
+        "claim_id": f"{clip_id}_claim",
+        "clip_id": clip_id,
+        "input_tokens": 100 + int(seconds * 10),
+        "wire": wire,
+    }
+
+
+def test_billed_audio_is_null_when_nobody_reported_it() -> None:
+    """Zero is a claim. Silence is not.
+
+    A total of zero is what a request that never carried the sound looks
+    like, and 330 stops the run on it. If a provider that simply does not
+    report the field produced the same zero, the stop rule would fire on
+    every run against such a provider -- or, read the other way, a real zero
+    would be dismissed as a quiet provider.
+    """
+    calls = [_wire_call("a", seconds=1.0), _wire_call("b", seconds=2.0)]
+    delivery = probe.delivery_section(
+        calls, measured=False, durations={"a": 1.0, "b": 2.0}
+    )
+    assert delivery["audio_tokens_reported"] == 0
+    assert delivery["audio_tokens_total"] is None
+
+
+def test_billed_audio_totals_what_was_reported() -> None:
+    """And when it is reported, it is a sum rather than a count."""
+    calls = [
+        _wire_call("a", seconds=1.0, tokens=30),
+        _wire_call("a", seconds=1.0, tokens=32),
+        _wire_call("b", seconds=2.0),
+    ]
+    delivery = probe.delivery_section(
+        calls, measured=True, durations={"a": 1.0, "b": 2.0}
+    )
+    assert delivery["audio_tokens_reported"] == 2
+    assert delivery["audio_tokens_total"] == 62
+
+
+def test_a_real_zero_still_reads_as_zero() -> None:
+    """The other half of the distinction, and the one the stop rule needs."""
+    calls = [_wire_call("a", seconds=1.0, tokens=0)]
+    delivery = probe.delivery_section(
+        calls, measured=True, durations={"a": 1.0}
+    )
+    assert delivery["audio_tokens_total"] == 0
+
+
+def test_the_delivery_record_measures_speech_against_speech_lengths() -> None:
+    """The bug this pins produced a full page of red on a healthy run.
+
+    ``delivery_section`` defaulted to the tone clips for its duration table.
+    Given speech calls, every lookup missed, every clip landed in
+    ``clips_whose_sent_duration_differs``, and the correlation between prompt
+    tokens and clip seconds -- the line that says the audio was charged for --
+    had nothing to correlate. A reader following the instruction to check
+    delivery before accuracy would have concluded the audio never arrived.
+    """
+    calls = [
+        _wire_call("crate", seconds=3.0151),
+        _wire_call("valve", seconds=3.2219),
+    ]
+    durations = {"crate": 3.0151, "valve": 3.2219}
+
+    honest = probe.delivery_section(calls, measured=False, durations=durations)
+    assert honest["clips_whose_sent_duration_differs"] == []
+    assert honest["prompt_token_vs_clip_seconds"]["n"] == 2
+
+    # The default, which is what the defect used: tone clip ids, so every
+    # speech clip misses and is reported as a mismatch.
+    wrong = probe.delivery_section(calls, measured=False)
+    assert sorted(wrong["clips_whose_sent_duration_differs"]) == ["crate", "valve"]
+    assert wrong["prompt_token_vs_clip_seconds"]["n"] == 0
+
+
+def test_the_speech_run_picks_the_right_durations_without_being_told(
+    tmp_path: Path,
+) -> None:
+    """End to end through the CLI, because that is what CI runs."""
+    manifest_path, clip_dir = _speech_fixture(tmp_path, clips=3)
+    out = tmp_path / "report.json"
+    delivery_out = tmp_path / "delivery.json"
+    assert probe.main([
+        "--dry-run", "--quiet",
+        "--speech-set", str(manifest_path),
+        "--speech-clips", str(clip_dir),
+        "--repeats", "1",
+        "--out", str(out),
+        "--delivery-out", str(delivery_out),
+    ]) == 0
+    report = json.loads(out.read_text(encoding="utf-8"))
+    assert report["corpus"] == "speech"
+    delivery = report["delivery"]
+    assert delivery["clips_whose_sent_duration_differs"] == []
+    assert delivery["calls_carrying_audio"] == delivery["calls_inspected"]
+
+
+def test_a_clip_with_no_pinned_length_is_left_out_rather_than_guessed(
+    tmp_path: Path,
+) -> None:
+    """A placeholder length disagrees with every real one."""
+    manifest_path, clip_dir = _speech_fixture(tmp_path)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    del manifest["clips"][0]["sent"]["seconds"]
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    corpus = probe.load_speech_corpus(manifest_path, clip_dir)
+    assert "clip0" not in corpus.durations
+    assert "clip1" in corpus.durations
