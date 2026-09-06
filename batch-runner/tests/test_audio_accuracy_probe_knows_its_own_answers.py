@@ -3309,6 +3309,164 @@ def test_the_paid_summary_says_a_stopped_run_stopped() -> None:
     assert "partial run" in body
 
 
+def test_the_stop_banner_is_executed_and_not_merely_present(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """The test above greps. A grep cannot see a ``KeyError``.
+
+    Every rehearsal finishes, so ``stopped`` is ``None`` on every report the
+    free run has ever produced and this branch is skipped. The input that does
+    enter it is a paid run that aborted -- the run whose summary matters most,
+    written after the money is gone. That is defect 14's shape and defect 19's:
+    a branch whose first execution is the expensive one.
+
+    So the report here is built the way the measurer builds one -- the stop
+    dict comes from ``_stop_reason``, not from a literal -- and rendered
+    through the workflow's own code. What it is checking is that the two
+    numbers stay distinguishable: ``after_calls`` is what was bought and
+    ``calls_planned`` is what was designed, and a summary that prints the
+    same figure twice says a partial run went to plan.
+    """
+    manifest_path, clip_dir = _speech_fixture(tmp_path, clips=3)
+    corpus = probe.load_speech_corpus(manifest_path, clip_dir)
+    perception = probe.AudioPerception(
+        client=probe.TruthfulStub(corpus.claims),
+        deployment="gpt-audio-1.5",
+        call_cap=AUDIO_CALL_CAP,
+        trim_seconds=AUDIO_TRIM_SECONDS,
+    )
+    ticks = iter([0.0] + [10_000.0] * 500)
+    result = probe.run_measurement(
+        perception=perception,
+        clip_dir=tmp_path / "unused",
+        repeats=3,
+        claims=corpus.claims,
+        prerendered=corpus,
+        stop_rules=probe.StopRules(wall_clock_seconds=60),
+        clock=lambda: next(ticks),
+    )
+    stopped = probe.build_report(
+        identity=probe.pinned_identity(),
+        measured=False,
+        repeats=3,
+        result=result,
+        speech=corpus,
+    )
+    planned = 3 * len(corpus.claims)
+    assert stopped["stopped"]["rule"] == "wall_clock_seconds"
+    assert stopped["calls_planned"] == planned
+    assert len(stopped["calls"]) == 1 < planned, (
+        "the fixture no longer produces a partial run, so this test would pass "
+        "on a summary that cannot tell a shortfall from a full run"
+    )
+
+    # A run that finished must stay quiet, or the banner is decoration and
+    # this test proves nothing about the branch.
+    finished = json.loads(json.dumps(stopped))
+    finished["stopped"] = None
+    BANNER = "stopped early on the pre-registered rule"
+    assert BANNER not in _render_paid_summary(
+        finished, tmp_path, monkeypatch, capsys
+    )
+
+    printed = _render_paid_summary(stopped, tmp_path, monkeypatch, capsys)
+    assert BANNER in printed
+    assert "`wall_clock_seconds`" in printed
+    assert f"made 1 of {planned} planned calls" in printed
+    # The rule's own reading, so the page says why it stopped and not only
+    # that it did.
+    assert "exceeded its pre-registered time limit" in printed
+    # Above the numbers it qualifies. A caveat printed under a table of rates
+    # is read after the rates have been believed.
+    assert printed.index(BANNER) < printed.index("accuracy (answered calls)")
+
+
+def test_a_run_that_answered_nothing_does_not_print_a_discrimination_of_none(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """``**None**`` in the bold cell that should hold Youden's J.
+
+    Nothing measured is not a measurement of nothing, and this is the one row
+    where the difference is the whole finding. The card this diagnostic feeds
+    already says "discrimination 0" as its headline -- that is what a judge
+    whose verdict ignores the audio scores. A run where no call was answered
+    has an undefined J, and the summary printed the bare value, so that cell
+    read ``None``: one glance from the number it is the opposite of. The same
+    line printed ``None`` beside "p -- pre-registered primary", which is not a
+    p-value and is not a null result either.
+
+    Rehearsals answer every call, so these rows had only ever rendered with
+    real numbers in them. The shape that reaches them is a paid run whose
+    replies broke the response contract -- which is exactly what run
+    34008840627 did, 52 times.
+    """
+    manifest_path, clip_dir = _speech_fixture(tmp_path, clips=5)
+    corpus = probe.load_speech_corpus(manifest_path, clip_dir)
+
+    class _NeverAnswers:
+        def reset(self) -> None:
+            return None
+
+        def judge(self, **_kwargs: object) -> probe.AudioVerdict:
+            return probe.AudioVerdict(
+                verdict="judge_error",
+                partial_score=0.0,
+                evidence="",
+                confidence=0.0,
+                reasoning="",
+                judge_error="format_error:missing_field",
+            )
+
+    report = probe.build_report(
+        identity=probe.pinned_identity(),
+        measured=True,
+        repeats=3,
+        result=probe.run_measurement(
+            perception=_NeverAnswers(),
+            clip_dir=tmp_path / "unused",
+            repeats=3,
+            claims=corpus.claims,
+            prerendered=corpus,
+        ),
+        speech=corpus,
+    )
+    overall = report["accuracy"]["overall"]
+    assert overall["answered"] == 0 and overall["accuracy"] is None
+    assert report["accuracy"]["discrimination_j"]["per_call"] is None, (
+        "the fixture now yields a computable J, so this test no longer covers "
+        "the branch it exists for"
+    )
+
+    printed = _render_paid_summary(report, tmp_path, monkeypatch, capsys)
+    # Not the word, anywhere. A bare repr in a rendered table is a defect
+    # wherever it lands, and the two cells below are where it landed.
+    assert "None" not in printed, (
+        "a Python repr reached the summary: "
+        + repr([line for line in printed.splitlines() if "None" in line])
+    )
+    assert "| **discrimination (Youden's J)** | **not measured** |" in printed
+    assert "(binomial, n=0) | **not measured** |" in printed
+    # One vocabulary. "n/a" on the accuracy row and something else two rows
+    # down, for the identical condition, is a table a reader has to translate.
+    assert "| accuracy (answered calls) | not measured |" in printed
+    assert "n/a" not in printed
+
+    # And the other half: a run that did answer must print its numbers, or
+    # the fix is a summary that says "not measured" about everything.
+    out = tmp_path / "healthy.json"
+    assert probe.main([
+        "--dry-run", "--quiet", "--repeats", "3",
+        "--speech-set", str(manifest_path),
+        "--speech-clips", str(clip_dir),
+        "--out", str(out),
+    ]) == 0
+    healthy = _render_paid_summary(
+        json.loads(out.read_text(encoding="utf-8")), tmp_path, monkeypatch, capsys
+    )
+    assert "not measured" not in healthy
+    assert "| **discrimination (Youden's J)** | **1.0** |" in healthy
+
+
 def test_the_dry_run_summary_shows_the_field_exists() -> None:
     step = _step("dry-run", "Summarise")
     assert "stopped early" in step["run"]

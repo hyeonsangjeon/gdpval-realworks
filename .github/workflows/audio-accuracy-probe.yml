@@ -464,8 +464,27 @@ jobs:
           stab = acc["stability"]
           flips = stab["repeat_flips"]
 
+          # Nothing measured is not a measurement of nothing. Youden's J of 0
+          # is the finding this diagnostic exists to look for -- a verdict that
+          # does not depend on the audio -- and the card it feeds already
+          # carries "discrimination 0" as its headline. A run where no call was
+          # answered has an undefined J, and printing the bare value put the
+          # word `None` in that bold cell, one glance from the number it is the
+          # opposite of. Same for p: `None` beside "pre-registered primary" is
+          # not a p-value, and it is not a null result either.
+          #
+          # Every rehearsal answers every call, so these were only ever going
+          # to render on a paid run that went wrong -- the run whose summary
+          # gets read hardest.
+          NOT_MEASURED = "not measured"
+
           def pct(value):
-              return "n/a" if value is None else f"{value * 100:.2f}%"
+              return NOT_MEASURED if value is None else f"{value * 100:.2f}%"
+
+          def stat(value):
+              # Same words as pct, so one table does not say "n/a" on one row
+              # and something else on the next for the identical condition.
+              return NOT_MEASURED if value is None else f"{value}"
 
           print("## Audio accuracy probe — measured\n")
           print(f"Model `{report['pins']['audio_deployment']}`, "
@@ -589,8 +608,8 @@ jobs:
               print(f"| &nbsp;&nbsp;· model declined to judge | {kinds.get('declined_to_judge', 0)} |")
               print(f"| &nbsp;&nbsp;· reply broke the response contract | {kinds.get('read_failure', 0)} |")
               print(f"| &nbsp;&nbsp;· the call itself failed | {kinds.get('provider_failure', 0)} |")
-          print(f"| **discrimination (Youden's J)** | **{j['per_call']}** |")
-          print(f"| &nbsp;&nbsp;· on majority verdicts | {j['per_claim_majority']} |")
+          print(f"| **discrimination (Youden's J)** | **{stat(j['per_call'])}** |")
+          print(f"| &nbsp;&nbsp;· on majority verdicts | {stat(j['per_claim_majority'])} |")
           # The count J cannot give. Ten pairs answered the same way is a
           # judge that never separated anything, at 50% accuracy.
           print(f"| **pairs told apart** | **{pairs['answered_differently']} "
@@ -603,7 +622,7 @@ jobs:
           # value. Printing both, labelled, is what stops "the significant
           # one" from becoming the primary one after the fact.
           print(f"| **p — pre-registered primary** (binomial, n={binom['n']}) "
-                f"| **{binom['p_one_sided']}** |")
+                f"| **{stat(binom['p_one_sided'])}** |")
           print(f"| &nbsp;&nbsp;· correct majority verdicts | "
                 f"{binom['correct']} of {binom['n']} |")
           # §4 promises n and the reason it shrank are printed together. A
@@ -613,8 +632,8 @@ jobs:
           print(f"| &nbsp;&nbsp;· claims left out: hedged / no majority | "
                 f"{binom['hedged_majorities_excluded']} / "
                 f"{stab['claims'] - binom['claims_with_a_majority']} |")
-          print(f"| p — pre-specified secondary (within-pair permutation) | {perm['p_one_sided']} |")
-          print(f"| smallest p the permutation can reach | {perm['smallest_attainable_p']} |")
+          print(f"| p — pre-specified secondary (within-pair permutation) | {stat(perm['p_one_sided'])} |")
+          print(f"| smallest p the permutation can reach | {stat(perm['smallest_attainable_p'])} |")
           # Same denominator as the 19.35% the dispatch description promises
           # this run can be compared with. The claim-level count is printed
           # under it precisely so nobody reads it as the same measure.
@@ -700,7 +719,7 @@ jobs:
               for name in (ctl, trt):
                   side = comparison[name]
                   print(f"| {name} | {pct(side['accuracy_of_answered'])} | "
-                        f"{pct(side['response_rate'])} | {side['discrimination_j']} | "
+                        f"{pct(side['response_rate'])} | {stat(side['discrimination_j'])} | "
                         f"{side['correct']}/{side['attempts']} |")
               d = comparison["discordant"]
               print()
