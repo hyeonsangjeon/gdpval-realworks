@@ -1740,6 +1740,112 @@ def test_a_prerendered_corpus_is_not_re_rendered(
     assert len(result["calls"]) == len(corpus.claims)
 
 
+def test_the_judge_is_handed_the_criterion_and_nothing_else(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """330 §2: the model sees one line. The answer is in the same process.
+
+    ``load_speech_corpus`` reads a manifest that carries the sentence eSpeak
+    was given and the reason each claim holds -- both have to be committed for
+    the set to be reproducible. So the ground truth is one attribute access
+    away from the prompt for the whole run, and the failure mode is not a
+    crash: a judge handed ``because`` answers every claim correctly, and the
+    report says the model hears words.
+
+    This pins the argument list rather than the prompt text because the wire
+    recorder keeps only a digest of the prompt (§6 -- the prompt is not
+    published), so the boundary that can be checked is this one.
+    """
+    manifest_path, clip_dir = _speech_fixture(tmp_path)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    for clip in manifest["clips"]:
+        clip["command"] = ["espeak-ng", "-w", "x.wav", "SENTENCE-NOT-FOR-SENDING"]
+    for claim in manifest["claims"]:
+        claim["because"] = "GROUND-TRUTH-NOT-FOR-SENDING"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    corpus = probe.load_speech_corpus(manifest_path, clip_dir)
+    seen: list[dict[str, object]] = []
+
+    class _Recorder:
+        def reset(self) -> None:
+            return None
+
+        def judge(self, **kwargs: object) -> probe.AudioVerdict:
+            seen.append(kwargs)
+            return probe.AudioVerdict(
+                verdict="pass",
+                partial_score=0.0,
+                evidence="",
+                confidence=1.0,
+                reasoning="",
+            )
+
+    def _explode_renderer(*_args: object, **_kwargs: object) -> str:
+        raise AssertionError("the tone renderer must not run for speech")
+
+    monkeypatch.setattr(probe, "render_clip", _explode_renderer)
+    probe.run_measurement(
+        perception=_Recorder(),
+        clip_dir=tmp_path / "unused",
+        repeats=1,
+        claims=corpus.claims,
+        prerendered=corpus,
+    )
+
+    assert len(seen) == len(corpus.claims)
+    criteria = {claim.criterion for claim in corpus.claims}
+    for call in seen:
+        # Not a subset check: a new keyword is exactly how the answer would
+        # arrive, so anything beyond these two fails here rather than after
+        # the money is spent.
+        assert set(call) == {"criterion", "audio_path"}
+        assert call["criterion"] in criteria
+        blob = " ".join(str(value) for value in call.values())
+        assert "GROUND-TRUTH-NOT-FOR-SENDING" not in blob
+        assert "SENTENCE-NOT-FOR-SENDING" not in blob
+
+    # The transcript is in the manifest and must not survive loading it.
+    assert not any(
+        "SENTENCE-NOT-FOR-SENDING" in str(vars(clip)) for clip in corpus.clips
+    )
+
+
+def test_the_published_criteria_do_not_answer_themselves() -> None:
+    """A criterion that quotes the sentence is answerable without listening.
+
+    The pair design is what keeps this honest: both sides ask about the same
+    clip in the same shape, and differ by the one confusable word. If one side
+    named its own truth value -- or restated the sentence -- a reader with no
+    audio would score 100% and the run would be reported as hearing.
+    """
+    published = json.loads(
+        PUBLISHED_SPEECH_MANIFEST.read_text(encoding="utf-8")
+    )
+    transcripts = {
+        clip["clip_id"]: clip["command"][-1] for clip in published["clips"]
+    }
+    by_pair: dict[str, list[dict[str, object]]] = {}
+    for claim in published["claims"]:
+        criterion = str(claim["criterion"])
+        lowered = criterion.lower()
+        assert str(claim["because"]).lower() not in lowered
+        assert transcripts[claim["clip_id"]].lower() not in lowered
+        for marker in ("true", "false", "correct", "incorrect", "the answer"):
+            assert marker not in lowered, f"{claim['claim_id']}: {marker!r}"
+        by_pair.setdefault(str(claim["pair_id"]), []).append(claim)
+
+    assert len(by_pair) == 10
+    for pair_id, sides in by_pair.items():
+        assert len(sides) == 2, pair_id
+        first, second = sides
+        assert first["clip_id"] == second["clip_id"], pair_id
+        assert first["family"] == second["family"], pair_id
+        # Identical criteria would make the pair one question asked twice, and
+        # the permutation test would be swapping a label between duplicates.
+        assert first["criterion"] != second["criterion"], pair_id
+
+
 def test_the_report_describes_the_corpus_that_ran(tmp_path: Path) -> None:
     """Reporting the tone corpus's counts beside a speech run's calls would be
     a mislabel of exactly the kind this file exists to stop."""

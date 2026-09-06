@@ -462,6 +462,17 @@ entries land under a fresh dated heading the day they merge to `main`.
   the run's call count stays sourced from the cost block, which an existing
   test keeps separate because a `both` run scores one arm and calls two.
 
+  The seventh was that nothing stopped the answer reaching the model. The
+  manifest has to carry the sentence eSpeak was given and why each claim
+  holds, or the set is not reproducible — so for the whole run the ground
+  truth sits one attribute access away from the prompt. A judge handed it
+  answers all twenty correctly and the report says the model hears words;
+  the run does not fail. The argument list is now pinned instead of the
+  prompt text, which §6 keeps unpublished: `judge()` takes `criterion` and
+  `audio_path`, and a third keyword fails the test. The corpus was audited
+  the same way — no criterion states its own truth value or quotes its
+  transcript, and each pair differs by one confusable word on the same clip.
+
   330 section 3 pre-registered four stop conditions and nothing enforced them.
   They are now `SPEECH_STOP_RULES`, checked after each call, with a test that
   fails if the constants and the document drift apart: 20 minutes wall clock,
