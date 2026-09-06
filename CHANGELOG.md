@@ -394,6 +394,39 @@ entries land under a fresh dated heading the day they merge to `main`.
   "Critical item pass rate" into the report prompt — is closed under **Fixed**.
 
 ### Added
+- **The accuracy probe can now run the speech fixture, and stops when 330 says
+  to stop.** The fixture landed pinned but unrunnable: the measurement script
+  only knew the nine synthetic tone clips, so a `corpus: speech` dispatch had
+  nowhere to go. It now loads `330-speech-verification-manifest.json`, rebuilds
+  the clips from eSpeak NG on the runner, and refuses to measure anything whose
+  SHA-256 does not match the committed pin — in both the free and the paid job,
+  before either spends. Agreeing with the pin is what makes two directories the
+  same audio; travelling together in an artifact is not.
+
+  Two defects surfaced in the wiring, both of which would have produced a
+  confident wrong reading. The delivery record built its duration table from the
+  *tone* clips whatever corpus ran, so a perfectly healthy speech run would have
+  listed every clip under `clips_whose_sent_duration_differs` and reported
+  `prompt_token_vs_clip_seconds.n == 0` — the delivery block readers are told to
+  check *before* trusting the accuracy would have said the audio never arrived.
+  And the record counted the calls that reported audio tokens without ever
+  totalling them, which is the number 330's stop rule turns on.
+
+  `audio_tokens_total` is `null` when no call reported the field, not `0`. A
+  zero is a claim — *the provider metered no audio* — and it must not be
+  indistinguishable from the provider never having said.
+
+  330 section 3 pre-registered four stop conditions and nothing enforced them.
+  They are now `SPEECH_STOP_RULES`, checked after each call, with a test that
+  fails if the constants and the document drift apart: 20 minutes wall clock,
+  zero usable verdicts in the first 10 calls, 10 provider failures, and audio
+  metered at 0. The second would have ended 328's observation arm at ten calls
+  instead of sixty. A stopped run keeps everything it bought — including the
+  call that tripped the rule — and reports `stopped` beside `calls_planned`, so
+  a partial run cannot be read as a completed one. The tone corpus runs unruled:
+  its numbers are published and adding conditions now would change the design
+  they came out of. 116 tests on the probe, 231 across the audio suite.
+
 - **A speech fixture, because every audio measurement so far has been beeps.**
   The tone corpora answered "does the verdict depend on the audio at all". None
   of the 31 graded audio deliverables is a sine wave, so the question the corpus
