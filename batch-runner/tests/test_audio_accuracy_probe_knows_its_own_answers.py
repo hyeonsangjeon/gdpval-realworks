@@ -21,6 +21,7 @@ the test that matters is the one asserting its discrimination is **zero**.
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import math
@@ -1476,3 +1477,387 @@ def test_stub_refuses_a_criterion_it_was_not_given() -> None:
             ],
             modalities=["text"],
         )
+
+
+# ── The speech corpus arrives instead of being rendered ──────────────
+#
+# The tone corpus is generated here and checked against its own waveform. The
+# speech set cannot be: eSpeak NG does not install on this host, so the clips
+# come from CI as an artifact and the repository keeps a manifest. That makes
+# the loader, not the renderer, the thing standing between "measured the
+# pinned set" and "measured whatever was in that folder".
+
+
+PUBLISHED_SPEECH_MANIFEST = (
+    Path(__file__).resolve().parents[2]
+    / "tasks"
+    / "rebuilding_grading_task"
+    / "330-speech-verification-manifest.json"
+)
+
+
+def _speech_fixture(tmp_path: Path, *, clips: int = 2) -> tuple[Path, Path]:
+    """A miniature manifest with real files behind it.
+
+    Built here rather than copied from the published set so the tests do not
+    depend on the artifact being downloaded, and so a digest can be corrupted
+    without editing a committed file.
+    """
+    clip_dir = tmp_path / "clips"
+    clip_dir.mkdir()
+    entries = []
+    claims = []
+    for index in range(clips):
+        clip_id = f"clip{index}"
+        path = clip_dir / f"{clip_id}.sent.wav"
+        with wave.open(str(path), "wb") as handle:
+            handle.setnchannels(1)
+            handle.setsampwidth(2)
+            handle.setframerate(16_000)
+            handle.writeframes(struct.pack("<800h", *([0] * 800)))
+        data = path.read_bytes()
+        entries.append({
+            "clip_id": clip_id,
+            "source": {"file": f"{clip_id}.source.wav", "sha256": "0" * 64},
+            "sent": {
+                "file": path.name,
+                "sha256": hashlib.sha256(data).hexdigest(),
+                "seconds": 0.05,
+                "sample_rate_hz": 16_000,
+            },
+        })
+        for suffix, holds in (("yes", True), ("no", False)):
+            claims.append({
+                "claim_id": f"{clip_id}_{suffix}",
+                "pair_id": f"{clip_id}_pair",
+                "clip_id": clip_id,
+                "family": "confusable_number",
+                "criterion": f"criterion {suffix} for {clip_id}",
+                "holds": holds,
+                "because": "fixture",
+            })
+    manifest = {
+        "clips": entries,
+        "claims": claims,
+        "provenance": {"tool": "espeak-ng", "version_string": "fixture"},
+        "encoder": {"library": "PyAV"},
+        "limits": {"reading": "a pass is strong, a failure is weak"},
+    }
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    return manifest_path, clip_dir
+
+
+def test_the_pairing_is_read_from_the_set_and_not_guessed_from_the_name() -> None:
+    """The tone corpus's naming rule is wrong for the speech set, silently.
+
+    ``claim_id.rsplit("_", 1)[0]`` recovers the pair for ``timing_true`` /
+    ``timing_false``. Applied to the published speech set it produces
+    **thirteen** groups instead of ten, six of them holding a single claim --
+    and a permutation test that swaps labels within a pair of size one does
+    not swap anything. The corpus would still report an accuracy; only the
+    null distribution it was compared against would be a straight line.
+    """
+    published = json.loads(PUBLISHED_SPEECH_MANIFEST.read_text(encoding="utf-8"))
+    derived: dict[str, list[bool]] = {}
+    for entry in published["claims"]:
+        derived.setdefault(
+            entry["claim_id"].rsplit("_", 1)[0], []
+        ).append(entry["holds"])
+    singletons = [k for k, v in derived.items() if len(v) == 1]
+    assert len(derived) == 13, "the naming rule is expected to mis-group"
+    assert len(singletons) == 6, singletons
+
+    # The explicit field is what makes it ten again.
+    real = {entry["pair_id"] for entry in published["claims"]}
+    assert len(real) == 10
+
+
+def test_an_explicit_pair_id_wins_and_absence_falls_back() -> None:
+    """Both halves, because the tone corpus depends on the fallback."""
+    speech = probe.Claim(
+        claim_id="crate_seventeen",
+        clip_id="crate",
+        family="confusable_number",
+        criterion="x",
+        holds=True,
+        because="y",
+        explicit_pair_id="crate_number",
+    )
+    assert speech.pair_id == "crate_number"
+    assert speech.to_dict()["pair_id"] == "crate_number"
+
+    tone = probe.Claim(
+        claim_id="timing_true",
+        clip_id="tone_stops_early",
+        family="timing",
+        criterion="x",
+        holds=True,
+        because="y",
+    )
+    assert tone.pair_id == "timing"
+
+
+def test_audio_that_is_not_the_pinned_audio_is_refused(tmp_path: Path) -> None:
+    """The failure this guards against is mundane and produces a real number.
+
+    An artifact from a different run, a partial download, a clip regenerated
+    by a newer eSpeak: each yields a folder of plausible WAVs and an accuracy
+    that cannot be attributed to any published set.
+    """
+    manifest_path, clip_dir = _speech_fixture(tmp_path)
+    target = clip_dir / "clip0.sent.wav"
+    target.write_bytes(target.read_bytes() + b"\x00\x00")
+
+    with pytest.raises(ValueError, match="Refusing to measure audio"):
+        probe.load_speech_corpus(manifest_path, clip_dir)
+
+
+def test_a_missing_clip_says_where_to_get_it(tmp_path: Path) -> None:
+    """The clips are deliberately not committed, so 'missing' is the normal
+    first experience of this flag and the message has to be actionable."""
+    manifest_path, clip_dir = _speech_fixture(tmp_path)
+    (clip_dir / "clip0.sent.wav").unlink()
+
+    with pytest.raises(FileNotFoundError, match="speech-verification-set"):
+        probe.load_speech_corpus(manifest_path, clip_dir)
+
+
+def test_the_delivered_file_is_the_one_loaded(tmp_path: Path) -> None:
+    """``sent``, not ``source``.
+
+    eSpeak writes 22050 Hz and the grading path delivers 16 kHz. Loading the
+    file the model never hears would be a digest check that passes while
+    describing the wrong bytes -- the exact defect the two digests exist to
+    make visible.
+    """
+    manifest_path, clip_dir = _speech_fixture(tmp_path)
+    corpus = probe.load_speech_corpus(manifest_path, clip_dir)
+    for clip in corpus.clips:
+        assert clip.path.name.endswith(".sent.wav")
+        assert clip.sample_rate_hz == AUDIO_SAMPLE_RATE_HZ
+
+
+def test_an_unbalanced_speech_set_is_refused(tmp_path: Path) -> None:
+    """Balance is what makes 50% the chance line.
+
+    A set that had drifted would still produce an accuracy, and it would be
+    compared against a baseline nobody recomputed.
+    """
+    manifest_path, clip_dir = _speech_fixture(tmp_path)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["claims"][1]["holds"] = True
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="not balanced"):
+        probe.load_speech_corpus(manifest_path, clip_dir)
+
+
+def test_a_pair_that_does_not_disagree_with_itself_is_refused(
+    tmp_path: Path,
+) -> None:
+    """Balanced overall and still broken.
+
+    The pair is the unit the permutation test shuffles within. Two clips, one
+    all-true and one all-false, is ten-true-of-twenty at the corpus level --
+    the balance check passes -- while every within-pair swap is a no-op. The
+    corpus would be graded against a null distribution with no spread in it.
+    """
+    manifest_path, clip_dir = _speech_fixture(tmp_path)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    # clip0: both true. clip1: both false. Still 2 of 4.
+    manifest["claims"][1]["holds"] = True
+    manifest["claims"][2]["holds"] = False
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="not one true and one false"):
+        probe.load_speech_corpus(manifest_path, clip_dir)
+
+
+def test_a_claim_about_a_clip_that_is_not_pinned_is_refused(
+    tmp_path: Path,
+) -> None:
+    """Otherwise the run would fail at the call, having already spent."""
+    manifest_path, clip_dir = _speech_fixture(tmp_path)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["claims"][0]["clip_id"] = "not_a_clip"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="does not pin"):
+        probe.load_speech_corpus(manifest_path, clip_dir)
+
+
+def test_the_published_set_loads_when_its_clips_are_present(
+    tmp_path: Path,
+) -> None:
+    """The committed manifest has to be loadable by the thing that reads it.
+
+    The clips are not committed, so this reconstructs the parts that do not
+    need audio and checks the corpus-level shape the pre-registration counted
+    on: ten clips, twenty claims, ten pairs, balanced.
+    """
+    published = json.loads(PUBLISHED_SPEECH_MANIFEST.read_text(encoding="utf-8"))
+    assert len(published["clips"]) == 10
+    assert len(published["claims"]) == 20
+    assert sum(1 for c in published["claims"] if c["holds"]) == 10
+    by_pair: dict[str, list[bool]] = {}
+    for entry in published["claims"]:
+        by_pair.setdefault(entry["pair_id"], []).append(entry["holds"])
+    assert len(by_pair) == 10
+    assert all(sorted(v) == [False, True] for v in by_pair.values())
+
+
+def test_a_prerendered_corpus_is_not_re_rendered(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Re-deriving the digests here would pin what was downloaded.
+
+    The point of the manifest is that the digest was published by the build.
+    If the runner recomputed it, a corrupted download would be reported as its
+    own pin and the check would be circular.
+    """
+    manifest_path, clip_dir = _speech_fixture(tmp_path)
+    corpus = probe.load_speech_corpus(manifest_path, clip_dir)
+
+    def _explode(*_args: object, **_kwargs: object) -> str:
+        raise AssertionError("the tone renderer must not run for speech")
+
+    monkeypatch.setattr(probe, "render_clip", _explode)
+    perception = probe.AudioPerception(
+        client=probe.TruthfulStub(corpus.claims),
+        deployment="gpt-audio-1.5",
+        call_cap=AUDIO_CALL_CAP,
+        trim_seconds=AUDIO_TRIM_SECONDS,
+    )
+    result = probe.run_measurement(
+        perception=perception,
+        clip_dir=tmp_path / "unused",
+        repeats=1,
+        claims=corpus.claims,
+        prerendered=corpus,
+    )
+    assert result["clip_sha256"] == corpus.digests
+    assert len(result["calls"]) == len(corpus.claims)
+
+
+def test_the_report_describes_the_corpus_that_ran(tmp_path: Path) -> None:
+    """Reporting the tone corpus's counts beside a speech run's calls would be
+    a mislabel of exactly the kind this file exists to stop."""
+    manifest_path, clip_dir = _speech_fixture(tmp_path, clips=3)
+    corpus = probe.load_speech_corpus(manifest_path, clip_dir)
+    perception = probe.AudioPerception(
+        client=probe.TruthfulStub(corpus.claims),
+        deployment="gpt-audio-1.5",
+        call_cap=AUDIO_CALL_CAP,
+        trim_seconds=AUDIO_TRIM_SECONDS,
+    )
+    result = probe.run_measurement(
+        perception=perception,
+        clip_dir=tmp_path / "unused",
+        repeats=1,
+        claims=corpus.claims,
+        prerendered=corpus,
+    )
+    report = probe.build_report(
+        identity=probe.pinned_identity(),
+        measured=False,
+        repeats=1,
+        result=result,
+        speech=corpus,
+    )
+    assert report["corpus"] == "speech"
+    assert report["pins"]["clips"] == 3
+    assert report["pins"]["claims"] == 6
+    assert report["pins"]["clips"] != len(probe.CLIPS)
+    assert [c["clip_id"] for c in report["clips"]] == [
+        c.clip_id for c in corpus.clips
+    ]
+    assert "hears words" in report["what_this_measures"]
+    # The asymmetry is a field, not a caveat in a document nobody opens.
+    assert report["speech_set"]["limits"]["reading"]
+    json.dumps(report)
+
+
+def test_the_expected_token_count_is_written_down_before_the_run(
+    tmp_path: Path,
+) -> None:
+    """A corpus that never reached the model produces a plausible accuracy.
+
+    The only cheap way to notice is a usage figure that is nowhere near what
+    the audio should have cost, and that comparison needs a number recorded
+    beforehand rather than reconstructed afterwards.
+    """
+    manifest_path, clip_dir = _speech_fixture(tmp_path, clips=2)
+    corpus = probe.load_speech_corpus(manifest_path, clip_dir)
+    perception = probe.AudioPerception(
+        client=probe.TruthfulStub(corpus.claims),
+        deployment="gpt-audio-1.5",
+        call_cap=AUDIO_CALL_CAP,
+        trim_seconds=AUDIO_TRIM_SECONDS,
+    )
+    result = probe.run_measurement(
+        perception=perception,
+        clip_dir=tmp_path / "unused",
+        repeats=3,
+        claims=corpus.claims,
+        prerendered=corpus,
+    )
+    report = probe.build_report(
+        identity=probe.pinned_identity(),
+        measured=False,
+        repeats=3,
+        result=result,
+        speech=corpus,
+    )
+    assert report["speech_set"]["expected_audio_tokens"] == round(
+        probe.AUDIO_TOKENS_PER_SECOND * corpus.total_seconds * 3
+    )
+
+
+def test_the_published_set_predicts_the_pre_registered_token_count() -> None:
+    """330 states ~937 tokens for three repeats. The code has to agree.
+
+    Two places carrying the same number is how a stop rule quietly stops
+    matching the run it governs.
+    """
+    published = json.loads(PUBLISHED_SPEECH_MANIFEST.read_text(encoding="utf-8"))
+    seconds = round(sum(c["sent"]["seconds"] for c in published["clips"]), 4)
+    assert seconds == 31.2350
+    assert round(probe.AUDIO_TOKENS_PER_SECOND * seconds * 3) == 937
+
+
+def test_the_speech_flags_travel_together() -> None:
+    """A manifest with no clips is a run that cannot start, not one that
+    quietly falls back to tones."""
+    with pytest.raises(SystemExit):
+        probe.main(["--dry-run", "--speech-set", "x.json"])
+    with pytest.raises(SystemExit):
+        probe.main(["--dry-run", "--speech-clips", "somewhere"])
+
+
+def test_the_speech_run_refuses_a_second_prompt_arm(tmp_path: Path) -> None:
+    """330 pre-registers one arm. Two questions in one run is what left 328
+    unable to answer either of them."""
+    manifest_path, clip_dir = _speech_fixture(tmp_path)
+    with pytest.raises(SystemExit):
+        probe.main([
+            "--dry-run", "--quiet",
+            "--speech-set", str(manifest_path),
+            "--speech-clips", str(clip_dir),
+            "--prompt-arm", "both",
+        ])
+
+
+def test_a_speech_set_that_cannot_be_loaded_exits_three_not_traceback(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Same exit code as an unreadable identity, for the same reason: a run
+    that cannot say what it sent has nothing to report."""
+    manifest_path, clip_dir = _speech_fixture(tmp_path)
+    (clip_dir / "clip0.sent.wav").unlink()
+    assert probe.main([
+        "--dry-run", "--quiet",
+        "--speech-set", str(manifest_path),
+        "--speech-clips", str(clip_dir),
+    ]) == 3
+    assert "::error::" in capsys.readouterr().err
