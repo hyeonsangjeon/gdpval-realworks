@@ -514,6 +514,15 @@ jobs:
                       print("\n**The billed audio is more than 10% away from the "
                             "pre-registered figure.** Either different sound was sent or "
                             "the metering changed; read that before reading the accuracy.\n")
+              # The first thing to check when the total sits above the band, and
+              # the reason it is printed next to it: a retried envelope sends the
+              # clip a second time and is billed a second time, so more requests
+              # than calls is extra audio that nothing went wrong to produce.
+              requests = (report.get("delivery") or {}).get("requests_total")
+              calls = (report.get("delivery") or {}).get("calls_inspected")
+              if requests and calls and requests > calls:
+                  print(f"- requests sent: **{requests}** for {calls} calls — "
+                        f"{requests - calls} retried envelope(s), each billed again")
               print()
           # 330 §2 puts the delivery checks *before* the accuracy: an accuracy
           # measured on calls that carried no audio is 324 again -- the speech

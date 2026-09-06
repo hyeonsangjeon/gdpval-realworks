@@ -2883,6 +2883,7 @@ def test_the_paid_summary_refuses_to_pool_the_two_corpora() -> None:
 def _wire_call(clip_id: str, *, seconds: float, tokens: object = "absent") -> dict:
     """A call log entry shaped like the one ``summarise_wire`` produces."""
     wire: dict[str, Any] = {
+        "requests": 1,
         "requests_with_audio": 1,
         "audio_sha256": f"sha-{clip_id}",
         "audio_duration_s": seconds,
@@ -2893,6 +2894,7 @@ def _wire_call(clip_id: str, *, seconds: float, tokens: object = "absent") -> di
     }
     if tokens != "absent":
         wire["audio_tokens"] = tokens
+        wire["audio_tokens_billed"] = tokens
     return {
         "repeat": 1,
         "claim_id": f"{clip_id}_claim",
@@ -2931,6 +2933,120 @@ def test_billed_audio_totals_what_was_reported() -> None:
     )
     assert delivery["audio_tokens_reported"] == 2
     assert delivery["audio_tokens_total"] == 62
+
+
+def test_a_retried_envelope_is_billed_twice_and_counted_twice() -> None:
+    """One verdict, two requests, two clips' worth of audio on the invoice.
+
+    ``summarise_wire`` exists because a judge call can make more than one
+    request -- it keeps ``requests`` for exactly that reason -- and every other
+    field it collapses takes the *last* one, correctly: ``audio_sha256`` and
+    ``response_model`` describe the request that produced the verdict.
+
+    ``audio_tokens`` was collapsed the same way, and it is not that kind of
+    field. Billing counts requests. Six retries in sixty calls is 10% more
+    audio bought than planned, which is the entire width of the pre-registered
+    band -- and the summary would have printed ``0.0% from expected`` while it
+    happened, because the number it compares was structurally incapable of
+    including the retry. The band exists to notice exactly this.
+    """
+    def _request(tokens: int) -> dict[str, Any]:
+        return {
+            "audio_part_present": True,
+            "audio_sha256": "a" * 64,
+            "audio_format": "wav",
+            "prompt_sha256": "b" * 64,
+            "prompt_chars": 10,
+            "response_model": "gpt-audio-1.5",
+            "audio_tokens": tokens,
+            "sent_wav": {
+                "bytes": 1,
+                "sample_rate_hz": AUDIO_SAMPLE_RATE_HZ,
+                "channels": 1,
+                "duration_s": 3.1,
+            },
+        }
+
+    once = probe.summarise_wire([_request(31)])
+    assert once["requests"] == 1
+    assert once["audio_tokens"] == 31
+    assert once["audio_tokens_billed"] == 31, "no retry, so the two agree"
+
+    retried = probe.summarise_wire([_request(31), _request(31)])
+    assert retried["requests"] == 2
+    assert retried["audio_tokens"] == 31, (
+        "the verdict's own meter reading is still the last request's, like the "
+        "digest and the model name it sits beside"
+    )
+    assert retried["audio_tokens_billed"] == 62, (
+        "the clip went out twice and was billed twice"
+    )
+
+    # The fixture helper below has to keep producing what this function does,
+    # or the delivery tests pass against a shape the measurer never emits. A
+    # subset check is not enough: the fixture omitted ``requests`` entirely and
+    # `delivery_section` read it as 0, so a run of sixty calls reported twelve.
+    fixture = _wire_call("a", seconds=1.0, tokens=1)["wire"]
+    assert set(fixture) <= set(retried), (
+        "_wire_call invented a wire field summarise_wire does not produce"
+    )
+    for field in (
+        "requests", "requests_with_audio", "audio_tokens", "audio_tokens_billed"
+    ):
+        assert field in fixture, (
+            f"delivery_section reads {field!r} and the fixture does not have it, "
+            f"so its tests measure a call shape that never reaches the report"
+        )
+
+
+def test_the_delivery_total_is_the_bill_not_the_verdict_count() -> None:
+    """Sixty calls, six of which retried, against the +/-10% band.
+
+    The reported total used to be 1,860 with 2,046 billed -- inside the band,
+    on a run that bought 10% more audio than pre-registered.
+    """
+    calls = [_wire_call(f"c{i}", seconds=1.0, tokens=31) for i in range(54)]
+    for i in range(6):
+        call = _wire_call(f"r{i}", seconds=1.0, tokens=31)
+        call["wire"]["requests"] = 2
+        call["wire"]["requests_with_audio"] = 2
+        call["wire"]["audio_tokens_billed"] = 62
+        calls.append(call)
+
+    durations = {call["clip_id"]: 1.0 for call in calls}
+    delivery = probe.delivery_section(calls, measured=True, durations=durations)
+
+    assert delivery["audio_tokens_total"] == 54 * 31 + 6 * 62 == 2046
+    assert delivery["audio_tokens_total"] != 60 * 31, "the retries fell off the bill"
+    # And the count that explains why, so a reader seeing the band exceeded is
+    # not left guessing between "a retry" and "different sound went out".
+    assert delivery["requests_total"] == 66
+    assert delivery["calls_inspected"] == 60
+
+
+def test_the_summary_says_when_more_requests_went_out_than_calls(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """A drift line with no cause is a line that gets argued with, not acted on."""
+    manifest_path, clip_dir = _speech_fixture(tmp_path, clips=5)
+    out = tmp_path / "retried.json"
+    assert probe.main([
+        "--dry-run", "--quiet", "--repeats", "3",
+        "--speech-set", str(manifest_path),
+        "--speech-clips", str(clip_dir),
+        "--out", str(out),
+    ]) == 0
+    base = json.loads(out.read_text(encoding="utf-8"))
+    assert base["delivery"]["requests_total"] == base["delivery"]["calls_inspected"]
+
+    clean = _render_paid_summary(base, tmp_path, monkeypatch, capsys)
+    assert "retried envelope" not in clean, "a line that prints when nothing retried"
+
+    report = json.loads(json.dumps(base))
+    report["delivery"]["requests_total"] = report["delivery"]["calls_inspected"] + 6
+    printed = _render_paid_summary(report, tmp_path, monkeypatch, capsys)
+    assert "6 retried envelope(s), each billed again" in printed
+    assert f"requests sent: **{report['delivery']['requests_total']}**" in printed
 
 
 def test_a_real_zero_still_reads_as_zero() -> None:

@@ -1971,7 +1971,18 @@ def summarise_wire(records: Sequence[dict[str, Any]]) -> dict[str, Any]:
         "prompt_sha256": records[-1].get("prompt_sha256") if records else None,
         "prompt_chars": records[-1].get("prompt_chars") if records else None,
         "response_model": records[-1].get("response_model") if records else None,
+        # Two token fields, because the question has two answers whenever a
+        # call retried. The last request is the one that produced the verdict,
+        # and it is the one ``audio_sha256`` and ``response_model`` above
+        # describe, so ``audio_tokens`` stays last-request: it is the meter
+        # reading for *this verdict*.
         "audio_tokens": tokens[-1] if tokens else None,
+        # What the retry also cost. Billing counts requests, and a judge that
+        # retries a malformed envelope sends the clip again. Summing the
+        # last-request figure over sixty calls understates the bill by exactly
+        # the retries -- six of them is 10%, which is the whole width of the
+        # pre-registered delivery band, reported as "0.0% from expected".
+        "audio_tokens_billed": sum(tokens) if tokens else None,
     }
 
 
@@ -2071,17 +2082,27 @@ def delivery_section(
         "audio_tokens_reported": sum(
             1 for c in wired if c["wire"].get("audio_tokens") is not None
         ),
+        # Requests, not calls. A judge that retries a malformed envelope makes
+        # two of these for one verdict and is billed for both, so this is the
+        # number that explains a delivery total above the pre-registered one.
+        # Equal to the call count on a run where nothing had to be retried.
+        "requests_total": sum(c["wire"].get("requests") or 0 for c in wired),
         # Null, not zero, when nothing reported it. Zero is a claim -- "the
         # provider metered no audio", which is how a request that never
         # carried the sound looks -- and it must not be indistinguishable
         # from "the provider did not tell us". The pre-registered stop rule
         # in 330 fires on a real zero, so the two have to stay apart.
+        #
+        # Summed from ``audio_tokens_billed``, which counts every request the
+        # call made. The last-request figure beside it is the meter for the
+        # verdict; this line is labelled "actually billed" in the summary and
+        # has to be that.
         "audio_tokens_total": (
             sum(
-                c["wire"]["audio_tokens"] for c in wired
-                if c["wire"].get("audio_tokens") is not None
+                c["wire"]["audio_tokens_billed"] for c in wired
+                if c["wire"].get("audio_tokens_billed") is not None
             )
-            if any(c["wire"].get("audio_tokens") is not None for c in wired)
+            if any(c["wire"].get("audio_tokens_billed") is not None for c in wired)
             else None
         ),
         "prompt_token_vs_clip_seconds": {

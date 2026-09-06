@@ -677,6 +677,26 @@ entries land under a fresh dated heading the day they merge to `main`.
   skip, widening the band to 20%, making the banner fire on every run, and
   reporting the unmeasured case as `0`.
 
+  And the number that line compares is not the bill. A judge call can make more
+  than one request — a malformed envelope is asked again — and `summarise_wire`
+  keeps a `requests` count for exactly that reason. It collapsed the audio token
+  figure to the *last* request, which is right for `audio_sha256` and
+  `response_model`, since those describe the request that produced the verdict,
+  and wrong for a billing quantity: the retry sends the clip again and is
+  charged again. Six retries in sixty calls is 10% more audio bought than
+  pre-registered — the entire width of the band — reported as `0.0% from
+  expected`, because the compared number was structurally incapable of holding
+  it. Split in two: `audio_tokens` stays the verdict's own meter reading, and
+  `audio_tokens_billed` sums every request the call made, which is what
+  `audio_tokens_total` now totals. `requests_total` is recorded beside it and
+  the summary names the retries when there are any, so a band that was exceeded
+  says why rather than leaving a reader to choose between a retry and a
+  delivery fault. Found by reading the collapse, then measured: 54 clean calls
+  and 6 retried ones report 1,860 against 2,046 billed. Mutation-checked five
+  ways, including the one that started it — the test fixture had never carried
+  a `requests` field at all, so `delivery_section` read it as zero and a
+  sixty-call run reported twelve requests.
+
   330 section 3 pre-registered four stop conditions and nothing enforced them.
   They are now `SPEECH_STOP_RULES`, checked after each call, with a test that
   fails if the constants and the document drift apart: 20 minutes wall clock,
