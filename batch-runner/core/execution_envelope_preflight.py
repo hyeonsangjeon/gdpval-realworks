@@ -449,6 +449,81 @@ def check_experiment_files_match_conditions(
     problems.extend(
         _check_the_plan_prices_what_the_files_add_to_the_prompt(loaded_settings)
     )
+    problems.extend(
+        _check_the_pinned_api_version_is_the_one_the_code_uses(
+            conditions_by_environment
+        )
+    )
+    return problems
+
+
+def _check_the_pinned_api_version_is_the_one_the_code_uses(
+    conditions_by_environment: Mapping[str, ModelRunConditions],
+) -> list[str]:
+    """Hold the plan's pinned API version against the constants that set it.
+
+    Every other condition here is checked by opening the settings files and
+    comparing them run place against run place. This one cannot be. The
+    settings files carry no API version at all, so there is nothing written
+    in them to compare, and a comparison of them passes whatever version is
+    really in force. What decides that is a constant in the client code —
+    which means the plan can pin one string, the code send another, and every
+    settings check still agree.
+
+    The constants are read by import rather than copied here. A copy is the
+    same failure one level up: it would agree with the plan while the code
+    moved underneath both.
+    """
+    problems: list[str] = []
+    pinned = {
+        conditions.api_version
+        for conditions in conditions_by_environment.values()
+        if conditions.api_version
+    }
+    if not pinned:
+        return [
+            "the plan pins no API version, so a run place could be answered "
+            "on whichever version its client happened to be built with, and "
+            "nothing here would notice"
+        ]
+    if len(pinned) > 1:
+        return [
+            "the run places pin different API versions ("
+            + ", ".join(sorted(pinned))
+            + "), so they would not be asking the same product in the same way"
+        ]
+
+    want = pinned.pop()
+    for module_name, constant in (
+        ("core.llm_client", "DEFAULT_API_VERSION"),
+        ("core.azure_ai_clients", "DEFAULT_LEGACY_API_VERSION"),
+    ):
+        # Both failures below are reported rather than passed over. A version
+        # that could not be read is not a version that agreed.
+        try:
+            module = import_module(module_name)
+        except ImportError as error:
+            problems.append(
+                f"{module_name} could not be imported ({error}), so the API "
+                f"version the plan pins at {want!r} could not be held against "
+                "the code that sets it. That is unknown, not agreed"
+            )
+            continue
+        if not hasattr(module, constant):
+            problems.append(
+                f"{module_name} no longer defines {constant}, so whatever now "
+                f"decides the API version is unchecked against the {want!r} "
+                "the plan pins"
+            )
+            continue
+        found = getattr(module, constant)
+        if found != want:
+            problems.append(
+                f"the plan pins the API version at {want!r}, but "
+                f"{module_name}.{constant} is {found!r}. The settings files "
+                "carry no API version, so nothing else here catches this — "
+                "the comparison would run on a version it never agreed to"
+            )
     return problems
 
 

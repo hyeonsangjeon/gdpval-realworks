@@ -11,7 +11,12 @@ File handling:
       2) Check message content blocks for output_file references
       3) Fallback: scan container via containers.files.list/content API
 
-Requires: Azure OpenAI with Responses API (api_version >= 2025-03-01-preview)
+Requires: Azure OpenAI with the Responses API. Which API version that is
+gets decided by whoever builds the client this runner is handed — this
+module takes no version of its own, so there is one place to look rather
+than two that can drift apart. The comparison pins the version it expects
+in its plan, and core.execution_envelope_preflight holds that pinned string
+against the client-code constants before a run starts.
 
 See https://learn.microsoft.com/en-us/azure/ai-foundry/openai/how-to/code-interpreter?view=foundry-classic&tabs=python
 
@@ -247,7 +252,6 @@ class CodeInterpreterRunner(RecordsItsFirstRequest):
         self,
         api_key: Optional[str] = None,
         endpoint: Optional[str] = None,
-        api_version: str = "2025-03-01-preview",
         prompt_name: Optional[str] = None,
         max_completion_tokens: Optional[int] = None,
         *,
