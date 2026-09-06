@@ -15,8 +15,10 @@ nobody reviews.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sys
+import wave
 from pathlib import Path
 from typing import Any
 
@@ -186,13 +188,14 @@ def test_the_command_fixes_every_knob_that_changes_the_waveform() -> None:
     assert argv[-1] == "hello", "the text is the last argument"
 
 
-def test_the_clips_are_authored_at_the_rate_the_grader_sends() -> None:
-    """16 kHz, read from the grader rather than restated.
+def test_the_pinned_rate_is_the_graders_and_not_a_second_opinion() -> None:
+    """16 kHz, read from the grading path rather than restated here.
 
-    The audio path re-encodes to 16 kHz mono on the way out. Authoring at that
-    rate makes the step an identity transform, so the digest in the manifest
-    is the digest of what the model hears. If the two ever diverge, the
-    manifest would be pinning a file nobody sends.
+    The clips are *not* authored at this rate -- eSpeak NG has no sample-rate
+    option and ``en-us`` renders at 22050 Hz. This is the rate they arrive at,
+    after :func:`_trim_audio_bytes` re-encodes them, which is the only rate the
+    model ever hears. Restating ``16000`` as a literal would let the two drift
+    apart silently and leave the manifest pinning a file nobody sends.
     """
     from core.perception.audio import AUDIO_SAMPLE_RATE_HZ
 
@@ -214,25 +217,99 @@ def test_a_missing_synthesiser_says_where_to_build_instead(
     assert "speech-verification-set.yml" in str(caught.value)
 
 
-def test_a_wrong_sample_rate_is_refused_rather_than_resampled(
+def _write_wav(path: Path, *, rate: int, seconds: float = 0.25) -> None:
+    """A quiet mono WAV at ``rate``, written with the standard library.
+
+    Stands in for eSpeak's output so the conversion below can be exercised on
+    a host that cannot install eSpeak. What matters to the code under test is
+    the container's sample rate, not what the samples contain.
+    """
+    frames = int(rate * seconds)
+    with wave.open(str(path), "wb") as handle:
+        handle.setnchannels(1)
+        handle.setsampwidth(2)
+        handle.setframerate(rate)
+        handle.writeframes(b"\x00\x00" * frames)
+
+
+def test_the_clip_is_pinned_at_both_ends_of_the_conversion(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Silently converting would put a true digest on a file nobody sends."""
+    """The real 22050 -> 16000 step, run for real, on a host without eSpeak.
+
+    This is the case that broke the first build: eSpeak NG has no sample-rate
+    flag and ``en-us`` renders at 22050 Hz, so a fixture pinned only at the
+    synthesiser describes a file that is re-encoded before anyone hears it.
+    Both ends are recorded instead -- and the conversion is done by the
+    grading path's own function, so no second encoder has to be trusted.
+
+    Only ``_run`` is stubbed. The WAV is a real 22050 Hz container and the
+    re-encode is the real one.
+    """
+    pytest.importorskip("av")
+    clip = speech.CLIPS[0]
+    source = tmp_path / f"{clip.clip_id}.source.wav"
+    _write_wav(source, rate=22_050)
+    monkeypatch.setattr(
+        speech, "_run",
+        lambda argv: __import__("subprocess").CompletedProcess(argv, 0, "", ""),
+    )
+
+    entry = speech.synthesise(clip, tmp_path)
+
+    assert entry["source"]["sample_rate_hz"] == 22_050, "eSpeak's own rate"
+    assert entry["sent"]["sample_rate_hz"] == speech.SPEECH_SAMPLE_RATE_HZ
+    assert entry["sent"]["channels"] == 1
+    # Two different files, and the manifest says which is which. A single
+    # `sha256` field would have left a reader to assume the wrong one.
+    assert entry["source"]["sha256"] != entry["sent"]["sha256"]
+    assert (tmp_path / entry["source"]["file"]).is_file()
+    sent_path = tmp_path / entry["sent"]["file"]
+    assert sent_path.is_file()
+    assert (hashlib.sha256(sent_path.read_bytes()).hexdigest()
+            == entry["sent"]["sha256"]), "the digest names the file beside it"
+
+
+def test_a_rate_the_grader_does_not_deliver_is_refused_rather_than_resampled(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """If the grading path stops delivering 16 kHz, the fixture stops too.
+
+    Patching it up here so the digests keep matching would hide a change in
+    what the model actually hears behind a green build.
+    """
+    clip = speech.CLIPS[0]
+    _write_wav(tmp_path / f"{clip.clip_id}.source.wav", rate=22_050)
     monkeypatch.setattr(
         speech, "_run",
         lambda argv: __import__("subprocess").CompletedProcess(argv, 0, "", ""),
     )
     monkeypatch.setattr(
-        speech, "_wav_facts",
-        lambda _p: {"channels": 1, "sample_width_bytes": 2,
-                    "sample_rate_hz": 22050, "frames": 100, "seconds": 0.005},
+        speech, "_trim_audio_bytes", lambda *_a, **_k: (b"stub", "wav")
     )
-    monkeypatch.setattr(speech, "_sha256_file", lambda _p: "0" * 64)
-    target = tmp_path / "crate.wav"
-    target.write_bytes(b"x")
+    monkeypatch.setattr(
+        speech, "_wav_facts_from_bytes",
+        lambda _b: {"channels": 1, "sample_width_bytes": 2,
+                    "sample_rate_hz": 22_050, "frames": 100, "seconds": 0.005},
+    )
     with pytest.raises(RuntimeError) as caught:
-        speech.synthesise(speech.CLIPS[0], tmp_path)
+        speech.synthesise(clip, tmp_path)
     assert "Refusing to resample" in str(caught.value)
+
+
+def test_the_re_encoder_is_recorded_because_the_sent_digest_depends_on_it(
+) -> None:
+    """A ``sent`` digest reproduces only against the same ffmpeg.
+
+    Recording the synthesiser alone would make a mismatch unattributable: the
+    reader could not tell whether the speech changed or only the encoding did.
+    """
+    pytest.importorskip("av")
+    encoder = speech.encoder_provenance()
+    assert encoder["library"] == "PyAV"
+    assert encoder["version"]
+    assert encoder["ffmpeg_libraries"]
+    assert encoder["function"].endswith("_trim_audio_bytes")
 
 
 # ── Reproducing a published set ──────────────────────────────────────
@@ -241,7 +318,11 @@ def test_a_wrong_sample_rate_is_refused_rather_than_resampled(
 def _manifest(**over: Any) -> dict[str, Any]:
     base: dict[str, Any] = {
         "clips": [
-            {"clip_id": clip.clip_id, "sha256": f"{i:064d}"}
+            {
+                "clip_id": clip.clip_id,
+                "source": {"sha256": f"{i:064d}"},
+                "sent": {"sha256": f"{i + 100:064d}"},
+            }
             for i, clip in enumerate(speech.CLIPS)
         ],
         "corpus": {
@@ -260,7 +341,7 @@ def test_an_identical_rebuild_reports_no_problems() -> None:
     assert speech.compare_to_expected(_manifest(), _manifest()) == []
 
 
-def test_a_changed_digest_is_caught_and_says_the_likely_cause() -> None:
+def test_a_changed_synthesis_is_caught_and_says_the_likely_cause() -> None:
     """The expected failure, and the one a reader will hit.
 
     A different espeak-ng version is overwhelmingly the reason a rebuild
@@ -268,11 +349,40 @@ def test_a_changed_digest_is_caught_and_says_the_likely_cause() -> None:
     someone to suspect the audio pipeline.
     """
     built = _manifest()
-    built["clips"][0] = {"clip_id": speech.CLIPS[0].clip_id, "sha256": "f" * 64}
+    built["clips"][0] = {
+        **built["clips"][0], "source": {"sha256": "f" * 64},
+    }
     problems = speech.compare_to_expected(built, _manifest())
     assert len(problems) == 1
     assert speech.CLIPS[0].clip_id in problems[0]
     assert "espeak-ng version" in problems[0]
+
+
+def test_the_same_speech_encoded_differently_blames_the_encoder() -> None:
+    """Source matched, sent did not: that is ffmpeg, not the synthesiser.
+
+    Collapsing both digests into one number would report this as "the audio
+    changed" and send a reader to check the wrong tool.
+    """
+    built = _manifest()
+    built["clips"][0] = {**built["clips"][0], "sent": {"sha256": "f" * 64}}
+    problems = speech.compare_to_expected(built, _manifest())
+    assert len(problems) == 1
+    assert "encoder.ffmpeg_libraries" in problems[0]
+    assert "espeak-ng" not in problems[0]
+
+
+def test_a_manifest_missing_one_of_the_two_digests_is_not_called_a_match() -> None:
+    """An older manifest predates the ``sent`` digest.
+
+    Silently skipping the comparison would report a clean reproduction of
+    something that was never checked.
+    """
+    old = _manifest()
+    old["clips"] = [{"clip_id": c["clip_id"], "source": c["source"]}
+                    for c in old["clips"]]
+    problems = speech.compare_to_expected(_manifest(), old)
+    assert any("cannot be compared" in p for p in problems)
 
 
 def test_a_missing_or_extra_clip_is_caught() -> None:
@@ -299,6 +409,24 @@ def test_a_corpus_that_grew_without_a_new_manifest_is_caught() -> None:
 # ── What the manifest promises about itself ──────────────────────────
 
 
+def _stub_clip_entry(clip: Any) -> dict[str, Any]:
+    """A clip entry of the real shape, without running a synthesiser.
+
+    Shaped like the real thing rather than minimal, so that the JSON
+    round-trip below is exercised against what a build actually emits.
+    """
+    return {
+        "clip_id": clip.clip_id,
+        "command": [speech.ESPEAK_BINARY, "-v", speech.ESPEAK_VOICE],
+        "source": {"file": f"{clip.clip_id}.source.wav", "sha256": "0" * 64,
+                   "bytes": 1, "sample_rate_hz": 22_050, "seconds": 1.0},
+        "sent": {"file": f"{clip.clip_id}.sent.wav", "sha256": "1" * 64,
+                 "bytes": 1, "format": "wav",
+                 "sample_rate_hz": speech.SPEECH_SAMPLE_RATE_HZ,
+                 "seconds": 1.0},
+    }
+
+
 def test_the_manifest_states_the_asymmetry_between_pass_and_fail(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -312,7 +440,7 @@ def test_the_manifest_states_the_asymmetry_between_pass_and_fail(
     monkeypatch.setattr(speech, "espeak_provenance", lambda: {"tool": "stub"})
     monkeypatch.setattr(
         speech, "synthesise",
-        lambda clip, _out: {"clip_id": clip.clip_id, "sha256": "0" * 64},
+        lambda clip, _out: _stub_clip_entry(clip),
     )
     manifest = speech.build(tmp_path)
 
@@ -338,7 +466,7 @@ def test_the_manifest_carries_the_ground_truth_and_the_workflow_does_not_ship_it
     monkeypatch.setattr(speech, "espeak_provenance", lambda: {"tool": "stub"})
     monkeypatch.setattr(
         speech, "synthesise",
-        lambda clip, _out: {"clip_id": clip.clip_id, "sha256": "0" * 64},
+        lambda clip, _out: _stub_clip_entry(clip),
     )
     manifest = speech.build(tmp_path)
     assert len(manifest["claims"]) == 20

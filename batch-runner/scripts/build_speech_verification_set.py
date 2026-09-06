@@ -92,6 +92,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import json
 import shutil
 import subprocess
@@ -104,7 +105,11 @@ from typing import Any, Optional, Sequence
 _HERE = Path(__file__).resolve()
 sys.path.insert(0, str(_HERE.parent.parent))
 
-from core.perception.audio import AUDIO_SAMPLE_RATE_HZ  # noqa: E402
+from core.perception.audio import (  # noqa: E402
+    AUDIO_SAMPLE_RATE_HZ,
+    AUDIO_TRIM_SECONDS,
+    _trim_audio_bytes,
+)
 
 #: The synthesiser. Named once.
 ESPEAK_BINARY = "espeak-ng"
@@ -124,9 +129,20 @@ ESPEAK_WORDS_PER_MINUTE = 150
 ESPEAK_PITCH = 50
 ESPEAK_AMPLITUDE = 100
 
-#: 16 kHz mono, which is what the grader re-encodes to anyway. Authoring at the
-#: destination rate makes that step an identity transform, so the bytes the
-#: manifest pins are the bytes the model hears.
+#: 16 kHz mono: the rate the grading path delivers at, read from that path
+#: rather than restated.
+#:
+#: This is deliberately *not* the rate the WAVs are authored at. eSpeak NG has
+#: no sample-rate option -- the rate is a property of the voice data, and
+#: ``en-us`` renders at 22050 Hz -- so an earlier draft of this file refused to
+#: build at all, on the reasoning that resampling would put a digest in the
+#: manifest for a file nobody sends. The reasoning was right and the conclusion
+#: was wrong: the conversion is not optional and not ours to skip, because
+#: :func:`_trim_audio_bytes` re-encodes every clip on the way out regardless of
+#: what rate it arrives at. So the build performs that same conversion, with
+#: that same function, and pins both ends -- what eSpeak wrote, and what the
+#: model hears. Adding ffmpeg or sox here would have meant a second tool to
+#: pin; using the grader's own encoder means there is nothing extra to trust.
 SPEECH_SAMPLE_RATE_HZ = AUDIO_SAMPLE_RATE_HZ
 
 
@@ -391,47 +407,146 @@ def espeak_provenance() -> dict[str, Any]:
     }
 
 
+def encoder_provenance() -> dict[str, Any]:
+    """What re-encoded the clips on the way to the model.
+
+    Separate from :func:`espeak_provenance` because it is a separate claim.
+    The source digests reproduce from eSpeak NG alone; the sent digests need
+    this too, and a rebuild that matches one but not the other is telling you
+    which half moved.
+
+    This is not an extra dependency taken on for the fixture -- it is the
+    library the grading path already decodes and re-encodes with. Recording it
+    is how the ``sent`` digests stay checkable.
+    """
+    try:
+        import av  # type: ignore
+    except ImportError:
+        return {
+            "library": None,
+            "note": (
+                "PyAV is absent, so the grading path could not re-encode and "
+                "no `sent` digest was produced."
+            ),
+        }
+
+    versions = getattr(av, "library_versions", None) or {}
+    return {
+        "library": "PyAV",
+        "version": getattr(av, "__version__", None),
+        "ffmpeg_libraries": {
+            name: ".".join(str(part) for part in value)
+            for name, value in sorted(versions.items())
+        },
+        "function": "core.perception.audio._trim_audio_bytes",
+        "target": f"{SPEECH_SAMPLE_RATE_HZ} Hz mono s16",
+        "note": (
+            "The `sent` bytes are what this function returns for the `source` "
+            "file at the default window, which is the call a real grading run "
+            "makes. A `sent` digest that differs while `source` matches means "
+            "this encoder moved, not the synthesiser."
+        ),
+    }
+
+
 def _wav_facts(path: Path) -> dict[str, Any]:
     with wave.open(str(path), "rb") as handle:
-        frames = handle.getnframes()
-        rate = handle.getframerate()
-        return {
-            "channels": handle.getnchannels(),
-            "sample_width_bytes": handle.getsampwidth(),
-            "sample_rate_hz": rate,
-            "frames": frames,
-            "seconds": round(frames / rate, 4) if rate else None,
-        }
+        return _wav_facts_from_handle(handle)
+
+
+def _wav_facts_from_bytes(data: bytes) -> dict[str, Any]:
+    """The same facts, for audio that exists only in memory.
+
+    What :func:`_trim_audio_bytes` returns never touches the disk on a real
+    grading call, and the check that matters is about those bytes.
+    """
+    with wave.open(io.BytesIO(data), "rb") as handle:
+        return _wav_facts_from_handle(handle)
+
+
+def _wav_facts_from_handle(handle: wave.Wave_read) -> dict[str, Any]:
+    frames = handle.getnframes()
+    rate = handle.getframerate()
+    return {
+        "channels": handle.getnchannels(),
+        "sample_width_bytes": handle.getsampwidth(),
+        "sample_rate_hz": rate,
+        "frames": frames,
+        "seconds": round(frames / rate, 4) if rate else None,
+    }
 
 
 def synthesise(clip: SpeechClip, out_dir: Path) -> dict[str, Any]:
-    """Render one clip and describe exactly what was rendered."""
-    out_path = out_dir / f"{clip.clip_id}.wav"
-    argv = espeak_argv(clip.transcript, out_path)
+    """Render one clip, then pin both what was written and what gets sent.
+
+    Two files come out of this, and the distinction is the point. eSpeak NG
+    writes at its voice's own rate; the grading path re-encodes whatever it is
+    given to 16 kHz mono before the model hears any of it. Pinning only the
+    first would describe a file that is never transmitted, and pinning only the
+    second would leave the synthesis unreproducible. So both are written, both
+    are hashed, and the conversion between them is done by the grader's own
+    :func:`_trim_audio_bytes` rather than by a second encoder that would need
+    its own version pinned to mean anything.
+    """
+    source_path = out_dir / f"{clip.clip_id}.source.wav"
+    argv = espeak_argv(clip.transcript, source_path)
     result = _run(argv)
-    if result.returncode != 0 or not out_path.is_file():
+    if result.returncode != 0 or not source_path.is_file():
         raise RuntimeError(
             f"espeak-ng failed for {clip.clip_id}: rc={result.returncode} "
             f"{(result.stderr or '').strip()[:300]}"
         )
 
-    facts = _wav_facts(out_path)
-    if facts["sample_rate_hz"] != SPEECH_SAMPLE_RATE_HZ:
-        # Not resampled silently. The whole value of the pin is that the bytes
-        # the manifest names are the bytes the model hears; quietly converting
-        # here would put a digest in the manifest for a file nobody sends.
+    source_facts = _wav_facts(source_path)
+
+    # The clips are seconds long and the trim window is tens of seconds, so
+    # this cuts nothing; it is called at its defaults precisely so that it is
+    # the same call the grading path makes. Passing a narrower window here
+    # would pin bytes that a real call would not produce.
+    sent_bytes, sent_format = _trim_audio_bytes(
+        str(source_path), AUDIO_TRIM_SECONDS, 0.0
+    )
+    sent_facts = _wav_facts_from_bytes(sent_bytes)
+    if sent_facts["sample_rate_hz"] != SPEECH_SAMPLE_RATE_HZ:
+        # Still not resampled by hand. If the grading path stops delivering at
+        # the rate this file expects, that is a change in what the model hears
+        # and the fixture has to be rebuilt knowing it -- not quietly patched
+        # up here so the digests keep matching.
         raise RuntimeError(
-            f"{clip.clip_id}: espeak-ng wrote {facts['sample_rate_hz']} Hz, "
-            f"expected {SPEECH_SAMPLE_RATE_HZ} Hz. Refusing to resample: the "
+            f"{clip.clip_id}: the grading path delivered "
+            f"{sent_facts['sample_rate_hz']} Hz, but this set is pinned "
+            f"against {SPEECH_SAMPLE_RATE_HZ} Hz. Refusing to resample: the "
             f"manifest must pin the bytes that are actually sent."
         )
+    if sent_facts["channels"] != 1:
+        raise RuntimeError(
+            f"{clip.clip_id}: the grading path delivered "
+            f"{sent_facts['channels']} channels, expected mono."
+        )
+
+    sent_path = out_dir / f"{clip.clip_id}.sent.{sent_format}"
+    sent_path.write_bytes(sent_bytes)
+
     return {
         "clip_id": clip.clip_id,
-        "file": out_path.name,
-        "sha256": _sha256_file(out_path),
-        "bytes": out_path.stat().st_size,
         "command": argv,
-        **facts,
+        # What eSpeak NG produced. Reproducible from `command` given the same
+        # version, and that is what a rebuild check compares first.
+        "source": {
+            "file": source_path.name,
+            "sha256": _sha256_file(source_path),
+            "bytes": source_path.stat().st_size,
+            **source_facts,
+        },
+        # What the model actually receives. Reproducing this additionally
+        # requires the same PyAV/ffmpeg, which is why `encoder` is recorded.
+        "sent": {
+            "file": sent_path.name,
+            "sha256": hashlib.sha256(sent_bytes).hexdigest(),
+            "bytes": len(sent_bytes),
+            "format": sent_format,
+            **sent_facts,
+        },
     }
 
 
@@ -439,6 +554,7 @@ def build(out_dir: Path) -> dict[str, Any]:
     """Synthesise the whole set and return its manifest."""
     out_dir.mkdir(parents=True, exist_ok=True)
     provenance = espeak_provenance()
+    encoder = encoder_provenance()
     clips = [synthesise(clip, out_dir) for clip in CLIPS]
 
     true_claims = sum(1 for c in CLAIMS if c.holds)
@@ -449,6 +565,7 @@ def build(out_dir: Path) -> dict[str, Any]:
             "evidence and a failure is weak: see limits.reading."
         ),
         "provenance": provenance,
+        "encoder": encoder,
         "clips": clips,
         # Ground truth. Never sent to the model -- the judging path reads
         # `criterion` alone, one at a time.
@@ -501,22 +618,54 @@ def compare_to_expected(
     block legitimately differs between hosts (paths, package versions), and
     demanding byte-equality there would make the check fail for reasons that
     say nothing about the audio.
+
+    Both digests are compared, and they fail with different sentences on
+    purpose. A ``source`` mismatch means a different synthesiser; a ``sent``
+    mismatch with a matching ``source`` means the same speech re-encoded by a
+    different ffmpeg. Reporting one number for both would leave a reader
+    guessing which half of the chain moved.
     """
     problems: list[str] = []
-    got = {c["clip_id"]: c["sha256"] for c in manifest["clips"]}
-    want = {c["clip_id"]: c["sha256"] for c in expected.get("clips", [])}
 
-    for clip_id in sorted(set(want) - set(got)):
+    def _digests(doc: dict[str, Any], part: str) -> dict[str, str]:
+        found = {}
+        for clip in doc.get("clips", []):
+            digest = (clip.get(part) or {}).get("sha256")
+            if digest:
+                found[clip["clip_id"]] = digest
+        return found
+
+    got_ids = {c["clip_id"] for c in manifest.get("clips", [])}
+    want_ids = {c["clip_id"] for c in expected.get("clips", [])}
+    for clip_id in sorted(want_ids - got_ids):
         problems.append(f"{clip_id}: expected but not built")
-    for clip_id in sorted(set(got) - set(want)):
+    for clip_id in sorted(got_ids - want_ids):
         problems.append(f"{clip_id}: built but not in the expected manifest")
-    for clip_id in sorted(set(got) & set(want)):
-        if got[clip_id] != want[clip_id]:
-            problems.append(
-                f"{clip_id}: sha256 {got[clip_id][:16]}... != expected "
-                f"{want[clip_id][:16]}... (a different espeak-ng version is "
-                f"the usual cause; compare provenance.version_string)"
-            )
+
+    shared = sorted(got_ids & want_ids)
+    for part, cause in (
+        ("source", "a different espeak-ng version is the usual cause; "
+                   "compare provenance.version_string"),
+        ("sent", "the synthesised audio matched, so this is the re-encoder; "
+                 "compare encoder.ffmpeg_libraries"),
+    ):
+        got = _digests(manifest, part)
+        want = _digests(expected, part)
+        for clip_id in shared:
+            if clip_id not in got or clip_id not in want:
+                # An older manifest may predate one of the two digests. Say so
+                # rather than reporting a mismatch that was never measured.
+                if clip_id in got or clip_id in want:
+                    problems.append(
+                        f"{clip_id}: {part} sha256 is present on one side and "
+                        f"missing on the other, so the two cannot be compared"
+                    )
+                continue
+            if got[clip_id] != want[clip_id]:
+                problems.append(
+                    f"{clip_id}: {part} sha256 {got[clip_id][:16]}... != "
+                    f"expected {want[clip_id][:16]}... ({cause})"
+                )
 
     got_corpus = manifest["corpus"]
     want_corpus = expected.get("corpus", {})
@@ -581,6 +730,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
 
     prov = manifest["provenance"]
+    encoder = manifest["encoder"]
     print(f"built {len(manifest['clips'])} clips in {out_dir}")
     print(f"  tool    : {prov['version_string']}")
     print(f"  package : {prov['package']['name']} "
@@ -588,10 +738,19 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     print(f"  licence : {prov['license']} (redistributed here: "
           f"{prov['redistributed_here']})")
     print(f"  binary  : sha256 {prov['binary_sha256']}")
+    print(f"  encoder : {encoder.get('library')} {encoder.get('version')} "
+          f"-> {encoder.get('target')}")
     print(f"  manifest: {manifest_path}")
+    # Both digests, labelled. The synthesised file is not the one that is
+    # sent, and a single unlabelled column would invite reading either as the
+    # other.
     for clip in manifest["clips"]:
-        print(f"    {clip['clip_id']:<10} {clip['seconds']:>6.2f}s  "
-              f"sha256 {clip['sha256']}")
+        source, sent = clip["source"], clip["sent"]
+        print(f"    {clip['clip_id']:<10} {sent['seconds']:>6.2f}s")
+        print(f"      synthesised ({source['sample_rate_hz']} Hz): "
+              f"{source['sha256']}")
+        print(f"      delivered   ({sent['sample_rate_hz']} Hz): "
+              f"{sent['sha256']}")
 
     if args.expect_manifest:
         expected = json.loads(
