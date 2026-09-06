@@ -3937,3 +3937,79 @@ def test_the_document_names_the_field_the_comparison_uses() -> None:
     # And the field the document names is the field the report writes.
     summary = probe.summarise(_calls(lambda claim: "pass"))
     assert "flip_rate_pct" in summary["stability"]["repeat_flips"]
+
+
+def test_a_foreign_model_answering_is_bannered_and_not_merely_listed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """The summary printed both halves of an identity check and did neither.
+
+    Its header states the pinned model. Four hundred lines later a table row
+    lists what actually answered. Nothing compared them, so a deployment
+    repointed at a different model behind the same name would have produced a
+    summary that reads clean and reports somebody else's answers under `330`
+    §2's pin.
+
+    Ground truth for the comparison is the real paid run `34008840627`, whose
+    delivery block reads `"response_models": ["gpt-audio-1.5"]` -- exactly the
+    pinned deployment, no version suffix. That is why an exact match is safe
+    here and why the check is gated on `measured`: a rehearsal answers with
+    `stub-not-a-model` by design and must stay quiet.
+
+    Executed in both directions, plus the two ways a naive comparison would
+    cry wolf.
+    """
+    manifest_path, clip_dir = _speech_fixture(tmp_path, clips=3)
+    out = tmp_path / "probe.json"
+    assert probe.main([
+        "--dry-run", "--quiet", "--repeats", "1",
+        "--speech-set", str(manifest_path),
+        "--speech-clips", str(clip_dir),
+        "--out", str(out),
+    ]) == 0
+    rehearsal = json.loads(out.read_text(encoding="utf-8"))
+    pinned = rehearsal["pins"]["audio_deployment"]
+    assert rehearsal["delivery"]["response_models"] == ["stub-not-a-model"], (
+        "the rehearsal no longer answers with the stub, so the gate below is "
+        "not being exercised on the shape it was written for"
+    )
+
+    def _page(report: dict) -> str:
+        return _render_paid_summary(report, tmp_path, monkeypatch, capsys)
+
+    BANNER = "A model other than the pinned"
+
+    # A rehearsal answers with a name that is not the pin, on purpose. Warning
+    # on every dry run would train a reader to scroll past the banner.
+    assert BANNER not in _page(rehearsal)
+
+    def _measured(models: list) -> dict:
+        report = json.loads(json.dumps(rehearsal))
+        report["measured"] = True
+        report["delivery"]["measured"] = True
+        report["delivery"]["response_models"] = models
+        return report
+
+    # The pinned model, and nothing else: silence.
+    assert BANNER not in _page(_measured([pinned]))
+
+    # Nothing answered at all. That is a real condition with its own reporting
+    # -- "not measured" in the accuracy rows -- and it is not a foreign model.
+    # A whole-list comparison would have called `[]` an impostor.
+    assert BANNER not in _page(_measured([]))
+
+    # A foreign model, alone.
+    printed = _page(_measured(["gpt-4o-audio-preview"]))
+    assert BANNER in printed
+    assert f"`{pinned}`" in printed
+    assert "gpt-4o-audio-preview" in printed
+    assert "not the" in printed and "pre-registered run" in printed
+    assert printed.index(BANNER) < printed.index("### By family"), (
+        "the banner has to precede the numbers it disqualifies"
+    )
+
+    # A foreign model mixed in with the pinned one. Some calls being right does
+    # not make the run the registered one.
+    mixed = _page(_measured([pinned, "gpt-4o-audio-preview"]))
+    assert BANNER in mixed
+    assert "gpt-4o-audio-preview" in mixed

@@ -709,6 +709,34 @@ jobs:
                   print("**A clip sent more than one digest.** The arms did not hear the")
                   print("same bytes, so the comparison below is not a prompt comparison.\n")
 
+              # This page printed both halves of an identity check and performed
+              # neither. The header states the pinned model; the row above lists
+              # what answered; the two sit four hundred lines apart and a reader
+              # was expected to hold both. A deployment can be repointed without
+              # its name changing, and `330` §2 pins the model by name -- so a
+              # different model answering does not make the run less accurate,
+              # it makes it a different run than the one registered.
+              #
+              # Gated on `measured` because a rehearsal answers with
+              # `stub-not-a-model` on purpose. Ground truth for the real case is
+              # run `34008840627`, whose delivery block reads
+              # `"response_models": ["gpt-audio-1.5"]` -- exactly the pin, no
+              # version suffix -- so an exact comparison does not cry wolf.
+              #
+              # Filtered rather than compared whole, so that a run where nothing
+              # answered (`[]`) stays silent here. Nothing answering is a real
+              # condition with its own reporting; it is not a foreign model.
+              pinned = report["pins"]["audio_deployment"]
+              unexpected = [
+                  model for model in delivery["response_models"] if model != pinned
+              ]
+              if delivery.get("measured") and unexpected:
+                  print(f"**A model other than the pinned `{pinned}` answered.** This")
+                  print(f"run reports `{json.dumps(delivery['response_models'])}`. `330`")
+                  print("§2 pins the model by name, so these calls are not the")
+                  print("pre-registered run and the accuracy below cannot stand in")
+                  print("for it.\n")
+
           comparison = report.get("arm_comparison")
           if comparison:
               ctl, trt = comparison["control"], comparison["treatment"]

@@ -12,6 +12,23 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Changed
+- **The paid summary printed both halves of a model-identity check and did
+  neither half.** Its header states the model 330 §2 pins; a table row four
+  hundred lines down lists what actually answered. Nothing compared the two, so
+  a reader was expected to hold both strings in their head. An Azure deployment
+  can be repointed at a different model without its name changing, and a run
+  answered by a different model is not less accurate — it is a different run
+  than the registered one, which no accuracy figure repairs. A foreign name now
+  gets a banner above the numbers it disqualifies. The comparison was grounded
+  on the real paid run `34008840627`, whose delivery block reads
+  `"response_models": ["gpt-audio-1.5"]` — the pin exactly, no version suffix —
+  rather than on a guess about what Azure returns, because a check that cries
+  wolf on every run is worse than no check. Both wolf-crying directions are
+  pinned by the test: a rehearsal answers `stub-not-a-model` by design and stays
+  quiet, and a run where *nothing* answered (`[]`) is a measurement that did not
+  happen, not an impostor — the same "not measured is not something else" rule
+  as the row below it. Mutation-checked three ways, one per direction.
+
 - **The summary put `None` in the cell that decides whether the audio judge can
   hear.** Rendering the paid summary against a run where no call was answered —
   the shape 330 §3's second stop rule exists to produce, and the shape run
