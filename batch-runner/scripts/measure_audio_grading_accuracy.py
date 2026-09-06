@@ -2301,6 +2301,58 @@ def run_measurement(
     }
 
 
+def pair_consistency(by_claim: Mapping[str, Any]) -> dict[str, Any]:
+    """330 section 4's first secondary metric: did each pair get told apart.
+
+    Every pair is the same clip asked the same kind of question twice, once
+    where the answer is yes and once where it is no. A judge that heard the
+    clip answers them differently. A judge that answered without listening
+    gives both sides the same verdict, and ten pairs of ``pass`` score 50% on
+    this balanced corpus -- an accuracy figure that looks like a coin and
+    reads like a near miss.
+
+    Youden's J already summarises this as a difference of rates, but it
+    cannot say *how many* pairs were never separated, and the document
+    promises that count. Computing it here rather than deriving it from the
+    per-claim table afterwards keeps it a pre-registered number.
+    """
+    sides: dict[str, dict[bool, Optional[str]]] = {}
+    for entry in by_claim.values():
+        pair_id = entry.get("pair_id")
+        if pair_id is None:
+            continue
+        sides.setdefault(pair_id, {})[bool(entry["holds"])] = entry["majority"]
+
+    identical_by_verdict: dict[str, int] = {}
+    differently = identical = incomplete = 0
+    for verdicts in sides.values():
+        true_side = verdicts.get(True)
+        false_side = verdicts.get(False)
+        if true_side is None or false_side is None:
+            incomplete += 1
+        elif true_side != false_side:
+            differently += 1
+        else:
+            identical += 1
+            identical_by_verdict[true_side] = (
+                identical_by_verdict.get(true_side, 0) + 1
+            )
+    return {
+        "unit": "one true/false pair, on majority verdicts",
+        "pairs": len(sides),
+        "answered_differently": differently,
+        "answered_identically": identical,
+        "identical_by_verdict": dict(sorted(identical_by_verdict.items())),
+        "incomplete": incomplete,
+        "meaning": (
+            "A pair answered identically was not told apart. Both sides "
+            "'pass' on every pair is what a judge that never heard the clip "
+            "produces, and on this balanced corpus it still scores 50%. "
+            "'incomplete' pairs had no majority on one side and are neither."
+        ),
+    }
+
+
 def repeat_flip_rate(by_claim: Mapping[str, Any]) -> dict[str, Any]:
     """Disagreement between repeats, in the denominator the earlier study used.
 
@@ -2448,6 +2500,9 @@ def summarise(
         by_claim[claim.claim_id] = {
             "holds": claim.holds,
             "family": claim.family,
+            # Carried so the pair census below reads it from here rather than
+            # from a second pass over the calls that could drift out of step.
+            "pair_id": claim.pair_id,
             "verdicts": verdicts,
             "majority": majority,
             "stable": len(set(verdicts)) == 1,
@@ -2497,6 +2552,8 @@ def summarise(
         # is chosen after the numbers exist.
         "pre_registered_binomial": binomial_majority_test(by_claim),
         "permutation": permute_within_pairs(calls),
+        # The count J cannot give: how many pairs were never separated at all.
+        "pair_consistency": pair_consistency(by_claim),
         "mean_confidence": {
             key: (sum(values) / len(values) if values else None)
             for key, values in confidences.items()

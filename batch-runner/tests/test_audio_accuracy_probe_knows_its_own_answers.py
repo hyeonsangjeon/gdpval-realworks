@@ -2498,6 +2498,86 @@ def test_the_repeats_are_collapsed_before_the_test_not_after() -> None:
     assert "반복 3회를 독립 시행으로 세면" in doc
 
 
+def test_a_judge_that_never_listened_is_visible_as_a_count() -> None:
+    """Ten pairs of `pass` scores 50% on a balanced corpus. Accuracy alone
+    reads that as a near miss; the pair census reads it as zero pairs told
+    apart."""
+    by_claim = {}
+    for index in range(10):
+        for holds in (True, False):
+            by_claim[f"p{index}_{holds}"] = {
+                "holds": holds,
+                "pair_id": f"p{index}",
+                "majority": "pass",
+            }
+    got = probe.pair_consistency(by_claim)
+    assert got["pairs"] == 10
+    assert got["answered_differently"] == 0
+    assert got["answered_identically"] == 10
+    assert got["identical_by_verdict"] == {"pass": 10}
+    assert got["incomplete"] == 0
+
+
+def test_a_pair_told_apart_counts_as_told_apart() -> None:
+    by_claim = {
+        "a_t": {"holds": True, "pair_id": "a", "majority": "pass"},
+        "a_f": {"holds": False, "pair_id": "a", "majority": "fail"},
+        # Same verdict on both sides, and it is not `pass`.
+        "b_t": {"holds": True, "pair_id": "b", "majority": "fail"},
+        "b_f": {"holds": False, "pair_id": "b", "majority": "fail"},
+    }
+    got = probe.pair_consistency(by_claim)
+    assert got["answered_differently"] == 1
+    assert got["identical_by_verdict"] == {"fail": 1}
+
+
+def test_a_pair_missing_a_side_is_neither_told_apart_nor_confused() -> None:
+    """Counting it as separated would credit a pair that was never answered;
+    counting it as identical would blame one."""
+    by_claim = {
+        "a_t": {"holds": True, "pair_id": "a", "majority": None},
+        "a_f": {"holds": False, "pair_id": "a", "majority": "fail"},
+    }
+    got = probe.pair_consistency(by_claim)
+    assert got["incomplete"] == 1
+    assert got["answered_differently"] == 0
+    assert got["answered_identically"] == 0
+
+
+def test_the_pair_census_covers_every_pair_of_the_speech_set() -> None:
+    """Ten clips, ten pairs, read from the committed manifest. A census that
+    silently saw fewer would understate how much of the corpus was never
+    separated."""
+    manifest = probe.REPO_ROOT / SPEECH_MANIFEST_REPO_PATH
+    claims = json.loads(manifest.read_text(encoding="utf-8"))["claims"]
+    by_claim = {
+        claim["claim_id"]: {
+            "holds": claim["holds"],
+            "pair_id": claim["pair_id"],
+            # Answered correctly on both sides, so every pair is separated.
+            "majority": "pass" if claim["holds"] else "fail",
+        }
+        for claim in claims
+    }
+    got = probe.pair_consistency(by_claim)
+    assert got["pairs"] == 10
+    assert got["answered_differently"] == 10
+    assert got["answered_identically"] == 0
+    assert got["incomplete"] == 0
+
+
+def test_the_summary_prints_the_pairs_it_told_apart() -> None:
+    body = _step("measure", "Summarise")["run"]
+    assert "pairs told apart" in body
+    assert "both sides the same verdict" in body
+    doc = (
+        probe.REPO_ROOT / "tasks" / "rebuilding_grading_task"
+        / "330-speech-diagnostic-prereg.md"
+    ).read_text(encoding="utf-8")
+    assert "accuracy.pair_consistency" in doc
+    assert "answered_differently" in doc
+
+
 def test_the_flip_rate_uses_the_denominator_it_is_compared_against() -> None:
     """19.35% was flips over *pairs of runs*. Three repeats give three pairs
     per claim, so a claim that flips once is one third of that figure and all

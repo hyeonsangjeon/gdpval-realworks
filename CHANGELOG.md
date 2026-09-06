@@ -435,6 +435,25 @@ entries land under a fresh dated heading the day they merge to `main`.
   convenient, and `n` is printed beside the p so a shrunk denominator is
   visible.
 
+  Two of §4's secondary metrics were promised and not computed. The repeat
+  disagreement was to be "comparable with the 19.35%" measured on the graded
+  audio cohort, and the dispatch description said so too, but 19.35% is flips
+  over *pairs of runs* and the report carried only `identical_across_repeats`,
+  whose complement is the share of claims that flipped at all. On three repeats
+  a claim that flips once is 33% of the first figure and 100% of the second, so
+  the obvious division would have been printed beside 19.35% as a change in
+  steadiness that never happened. `repeat_flip_rate` computes the pairwise one
+  — 20 claims × 3 pairs = 60 — and both are shown with the claim-level figure
+  marked as a different denominator. Pairs where a repeat never answered leave
+  the denominator and are counted separately; nothing to compare reports null,
+  not 0%, which would claim the repeats agreed. And §4's pair consistency ("둘
+  다 `pass`면 안 듣고 찍은 것") had no count: Youden's J summarises it as a
+  difference of rates and cannot say *how many* pairs were never separated.
+  `pair_consistency` reports pairs told apart, pairs given the same verdict on
+  both sides and which verdict that was, and pairs missing a side. Ten pairs of
+  `pass` still scores 50% on this balanced corpus, which accuracy alone reads
+  as a near miss.
+
   330 section 3 pre-registered four stop conditions and nothing enforced them.
   They are now `SPEECH_STOP_RULES`, checked after each call, with a test that
   fails if the constants and the document drift apart: 20 minutes wall clock,

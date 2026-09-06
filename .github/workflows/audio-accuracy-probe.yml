@@ -410,6 +410,7 @@ jobs:
           j = acc["discrimination_j"]
           perm = acc["permutation"]
           binom = acc["pre_registered_binomial"]
+          pairs = acc["pair_consistency"]
           stab = acc["stability"]
           flips = stab["repeat_flips"]
 
@@ -471,6 +472,14 @@ jobs:
               print(f"| &nbsp;&nbsp;· the call itself failed | {kinds.get('provider_failure', 0)} |")
           print(f"| **discrimination (Youden's J)** | **{j['per_call']}** |")
           print(f"| &nbsp;&nbsp;· on majority verdicts | {j['per_claim_majority']} |")
+          # The count J cannot give. Ten pairs answered the same way is a
+          # judge that never separated anything, at 50% accuracy.
+          print(f"| **pairs told apart** | **{pairs['answered_differently']} "
+                f"of {pairs['pairs']}** |")
+          print(f"| &nbsp;&nbsp;· both sides the same verdict | "
+                f"{pairs['answered_identically']} "
+                f"`{json.dumps(pairs['identical_by_verdict'])}` |")
+          print(f"| &nbsp;&nbsp;· no majority on one side | {pairs['incomplete']} |")
           # The pre-registration names this one primary, before it had a
           # value. Printing both, labelled, is what stops "the significant
           # one" from becoming the primary one after the fact.
