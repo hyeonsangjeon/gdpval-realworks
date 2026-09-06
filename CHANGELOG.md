@@ -657,7 +657,10 @@ entries land under a fresh dated heading the day they merge to `main`.
   disagree, and the document's block is *read* by a test instead of restated in
   one. The two tests this replaces asserted the code's formula against itself
   and the document's number against the same formula, so both were green on the
-  wrong answer.
+  wrong answer. The block was also not the only copy — the rehearsal table two
+  sections up carried 937 as well, which is how a document ends up disagreeing
+  with itself about what a run costs, so the test now requires every labelled
+  statement of the figure to be the same one.
 
   330 section 3 pre-registered four stop conditions and nothing enforced them.
   They are now `SPEECH_STOP_RULES`, checked after each call, with a test that

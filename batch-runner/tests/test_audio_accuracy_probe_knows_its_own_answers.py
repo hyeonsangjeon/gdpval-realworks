@@ -2594,6 +2594,18 @@ def test_the_document_and_the_code_agree_on_what_the_run_sends() -> None:
     assert _stated("클립 길이 합") == round(sum(seconds.values()), 4)
     assert _stated("클립 길이 합") * 2 == _stated("한 바퀴에 나가는 소리")
 
+    # Every place the document states the figure has to state the same one.
+    # The block above was not the only copy: the rehearsal table two sections
+    # up carried 937 as well, and correcting one of them is how a document
+    # ends up disagreeing with itself about what a run costs. The paragraph
+    # explaining that it *used* to be 937 is prose and is not a statement of
+    # the figure, which is why the pattern is the labelled form.
+    stated = {
+        int(found.replace(",", ""))
+        for found in re.findall(r"예상 오디오 토큰[^\d]{0,4}\*\*([\d,]+)\*\*", doc)
+    }
+    assert stated == {tokens}, f"330 states more than one token figure: {stated}"
+
 
 def test_the_speech_flags_travel_together() -> None:
     """A manifest with no clips is a run that cannot start, not one that
