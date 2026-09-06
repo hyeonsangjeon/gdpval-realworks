@@ -477,6 +477,20 @@ jobs:
                             f"length. ", end="")
                   print("\n> Whatever the number below describes, it is not "
                         "this model hearing these clips.\n")
+          # 330 §4 names this trap by hand: a judge that answers the same way
+          # to both sides of every pair still scores about 50% on a balanced
+          # corpus, and 50% reads as a near miss. The "J = 0 would mean..."
+          # paragraph under the table is in the subjunctive; on this run it is
+          # the indicative, and it belongs above the number it is about.
+          if pairs["answered_identically"] and not pairs["answered_differently"]:
+              print(f"> **Read this before the accuracy below.** The judge gave "
+                    f"both sides of every pair it resolved "
+                    f"({pairs['answered_identically']} of {pairs['pairs']}) the "
+                    f"same verdict "
+                    f"(`{json.dumps(pairs['identical_by_verdict'])}`).")
+              print("> On this balanced corpus that scores about 50% whatever it")
+              print("> said, so the accuracy below is not a near miss — it is a")
+              print("> judge that separated nothing.\n")
           if len(report["pins"]["prompt_arms"]) > 1:
               print("The table below is the **production arm alone** — the prompt the")
               print("grader actually runs. The alternative prompt is never folded in,")

@@ -513,6 +513,18 @@ entries land under a fresh dated heading the day they merge to `main`.
   own summary code against a real zero-answer report rather than grepping it,
   because a string check cannot see a TypeError.
 
+  The eleventh is the page having the right sentence and printing it in the
+  subjunctive. A judge that answers `pass` to every criterion scores 50% on a
+  balanced corpus, and 50% reads as a near miss; §4 names that trap by hand,
+  because accuracy alone cannot tell a listener from a coin. Under the table
+  sat "J = 0 *would* mean the verdict does not depend on the audio" — general
+  guidance, easy to skim, and on the one run where it is a description of what
+  just happened it still reads as boilerplate. When no pair was told apart the
+  summary now says so above the accuracy, beside the arrival banner, with the
+  verdict it gave to everything. It stays silent when the pairs were separated:
+  a warning that prints on every run is decoration. Verified by rendering the
+  paid summary against both shapes offline.
+
   330 section 3 pre-registered four stop conditions and nothing enforced them.
   They are now `SPEECH_STOP_RULES`, checked after each call, with a test that
   fails if the constants and the document drift apart: 20 minutes wall clock,

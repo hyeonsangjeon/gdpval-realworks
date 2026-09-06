@@ -946,6 +946,31 @@ def _summarise_body() -> str:
     return "\n".join(lines[start + 1 : end])
 
 
+def _render_paid_summary(
+    report: dict,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture,
+) -> str:
+    """Run the paid Summarise step over a report and return what it printed.
+
+    Executing it is the point. A grep over the workflow text cannot see a
+    ``TypeError``, and every defect this file has caught in the summary was a
+    line that rendered fine on the shape its author had in mind.
+    """
+    workspace = tmp_path / f"ws{len(list(tmp_path.iterdir()))}"
+    workspace.mkdir()
+    (workspace / "audio-accuracy-measured.json").write_text(
+        json.dumps(report), encoding="utf-8"
+    )
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(workspace))
+    exec(  # noqa: S102 - running the workflow's own code is the point
+        compile(_summarise_body(), "<Summarise>", "exec"),
+        {"__name__": "__main__"},
+    )
+    return capsys.readouterr().out
+
+
 def test_the_threshold_line_is_about_the_test_the_document_calls_primary() -> None:
     """The two tests have different floors and only one of them is primary.
 
@@ -1035,23 +1060,83 @@ def test_the_paid_summary_survives_a_run_where_nothing_answered(
     assert report["accuracy"]["overall"]["answered"] == 0
     assert report["accuracy"]["permutation"]["smallest_attainable_p"] is None
 
-    workspace = tmp_path / "ws"
-    workspace.mkdir()
-    (workspace / "audio-accuracy-measured.json").write_text(
-        json.dumps(report), encoding="utf-8"
-    )
-    monkeypatch.setenv("GITHUB_WORKSPACE", str(workspace))
-    exec(  # noqa: S102 - running the workflow's own code is the point
-        compile(_summarise_body(), "<Summarise>", "exec"),
-        {"__name__": "__main__"},
-    )
-
-    printed = capsys.readouterr().out
+    printed = _render_paid_summary(report, tmp_path, monkeypatch, capsys)
     assert "No verdict was usable" in printed
     assert "1/0" not in printed, "a floor of one-over-zero is not a floor"
     # Everything downstream of the p-values used to be lost with the crash.
     assert "### Cost" in printed
     assert "### By family" in printed
+    # And the pair banner must not fire here: nothing was resolved, so the
+    # judge did not "give both sides the same verdict" -- it gave none.
+    assert "separated nothing" not in printed
+
+
+def test_a_judge_that_separated_nothing_says_so_above_the_accuracy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """A judge answering `pass` to everything scores 50%, and 50% reads as close.
+
+    330 §4 names this by hand -- "10쌍 전부 pass여도 정확도가 50%로 나온다.
+    정확도만 보면 아깝게 못 넘었다로 읽히는 자리다" -- because on a balanced
+    corpus the accuracy cannot tell a listener from a coin. The summary had
+    the right words for it and printed them in the subjunctive, under the
+    table: "J = 0 *would* mean the verdict does not depend on the audio." On
+    the run where it is the indicative, that paragraph reads as boilerplate.
+
+    So the observation goes above the number it qualifies, next to the
+    arrival banner, and it fires only on the shape it describes.
+    """
+    manifest_path, clip_dir = _speech_fixture(tmp_path, clips=5)
+    corpus = probe.load_speech_corpus(manifest_path, clip_dir)
+    by_criterion = {claim.criterion: claim for claim in corpus.claims}
+
+    def _run(verdict_for) -> dict:
+        class _Judge:
+            def reset(self) -> None:
+                return None
+
+            def judge(self, *, criterion: str, **_kwargs: object) -> probe.AudioVerdict:
+                return probe.AudioVerdict(
+                    verdict=verdict_for(by_criterion[criterion]),
+                    partial_score=0.0,
+                    evidence="",
+                    confidence=0.9,
+                    reasoning="",
+                )
+
+        return probe.build_report(
+            identity=probe.pinned_identity(),
+            measured=True,
+            repeats=3,
+            result=probe.run_measurement(
+                perception=_Judge(),
+                clip_dir=tmp_path / "unused",
+                repeats=3,
+                claims=corpus.claims,
+                prerendered=corpus,
+            ),
+            speech=corpus,
+        )
+
+    everything_passes = _run(lambda _claim: "pass")
+    consistency = everything_passes["accuracy"]["pair_consistency"]
+    assert consistency["answered_differently"] == 0
+    assert consistency["answered_identically"] == consistency["pairs"]
+    assert everything_passes["accuracy"]["overall"]["accuracy"] == 0.5
+
+    printed = _render_paid_summary(everything_passes, tmp_path, monkeypatch, capsys)
+    banner = printed.index("separated nothing")
+    accuracy = printed.index("| accuracy (answered calls) |")
+    assert banner < accuracy, "the warning prints under the number it is about"
+    assert '`{"pass": 5}`' in printed, "which verdict it gave to everything"
+
+    # The half that makes the banner worth having: it stays quiet when the
+    # judge did separate the pairs. A warning on every run is decoration.
+    heard = _run(lambda claim: "pass" if claim.holds else "fail")
+    assert heard["accuracy"]["pair_consistency"]["answered_differently"] == 5
+    assert "separated nothing" not in _render_paid_summary(
+        heard, tmp_path, monkeypatch, capsys
+    )
 
 
 @pytest.mark.parametrize("arm,arms", [
