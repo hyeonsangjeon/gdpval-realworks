@@ -354,6 +354,70 @@ entries land under a fresh dated heading the day they merge to `main`.
   "Critical item pass rate" into the report prompt — is closed under **Fixed**.
 
 ### Added
+- **The prompt A/B was bought, and it did not separate the causes — because the
+  treatment broke the answer format, not the hearing.** #433's pre-registration
+  was executed as written: run
+  [34008840627](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/34008840627)
+  at `1eccfb7`, 120 paid calls to `gpt-audio-1.5`, 20 criteria × 3 repeats × 2
+  prompt arms, interleaved control-then-treatment on each `(criterion, repeat)`.
+  The delivery record came back clean on every invariant the prereg said would
+  void the run — 120 of 120 calls carried audio, `clips_with_more_than_one_digest`
+  empty, `clips_whose_sent_duration_differs` empty, one `wav`/16 kHz/mono format,
+  `response_models: ["gpt-audio-1.5"]`, usage complete on all 120 — so the
+  experiment is valid and the pre-registered analysis stands as computed:
+  production 28/51 correct at a 0.850 response rate against observation 8/17 at
+  **0.283**, discordant 21:1, **exact McNemar p = 1.0967 × 10⁻⁵**, which is the
+  prereg's fourth row, *the treatment is significantly worse*.
+
+  It is the *why* that removes the result's teeth, and the artifact says it
+  plainly. Every one of the treatment's 43 unanswered calls is
+  `provider_error:JSONDecodeError` — the model answered, spent output tokens and
+  reported usage; the grader's `_parse_json_envelope` could not read the shape.
+  The 17 it did parse came back as `true` ×13, `false` ×2, `refuse` and
+  `analyze_audio` — **not one `pass`**, and the scorer's rule is
+  `said_pass = verdict == "pass"`. That single line is what produced the
+  treatment's J of exactly 0.0 and its 0% on true claims. Re-scoring `true`→pass
+  and `false`→fail, post-hoc and marked as such, flips the sign: 66.67%
+  accuracy, J = 0.2857, and the paired test over the 15 surviving pairs gives
+  **p = 1.0**. One scoring rule moves the answer from *p* = 10⁻⁵ to *p* = 1, and
+  the distance between them is entirely response format. The honest conclusion
+  is the one the document leads with: **prompt versus capability is still not
+  separated**, and the A/B has to be re-bought with the verdict vocabulary
+  enforced and format failure counted apart from judgement error. The prereg's
+  own assumption — "the response envelope is identical in both arms, so format
+  will not drive the response rate" — is what failed.
+
+  What the run did buy outright is delivery, now beyond inference. The provider's
+  own `audio_tokens` counter came back at **exactly 10.00 tokens per second on
+  every clip, zero variance**, including `pure_silence`, whose samples are all
+  zero and which was still billed 60 tokens for its 6 seconds. The token/duration
+  fit reproduces #429 to four decimals *within each arm* — r = 0.9805, 10.86
+  tokens/second, in both — with only the intercept moving (119.6 → 265.6) by the
+  146 tokens the longer treatment header costs; pooling the arms drops r to
+  0.2492 while leaving the slope untouched, which is why the figure is reported
+  per arm and not as a headline. And for the first time the sent digests exist
+  beside the file digests, confirming 325's warning that they differ:
+  `tone_stops_early` is `faf3dccf…` on disk and `9578b014…` on the wire.
+
+  Two side findings are recorded without being acted on. `presence_false` and
+  `timing_true` reached no verdict in any arm or repeat, all six calls each,
+  which is why the job exited 2 — the fail-closed guard is correct and is left
+  alone, and the paper's denominators are 18 criteria, not 20. And
+  `core/perception/audio.py` accepts any string as a verdict
+  (`str(payload.get("verdict", "fail"))`) with no vocabulary check, while
+  `tool_calling_judge._validated_final_envelope` rejects anything outside
+  `{pass, partial, fail}`; the sub-judge is missing the check the main judge has.
+  **No production grader file, config or published score was touched**, the 31
+  audio-routed items of the 185-task run are untouched, and `gpt-audio-1.5`
+  remains absent from the price table, so `pricing_complete` is `false` and
+  `estimated_cost_usd` is **`null` — money was spent and the amount is unknown,
+  which is not $0**. Both source artifacts ship with the document:
+  `328-audio-accuracy-measured.json` (178,100 B,
+  `e9d21a1b603a2c6f219d8895f583f26957aa49dc72c1d50fbf9cdeb98da9b92d`) and
+  `328-audio-accuracy-measured-delivery.json` (3,315 B,
+  `88288b6ecc56f0bfd1c0ea0e657261766e78d50c8abdae9b431f6bc9edd7318e`), and every
+  figure above re-derives from them with the snippet in §9. **324's numbers are
+  unchanged, all of them.**
 - **The audio did arrive, and the probe can now prove it on every run — including
   the free one.** #429 left the 51.85% of the audio judge with three unseparated
   explanations behind it: the bytes never reached the model, the question dragged
