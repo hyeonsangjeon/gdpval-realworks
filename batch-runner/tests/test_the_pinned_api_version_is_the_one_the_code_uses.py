@@ -150,6 +150,28 @@ def test_run_places_pinning_different_versions_are_refused(conditions):
     assert "2023-05-15" in said, said
 
 
+def test_one_run_place_pinning_nothing_does_not_ride_on_the_others(conditions):
+    """The gap between "nobody pinned" and "everybody pinned".
+
+    Emptying every version is caught, and disagreeing versions are caught,
+    but the case in between is the quiet one: gathering the pinned versions
+    into a set drops the blank rather than noticing it, so two agreeing run
+    places would carry a third that was held to nothing.
+    """
+    environment = sorted(conditions)[0]
+    problems = _check(
+        {
+            **conditions,
+            environment: replace(conditions[environment], api_version=""),
+        }
+    )
+
+    assert problems, f"{environment} pinned no API version and it passed"
+    said = " ".join(problems)
+    assert environment in said, said
+    assert "pin no API version while the others do" in said, said
+
+
 def test_a_constant_that_disappeared_is_reported_rather_than_skipped(
     conditions, monkeypatch
 ):

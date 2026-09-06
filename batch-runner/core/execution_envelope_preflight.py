@@ -475,6 +475,13 @@ def _check_the_pinned_api_version_is_the_one_the_code_uses(
     moved underneath both.
     """
     problems: list[str] = []
+    # A run place that pins nothing is filtered out of ``pinned`` below, so it
+    # has to be caught here or it rides along on its neighbours' agreement.
+    unpinned = sorted(
+        environment
+        for environment, conditions in conditions_by_environment.items()
+        if not conditions.api_version
+    )
     pinned = {
         conditions.api_version
         for conditions in conditions_by_environment.values()
@@ -486,8 +493,15 @@ def _check_the_pinned_api_version_is_the_one_the_code_uses(
             "on whichever version its client happened to be built with, and "
             "nothing here would notice"
         ]
+    if unpinned:
+        problems.append(
+            "these run places pin no API version while the others do ("
+            + ", ".join(unpinned)
+            + "), so they would be held to nothing while the comparison read "
+            "as agreed"
+        )
     if len(pinned) > 1:
-        return [
+        return problems + [
             "the run places pin different API versions ("
             + ", ".join(sorted(pinned))
             + "), so they would not be asking the same product in the same way"
