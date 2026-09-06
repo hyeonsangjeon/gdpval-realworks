@@ -609,6 +609,22 @@ entries land under a fresh dated heading the day they merge to `main`.
   Mutation-checked three ways: guard never fires, guard always fires, bullet
   drops the field.
 
+  The seventeenth is not wrong yet, which is the only reason it is worth
+  writing down. The approval gate has no checkout, so the line it shows a
+  reviewer — `corpus = speech (10 clips)`, `criteria = 20`, `calls = 60 in
+  total` — is a restatement. That is the line that was once `calls = 36` for a
+  run that made sixty, after the tone corpus grew from twelve criteria to
+  twenty: the record of what was authorised disagreeing with what was spent.
+  It was pinned afterwards, and pinned against `CLAIMS` — the tone corpus,
+  which is not the one this dispatch buys. That the speech set also holds
+  twenty was a comment. Since the criteria count *is* the call count, and 330
+  §5 says twenty claims is few, four more claims would have the gate recording
+  sixty calls for a run that makes seventy-two — and the assertion would still
+  have passed, because the twenty was typed into the test. Verified by growing
+  the manifest by four claims: the tests as they stood went green. Both counts
+  now come from the manifest, and the day the corpora diverge the failure says
+  to branch the record on `$CORPUS` the way the clip count already is.
+
   330 section 3 pre-registered four stop conditions and nothing enforced them.
   They are now `SPEECH_STOP_RULES`, checked after each call, with a test that
   fails if the constants and the document drift apart: 20 minutes wall clock,

@@ -2662,16 +2662,42 @@ def test_both_runs_forward_the_speech_flags_together(
     assert "inputs.corpus" in run
 
 
-@pytest.mark.parametrize("corpus,clips", [("tones", 9), ("speech", 10)])
-def test_the_approval_record_names_the_corpus_it_authorised(
-    corpus: str, clips: int
-) -> None:
+@pytest.mark.parametrize("corpus", ["tones", "speech"])
+def test_the_approval_record_names_the_corpus_it_authorised(corpus: str) -> None:
     """Run the gate's own shell, as the call-count test does.
 
     Both corpora hold twenty criteria, so the call count alone cannot tell a
     reader which sounds were bought. The clip count can, and it is the one
     number that differs.
+
+    Every number here is read from a corpus rather than typed in. The criteria
+    count is the one that sets the call count on the record -- the record
+    computes ``20 * PROBE_REPEATS`` -- and it was pinned against ``CLAIMS``
+    alone, which is the corpus this run does *not* buy. That the speech set
+    also holds twenty was a sentence in a comment.
+
+    330 §5 says twenty claims is few, so growing the speech set is a change
+    somebody will reasonably make, and it is the newer of the two corpora. With
+    the count typed in here, adding four claims would leave the gate recording
+    ``calls = 60`` for a run that makes 72 and the assertion would still pass:
+    ``calls = 36`` again, on the dispatch that spends the money.
     """
+    published = json.loads(
+        (probe.REPO_ROOT / SPEECH_MANIFEST_REPO_PATH).read_text(encoding="utf-8")
+    )
+    criteria = {"tones": len(probe.CLAIMS), "speech": len(published["claims"])}
+    true_claims = {
+        "tones": sum(1 for claim in probe.CLAIMS if claim.holds),
+        "speech": sum(1 for claim in published["claims"] if claim["holds"]),
+    }
+    clips = {"tones": len(probe.CLIPS), "speech": len(published["clips"])}
+
+    assert criteria["tones"] == criteria["speech"], (
+        "the corpora no longer hold the same number of criteria, so the "
+        "record's one `criteria` line and its `20 * PROBE_REPEATS` call count "
+        "cannot serve both. Branch them on $CORPUS the way CLIPS is branched"
+    )
+
     bash = shutil.which("bash")
     if bash is None:  # pragma: no cover - CI and dev boxes both have bash
         pytest.skip("no bash to run the gate's own script with")
@@ -2688,10 +2714,14 @@ def test_the_approval_record_names_the_corpus_it_authorised(
         text=True,
         check=True,
     )
-    assert f"corpus     = {corpus} ({clips} clips)" in result.stdout
+    assert f"corpus     = {corpus} ({clips[corpus]} clips)" in result.stdout
     # Still the same criteria count, which is why the clip count had to be
     # added rather than relied upon to differ.
-    assert "criteria   = 20" in result.stdout
+    assert (
+        f"criteria   = {criteria[corpus]} ({true_claims[corpus]} true / "
+        f"{criteria[corpus] - true_claims[corpus]} false)"
+    ) in result.stdout
+    assert f"calls      = {criteria[corpus] * 3} per arm" in result.stdout
 
 
 def test_the_gate_states_the_clip_counts_the_corpora_actually_have() -> None:

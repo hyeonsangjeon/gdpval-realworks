@@ -306,7 +306,10 @@ jobs:
           if [ "$PROBE_ARM" = "both" ]; then PROBE_ARMS=2; else PROBE_ARMS=1; fi
           # Defaulted because this job has no checkout and is executed
           # directly by a test that sets only the two variables above. The
-          # two corpora have the same criteria count and differ only in clips.
+          # two corpora have the same criteria count and differ only in clips
+          # -- and that sentence is now checked rather than trusted: the
+          # criteria count sets the call count below, and it was pinned
+          # against the tone corpus alone, which is not the one this buys.
           CORPUS="${PROBE_CORPUS:-tones}"
           if [ "$CORPUS" = "speech" ]; then CLIPS=10; else CLIPS=9; fi
           printf '%s\n' \
