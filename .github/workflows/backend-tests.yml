@@ -28,12 +28,21 @@ on:
       - "batch-runner/**"
       - "scripts/**"
       - ".github/workflows/backend-tests.yml"
+      # tests/test_the_free_check_runs_in_ci.py asserts about the shape of the
+      # preflight workflow -- that it references no secret, wraps nothing in
+      # continue-on-error, and does not pass --azure-route-served. Without this
+      # path, a pull request editing only that file would start no run of this
+      # suite, and every one of those assertions would be decoration: somebody
+      # could add the flag that makes the job claim access it was never given
+      # and nothing would fire.
+      - ".github/workflows/execution-envelope-preflight.yml"
   push:
     branches: [main]
     paths:
       - "batch-runner/**"
       - "scripts/**"
       - ".github/workflows/backend-tests.yml"
+      - ".github/workflows/execution-envelope-preflight.yml"
   workflow_dispatch:
     inputs:
       expected_sha:
