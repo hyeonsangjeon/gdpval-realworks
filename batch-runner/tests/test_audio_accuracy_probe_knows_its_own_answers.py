@@ -2498,6 +2498,42 @@ def test_the_repeats_are_collapsed_before_the_test_not_after() -> None:
     assert "반복 3회를 독립 시행으로 세면" in doc
 
 
+def test_every_analysis_field_the_document_names_exists_in_a_real_report(
+    tmp_path: Path,
+) -> None:
+    """The general form of the bug this file keeps catching.
+
+    Each specific case -- the primary binomial, the pair census, the flip
+    rate's denominator -- was a field 330 promised and the report did not
+    write. A named field that does not exist is how "the analysis I
+    pre-registered" quietly becomes "the analysis I did", and the substring
+    assertions elsewhere only guard the paths someone thought to list.
+
+    So: resolve every ``accuracy.*`` path the document names against a report
+    the script actually produced. A renamed field breaks this whether or not
+    anyone remembers to update a test. Scope is the analysis section because
+    that is where all of those defects were; the delivery evidence needs a
+    wired run and is checked against the published clips instead.
+    """
+    doc = (
+        probe.REPO_ROOT / "tasks" / "rebuilding_grading_task"
+        / "330-speech-diagnostic-prereg.md"
+    ).read_text(encoding="utf-8")
+    named = sorted(set(re.findall(r"`(accuracy(?:\.[a-z_]+)+)`", doc)))
+    assert named, "the document names no analysis fields at all"
+
+    out = tmp_path / "report.json"
+    probe.main(["--dry-run", "--quiet", "--repeats", "3", "--out", str(out)])
+    report = json.loads(out.read_text(encoding="utf-8"))
+    for path in named:
+        node = report
+        for part in path.split("."):
+            assert isinstance(node, dict) and part in node, (
+                f"330 names `{path}`, but the report has no `{part}` there"
+            )
+            node = node[part]
+
+
 def test_the_accuracy_never_appears_without_its_denominator() -> None:
     """328 published 47.1% on 17 answers out of 60 and the 17 was nowhere near
     the number. 330 §4 requires both figures side by side, so the summary a
