@@ -354,6 +354,85 @@ entries land under a fresh dated heading the day they merge to `main`.
   "Critical item pass rate" into the report prompt — is closed under **Fixed**.
 
 ### Added
+- **The audio did arrive, and the probe can now prove it on every run — including
+  the free one.** #429 left the 51.85% of the audio judge with three unseparated
+  explanations behind it: the bytes never reached the model, the question dragged
+  the answer, or the model cannot hear. This change kills the first and builds
+  the instrument for the second. `measure_audio_grading_accuracy.py` grew a
+  `WireClient` that wraps every provider call and records what the wire actually
+  carried — SHA256 of the encoded audio, byte count, format, sample rate,
+  channels, declared duration, the model name that came *back*, and the usage
+  block — and `--delivery-out` writes that record beside the report on paid runs
+  and dry runs alike. **Hashes and counts only: no audio, no prompt text, no
+  model reasoning is ever written.**
+
+  The record settles delivery arithmetically. Across the 60 calls of #429 the
+  prompt-token count tracks clip duration at **r = 0.9805**, slope **10.86
+  tokens per second**, intercept 119.6; by per-clip means **r = 0.9821**, slope
+  11.01; and subtracting criterion text length's own share of the tokens (that
+  share is itself only r = 0.4249) leaves **r = 0.9678**, slope 9.71 — the
+  stricter two-sided partial correlation gives 0.9984, and the document quotes
+  the weaker one. `pure_silence` — the file where the judge heard a
+  clear human voice — was billed for six seconds of audio tokens. All 60 calls
+  report `usage_complete`. **Something the length of each clip was charged for
+  on every call, so "the bytes never arrived" is no longer an available
+  explanation.** Written up in
+  `tasks/rebuilding_grading_task/325-what-the-wire-carried.md`.
+
+  The instrument for the second explanation is a pre-registered, interleaved
+  A/B. `--prompt-arm production|observation|both` sends the identical criteria
+  and the *identical audio object* under either the grading path's own prompt,
+  passed through untouched so the control is structurally the production
+  prompt, or a header that asks the model to observe before judging. `both`
+  interleaves them criterion by criterion so that anything drifting with time
+  hits both arms equally, and the report carries an exact two-sided McNemar over
+  the pairs — `null`, never `1.0`, when nothing is discordant — alongside each
+  arm's accuracy **over answered calls** and response rate **over all attempts**,
+  because the observation arm is allowed to decline and declining is how an arm
+  buys accuracy it did not earn. The conditions, the five header changes, the
+  detectability floor (fewer than 6 discordant pairs and `p < 0.05` is
+  arithmetically impossible) and the four pre-committed readings are frozen
+  before the spend in
+  `tasks/rebuilding_grading_task/326-prompt-arm-prereg.md`; the same document
+  records why the speech half is still blocked — a `wave`-and-`math` corpus has
+  no external warrant that its words are intelligible, so an offline formant TTS
+  binary would have to be pinned by version and sha256 first. No recorded voice
+  and no cloned person, either way.
+
+  `Audio Accuracy Probe` gained a matching `prompt_arm` choice input and uploads
+  the delivery record as its own artifact, so a reader who distrusts the
+  accuracy can check whether the sound arrived without buying anything. The
+  approval record now states the doubled call count that `both` actually buys.
+  **That last line is the one this change most needed:** the summaries first
+  read `accuracy.overall.calls`, which scores the production arm alone, and a
+  120-call run would have announced itself as 60 — the same undercount that once
+  put "calls = 36" on a 60-call approval. Both summaries now read
+  `cost.model_calls`, and a test asserts it in **both** jobs after a mutation
+  survived by hiding in the free one.
+
+  57 new tests: 45 in `test_audio_payload_actually_carries_the_audio.py`, which
+  constructs the payload and asserts the audio is in it — a mock provider that
+  drops the audio part fails the suite — and 12 more in the probe's own file
+  (60 → 72) pinning the workflow's arms, its forwarding of both new flags, and
+  the approval record, which is checked by **executing the gate's own bash** and
+  reading the numbers it prints. 24/24 and 11/11 planted mutations caught.
+  Alongside them, `327-thirty-one-items-that-listened.md` counts the blast
+  radius without touching it: of 8,816 items in the 185-task run, **31 went to
+  audio**, 25 actually called the audio judge and **6 answered a question about
+  sound by reading a `.zip` listing or an `.mp4` filename**; 50 of 13,615 points,
+  **zero of them required**; run mean 79.53% moves only to 79.29–79.74% at either
+  limit, but inside a single task the span reaches **29.03, 20.00 and 35.72
+  points**. **Nothing was deleted, zeroed or overwritten**, and the re-grade
+  options are recorded as evidence, not executed.
+
+  Nothing under `core/perception/**`, `core/tool_calling_judge.py` or any
+  grading config is touched; all 14 grader fingerprints are unmoved, verified by
+  running `compute_grader_source_hash` itself and intersecting the files it
+  hashes against this diff's eleven — empty. The 120-call paid run is pre-registered
+  and not yet bought; when it is, `gpt-audio-1.5` still has no published price,
+  so it will report `pricing_complete: false` and `estimated_cost_usd: null`.
+  **That is not `$0`.**
+
 - **The audio judge described a clear human voice, at confidence 0.98, in a file
   where every sample is zero.** The doubled probe corpus was put to
   `gpt-audio-1.5` for the first time — 20 criteria on 9 synthesised clips, 10
@@ -656,6 +735,24 @@ entries land under a fresh dated heading the day they merge to `main`.
   because none of them can run.
 
 ### Fixed
+- **A negative result was written up as a proof, and it was not one.** The #429
+  entry above and the document it points at claimed the run had shown the model
+  "never listened", that the counter-argument was "gone", and that the ability
+  was absent. Nine synthesised clips, 20 criteria, one model and three repeats
+  cannot carry that. `p = 0.5` says the observed split is what chance produces;
+  it is **not** a demonstration of incapacity, and a null result on one corpus is
+  not a null result everywhere. The overclaim survived review because the
+  measurement was careful — the conclusion drawn from it was not.
+
+  `324-the-speech-it-heard-in-silence.md` now opens with a retraction naming the
+  three sentences that overreached and stating what the run does and does not
+  license: on **this** corpus, at **this** size, the verdicts did not track the
+  sound, and delivery, prompt and capability were **not** separated. **Every
+  figure, table, quotation and the raw JSON are unchanged** — the 19 pinning
+  tests that re-derive them from the report still pass, which is the point:
+  the numbers were never the problem. The two follow-ups that do the separating
+  are #325 (delivery, now settled) and #326 (prompt, pre-registered above).
+
 - **A scope that matched nothing was reported as a file with no text.**
   `read_deliverable` takes a `scope`: `{"sheet": ...}` for a workbook,
   `{"page_start": ...}` for a PDF. Name a sheet the workbook does not have, or

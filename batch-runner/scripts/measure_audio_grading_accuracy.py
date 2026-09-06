@@ -115,10 +115,40 @@ the same clip length and the same call cap as the 19.35% it exists to explain.
 A test asserts that; if the config moves, this refuses rather than quietly
 measuring a different model.
 
+**What the first measured run could not tell you.** It reported 51.85%
+accuracy and a discrimination of ``-0.0037`` at ``p = 0.5215``, and the
+write-up read that as a statement about what the model can hear. It is only
+that if two things hold, and the run checked neither: that the audio actually
+reached the provider, and that the prompt asked a question a listening model
+would answer differently from a guessing one. A request that assembled the
+text and dropped the audio produces the same numbers. So does a prompt that
+hands the model a claim and invites it to agree. Two things were added here:
+
+``delivery``
+    What each request actually carried, taken off the wire by
+    :class:`WireClient`: whether an ``input_audio`` part was present, the
+    SHA-256 and length of the bytes inside it, what the WAV header says about
+    itself, the model the *reply* names, whether the provider reported any
+    audio tokens, and whether prompt tokens track clip duration. Hashes and
+    counts only -- no audio, no prompt text, no reasoning, is written to an
+    artifact.
+
+``--prompt-arm both``
+    The same twenty criteria, against byte-identical audio, under the
+    production header and under an alternative that requires the model to
+    observe the clip before judging the claim. Interleaved rather than run in
+    sequence, so drift moves both arms together, and compared with an exact
+    McNemar test on the pairs. This separates "the prompt did not ask well"
+    from "the model cannot hear", which the first run could not.
+
+Neither is a defence of the first run's conclusion or an attack on it. They
+are the two alternative explanations it left open, made measurable.
+
 Usage::
 
     python3 scripts/measure_audio_grading_accuracy.py --dry-run
     python3 scripts/measure_audio_grading_accuracy.py --repeats 3 --out report.json
+    python3 scripts/measure_audio_grading_accuracy.py --prompt-arm both --repeats 3
 
 ``--dry-run`` runs the whole path -- render, encode, prompt, parse, score,
 aggregate -- against a stub that answers from the segment list instead of a
@@ -140,7 +170,9 @@ from __future__ import annotations
 
 import argparse
 import base64
+import contextlib
 import hashlib
+import io
 import itertools
 import json
 import math
@@ -155,6 +187,7 @@ from typing import Any, Callable, Iterable, Iterator, Optional, Sequence
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from core.cost_metering import resolved_model_of  # noqa: E402
 from core.perception.audio import (  # noqa: E402
     AUDIO_CALL_CAP,
     AUDIO_SAMPLE_RATE_HZ,
@@ -916,6 +949,11 @@ class Tally:
             "hedged": self.hedged,
             "unanswered": self.unanswered,
             "accuracy": _rate(self.correct, self.answered),
+            # Reported beside the accuracy, never folded into it. The accuracy
+            # divides by the calls that answered; on its own that lets a model
+            # which refused nine times out of ten look excellent on the tenth.
+            # This is the denominator that would have been hidden.
+            "response_rate": _rate(self.answered, self.calls),
         }
 
 
@@ -1027,6 +1065,139 @@ def majority_verdict(verdicts: Sequence[str]) -> Optional[str]:
 
 
 # --------------------------------------------------------------------------
+# Comparing two arms
+# --------------------------------------------------------------------------
+
+
+def mcnemar_exact(b: int, c: int) -> Optional[float]:
+    """Two-sided exact p for ``b`` wins one way against ``c`` the other.
+
+    The arms are run on the same twenty criteria against the same clip bytes,
+    so the comparison is *paired* and an unpaired test would throw away the
+    pairing and answer a question nobody asked. McNemar's test looks only at
+    the discordant calls -- the ones where exactly one arm was right -- and
+    asks whether they split more lopsidedly than a coin would. Exact, by
+    summing the binomial rather than leaning on a chi-square approximation
+    that is not trustworthy at the counts this corpus can produce.
+
+    ``None`` when nothing was discordant: the arms agreed on every call, and
+    "no evidence of a difference" is the honest reading of that rather than
+    ``p = 1.0`` dressed up as a measurement.
+    """
+    n = b + c
+    if n == 0:
+        return None
+    tail = sum(math.comb(n, i) for i in range(min(b, c) + 1))
+    return min(1.0, 2 * tail / (2 ** n))
+
+
+def pearson_r(xs: Sequence[float], ys: Sequence[float]) -> Optional[float]:
+    """Correlation, for the one place it is evidence rather than decoration.
+
+    Prompt tokens against clip seconds. If the audio never reached the model,
+    the count cannot track the duration of a file the request did not carry.
+    """
+    if len(xs) != len(ys) or len(xs) < 3:
+        return None
+    mx = sum(xs) / len(xs)
+    my = sum(ys) / len(ys)
+    sxx = sum((x - mx) ** 2 for x in xs)
+    syy = sum((y - my) ** 2 for y in ys)
+    if sxx <= 0 or syy <= 0:
+        return None
+    sxy = sum((x - mx) * (y - my) for x, y in zip(xs, ys))
+    return sxy / math.sqrt(sxx * syy)
+
+
+def _arm_of(call: dict[str, Any]) -> str:
+    """The arm a call belongs to, defaulting to the arm that has no wrapper."""
+    return str(call.get("arm") or "production")
+
+
+def compare_arms(
+    calls: Sequence[dict[str, Any]],
+    *,
+    control: str = "production",
+    treatment: str = "observation",
+) -> Optional[dict[str, Any]]:
+    """The paired difference between two prompts, or ``None`` if one is absent.
+
+    Pairing is on ``(claim, repeat)``: the same criterion, the same clip, the
+    same repeat index, put twice in immediate succession under two prompts.
+    Only calls with a partner on the other side are counted, because a call
+    whose partner failed to come back is not a pair and averaging it in would
+    quietly compare different corpora.
+    """
+    by_key: dict[tuple[str, int], dict[str, dict[str, Any]]] = {}
+    for call in calls:
+        arm = _arm_of(call)
+        if arm not in (control, treatment):
+            continue
+        key = (call["claim_id"], int(call["repeat"]))
+        by_key.setdefault(key, {})[arm] = call
+    paired = [v for v in by_key.values() if control in v and treatment in v]
+    if not paired:
+        return None
+
+    b = c = both = neither = 0
+    for pair in paired:
+        # A hedge and a non-answer are both "not correct" here. The arms are
+        # being compared on whether they got the criterion right, and a model
+        # that stopped answering has not improved.
+        ctl = pair[control]["outcome"] == OUTCOME_CORRECT
+        trt = pair[treatment]["outcome"] == OUTCOME_CORRECT
+        if ctl and trt:
+            both += 1
+        elif ctl and not trt:
+            b += 1
+        elif trt and not ctl:
+            c += 1
+        else:
+            neither += 1
+
+    def _side(arm: str) -> dict[str, Any]:
+        rows = [pair[arm] for pair in paired]
+        answered = [r for r in rows if r["outcome"] != OUTCOME_UNANSWERED]
+        return {
+            "correct": sum(1 for r in rows if r["outcome"] == OUTCOME_CORRECT),
+            "answered": len(answered),
+            "attempts": len(rows),
+            "accuracy_of_answered": _rate(
+                sum(1 for r in rows if r["outcome"] == OUTCOME_CORRECT),
+                len(answered),
+            ),
+            "response_rate": _rate(len(answered), len(rows)),
+            "discrimination_j": discrimination(
+                [(r["holds"], r["verdict"]) for r in rows]
+            ),
+        }
+
+    p_value = mcnemar_exact(b, c)
+    return {
+        "pairs": len(paired),
+        "control": control,
+        "treatment": treatment,
+        control: _side(control),
+        treatment: _side(treatment),
+        "discordant": {
+            "control_only_correct": b,
+            "treatment_only_correct": c,
+            "both_correct": both,
+            "neither_correct": neither,
+        },
+        "mcnemar_exact_p": p_value,
+        "reading": (
+            "Exact two-sided McNemar on the discordant calls. A large p means "
+            "this corpus did not detect a difference between the prompts; it "
+            "does NOT mean the prompts are equivalent. With "
+            f"{b + c} discordant calls out of {len(paired)}, only a large "
+            "effect could have shown up at all, and the interval on the "
+            "difference is correspondingly wide."
+        ),
+    }
+
+
+# --------------------------------------------------------------------------
 # Identity
 # --------------------------------------------------------------------------
 
@@ -1090,10 +1261,31 @@ class _StubChoice:
         self.message = type("_M", (), {"content": content})()
 
 
+class _StubUsage:
+    """A token count derived from what the stub was actually sent.
+
+    Not invented: ``prompt_tokens`` is a function of the base64 the request
+    carried, so a longer clip really does produce a larger count and the
+    delivery section's token-against-duration line has genuine variance to
+    work on in a free run. What the stub will *not* fabricate is
+    ``audio_tokens``. That field is a provider's statement that it read the
+    part as audio, and there is no provider here to make it.
+    """
+
+    def __init__(self, b64_chars: int, completion_tokens: int) -> None:
+        self.prompt_tokens = 100 + b64_chars // 1000
+        self.completion_tokens = completion_tokens
+        self.total_tokens = self.prompt_tokens + completion_tokens
+
+
 class _StubResponse:
-    def __init__(self, content: str) -> None:
+    def __init__(self, content: str, *, b64_chars: int = 0) -> None:
         self.choices = [_StubChoice(content)]
-        self.usage = None
+        self.usage = _StubUsage(b64_chars, max(1, len(content) // 4))
+        #: The stub answers as itself. A dry run's report then names
+        #: ``stub-not-a-model`` where a paid one names the deployment, so a
+        #: free artifact cannot be read as describing ``gpt-audio-1.5``.
+        self.model = "stub-not-a-model"
 
 
 class TruthfulStub:
@@ -1116,9 +1308,12 @@ class TruthfulStub:
     def create(self, **kwargs: Any) -> _StubResponse:
         self.requests.append(kwargs)
         text = ""
+        b64_chars = 0
         for part in kwargs["messages"][0]["content"]:
             if part.get("type") == "text":
                 text = part["text"]
+            elif part.get("type") == "input_audio":
+                b64_chars = len((part.get("input_audio") or {}).get("data") or "")
         claim = None
         for criterion, candidate in self._by_criterion.items():
             if criterion in text:
@@ -1135,8 +1330,418 @@ class TruthfulStub:
                     "confidence": 1.0,
                     "reasoning": "stub: answered from the segment list",
                 }
-            )
+            ),
+            b64_chars=b64_chars,
         )
+
+
+# --------------------------------------------------------------------------
+# What actually went on the wire
+# --------------------------------------------------------------------------
+#
+# The first measured run reported 51.85% accuracy and a discrimination of
+# essentially zero, and the write-up read that as a statement about the model.
+# It is only a statement about the model if the model was given the audio. A
+# request that assembled the text part and dropped the ``input_audio`` part
+# would produce exactly the same numbers -- a judge answering from the
+# criterion's wording alone is precisely what near-zero J looks like -- and
+# nothing in the report could tell the two apart.
+#
+# So the wire is recorded. Not the audio: a hash of it, its length, and the
+# facts a WAV header states about itself. Enough to prove bytes went out and
+# to prove they were the bytes rendered, without putting a megabyte of base64
+# into an artifact or a log.
+#
+# This lives here rather than in ``core/perception/audio.py`` on purpose. The
+# production sub-judge is what is under investigation; instrumenting the thing
+# you are measuring changes what you are measuring, and a diagnostic has no
+# business editing the grader while a fingerprint freeze is in force.
+
+
+#: The separator ``AudioPerception.judge`` puts between its system header and
+#: the criterion. The observation arm has to split the outgoing text there to
+#: swap the header while keeping the criterion byte-identical. If core ever
+#: renames it, the split fails loudly rather than silently shipping the
+#: production prompt under the observation arm's name -- which would make the
+#: two arms identical and the comparison a fabrication. A test pins it against
+#: the real module.
+PRODUCTION_CRITERION_MARKER = "\n\nCriterion:\n"
+
+#: The alternative prompt. It is a *bundle*, and the pre-registration says so:
+#: it (i) demands observation before judgement, (ii) states outright that the
+#: claim may be false and that its wording is the thing under test rather than
+#: a fact, (iii) offers ``judge_error`` as the honest answer when the audio
+#: does not decide it, (iv) drops the production header's "head-only slice
+#: (first 30s)" framing -- which is true of a graded deliverable and false of
+#: a 6-second clip, and which the first run's evidence strings echoed back --
+#: and (v) says "Statement" where production says "Criterion".
+#:
+#: A difference between the arms cannot be attributed to any one of those
+#: five. That is the cost of testing a realistic alternative rather than five
+#: separate one-word edits, and it is a limit on the reading, not a defect in
+#: the design.
+#:
+#: What it deliberately does NOT do is tell the model anything about the
+#: answer: no per-item hint, and no statement of how many claims are true.
+OBSERVATION_HEADER = (
+    "You are an audio analyst. A short audio clip has been supplied to you as "
+    "audio input. Work only from that audio. Nothing you have been told about "
+    "the clip is a substitute for listening to it.\n\n"
+    "FIRST, before treating the statement below as anything but words, "
+    "observe the clip and note what you can actually measure from it: how "
+    "long it runs; whether any sound is present at all; how many discrete "
+    "sound events occur and at what times; what pitches, intervals and "
+    "harmonic content are present.\n\n"
+    "THEN judge the statement against those observations. The statement may "
+    "be true or it may be false. Do not assume it is true, and do not let its "
+    "wording tell you what you heard: if it names a count, a tempo, a key or "
+    "an interval, that number is the claim under test, not a fact about the "
+    "clip. If the audio does not let you decide, return verdict "
+    "\"judge_error\" rather than guessing.\n\n"
+    "Return the same JSON envelope as the main judge: {verdict, "
+    "partial_score, evidence, confidence, reasoning}. In \"evidence\", state "
+    "the value you observed before you state whether the statement holds. "
+    "Keep evidence <= 200 chars. Return JSON only."
+)
+
+#: Arm identifiers. ``production`` forwards the request untouched, so the
+#: control arm is the real grading prompt and not a re-implementation of it.
+PROMPT_ARMS = ("production", "observation")
+
+
+def _wav_facts(data: bytes) -> dict[str, Any]:
+    """What the bytes on the wire say about themselves.
+
+    Read back out of the payload rather than assumed from the render: the
+    clip is written at :data:`CLIP_SAMPLE_RATE_HZ` and the grader re-encodes
+    it to :data:`AUDIO_SAMPLE_RATE_HZ` mono before sending, so the file on
+    disk and the bytes in the request are not the same bytes and do not have
+    the same digest. Only one of them is evidence about what the model heard.
+    """
+    facts: dict[str, Any] = {
+        "riff": data[:4].decode("ascii", "replace"),
+        "wave": data[8:12].decode("ascii", "replace"),
+        "bytes": len(data),
+    }
+    try:
+        with contextlib.closing(wave.open(io.BytesIO(data), "rb")) as handle:
+            channels = handle.getnchannels()
+            width = handle.getsampwidth()
+            rate = handle.getframerate()
+            frames = handle.getnframes()
+            facts.update(
+                channels=channels,
+                sample_width_bytes=width,
+                sample_rate_hz=rate,
+                frames=frames,
+                duration_s=round(frames / rate, 4) if rate else None,
+            )
+            # A muxer that streams its output can leave the frame count at
+            # zero in the header. Deriving it from the payload size keeps the
+            # duration check honest when that happens instead of reporting a
+            # confident 0.0 seconds.
+            per_frame = channels * width
+            if per_frame and rate:
+                facts["duration_s_from_size"] = round(
+                    max(len(data) - 44, 0) / (per_frame * rate), 4
+                )
+    except Exception as exc:  # noqa: BLE001 - a malformed payload is a finding
+        facts["parse_error"] = f"{type(exc).__name__}: {exc}"
+    return facts
+
+
+def _audio_usage_facts(response: Any) -> dict[str, Any]:
+    """Whether the reply accounted for any *audio* tokens.
+
+    ``core.cost_metering.extract_usage`` reads the input, output and cached
+    counts and stops; the audio breakdown is not part of a price lookup and
+    so was never pulled. It is the single most direct piece of evidence that
+    a request was understood as carrying audio, so the diagnostic reads it
+    even though the ledger does not.
+    """
+    usage = getattr(response, "usage", None)
+    out: dict[str, Any] = {
+        "usage_present": usage is not None,
+        "audio_tokens": None,
+        "audio_tokens_source": None,
+    }
+    if usage is None:
+        return out
+    for name in ("prompt_tokens_details", "input_tokens_details"):
+        details = getattr(usage, name, None)
+        if details is None and isinstance(usage, dict):
+            details = usage.get(name)
+        if details is None:
+            continue
+        value = getattr(details, "audio_tokens", None)
+        if value is None and isinstance(details, dict):
+            value = details.get("audio_tokens")
+        if value is not None:
+            out["audio_tokens"] = int(value)
+            out["audio_tokens_source"] = name
+            break
+    return out
+
+
+def split_production_text(text: str) -> tuple[str, str]:
+    """``(header, criterion)`` from the text part the grader assembled."""
+    index = text.find(PRODUCTION_CRITERION_MARKER)
+    if index < 0:
+        raise ValueError(
+            "the outgoing text part does not carry "
+            f"{PRODUCTION_CRITERION_MARKER!r}; core/perception/audio.py has "
+            "changed its prompt assembly and the observation arm cannot swap "
+            "the header without also rewriting the criterion"
+        )
+    return text[:index], text[index + len(PRODUCTION_CRITERION_MARKER):]
+
+
+def apply_arm(kwargs: dict[str, Any], arm: str) -> dict[str, Any]:
+    """Rewrite the outgoing request for ``arm``, touching only the text part.
+
+    Everything that is not the prompt -- model, modalities, and above all the
+    ``input_audio`` part -- is passed through by reference. The two arms
+    therefore send byte-identical audio by construction rather than by
+    assertion, and a test still asserts it.
+    """
+    if arm == "production":
+        return kwargs
+    if arm != "observation":
+        raise ValueError(f"unknown prompt arm: {arm}")
+    messages = []
+    for message in kwargs["messages"]:
+        content = []
+        for part in message["content"]:
+            if part.get("type") == "text":
+                _, criterion = split_production_text(part["text"])
+                content.append({
+                    "type": "text",
+                    "text": f"{OBSERVATION_HEADER}\n\nStatement:\n{criterion}",
+                })
+            else:
+                content.append(part)
+        messages.append({**message, "content": content})
+    return {**kwargs, "messages": messages}
+
+
+class WireClient:
+    """Wraps the grader's client to record the request and switch the arm.
+
+    Two jobs in one wrapper because they are the same interception point, and
+    splitting them would mean the arm swap happened somewhere the recorder
+    could not see -- leaving the report unable to say which prompt each call
+    actually carried.
+    """
+
+    def __init__(self, inner: Any, *, arm: str = "production") -> None:
+        self._inner = inner
+        self.arm = arm
+        self.records: list[dict[str, Any]] = []
+        self.chat = type("_Chat", (), {"completions": self})()
+
+    def create(self, **kwargs: Any) -> Any:
+        record: dict[str, Any] = {"arm": self.arm}
+        record.update(self._inspect(kwargs))
+        sent = apply_arm(kwargs, self.arm)
+        # Recorded after the swap: the point of the record is what went out,
+        # and under the observation arm that is not what came in.
+        for message in sent["messages"]:
+            for part in message["content"]:
+                if part.get("type") == "text":
+                    text = part["text"]
+                    record["prompt_chars"] = len(text)
+                    record["prompt_sha256"] = hashlib.sha256(
+                        text.encode("utf-8")
+                    ).hexdigest()
+        record["requested_model"] = sent.get("model")
+        try:
+            response = self._inner.chat.completions.create(**sent)
+        except Exception as exc:  # noqa: BLE001 - recorded, then re-raised
+            record["transport_error"] = type(exc).__name__
+            self.records.append(record)
+            raise
+        record["response_model"] = resolved_model_of(
+            response, str(sent.get("model") or "")
+        )
+        record.update(_audio_usage_facts(response))
+        self.records.append(record)
+        return response
+
+    @staticmethod
+    def _inspect(kwargs: dict[str, Any]) -> dict[str, Any]:
+        """Facts about the audio part, or its absence.
+
+        ``audio_part_present: false`` is the finding this whole class exists
+        to be able to report. Nothing raises on it -- a diagnostic that
+        crashes on the defect it is looking for cannot describe it.
+        """
+        found: dict[str, Any] = {
+            "audio_part_present": False,
+            "audio_parts": 0,
+            "audio_b64_chars": 0,
+            "audio_sha256": None,
+            "audio_format": None,
+        }
+        for message in kwargs.get("messages", []):
+            for part in message.get("content", []):
+                if part.get("type") != "input_audio":
+                    continue
+                found["audio_parts"] += 1
+                blob = part.get("input_audio") or {}
+                b64 = blob.get("data") or ""
+                found["audio_format"] = blob.get("format")
+                found["audio_b64_chars"] = len(b64)
+                if not b64:
+                    continue
+                try:
+                    data = base64.b64decode(b64, validate=True)
+                except Exception as exc:  # noqa: BLE001
+                    found["audio_b64_error"] = f"{type(exc).__name__}: {exc}"
+                    continue
+                found["audio_part_present"] = True
+                found["audio_sha256"] = hashlib.sha256(data).hexdigest()
+                found["sent_wav"] = _wav_facts(data)
+        return found
+
+
+def summarise_wire(records: Sequence[dict[str, Any]]) -> dict[str, Any]:
+    """The per-call digest that goes in the report next to the verdict.
+
+    One judge call can make more than one request -- the sub-judge retries a
+    malformed envelope -- so this collapses however many there were into the
+    facts that matter per verdict, and keeps the count so a reader can see
+    that it did.
+    """
+    sent = [r for r in records if r.get("audio_part_present")]
+    wav = (sent[-1].get("sent_wav") or {}) if sent else {}
+    tokens = [
+        r["audio_tokens"] for r in records if r.get("audio_tokens") is not None
+    ]
+    return {
+        "requests": len(records),
+        "requests_with_audio": len(sent),
+        "audio_sha256": sent[-1]["audio_sha256"] if sent else None,
+        "audio_bytes": wav.get("bytes"),
+        "audio_sample_rate_hz": wav.get("sample_rate_hz"),
+        "audio_channels": wav.get("channels"),
+        "audio_duration_s": wav.get("duration_s"),
+        "audio_format": sent[-1]["audio_format"] if sent else None,
+        "prompt_sha256": records[-1].get("prompt_sha256") if records else None,
+        "prompt_chars": records[-1].get("prompt_chars") if records else None,
+        "response_model": records[-1].get("response_model") if records else None,
+        "audio_tokens": tokens[-1] if tokens else None,
+    }
+
+
+def delivery_section(
+    calls: Sequence[dict[str, Any]],
+    *,
+    measured: bool,
+    clips: Sequence[Clip] = CLIPS,
+) -> Optional[dict[str, Any]]:
+    """Did the audio reach the model, and did it reach it intact?
+
+    The first run could not answer this, and the accuracy it reported is only
+    a fact about ``gpt-audio-1.5`` if the answer is yes. Four independent
+    lines are reported rather than one, because each fails differently:
+
+    * the request carried a decodable ``input_audio`` part at all;
+    * the bytes in it parse as a WAV of the sample rate, channel count and
+      duration the clip was rendered at, so nothing truncated them;
+    * every arm and repeat of a given clip sent the *same* digest, so the two
+      prompts were compared against identical audio;
+    * prompt tokens track clip duration, which is the one line that depends
+      on the provider having understood the part rather than merely accepted
+      it. A request whose audio was dropped on the far side would still show
+      the first three.
+    """
+    wired = [c for c in calls if isinstance(c.get("wire"), dict)]
+    if not wired:
+        return None
+    durations = {clip.clip_id: clip.duration_s for clip in clips}
+
+    by_clip: dict[str, set[str]] = {}
+    for call in wired:
+        digest = call["wire"].get("audio_sha256")
+        if digest:
+            by_clip.setdefault(call["clip_id"], set()).add(digest)
+
+    mismatched_duration = sorted(
+        {
+            call["clip_id"]
+            for call in wired
+            if call["wire"].get("audio_duration_s") is not None
+            and abs(
+                float(call["wire"]["audio_duration_s"])
+                - durations.get(call["clip_id"], -1.0)
+            )
+            > 0.05
+        }
+    )
+    paired = [
+        (durations[c["clip_id"]], float(c["input_tokens"]))
+        for c in wired
+        if c.get("input_tokens") is not None and c["clip_id"] in durations
+    ]
+    models = sorted({
+        str(c["wire"]["response_model"])
+        for c in wired
+        if c["wire"].get("response_model")
+    })
+    return {
+        "measured": measured,
+        "calls_inspected": len(wired),
+        "calls_carrying_audio": sum(
+            1 for c in wired if c["wire"].get("requests_with_audio")
+        ),
+        "calls_without_audio": sorted(
+            c["claim_id"]
+            for c in wired
+            if not c["wire"].get("requests_with_audio")
+        ),
+        "sent_formats": sorted(
+            {str(c["wire"]["audio_format"]) for c in wired
+             if c["wire"].get("audio_format")}
+        ),
+        "sent_sample_rates_hz": sorted(
+            {int(c["wire"]["audio_sample_rate_hz"]) for c in wired
+             if c["wire"].get("audio_sample_rate_hz")}
+        ),
+        "sent_channels": sorted(
+            {int(c["wire"]["audio_channels"]) for c in wired
+             if c["wire"].get("audio_channels")}
+        ),
+        "digests_per_clip": {
+            clip_id: sorted(digests) for clip_id, digests in sorted(by_clip.items())
+        },
+        "clips_with_more_than_one_digest": sorted(
+            clip_id for clip_id, digests in by_clip.items() if len(digests) > 1
+        ),
+        "clips_whose_sent_duration_differs": mismatched_duration,
+        "response_models": models,
+        "audio_tokens_reported": sum(
+            1 for c in wired if c["wire"].get("audio_tokens") is not None
+        ),
+        "prompt_token_vs_clip_seconds": {
+            "n": len(paired),
+            "pearson_r": pearson_r([d for d, _ in paired], [t for _, t in paired]),
+            "meaning": (
+                "Prompt tokens against clip duration. Near 1 means the count "
+                "scales with the audio, which a request that did not carry it "
+                "cannot do. Near 0 with audio parts present would mean the "
+                "part was accepted and not charged for -- a different and "
+                "worse failure than never sending it."
+            ),
+        },
+        "not_covered": (
+            "This shows the bytes left this process correctly and were billed "
+            "as audio. It cannot show what the model did with them."
+            if measured
+            else "No provider was called. Every figure here describes the "
+            "stub, which reports no audio tokens and answers as "
+            "'stub-not-a-model'. It proves the plumbing, not the delivery."
+        ),
+    }
 
 
 # --------------------------------------------------------------------------
@@ -1152,6 +1757,8 @@ def run_measurement(
     claims: Sequence[Claim] = CLAIMS,
     clips: Sequence[Clip] = CLIPS,
     on_call: Optional[Callable[[int, int, Claim, AudioVerdict], None]] = None,
+    arms: Sequence[str] = ("production",),
+    wire: Optional[WireClient] = None,
 ) -> dict[str, Any]:
     """Render the clips, put every claim to the sub-judge, and tally.
 
@@ -1160,7 +1767,24 @@ def run_measurement(
     of work against its own clip, and letting a corpus-wide counter run into
     the cap would silently turn the tail of the corpus into ``cap_exceeded``
     refusals that look like model behaviour and are not.
+
+    When two arms are given, they are **interleaved** rather than run one
+    after the other: the same criterion goes out under both prompts back to
+    back, then the next criterion. A model whose behaviour drifts over an
+    hour, or a deployment that is rerouted mid-run, then moves both arms
+    together instead of landing entirely on whichever one was scheduled
+    second. It is the same reason the pairing exists in the corpus, applied to
+    time instead of to truth value.
     """
+    for arm in arms:
+        if arm not in PROMPT_ARMS:
+            raise ValueError(f"unknown prompt arm: {arm}")
+    if wire is None and tuple(arms) != ("production",):
+        # The arm swap happens inside the wrapper. Without one, the request
+        # would go out under the production prompt and be labelled with the
+        # other arm's name, which is not a weaker measurement but a false one.
+        raise ValueError("a non-production arm needs a WireClient to rewrite it")
+
     digests: dict[str, str] = {}
     paths: dict[str, Path] = {}
     for clip in clips:
@@ -1171,16 +1795,20 @@ def run_measurement(
     calls: list[dict[str, Any]] = []
     for repeat in range(1, repeats + 1):
         for claim in claims:
-            perception.reset()
-            verdict = perception.judge(
-                criterion=claim.criterion,
-                audio_path=str(paths[claim.clip_id]),
-            )
-            if on_call is not None:
-                on_call(repeat, len(calls) + 1, claim, verdict)
-            calls.append(
-                {
+            for arm in arms:
+                if wire is not None:
+                    wire.arm = arm
+                    first_record = len(wire.records)
+                perception.reset()
+                verdict = perception.judge(
+                    criterion=claim.criterion,
+                    audio_path=str(paths[claim.clip_id]),
+                )
+                if on_call is not None:
+                    on_call(repeat, len(calls) + 1, claim, verdict)
+                call = {
                     "repeat": repeat,
+                    "arm": arm,
                     "claim_id": claim.claim_id,
                     "pair_id": claim.pair_id,
                     "clip_id": claim.clip_id,
@@ -1197,7 +1825,9 @@ def run_measurement(
                     "latency_ms": round(verdict.latency_ms, 3),
                     "usage_complete": verdict.usage_complete,
                 }
-            )
+                if wire is not None:
+                    call["wire"] = summarise_wire(wire.records[first_record:])
+                calls.append(call)
     return {"calls": calls, "clip_sha256": digests}
 
 
@@ -1301,7 +1931,13 @@ def build_report(
     calls = result["calls"]
     model_calls = sum(int(call["api_call_count"]) for call in calls)
     billable = model_calls if measured else 0
-    return {
+    # Execution order, not alphabetical: which arm went first is a fact about
+    # the run, and "observation, production" would misdescribe an interleave
+    # that always puts the control first.
+    arms_present = list(dict.fromkeys(_arm_of(call) for call in calls))
+
+    control_calls = [c for c in calls if _arm_of(c) == "production"] or list(calls)
+    report = {
         "what_this_measures": (
             "Whether the audio sub-judge's verdict is correct, on clips whose "
             "contents are known by construction. The repeat runs measured "
@@ -1319,12 +1955,17 @@ def build_report(
             "clips": len(CLIPS),
             "true_claims": sum(1 for c in CLAIMS if c.holds),
             "false_claims": sum(1 for c in CLAIMS if not c.holds),
+            "prompt_arms": arms_present,
         },
         "clips": [clip.to_dict() for clip in CLIPS],
         "clip_sha256": result["clip_sha256"],
         "claims": [claim.to_dict() for claim in CLAIMS],
         "calls": calls,
-        "accuracy": summarise(calls),
+        # Always the production prompt, so this number keeps meaning what it
+        # meant before there was a second arm: how the *grader* behaves. The
+        # alternative prompt's figures live under "arms" and are never folded
+        # in, because averaging the two would describe a prompt nothing runs.
+        "accuracy": summarise(control_calls),
         "cost": {
             # Two numbers, because a dry run makes 60 calls and is billed for
             # none of them. Collapsing them would put a "billable_calls: 60"
@@ -1346,6 +1987,18 @@ def build_report(
             ),
         },
     }
+
+    delivery = delivery_section(calls, measured=measured)
+    if delivery is not None:
+        report["delivery"] = delivery
+
+    if len(arms_present) > 1:
+        report["arms"] = {
+            arm: summarise([c for c in calls if _arm_of(c) == arm])
+            for arm in arms_present
+        }
+        report["arm_comparison"] = compare_arms(calls)
+    return report
 
 
 def main(argv: Optional[list[str]] = None) -> int:
@@ -1385,10 +2038,34 @@ def main(argv: Optional[list[str]] = None) -> int:
         action="store_true",
         help="Suppress the per-call progress lines.",
     )
+    parser.add_argument(
+        "--prompt-arm",
+        choices=(*PROMPT_ARMS, "both"),
+        default="production",
+        help=(
+            "Which prompt to put the criteria under. 'production' is the "
+            "grader's own header, unchanged. 'observation' swaps the header "
+            "for one that demands the model measure the clip before judging "
+            "the claim. 'both' runs them interleaved on identical audio, "
+            "which is the only setting that supports a paired comparison -- "
+            "and doubles the call count."
+        ),
+    )
+    parser.add_argument(
+        "--delivery-out",
+        type=Path,
+        default=None,
+        help=(
+            "Write just the delivery evidence here: what the requests "
+            "carried, hashed rather than dumped. Never contains audio, "
+            "prompt text or model reasoning."
+        ),
+    )
     args = parser.parse_args(argv)
 
     if args.repeats < 1:
         parser.error("--repeats must be at least 1")
+    arms = PROMPT_ARMS if args.prompt_arm == "both" else (args.prompt_arm,)
 
     try:
         identity = pinned_identity(args.config)
@@ -1430,9 +2107,14 @@ def main(argv: Optional[list[str]] = None) -> int:
         )
         client = managed.client
 
+    # Always wrapped, even for a single production arm: the delivery evidence
+    # is the reason this run exists, and making it conditional would mean the
+    # cheap runs are the ones that cannot say whether the audio arrived.
+    wire = WireClient(client, arm=arms[0])
+
     try:
         perception = AudioPerception(
-            client=client,
+            client=wire,
             deployment=identity["audio_deployment"],
             call_cap=identity["audio_call_cap_per_task"],
             trim_seconds=identity["audio_clip_seconds"],
@@ -1443,6 +2125,8 @@ def main(argv: Optional[list[str]] = None) -> int:
                 clip_dir=Path(tmp),
                 repeats=args.repeats,
                 on_call=progress,
+                arms=arms,
+                wire=wire,
             )
     finally:
         if managed is not None:
@@ -1459,6 +2143,22 @@ def main(argv: Optional[list[str]] = None) -> int:
     if args.out is not None:
         args.out.parent.mkdir(parents=True, exist_ok=True)
         args.out.write_text(text + "\n", encoding="utf-8")
+    if args.delivery_out is not None:
+        args.delivery_out.parent.mkdir(parents=True, exist_ok=True)
+        args.delivery_out.write_text(
+            json.dumps(
+                {
+                    "measured": report["measured"],
+                    "pins": report["pins"],
+                    "clip_sha256": report["clip_sha256"],
+                    "delivery": report.get("delivery"),
+                },
+                indent=2,
+                ensure_ascii=False,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
 
     missing = unanswered_claims(result["calls"])
     if missing:

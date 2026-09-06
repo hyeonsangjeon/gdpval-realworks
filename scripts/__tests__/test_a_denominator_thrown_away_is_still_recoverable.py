@@ -968,6 +968,10 @@ def test_the_six_sealed_files_on_disk_are_still_sealed():
         "scripts/__tests__/test_analyze_grade_run.py",
         "scripts/__tests__/test_sol_max_anchor_selection.py",
         "tasks/LATEST_TASK_RESULT/README.md",
+        # 327 quotes the 185-task gold ceiling's digest as the receipt for the
+        # 31 audio-routed items it counts. Naming the payload is the point of
+        # that document, so it joins the list of things to move with the seal.
+        "tasks/rebuilding_grading_task/327-thirty-one-items-that-listened.md",
         "tasks/rebuilding_grading_task/PR3_FULL_GOLD_CORPUS.md",
     }, (
         "a document dropped out of the voucher set. It did not stop asserting "
