@@ -494,6 +494,25 @@ entries land under a fresh dated heading the day they merge to `main`.
   model hearing these clips. The detail stays where it was; only the line that
   decides whether to read on moved. A test pins the order.
 
+  The tenth is the summary page saying what the design can do, computed from
+  the wrong test. The pre-registration names the binomial primary and the
+  within-pair permutation secondary, and their floors are not the same kind of
+  number: the permutation's is fixed by the pair count at 1/1024, while the
+  binomial's is 1/2^n and *climbs* as hedged majorities leave n. At n = 4 the
+  primary's floor is 0.0625, and the page — computing from the permutation —
+  announced "thresholds this design can reach: 0.05, 0.01, 0.001" for a run
+  where the pre-registered primary could reach none of them. It now quotes both
+  floors by name and derives the thresholds from the primary, and prints why n
+  shrank beside n, because a bare `n=14` does not distinguish six claims the
+  model hedged from six that were never answered. And on a run where nothing
+  was answered at all — the outcome §3's second stop rule exists to produce —
+  both floors are null, the page printed "the floor is 1/0" and then died
+  comparing `None` to 0.05, losing the delivery, cost and family sections with
+  it. The one run whose summary has to explain itself had no summary. It now
+  says no verdict was usable and carries on. That test executes the workflow's
+  own summary code against a real zero-answer report rather than grepping it,
+  because a string check cannot see a TypeError.
+
   330 section 3 pre-registered four stop conditions and nothing enforced them.
   They are now `SPEECH_STOP_RULES`, checked after each call, with a test that
   fails if the constants and the document drift apart: 20 minutes wall clock,

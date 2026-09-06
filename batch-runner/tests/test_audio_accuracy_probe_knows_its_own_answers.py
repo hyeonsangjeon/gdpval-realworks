@@ -932,6 +932,128 @@ def test_whether_the_audio_arrived_is_printed_above_the_accuracy() -> None:
     assert "clips_whose_sent_duration_differs" in summary[:accuracy]
 
 
+def _summarise_body() -> str:
+    """The python the paid Summarise step actually runs, on its own.
+
+    Extracted rather than re-implemented: a copy in this file would drift and
+    then pass while the workflow failed, which is the whole failure mode.
+    """
+    lines = _step("measure", "Summarise")["run"].splitlines()
+    start = next(
+        i for i, line in enumerate(lines) if line.startswith("python - <<")
+    )
+    end = next(i for i in range(start + 1, len(lines)) if lines[i] == "PY")
+    return "\n".join(lines[start + 1 : end])
+
+
+def test_the_threshold_line_is_about_the_test_the_document_calls_primary() -> None:
+    """The two tests have different floors and only one of them is primary.
+
+    The permutation's floor is fixed by the pair count -- ten pairs, 1/1024,
+    forever. The binomial's is 1/2**n and it *moves*: every hedged majority
+    leaves n, and at n = 4 the floor is 0.0625, so the pre-registered primary
+    cannot reach 0.05 however well the model does. A threshold line computed
+    from the permutation announces 0.05, 0.01 and 0.001 on exactly that run.
+    """
+    summary = _step("measure", "Summarise")["run"]
+    assert 'binom_floor = binom["smallest_attainable_p"]' in summary
+    assert (
+        "reachable = [t for t in (0.05, 0.01, 0.001) if binom_floor < t]"
+        in summary
+    ), "the thresholds are computed from the secondary test's floor"
+    assert "Thresholds the **pre-registered primary** can reach" in summary
+    # §4 promises n and the reason it shrank appear together.
+    assert "hedged_majorities_excluded" in summary
+    assert "claims_with_a_majority" in summary
+
+
+def test_the_family_table_says_its_rows_are_calls() -> None:
+    """"6 answered, 6 correct" for a two-claim family reads as six items.
+
+    It is two claims asked three times, about the same two clips. §4 already
+    forbids treating repeats as independent trials -- this is the one table
+    where the counts invite it, so the table says so itself rather than
+    relying on a reader having got as far as §4.
+    """
+    summary = _step("measure", "Summarise")["run"]
+    section = summary.index("### By family")
+    caption = summary[section:]
+    assert "**Calls, not claims.**" in caption
+    # Derived from the run's own repeat count: a hard-coded "three" is wrong
+    # on any dispatch that changes it, and this file has published a
+    # hard-coded corpus count that went stale once already.
+    assert 'int(report["pins"]["repeats"])' in caption
+    assert "two coin flips" in caption
+
+
+def test_the_paid_summary_survives_a_run_where_nothing_answered(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """328's arm answered nothing usable, and that is a pre-registered outcome.
+
+    §3's second stop rule exists to produce this run on purpose: zero usable
+    verdicts in the first ten calls, stop, report. So the summary has to
+    render it -- and it did not. With nothing answered both tests return a
+    null floor, the page printed "the floor is 1/0" and then died comparing
+    ``None`` to 0.05, taking the delivery, cost and family sections with it.
+    The one run whose summary has to explain itself was the one that had no
+    summary.
+
+    Executed rather than grepped: only running it catches a TypeError.
+    """
+    manifest_path, clip_dir = _speech_fixture(tmp_path, clips=5)
+    corpus = probe.load_speech_corpus(manifest_path, clip_dir)
+
+    class _NeverAnswers:
+        def reset(self) -> None:
+            return None
+
+        def judge(self, **_kwargs: object) -> probe.AudioVerdict:
+            return probe.AudioVerdict(
+                verdict="judge_error",
+                partial_score=0.0,
+                evidence="",
+                confidence=0.0,
+                reasoning="",
+                judge_error="format_error:unparseable",
+            )
+
+    result = probe.run_measurement(
+        perception=_NeverAnswers(),
+        clip_dir=tmp_path / "unused",
+        repeats=3,
+        claims=corpus.claims,
+        prerendered=corpus,
+    )
+    report = probe.build_report(
+        identity=probe.pinned_identity(),
+        measured=True,
+        repeats=3,
+        result=result,
+        speech=corpus,
+    )
+    assert report["accuracy"]["overall"]["answered"] == 0
+    assert report["accuracy"]["permutation"]["smallest_attainable_p"] is None
+
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    (workspace / "audio-accuracy-measured.json").write_text(
+        json.dumps(report), encoding="utf-8"
+    )
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(workspace))
+    exec(  # noqa: S102 - running the workflow's own code is the point
+        compile(_summarise_body(), "<Summarise>", "exec"),
+        {"__name__": "__main__"},
+    )
+
+    printed = capsys.readouterr().out
+    assert "No verdict was usable" in printed
+    assert "1/0" not in printed, "a floor of one-over-zero is not a floor"
+    # Everything downstream of the p-values used to be lost with the crash.
+    assert "### Cost" in printed
+    assert "### By family" in printed
+
+
 @pytest.mark.parametrize("arm,arms", [
     ("production", 1),
     ("observation", 1),

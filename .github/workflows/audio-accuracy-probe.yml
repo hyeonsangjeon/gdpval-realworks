@@ -522,13 +522,22 @@ jobs:
                 f"| **{binom['p_one_sided']}** |")
           print(f"| &nbsp;&nbsp;· correct majority verdicts | "
                 f"{binom['correct']} of {binom['n']} |")
+          # §4 promises n and the reason it shrank are printed together. A
+          # bare n=14 does not say whether six claims hedged or six were
+          # never answered, and those are different findings: one is the
+          # model refusing the question, the other is nothing arriving.
+          print(f"| &nbsp;&nbsp;· claims left out: hedged / no majority | "
+                f"{binom['hedged_majorities_excluded']} / "
+                f"{stab['claims'] - binom['claims_with_a_majority']} |")
           print(f"| p — pre-specified secondary (within-pair permutation) | {perm['p_one_sided']} |")
           print(f"| smallest p the permutation can reach | {perm['smallest_attainable_p']} |")
           # Same denominator as the 19.35% the dispatch description promises
           # this run can be compared with. The claim-level count is printed
           # under it precisely so nobody reads it as the same measure.
+          flip_pct = flips["flip_rate_pct"]
           print(f"| **repeat flip rate** (pairs of repeats) | "
-                f"**{flips['flip_rate_pct']}%** vs {flips['prior_audio_cohort_pct']}% "
+                f"**{f'{flip_pct}%' if flip_pct is not None else 'no comparable pairs'}** "
+                f"vs {flips['prior_audio_cohort_pct']}% "
                 f"on the graded audio cohort |")
           print(f"| &nbsp;&nbsp;· comparable pairs | {flips['flips']} flips "
                 f"in {flips['comparable_pairs']} |")
@@ -540,15 +549,33 @@ jobs:
           print("**J = 0 would mean the verdict does not depend on the audio.** A model")
           print("answering `pass` to everything scores 50% accuracy on this balanced")
           print("corpus and J = 0; accuracy alone cannot tell a listener from a coin.\n")
+          # Each test has its own floor and they are not interchangeable. The
+          # permutation's is fixed by the pair count. The primary's is 1/2^n
+          # and it *moves*: every hedged majority leaves n and the floor
+          # climbs, so n = 4 cannot reach 0.05 however well the model does.
+          # Printing the permutation's floor alone announced thresholds the
+          # pre-registered primary could no longer reach.
           floor = perm["smallest_attainable_p"]
-          print(f"This design cannot produce a p below {floor} — "
-                f"{perm['pairs']} pairs, {perm['assignments']} relabellings, "
-                f"so the floor is 1/{perm['assignments']}. Repeats do not move "
-                "it; only pairs do.\n")
-          reachable = [t for t in (0.05, 0.01, 0.001) if floor < t]
-          print("Thresholds this design can reach: "
-                + (", ".join(str(t) for t in reachable) if reachable else "none")
-                + ".\n")
+          binom_floor = binom["smallest_attainable_p"]
+          if floor is None or binom_floor is None:
+              # No usable verdict, so there is no test and no floor. This is
+              # the shape 328's observation arm actually had, and the old
+              # code printed "the floor is 1/0" and then died on None < 0.05,
+              # taking the delivery and cost sections with it -- on the one
+              # run whose summary has to explain itself.
+              print("**No verdict was usable, so neither test has a value.** There")
+              print("is no floor to quote: a floor is a property of a test that ran.")
+              print("Read the non-answer split above — this is a format or delivery")
+              print("result, not a result about hearing.\n")
+          else:
+              print(f"Floors, per test — **primary** (binomial, n={binom['n']}): "
+                    f"{binom_floor}. Secondary (permutation, {perm['pairs']} pairs, "
+                    f"{perm['assignments']} relabellings): {floor}. Repeats move "
+                    "neither; only claims and pairs do.\n")
+              reachable = [t for t in (0.05, 0.01, 0.001) if binom_floor < t]
+              print("Thresholds the **pre-registered primary** can reach: "
+                    + (", ".join(str(t) for t in reachable) if reachable else "none")
+                    + ".\n")
 
           delivery = report.get("delivery")
           if delivery:
@@ -623,6 +650,17 @@ jobs:
           print(f"- estimated cost: `{json.dumps(report['cost']['estimated_cost_usd'])}` — "
                 "**null, not $0.** An unpriced model costs an unknown amount.")
           print("\n### By family\n")
+          # Counts, not percentages, and said out loud: a family of two claims
+          # asked three times shows "6 answered, 6 correct", which reads as six
+          # items agreeing. §4 forbids exactly that reading -- the three calls
+          # for one claim ask the same question about the same audio.
+          family_repeats = int(report["pins"]["repeats"])
+          print(f"**Calls, not claims.** Each claim was asked {family_repeats} times, so")
+          print(f"a family of two claims contributes {2 * family_repeats} rows here. §4")
+          print("treats these as description only: significance is the binomial above,")
+          print("on one majority verdict per claim. A two-claim family can score 0, 50")
+          print("or 100% and nothing else, and its 100% is two coin flips landing")
+          print("heads.\n")
           print("| family | answered | correct | false fail | false pass | hedged |")
           print("|---|---|---|---|---|---|")
           for name, row in acc["by_family"].items():
