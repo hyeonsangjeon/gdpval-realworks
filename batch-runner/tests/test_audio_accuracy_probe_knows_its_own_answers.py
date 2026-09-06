@@ -21,6 +21,7 @@ the test that matters is the one asserting its discrimination is **zero**.
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import math
@@ -905,6 +906,444 @@ def test_the_paid_summary_names_the_arm_its_table_describes() -> None:
     assert "production arm alone" in _step("measure", "Summarise")["run"]
 
 
+def test_whether_the_audio_arrived_is_printed_above_the_accuracy() -> None:
+    """324's failure survives every rule this file has so far.
+
+    §3's stop rule fires on audio metered at a real ``0``. It does not fire on
+    a request that carried no audio part at all, and not on a clip that is not
+    the pinned length -- ``WireClient`` records both and deliberately does not
+    raise, because a diagnostic that crashes on the defect it is looking for
+    cannot describe it. So the run completes all sixty calls and prints an
+    accuracy, with ``calls_carrying_audio: 0`` in a section sixty lines below.
+
+    §2 puts these checks before the accuracy for that reason. The detail can
+    stay where it is; the line that says whether to read on cannot.
+    """
+    summary = _step("measure", "Summarise")["run"]
+    banner = summary.index("Read this before the accuracy below")
+    arrived = summary.index("| audio actually sent |")
+    accuracy = summary.index("| accuracy (answered calls) |")
+    assert banner < accuracy, "the warning prints under the number it is about"
+    assert arrived < accuracy, "the arrival count prints under the accuracy"
+
+    # Both conditions, not just the missing-audio one: a clip of the wrong
+    # length is audio that arrived and was not the pinned audio.
+    assert "calls_carrying_audio" in summary
+    assert "clips_whose_sent_duration_differs" in summary[:accuracy]
+
+
+def _summarise_body(job: str = "measure") -> str:
+    """The python a Summarise step actually runs, on its own.
+
+    Extracted rather than re-implemented: a copy in this file would drift and
+    then pass while the workflow failed, which is the whole failure mode.
+    """
+    lines = _step(job, "Summarise")["run"].splitlines()
+    start = next(
+        i for i, line in enumerate(lines) if line.startswith("python - <<")
+    )
+    end = next(i for i in range(start + 1, len(lines)) if lines[i] == "PY")
+    return "\n".join(lines[start + 1 : end])
+
+
+def _render_summary(
+    job: str,
+    report_name: str,
+    report: dict,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture,
+) -> str:
+    """Run a Summarise step over a report and return what it printed.
+
+    Executing it is the point. A grep over the workflow text cannot see a
+    ``TypeError``, and every defect this file has caught in the summary was a
+    line that rendered fine on the shape its author had in mind.
+    """
+    workspace = tmp_path / f"ws{len(list(tmp_path.iterdir()))}"
+    workspace.mkdir()
+    (workspace / report_name).write_text(json.dumps(report), encoding="utf-8")
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(workspace))
+    exec(  # noqa: S102 - running the workflow's own code is the point
+        compile(_summarise_body(job), f"<{job} Summarise>", "exec"),
+        {"__name__": "__main__"},
+    )
+    return capsys.readouterr().out
+
+
+def _render_paid_summary(
+    report: dict,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture,
+) -> str:
+    return _render_summary(
+        "measure",
+        "audio-accuracy-measured.json",
+        report,
+        tmp_path,
+        monkeypatch,
+        capsys,
+    )
+
+
+def test_the_free_page_says_when_the_audio_did_not_go_out_as_pinned(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """The free run exists to find for nothing what a paid dispatch would.
+
+    §3 deliberately lets a run finish when a request carried no audio part, or
+    when a clip is not its pinned length: a diagnostic that dies on the defect
+    it hunts cannot describe that defect. The paid summary therefore banners
+    both conditions above the accuracy. The free page banners neither -- it
+    printed the arrival count and the digest list and stopped there.
+
+    That page is what a dispatcher reads *before* deciding to buy. When defect
+    1 was live -- durations compared against the tone corpus, so all ten speech
+    clips were off their pinned length -- this page said "60/60 requests
+    carried audio; clips sending more than one digest: `[]`" and nothing else.
+    It read clean. The defect was found by reading a JSON file by hand.
+
+    Executed, not grepped: the free step is python too.
+    """
+    manifest_path, clip_dir = _speech_fixture(tmp_path, clips=5)
+    out = tmp_path / "dry.json"
+    assert probe.main([
+        "--dry-run", "--quiet", "--repeats", "1",
+        "--speech-set", str(manifest_path),
+        "--speech-clips", str(clip_dir),
+        "--out", str(out),
+    ]) == 0
+    healthy = json.loads(out.read_text(encoding="utf-8"))
+    delivery = healthy["delivery"]
+    assert delivery["calls_carrying_audio"] == delivery["calls_inspected"]
+    assert delivery["clips_whose_sent_duration_differs"] == []
+
+    def _page(report: dict) -> str:
+        return _render_summary(
+            "dry-run", "audio-accuracy-dry-run.json", report,
+            tmp_path, monkeypatch, capsys,
+        )
+
+    # A healthy rehearsal must stay quiet. A warning on every run is decoration.
+    assert "Do not dispatch" not in _page(healthy)
+
+    wrong_length = json.loads(json.dumps(healthy))
+    named = sorted(delivery["digests_per_clip"])[:1]
+    wrong_length["delivery"]["clips_whose_sent_duration_differs"] = named
+    printed = _page(wrong_length)
+    assert "Do not dispatch" in printed, (
+        "the free page is silent about a clip that is not the pinned clip, so "
+        "the paid dispatch is what finds out"
+    )
+    assert named[0] in printed, "it does not say which clip"
+
+    no_audio = json.loads(json.dumps(healthy))
+    no_audio["delivery"]["calls_carrying_audio"] = 0
+    assert "Do not dispatch" in _page(no_audio)
+
+
+def test_the_threshold_line_is_about_the_test_the_document_calls_primary() -> None:
+    """The two tests have different floors and only one of them is primary.
+
+    The permutation's floor is fixed by the pair count -- ten pairs, 1/1024,
+    forever. The binomial's is 1/2**n and it *moves*: every hedged majority
+    leaves n, and at n = 4 the floor is 0.0625, so the pre-registered primary
+    cannot reach 0.05 however well the model does. A threshold line computed
+    from the permutation announces 0.05, 0.01 and 0.001 on exactly that run.
+    """
+    summary = _step("measure", "Summarise")["run"]
+    assert 'binom_floor = binom["smallest_attainable_p"]' in summary
+    assert (
+        "reachable = [t for t in (0.05, 0.01, 0.001) if binom_floor < t]"
+        in summary
+    ), "the thresholds are computed from the secondary test's floor"
+    assert "Thresholds the **pre-registered primary** can reach" in summary
+    # §4 promises n and the reason it shrank appear together.
+    assert "hedged_majorities_excluded" in summary
+    assert "claims_with_a_majority" in summary
+
+
+def test_the_family_table_says_its_rows_are_calls() -> None:
+    """"6 answered, 6 correct" for a two-claim family reads as six items.
+
+    It is two claims asked three times, about the same two clips. §4 already
+    forbids treating repeats as independent trials -- this is the one table
+    where the counts invite it, so the table says so itself rather than
+    relying on a reader having got as far as §4.
+    """
+    summary = _step("measure", "Summarise")["run"]
+    section = summary.index("### By family")
+    caption = summary[section:]
+    assert "**Calls, not claims.**" in caption
+    # Derived from the run's own repeat count: a hard-coded "three" is wrong
+    # on any dispatch that changes it, and this file has published a
+    # hard-coded corpus count that went stale once already.
+    assert 'int(report["pins"]["repeats"])' in caption
+    assert "two coin flips" in caption
+
+
+def test_the_summary_says_something_when_there_was_no_report(
+    tmp_path: Path
+) -> None:
+    """The step is ``if: always()``, so it also runs on the runs that stopped.
+
+    It began with ``test -f report || exit 0``: no report, no page, under a red
+    job. That silence was already wrong -- the failure lands in an annotation,
+    which is the one place this repository has learned people do not look --
+    and this PR adds another way to reach it, since the grader-pin check
+    refuses before writing anything.
+
+    It matters more than tidiness because the two ways to get here differ by
+    money. A pre-flight refusal happens before the first call and costs
+    nothing; a failure after the calls started bought them and still writes no
+    report, because the report is written at the end. An empty page reads like
+    the first one.
+
+    Executed, not grepped: the guard is shell, and shell that is never run is
+    a suggestion.
+    """
+    prologue = _step("measure", "Summarise")["run"].split("python - <<", 1)[0]
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    summary = tmp_path / "summary.md"
+
+    def _run() -> str:
+        summary.write_text("", encoding="utf-8")
+        done = subprocess.run(
+            ["bash", "-c", prologue],
+            env={
+                **os.environ,
+                "GITHUB_WORKSPACE": str(workspace),
+                "GITHUB_STEP_SUMMARY": str(summary),
+            },
+            capture_output=True,
+            text=True,
+        )
+        assert done.returncode == 0, done.stderr
+        return summary.read_text(encoding="utf-8")
+
+    printed = _run()
+    assert printed.strip(), (
+        "no report and no page either: the run that most needs explaining is "
+        "the one that gets none"
+    )
+    assert "annotation" in printed, (
+        "it has to send the reader where the reason actually is"
+    )
+    assert "nothing was bought" in printed and "were billed" in printed, (
+        "both ways of getting here have to be named; they differ by money, "
+        "and an empty page reads like the free one"
+    )
+    assert "%" not in printed, (
+        "no report means no figures; a page here that carries one is quoting "
+        "something it does not have"
+    )
+
+    (workspace / "audio-accuracy-measured.json").write_text(
+        "{}", encoding="utf-8"
+    )
+    assert _run() == "", (
+        "with a report present the prologue must stay out of the way and let "
+        "the real summary write the page"
+    )
+
+
+def test_the_paid_summary_survives_a_run_where_nothing_answered(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """328's arm answered nothing usable, and that is a pre-registered outcome.
+
+    §3's second stop rule exists to produce this run on purpose: zero usable
+    verdicts in the first ten calls, stop, report. So the summary has to
+    render it -- and it did not. With nothing answered both tests return a
+    null floor, the page printed "the floor is 1/0" and then died comparing
+    ``None`` to 0.05, taking the delivery, cost and family sections with it.
+    The one run whose summary has to explain itself was the one that had no
+    summary.
+
+    Executed rather than grepped: only running it catches a TypeError.
+    """
+    manifest_path, clip_dir = _speech_fixture(tmp_path, clips=5)
+    corpus = probe.load_speech_corpus(manifest_path, clip_dir)
+
+    class _NeverAnswers:
+        def reset(self) -> None:
+            return None
+
+        def judge(self, **_kwargs: object) -> probe.AudioVerdict:
+            return probe.AudioVerdict(
+                verdict="judge_error",
+                partial_score=0.0,
+                evidence="",
+                confidence=0.0,
+                reasoning="",
+                judge_error="format_error:unparseable",
+            )
+
+    result = probe.run_measurement(
+        perception=_NeverAnswers(),
+        clip_dir=tmp_path / "unused",
+        repeats=3,
+        claims=corpus.claims,
+        prerendered=corpus,
+    )
+    report = probe.build_report(
+        identity=probe.pinned_identity(),
+        measured=True,
+        repeats=3,
+        result=result,
+        speech=corpus,
+    )
+    assert report["accuracy"]["overall"]["answered"] == 0
+    assert report["accuracy"]["permutation"]["smallest_attainable_p"] is None
+
+    printed = _render_paid_summary(report, tmp_path, monkeypatch, capsys)
+    assert "No verdict was usable" in printed
+    assert "1/0" not in printed, "a floor of one-over-zero is not a floor"
+    # Everything downstream of the p-values used to be lost with the crash.
+    assert "### Cost" in printed
+    assert "### By family" in printed
+    # And the pair banner must not fire here: nothing was resolved, so the
+    # judge did not "give both sides the same verdict" -- it gave none.
+    assert "separated nothing" not in printed
+
+
+def test_a_judge_that_separated_nothing_says_so_above_the_accuracy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """A judge answering `pass` to everything scores 50%, and 50% reads as close.
+
+    330 §4 names this by hand -- "10쌍 전부 pass여도 정확도가 50%로 나온다.
+    정확도만 보면 아깝게 못 넘었다로 읽히는 자리다" -- because on a balanced
+    corpus the accuracy cannot tell a listener from a coin. The summary had
+    the right words for it and printed them in the subjunctive, under the
+    table: "J = 0 *would* mean the verdict does not depend on the audio." On
+    the run where it is the indicative, that paragraph reads as boilerplate.
+
+    So the observation goes above the number it qualifies, next to the
+    arrival banner, and it fires only on the shape it describes.
+    """
+    manifest_path, clip_dir = _speech_fixture(tmp_path, clips=5)
+    corpus = probe.load_speech_corpus(manifest_path, clip_dir)
+    by_criterion = {claim.criterion: claim for claim in corpus.claims}
+
+    def _run(verdict_for) -> dict:
+        class _Judge:
+            def reset(self) -> None:
+                return None
+
+            def judge(self, *, criterion: str, **_kwargs: object) -> probe.AudioVerdict:
+                return probe.AudioVerdict(
+                    verdict=verdict_for(by_criterion[criterion]),
+                    partial_score=0.0,
+                    evidence="",
+                    confidence=0.9,
+                    reasoning="",
+                )
+
+        return probe.build_report(
+            identity=probe.pinned_identity(),
+            measured=True,
+            repeats=3,
+            result=probe.run_measurement(
+                perception=_Judge(),
+                clip_dir=tmp_path / "unused",
+                repeats=3,
+                claims=corpus.claims,
+                prerendered=corpus,
+            ),
+            speech=corpus,
+        )
+
+    everything_passes = _run(lambda _claim: "pass")
+    consistency = everything_passes["accuracy"]["pair_consistency"]
+    assert consistency["answered_differently"] == 0
+    assert consistency["answered_identically"] == consistency["pairs"]
+    assert everything_passes["accuracy"]["overall"]["accuracy"] == 0.5
+
+    printed = _render_paid_summary(everything_passes, tmp_path, monkeypatch, capsys)
+    banner = printed.index("separated nothing")
+    accuracy = printed.index("| accuracy (answered calls) |")
+    assert banner < accuracy, "the warning prints under the number it is about"
+    assert '`{"pass": 5}`' in printed, "which verdict it gave to everything"
+
+    # The half that makes the banner worth having: it stays quiet when the
+    # judge did separate the pairs. A warning on every run is decoration.
+    heard = _run(lambda claim: "pass" if claim.holds else "fail")
+    assert heard["accuracy"]["pair_consistency"]["answered_differently"] == 5
+    assert "separated nothing" not in _render_paid_summary(
+        heard, tmp_path, monkeypatch, capsys
+    )
+
+
+def test_the_arrival_banner_fires_on_the_shape_it_exists_for(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """The line 330 §3 calls the fix for 324 had never been rendered.
+
+    The test above it checks that the banner's *text* sits earlier in the
+    workflow source than the accuracy row. That is an ordering check over a
+    string, and it holds whether or not the condition beneath it is right --
+    the branch that prints the banner has only ever run on healthy reports,
+    where it prints nothing.
+
+    Which is the wrong way round. The banner exists for the unhealthy run:
+    ``WireClient`` deliberately does not raise when a request carried no audio
+    or a clip was the wrong length, so that shape completes all sixty calls and
+    prints a headline number. If the banner throws there, the summary dies on
+    the one run it was added for -- which is what the null-floor crash did, on
+    the one run §3's second stop rule exists to produce.
+
+    So: render all three shapes and read what came out.
+    """
+    manifest_path, clip_dir = _speech_fixture(tmp_path, clips=5)
+    out = tmp_path / "healthy.json"
+    assert probe.main([
+        "--dry-run", "--quiet", "--repeats", "3",
+        "--speech-set", str(manifest_path),
+        "--speech-clips", str(clip_dir),
+        "--out", str(out),
+    ]) == 0
+    healthy = json.loads(out.read_text(encoding="utf-8"))
+
+    delivered = healthy["delivery"]
+    assert delivered["calls_carrying_audio"] == delivered["calls_inspected"]
+    assert delivered["clips_whose_sent_duration_differs"] == []
+
+    printed = _render_paid_summary(healthy, tmp_path, monkeypatch, capsys)
+    assert "Read this before the accuracy below" not in printed, (
+        "a banner that prints on a clean run is decoration"
+    )
+    assert "### Did the audio arrive" in printed, "the detail section still runs"
+
+    def _mutated(**delivery: object) -> str:
+        report = json.loads(json.dumps(healthy))
+        report["delivery"].update(delivery)
+        return _render_paid_summary(report, tmp_path, monkeypatch, capsys)
+
+    # 324: the calls that carried no audio at all. Not caught by §3's stop
+    # rule, which fires on audio metered at a real 0 rather than absent.
+    inspected = delivered["calls_inspected"]
+    printed = _mutated(calls_carrying_audio=0, calls_without_audio=list(range(inspected)))
+    banner = printed.index("Read this before the accuracy below")
+    accuracy = printed.index("| accuracy (answered calls) |")
+    assert banner < accuracy, "the warning prints under the number it is about"
+    assert f"{inspected} of {inspected} requests carried no audio" in printed
+    assert "it is not this model hearing these clips" in printed
+
+    # The other half of the condition: audio arrived, and was not the pinned
+    # audio. The accuracy is about a corpus §2 did not fingerprint.
+    printed = _mutated(clips_whose_sent_duration_differs=["boxes", "crate"])
+    assert printed.index("Read this before the accuracy below") < printed.index(
+        "| accuracy (answered calls) |"
+    )
+    assert "2 clip(s) were not the pinned length" in printed
+    assert "requests carried no audio" not in printed, (
+        "it should name the fault it found, not both"
+    )
+
+
 @pytest.mark.parametrize("arm,arms", [
     ("production", 1),
     ("observation", 1),
@@ -1189,6 +1628,144 @@ def test_identity_comes_from_the_config_the_repeat_runs_used() -> None:
 
 def test_pinned_config_is_the_audio_repeat_config() -> None:
     assert probe.PINNED_CONFIG.name == "gold_audio_repeat_v2_sol_max.yaml"
+
+
+def test_a_grader_the_document_does_not_pin_stops_the_run(
+    tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
+    """The pre-registration pins a grader fingerprint and nothing checked it.
+
+    It is the hash of the grader source and config the paid run will use, and
+    it is the field that decides whether the run describes the same grader the
+    19.35% came off. Written by hand and never recomputed, it says whatever it
+    said on the day it was typed: edit anything the hash covers --
+    ``core/**.py``, ``step8_grade.py``, the schema, the requirements closure,
+    the prompt template -- and the document still claims the old one, for a run
+    that is no longer the run it describes. Same shape as every other defect in
+    this file: the document names a safeguard, and the safeguard is a sentence.
+
+    The check does **not** live in a unit test. What the hash covers is mostly
+    files this workstream does not own, so it moves when somebody else merges
+    something perfectly correct -- and an equality asserted here would turn
+    that into a red build on their PR. It already did move once, which is how
+    this was found.
+
+    So it is enforced where it protects something: at dispatch, before a call
+    goes out, next to the clip-digest check that works the same way. A run
+    whose grader is not the pinned one stops, and stopping costs a dispatch;
+    discovering it afterwards costs the run's meaning.
+    """
+    computed = probe.grader_source_hash()
+
+    wrong = tmp_path / "prereg-wrong.md"
+    wrong.write_text(f"| 채점기 지문 | `{'a' * 64}` |\n", encoding="utf-8")
+    manifest_path, clip_dir = _speech_fixture(tmp_path, clips=2)
+    args = [
+        "--dry-run", "--quiet", "--repeats", "1",
+        "--speech-set", str(manifest_path),
+        "--speech-clips", str(clip_dir),
+        "--out", str(tmp_path / "out.json"),
+    ]
+
+    assert probe.main([*args, "--expect-grader-pin", str(wrong)]) == 3
+    stderr = capsys.readouterr().err
+    assert "a" * 64 in stderr and computed in stderr, (
+        "a refusal has to name both fingerprints, or the reader cannot tell "
+        "which end moved"
+    )
+    assert not (tmp_path / "out.json").exists(), (
+        "it stopped after writing a report, which is not stopping"
+    )
+
+    right = tmp_path / "prereg-right.md"
+    right.write_text(f"| 채점기 지문 | `{computed}` |\n", encoding="utf-8")
+    assert probe.main([*args, "--expect-grader-pin", str(right)]) == 0
+    assert (tmp_path / "out.json").exists()
+
+
+def test_the_run_records_the_grader_it_actually_used(tmp_path: Path) -> None:
+    """Checking the pin is not the same as keeping it.
+
+    After the run the fingerprint stops being a promise and becomes the record
+    of which grader produced these numbers. If that record lives only in a
+    markdown file somebody typed, it is the state this check exists to end.
+    """
+    manifest_path, clip_dir = _speech_fixture(tmp_path, clips=2)
+    out = tmp_path / "out.json"
+    assert probe.main([
+        "--dry-run", "--quiet", "--repeats", "1",
+        "--speech-set", str(manifest_path),
+        "--speech-clips", str(clip_dir),
+        "--out", str(out),
+    ]) == 0
+    pins = json.loads(out.read_text(encoding="utf-8"))["pins"]
+    assert pins["grader_source_sha256"] == probe.grader_source_hash()
+
+
+def test_a_document_that_pins_no_grader_is_not_a_pin(tmp_path: Path) -> None:
+    """Two ways the document can fail to say which grader, both refusals.
+
+    Neither is hypothetical: §2 is a markdown table, and tables get edited.
+    Silently skipping the check when the row is missing would make deleting
+    the row the way to make the check pass.
+    """
+    empty = tmp_path / "silent.md"
+    empty.write_text("# 330\n\nno fingerprint here\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="states no grader fingerprint"):
+        probe.grader_pin_stated_in(empty)
+
+    two = tmp_path / "two.md"
+    two.write_text(
+        f"| 채점기 지문 | `{'a' * 64}` |\n| 채점기 지문 | `{'b' * 64}` |\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="2 different grader fingerprints"):
+        probe.grader_pin_stated_in(two)
+
+    real = (
+        probe.REPO_ROOT / "tasks" / "rebuilding_grading_task"
+        / "330-speech-diagnostic-prereg.md"
+    )
+    pinned = probe.grader_pin_stated_in(real)
+    assert re.fullmatch(r"[0-9a-f]{64}", pinned), (
+        "330 §2 no longer states a grader fingerprint the run can be held to"
+    )
+
+
+def test_both_jobs_hold_a_speech_run_to_the_document_it_belongs_to() -> None:
+    """The gate is only a gate if the speech run goes through it.
+
+    Including the free job. The whole reason the fingerprint check is at
+    dispatch rather than in a test is that it should be discovered without
+    buying anything, and that only works if ``dry_run`` carries it too.
+    """
+    text = (
+        probe.REPO_ROOT / ".github" / "workflows" / "audio-accuracy-probe.yml"
+    ).read_text(encoding="utf-8")
+    prereg = re.search(r"^  SPEECH_PREREG: .*/(\S+\.md)$", text, re.MULTILINE)
+    assert prereg, "the workflow no longer names a pre-registration"
+    assert (
+        probe.REPO_ROOT / "tasks" / "rebuilding_grading_task" / prereg.group(1)
+    ).is_file(), "SPEECH_PREREG points at a file that is not in the repo"
+
+    invocations = [
+        block for block in text.split("\n\n")
+        if "measure_audio_grading_accuracy.py" in block
+        and "ARGS=(" in block
+    ]
+    assert len(invocations) == 2, (
+        f"expected the free and paid measure steps, found {len(invocations)}"
+    )
+    for block in invocations:
+        assert "--speech-set" in block and "--expect-grader-pin" in block, (
+            "a speech run that does not pass --expect-grader-pin is not "
+            "pinned to any grader; the document just says it is"
+        )
+        speech_branch = block.index('= "speech"')
+        assert block.index("--expect-grader-pin") > speech_branch, (
+            "the pin is passed outside the speech branch, so the published "
+            "tone runs would be re-gated on a document they predate"
+        )
 
 
 # --------------------------------------------------------------------------
@@ -1476,3 +2053,1729 @@ def test_stub_refuses_a_criterion_it_was_not_given() -> None:
             ],
             modalities=["text"],
         )
+
+
+# ── The speech corpus arrives instead of being rendered ──────────────
+#
+# The tone corpus is generated here and checked against its own waveform. The
+# speech set cannot be: eSpeak NG does not install on this host, so the clips
+# come from CI as an artifact and the repository keeps a manifest. That makes
+# the loader, not the renderer, the thing standing between "measured the
+# pinned set" and "measured whatever was in that folder".
+
+
+PUBLISHED_SPEECH_MANIFEST = (
+    Path(__file__).resolve().parents[2]
+    / "tasks"
+    / "rebuilding_grading_task"
+    / "330-speech-verification-manifest.json"
+)
+
+
+def _speech_fixture(tmp_path: Path, *, clips: int = 2) -> tuple[Path, Path]:
+    """A miniature manifest with real files behind it.
+
+    Built here rather than copied from the published set so the tests do not
+    depend on the artifact being downloaded, and so a digest can be corrupted
+    without editing a committed file.
+    """
+    clip_dir = tmp_path / "clips"
+    clip_dir.mkdir()
+    entries = []
+    claims = []
+    for index in range(clips):
+        clip_id = f"clip{index}"
+        path = clip_dir / f"{clip_id}.sent.wav"
+        with wave.open(str(path), "wb") as handle:
+            handle.setnchannels(1)
+            handle.setsampwidth(2)
+            handle.setframerate(16_000)
+            handle.writeframes(struct.pack("<800h", *([0] * 800)))
+        data = path.read_bytes()
+        entries.append({
+            "clip_id": clip_id,
+            "source": {"file": f"{clip_id}.source.wav", "sha256": "0" * 64},
+            "sent": {
+                "file": path.name,
+                "sha256": hashlib.sha256(data).hexdigest(),
+                "seconds": 0.05,
+                "sample_rate_hz": 16_000,
+            },
+        })
+        for suffix, holds in (("yes", True), ("no", False)):
+            claims.append({
+                "claim_id": f"{clip_id}_{suffix}",
+                "pair_id": f"{clip_id}_pair",
+                "clip_id": clip_id,
+                "family": "confusable_number",
+                "criterion": f"criterion {suffix} for {clip_id}",
+                "holds": holds,
+                "because": "fixture",
+            })
+    manifest = {
+        "clips": entries,
+        "claims": claims,
+        "provenance": {"tool": "espeak-ng", "version_string": "fixture"},
+        "encoder": {"library": "PyAV"},
+        "limits": {"reading": "a pass is strong, a failure is weak"},
+    }
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    return manifest_path, clip_dir
+
+
+def test_the_pairing_is_read_from_the_set_and_not_guessed_from_the_name() -> None:
+    """The tone corpus's naming rule is wrong for the speech set, silently.
+
+    ``claim_id.rsplit("_", 1)[0]`` recovers the pair for ``timing_true`` /
+    ``timing_false``. Applied to the published speech set it produces
+    **thirteen** groups instead of ten, six of them holding a single claim --
+    and a permutation test that swaps labels within a pair of size one does
+    not swap anything. The corpus would still report an accuracy; only the
+    null distribution it was compared against would be a straight line.
+    """
+    published = json.loads(PUBLISHED_SPEECH_MANIFEST.read_text(encoding="utf-8"))
+    derived: dict[str, list[bool]] = {}
+    for entry in published["claims"]:
+        derived.setdefault(
+            entry["claim_id"].rsplit("_", 1)[0], []
+        ).append(entry["holds"])
+    singletons = [k for k, v in derived.items() if len(v) == 1]
+    assert len(derived) == 13, "the naming rule is expected to mis-group"
+    assert len(singletons) == 6, singletons
+
+    # The explicit field is what makes it ten again.
+    real = {entry["pair_id"] for entry in published["claims"]}
+    assert len(real) == 10
+
+
+def test_an_explicit_pair_id_wins_and_absence_falls_back() -> None:
+    """Both halves, because the tone corpus depends on the fallback."""
+    speech = probe.Claim(
+        claim_id="crate_seventeen",
+        clip_id="crate",
+        family="confusable_number",
+        criterion="x",
+        holds=True,
+        because="y",
+        explicit_pair_id="crate_number",
+    )
+    assert speech.pair_id == "crate_number"
+    assert speech.to_dict()["pair_id"] == "crate_number"
+
+    tone = probe.Claim(
+        claim_id="timing_true",
+        clip_id="tone_stops_early",
+        family="timing",
+        criterion="x",
+        holds=True,
+        because="y",
+    )
+    assert tone.pair_id == "timing"
+
+
+def test_audio_that_is_not_the_pinned_audio_is_refused(tmp_path: Path) -> None:
+    """The failure this guards against is mundane and produces a real number.
+
+    An artifact from a different run, a partial download, a clip regenerated
+    by a newer eSpeak: each yields a folder of plausible WAVs and an accuracy
+    that cannot be attributed to any published set.
+    """
+    manifest_path, clip_dir = _speech_fixture(tmp_path)
+    target = clip_dir / "clip0.sent.wav"
+    target.write_bytes(target.read_bytes() + b"\x00\x00")
+
+    with pytest.raises(ValueError, match="Refusing to measure audio"):
+        probe.load_speech_corpus(manifest_path, clip_dir)
+
+
+def test_a_missing_clip_says_where_to_get_it(tmp_path: Path) -> None:
+    """The clips are deliberately not committed, so 'missing' is the normal
+    first experience of this flag and the message has to be actionable."""
+    manifest_path, clip_dir = _speech_fixture(tmp_path)
+    (clip_dir / "clip0.sent.wav").unlink()
+
+    with pytest.raises(FileNotFoundError, match="speech-verification-set"):
+        probe.load_speech_corpus(manifest_path, clip_dir)
+
+
+def test_the_delivered_file_is_the_one_loaded(tmp_path: Path) -> None:
+    """``sent``, not ``source``.
+
+    eSpeak writes 22050 Hz and the grading path delivers 16 kHz. Loading the
+    file the model never hears would be a digest check that passes while
+    describing the wrong bytes -- the exact defect the two digests exist to
+    make visible.
+    """
+    manifest_path, clip_dir = _speech_fixture(tmp_path)
+    corpus = probe.load_speech_corpus(manifest_path, clip_dir)
+    for clip in corpus.clips:
+        assert clip.path.name.endswith(".sent.wav")
+        assert clip.sample_rate_hz == AUDIO_SAMPLE_RATE_HZ
+
+
+def test_an_unbalanced_speech_set_is_refused(tmp_path: Path) -> None:
+    """Balance is what makes 50% the chance line.
+
+    A set that had drifted would still produce an accuracy, and it would be
+    compared against a baseline nobody recomputed.
+    """
+    manifest_path, clip_dir = _speech_fixture(tmp_path)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["claims"][1]["holds"] = True
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="not balanced"):
+        probe.load_speech_corpus(manifest_path, clip_dir)
+
+
+def test_a_pair_that_does_not_disagree_with_itself_is_refused(
+    tmp_path: Path,
+) -> None:
+    """Balanced overall and still broken.
+
+    The pair is the unit the permutation test shuffles within. Two clips, one
+    all-true and one all-false, is ten-true-of-twenty at the corpus level --
+    the balance check passes -- while every within-pair swap is a no-op. The
+    corpus would be graded against a null distribution with no spread in it.
+    """
+    manifest_path, clip_dir = _speech_fixture(tmp_path)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    # clip0: both true. clip1: both false. Still 2 of 4.
+    manifest["claims"][1]["holds"] = True
+    manifest["claims"][2]["holds"] = False
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="not one true and one false"):
+        probe.load_speech_corpus(manifest_path, clip_dir)
+
+
+def test_a_claim_about_a_clip_that_is_not_pinned_is_refused(
+    tmp_path: Path,
+) -> None:
+    """Otherwise the run would fail at the call, having already spent."""
+    manifest_path, clip_dir = _speech_fixture(tmp_path)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["claims"][0]["clip_id"] = "not_a_clip"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="does not pin"):
+        probe.load_speech_corpus(manifest_path, clip_dir)
+
+
+def test_the_published_set_loads_when_its_clips_are_present(
+    tmp_path: Path,
+) -> None:
+    """The committed manifest has to be loadable by the thing that reads it.
+
+    The clips are not committed, so this reconstructs the parts that do not
+    need audio and checks the corpus-level shape the pre-registration counted
+    on: ten clips, twenty claims, ten pairs, balanced.
+    """
+    published = json.loads(PUBLISHED_SPEECH_MANIFEST.read_text(encoding="utf-8"))
+    assert len(published["clips"]) == 10
+    assert len(published["claims"]) == 20
+    assert sum(1 for c in published["claims"] if c["holds"]) == 10
+    by_pair: dict[str, list[bool]] = {}
+    for entry in published["claims"]:
+        by_pair.setdefault(entry["pair_id"], []).append(entry["holds"])
+    assert len(by_pair) == 10
+    assert all(sorted(v) == [False, True] for v in by_pair.values())
+
+
+def test_a_prerendered_corpus_is_not_re_rendered(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Re-deriving the digests here would pin what was downloaded.
+
+    The point of the manifest is that the digest was published by the build.
+    If the runner recomputed it, a corrupted download would be reported as its
+    own pin and the check would be circular.
+    """
+    manifest_path, clip_dir = _speech_fixture(tmp_path)
+    corpus = probe.load_speech_corpus(manifest_path, clip_dir)
+
+    def _explode(*_args: object, **_kwargs: object) -> str:
+        raise AssertionError("the tone renderer must not run for speech")
+
+    monkeypatch.setattr(probe, "render_clip", _explode)
+    perception = probe.AudioPerception(
+        client=probe.TruthfulStub(corpus.claims),
+        deployment="gpt-audio-1.5",
+        call_cap=AUDIO_CALL_CAP,
+        trim_seconds=AUDIO_TRIM_SECONDS,
+    )
+    result = probe.run_measurement(
+        perception=perception,
+        clip_dir=tmp_path / "unused",
+        repeats=1,
+        claims=corpus.claims,
+        prerendered=corpus,
+    )
+    assert result["clip_sha256"] == corpus.digests
+    assert len(result["calls"]) == len(corpus.claims)
+
+
+def test_the_judge_is_handed_the_criterion_and_nothing_else(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """330 §2: the model sees one line. The answer is in the same process.
+
+    ``load_speech_corpus`` reads a manifest that carries the sentence eSpeak
+    was given and the reason each claim holds -- both have to be committed for
+    the set to be reproducible. So the ground truth is one attribute access
+    away from the prompt for the whole run, and the failure mode is not a
+    crash: a judge handed ``because`` answers every claim correctly, and the
+    report says the model hears words.
+
+    This pins the argument list rather than the prompt text because the wire
+    recorder keeps only a digest of the prompt (§6 -- the prompt is not
+    published), so the boundary that can be checked is this one.
+    """
+    manifest_path, clip_dir = _speech_fixture(tmp_path)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    for clip in manifest["clips"]:
+        clip["command"] = ["espeak-ng", "-w", "x.wav", "SENTENCE-NOT-FOR-SENDING"]
+    for claim in manifest["claims"]:
+        claim["because"] = "GROUND-TRUTH-NOT-FOR-SENDING"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    corpus = probe.load_speech_corpus(manifest_path, clip_dir)
+    seen: list[dict[str, object]] = []
+
+    class _Recorder:
+        def reset(self) -> None:
+            return None
+
+        def judge(self, **kwargs: object) -> probe.AudioVerdict:
+            seen.append(kwargs)
+            return probe.AudioVerdict(
+                verdict="pass",
+                partial_score=0.0,
+                evidence="",
+                confidence=1.0,
+                reasoning="",
+            )
+
+    def _explode_renderer(*_args: object, **_kwargs: object) -> str:
+        raise AssertionError("the tone renderer must not run for speech")
+
+    monkeypatch.setattr(probe, "render_clip", _explode_renderer)
+    probe.run_measurement(
+        perception=_Recorder(),
+        clip_dir=tmp_path / "unused",
+        repeats=1,
+        claims=corpus.claims,
+        prerendered=corpus,
+    )
+
+    assert len(seen) == len(corpus.claims)
+    criteria = {claim.criterion for claim in corpus.claims}
+    for call in seen:
+        # Not a subset check: a new keyword is exactly how the answer would
+        # arrive, so anything beyond these two fails here rather than after
+        # the money is spent.
+        assert set(call) == {"criterion", "audio_path"}
+        assert call["criterion"] in criteria
+        blob = " ".join(str(value) for value in call.values())
+        assert "GROUND-TRUTH-NOT-FOR-SENDING" not in blob
+        assert "SENTENCE-NOT-FOR-SENDING" not in blob
+
+    # The transcript is in the manifest and must not survive loading it.
+    assert not any(
+        "SENTENCE-NOT-FOR-SENDING" in str(vars(clip)) for clip in corpus.clips
+    )
+
+
+def test_the_published_criteria_do_not_answer_themselves() -> None:
+    """A criterion that quotes the sentence is answerable without listening.
+
+    The pair design is what keeps this honest: both sides ask about the same
+    clip in the same shape, and differ by the one confusable word. If one side
+    named its own truth value -- or restated the sentence -- a reader with no
+    audio would score 100% and the run would be reported as hearing.
+    """
+    published = json.loads(
+        PUBLISHED_SPEECH_MANIFEST.read_text(encoding="utf-8")
+    )
+    transcripts = {
+        clip["clip_id"]: clip["command"][-1] for clip in published["clips"]
+    }
+    by_pair: dict[str, list[dict[str, object]]] = {}
+    for claim in published["claims"]:
+        criterion = str(claim["criterion"])
+        lowered = criterion.lower()
+        assert str(claim["because"]).lower() not in lowered
+        assert transcripts[claim["clip_id"]].lower() not in lowered
+        for marker in ("true", "false", "correct", "incorrect", "the answer"):
+            assert marker not in lowered, f"{claim['claim_id']}: {marker!r}"
+        by_pair.setdefault(str(claim["pair_id"]), []).append(claim)
+
+    assert len(by_pair) == 10
+    for pair_id, sides in by_pair.items():
+        assert len(sides) == 2, pair_id
+        first, second = sides
+        assert first["clip_id"] == second["clip_id"], pair_id
+        assert first["family"] == second["family"], pair_id
+        # Identical criteria would make the pair one question asked twice, and
+        # the permutation test would be swapping a label between duplicates.
+        assert first["criterion"] != second["criterion"], pair_id
+
+
+def test_the_document_states_the_family_sizes_the_corpus_has() -> None:
+    """A family of two claims can only score 0, 50 or 100 per cent.
+
+    ``negation: 100%`` on two claims is two coin flips landing heads -- one
+    time in four -- and it reads as a finding. 330 §4 hangs "hears words but
+    not sentences" on three families, and two of them are that size, so the
+    document states every family's count beside the accuracies it can produce.
+    Those counts are the corpus's, and a claim added or moved without the
+    table following would leave the reading attached to the wrong denominator.
+    """
+    published = json.loads(
+        PUBLISHED_SPEECH_MANIFEST.read_text(encoding="utf-8")
+    )
+    sizes: dict[str, int] = {}
+    for claim in published["claims"]:
+        family = str(claim["family"])
+        sizes[family] = sizes.get(family, 0) + 1
+
+    doc = (
+        PUBLISHED_SPEECH_MANIFEST.parent / "330-speech-diagnostic-prereg.md"
+    ).read_text(encoding="utf-8")
+    section = doc.split("#### 종류별 숫자는", 1)
+    assert len(section) == 2, "the family-size subsection is gone"
+    # Cut at the bullet that follows the subsection so the rows come from
+    # this table and not from some other one further down the document.
+    table = section[1].split("\n* ", 1)[0]
+
+    stated = dict(
+        re.findall(r"^\|\s*`([a-z_]+)`\s*\|\s*(\d+)\s*\|", table, re.M)
+    )
+    assert {k: int(v) for k, v in stated.items()} == sizes
+    assert sum(sizes.values()) == 20
+
+    # The three families §4 reasons from have to be in the corpus at all --
+    # naming a family that is not there is the failure this file keeps finding.
+    for family in ("order", "binding", "negation"):
+        assert family in sizes, family
+
+
+def test_the_report_describes_the_corpus_that_ran(tmp_path: Path) -> None:
+    """Reporting the tone corpus's counts beside a speech run's calls would be
+    a mislabel of exactly the kind this file exists to stop."""
+    manifest_path, clip_dir = _speech_fixture(tmp_path, clips=3)
+    corpus = probe.load_speech_corpus(manifest_path, clip_dir)
+    perception = probe.AudioPerception(
+        client=probe.TruthfulStub(corpus.claims),
+        deployment="gpt-audio-1.5",
+        call_cap=AUDIO_CALL_CAP,
+        trim_seconds=AUDIO_TRIM_SECONDS,
+    )
+    result = probe.run_measurement(
+        perception=perception,
+        clip_dir=tmp_path / "unused",
+        repeats=1,
+        claims=corpus.claims,
+        prerendered=corpus,
+    )
+    report = probe.build_report(
+        identity=probe.pinned_identity(),
+        measured=False,
+        repeats=1,
+        result=result,
+        speech=corpus,
+    )
+    assert report["corpus"] == "speech"
+    assert report["pins"]["clips"] == 3
+    assert report["pins"]["claims"] == 6
+    assert report["pins"]["clips"] != len(probe.CLIPS)
+    assert [c["clip_id"] for c in report["clips"]] == [
+        c.clip_id for c in corpus.clips
+    ]
+    assert "hears words" in report["what_this_measures"]
+    # The asymmetry is a field, not a caveat in a document nobody opens.
+    assert report["speech_set"]["limits"]["reading"]
+    json.dumps(report)
+
+
+def test_the_expected_token_count_is_written_down_before_the_run(
+    tmp_path: Path,
+) -> None:
+    """A corpus that never reached the model produces a plausible accuracy.
+
+    The only cheap way to notice is a usage figure that is nowhere near what
+    the audio should have cost, and that comparison needs a number recorded
+    beforehand rather than reconstructed afterwards.
+    """
+    manifest_path, clip_dir = _speech_fixture(tmp_path, clips=2)
+    corpus = probe.load_speech_corpus(manifest_path, clip_dir)
+    perception = probe.AudioPerception(
+        client=probe.TruthfulStub(corpus.claims),
+        deployment="gpt-audio-1.5",
+        call_cap=AUDIO_CALL_CAP,
+        trim_seconds=AUDIO_TRIM_SECONDS,
+    )
+    result = probe.run_measurement(
+        perception=perception,
+        clip_dir=tmp_path / "unused",
+        repeats=3,
+        claims=corpus.claims,
+        prerendered=corpus,
+    )
+    report = probe.build_report(
+        identity=probe.pinned_identity(),
+        measured=False,
+        repeats=3,
+        result=result,
+        speech=corpus,
+    )
+    # The estimate has to describe the audio the run *sends*, and the run
+    # sends one clip per call. Comparing it against the corpus length was the
+    # defect: this fixture asks two criteria of each clip, exactly as the
+    # published set does, so the two formulas differ by 2x and only one of
+    # them is what gets billed.
+    sent = sum(corpus.durations[call["clip_id"]] for call in result["calls"])
+    assert report["speech_set"]["audio_seconds_sent"] == pytest.approx(sent)
+    assert report["speech_set"]["expected_audio_tokens"] == round(
+        probe.AUDIO_TOKENS_PER_SECOND * sent
+    )
+    assert report["speech_set"]["expected_audio_tokens"] != round(
+        probe.AUDIO_TOKENS_PER_SECOND * corpus.total_seconds * 3
+    ), "counting clips again instead of calls"
+
+
+def test_the_document_and_the_code_agree_on_what_the_run_sends() -> None:
+    """330 §2's token block is read out of the document, not typed in here.
+
+    The number it holds is the only pre-dispatch estimate of what this run
+    costs on a model with no published price, and it is what the +/-10%
+    delivery band is measured against. It said 937 -- the corpus length times
+    the repeats -- and the run sends 1,874, because a call carries the clip
+    its criterion is about and twenty criteria share ten clips. A healthy run
+    would have landed 82% above the band, and the summary would have printed
+    *"the billed audio is more than 10% away from the pre-registered figure"*
+    in bold on a run where nothing was wrong. A check that fires on every run
+    is worse than no check: it is the one that would have caught a real
+    delivery failure, spent.
+
+    Reading the block rather than restating it is the point. The old pair of
+    tests asserted the code's formula against itself and the document's number
+    against the same formula, so both were green on the wrong answer.
+    """
+    doc = (
+        probe.REPO_ROOT / "tasks" / "rebuilding_grading_task"
+        / "330-speech-diagnostic-prereg.md"
+    ).read_text(encoding="utf-8")
+
+    def _stated(name: str) -> float:
+        found = re.search(rf"^{name}\s*=\s*([0-9.]+)", doc, re.MULTILINE)
+        assert found, f"330 no longer states {name}"
+        return float(found.group(1))
+
+    band = re.search(r"^band_10pct\s*=\s*(\d+) \.\. (\d+)", doc, re.MULTILINE)
+    assert band, "330 no longer states the +/-10% band"
+
+    published = json.loads(PUBLISHED_SPEECH_MANIFEST.read_text(encoding="utf-8"))
+    seconds = {c["clip_id"]: c["sent"]["seconds"] for c in published["clips"]}
+    # What the run sends: one clip per call, every claim, every repeat.
+    sent = round(
+        sum(seconds[claim["clip_id"]] for claim in published["claims"]) * 3, 4
+    )
+    tokens = round(probe.AUDIO_TOKENS_PER_SECOND * sent)
+
+    assert _stated("audio_seconds_sent") == sent
+    assert _stated("expected_audio_tokens") == tokens
+    assert int(band.group(1)) == round(tokens * 0.9)
+    assert int(band.group(2)) == round(tokens * 1.1)
+
+    # And the corpus length is still in there, named as the thing it is, so
+    # the two cannot be read as the same number again.
+    assert _stated("클립 길이 합") == round(sum(seconds.values()), 4)
+    assert _stated("클립 길이 합") * 2 == _stated("한 바퀴에 나가는 소리")
+
+    # Every place the document states the figure has to state the same one.
+    # The block above was not the only copy: the rehearsal table two sections
+    # up carried 937 as well, and correcting one of them is how a document
+    # ends up disagreeing with itself about what a run costs. The paragraph
+    # explaining that it *used* to be 937 is prose and is not a statement of
+    # the figure, which is why the pattern is the labelled form.
+    stated = {
+        int(found.replace(",", ""))
+        for found in re.findall(r"예상 오디오 토큰[^\d]{0,4}\*\*([\d,]+)\*\*", doc)
+    }
+    assert stated == {tokens}, f"330 states more than one token figure: {stated}"
+
+
+def test_the_billed_audio_line_says_which_of_the_three_things_happened(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """The +/-10% band's own branch had never been executed anywhere.
+
+    The test above fixes the *number* the band is measured against. It does not
+    render the line that does the measuring, and nothing else did either: every
+    rehearsal report has ``delivery.audio_tokens_total = None``, because no free
+    call reports the field, so the whole block was skipped in each of the six
+    tests that execute this summary. Defect 14's shape a fourth time -- a guard
+    exercised only on the input where it does nothing -- and here the input where
+    it does something is *the paid run*. It would have run for the first time
+    against money.
+
+    And the skip was itself the defect. The measurer is careful about three
+    states: ``None`` is recorded when no call reported the field, deliberately
+    not ``0``, because ``0`` is a claim about metering. The summary collapsed it
+    back to two by printing nothing -- so a reader checking whether the band held
+    saw identical blank space whether it held, or was never measured at all.
+    That is the same silence that made the free page useless against defect 1.
+    """
+    manifest_path, clip_dir = _speech_fixture(tmp_path, clips=5)
+    out = tmp_path / "billed.json"
+    assert probe.main([
+        "--dry-run", "--quiet", "--repeats", "3",
+        "--speech-set", str(manifest_path),
+        "--speech-clips", str(clip_dir),
+        "--out", str(out),
+    ]) == 0
+    base = json.loads(out.read_text(encoding="utf-8"))
+    expected = base["speech_set"]["expected_audio_tokens"]
+    assert base["delivery"]["audio_tokens_total"] is None, (
+        "the rehearsal now reports billed audio, so this test no longer covers "
+        "the branch the paid run takes first"
+    )
+
+    def _rendered(total: object) -> str:
+        report = json.loads(json.dumps(base))
+        report["delivery"]["audio_tokens_total"] = total
+        return _render_paid_summary(report, tmp_path, monkeypatch, capsys)
+
+    BANNER = "billed audio is more than 10% away"
+
+    silent = _rendered(None)
+    assert "not reported" in silent, "no call reported the field and the page said nothing"
+    assert "did not run" in silent, "silence reads as agreement with the expected figure"
+    assert BANNER not in silent, "a band that was not measured cannot have been missed"
+
+    exact = _rendered(expected)
+    assert f"actually billed: {expected}" in exact
+    assert "(0.0% from expected)" in exact
+    assert BANNER not in exact, "the banner fires on a run that matched exactly"
+    assert "not reported" not in exact
+
+    inside = _rendered(round(expected * 1.09))
+    assert BANNER not in inside, "9% drift is inside the pre-registered band"
+
+    outside = _rendered(round(expected * 1.11))
+    assert BANNER in outside, "11% drift is outside the band and the page stayed quiet"
+
+    # Metered at a real zero: §3's fourth stop rule ends the run, but a run
+    # stopped after some calls still writes a report and still gets summarised.
+    # 100% away is the loudest case the band has, so it must not be the case
+    # that gets rounded into silence.
+    zeroed = _rendered(0)
+    assert "actually billed: 0" in zeroed
+    assert BANNER in zeroed
+
+
+def test_the_speech_flags_travel_together() -> None:
+    """A manifest with no clips is a run that cannot start, not one that
+    quietly falls back to tones."""
+    with pytest.raises(SystemExit):
+        probe.main(["--dry-run", "--speech-set", "x.json"])
+    with pytest.raises(SystemExit):
+        probe.main(["--dry-run", "--speech-clips", "somewhere"])
+
+
+def test_the_speech_run_refuses_a_second_prompt_arm(tmp_path: Path) -> None:
+    """330 pre-registers one arm. Two questions in one run is what left 328
+    unable to answer either of them."""
+    manifest_path, clip_dir = _speech_fixture(tmp_path)
+    with pytest.raises(SystemExit):
+        probe.main([
+            "--dry-run", "--quiet",
+            "--speech-set", str(manifest_path),
+            "--speech-clips", str(clip_dir),
+            "--prompt-arm", "both",
+        ])
+
+
+def test_a_speech_set_that_cannot_be_loaded_exits_three_not_traceback(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Same exit code as an unreadable identity, for the same reason: a run
+    that cannot say what it sent has nothing to report."""
+    manifest_path, clip_dir = _speech_fixture(tmp_path)
+    (clip_dir / "clip0.sent.wav").unlink()
+    assert probe.main([
+        "--dry-run", "--quiet",
+        "--speech-set", str(manifest_path),
+        "--speech-clips", str(clip_dir),
+    ]) == 3
+    assert "::error::" in capsys.readouterr().err
+
+
+# ── The paid entry point has to be able to ask for the speech corpus ─────
+#
+# Everything above is about the script. These are about the only file that
+# can spend money with it: a corpus the workflow cannot select is a corpus
+# nobody can buy, and a corpus it selects without verifying is worse.
+
+
+SPEECH_MANIFEST_REPO_PATH = (
+    "tasks/rebuilding_grading_task/330-speech-verification-manifest.json"
+)
+
+
+def test_the_workflow_can_ask_for_either_corpus() -> None:
+    """A choice input, defaulting to the cheap and already-run one.
+
+    ``speech`` installs a synthesiser and rebuilds ten clips before it calls
+    anything, so it is a deliberate selection rather than something inherited
+    from a default nobody looked at.
+    """
+    inputs = _workflow()[True]["workflow_dispatch"]["inputs"]
+    corpus = inputs["corpus"]
+    assert corpus["type"] == "choice"
+    assert sorted(corpus["options"]) == ["speech", "tones"]
+    assert corpus["default"] == "tones"
+
+
+@pytest.mark.parametrize("job", ["dry-run", "measure"])
+def test_both_jobs_rebuild_the_speech_set_against_the_committed_pin(
+    job: str,
+) -> None:
+    """The check is the point, not the rebuild.
+
+    Regenerating clips is easy and proves nothing on its own -- a newer eSpeak
+    regenerates them happily, into different bytes, and the run would measure
+    audio the pre-registration does not describe. ``--expect-manifest`` is
+    what turns the rebuild into evidence, and it has to be on both jobs: the
+    free one so the failure is found before a reviewer is asked, the paid one
+    so the audio actually sent is the audio that was checked.
+    """
+    step = _step(job, "Build and verify the pinned speech set")
+    assert step["if"].strip() == "${{ inputs.corpus == 'speech' }}"
+    assert "--expect-manifest" in step["run"]
+    assert "$SPEECH_MANIFEST" in step["run"]
+    assert "--out-dir" in step["run"]
+    assert "$SPEECH_CLIPS" in step["run"]
+    assert "espeak-ng" in step["run"]
+
+
+def test_the_manifest_path_the_workflow_names_is_the_committed_one() -> None:
+    """A path typed into a workflow is not checked by anything until it runs.
+
+    If it were wrong, the failure would land after the espeak install, on the
+    paid job, having already passed the gate.
+    """
+    workflow = _workflow()
+    manifest = workflow["env"]["SPEECH_MANIFEST"]
+    assert manifest.endswith(SPEECH_MANIFEST_REPO_PATH)
+    assert (probe.REPO_ROOT / SPEECH_MANIFEST_REPO_PATH).is_file()
+
+
+@pytest.mark.parametrize("job,step_name", [
+    ("dry-run", "Dry run"),
+    ("measure", "Measure"),
+])
+def test_both_runs_forward_the_speech_flags_together(
+    job: str, step_name: str
+) -> None:
+    """The script refuses a lone flag, so a half-forwarded pair fails loudly.
+
+    What it would not catch is a run step that forwards neither: that one
+    silently measures tones under an approval record that says speech.
+    """
+    run = _step(job, step_name)["run"]
+    assert "--speech-set" in run
+    assert "--speech-clips" in run
+    assert "inputs.corpus" in run
+
+
+@pytest.mark.parametrize("corpus", ["tones", "speech"])
+def test_the_approval_record_names_the_corpus_it_authorised(corpus: str) -> None:
+    """Run the gate's own shell, as the call-count test does.
+
+    Both corpora hold twenty criteria, so the call count alone cannot tell a
+    reader which sounds were bought. The clip count can, and it is the one
+    number that differs.
+
+    Every number here is read from a corpus rather than typed in. The criteria
+    count is the one that sets the call count on the record -- the record
+    computes ``20 * PROBE_REPEATS`` -- and it was pinned against ``CLAIMS``
+    alone, which is the corpus this run does *not* buy. That the speech set
+    also holds twenty was a sentence in a comment.
+
+    330 §5 says twenty claims is few, so growing the speech set is a change
+    somebody will reasonably make, and it is the newer of the two corpora. With
+    the count typed in here, adding four claims would leave the gate recording
+    ``calls = 60`` for a run that makes 72 and the assertion would still pass:
+    ``calls = 36`` again, on the dispatch that spends the money.
+    """
+    published = json.loads(
+        (probe.REPO_ROOT / SPEECH_MANIFEST_REPO_PATH).read_text(encoding="utf-8")
+    )
+    criteria = {"tones": len(probe.CLAIMS), "speech": len(published["claims"])}
+    true_claims = {
+        "tones": sum(1 for claim in probe.CLAIMS if claim.holds),
+        "speech": sum(1 for claim in published["claims"] if claim["holds"]),
+    }
+    clips = {"tones": len(probe.CLIPS), "speech": len(published["clips"])}
+
+    assert criteria["tones"] == criteria["speech"], (
+        "the corpora no longer hold the same number of criteria, so the "
+        "record's one `criteria` line and its `20 * PROBE_REPEATS` call count "
+        "cannot serve both. Branch them on $CORPUS the way CLIPS is branched"
+    )
+
+    bash = shutil.which("bash")
+    if bash is None:  # pragma: no cover - CI and dev boxes both have bash
+        pytest.skip("no bash to run the gate's own script with")
+
+    result = subprocess.run(
+        [bash, "-c", _step("approve-paid", "Record approved request")["run"]],
+        env={
+            **os.environ,
+            "PROBE_REPEATS": "3",
+            "PROBE_ARM": "production",
+            "PROBE_CORPUS": corpus,
+        },
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert f"corpus     = {corpus} ({clips[corpus]} clips)" in result.stdout
+    # Still the same criteria count, which is why the clip count had to be
+    # added rather than relied upon to differ.
+    assert (
+        f"criteria   = {criteria[corpus]} ({true_claims[corpus]} true / "
+        f"{criteria[corpus] - true_claims[corpus]} false)"
+    ) in result.stdout
+    assert f"calls      = {criteria[corpus] * 3} per arm" in result.stdout
+
+
+def test_the_gate_states_the_clip_counts_the_corpora_actually_have() -> None:
+    """The gate has no checkout, so those two numbers are restatements.
+
+    Same failure mode as ``calls = 36``: a record that says what was
+    authorised, disagreeing with what exists.
+    """
+    run = _step("approve-paid", "Record approved request")["run"]
+    tone_clips = re.search(r"else CLIPS=(\d+)", run)
+    speech_clips = re.search(r'if \[ "\$CORPUS" = "speech" \]; then CLIPS=(\d+)', run)
+    assert tone_clips and speech_clips
+    assert int(tone_clips.group(1)) == len(probe.CLIPS)
+    published = json.loads(
+        (probe.REPO_ROOT / SPEECH_MANIFEST_REPO_PATH).read_text(encoding="utf-8")
+    )
+    assert int(speech_clips.group(1)) == len(published["clips"])
+
+
+def test_the_paid_summary_refuses_to_pool_the_two_corpora() -> None:
+    """Two capabilities, one heading, is how a beep count becomes a claim
+    about speech. The summary has to say they are separate where it prints
+    them, not only in a document."""
+    summary = _step("measure", "Summarise")["run"]
+    assert "not comparable" in summary
+    assert "speech_set" in summary
+    assert "expected_audio_tokens" in summary
+
+
+def _wire_call(clip_id: str, *, seconds: float, tokens: object = "absent") -> dict:
+    """A call log entry shaped like the one ``summarise_wire`` produces."""
+    wire: dict[str, Any] = {
+        "requests": 1,
+        "requests_with_audio": 1,
+        "audio_sha256": f"sha-{clip_id}",
+        "audio_duration_s": seconds,
+        "audio_format": "wav",
+        "audio_sample_rate_hz": AUDIO_SAMPLE_RATE_HZ,
+        "audio_channels": 1,
+        "response_model": "gpt-audio-1.5",
+    }
+    if tokens != "absent":
+        wire["audio_tokens"] = tokens
+        wire["audio_tokens_billed"] = tokens
+    return {
+        "repeat": 1,
+        "claim_id": f"{clip_id}_claim",
+        "clip_id": clip_id,
+        "input_tokens": 100 + int(seconds * 10),
+        "wire": wire,
+    }
+
+
+def test_billed_audio_is_null_when_nobody_reported_it() -> None:
+    """Zero is a claim. Silence is not.
+
+    A total of zero is what a request that never carried the sound looks
+    like, and 330 stops the run on it. If a provider that simply does not
+    report the field produced the same zero, the stop rule would fire on
+    every run against such a provider -- or, read the other way, a real zero
+    would be dismissed as a quiet provider.
+    """
+    calls = [_wire_call("a", seconds=1.0), _wire_call("b", seconds=2.0)]
+    delivery = probe.delivery_section(
+        calls, measured=False, durations={"a": 1.0, "b": 2.0}
+    )
+    assert delivery["audio_tokens_reported"] == 0
+    assert delivery["audio_tokens_total"] is None
+
+
+def test_billed_audio_totals_what_was_reported() -> None:
+    """And when it is reported, it is a sum rather than a count."""
+    calls = [
+        _wire_call("a", seconds=1.0, tokens=30),
+        _wire_call("a", seconds=1.0, tokens=32),
+        _wire_call("b", seconds=2.0),
+    ]
+    delivery = probe.delivery_section(
+        calls, measured=True, durations={"a": 1.0, "b": 2.0}
+    )
+    assert delivery["audio_tokens_reported"] == 2
+    assert delivery["audio_tokens_total"] == 62
+
+
+def test_a_retried_envelope_is_billed_twice_and_counted_twice() -> None:
+    """One verdict, two requests, two clips' worth of audio on the invoice.
+
+    ``summarise_wire`` exists because a judge call can make more than one
+    request -- it keeps ``requests`` for exactly that reason -- and every other
+    field it collapses takes the *last* one, correctly: ``audio_sha256`` and
+    ``response_model`` describe the request that produced the verdict.
+
+    ``audio_tokens`` was collapsed the same way, and it is not that kind of
+    field. Billing counts requests. Six retries in sixty calls is 10% more
+    audio bought than planned, which is the entire width of the pre-registered
+    band -- and the summary would have printed ``0.0% from expected`` while it
+    happened, because the number it compares was structurally incapable of
+    including the retry. The band exists to notice exactly this.
+    """
+    def _request(tokens: int) -> dict[str, Any]:
+        return {
+            "audio_part_present": True,
+            "audio_sha256": "a" * 64,
+            "audio_format": "wav",
+            "prompt_sha256": "b" * 64,
+            "prompt_chars": 10,
+            "response_model": "gpt-audio-1.5",
+            "audio_tokens": tokens,
+            "sent_wav": {
+                "bytes": 1,
+                "sample_rate_hz": AUDIO_SAMPLE_RATE_HZ,
+                "channels": 1,
+                "duration_s": 3.1,
+            },
+        }
+
+    once = probe.summarise_wire([_request(31)])
+    assert once["requests"] == 1
+    assert once["audio_tokens"] == 31
+    assert once["audio_tokens_billed"] == 31, "no retry, so the two agree"
+
+    retried = probe.summarise_wire([_request(31), _request(31)])
+    assert retried["requests"] == 2
+    assert retried["audio_tokens"] == 31, (
+        "the verdict's own meter reading is still the last request's, like the "
+        "digest and the model name it sits beside"
+    )
+    assert retried["audio_tokens_billed"] == 62, (
+        "the clip went out twice and was billed twice"
+    )
+
+    # The fixture helper below has to keep producing what this function does,
+    # or the delivery tests pass against a shape the measurer never emits. A
+    # subset check is not enough: the fixture omitted ``requests`` entirely and
+    # `delivery_section` read it as 0, so a run of sixty calls reported twelve.
+    fixture = _wire_call("a", seconds=1.0, tokens=1)["wire"]
+    assert set(fixture) <= set(retried), (
+        "_wire_call invented a wire field summarise_wire does not produce"
+    )
+    for field in (
+        "requests", "requests_with_audio", "audio_tokens", "audio_tokens_billed"
+    ):
+        assert field in fixture, (
+            f"delivery_section reads {field!r} and the fixture does not have it, "
+            f"so its tests measure a call shape that never reaches the report"
+        )
+
+
+def test_the_delivery_total_is_the_bill_not_the_verdict_count() -> None:
+    """Sixty calls, six of which retried, against the +/-10% band.
+
+    The reported total used to be 1,860 with 2,046 billed -- inside the band,
+    on a run that bought 10% more audio than pre-registered.
+    """
+    calls = [_wire_call(f"c{i}", seconds=1.0, tokens=31) for i in range(54)]
+    for i in range(6):
+        call = _wire_call(f"r{i}", seconds=1.0, tokens=31)
+        call["wire"]["requests"] = 2
+        call["wire"]["requests_with_audio"] = 2
+        call["wire"]["audio_tokens_billed"] = 62
+        calls.append(call)
+
+    durations = {call["clip_id"]: 1.0 for call in calls}
+    delivery = probe.delivery_section(calls, measured=True, durations=durations)
+
+    assert delivery["audio_tokens_total"] == 54 * 31 + 6 * 62 == 2046
+    assert delivery["audio_tokens_total"] != 60 * 31, "the retries fell off the bill"
+    # And the count that explains why, so a reader seeing the band exceeded is
+    # not left guessing between "a retry" and "different sound went out".
+    assert delivery["requests_total"] == 66
+    assert delivery["calls_inspected"] == 60
+
+
+def test_the_summary_says_when_more_requests_went_out_than_calls(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """A drift line with no cause is a line that gets argued with, not acted on."""
+    manifest_path, clip_dir = _speech_fixture(tmp_path, clips=5)
+    out = tmp_path / "retried.json"
+    assert probe.main([
+        "--dry-run", "--quiet", "--repeats", "3",
+        "--speech-set", str(manifest_path),
+        "--speech-clips", str(clip_dir),
+        "--out", str(out),
+    ]) == 0
+    base = json.loads(out.read_text(encoding="utf-8"))
+    assert base["delivery"]["requests_total"] == base["delivery"]["calls_inspected"]
+
+    clean = _render_paid_summary(base, tmp_path, monkeypatch, capsys)
+    assert "retried envelope" not in clean, "a line that prints when nothing retried"
+
+    report = json.loads(json.dumps(base))
+    report["delivery"]["requests_total"] = report["delivery"]["calls_inspected"] + 6
+    printed = _render_paid_summary(report, tmp_path, monkeypatch, capsys)
+    assert "6 retried envelope(s), each billed again" in printed
+    assert f"requests sent: **{report['delivery']['requests_total']}**" in printed
+
+
+def test_a_real_zero_still_reads_as_zero() -> None:
+    """The other half of the distinction, and the one the stop rule needs."""
+    calls = [_wire_call("a", seconds=1.0, tokens=0)]
+    delivery = probe.delivery_section(
+        calls, measured=True, durations={"a": 1.0}
+    )
+    assert delivery["audio_tokens_total"] == 0
+
+
+def test_the_delivery_record_measures_speech_against_speech_lengths() -> None:
+    """The bug this pins produced a full page of red on a healthy run.
+
+    ``delivery_section`` defaulted to the tone clips for its duration table.
+    Given speech calls, every lookup missed, every clip landed in
+    ``clips_whose_sent_duration_differs``, and the correlation between prompt
+    tokens and clip seconds -- the line that says the audio was charged for --
+    had nothing to correlate. A reader following the instruction to check
+    delivery before accuracy would have concluded the audio never arrived.
+    """
+    calls = [
+        _wire_call("crate", seconds=3.0151),
+        _wire_call("valve", seconds=3.2219),
+    ]
+    durations = {"crate": 3.0151, "valve": 3.2219}
+
+    honest = probe.delivery_section(calls, measured=False, durations=durations)
+    assert honest["clips_whose_sent_duration_differs"] == []
+    assert honest["prompt_token_vs_clip_seconds"]["n"] == 2
+
+    # The default, which is what the defect used: tone clip ids, so every
+    # speech clip misses and is reported as a mismatch.
+    wrong = probe.delivery_section(calls, measured=False)
+    assert sorted(wrong["clips_whose_sent_duration_differs"]) == ["crate", "valve"]
+    assert wrong["prompt_token_vs_clip_seconds"]["n"] == 0
+
+
+def test_the_speech_run_picks_the_right_durations_without_being_told(
+    tmp_path: Path,
+) -> None:
+    """End to end through the CLI, because that is what CI runs."""
+    manifest_path, clip_dir = _speech_fixture(tmp_path, clips=3)
+    out = tmp_path / "report.json"
+    delivery_out = tmp_path / "delivery.json"
+    assert probe.main([
+        "--dry-run", "--quiet",
+        "--speech-set", str(manifest_path),
+        "--speech-clips", str(clip_dir),
+        "--repeats", "1",
+        "--out", str(out),
+        "--delivery-out", str(delivery_out),
+    ]) == 0
+    report = json.loads(out.read_text(encoding="utf-8"))
+    assert report["corpus"] == "speech"
+    delivery = report["delivery"]
+    assert delivery["clips_whose_sent_duration_differs"] == []
+    assert delivery["calls_carrying_audio"] == delivery["calls_inspected"]
+
+
+def test_a_clip_with_no_pinned_length_is_left_out_rather_than_guessed(
+    tmp_path: Path,
+) -> None:
+    """A placeholder length disagrees with every real one."""
+    manifest_path, clip_dir = _speech_fixture(tmp_path)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    del manifest["clips"][0]["sent"]["seconds"]
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    corpus = probe.load_speech_corpus(manifest_path, clip_dir)
+    assert "clip0" not in corpus.durations
+    assert "clip1" in corpus.durations
+
+
+# ── Stop rules, which only exist if code obeys them ──────────────────────
+#
+# 330 section 3 names four. A rule that lives only in a document is
+# reconsidered at the exact moment obeying it would cost something.
+
+
+def _rule_calls(n: int, **overrides: Any) -> list[dict]:
+    calls = []
+    for index in range(n):
+        call = _wire_call("a", seconds=1.0, tokens=10)
+        call["claim_id"] = f"c{index}"
+        call["unanswered_kind"] = None
+        call.update(overrides)
+        calls.append(call)
+    return calls
+
+
+def test_the_pre_registered_rules_are_the_ones_the_document_names() -> None:
+    """Four numbers in two files. This is the one that keeps them equal."""
+    rules = probe.SPEECH_STOP_RULES
+    assert rules.wall_clock_seconds == 20 * 60
+    assert rules.zero_response_after == 10
+    assert rules.max_provider_failures == 10
+    assert rules.stop_on_undelivered_audio is True
+
+    doc = (
+        probe.REPO_ROOT / "tasks" / "rebuilding_grading_task"
+        / "330-speech-diagnostic-prereg.md"
+    ).read_text(encoding="utf-8")
+    assert "20분" in doc
+    assert "10번" in doc
+
+
+def test_nothing_stops_a_healthy_run() -> None:
+    assert probe._stop_reason(
+        probe.SPEECH_STOP_RULES, calls=_rule_calls(30), elapsed_s=10.0
+    ) is None
+
+
+def test_the_clock_stops_the_run() -> None:
+    fired = probe._stop_reason(
+        probe.SPEECH_STOP_RULES, calls=_rule_calls(5), elapsed_s=20 * 60 + 1
+    )
+    assert fired["rule"] == "wall_clock_seconds"
+    assert fired["after_calls"] == 5
+
+
+def test_ten_calls_with_no_usable_verdict_stop_the_run() -> None:
+    """This is the rule that would have ended 328's observation arm at ten.
+
+    That run bought all sixty, none of which parsed, and published an
+    accuracy computed over the seventeen replies that happened to contain a
+    word the reader accepted.
+    """
+    calls = _rule_calls(10, unanswered_kind="read_failure")
+    fired = probe._stop_reason(
+        probe.SPEECH_STOP_RULES, calls=calls, elapsed_s=5.0
+    )
+    assert fired["rule"] == "zero_response_after"
+
+    # One usable verdict among the ten is enough to keep going: the question
+    # is whether the format is broken, not whether it is perfect.
+    calls[3]["unanswered_kind"] = None
+    assert probe._stop_reason(
+        probe.SPEECH_STOP_RULES, calls=calls, elapsed_s=5.0
+    ) is None
+
+
+def test_ten_provider_failures_stop_the_run() -> None:
+    calls = _rule_calls(12)
+    for call in calls[:10]:
+        call["unanswered_kind"] = "provider_failure"
+    fired = probe._stop_reason(
+        probe.SPEECH_STOP_RULES, calls=calls, elapsed_s=5.0
+    )
+    assert fired["rule"] == "max_provider_failures"
+
+
+def test_a_request_that_carried_no_audio_stops_the_run_at_once() -> None:
+    """One call, not ten. Everything after it would measure nothing."""
+    calls = _rule_calls(1)
+    calls[-1]["wire"]["requests_with_audio"] = 0
+    fired = probe._stop_reason(
+        probe.SPEECH_STOP_RULES, calls=calls, elapsed_s=1.0
+    )
+    assert fired["rule"] == "stop_on_undelivered_audio"
+
+
+def test_a_reported_zero_and_an_unreported_field_are_not_the_same() -> None:
+    """The distinction the null total exists to preserve, applied.
+
+    A provider that never reports audio tokens must not trip a rule about
+    audio never arriving; a provider that reports zero must.
+    """
+    silent = _rule_calls(1)
+    silent[-1]["wire"].pop("audio_tokens", None)
+    assert probe._audio_was_delivered(silent[-1]) is True
+    assert probe._stop_reason(
+        probe.SPEECH_STOP_RULES, calls=silent, elapsed_s=1.0
+    ) is None
+
+    zero = _rule_calls(1)
+    zero[-1]["wire"]["audio_tokens"] = 0
+    assert probe._audio_was_delivered(zero[-1]) is False
+    assert probe._stop_reason(
+        probe.SPEECH_STOP_RULES, calls=zero, elapsed_s=1.0
+    )["rule"] == "stop_on_undelivered_audio"
+
+
+def test_a_stopped_run_keeps_what_it_bought(tmp_path: Path) -> None:
+    """Stopping is not discarding. 330: the partial result is still reported.
+
+    A stop that threw away the calls would make obeying the rule expensive,
+    which is how a stop rule stops being obeyed.
+    """
+    manifest_path, clip_dir = _speech_fixture(tmp_path, clips=3)
+    corpus = probe.load_speech_corpus(manifest_path, clip_dir)
+    perception = probe.AudioPerception(
+        client=probe.TruthfulStub(corpus.claims),
+        deployment="gpt-audio-1.5",
+        call_cap=AUDIO_CALL_CAP,
+        trim_seconds=AUDIO_TRIM_SECONDS,
+    )
+    ticks = iter([0.0] + [10_000.0] * 500)
+    result = probe.run_measurement(
+        perception=perception,
+        clip_dir=tmp_path / "unused",
+        repeats=3,
+        claims=corpus.claims,
+        prerendered=corpus,
+        stop_rules=probe.StopRules(wall_clock_seconds=60),
+        clock=lambda: next(ticks),
+    )
+    assert result["stopped"]["rule"] == "wall_clock_seconds"
+    # One call made, kept, and the plan it fell short of is recorded.
+    assert len(result["calls"]) == 1
+    assert result["planned_calls"] == 3 * len(corpus.claims)
+
+    report = probe.build_report(
+        identity=probe.pinned_identity(),
+        measured=False,
+        repeats=3,
+        result=result,
+        speech=corpus,
+    )
+    assert report["stopped"]["rule"] == "wall_clock_seconds"
+    assert report["calls_planned"] == 3 * len(corpus.claims)
+    json.dumps(report)
+
+
+def test_a_finished_run_says_so_rather_than_leaving_the_field_out(
+    tmp_path: Path,
+) -> None:
+    """``stopped: null`` beside a full count is a statement. A missing key is
+    something a reader has to interpret."""
+    out = tmp_path / "report.json"
+    assert probe.main(
+        ["--dry-run", "--quiet", "--repeats", "1", "--out", str(out)]
+    ) == 0
+    report = json.loads(out.read_text(encoding="utf-8"))
+    assert "stopped" in report
+    assert report["stopped"] is None
+    assert report["calls_planned"] == len(probe.CLAIMS)
+
+
+def test_the_tone_corpus_runs_without_stop_rules(tmp_path: Path) -> None:
+    """Its numbers are published. Adding rules now would change the design a
+    published result was produced under, after the fact."""
+    source = (
+        probe.REPO_ROOT / "batch-runner" / "scripts"
+        / "measure_audio_grading_accuracy.py"
+    ).read_text(encoding="utf-8")
+    assert "stop_rules=SPEECH_STOP_RULES if speech else None" in source
+
+
+def test_the_paid_summary_says_a_stopped_run_stopped() -> None:
+    """A partial run that looks complete in the summary is how a stop rule
+    turns into a quietly worse result."""
+    step = _step("measure", "Summarise")
+    body = step["run"]
+    assert 'stopped = report.get("stopped")' in body
+    assert "stopped early on the pre-registered rule" in body
+    # The plan it fell short of has to be next to the count it reached,
+    # or "made 12 calls" reads as the design rather than as a shortfall.
+    assert "report['calls_planned']" in body
+    assert "partial run" in body
+
+
+def test_the_dry_run_summary_shows_the_field_exists() -> None:
+    step = _step("dry-run", "Summarise")
+    assert "stopped early" in step["run"]
+
+
+def test_the_dispatch_the_document_names_is_a_dispatch_the_workflow_accepts() -> None:
+    """A pre-registered input set that the workflow would reject is not a
+    pre-registration; it is a plan that gets edited at dispatch time."""
+    doc = (
+        probe.REPO_ROOT / "tasks" / "rebuilding_grading_task"
+        / "330-speech-diagnostic-prereg.md"
+    ).read_text(encoding="utf-8")
+    inputs = _workflow()[True]["workflow_dispatch"]["inputs"]
+
+    for name, value in [
+        ("dry_run", "`false`"),
+        ("paid_approval", "`true`"),
+        ("repeats", "`3`"),
+        ("prompt_arm", "`production`"),
+        ("corpus", "`speech`"),
+    ]:
+        assert f"| `{name}` | {value} |" in doc, name
+        assert name in inputs, name
+
+    assert "production" in inputs["prompt_arm"]["options"]
+    assert "speech" in inputs["corpus"]["options"]
+    # 60 calls, and the document's arithmetic has to be the workflow's.
+    assert int(inputs["repeats"]["default"]) == 3
+    assert "20 × 3 × 1 = 60" in doc
+
+
+def test_the_column_saying_which_inputs_must_be_typed_is_derived() -> None:
+    """§0's third column is the one the operator acts on, and it was prose.
+
+    The table has a "does this differ from the default?" column. Three rows say
+    yes, two say no, and the two that say no are the two the operator will not
+    type -- that is what the column is *for*. So a default moving underneath it
+    does not produce a wrong document so much as a wrong dispatch.
+
+    Neither 같음 row is a spending risk on its own. ``repeats`` is pinned by the
+    test above, and if ``prompt_arm``'s default became ``both`` the measurer
+    refuses that combination with a speech set before it resolves the identity,
+    so the run stops rather than buying 120 calls. But it stops, and stopping is
+    not what §0 describes: "아래 다섯 개 말고 다른 조합은 이 사전등록이 아니다."
+
+    The 다름 rows carry the other half. ``dry_run`` defaults to ``true``, and
+    that default is what makes a careless dispatch free; if it ever became
+    ``false`` this column would still be telling the operator to type something
+    the workflow no longer needs telling.
+
+    Every row is right today. Nothing checked that, which is the whole shape:
+    a true sentence with no guard is only true until someone edits elsewhere.
+    """
+    doc = (
+        probe.REPO_ROOT / "tasks" / "rebuilding_grading_task"
+        / "330-speech-diagnostic-prereg.md"
+    ).read_text(encoding="utf-8")
+    inputs = _workflow()[True]["workflow_dispatch"]["inputs"]
+
+    rows = re.findall(
+        r"^\| `([a-z_]+)` \| `([^`]+)` \| (✅ 다름|같음) \|$", doc, re.MULTILINE
+    )
+    assert [name for name, _, _ in rows] == [
+        "dry_run",
+        "paid_approval",
+        "repeats",
+        "prompt_arm",
+        "corpus",
+    ], "§0's dispatch table is no longer the five inputs it pre-registers"
+
+    for name, stated_value, stated_verdict in rows:
+        default = str(inputs[name]["default"]).lower()
+        differs = default != stated_value.lower()
+        assert differs == (stated_verdict == "✅ 다름"), (
+            f"§0 says `{name}` is {stated_verdict!r} from the default, but the "
+            f"workflow's default is {inputs[name]['default']!r} and the "
+            f"pre-registered value is {stated_value!r}. The column tells the "
+            f"operator which inputs to type; re-derive it, do not re-word it."
+        )
+
+
+# ── The per-claim table, which is where the primary analysis lives ───────
+#
+# Third instance of one bug: an analysis function defaulting to the tone
+# corpus while the speech corpus runs. The per-call figures stay healthy,
+# so nothing looks wrong until someone asks for the number 330 called
+# primary and finds it was never computed.
+
+
+def test_every_claim_that_ran_has_a_row(tmp_path: Path) -> None:
+    manifest_path, clip_dir = _speech_fixture(tmp_path, clips=4)
+    corpus = probe.load_speech_corpus(manifest_path, clip_dir)
+    perception = probe.AudioPerception(
+        client=probe.TruthfulStub(corpus.claims),
+        deployment="gpt-audio-1.5",
+        call_cap=AUDIO_CALL_CAP,
+        trim_seconds=AUDIO_TRIM_SECONDS,
+    )
+    result = probe.run_measurement(
+        perception=perception,
+        clip_dir=tmp_path / "unused",
+        repeats=3,
+        claims=corpus.claims,
+        prerendered=corpus,
+    )
+    report = probe.build_report(
+        identity=probe.pinned_identity(),
+        measured=False,
+        repeats=3,
+        result=result,
+        speech=corpus,
+    )
+    acc = report["accuracy"]
+    assert set(acc["by_claim"]) == {c.claim_id for c in corpus.claims}
+    assert acc["stability"]["claims"] == len(corpus.claims)
+    # Not merely present: actually usable. A table of rows whose majority is
+    # None would satisfy a count and still leave the primary test empty.
+    assert acc["discrimination_j"]["per_claim_majority"] is not None
+    assert acc["pre_registered_binomial"]["n"] == len(corpus.claims)
+
+
+def test_a_tone_claim_id_does_not_stand_in_for_a_speech_one(
+    tmp_path: Path,
+) -> None:
+    """The failure was silent because the ids simply did not intersect."""
+    manifest_path, clip_dir = _speech_fixture(tmp_path, clips=2)
+    corpus = probe.load_speech_corpus(manifest_path, clip_dir)
+    assert not ({c.claim_id for c in corpus.claims}
+                & {c.claim_id for c in probe.CLAIMS})
+    calls = [
+        {
+            "claim_id": claim.claim_id,
+            "holds": claim.holds,
+            "family": claim.family,
+            "pair_id": claim.pair_id,
+            "verdict": "pass" if claim.holds else "fail",
+            "outcome": probe.OUTCOME_CORRECT,
+            "confidence": None,
+            "unanswered_kind": None,
+        }
+        for claim in corpus.claims
+    ]
+    assert probe.summarise(calls)["by_claim"] == {}
+    assert probe.summarise(calls, claims=corpus.claims)["by_claim"]
+
+
+def test_the_published_speech_set_fills_the_primary_analysis() -> None:
+    """Against the real manifest, not a fixture: 20 claims, 20 rows."""
+    manifest = probe.REPO_ROOT / SPEECH_MANIFEST_REPO_PATH
+    claims = json.loads(manifest.read_text(encoding="utf-8"))["claims"]
+    assert len(claims) == 20
+    doc = (
+        probe.REPO_ROOT / "tasks" / "rebuilding_grading_task"
+        / "330-speech-diagnostic-prereg.md"
+    ).read_text(encoding="utf-8")
+    assert "`accuracy.pre_registered_binomial`" in doc
+
+
+# ── Two tests, both named before either has a value ──────────────────────
+
+
+def test_the_primary_test_is_the_one_the_document_calls_primary() -> None:
+    doc = (
+        probe.REPO_ROOT / "tasks" / "rebuilding_grading_task"
+        / "330-speech-diagnostic-prereg.md"
+    ).read_text(encoding="utf-8")
+    # ``n <= 20``, not ``n = 20``. The hedged-majority exclusion was always in
+    # the document; the label was not, and a table cell reading "n = 20" is
+    # what a run with n = 14 gets written up as.
+    assert "이항검정 (n ≤ 20, p = 0.5)" in doc
+    assert "이항검정 (n = 20" not in doc
+    assert "`accuracy.permutation`" in doc
+    step = _step("measure", "Summarise")
+    assert "pre-registered primary" in step["run"]
+    assert "pre-specified secondary" in step["run"]
+
+
+@pytest.mark.parametrize(
+    "correct, n, expected",
+    [
+        (20, 20, 1 / 2 ** 20),
+        (10, 20, 0.5880985260009766),
+        (0, 20, 1.0),
+        (1, 1, 0.5),
+    ],
+)
+def test_the_binomial_is_the_binomial(correct: int, n: int, expected: float) -> None:
+    by_claim = {
+        f"c{i}": {
+            "holds": True,
+            "majority": "pass",
+            "majority_outcome": (
+                probe.OUTCOME_CORRECT if i < correct else probe.OUTCOME_FALSE_FAIL
+            ),
+        }
+        for i in range(n)
+    }
+    got = probe.binomial_majority_test(by_claim)
+    assert got["n"] == n
+    assert got["correct"] == correct
+    assert got["p_one_sided"] == pytest.approx(expected)
+
+
+def test_a_hedged_majority_is_not_scored_either_way() -> None:
+    """`partial` is a refusal to answer a binary question, so it leaves the
+    denominator rather than being rounded into whichever side is convenient."""
+    by_claim = {
+        "a": {"majority": "pass", "majority_outcome": probe.OUTCOME_CORRECT},
+        "b": {"majority": "partial", "majority_outcome": probe.OUTCOME_HEDGED},
+        "c": {"majority": None, "majority_outcome": None},
+    }
+    got = probe.binomial_majority_test(by_claim)
+    assert got["claims_with_a_majority"] == 2
+    assert got["hedged_majorities_excluded"] == 1
+    assert got["n"] == 1 and got["correct"] == 1
+
+
+def test_a_test_with_nothing_to_test_returns_null_not_one() -> None:
+    got = probe.binomial_majority_test({})
+    assert got["n"] == 0
+    assert got["p_one_sided"] is None
+    assert got["smallest_attainable_p"] is None
+
+
+def test_the_repeats_are_collapsed_before_the_test_not_after() -> None:
+    """60 calls are not 60 trials. Three calls about one clip ask one
+    question, and counting them separately manufactures significance."""
+    source = (
+        probe.REPO_ROOT / "batch-runner" / "scripts"
+        / "measure_audio_grading_accuracy.py"
+    ).read_text(encoding="utf-8")
+    assert "binomial_majority_test(by_claim)" in source
+    doc = (
+        probe.REPO_ROOT / "tasks" / "rebuilding_grading_task"
+        / "330-speech-diagnostic-prereg.md"
+    ).read_text(encoding="utf-8")
+    assert "반복 3회를 독립 시행으로 세면" in doc
+
+
+def test_every_analysis_field_the_document_names_exists_in_a_real_report(
+    tmp_path: Path,
+) -> None:
+    """The general form of the bug this file keeps catching.
+
+    Each specific case -- the primary binomial, the pair census, the flip
+    rate's denominator -- was a field 330 promised and the report did not
+    write. A named field that does not exist is how "the analysis I
+    pre-registered" quietly becomes "the analysis I did", and the substring
+    assertions elsewhere only guard the paths someone thought to list.
+
+    So: resolve every ``accuracy.*`` path the document names against a report
+    the script actually produced. A renamed field breaks this whether or not
+    anyone remembers to update a test. Scope is the analysis section because
+    that is where all of those defects were; the delivery evidence needs a
+    wired run and is checked against the published clips instead.
+    """
+    doc = (
+        probe.REPO_ROOT / "tasks" / "rebuilding_grading_task"
+        / "330-speech-diagnostic-prereg.md"
+    ).read_text(encoding="utf-8")
+    named = sorted(set(re.findall(r"`(accuracy(?:\.[a-z_]+)+)`", doc)))
+    assert named, "the document names no analysis fields at all"
+
+    out = tmp_path / "report.json"
+    probe.main(["--dry-run", "--quiet", "--repeats", "3", "--out", str(out)])
+    report = json.loads(out.read_text(encoding="utf-8"))
+    for path in named:
+        node = report
+        for part in path.split("."):
+            assert isinstance(node, dict) and part in node, (
+                f"330 names `{path}`, but the report has no `{part}` there"
+            )
+            node = node[part]
+
+
+def test_the_accuracy_never_appears_without_its_denominator() -> None:
+    """328 published 47.1% on 17 answers out of 60 and the 17 was nowhere near
+    the number. 330 §4 requires both figures side by side, so the summary a
+    person reads has to carry the rate, not only the artifact."""
+    body = _step("measure", "Summarise")["run"]
+    assert "response rate" in body
+    assert "answers it was computed from" in body
+    # This arm's rate, beside this arm's accuracy. The run's call count is a
+    # different number and stays sourced from the cost block.
+    assert "acc['overall']['response_rate']" in body
+    assert "acc['overall']['calls']" not in body
+    doc = (
+        probe.REPO_ROOT / "tasks" / "rebuilding_grading_task"
+        / "330-speech-diagnostic-prereg.md"
+    ).read_text(encoding="utf-8")
+    assert "두 숫자를 항상 같이 낸다" in doc
+    # And the fields the summary prints are ones the report actually writes.
+    summary = probe.summarise(_calls(lambda claim: "judge_error"))
+    assert summary["overall"]["response_rate"] == 0.0
+    assert summary["overall"]["answered"] == 0
+
+
+def test_a_judge_that_never_listened_is_visible_as_a_count() -> None:
+    """Ten pairs of `pass` scores 50% on a balanced corpus. Accuracy alone
+    reads that as a near miss; the pair census reads it as zero pairs told
+    apart."""
+    by_claim = {}
+    for index in range(10):
+        for holds in (True, False):
+            by_claim[f"p{index}_{holds}"] = {
+                "holds": holds,
+                "pair_id": f"p{index}",
+                "majority": "pass",
+            }
+    got = probe.pair_consistency(by_claim)
+    assert got["pairs"] == 10
+    assert got["answered_differently"] == 0
+    assert got["answered_identically"] == 10
+    assert got["identical_by_verdict"] == {"pass": 10}
+    assert got["incomplete"] == 0
+
+
+def test_a_pair_told_apart_counts_as_told_apart() -> None:
+    by_claim = {
+        "a_t": {"holds": True, "pair_id": "a", "majority": "pass"},
+        "a_f": {"holds": False, "pair_id": "a", "majority": "fail"},
+        # Same verdict on both sides, and it is not `pass`.
+        "b_t": {"holds": True, "pair_id": "b", "majority": "fail"},
+        "b_f": {"holds": False, "pair_id": "b", "majority": "fail"},
+    }
+    got = probe.pair_consistency(by_claim)
+    assert got["answered_differently"] == 1
+    assert got["identical_by_verdict"] == {"fail": 1}
+
+
+def test_a_pair_missing_a_side_is_neither_told_apart_nor_confused() -> None:
+    """Counting it as separated would credit a pair that was never answered;
+    counting it as identical would blame one."""
+    by_claim = {
+        "a_t": {"holds": True, "pair_id": "a", "majority": None},
+        "a_f": {"holds": False, "pair_id": "a", "majority": "fail"},
+    }
+    got = probe.pair_consistency(by_claim)
+    assert got["incomplete"] == 1
+    assert got["answered_differently"] == 0
+    assert got["answered_identically"] == 0
+
+
+def test_the_pair_census_covers_every_pair_of_the_speech_set() -> None:
+    """Ten clips, ten pairs, read from the committed manifest. A census that
+    silently saw fewer would understate how much of the corpus was never
+    separated."""
+    manifest = probe.REPO_ROOT / SPEECH_MANIFEST_REPO_PATH
+    claims = json.loads(manifest.read_text(encoding="utf-8"))["claims"]
+    by_claim = {
+        claim["claim_id"]: {
+            "holds": claim["holds"],
+            "pair_id": claim["pair_id"],
+            # Answered correctly on both sides, so every pair is separated.
+            "majority": "pass" if claim["holds"] else "fail",
+        }
+        for claim in claims
+    }
+    got = probe.pair_consistency(by_claim)
+    assert got["pairs"] == 10
+    assert got["answered_differently"] == 10
+    assert got["answered_identically"] == 0
+    assert got["incomplete"] == 0
+
+
+def test_the_summary_prints_the_pairs_it_told_apart() -> None:
+    body = _step("measure", "Summarise")["run"]
+    assert "pairs told apart" in body
+    assert "both sides the same verdict" in body
+    doc = (
+        probe.REPO_ROOT / "tasks" / "rebuilding_grading_task"
+        / "330-speech-diagnostic-prereg.md"
+    ).read_text(encoding="utf-8")
+    assert "accuracy.pair_consistency" in doc
+    assert "answered_differently" in doc
+
+
+def test_the_flip_rate_uses_the_denominator_it_is_compared_against() -> None:
+    """19.35% was flips over *pairs of runs*. Three repeats give three pairs
+    per claim, so a claim that flips once is one third of that figure and all
+    of the claim-level one."""
+    by_claim = {
+        "steady": {"verdicts": ["pass", "pass", "pass"]},
+        "one_flip": {"verdicts": ["pass", "pass", "fail"]},
+    }
+    got = probe.repeat_flip_rate(by_claim)
+    # 6 pairs, 2 of them disagree (pass/fail twice within `one_flip`).
+    assert got["comparable_pairs"] == 6
+    assert got["flips"] == 2
+    assert got["flip_rate_pct"] == pytest.approx(100.0 * 2 / 6)
+    # The other denominator, kept beside it and labelled, not instead of it.
+    assert got["claims_that_ever_flipped"] == 1
+    assert got["prior_audio_cohort_pct"] == pytest.approx(19.3548, abs=1e-3)
+
+
+def test_the_earlier_figure_quoted_here_is_the_earlier_figure() -> None:
+    """The comparison is only worth printing if the number it is set against
+    is the one the repeat study actually produced."""
+    prior = (
+        probe.REPO_ROOT / "batch-runner" / "tests"
+        / "test_audio_repeat_variation_bounds_what_it_can.py"
+    ).read_text(encoding="utf-8")
+    assert "19.3548" in prior
+    assert "verdict_flip_rate_pct" in prior
+    got = probe.repeat_flip_rate({})
+    assert got["prior_audio_cohort_pct"] == pytest.approx(19.3548, abs=1e-3)
+
+
+def test_a_pair_missing_an_answer_is_not_an_agreement() -> None:
+    """An unanswered repeat did not agree with its partner and did not
+    disagree; folding it in either direction reports steadiness that was
+    never measured."""
+    by_claim = {
+        "half_answered": {"verdicts": ["pass", "judge_error", "fail"]},
+        "silent": {"verdicts": ["judge_error", "judge_error", "judge_error"]},
+    }
+    got = probe.repeat_flip_rate(by_claim)
+    assert got["comparable_pairs"] == 1
+    assert got["flips"] == 1
+    assert got["pairs_dropped_for_a_missing_answer"] == 5
+    assert got["flip_rate_pct"] == pytest.approx(100.0)
+
+
+def test_a_run_with_nothing_to_compare_reports_null_not_zero() -> None:
+    got = probe.repeat_flip_rate({"silent": {"verdicts": ["judge_error"]}})
+    assert got["comparable_pairs"] == 0
+    assert got["flip_rate_pct"] is None
+    assert got["flips"] == 0
+
+
+def test_the_flip_rate_travels_with_the_report() -> None:
+    """It has to be in the artifact, not left as a division a reader might do
+    with the wrong two fields."""
+    # One claim answered three times, disagreeing once: three pairs, two of
+    # which are pass/fail.
+    calls = []
+    for index, verdict in enumerate(("fail", "pass", "pass")):
+        call = dict(_calls(lambda claim: verdict)[0])
+        call["repeat"] = index + 1
+        calls.append(call)
+    summary = probe.summarise(calls, claims=probe.CLAIMS[:1])
+    flips = summary["stability"]["repeat_flips"]
+    assert flips["unit"] == "one pair of repeats for one claim"
+    assert flips["comparable_pairs"] == 3
+    assert flips["flips"] == 2
+    assert flips["claims_that_ever_flipped"] == 1
+
+
+def test_the_summary_prints_both_denominators_and_says_which_is_which() -> None:
+    """Printing one alone is how the units got confused in the first place."""
+    body = _step("measure", "Summarise")["run"]
+    assert "repeat flip rate" in body
+    assert "claims that ever flipped" in body
+    assert "different denominator" in body
+    assert "prior_audio_cohort_pct" in body
+
+
+def test_the_document_names_the_field_the_comparison_uses() -> None:
+    """A pre-registration that says "comparable" without saying to which
+    number leaves the choice for after the numbers exist."""
+    doc = (
+        probe.REPO_ROOT / "tasks" / "rebuilding_grading_task"
+        / "330-speech-diagnostic-prereg.md"
+    ).read_text(encoding="utf-8")
+    assert "accuracy.stability.repeat_flips.flip_rate_pct" in doc
+    assert "claims_that_ever_flipped" in doc
+    assert "pairs_dropped_for_a_missing_answer" in doc
+    # And the field the document names is the field the report writes.
+    summary = probe.summarise(_calls(lambda claim: "pass"))
+    assert "flip_rate_pct" in summary["stability"]["repeat_flips"]

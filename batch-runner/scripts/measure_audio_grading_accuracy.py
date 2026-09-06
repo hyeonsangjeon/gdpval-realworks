@@ -177,13 +177,17 @@ import itertools
 import json
 import math
 import os
+import re
 import struct
 import sys
 import tempfile
+import time
 import wave
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Iterable, Iterator, Optional, Sequence
+from typing import (
+    Any, Callable, Iterable, Iterator, Mapping, Optional, Sequence,
+)
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -216,6 +220,13 @@ PINNED_CONFIG = (
 #: exists.
 REPEAT_FLIP_RATE_PCT = 19.35
 REPEAT_TEXT_FLIP_RATE_PCT = 2.12
+
+#: Audio tokens the provider billed per second of clip in run 34008840627 --
+#: exactly 10.00, across every call. Kept as a constant so that a speech run's
+#: expected usage can be written down *before* the run, which is what makes a
+#: silent delivery failure detectable: a corpus that never reached the model
+#: produces a plausible-looking accuracy and a token count nowhere near this.
+AUDIO_TOKENS_PER_SECOND = 10.0
 
 #: Amplitude of a rendered tone, as a fraction of full scale. Loud enough that
 #: no plausible re-encode loses it, quiet enough not to clip when PyAV
@@ -604,16 +615,27 @@ class Claim:
     #: The arithmetic that settles it, for a reader who does not want to
     #: reconstruct the segment list.
     because: str
+    #: Set only when the pairing cannot be read off the ``claim_id``. The tone
+    #: corpus names its claims ``<pair>_true`` / ``<pair>_false``, so stripping
+    #: the last segment recovers the pair. A corpus that names them any other
+    #: way -- the speech set pairs ``crate_seventeen`` with ``crate_seventy``
+    #: under ``crate_number`` -- would have that rule silently invent one pair
+    #: per claim, and the permutation test would then swap labels within pairs
+    #: of size one, which is not a swap at all. Carrying the pairing explicitly
+    #: is the difference between a null distribution and a straight line.
+    explicit_pair_id: Optional[str] = None
 
     @property
     def pair_id(self) -> str:
-        """The claim_id without its ``_true`` / ``_false`` suffix.
+        """The pairing this claim belongs to.
 
         Claims come in matched pairs on the same clip, and the permutation
         test swaps labels *within* a pair. That is what keeps a relabelling
         from producing a corpus that could not have existed -- two true
         criteria about one clip and none about another.
         """
+        if self.explicit_pair_id is not None:
+            return self.explicit_pair_id
         return self.claim_id.rsplit("_", 1)[0]
 
     def to_dict(self) -> dict[str, Any]:
@@ -864,6 +886,201 @@ CLAIMS: tuple[Claim, ...] = (
         ),
     ),
 )
+
+
+# --------------------------------------------------------------------------
+# The other corpus: speech
+# --------------------------------------------------------------------------
+#
+# Everything above is tones. That corpus answers "does the verdict depend on
+# the audio at all", and it answered. It cannot answer the question the graded
+# corpus turns on, because none of the 31 audio deliverables is a sine wave.
+#
+# The speech set is not built here. It is synthesised in CI by
+# ``build_speech_verification_set.py`` -- eSpeak NG does not install on the dev
+# host -- and arrives as an artifact plus a manifest that is committed. So the
+# clips are *loaded* rather than rendered, and the loading is where the
+# safety property lives: what is measured has to be what was pinned.
+
+
+@dataclass(frozen=True)
+class LoadedClip:
+    """A clip that already exists as a file, described by its manifest entry."""
+
+    clip_id: str
+    path: Path
+    sha256: str
+    seconds: Optional[float]
+    sample_rate_hz: Optional[int]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "clip_id": self.clip_id,
+            "file": self.path.name,
+            "sha256": self.sha256,
+            "seconds": self.seconds,
+            "sample_rate_hz": self.sample_rate_hz,
+        }
+
+
+@dataclass(frozen=True)
+class SpeechCorpus:
+    """A pinned speech set, verified against the bytes on disk."""
+
+    manifest_path: Path
+    clips: tuple[LoadedClip, ...]
+    claims: tuple[Claim, ...]
+    provenance: dict[str, Any]
+    encoder: dict[str, Any]
+    limits: dict[str, Any]
+
+    @property
+    def paths(self) -> dict[str, Path]:
+        return {clip.clip_id: clip.path for clip in self.clips}
+
+    @property
+    def digests(self) -> dict[str, str]:
+        return {clip.clip_id: clip.sha256 for clip in self.clips}
+
+    @property
+    def durations(self) -> dict[str, float]:
+        """Clip id to delivered length, for the delivery record.
+
+        Clips whose manifest entry carries no length are left out rather than
+        given a placeholder: an absent duration cannot disagree with what was
+        sent, and a placeholder would disagree with everything.
+        """
+        return {
+            clip.clip_id: float(clip.seconds)
+            for clip in self.clips
+            if clip.seconds is not None
+        }
+
+    @property
+    def total_seconds(self) -> float:
+        return round(sum(c.seconds or 0.0 for c in self.clips), 4)
+
+    @property
+    def seconds_per_pass(self) -> float:
+        """Audio one pass over the corpus sends. Not ``total_seconds``.
+
+        Every call carries the clip its criterion is about, and this set asks
+        two criteria of each clip, so one pass sends each clip twice. The
+        corpus is 31.235 s of audio and a pass sends 62.47 s of it.
+
+        The difference is not academic: the expected token count is what the
+        pre-registered +/-10% delivery band is measured against, and counting
+        clips instead of calls halves it. A healthy run would then land 100%
+        above the band and be reported as "the audio was delivered
+        differently" -- the false alarm arriving in place of the check that
+        was supposed to catch a real delivery change.
+        """
+        durations = self.durations
+        return round(
+            sum(
+                durations[claim.clip_id]
+                for claim in self.claims
+                if claim.clip_id in durations
+            ),
+            4,
+        )
+
+
+def load_speech_corpus(manifest_path: Path, clip_dir: Path) -> SpeechCorpus:
+    """Load the pinned speech set, refusing anything that is not what it says.
+
+    The digest is checked against the file that will actually be sent, and a
+    mismatch raises. This is the whole reason the manifest is committed: a
+    measurement whose audio cannot be identified afterwards is not a
+    measurement, and the failure mode being guarded against is mundane -- an
+    artifact from a different run, a partial download, a clip regenerated by a
+    newer eSpeak. Each of those produces a number that looks exactly like a
+    real one.
+
+    The ``sent`` file is used, not ``source``. eSpeak writes 22050 Hz and the
+    grading path delivers 16 kHz; pinning the file the model never hears would
+    be a check that passes while describing the wrong bytes.
+    """
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+    clips: list[LoadedClip] = []
+    for entry in manifest["clips"]:
+        sent = entry["sent"]
+        path = clip_dir / sent["file"]
+        if not path.is_file():
+            raise FileNotFoundError(
+                f"{entry['clip_id']}: {path} is missing. The clips are a CI "
+                f"artifact and are not committed; download "
+                f"'speech-verification-set' from the run that produced "
+                f"{manifest_path.name} and point --speech-clips at it."
+            )
+        actual = hashlib.sha256(path.read_bytes()).hexdigest()
+        if actual != sent["sha256"]:
+            raise ValueError(
+                f"{entry['clip_id']}: {path.name} is sha256 {actual[:16]}..., "
+                f"but the manifest pins {sent['sha256'][:16]}.... Refusing to "
+                f"measure audio that is not the audio that was pinned."
+            )
+        clips.append(
+            LoadedClip(
+                clip_id=entry["clip_id"],
+                path=path,
+                sha256=actual,
+                seconds=sent.get("seconds"),
+                sample_rate_hz=sent.get("sample_rate_hz"),
+            )
+        )
+
+    known = {clip.clip_id for clip in clips}
+    claims: list[Claim] = []
+    for entry in manifest["claims"]:
+        if entry["clip_id"] not in known:
+            raise ValueError(
+                f"{entry['claim_id']}: asks about clip "
+                f"'{entry['clip_id']}', which the manifest does not pin"
+            )
+        claims.append(
+            Claim(
+                claim_id=entry["claim_id"],
+                clip_id=entry["clip_id"],
+                family=entry["family"],
+                criterion=entry["criterion"],
+                holds=bool(entry["holds"]),
+                because=entry.get("because", ""),
+                # Read, never derived: see Claim.explicit_pair_id.
+                explicit_pair_id=entry["pair_id"],
+            )
+        )
+
+    # Balance is a property of the corpus, and it is what makes 50% the
+    # chance line. A set that had drifted off balance would still produce an
+    # accuracy, against a baseline nobody had recomputed.
+    true_claims = sum(1 for c in claims if c.holds)
+    if true_claims * 2 != len(claims):
+        raise ValueError(
+            f"{true_claims} true of {len(claims)} claims: the set is not "
+            f"balanced, so guessing does not score 50% and the binomial test "
+            f"against 0.5 would be against the wrong number."
+        )
+    by_pair: dict[str, list[bool]] = {}
+    for claim in claims:
+        by_pair.setdefault(claim.pair_id, []).append(claim.holds)
+    for pair_id, holds in sorted(by_pair.items()):
+        if sorted(holds) != [False, True]:
+            raise ValueError(
+                f"pair '{pair_id}' is {holds}, not one true and one false. "
+                f"The permutation test swaps labels within pairs and cannot "
+                f"do that here."
+            )
+
+    return SpeechCorpus(
+        manifest_path=manifest_path,
+        clips=tuple(clips),
+        claims=tuple(claims),
+        provenance=manifest.get("provenance", {}),
+        encoder=manifest.get("encoder", {}),
+        limits=manifest.get("limits", {}),
+    )
 
 
 # --------------------------------------------------------------------------
@@ -1329,6 +1546,45 @@ def pinned_identity(config_path: Path = PINNED_CONFIG) -> dict[str, Any]:
     }
 
 
+#: The row a pre-registration writes its grader fingerprint into. Read rather
+#: than restated here: the operator reads that table before dispatching, and a
+#: constant in this file would be a second place for the value to live and a
+#: second place for it to go stale.
+_GRADER_PIN_ROW = re.compile(
+    r"^\|\s*채점기 지문\s*\|\s*`([0-9a-f]{64})`\s*\|", re.MULTILINE
+)
+
+
+def grader_source_hash(config_path: Path = PINNED_CONFIG) -> str:
+    """What this checkout's grader fingerprints as, computed not quoted.
+
+    ``step8_grade``'s own function, on the config this measurement borrows.
+    It covers the grading entry point, every ``core/**`` module, the grade
+    schema, the requirements closure, the prompt template and the config
+    file, so any of them moving changes the answer.
+    """
+    from step8_grade import compute_grader_source_hash
+
+    return compute_grader_source_hash(config_path, _read_yaml(config_path))
+
+
+def grader_pin_stated_in(doc_path: Path) -> str:
+    """The fingerprint a pre-registration pins, taken out of its own table."""
+    found = set(_GRADER_PIN_ROW.findall(doc_path.read_text(encoding="utf-8")))
+    if not found:
+        raise ValueError(
+            f"{doc_path} states no grader fingerprint, so there is nothing to "
+            f"hold this run to. A pre-registration that does not name a "
+            f"grader is not pinning one."
+        )
+    if len(found) > 1:
+        raise ValueError(
+            f"{doc_path} states {len(found)} different grader fingerprints; "
+            f"which one this run is supposed to be is not decidable"
+        )
+    return found.pop()
+
+
 # --------------------------------------------------------------------------
 # The stub, for the free run
 # --------------------------------------------------------------------------
@@ -1715,7 +1971,18 @@ def summarise_wire(records: Sequence[dict[str, Any]]) -> dict[str, Any]:
         "prompt_sha256": records[-1].get("prompt_sha256") if records else None,
         "prompt_chars": records[-1].get("prompt_chars") if records else None,
         "response_model": records[-1].get("response_model") if records else None,
+        # Two token fields, because the question has two answers whenever a
+        # call retried. The last request is the one that produced the verdict,
+        # and it is the one ``audio_sha256`` and ``response_model`` above
+        # describe, so ``audio_tokens`` stays last-request: it is the meter
+        # reading for *this verdict*.
         "audio_tokens": tokens[-1] if tokens else None,
+        # What the retry also cost. Billing counts requests, and a judge that
+        # retries a malformed envelope sends the clip again. Summing the
+        # last-request figure over sixty calls understates the bill by exactly
+        # the retries -- six of them is 10%, which is the whole width of the
+        # pre-registered delivery band, reported as "0.0% from expected".
+        "audio_tokens_billed": sum(tokens) if tokens else None,
     }
 
 
@@ -1724,6 +1991,7 @@ def delivery_section(
     *,
     measured: bool,
     clips: Sequence[Clip] = CLIPS,
+    durations: Optional[Mapping[str, float]] = None,
 ) -> Optional[dict[str, Any]]:
     """Did the audio reach the model, and did it reach it intact?
 
@@ -1744,7 +2012,13 @@ def delivery_section(
     wired = [c for c in calls if isinstance(c.get("wire"), dict)]
     if not wired:
         return None
-    durations = {clip.clip_id: clip.duration_s for clip in clips}
+    # ``durations`` overrides ``clips`` because the speech corpus is not made
+    # of ``Clip``. Without it the tone durations would be compared against
+    # speech clip ids, every lookup would miss, and every clip would be
+    # reported as "sent duration differs" -- a false alarm on the one line a
+    # reader is told to check before reading the accuracy.
+    if durations is None:
+        durations = {clip.clip_id: clip.duration_s for clip in clips}
 
     by_clip: dict[str, set[str]] = {}
     for call in wired:
@@ -1808,6 +2082,29 @@ def delivery_section(
         "audio_tokens_reported": sum(
             1 for c in wired if c["wire"].get("audio_tokens") is not None
         ),
+        # Requests, not calls. A judge that retries a malformed envelope makes
+        # two of these for one verdict and is billed for both, so this is the
+        # number that explains a delivery total above the pre-registered one.
+        # Equal to the call count on a run where nothing had to be retried.
+        "requests_total": sum(c["wire"].get("requests") or 0 for c in wired),
+        # Null, not zero, when nothing reported it. Zero is a claim -- "the
+        # provider metered no audio", which is how a request that never
+        # carried the sound looks -- and it must not be indistinguishable
+        # from "the provider did not tell us". The pre-registered stop rule
+        # in 330 fires on a real zero, so the two have to stay apart.
+        #
+        # Summed from ``audio_tokens_billed``, which counts every request the
+        # call made. The last-request figure beside it is the meter for the
+        # verdict; this line is labelled "actually billed" in the summary and
+        # has to be that.
+        "audio_tokens_total": (
+            sum(
+                c["wire"]["audio_tokens_billed"] for c in wired
+                if c["wire"].get("audio_tokens_billed") is not None
+            )
+            if any(c["wire"].get("audio_tokens_billed") is not None for c in wired)
+            else None
+        ),
         "prompt_token_vs_clip_seconds": {
             "n": len(paired),
             "pearson_r": pearson_r([d for d, _ in paired], [t for _, t in paired]),
@@ -1835,6 +2132,144 @@ def delivery_section(
 # --------------------------------------------------------------------------
 
 
+@dataclass(frozen=True)
+class StopRules:
+    """When to walk away from a paid run, decided before it starts.
+
+    Pre-registered in ``330-speech-diagnostic-prereg.md`` section 3. They are
+    written here rather than left to a person watching the log because a rule
+    that only exists in a document is a rule that gets reconsidered at the
+    moment it would cost something -- which is when "just a bit more" wins.
+
+    Stopping is not a failure and not a discarded run. Whatever was collected
+    is reported, with ``stopped`` saying which rule fired and where, so a
+    reader can see the run is partial rather than inferring it from a count.
+
+    ``None`` on any field disables that rule. The tone corpus runs with every
+    rule off, because its results are already published and turning these on
+    for it would change a methodology after the fact.
+    """
+
+    #: Wall clock, seconds. Checked after each call, so a single very slow
+    #: call can overshoot it; the alternative is killing a call mid-flight
+    #: and paying for a response nobody reads.
+    wall_clock_seconds: Optional[float] = None
+    #: If the first N calls yield no usable verdict at all, stop. Sixty calls
+    #: of a broken response format cost the same as sixty good ones and teach
+    #: nothing; this is the rule that would have ended the observation arm of
+    #: 328 after ten.
+    zero_response_after: Optional[int] = None
+    #: Cumulative provider failures. Infrastructure, not capability -- there
+    #: is nothing to learn about the model by retrying it into a wall.
+    max_provider_failures: Optional[int] = None
+    #: Stop on the first call the provider says carried no audio. Measuring
+    #: comprehension of sound that was never delivered produces a number that
+    #: looks exactly like a real one.
+    stop_on_undelivered_audio: bool = False
+
+
+#: The rules named in 330 section 3, in the order that document lists them.
+SPEECH_STOP_RULES = StopRules(
+    wall_clock_seconds=20 * 60,
+    zero_response_after=10,
+    max_provider_failures=10,
+    stop_on_undelivered_audio=True,
+)
+
+
+def _audio_was_delivered(call: dict[str, Any]) -> Optional[bool]:
+    """Did this call carry sound? ``None`` when the provider did not say.
+
+    Three states, not two. A provider that reports nothing is not a provider
+    reporting zero, and only the second is evidence of non-delivery.
+    """
+    wire = call.get("wire")
+    if not isinstance(wire, dict):
+        return None
+    carried = wire.get("requests_with_audio")
+    if carried is not None and not carried:
+        return False
+    tokens = wire.get("audio_tokens")
+    if tokens is not None:
+        return bool(tokens)
+    if carried:
+        return True
+    return None
+
+
+def _stop_reason(
+    rules: StopRules,
+    *,
+    calls: Sequence[dict[str, Any]],
+    elapsed_s: float,
+) -> Optional[dict[str, Any]]:
+    """The first rule that fires, or ``None``. Evaluated after every call."""
+    if rules.wall_clock_seconds is not None and elapsed_s > rules.wall_clock_seconds:
+        return {
+            "rule": "wall_clock_seconds",
+            "limit": rules.wall_clock_seconds,
+            "observed": round(elapsed_s, 3),
+            "after_calls": len(calls),
+            "reading": (
+                "The run exceeded its pre-registered time limit. What is "
+                "below is a partial run and its counts are not the design's."
+            ),
+        }
+
+    if rules.stop_on_undelivered_audio and calls:
+        if _audio_was_delivered(calls[-1]) is False:
+            return {
+                "rule": "stop_on_undelivered_audio",
+                "limit": None,
+                "observed": calls[-1].get("claim_id"),
+                "after_calls": len(calls),
+                "reading": (
+                    "The provider reported a request that carried no audio. "
+                    "Nothing measured after this point would be about "
+                    "hearing, so the run stops rather than producing a "
+                    "number that looks like an accuracy."
+                ),
+            }
+
+    if rules.max_provider_failures is not None:
+        failures = sum(
+            1 for c in calls if c.get("unanswered_kind") == "provider_failure"
+        )
+        if failures >= rules.max_provider_failures:
+            return {
+                "rule": "max_provider_failures",
+                "limit": rules.max_provider_failures,
+                "observed": failures,
+                "after_calls": len(calls),
+                "reading": (
+                    "Infrastructure, not capability. Retrying into a wall "
+                    "buys nothing and says nothing about the model."
+                ),
+            }
+
+    if (
+        rules.zero_response_after is not None
+        and len(calls) >= rules.zero_response_after
+    ):
+        answered = sum(1 for c in calls if c.get("unanswered_kind") is None)
+        if answered == 0:
+            return {
+                "rule": "zero_response_after",
+                "limit": rules.zero_response_after,
+                "observed": 0,
+                "after_calls": len(calls),
+                "reading": (
+                    "No usable verdict in the first "
+                    f"{len(calls)} calls. On 2026-09-06 a run in this state "
+                    "went on to buy all sixty and reported an accuracy over "
+                    "the seventeen replies that happened to parse. This "
+                    "stops instead."
+                ),
+            }
+
+    return None
+
+
 def run_measurement(
     *,
     perception: AudioPerception,
@@ -1845,6 +2280,9 @@ def run_measurement(
     on_call: Optional[Callable[[int, int, Claim, AudioVerdict], None]] = None,
     arms: Sequence[str] = ("production",),
     wire: Optional[WireClient] = None,
+    prerendered: Optional[SpeechCorpus] = None,
+    stop_rules: Optional[StopRules] = None,
+    clock: Callable[[], float] = time.monotonic,
 ) -> dict[str, Any]:
     """Render the clips, put every claim to the sub-judge, and tally.
 
@@ -1861,6 +2299,12 @@ def run_measurement(
     together instead of landing entirely on whichever one was scheduled
     second. It is the same reason the pairing exists in the corpus, applied to
     time instead of to truth value.
+
+    With ``prerendered``, the tone synthesiser is not used at all: the clips
+    are files that already exist and whose digests were checked on load. The
+    speech set has to arrive this way because it cannot be built on this host,
+    and re-deriving its digests here would pin whatever was downloaded rather
+    than what was published.
     """
     for arm in arms:
         if arm not in PROMPT_ARMS:
@@ -1871,17 +2315,29 @@ def run_measurement(
         # other arm's name, which is not a weaker measurement but a false one.
         raise ValueError("a non-production arm needs a WireClient to rewrite it")
 
-    digests: dict[str, str] = {}
-    paths: dict[str, Path] = {}
-    for clip in clips:
-        path = clip_dir / f"{clip.clip_id}.wav"
-        digests[clip.clip_id] = render_clip(clip, path)
-        paths[clip.clip_id] = path
+    if prerendered is not None:
+        digests = dict(prerendered.digests)
+        paths = dict(prerendered.paths)
+    else:
+        digests = {}
+        paths = {}
+        for clip in clips:
+            path = clip_dir / f"{clip.clip_id}.wav"
+            digests[clip.clip_id] = render_clip(clip, path)
+            paths[clip.clip_id] = path
 
     calls: list[dict[str, Any]] = []
+    stopped: Optional[dict[str, Any]] = None
+    started_at = clock()
     for repeat in range(1, repeats + 1):
+        if stopped is not None:
+            break
         for claim in claims:
+            if stopped is not None:
+                break
             for arm in arms:
+                if stopped is not None:
+                    break
                 if wire is not None:
                     wire.arm = arm
                     first_record = len(wire.records)
@@ -1917,11 +2373,197 @@ def run_measurement(
                 if wire is not None:
                     call["wire"] = summarise_wire(wire.records[first_record:])
                 calls.append(call)
-    return {"calls": calls, "clip_sha256": digests}
+                if stop_rules is not None:
+                    # After appending, so the call that tripped the rule is
+                    # in the record rather than dropped from it.
+                    stopped = _stop_reason(
+                        stop_rules, calls=calls, elapsed_s=clock() - started_at
+                    )
+    return {
+        "calls": calls,
+        "clip_sha256": digests,
+        "stopped": stopped,
+        "planned_calls": repeats * len(claims) * len(arms),
+    }
 
 
-def summarise(calls: Sequence[dict[str, Any]]) -> dict[str, Any]:
-    """Turn the call log into the three numbers the card asked for."""
+def pair_consistency(by_claim: Mapping[str, Any]) -> dict[str, Any]:
+    """330 section 4's first secondary metric: did each pair get told apart.
+
+    Every pair is the same clip asked the same kind of question twice, once
+    where the answer is yes and once where it is no. A judge that heard the
+    clip answers them differently. A judge that answered without listening
+    gives both sides the same verdict, and ten pairs of ``pass`` score 50% on
+    this balanced corpus -- an accuracy figure that looks like a coin and
+    reads like a near miss.
+
+    Youden's J already summarises this as a difference of rates, but it
+    cannot say *how many* pairs were never separated, and the document
+    promises that count. Computing it here rather than deriving it from the
+    per-claim table afterwards keeps it a pre-registered number.
+    """
+    sides: dict[str, dict[bool, Optional[str]]] = {}
+    for entry in by_claim.values():
+        pair_id = entry.get("pair_id")
+        if pair_id is None:
+            continue
+        sides.setdefault(pair_id, {})[bool(entry["holds"])] = entry["majority"]
+
+    identical_by_verdict: dict[str, int] = {}
+    differently = identical = incomplete = 0
+    for verdicts in sides.values():
+        true_side = verdicts.get(True)
+        false_side = verdicts.get(False)
+        if true_side is None or false_side is None:
+            incomplete += 1
+        elif true_side != false_side:
+            differently += 1
+        else:
+            identical += 1
+            identical_by_verdict[true_side] = (
+                identical_by_verdict.get(true_side, 0) + 1
+            )
+    return {
+        "unit": "one true/false pair, on majority verdicts",
+        "pairs": len(sides),
+        "answered_differently": differently,
+        "answered_identically": identical,
+        "identical_by_verdict": dict(sorted(identical_by_verdict.items())),
+        "incomplete": incomplete,
+        "meaning": (
+            "A pair answered identically was not told apart. Both sides "
+            "'pass' on every pair is what a judge that never heard the clip "
+            "produces, and on this balanced corpus it still scores 50%. "
+            "'incomplete' pairs had no majority on one side and are neither."
+        ),
+    }
+
+
+def repeat_flip_rate(by_claim: Mapping[str, Any]) -> dict[str, Any]:
+    """Disagreement between repeats, in the denominator the earlier study used.
+
+    The repeat run this script's header quotes reported 19.35%: verdict flips
+    divided by *pairs of runs*, three such pairs per item at three repeats.
+    ``stability`` below counts something else -- claims whose repeats were all
+    identical -- and one minus that share is the share of claims that flipped
+    *at all*. On three repeats a claim that flips once is 100% of the second
+    figure and 33% of the first, so setting them beside each other reads as a
+    change in steadiness that never happened. 330 section 4 promises the
+    comparison, so the comparable number has to exist.
+
+    Pairs where either side never answered are not disagreements about the
+    audio; they leave the denominator and are counted where a reader can see
+    how much of the run they were.
+    """
+    pairs = 0
+    flips = 0
+    dropped = 0
+    ever_flipped = 0
+    for entry in by_claim.values():
+        verdicts = entry["verdicts"]
+        flipped_here = False
+        for left in range(len(verdicts)):
+            for right in range(left + 1, len(verdicts)):
+                a, b = verdicts[left], verdicts[right]
+                if a == "judge_error" or b == "judge_error":
+                    dropped += 1
+                    continue
+                pairs += 1
+                if a != b:
+                    flips += 1
+                    flipped_here = True
+        ever_flipped += int(flipped_here)
+    return {
+        "unit": "one pair of repeats for one claim",
+        "comparable_pairs": pairs,
+        "pairs_dropped_for_a_missing_answer": dropped,
+        "flips": flips,
+        # Null, not zero, on a run with nothing to compare. Zero would say the
+        # repeats agreed.
+        "flip_rate_pct": (100.0 * flips / pairs) if pairs else None,
+        "claims_that_ever_flipped": ever_flipped,
+        "prior_audio_cohort_pct": 19.3548,
+        "meaning": (
+            "Share of repeat pairs that answered differently, the same "
+            "denominator as the 19.35% measured on the graded audio cohort. "
+            "'claims_that_ever_flipped' is the other denominator and is not "
+            "comparable with that figure."
+        ),
+    }
+
+
+def binomial_majority_test(
+    by_claim: Mapping[str, Any],
+) -> dict[str, Any]:
+    """330 section 4's *primary* analysis, computed rather than described.
+
+    One verdict per claim by majority of the repeats, then an exact one-sided
+    binomial test against p = 0.5. Chance is 50% because the corpus is
+    balanced -- ten true claims and ten false ones.
+
+    This is reported *beside* the within-pair permutation test, and both are
+    named in the pre-registration before any of them has a value. Computing
+    only one and choosing which to call primary after seeing them is the
+    failure this whole document exists to avoid, and having two numbers where
+    one is labelled primary is the only arrangement in which that choice
+    cannot be made later.
+
+    The repeats are collapsed by majority on purpose. Counting 60 calls as 60
+    independent trials inflates the denominator threefold and manufactures a
+    significance the design cannot support: the three calls for one claim ask
+    the same question about the same audio.
+    """
+    outcomes = [
+        entry["majority_outcome"]
+        for entry in by_claim.values()
+        if entry["majority"] is not None
+    ]
+    # A hedge is not a correct answer and it is not an incorrect one either.
+    # Dropping it shrinks n honestly; scoring it either way would not.
+    scored = [o for o in outcomes if o != OUTCOME_HEDGED]
+    n = len(scored)
+    correct = sum(1 for o in scored if o == OUTCOME_CORRECT)
+    p_value = (
+        sum(math.comb(n, i) for i in range(correct, n + 1)) / (2 ** n)
+        if n
+        else None
+    )
+    return {
+        "test": "exact one-sided binomial, p = 0.5",
+        "unit": "one majority verdict per claim",
+        "claims_with_a_majority": len(outcomes),
+        "hedged_majorities_excluded": len(outcomes) - n,
+        "n": n,
+        "correct": correct,
+        "p_one_sided": p_value,
+        # The floor a perfect score can reach. Below n = 5 nothing this test
+        # can produce clears 0.05, and a reader deserves to know that before
+        # reading the p rather than after.
+        "smallest_attainable_p": (1 / (2 ** n)) if n else None,
+        "meaning": (
+            "P(at least this many correct | the judge is guessing). The "
+            "repeats are collapsed to one verdict per claim first; treating "
+            "them as independent trials would triple the denominator and "
+            "invent significance the design cannot support."
+        ),
+    }
+
+
+def summarise(
+    calls: Sequence[dict[str, Any]],
+    *,
+    claims: Sequence[Claim] = CLAIMS,
+) -> dict[str, Any]:
+    """Turn the call log into the three numbers the card asked for.
+
+    ``claims`` is the corpus that ran, not the tone corpus. The per-claim
+    table below is keyed by claim id, so a default of ``CLAIMS`` matches
+    nothing on a speech run and every per-claim figure -- the majority vote,
+    the stability count, the per-claim discrimination -- comes back empty
+    while the per-call figures look perfectly healthy. 330's *primary*
+    analysis is the majority vote, so that is the number that would have
+    gone missing after the money was spent.
+    """
     overall = Tally()
     on_true = Tally()
     on_false = Tally()
@@ -1936,7 +2578,7 @@ def summarise(calls: Sequence[dict[str, Any]]) -> dict[str, Any]:
         by_family.setdefault(call["family"], Tally()).add(call["outcome"], kind)
 
     by_claim: dict[str, Any] = {}
-    for claim in CLAIMS:
+    for claim in claims:
         verdicts = [c["verdict"] for c in calls if c["claim_id"] == claim.claim_id]
         if not verdicts:
             continue
@@ -1944,6 +2586,9 @@ def summarise(calls: Sequence[dict[str, Any]]) -> dict[str, Any]:
         by_claim[claim.claim_id] = {
             "holds": claim.holds,
             "family": claim.family,
+            # Carried so the pair census below reads it from here rather than
+            # from a second pass over the calls that could drift out of step.
+            "pair_id": claim.pair_id,
             "verdicts": verdicts,
             "majority": majority,
             "stable": len(set(verdicts)) == 1,
@@ -1988,7 +2633,13 @@ def summarise(calls: Sequence[dict[str, Any]]) -> dict[str, Any]:
                 "depend on the audio; accuracy alone cannot show that."
             ),
         },
+        # Both, always, and labelled. The pre-registration names the binomial
+        # as primary; the permutation is the pre-specified secondary. Neither
+        # is chosen after the numbers exist.
+        "pre_registered_binomial": binomial_majority_test(by_claim),
         "permutation": permute_within_pairs(calls),
+        # The count J cannot give: how many pairs were never separated at all.
+        "pair_consistency": pair_consistency(by_claim),
         "mean_confidence": {
             key: (sum(values) / len(values) if values else None)
             for key, values in confidences.items()
@@ -2001,6 +2652,11 @@ def summarise(calls: Sequence[dict[str, Any]]) -> dict[str, Any]:
             "no_majority": sum(
                 1 for entry in by_claim.values() if entry["majority"] is None
             ),
+            # The figure 330 promises to set against the earlier 19.35%. It
+            # lives here rather than being left for a reader to divide,
+            # because the obvious division of the fields above answers a
+            # different question and looks like the same one.
+            "repeat_flips": repeat_flip_rate(by_claim),
         },
     }
 
@@ -2020,6 +2676,7 @@ def build_report(
     measured: bool,
     repeats: int,
     result: dict[str, Any],
+    speech: Optional[SpeechCorpus] = None,
 ) -> dict[str, Any]:
     calls = result["calls"]
     model_calls = sum(int(call["api_call_count"]) for call in calls)
@@ -2029,36 +2686,65 @@ def build_report(
     # that always puts the control first.
     arms_present = list(dict.fromkeys(_arm_of(call) for call in calls))
 
+    # The corpus that actually ran, not the module globals. Reporting the tone
+    # corpus's counts beside a speech run's calls would be a mislabel of
+    # exactly the kind this whole file exists to stop.
+    report_claims: Sequence[Claim] = speech.claims if speech else CLAIMS
+    clip_dicts = (
+        [clip.to_dict() for clip in speech.clips]
+        if speech
+        else [clip.to_dict() for clip in CLIPS]
+    )
+    corpus_name = "speech" if speech else "tones"
+
     control_calls = [c for c in calls if _arm_of(c) == "production"] or list(calls)
     report = {
         "what_this_measures": (
+            "Whether the audio sub-judge hears words. The clips are "
+            "synthesised speech with a known transcript, and the criteria come "
+            "in matched true/false pairs on the same clip, so guessing scores "
+            "50%. Synthesised speech is harder to follow than a human voice: a "
+            "pass is strong evidence, a failure is weak. This is a different "
+            "question from the tone corpus and its numbers are not comparable."
+            if speech
+            else
             "Whether the audio sub-judge's verdict is correct, on clips whose "
             "contents are known by construction. The repeat runs measured "
             f"consistency ({REPEAT_FLIP_RATE_PCT}% of audio verdict pairs "
             f"disagree, against {REPEAT_TEXT_FLIP_RATE_PCT}% on text). "
             "Consistency is not correctness and neither implies the other."
         ),
+        "corpus": corpus_name,
         "measured": measured,
+        # Null on a run that finished. When it is not null the counts below
+        # are a partial run's, and a reader must not compare them with a
+        # complete one as though the design had been the same.
+        "stopped": result.get("stopped"),
+        "calls_planned": result.get("planned_calls"),
         "pins": {
             **identity,
-            "clip_sample_rate_hz": CLIP_SAMPLE_RATE_HZ,
+            "clip_sample_rate_hz": (
+                speech.clips[0].sample_rate_hz
+                if speech and speech.clips
+                else CLIP_SAMPLE_RATE_HZ
+            ),
             "grader_resample_rate_hz": AUDIO_SAMPLE_RATE_HZ,
             "repeats": repeats,
-            "claims": len(CLAIMS),
-            "clips": len(CLIPS),
-            "true_claims": sum(1 for c in CLAIMS if c.holds),
-            "false_claims": sum(1 for c in CLAIMS if not c.holds),
+            "claims": len(report_claims),
+            "clips": len(clip_dicts),
+            "true_claims": sum(1 for c in report_claims if c.holds),
+            "false_claims": sum(1 for c in report_claims if not c.holds),
             "prompt_arms": arms_present,
         },
-        "clips": [clip.to_dict() for clip in CLIPS],
+        "clips": clip_dicts,
         "clip_sha256": result["clip_sha256"],
-        "claims": [claim.to_dict() for claim in CLAIMS],
+        "claims": [claim.to_dict() for claim in report_claims],
         "calls": calls,
         # Always the production prompt, so this number keeps meaning what it
         # meant before there was a second arm: how the *grader* behaves. The
         # alternative prompt's figures live under "arms" and are never folded
         # in, because averaging the two would describe a prompt nothing runs.
-        "accuracy": summarise(control_calls),
+        "accuracy": summarise(control_calls, claims=report_claims),
         "cost": {
             # Two numbers, because a dry run makes 60 calls and is billed for
             # none of them. Collapsing them would put a "billable_calls: 60"
@@ -2081,13 +2767,55 @@ def build_report(
         },
     }
 
-    delivery = delivery_section(calls, measured=measured)
+    delivery = delivery_section(
+        calls, measured=measured, durations=speech.durations if speech else None
+    )
     if delivery is not None:
         report["delivery"] = delivery
 
+    if speech is not None:
+        # What was heard, and what it would and would not mean. Carried in the
+        # report rather than left in the write-up, because the number and the
+        # caveat get copied separately otherwise.
+        #
+        # Passes over the corpus is repeats x arms, but it is taken from the
+        # same planned-call number the report prints rather than recomputed,
+        # so the estimate and the plan cannot disagree.
+        planned = result.get("planned_calls") or 0
+        passes = planned // len(speech.claims) if speech.claims else 0
+        seconds_sent = round(speech.seconds_per_pass * passes, 4)
+        report["speech_set"] = {
+            "manifest": speech.manifest_path.name,
+            "provenance": speech.provenance,
+            "encoder": speech.encoder,
+            "limits": speech.limits,
+            "total_seconds": speech.total_seconds,
+            "audio_seconds_per_pass": speech.seconds_per_pass,
+            "audio_seconds_sent": seconds_sent,
+            # 328 saw exactly 10.00 audio tokens per second of clip. Written
+            # down before the run so that a delivery failure is checkable
+            # against a prediction rather than explained after the fact.
+            "expected_audio_tokens": round(
+                AUDIO_TOKENS_PER_SECOND * seconds_sent
+            ),
+            "expected_audio_tokens_basis": (
+                f"{AUDIO_TOKENS_PER_SECOND:.2f} tokens/s x "
+                f"{speech.seconds_per_pass} s per pass x {passes} passes "
+                f"(repeats x arms) = {seconds_sent} s, from run 34008840627. "
+                f"The corpus is {speech.total_seconds} s long, but a pass "
+                f"sends more than that: every call carries the clip its "
+                f"criterion is about, and {len(speech.claims)} criteria share "
+                f"{len(speech.clips)} clips. A measured total outside +/-10% "
+                f"of this is itself a finding: the audio was delivered "
+                f"differently, or billing changed."
+            ),
+        }
+
     if len(arms_present) > 1:
         report["arms"] = {
-            arm: summarise([c for c in calls if _arm_of(c) == arm])
+            arm: summarise(
+                [c for c in calls if _arm_of(c) == arm], claims=report_claims
+            )
             for arm in arms_present
         }
         report["arm_comparison"] = compare_arms(calls)
@@ -2145,6 +2873,38 @@ def main(argv: Optional[list[str]] = None) -> int:
         ),
     )
     parser.add_argument(
+        "--speech-set",
+        type=Path,
+        default=None,
+        help=(
+            "Measure the pinned speech set instead of the tone corpus. Takes "
+            "the path to a published manifest.json. The clips themselves are "
+            "not committed -- they are GPL-3.0-or-later output and arrive as "
+            "a CI artifact -- so --speech-clips must point at the downloaded "
+            "directory. Every clip's digest is checked against the manifest "
+            "before a single call goes out."
+        ),
+    )
+    parser.add_argument(
+        "--speech-clips",
+        type=Path,
+        default=None,
+        help=(
+            "Directory holding the .sent.wav files the manifest names. "
+            "Required with --speech-set."
+        ),
+    )
+    parser.add_argument(
+        "--expect-grader-pin",
+        type=Path,
+        default=None,
+        help=(
+            "Path to the pre-registration this run belongs to. Its grader "
+            "fingerprint is compared against the one this checkout computes, "
+            "and a mismatch stops the run before a single call goes out."
+        ),
+    )
+    parser.add_argument(
         "--delivery-out",
         type=Path,
         default=None,
@@ -2159,6 +2919,55 @@ def main(argv: Optional[list[str]] = None) -> int:
     if args.repeats < 1:
         parser.error("--repeats must be at least 1")
     arms = PROMPT_ARMS if args.prompt_arm == "both" else (args.prompt_arm,)
+    if (args.speech_set is None) != (args.speech_clips is None):
+        parser.error("--speech-set and --speech-clips go together")
+
+    speech: Optional[SpeechCorpus] = None
+    if args.speech_set is not None:
+        try:
+            speech = load_speech_corpus(args.speech_set, args.speech_clips)
+        except (OSError, ValueError, KeyError) as exc:
+            # Exit 3, like an unreadable identity: a run that cannot say which
+            # audio it sent has nothing to report, and the digest check is the
+            # only thing standing between "measured the pinned set" and
+            # "measured whatever was in that folder".
+            print(f"::error::{exc}", file=sys.stderr)
+            return 3
+        if args.prompt_arm != "production":
+            # 330 pre-registers one arm. Two questions in one run is what made
+            # 328 unable to answer either.
+            parser.error(
+                "the speech set is pre-registered as a single production arm; "
+                "--prompt-arm would make it a different, unregistered run"
+            )
+
+    # Before the identity, before the client, before anything is bought: is
+    # the grader this checkout would use the one the pre-registration names?
+    # The fingerprint is what makes "we measured the grader in §2" a checkable
+    # sentence, and it covers files this workstream does not own -- so it
+    # moves without anyone here touching it. Finding that at dispatch time
+    # costs a stopped run; finding it afterwards costs the run's meaning.
+    if args.expect_grader_pin is not None:
+        try:
+            pinned = grader_pin_stated_in(args.expect_grader_pin)
+            computed = grader_source_hash(args.config)
+        except (OSError, ValueError, KeyError) as exc:
+            print(f"::error::{exc}", file=sys.stderr)
+            return 3
+        if pinned != computed:
+            print(
+                f"::error::this is not the grader "
+                f"{args.expect_grader_pin.name} pins. It names "
+                f"{pinned}, this checkout computes {computed}. Something the "
+                f"fingerprint covers moved -- core/**, step8_grade.py, the "
+                f"grade schema, the requirements closure, the prompt template "
+                f"or {args.config.name}. Re-pin the document to the computed "
+                f"value and record what moved, or run this on the grader it "
+                f"names. Filing the result under a fingerprint that was not "
+                f"the one that ran is the one option that is not available.",
+                file=sys.stderr,
+            )
+            return 3
 
     try:
         identity = pinned_identity(args.config)
@@ -2168,6 +2977,11 @@ def main(argv: Optional[list[str]] = None) -> int:
         # which model it is describing has nothing to report.
         print(f"::error::{exc}", file=sys.stderr)
         return 3
+    # Recorded, not just checked. After the run this string stops being a
+    # promise and becomes the record of which grader produced these numbers,
+    # and a record that lives only in a markdown file someone typed is the
+    # thing this whole check exists to replace.
+    identity["grader_source_sha256"] = grader_source_hash(args.config)
     if identity["audio_clip_seconds"] != AUDIO_TRIM_SECONDS:
         # Not fatal to the arithmetic, but it means the clips the model hears
         # here are cut to a different length than the ones it heard in the
@@ -2190,7 +3004,7 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     managed = None
     if args.dry_run:
-        client: Any = TruthfulStub(CLAIMS)
+        client: Any = TruthfulStub(speech.claims if speech else CLAIMS)
     else:
         from core.azure_ai_clients import AzureAIWorkload  # noqa: E402
         from core.llm_client import create_typed_azure_client  # noqa: E402
@@ -2217,9 +3031,15 @@ def main(argv: Optional[list[str]] = None) -> int:
                 perception=perception,
                 clip_dir=Path(tmp),
                 repeats=args.repeats,
+                claims=speech.claims if speech else CLAIMS,
                 on_call=progress,
                 arms=arms,
                 wire=wire,
+                prerendered=speech,
+                # Only the speech corpus. The tone results are published and
+                # turning these on for that path would change a methodology
+                # after its numbers were reported.
+                stop_rules=SPEECH_STOP_RULES if speech else None,
             )
     finally:
         if managed is not None:
@@ -2230,6 +3050,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         measured=not args.dry_run,
         repeats=args.repeats,
         result=result,
+        speech=speech,
     )
     text = json.dumps(report, indent=2, ensure_ascii=False)
     print(text)

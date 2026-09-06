@@ -50,6 +50,27 @@ name: Audio Accuracy Probe
 #     reasoning. It is what lets a reader tell a judge that answered badly from
 #     a request that never carried the sound.
 #
+# A second corpus arrived after that, and it asks a different question:
+#
+#   * `corpus`. `tones` is everything above -- clicks, beeps and sine waves,
+#     ground truth by arithmetic. It answers "does the verdict depend on the
+#     audio at all". It cannot answer the question the graded corpus turns on,
+#     because none of the 31 audio deliverables is a sine wave: they are all
+#     people talking. `speech` runs the same machinery against ten synthesised
+#     sentences with a known transcript, twenty criteria in matched pairs, and
+#     answers "does it hear words". The two are reported separately and their
+#     numbers are not comparable; a system that counts three beeps has shown
+#     that sound arrived, not that it was understood.
+#
+#     The speech clips are not committed -- eSpeak NG is GPL-3.0-or-later and
+#     nothing of it is redistributed here -- so the run rebuilds them and
+#     checks them against the digests committed in
+#     tasks/rebuilding_grading_task/330-speech-verification-manifest.json.
+#     If the runner's eSpeak has moved, the rebuild produces different bytes,
+#     the comparison fails, and the run stops before spending. That is the
+#     intended behaviour: the pre-registration in 330 names those digests, and
+#     a run whose audio it does not describe is not the run that was approved.
+#
 # It still spends money, so the paid half sits behind the same `grading`
 # environment gate every other paid path in this repository uses. A gate that
 # is reused rather than duplicated is one fewer approval surface to audit.
@@ -81,11 +102,32 @@ on:
           - production
           - observation
           - both
+      corpus:
+        description: 'Which sounds. tones = clicks, beeps and sine waves; answers whether the verdict depends on the audio at all. speech = ten synthesised sentences with a known transcript; answers whether it hears words. speech rebuilds its clips and refuses to run if they do not match the committed digests, and accepts the production arm only.'
+        required: false
+        type: choice
+        default: tones
+        options:
+          - tones
+          - speech
 
 # Read-only by default. The paid job adds id-token for OIDC and nothing else:
 # there is no commit, no release, and no dispatch to make.
 permissions:
   contents: read
+
+# The committed pin and the directory the rebuild writes into, named once so
+# the free job and the paid job cannot drift apart. The free job proves the
+# rebuild reproduces the pin; if these two paths differed between the jobs,
+# that proof would be about a different set of files than the one bought.
+env:
+  SPEECH_MANIFEST: ${{ github.workspace }}/tasks/rebuilding_grading_task/330-speech-verification-manifest.json
+  SPEECH_CLIPS: ${{ github.workspace }}/speech-set
+  # The document the speech run belongs to. Handed to the measurer so the run
+  # is held to the grader fingerprint §2 pins -- the fingerprint covers files
+  # nobody here edits, so it can move without this workflow changing, and the
+  # free job is where that should surface.
+  SPEECH_PREREG: ${{ github.workspace }}/tasks/rebuilding_grading_task/330-speech-diagnostic-prereg.md
 
 # One at a time. Two concurrent probes would interleave their calls against the
 # same deployment's TPM budget and each would measure the other's throttling.
@@ -130,6 +172,28 @@ jobs:
           cd batch-runner
           python -m pytest tests/test_audio_accuracy_probe_knows_its_own_answers.py -q
 
+      # Only for the speech corpus, and it runs on the free job as well as the
+      # paid one -- so a rebuild that no longer reproduces the pin is found
+      # before a reviewer is asked to approve anything.
+      #
+      # eSpeak NG is deliberately not version-pinned here. Pinning the apt
+      # version would be a pin that lies: the thing that has to be reproduced
+      # is the *bytes*, and the manifest holds their digests. If the runner's
+      # eSpeak has moved, --expect-manifest fails and says which end moved,
+      # the synthesiser or the encoder. Silently accepting different audio
+      # would be worse than stopping.
+      - name: Build and verify the pinned speech set
+        if: ${{ inputs.corpus == 'speech' }}
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends espeak-ng
+          espeak-ng --version
+          cd batch-runner
+          python scripts/build_speech_verification_set.py \
+            --out-dir "$SPEECH_CLIPS" \
+            --expect-manifest "$SPEECH_MANIFEST"
+
       # The arm and the delivery record are exercised here too. A dispatch that
       # asks for `both` should discover a broken interleave on the free run,
       # not after buying half of it.
@@ -137,12 +201,16 @@ jobs:
         run: |
           set -euo pipefail
           cd batch-runner
-          python scripts/measure_audio_grading_accuracy.py \
-            --dry-run \
-            --repeats "${{ inputs.repeats }}" \
-            --prompt-arm "${{ inputs.prompt_arm }}" \
-            --out "$GITHUB_WORKSPACE/audio-accuracy-dry-run.json" \
-            --delivery-out "$GITHUB_WORKSPACE/audio-accuracy-dry-run-delivery.json"
+          ARGS=(--dry-run
+                --repeats "${{ inputs.repeats }}"
+                --prompt-arm "${{ inputs.prompt_arm }}"
+                --out "$GITHUB_WORKSPACE/audio-accuracy-dry-run.json"
+                --delivery-out "$GITHUB_WORKSPACE/audio-accuracy-dry-run-delivery.json")
+          if [ "${{ inputs.corpus }}" = "speech" ]; then
+            ARGS+=(--speech-set "$SPEECH_MANIFEST" --speech-clips "$SPEECH_CLIPS")
+            ARGS+=(--expect-grader-pin "$SPEECH_PREREG")
+          fi
+          python scripts/measure_audio_grading_accuracy.py "${ARGS[@]}"
 
       # A dry run reports 100% accuracy, because the stub answers from the
       # segment list. That is a shape check and not a result, and the report
@@ -159,6 +227,7 @@ jobs:
           print("from the segment list, so a perfect score here means the pipeline")
           print("works, not that the model listens.\n")
           print(f"- `measured`: `{json.dumps(report['measured'])}`")
+          print(f"- corpus: `{report['corpus']}`")
           print(f"- prompt arms: {', '.join(report['pins']['prompt_arms'])}")
           # cost.model_calls, not accuracy.overall.calls: the accuracy block
           # covers the production arm alone, so on a `both` dispatch it is half
@@ -173,7 +242,25 @@ jobs:
               print(f"- delivery: {delivery['calls_carrying_audio']}/"
                     f"{delivery['calls_inspected']} requests carried audio; "
                     f"clips sending more than one digest: "
-                    f"`{json.dumps(delivery['clips_with_more_than_one_digest'])}`")
+                    f"`{json.dumps(delivery['clips_with_more_than_one_digest'])}`; "
+                    f"clips off their pinned length: "
+                    f"`{json.dumps(delivery['clips_whose_sent_duration_differs'])}`")
+              # This page is the whole reason the free job exists: to find out
+              # for nothing what would otherwise be found by buying a dispatch.
+              # Neither condition below stops a run -- that is deliberate, §3 --
+              # so if this page stays quiet about them, nothing free says a word.
+              if (delivery["calls_carrying_audio"] < delivery["calls_inspected"]
+                      or delivery["clips_whose_sent_duration_differs"]):
+                  print()
+                  print("> **Do not dispatch the paid run yet.** The audio did not")
+                  print("> go out the way `330` §2 pins it. Neither of these stops a")
+                  print("> run, so the paid dispatch would spend the whole budget and")
+                  print("> print an accuracy with this same evidence against it.")
+                  print()
+          stopped = report.get("stopped")
+          print(f"- stopped early: `{json.dumps(stopped and stopped['rule'])}` "
+                f"({len(report.get('calls') or [])} of {report['calls_planned']} "
+                f"planned calls)")
           comparison = report.get("arm_comparison")
           if comparison:
               print(f"- pairs available for the arm comparison: {comparison['pairs']}")
@@ -209,6 +296,7 @@ jobs:
         env:
           PROBE_REPEATS: ${{ inputs.repeats }}
           PROBE_ARM: ${{ inputs.prompt_arm }}
+          PROBE_CORPUS: ${{ inputs.corpus }}
         run: |
           set -euo pipefail
           # `both` asks every criterion twice. The record has to say so: the
@@ -216,9 +304,18 @@ jobs:
           # run would spend, it was off by a factor and nobody noticed until
           # afterwards.
           if [ "$PROBE_ARM" = "both" ]; then PROBE_ARMS=2; else PROBE_ARMS=1; fi
+          # Defaulted because this job has no checkout and is executed
+          # directly by a test that sets only the two variables above. The
+          # two corpora have the same criteria count and differ only in clips
+          # -- and that sentence is now checked rather than trusted: the
+          # criteria count sets the call count below, and it was pinned
+          # against the tone corpus alone, which is not the one this buys.
+          CORPUS="${PROBE_CORPUS:-tones}"
+          if [ "$CORPUS" = "speech" ]; then CLIPS=10; else CLIPS=9; fi
           printf '%s\n' \
             "Approved paid audio accuracy probe:" \
             "  model      = gpt-audio-1.5 (read from gold_audio_repeat_v2_sol_max.yaml)" \
+            "  corpus     = $CORPUS ($CLIPS clips)" \
             "  criteria   = 20 (10 true / 10 false)" \
             "  repeats    = $PROBE_REPEATS" \
             "  prompt_arm = $PROBE_ARM ($PROBE_ARMS arm(s))" \
@@ -285,6 +382,23 @@ jobs:
           cd batch-runner
           python scripts/azure_oidc_identity_preflight.py --verify-session
 
+      # Rebuilt here rather than carried over from the free job. An artifact
+      # handed between jobs is one more thing that can be the wrong artifact,
+      # and the rebuild is two minutes -- cheaper than the ambiguity. Both
+      # jobs check against the same committed digests, so agreeing with the
+      # pin is what makes them the same audio, not having travelled together.
+      - name: Build and verify the pinned speech set
+        if: ${{ inputs.corpus == 'speech' }}
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends espeak-ng
+          espeak-ng --version
+          cd batch-runner
+          python scripts/build_speech_verification_set.py \
+            --out-dir "$SPEECH_CLIPS" \
+            --expect-manifest "$SPEECH_MANIFEST"
+
       # Same route profile and the same identity assertions the grading run
       # uses. The point of this measurement is to describe the audio path the
       # 19.35% came off; reaching it by a different route would describe
@@ -298,40 +412,174 @@ jobs:
         run: |
           set -euo pipefail
           cd batch-runner
-          python scripts/measure_audio_grading_accuracy.py \
-            --repeats "${{ inputs.repeats }}" \
-            --prompt-arm "${{ inputs.prompt_arm }}" \
-            --out "$GITHUB_WORKSPACE/audio-accuracy-measured.json" \
-            --delivery-out "$GITHUB_WORKSPACE/audio-accuracy-measured-delivery.json"
+          ARGS=(--repeats "${{ inputs.repeats }}"
+                --prompt-arm "${{ inputs.prompt_arm }}"
+                --out "$GITHUB_WORKSPACE/audio-accuracy-measured.json"
+                --delivery-out "$GITHUB_WORKSPACE/audio-accuracy-measured-delivery.json")
+          if [ "${{ inputs.corpus }}" = "speech" ]; then
+            ARGS+=(--speech-set "$SPEECH_MANIFEST" --speech-clips "$SPEECH_CLIPS")
+            ARGS+=(--expect-grader-pin "$SPEECH_PREREG")
+          fi
+          python scripts/measure_audio_grading_accuracy.py "${ARGS[@]}"
 
       - name: Summarise
         if: always()
         run: |
           set -euo pipefail
-          test -f "$GITHUB_WORKSPACE/audio-accuracy-measured.json" || exit 0
+          # No report means the run stopped before writing one, and this page
+          # is where somebody looks first. Exiting quietly here leaves an empty
+          # summary under a red job -- and the two ways to get here differ by
+          # whether money was spent, which is not something to leave to a
+          # guess.
+          if [ ! -f "$GITHUB_WORKSPACE/audio-accuracy-measured.json" ]; then
+            {
+              echo "## Audio accuracy probe — no report was written"
+              echo
+              echo "There is no accuracy on this page because the run produced no"
+              echo "report. **The reason is on the failed step above, as an"
+              echo "annotation** — this page cannot see it."
+              echo
+              echo "Two different things look like this:"
+              echo
+              echo "* **A pre-flight refusal.** The rebuilt clips not matching the"
+              echo "  pinned digests, the grader not being the one the"
+              echo "  pre-registration names, or the identity assertions failing."
+              echo "  These all run before the first call, so nothing was bought."
+              echo "* **A failure after the calls started.** The report is written"
+              echo "  at the end, so there is none — but those calls were billed."
+              echo
+              echo "Which one it was is in the annotation. Do not file this run as"
+              echo "having cost nothing without reading it."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
           import json, os
           report = json.load(open(os.path.join(os.environ["GITHUB_WORKSPACE"], "audio-accuracy-measured.json")))
           acc = report["accuracy"]
           j = acc["discrimination_j"]
           perm = acc["permutation"]
+          binom = acc["pre_registered_binomial"]
+          pairs = acc["pair_consistency"]
+          stab = acc["stability"]
+          flips = stab["repeat_flips"]
 
           def pct(value):
               return "n/a" if value is None else f"{value * 100:.2f}%"
 
           print("## Audio accuracy probe — measured\n")
           print(f"Model `{report['pins']['audio_deployment']}`, "
+                f"corpus `{report['corpus']}`, "
                 f"{report['pins']['claims']} criteria x {report['pins']['repeats']} repeats "
                 f"x {len(report['pins']['prompt_arms'])} arm(s) "
                 f"= {report['cost']['model_calls']} calls "
                 f"({', '.join(report['pins']['prompt_arms'])}).\n")
+          stopped = report.get("stopped")
+          if stopped:
+              print(f"> **This run stopped early on the pre-registered rule "
+                    f"`{stopped['rule']}`.** It made "
+                    f"{stopped['after_calls']} of {report['calls_planned']} "
+                    f"planned calls. {stopped['reading']}\n")
+              print("> Every number below is that partial run's. Do not compare it")
+              print("> with a completed run as though the design were the same.\n")
+          speech = report.get("speech_set")
+          if speech:
+              print("**This is the speech corpus.** It asks whether the judge hears")
+              print("words. The tone corpus asks whether the verdict depends on the")
+              print("audio at all. The two numbers are not comparable and must not be")
+              print("averaged or presented as one figure.\n")
+              print(f"- {speech['limits']['reading']}")
+              print(f"- clips rebuilt and checked against "
+                    f"`{os.path.basename(speech['manifest'])}`")
+              print(f"- expected audio tokens: {speech['expected_audio_tokens']} "
+                    f"({speech['expected_audio_tokens_basis']})")
+              # Three states, not two. The measurer is careful to record None
+              # when no call reported the field -- it is not 0, because 0 is a
+              # claim -- and printing nothing here throws that away: a reader
+              # checking whether the +/-10% delivery band held sees the same
+              # empty space whether it held or was never measured. Every free
+              # rehearsal has None here, so this branch first executes on the
+              # paid run.
+              delivered = (report.get("delivery") or {}).get("audio_tokens_total")
+              if delivered is None:
+                  print("- audio tokens actually billed: **not reported** by the "
+                        "provider, so the +/-10% delivery check did not run. Not 0, "
+                        "and not agreement with the expected figure above.")
+              else:
+                  expected = speech["expected_audio_tokens"]
+                  drift = None if not expected else abs(delivered - expected) / expected
+                  print(f"- audio tokens actually billed: {delivered}"
+                        + (f" ({drift * 100:.1f}% from expected)" if drift is not None else ""))
+                  if drift is not None and drift > 0.10:
+                      print("\n**The billed audio is more than 10% away from the "
+                            "pre-registered figure.** Either different sound was sent or "
+                            "the metering changed; read that before reading the accuracy.\n")
+              # The first thing to check when the total sits above the band, and
+              # the reason it is printed next to it: a retried envelope sends the
+              # clip a second time and is billed a second time, so more requests
+              # than calls is extra audio that nothing went wrong to produce.
+              requests = (report.get("delivery") or {}).get("requests_total")
+              calls = (report.get("delivery") or {}).get("calls_inspected")
+              if requests and calls and requests > calls:
+                  print(f"- requests sent: **{requests}** for {calls} calls — "
+                        f"{requests - calls} retried envelope(s), each billed again")
+              print()
+          # 330 §2 puts the delivery checks *before* the accuracy: an accuracy
+          # measured on calls that carried no audio is 324 again -- the speech
+          # it heard in silence. §3's stop rule catches audio metered at a real
+          # 0, but not a request that carried no audio part at all, and not a
+          # clip whose length is not the pinned one. Those produce a complete
+          # 60-call run with a headline accuracy and the evidence sixty lines
+          # below it. The detail stays in "Did the audio arrive"; what moves up
+          # here is the one line saying whether to read on.
+          arrival = report.get("delivery") or {}
+          if arrival:
+              carried = arrival["calls_carrying_audio"]
+              inspected = arrival["calls_inspected"]
+              wrong_length = arrival["clips_whose_sent_duration_differs"]
+              if carried < inspected or wrong_length:
+                  print("> **Read this before the accuracy below.** ", end="")
+                  if carried < inspected:
+                      print(f"{inspected - carried} of {inspected} requests "
+                            f"carried no audio. ", end="")
+                  if wrong_length:
+                      print(f"{len(wrong_length)} clip(s) were not the pinned "
+                            f"length. ", end="")
+                  print("\n> Whatever the number below describes, it is not "
+                        "this model hearing these clips.\n")
+          # 330 §4 names this trap by hand: a judge that answers the same way
+          # to both sides of every pair still scores about 50% on a balanced
+          # corpus, and 50% reads as a near miss. The "J = 0 would mean..."
+          # paragraph under the table is in the subjunctive; on this run it is
+          # the indicative, and it belongs above the number it is about.
+          if pairs["answered_identically"] and not pairs["answered_differently"]:
+              print(f"> **Read this before the accuracy below.** The judge gave "
+                    f"both sides of every pair it resolved "
+                    f"({pairs['answered_identically']} of {pairs['pairs']}) the "
+                    f"same verdict "
+                    f"(`{json.dumps(pairs['identical_by_verdict'])}`).")
+              print("> On this balanced corpus that scores about 50% whatever it")
+              print("> said, so the accuracy below is not a near miss — it is a")
+              print("> judge that separated nothing.\n")
           if len(report["pins"]["prompt_arms"]) > 1:
               print("The table below is the **production arm alone** — the prompt the")
               print("grader actually runs. The alternative prompt is never folded in,")
               print("because an average of the two describes a prompt nothing uses.\n")
           print("| | |")
           print("|---|---|")
+          if arrival:
+              print(f"| audio actually sent | "
+                    f"**{arrival['calls_carrying_audio']} / "
+                    f"{arrival['calls_inspected']}** requests |")
           print(f"| accuracy (answered calls) | {pct(acc['overall']['accuracy'])} |")
+          # 330 §4: never the accuracy on its own. 328 published a 47.1% whose
+          # denominator was 17 answers, and the 17 appeared nowhere near it.
+          # The rate is this arm's, like the accuracy above it -- the run's
+          # call count is reported separately and is not this number.
+          print(f"| &nbsp;&nbsp;· answers it was computed from | "
+                f"{acc['overall']['answered']} |")
+          print(f"| **response rate** (this arm's attempts) | "
+                f"**{pct(acc['overall']['response_rate'])}** |")
           print(f"| false-fail rate (on true claims) | {pct(acc['on_true_claims']['false_fail_rate'])} |")
           print(f"| false-pass rate (on false claims) | {pct(acc['on_false_claims']['false_pass_rate'])} |")
           print(f"| hedged (`partial`) | {acc['overall']['hedged']} |")
@@ -342,21 +590,76 @@ jobs:
               print(f"| &nbsp;&nbsp;· reply broke the response contract | {kinds.get('read_failure', 0)} |")
               print(f"| &nbsp;&nbsp;· the call itself failed | {kinds.get('provider_failure', 0)} |")
           print(f"| **discrimination (Youden's J)** | **{j['per_call']}** |")
-          print(f"| permutation p (one-sided) | {perm['p_one_sided']} |")
-          print(f"| smallest p this design can reach | {perm['smallest_attainable_p']} |")
+          print(f"| &nbsp;&nbsp;· on majority verdicts | {j['per_claim_majority']} |")
+          # The count J cannot give. Ten pairs answered the same way is a
+          # judge that never separated anything, at 50% accuracy.
+          print(f"| **pairs told apart** | **{pairs['answered_differently']} "
+                f"of {pairs['pairs']}** |")
+          print(f"| &nbsp;&nbsp;· both sides the same verdict | "
+                f"{pairs['answered_identically']} "
+                f"`{json.dumps(pairs['identical_by_verdict'])}` |")
+          print(f"| &nbsp;&nbsp;· no majority on one side | {pairs['incomplete']} |")
+          # The pre-registration names this one primary, before it had a
+          # value. Printing both, labelled, is what stops "the significant
+          # one" from becoming the primary one after the fact.
+          print(f"| **p — pre-registered primary** (binomial, n={binom['n']}) "
+                f"| **{binom['p_one_sided']}** |")
+          print(f"| &nbsp;&nbsp;· correct majority verdicts | "
+                f"{binom['correct']} of {binom['n']} |")
+          # §4 promises n and the reason it shrank are printed together. A
+          # bare n=14 does not say whether six claims hedged or six were
+          # never answered, and those are different findings: one is the
+          # model refusing the question, the other is nothing arriving.
+          print(f"| &nbsp;&nbsp;· claims left out: hedged / no majority | "
+                f"{binom['hedged_majorities_excluded']} / "
+                f"{stab['claims'] - binom['claims_with_a_majority']} |")
+          print(f"| p — pre-specified secondary (within-pair permutation) | {perm['p_one_sided']} |")
+          print(f"| smallest p the permutation can reach | {perm['smallest_attainable_p']} |")
+          # Same denominator as the 19.35% the dispatch description promises
+          # this run can be compared with. The claim-level count is printed
+          # under it precisely so nobody reads it as the same measure.
+          flip_pct = flips["flip_rate_pct"]
+          print(f"| **repeat flip rate** (pairs of repeats) | "
+                f"**{f'{flip_pct}%' if flip_pct is not None else 'no comparable pairs'}** "
+                f"vs {flips['prior_audio_cohort_pct']}% "
+                f"on the graded audio cohort |")
+          print(f"| &nbsp;&nbsp;· comparable pairs | {flips['flips']} flips "
+                f"in {flips['comparable_pairs']} |")
+          print(f"| &nbsp;&nbsp;· pairs dropped (a side never answered) | "
+                f"{flips['pairs_dropped_for_a_missing_answer']} |")
+          print(f"| &nbsp;&nbsp;· claims that ever flipped — *different denominator* | "
+                f"{flips['claims_that_ever_flipped']} of {stab['claims']} |")
           print()
           print("**J = 0 would mean the verdict does not depend on the audio.** A model")
           print("answering `pass` to everything scores 50% accuracy on this balanced")
           print("corpus and J = 0; accuracy alone cannot tell a listener from a coin.\n")
+          # Each test has its own floor and they are not interchangeable. The
+          # permutation's is fixed by the pair count. The primary's is 1/2^n
+          # and it *moves*: every hedged majority leaves n and the floor
+          # climbs, so n = 4 cannot reach 0.05 however well the model does.
+          # Printing the permutation's floor alone announced thresholds the
+          # pre-registered primary could no longer reach.
           floor = perm["smallest_attainable_p"]
-          print(f"This design cannot produce a p below {floor} — "
-                f"{perm['pairs']} pairs, {perm['assignments']} relabellings, "
-                f"so the floor is 1/{perm['assignments']}. Repeats do not move "
-                "it; only pairs do.\n")
-          reachable = [t for t in (0.05, 0.01, 0.001) if floor < t]
-          print("Thresholds this design can reach: "
-                + (", ".join(str(t) for t in reachable) if reachable else "none")
-                + ".\n")
+          binom_floor = binom["smallest_attainable_p"]
+          if floor is None or binom_floor is None:
+              # No usable verdict, so there is no test and no floor. This is
+              # the shape 328's observation arm actually had, and the old
+              # code printed "the floor is 1/0" and then died on None < 0.05,
+              # taking the delivery and cost sections with it -- on the one
+              # run whose summary has to explain itself.
+              print("**No verdict was usable, so neither test has a value.** There")
+              print("is no floor to quote: a floor is a property of a test that ran.")
+              print("Read the non-answer split above — this is a format or delivery")
+              print("result, not a result about hearing.\n")
+          else:
+              print(f"Floors, per test — **primary** (binomial, n={binom['n']}): "
+                    f"{binom_floor}. Secondary (permutation, {perm['pairs']} pairs, "
+                    f"{perm['assignments']} relabellings): {floor}. Repeats move "
+                    "neither; only claims and pairs do.\n")
+              reachable = [t for t in (0.05, 0.01, 0.001) if binom_floor < t]
+              print("Thresholds the **pre-registered primary** can reach: "
+                    + (", ".join(str(t) for t in reachable) if reachable else "none")
+                    + ".\n")
 
           delivery = report.get("delivery")
           if delivery:
@@ -431,6 +734,17 @@ jobs:
           print(f"- estimated cost: `{json.dumps(report['cost']['estimated_cost_usd'])}` — "
                 "**null, not $0.** An unpriced model costs an unknown amount.")
           print("\n### By family\n")
+          # Counts, not percentages, and said out loud: a family of two claims
+          # asked three times shows "6 answered, 6 correct", which reads as six
+          # items agreeing. §4 forbids exactly that reading -- the three calls
+          # for one claim ask the same question about the same audio.
+          family_repeats = int(report["pins"]["repeats"])
+          print(f"**Calls, not claims.** Each claim was asked {family_repeats} times, so")
+          print(f"a family of two claims contributes {2 * family_repeats} rows here. §4")
+          print("treats these as description only: significance is the binomial above,")
+          print("on one majority verdict per claim. A two-claim family can score 0, 50")
+          print("or 100% and nothing else, and its 100% is two coin flips landing")
+          print("heads.\n")
           print("| family | answered | correct | false fail | false pass | hedged |")
           print("|---|---|---|---|---|---|")
           for name, row in acc["by_family"].items():

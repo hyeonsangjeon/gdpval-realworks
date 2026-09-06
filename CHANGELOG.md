@@ -394,6 +394,320 @@ entries land under a fresh dated heading the day they merge to `main`.
   "Critical item pass rate" into the report prompt — is closed under **Fixed**.
 
 ### Added
+- **The accuracy probe can now run the speech fixture, and stops when 330 says
+  to stop.** The fixture landed pinned but unrunnable: the measurement script
+  only knew the nine synthetic tone clips, so a `corpus: speech` dispatch had
+  nowhere to go. It now loads `330-speech-verification-manifest.json`, rebuilds
+  the clips from eSpeak NG on the runner, and refuses to measure anything whose
+  SHA-256 does not match the committed pin — in both the free and the paid job,
+  before either spends. Agreeing with the pin is what makes two directories the
+  same audio; travelling together in an artifact is not.
+
+  Two defects surfaced in the wiring, both of which would have produced a
+  confident wrong reading. The delivery record built its duration table from the
+  *tone* clips whatever corpus ran, so a perfectly healthy speech run would have
+  listed every clip under `clips_whose_sent_duration_differs` and reported
+  `prompt_token_vs_clip_seconds.n == 0` — the delivery block readers are told to
+  check *before* trusting the accuracy would have said the audio never arrived.
+  And the record counted the calls that reported audio tokens without ever
+  totalling them, which is the number 330's stop rule turns on.
+
+  `audio_tokens_total` is `null` when no call reported the field, not `0`. A
+  zero is a claim — *the provider metered no audio* — and it must not be
+  indistinguishable from the provider never having said.
+
+  A third instance of the same bug, and the worst of the three: `summarise()`
+  built its per-claim table by iterating the *tone* claim list. Speech claim
+  ids do not intersect it, so `by_claim` came back empty, `stability.claims`
+  read `0`, and `discrimination_j.per_claim_majority` had nothing to compute
+  from — while every per-call figure looked healthy. 330 §4 names the majority
+  vote as the **primary** analysis, so the number the run exists to produce is
+  precisely the one that would have gone missing, after the money was spent.
+
+  And the primary significance test did not exist at all. §4 pre-registers an
+  exact binomial on majority verdicts (n = 20, p = 0.5); the report computed
+  only a within-pair permutation test, whose floor is 1/1024. Reporting the
+  permutation p afterwards as "the pre-registered result" is exactly the
+  after-the-fact substitution the document was written to prevent, so both are
+  now computed, both are named in §4 before either has a value, and the summary
+  labels which is primary and which is secondary. A `partial` majority leaves
+  the binomial's denominator rather than being rounded into whichever side is
+  convenient, and `n` is printed beside the p so a shrunk denominator is
+  visible.
+
+  Two of §4's secondary metrics were promised and not computed. The repeat
+  disagreement was to be "comparable with the 19.35%" measured on the graded
+  audio cohort, and the dispatch description said so too, but 19.35% is flips
+  over *pairs of runs* and the report carried only `identical_across_repeats`,
+  whose complement is the share of claims that flipped at all. On three repeats
+  a claim that flips once is 33% of the first figure and 100% of the second, so
+  the obvious division would have been printed beside 19.35% as a change in
+  steadiness that never happened. `repeat_flip_rate` computes the pairwise one
+  — 20 claims × 3 pairs = 60 — and both are shown with the claim-level figure
+  marked as a different denominator. Pairs where a repeat never answered leave
+  the denominator and are counted separately; nothing to compare reports null,
+  not 0%, which would claim the repeats agreed. And §4's pair consistency ("둘
+  다 `pass`면 안 듣고 찍은 것") had no count: Youden's J summarises it as a
+  difference of rates and cannot say *how many* pairs were never separated.
+  `pair_consistency` reports pairs told apart, pairs given the same verdict on
+  both sides and which verdict that was, and pairs missing a side. Ten pairs of
+  `pass` still scores 50% on this balanced corpus, which accuracy alone reads
+  as a near miss.
+
+  And the response rate was in the artifact but not in the summary a person
+  reads, beside the accuracy §4 says it must never appear without. 328's
+  observation arm published 47.1% on 17 answers; the paid table now prints the
+  answers the accuracy was computed from and the rate, so that run would have
+  rendered as `n/a`, `0`, and `0.00%`. Both are this arm's, like the accuracy —
+  the run's call count stays sourced from the cost block, which an existing
+  test keeps separate because a `both` run scores one arm and calls two.
+
+  The seventh was that nothing stopped the answer reaching the model. The
+  manifest has to carry the sentence eSpeak was given and why each claim
+  holds, or the set is not reproducible — so for the whole run the ground
+  truth sits one attribute access away from the prompt. A judge handed it
+  answers all twenty correctly and the report says the model hears words;
+  the run does not fail. The argument list is now pinned instead of the
+  prompt text, which §6 keeps unpublished: `judge()` takes `criterion` and
+  `audio_path`, and a third keyword fails the test. The corpus was audited
+  the same way — no criterion states its own truth value or quotes its
+  transcript, and each pair differs by one confusable word on the same clip.
+
+  The eighth and ninth are both the report saying more than the run can
+  support. §4 reads "solves the other families but not these three" as *hears
+  words, not sentences* — but `binding` and `negation` hold two claims each, so
+  they can only score 0, 50 or 100%, and 100% is two coin flips landing heads
+  (p = 0.25) printed as a discovery. The family sizes are now written into the
+  document beside the accuracies each can produce, taken from the manifest and
+  kept honest by a test, and that reading is restricted to `order`, the only
+  one of the three with four claims. Then the delivery checks: §2 says to read
+  them *before* trusting the accuracy, and the paid summary printed them sixty
+  lines below it. §3's fourth stop rule covers audio metered at a real `0`. It
+  does not cover a request that carried no audio part at all, and it does not
+  cover a clip that is not the pinned length — `WireClient` records both and
+  deliberately does not raise, because a diagnostic that dies on the defect it
+  exists to find cannot describe it. The result is a complete sixty-call run
+  with a headline number and the evidence against it far enough down the page
+  to miss, which is 324 exactly. The count of requests that actually carried
+  audio now prints in the row above the accuracy, with a banner when either
+  check fails saying that whatever the number below describes, it is not this
+  model hearing these clips. The detail stays where it was; only the line that
+  decides whether to read on moved. A test pins the order.
+
+  The tenth is the summary page saying what the design can do, computed from
+  the wrong test. The pre-registration names the binomial primary and the
+  within-pair permutation secondary, and their floors are not the same kind of
+  number: the permutation's is fixed by the pair count at 1/1024, while the
+  binomial's is 1/2^n and *climbs* as hedged majorities leave n. At n = 4 the
+  primary's floor is 0.0625, and the page — computing from the permutation —
+  announced "thresholds this design can reach: 0.05, 0.01, 0.001" for a run
+  where the pre-registered primary could reach none of them. It now quotes both
+  floors by name and derives the thresholds from the primary, and prints why n
+  shrank beside n, because a bare `n=14` does not distinguish six claims the
+  model hedged from six that were never answered. And on a run where nothing
+  was answered at all — the outcome §3's second stop rule exists to produce —
+  both floors are null, the page printed "the floor is 1/0" and then died
+  comparing `None` to 0.05, losing the delivery, cost and family sections with
+  it. The one run whose summary has to explain itself had no summary. It now
+  says no verdict was usable and carries on. That test executes the workflow's
+  own summary code against a real zero-answer report rather than grepping it,
+  because a string check cannot see a TypeError.
+
+  The eleventh is the page having the right sentence and printing it in the
+  subjunctive. A judge that answers `pass` to every criterion scores 50% on a
+  balanced corpus, and 50% reads as a near miss; §4 names that trap by hand,
+  because accuracy alone cannot tell a listener from a coin. Under the table
+  sat "J = 0 *would* mean the verdict does not depend on the audio" — general
+  guidance, easy to skim, and on the one run where it is a description of what
+  just happened it still reads as boilerplate. When no pair was told apart the
+  summary now says so above the accuracy, beside the arrival banner, with the
+  verdict it gave to everything. It stays silent when the pairs were separated:
+  a warning that prints on every run is decoration. Verified by rendering the
+  paid summary against both shapes offline.
+
+  One label in the pre-registration was corrected in the same pass, before any
+  spend: the primary test's row read `n = 20` while the rule two paragraphs
+  below it removes hedged majorities from the denominator. It now reads
+  `n ≤ 20`. Nothing about the design changed — the exclusion was always there —
+  but a table cell saying `n = 20` is how a run with n = 14 gets written up as
+  a twenty-item test.
+
+  The twelfth is the grader fingerprint the pre-registration pins. It existed
+  in exactly two places, both prose, and nothing recomputed it. That one string
+  covers `core/**.py`, `step8_grade.py`, the grade schema, the requirements
+  closure and the prompt template, so any of them moving leaves the document
+  pinning a grader that no longer exists — while still reading like a pin.
+  Recomputing it found that it had already happened: another workstream added
+  and edited files under `core/`, nothing to do with this diagnostic and
+  correct on its own terms, and the pinned `8bb8360a…` became a grader that is
+  not in this repository. Section 2 is re-pinned to `74e1f478…` with the old
+  value kept beside it, which is the right move only because nothing has been
+  bought yet; after the run that string is the record of what executed, and
+  editing a record to track a moved `HEAD` is falsifying it to keep CI green.
+
+  Where the check lives matters as much as the check. An equality asserted in a
+  unit test would go red on somebody else's correct `core/` merge — a tripwire
+  across a colleague's path, not a safeguard. It is enforced at dispatch
+  instead: `--expect-grader-pin` hands the measurer the document, which reads
+  section 2's own row, recomputes the fingerprint from this checkout and
+  refuses before a single call goes out — the same place and shape as the
+  `--expect-manifest` clip check. The free `dry_run` job passes it too, so
+  drift surfaces without buying a dispatch to discover it. And the computed
+  value is written into the report as `pins.grader_source_sha256`, so what ran
+  is recorded by the run rather than by a string somebody typed.
+
+  The thirteenth is the column in section 0 that tells the operator which
+  inputs to type. Five rows, three marked "differs from the default" and two
+  marked "same" — and the two marked same are the two nobody types, which is
+  what the column is for. It was written by hand, so a default moving in the
+  workflow does not produce a wrong document so much as a wrong dispatch.
+  Neither "same" row spends on its own: `repeats` was already pinned, and a
+  `prompt_arm` default of `both` is refused for a speech set before the
+  identity resolves. But it stops, and section 0 says the pre-registration is
+  those five values and not a sixth combination. The other direction is
+  `dry_run`, whose `true` default is what makes a careless dispatch free. The
+  column is now derived from the workflow's own defaults and compared row by
+  row. Every row was already right; nothing had checked it.
+
+  The fourteenth is the arrival banner itself — the line 330 section 3 calls
+  the fix for 324, and the only one in the summary that tells a reader the
+  number below is not this model hearing these clips. Its test checked that
+  the banner's text sits earlier in the workflow source than the accuracy row:
+  an ordering check over a string, true whether or not the condition beneath
+  it is. The branch had only ever run on healthy reports, where it prints
+  nothing — the wrong way round, because the banner exists for the run where
+  `WireClient` recorded missing audio or a clip of the wrong length and
+  deliberately did not raise. All three shapes are now rendered and read: no
+  audio at all, a clip that is not the pinned length, and a clean run that has
+  to stay quiet. Mutation-checked four ways, including `or` → `and`, which
+  silences the wrong-length half alone and is the edit a tidy-up makes.
+
+  The fifteenth is one step earlier than the tenth. That one was the summary
+  dying on a run where nothing answered; this one is the summary on a run that
+  never wrote a report at all. It began `test -f report || exit 0`, so a
+  pre-flight refusal left an empty page under a red job, with the reason in an
+  annotation. The grader-pin check above adds another way to land there. It
+  also matters more than tidiness, because the two ways of getting here differ
+  by money: the pre-flight checks all run before the first call and cost
+  nothing, while a failure after the calls started bought them and still writes
+  no report, since the report is written at the end. An empty page reads like
+  the free one. The step now names both and points at the annotation, and the
+  test runs the shell rather than reading it — shell that is never executed is
+  a suggestion.
+
+  The sixteenth is the fourteenth on the other page. Both delivery conditions
+  are bannered above the accuracy in the *paid* summary; the *free* one printed
+  the arrival count and the digest list and stopped there, saying nothing about
+  a clip that is not its pinned length. The free run is the whole point of
+  having a free run — it is what finds, for nothing, what would otherwise be
+  found by buying a dispatch. On the run where defect 1 was live, with all ten
+  speech clips measured against the tone corpus's durations, that page read
+  `60/60 requests carried audio; clips sending more than one digest: []` and
+  nothing else. It looked clean; the defect was found by opening the JSON by
+  hand. The free page now prints both values and, when either is wrong, says
+  not to dispatch the paid run yet — and stays quiet when they are right.
+  Mutation-checked three ways: guard never fires, guard always fires, bullet
+  drops the field.
+
+  The seventeenth is not wrong yet, which is the only reason it is worth
+  writing down. The approval gate has no checkout, so the line it shows a
+  reviewer — `corpus = speech (10 clips)`, `criteria = 20`, `calls = 60 in
+  total` — is a restatement. That is the line that was once `calls = 36` for a
+  run that made sixty, after the tone corpus grew from twelve criteria to
+  twenty: the record of what was authorised disagreeing with what was spent.
+  It was pinned afterwards, and pinned against `CLAIMS` — the tone corpus,
+  which is not the one this dispatch buys. That the speech set also holds
+  twenty was a comment. Since the criteria count *is* the call count, and 330
+  §5 says twenty claims is few, four more claims would have the gate recording
+  sixty calls for a run that makes seventy-two — and the assertion would still
+  have passed, because the twenty was typed into the test. Verified by growing
+  the manifest by four claims: the tests as they stood went green. Both counts
+  now come from the manifest, and the day the corpora diverge the failure says
+  to branch the record on `$CORPUS` the way the clip count already is.
+
+  Not a defect — the code was right — but the fourteenth's shape again and
+  worth the same paragraph. `--expect-manifest` is what stands between a moved
+  eSpeak and a paid dispatch, and only its passing half had ever executed.
+  Eight tests cover `compare_to_expected`; none covered the command that turns
+  the list it returns into the exit code the paid job's `set -euo pipefail`
+  acts on. The one real execution — free CI run `34027400241` — matched, so the
+  refusal was skipped there too. It is now driven both ways, with the published
+  manifest standing in for the synthesiser that cannot run on this kernel: one
+  altered `sent` digest exits 1 and names the clip, while an unaltered rebuild
+  still exits 0, because a check that stops every dispatch is a check that gets
+  removed. Mutation-checked in both directions — a refusal that returns 0, and
+  one that refuses without saying which clip.
+
+  The eighteenth was in the one number that has to be right *before* anything
+  is bought. 330 section 2 predicted 937 audio tokens — the corpus length,
+  31.235 s, times three repeats — and pre-registered a ±10% band around it as
+  the check for whether the sound went out as pinned. But a call carries the
+  clip its own criterion is about, and twenty criteria share ten clips, so one
+  pass over the corpus sends every clip twice: 187.41 s across the sixty calls,
+  1,874 tokens. Exactly double. A run with nothing wrong with it lands 82%
+  above the band, and the summary prints *"the billed audio is more than 10%
+  away from the pre-registered figure — either different sound was sent or the
+  metering changed"* in bold, on the healthy run. That is worse than having no
+  band at all: a check that fires every time is the check that would have
+  caught a real delivery failure, spent in advance on a false alarm. It is also
+  the only pre-dispatch cost estimate for a model with no published price, and
+  it understated that by half. Measured rather than reasoned — summing the clip
+  duration of all sixty calls in a free rehearsal gives 187.41 s. The report now
+  derives the figure from `calls_planned`, so the estimate and the plan cannot
+  disagree, and the document's block is *read* by a test instead of restated in
+  one. The two tests this replaces asserted the code's formula against itself
+  and the document's number against the same formula, so both were green on the
+  wrong answer. The block was also not the only copy — the rehearsal table two
+  sections up carried 937 as well, which is how a document ends up disagreeing
+  with itself about what a run costs, so the test now requires every labelled
+  statement of the figure to be the same one.
+
+  Fixing that number exposed the nineteenth: the line that *compares* against it
+  had never executed anywhere. All six tests that run this summary feed it a free
+  rehearsal report, and no free call reports an audio token count, so
+  `delivery.audio_tokens_total` is always `None` and the whole block is skipped —
+  the fourteenth's shape a fourth time, except that here the input which does
+  exercise it is the paid run itself. The skip was the defect, too. The measurer
+  is deliberately three-state: `None` when nothing reported the field, *not* `0`,
+  because `0` is a claim about metering. The summary collapsed that back to two
+  by printing nothing, so a reader checking whether the ±10% band held saw the
+  same blank space whether it held or was never measured. It now says which of
+  the three happened, and a test renders all of them — unreported, exact, 9%,
+  11%, and metered at zero. Mutation-checked four ways: restoring the silent
+  skip, widening the band to 20%, making the banner fire on every run, and
+  reporting the unmeasured case as `0`.
+
+  And the number that line compares is not the bill. A judge call can make more
+  than one request — a malformed envelope is asked again — and `summarise_wire`
+  keeps a `requests` count for exactly that reason. It collapsed the audio token
+  figure to the *last* request, which is right for `audio_sha256` and
+  `response_model`, since those describe the request that produced the verdict,
+  and wrong for a billing quantity: the retry sends the clip again and is
+  charged again. Six retries in sixty calls is 10% more audio bought than
+  pre-registered — the entire width of the band — reported as `0.0% from
+  expected`, because the compared number was structurally incapable of holding
+  it. Split in two: `audio_tokens` stays the verdict's own meter reading, and
+  `audio_tokens_billed` sums every request the call made, which is what
+  `audio_tokens_total` now totals. `requests_total` is recorded beside it and
+  the summary names the retries when there are any, so a band that was exceeded
+  says why rather than leaving a reader to choose between a retry and a
+  delivery fault. Found by reading the collapse, then measured: 54 clean calls
+  and 6 retried ones report 1,860 against 2,046 billed. Mutation-checked five
+  ways, including the one that started it — the test fixture had never carried
+  a `requests` field at all, so `delivery_section` read it as zero and a
+  sixty-call run reported twelve requests.
+
+  330 section 3 pre-registered four stop conditions and nothing enforced them.
+  They are now `SPEECH_STOP_RULES`, checked after each call, with a test that
+  fails if the constants and the document drift apart: 20 minutes wall clock,
+  zero usable verdicts in the first 10 calls, 10 provider failures, and audio
+  metered at 0. The second would have ended 328's observation arm at ten calls
+  instead of sixty. A stopped run keeps everything it bought — including the
+  call that tripped the rule — and reports `stopped` beside `calls_planned`, so
+  a partial run cannot be read as a completed one. The tone corpus runs unruled:
+  its numbers are published and adding conditions now would change the design
+  they came out of. 116 tests on the probe, 231 across the audio suite.
+
 - **A speech fixture, because every audio measurement so far has been beeps.**
   The tone corpora answered "does the verdict depend on the audio at all". None
   of the 31 graded audio deliverables is a sine wave, so the question the corpus
