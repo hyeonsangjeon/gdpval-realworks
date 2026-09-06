@@ -2316,3 +2316,183 @@ def test_the_paid_summary_says_a_stopped_run_stopped() -> None:
 def test_the_dry_run_summary_shows_the_field_exists() -> None:
     step = _step("dry-run", "Summarise")
     assert "stopped early" in step["run"]
+
+
+def test_the_dispatch_the_document_names_is_a_dispatch_the_workflow_accepts() -> None:
+    """A pre-registered input set that the workflow would reject is not a
+    pre-registration; it is a plan that gets edited at dispatch time."""
+    doc = (
+        probe.REPO_ROOT / "tasks" / "rebuilding_grading_task"
+        / "330-speech-diagnostic-prereg.md"
+    ).read_text(encoding="utf-8")
+    inputs = _workflow()[True]["workflow_dispatch"]["inputs"]
+
+    for name, value in [
+        ("dry_run", "`false`"),
+        ("paid_approval", "`true`"),
+        ("repeats", "`3`"),
+        ("prompt_arm", "`production`"),
+        ("corpus", "`speech`"),
+    ]:
+        assert f"| `{name}` | {value} |" in doc, name
+        assert name in inputs, name
+
+    assert "production" in inputs["prompt_arm"]["options"]
+    assert "speech" in inputs["corpus"]["options"]
+    # 60 calls, and the document's arithmetic has to be the workflow's.
+    assert int(inputs["repeats"]["default"]) == 3
+    assert "20 × 3 × 1 = 60" in doc
+
+
+# ── The per-claim table, which is where the primary analysis lives ───────
+#
+# Third instance of one bug: an analysis function defaulting to the tone
+# corpus while the speech corpus runs. The per-call figures stay healthy,
+# so nothing looks wrong until someone asks for the number 330 called
+# primary and finds it was never computed.
+
+
+def test_every_claim_that_ran_has_a_row(tmp_path: Path) -> None:
+    manifest_path, clip_dir = _speech_fixture(tmp_path, clips=4)
+    corpus = probe.load_speech_corpus(manifest_path, clip_dir)
+    perception = probe.AudioPerception(
+        client=probe.TruthfulStub(corpus.claims),
+        deployment="gpt-audio-1.5",
+        call_cap=AUDIO_CALL_CAP,
+        trim_seconds=AUDIO_TRIM_SECONDS,
+    )
+    result = probe.run_measurement(
+        perception=perception,
+        clip_dir=tmp_path / "unused",
+        repeats=3,
+        claims=corpus.claims,
+        prerendered=corpus,
+    )
+    report = probe.build_report(
+        identity=probe.pinned_identity(),
+        measured=False,
+        repeats=3,
+        result=result,
+        speech=corpus,
+    )
+    acc = report["accuracy"]
+    assert set(acc["by_claim"]) == {c.claim_id for c in corpus.claims}
+    assert acc["stability"]["claims"] == len(corpus.claims)
+    # Not merely present: actually usable. A table of rows whose majority is
+    # None would satisfy a count and still leave the primary test empty.
+    assert acc["discrimination_j"]["per_claim_majority"] is not None
+    assert acc["pre_registered_binomial"]["n"] == len(corpus.claims)
+
+
+def test_a_tone_claim_id_does_not_stand_in_for_a_speech_one(
+    tmp_path: Path,
+) -> None:
+    """The failure was silent because the ids simply did not intersect."""
+    manifest_path, clip_dir = _speech_fixture(tmp_path, clips=2)
+    corpus = probe.load_speech_corpus(manifest_path, clip_dir)
+    assert not ({c.claim_id for c in corpus.claims}
+                & {c.claim_id for c in probe.CLAIMS})
+    calls = [
+        {
+            "claim_id": claim.claim_id,
+            "holds": claim.holds,
+            "family": claim.family,
+            "pair_id": claim.pair_id,
+            "verdict": "pass" if claim.holds else "fail",
+            "outcome": probe.OUTCOME_CORRECT,
+            "confidence": None,
+            "unanswered_kind": None,
+        }
+        for claim in corpus.claims
+    ]
+    assert probe.summarise(calls)["by_claim"] == {}
+    assert probe.summarise(calls, claims=corpus.claims)["by_claim"]
+
+
+def test_the_published_speech_set_fills_the_primary_analysis() -> None:
+    """Against the real manifest, not a fixture: 20 claims, 20 rows."""
+    manifest = probe.REPO_ROOT / SPEECH_MANIFEST_REPO_PATH
+    claims = json.loads(manifest.read_text(encoding="utf-8"))["claims"]
+    assert len(claims) == 20
+    doc = (
+        probe.REPO_ROOT / "tasks" / "rebuilding_grading_task"
+        / "330-speech-diagnostic-prereg.md"
+    ).read_text(encoding="utf-8")
+    assert "`accuracy.pre_registered_binomial`" in doc
+
+
+# ── Two tests, both named before either has a value ──────────────────────
+
+
+def test_the_primary_test_is_the_one_the_document_calls_primary() -> None:
+    doc = (
+        probe.REPO_ROOT / "tasks" / "rebuilding_grading_task"
+        / "330-speech-diagnostic-prereg.md"
+    ).read_text(encoding="utf-8")
+    assert "이항검정 (n = 20, p = 0.5)" in doc
+    assert "`accuracy.permutation`" in doc
+    step = _step("measure", "Summarise")
+    assert "pre-registered primary" in step["run"]
+    assert "pre-specified secondary" in step["run"]
+
+
+@pytest.mark.parametrize(
+    "correct, n, expected",
+    [
+        (20, 20, 1 / 2 ** 20),
+        (10, 20, 0.5880985260009766),
+        (0, 20, 1.0),
+        (1, 1, 0.5),
+    ],
+)
+def test_the_binomial_is_the_binomial(correct: int, n: int, expected: float) -> None:
+    by_claim = {
+        f"c{i}": {
+            "holds": True,
+            "majority": "pass",
+            "majority_outcome": (
+                probe.OUTCOME_CORRECT if i < correct else probe.OUTCOME_FALSE_FAIL
+            ),
+        }
+        for i in range(n)
+    }
+    got = probe.binomial_majority_test(by_claim)
+    assert got["n"] == n
+    assert got["correct"] == correct
+    assert got["p_one_sided"] == pytest.approx(expected)
+
+
+def test_a_hedged_majority_is_not_scored_either_way() -> None:
+    """`partial` is a refusal to answer a binary question, so it leaves the
+    denominator rather than being rounded into whichever side is convenient."""
+    by_claim = {
+        "a": {"majority": "pass", "majority_outcome": probe.OUTCOME_CORRECT},
+        "b": {"majority": "partial", "majority_outcome": probe.OUTCOME_HEDGED},
+        "c": {"majority": None, "majority_outcome": None},
+    }
+    got = probe.binomial_majority_test(by_claim)
+    assert got["claims_with_a_majority"] == 2
+    assert got["hedged_majorities_excluded"] == 1
+    assert got["n"] == 1 and got["correct"] == 1
+
+
+def test_a_test_with_nothing_to_test_returns_null_not_one() -> None:
+    got = probe.binomial_majority_test({})
+    assert got["n"] == 0
+    assert got["p_one_sided"] is None
+    assert got["smallest_attainable_p"] is None
+
+
+def test_the_repeats_are_collapsed_before_the_test_not_after() -> None:
+    """60 calls are not 60 trials. Three calls about one clip ask one
+    question, and counting them separately manufactures significance."""
+    source = (
+        probe.REPO_ROOT / "batch-runner" / "scripts"
+        / "measure_audio_grading_accuracy.py"
+    ).read_text(encoding="utf-8")
+    assert "binomial_majority_test(by_claim)" in source
+    doc = (
+        probe.REPO_ROOT / "tasks" / "rebuilding_grading_task"
+        / "330-speech-diagnostic-prereg.md"
+    ).read_text(encoding="utf-8")
+    assert "반복 3회를 독립 시행으로 세면" in doc

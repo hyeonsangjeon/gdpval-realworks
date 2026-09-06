@@ -409,6 +409,7 @@ jobs:
           acc = report["accuracy"]
           j = acc["discrimination_j"]
           perm = acc["permutation"]
+          binom = acc["pre_registered_binomial"]
 
           def pct(value):
               return "n/a" if value is None else f"{value * 100:.2f}%"
@@ -467,8 +468,16 @@ jobs:
               print(f"| &nbsp;&nbsp;· reply broke the response contract | {kinds.get('read_failure', 0)} |")
               print(f"| &nbsp;&nbsp;· the call itself failed | {kinds.get('provider_failure', 0)} |")
           print(f"| **discrimination (Youden's J)** | **{j['per_call']}** |")
-          print(f"| permutation p (one-sided) | {perm['p_one_sided']} |")
-          print(f"| smallest p this design can reach | {perm['smallest_attainable_p']} |")
+          print(f"| &nbsp;&nbsp;· on majority verdicts | {j['per_claim_majority']} |")
+          # The pre-registration names this one primary, before it had a
+          # value. Printing both, labelled, is what stops "the significant
+          # one" from becoming the primary one after the fact.
+          print(f"| **p — pre-registered primary** (binomial, n={binom['n']}) "
+                f"| **{binom['p_one_sided']}** |")
+          print(f"| &nbsp;&nbsp;· correct majority verdicts | "
+                f"{binom['correct']} of {binom['n']} |")
+          print(f"| p — pre-specified secondary (within-pair permutation) | {perm['p_one_sided']} |")
+          print(f"| smallest p the permutation can reach | {perm['smallest_attainable_p']} |")
           print()
           print("**J = 0 would mean the verdict does not depend on the audio.** A model")
           print("answering `pass` to everything scores 50% accuracy on this balanced")

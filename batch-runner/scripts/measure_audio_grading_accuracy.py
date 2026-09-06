@@ -2301,8 +2301,78 @@ def run_measurement(
     }
 
 
-def summarise(calls: Sequence[dict[str, Any]]) -> dict[str, Any]:
-    """Turn the call log into the three numbers the card asked for."""
+def binomial_majority_test(
+    by_claim: Mapping[str, Any],
+) -> dict[str, Any]:
+    """330 section 4's *primary* analysis, computed rather than described.
+
+    One verdict per claim by majority of the repeats, then an exact one-sided
+    binomial test against p = 0.5. Chance is 50% because the corpus is
+    balanced -- ten true claims and ten false ones.
+
+    This is reported *beside* the within-pair permutation test, and both are
+    named in the pre-registration before any of them has a value. Computing
+    only one and choosing which to call primary after seeing them is the
+    failure this whole document exists to avoid, and having two numbers where
+    one is labelled primary is the only arrangement in which that choice
+    cannot be made later.
+
+    The repeats are collapsed by majority on purpose. Counting 60 calls as 60
+    independent trials inflates the denominator threefold and manufactures a
+    significance the design cannot support: the three calls for one claim ask
+    the same question about the same audio.
+    """
+    outcomes = [
+        entry["majority_outcome"]
+        for entry in by_claim.values()
+        if entry["majority"] is not None
+    ]
+    # A hedge is not a correct answer and it is not an incorrect one either.
+    # Dropping it shrinks n honestly; scoring it either way would not.
+    scored = [o for o in outcomes if o != OUTCOME_HEDGED]
+    n = len(scored)
+    correct = sum(1 for o in scored if o == OUTCOME_CORRECT)
+    p_value = (
+        sum(math.comb(n, i) for i in range(correct, n + 1)) / (2 ** n)
+        if n
+        else None
+    )
+    return {
+        "test": "exact one-sided binomial, p = 0.5",
+        "unit": "one majority verdict per claim",
+        "claims_with_a_majority": len(outcomes),
+        "hedged_majorities_excluded": len(outcomes) - n,
+        "n": n,
+        "correct": correct,
+        "p_one_sided": p_value,
+        # The floor a perfect score can reach. Below n = 5 nothing this test
+        # can produce clears 0.05, and a reader deserves to know that before
+        # reading the p rather than after.
+        "smallest_attainable_p": (1 / (2 ** n)) if n else None,
+        "meaning": (
+            "P(at least this many correct | the judge is guessing). The "
+            "repeats are collapsed to one verdict per claim first; treating "
+            "them as independent trials would triple the denominator and "
+            "invent significance the design cannot support."
+        ),
+    }
+
+
+def summarise(
+    calls: Sequence[dict[str, Any]],
+    *,
+    claims: Sequence[Claim] = CLAIMS,
+) -> dict[str, Any]:
+    """Turn the call log into the three numbers the card asked for.
+
+    ``claims`` is the corpus that ran, not the tone corpus. The per-claim
+    table below is keyed by claim id, so a default of ``CLAIMS`` matches
+    nothing on a speech run and every per-claim figure -- the majority vote,
+    the stability count, the per-claim discrimination -- comes back empty
+    while the per-call figures look perfectly healthy. 330's *primary*
+    analysis is the majority vote, so that is the number that would have
+    gone missing after the money was spent.
+    """
     overall = Tally()
     on_true = Tally()
     on_false = Tally()
@@ -2317,7 +2387,7 @@ def summarise(calls: Sequence[dict[str, Any]]) -> dict[str, Any]:
         by_family.setdefault(call["family"], Tally()).add(call["outcome"], kind)
 
     by_claim: dict[str, Any] = {}
-    for claim in CLAIMS:
+    for claim in claims:
         verdicts = [c["verdict"] for c in calls if c["claim_id"] == claim.claim_id]
         if not verdicts:
             continue
@@ -2369,6 +2439,10 @@ def summarise(calls: Sequence[dict[str, Any]]) -> dict[str, Any]:
                 "depend on the audio; accuracy alone cannot show that."
             ),
         },
+        # Both, always, and labelled. The pre-registration names the binomial
+        # as primary; the permutation is the pre-specified secondary. Neither
+        # is chosen after the numbers exist.
+        "pre_registered_binomial": binomial_majority_test(by_claim),
         "permutation": permute_within_pairs(calls),
         "mean_confidence": {
             key: (sum(values) / len(values) if values else None)
@@ -2469,7 +2543,7 @@ def build_report(
         # meant before there was a second arm: how the *grader* behaves. The
         # alternative prompt's figures live under "arms" and are never folded
         # in, because averaging the two would describe a prompt nothing runs.
-        "accuracy": summarise(control_calls),
+        "accuracy": summarise(control_calls, claims=report_claims),
         "cost": {
             # Two numbers, because a dry run makes 60 calls and is billed for
             # none of them. Collapsing them would put a "billable_calls: 60"
@@ -2525,7 +2599,9 @@ def build_report(
 
     if len(arms_present) > 1:
         report["arms"] = {
-            arm: summarise([c for c in calls if _arm_of(c) == arm])
+            arm: summarise(
+                [c for c in calls if _arm_of(c) == arm], claims=report_claims
+            )
             for arm in arms_present
         }
         report["arm_comparison"] = compare_arms(calls)

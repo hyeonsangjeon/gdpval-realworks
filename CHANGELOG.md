@@ -416,6 +416,25 @@ entries land under a fresh dated heading the day they merge to `main`.
   zero is a claim — *the provider metered no audio* — and it must not be
   indistinguishable from the provider never having said.
 
+  A third instance of the same bug, and the worst of the three: `summarise()`
+  built its per-claim table by iterating the *tone* claim list. Speech claim
+  ids do not intersect it, so `by_claim` came back empty, `stability.claims`
+  read `0`, and `discrimination_j.per_claim_majority` had nothing to compute
+  from — while every per-call figure looked healthy. 330 §4 names the majority
+  vote as the **primary** analysis, so the number the run exists to produce is
+  precisely the one that would have gone missing, after the money was spent.
+
+  And the primary significance test did not exist at all. §4 pre-registers an
+  exact binomial on majority verdicts (n = 20, p = 0.5); the report computed
+  only a within-pair permutation test, whose floor is 1/1024. Reporting the
+  permutation p afterwards as "the pre-registered result" is exactly the
+  after-the-fact substitution the document was written to prevent, so both are
+  now computed, both are named in §4 before either has a value, and the summary
+  labels which is primary and which is secondary. A `partial` majority leaves
+  the binomial's denominator rather than being rounded into whichever side is
+  convenient, and `n` is printed beside the p so a shrunk denominator is
+  visible.
+
   330 section 3 pre-registered four stop conditions and nothing enforced them.
   They are now `SPEECH_STOP_RULES`, checked after each call, with a test that
   fails if the constants and the document drift apart: 20 minutes wall clock,
