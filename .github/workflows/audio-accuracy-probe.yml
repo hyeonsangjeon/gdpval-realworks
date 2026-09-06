@@ -409,7 +409,33 @@ jobs:
         if: always()
         run: |
           set -euo pipefail
-          test -f "$GITHUB_WORKSPACE/audio-accuracy-measured.json" || exit 0
+          # No report means the run stopped before writing one, and this page
+          # is where somebody looks first. Exiting quietly here leaves an empty
+          # summary under a red job -- and the two ways to get here differ by
+          # whether money was spent, which is not something to leave to a
+          # guess.
+          if [ ! -f "$GITHUB_WORKSPACE/audio-accuracy-measured.json" ]; then
+            {
+              echo "## Audio accuracy probe — no report was written"
+              echo
+              echo "There is no accuracy on this page because the run produced no"
+              echo "report. **The reason is on the failed step above, as an"
+              echo "annotation** — this page cannot see it."
+              echo
+              echo "Two different things look like this:"
+              echo
+              echo "* **A pre-flight refusal.** The rebuilt clips not matching the"
+              echo "  pinned digests, the grader not being the one the"
+              echo "  pre-registration names, or the identity assertions failing."
+              echo "  These all run before the first call, so nothing was bought."
+              echo "* **A failure after the calls started.** The report is written"
+              echo "  at the end, so there is none — but those calls were billed."
+              echo
+              echo "Which one it was is in the annotation. Do not file this run as"
+              echo "having cost nothing without reading it."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
           import json, os
           report = json.load(open(os.path.join(os.environ["GITHUB_WORKSPACE"], "audio-accuracy-measured.json")))

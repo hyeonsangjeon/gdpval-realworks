@@ -1011,6 +1011,72 @@ def test_the_family_table_says_its_rows_are_calls() -> None:
     assert "two coin flips" in caption
 
 
+def test_the_summary_says_something_when_there_was_no_report(
+    tmp_path: Path
+) -> None:
+    """The step is ``if: always()``, so it also runs on the runs that stopped.
+
+    It began with ``test -f report || exit 0``: no report, no page, under a red
+    job. That silence was already wrong -- the failure lands in an annotation,
+    which is the one place this repository has learned people do not look --
+    and this PR adds another way to reach it, since the grader-pin check
+    refuses before writing anything.
+
+    It matters more than tidiness because the two ways to get here differ by
+    money. A pre-flight refusal happens before the first call and costs
+    nothing; a failure after the calls started bought them and still writes no
+    report, because the report is written at the end. An empty page reads like
+    the first one.
+
+    Executed, not grepped: the guard is shell, and shell that is never run is
+    a suggestion.
+    """
+    prologue = _step("measure", "Summarise")["run"].split("python - <<", 1)[0]
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    summary = tmp_path / "summary.md"
+
+    def _run() -> str:
+        summary.write_text("", encoding="utf-8")
+        done = subprocess.run(
+            ["bash", "-c", prologue],
+            env={
+                **os.environ,
+                "GITHUB_WORKSPACE": str(workspace),
+                "GITHUB_STEP_SUMMARY": str(summary),
+            },
+            capture_output=True,
+            text=True,
+        )
+        assert done.returncode == 0, done.stderr
+        return summary.read_text(encoding="utf-8")
+
+    printed = _run()
+    assert printed.strip(), (
+        "no report and no page either: the run that most needs explaining is "
+        "the one that gets none"
+    )
+    assert "annotation" in printed, (
+        "it has to send the reader where the reason actually is"
+    )
+    assert "nothing was bought" in printed and "were billed" in printed, (
+        "both ways of getting here have to be named; they differ by money, "
+        "and an empty page reads like the free one"
+    )
+    assert "%" not in printed, (
+        "no report means no figures; a page here that carries one is quoting "
+        "something it does not have"
+    )
+
+    (workspace / "audio-accuracy-measured.json").write_text(
+        "{}", encoding="utf-8"
+    )
+    assert _run() == "", (
+        "with a report present the prologue must stay out of the way and let "
+        "the real summary write the page"
+    )
+
+
 def test_the_paid_summary_survives_a_run_where_nothing_answered(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
 ) -> None:

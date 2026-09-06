@@ -582,6 +582,19 @@ entries land under a fresh dated heading the day they merge to `main`.
   to stay quiet. Mutation-checked four ways, including `or` → `and`, which
   silences the wrong-length half alone and is the edit a tidy-up makes.
 
+  The fifteenth is one step earlier than the tenth. That one was the summary
+  dying on a run where nothing answered; this one is the summary on a run that
+  never wrote a report at all. It began `test -f report || exit 0`, so a
+  pre-flight refusal left an empty page under a red job, with the reason in an
+  annotation. The grader-pin check above adds another way to land there. It
+  also matters more than tidiness, because the two ways of getting here differ
+  by money: the pre-flight checks all run before the first call and cost
+  nothing, while a failure after the calls started bought them and still writes
+  no report, since the report is written at the end. An empty page reads like
+  the free one. The step now names both and points at the annotation, and the
+  test runs the shell rather than reading it — shell that is never executed is
+  a suggestion.
+
   330 section 3 pre-registered four stop conditions and nothing enforced them.
   They are now `SPEECH_STOP_RULES`, checked after each call, with a test that
   fails if the constants and the document drift apart: 20 minutes wall clock,
