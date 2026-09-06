@@ -24,14 +24,18 @@ from __future__ import annotations
 import io
 import json
 import math
+import os
 import re
+import shutil
 import struct
+import subprocess
 import sys
 import wave
 from pathlib import Path
 from typing import Sequence
 
 import pytest
+import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -815,6 +819,127 @@ def test_the_workflow_states_the_corpus_it_actually_has() -> None:
     # to rot, and it would misdescribe what the design can support.
     for stale in ("six pairs", "64 relabellings", "0.01 is out of reach"):
         assert stale not in text, stale
+
+
+def _workflow() -> dict:
+    return yaml.safe_load(
+        (
+            probe.REPO_ROOT / ".github" / "workflows" / "audio-accuracy-probe.yml"
+        ).read_text(encoding="utf-8")
+    )
+
+
+def _step(job: str, name: str) -> dict:
+    for step in _workflow()["jobs"][job]["steps"]:
+        if step.get("name") == name:
+            return step
+    raise AssertionError(f"{job} has no step named {name!r}")
+
+
+def test_the_workflow_offers_exactly_the_arms_the_script_accepts() -> None:
+    """A dispatch that cannot ask for both arms cannot buy the comparison.
+
+    The paired analysis in ``326-prompt-arm-prereg.md`` needs the two prompts
+    interleaved against the same audio in one process. If the workflow can
+    only ask for the production arm, the only way to get a treatment arm is a
+    second dispatch -- which is the design the pre-registration rejected,
+    because a gap between the two halves lets a deployment change masquerade
+    as a prompt effect.
+    """
+    # `on` parses as the boolean True in YAML 1.1, which is why this is not
+    # spelled workflow["on"].
+    inputs = _workflow()[True]["workflow_dispatch"]["inputs"]
+    arm = inputs["prompt_arm"]
+
+    assert arm["type"] == "choice"
+    assert sorted(arm["options"]) == sorted((*probe.PROMPT_ARMS, "both"))
+    # Default to the cheap half. `both` doubles the spend, so it has to be
+    # something a dispatcher chose rather than something they inherited.
+    assert arm["default"] == "production"
+    assert arm["default"] in probe.PROMPT_ARMS
+
+
+@pytest.mark.parametrize("job,step_name", [
+    ("dry-run", "Dry run"),
+    ("measure", "Measure"),
+])
+def test_both_runs_forward_the_arm_and_keep_the_delivery_record(
+    job: str, step_name: str
+) -> None:
+    """The input has to reach the script, and the evidence has to come back.
+
+    Two failures this catches, both silent. An arm input the run never
+    forwards means a reviewer approves 120 calls and the run buys 60 of one
+    prompt -- the approval record and the spend disagree again, in the other
+    direction. A missing ``--delivery-out`` means the run that exists to prove
+    the audio arrived does not write down whether it did.
+    """
+    run = _step(job, step_name)["run"]
+    assert "--prompt-arm" in run, f"{job} does not forward the arm"
+    assert "inputs.prompt_arm" in run
+    assert "--delivery-out" in run, f"{job} keeps no delivery record"
+
+
+@pytest.mark.parametrize("job", ["dry-run", "measure"])
+def test_the_summaries_report_the_whole_run_not_one_arm(job: str) -> None:
+    """``accuracy`` covers the production arm alone. The call count must not.
+
+    ``build_report`` deliberately scores the control arm only, so that the
+    headline number keeps meaning what it meant before there was a second
+    prompt. That makes ``accuracy.overall.calls`` half of a ``both`` run, and
+    a summary that printed it as the call count would understate a paid run --
+    the same class of error as the approval record that said 36.
+
+    The free summary is checked too. It costs nothing to produce, but it is
+    what a dispatcher reads *before* deciding to buy, so a call count that is
+    half the truth there is the more expensive of the two.
+    """
+    summary = _step(job, "Summarise")["run"]
+    assert "report['cost']['model_calls']" in summary
+    assert "acc['overall']['calls']" not in summary
+    assert "prompt_arms" in summary, "the summary does not say which arms ran"
+
+
+def test_the_paid_summary_names_the_arm_its_table_describes() -> None:
+    """A per-arm table under an unqualified heading reads as the whole run."""
+    assert "production arm alone" in _step("measure", "Summarise")["run"]
+
+
+@pytest.mark.parametrize("arm,arms", [
+    ("production", 1),
+    ("observation", 1),
+    ("both", 2),
+])
+@pytest.mark.parametrize("repeats", [1, 3])
+def test_the_approval_record_counts_the_calls_both_arms_will_make(
+    arm: str, arms: int, repeats: int
+) -> None:
+    """Run the gate's own shell and read what it would put on the record.
+
+    This is the line that says what was authorised. It is shell arithmetic in
+    a job with no checkout, so nothing in the script can constrain it -- which
+    is precisely why it was wrong before. Executing it is the only check that
+    does not amount to reading it twice.
+    """
+    bash = shutil.which("bash")
+    if bash is None:  # pragma: no cover - CI and dev boxes both have bash
+        pytest.skip("no bash to run the gate's own script with")
+
+    result = subprocess.run(
+        [bash, "-c", _step("approve-paid", "Record approved request")["run"]],
+        env={**os.environ, "PROBE_REPEATS": str(repeats), "PROBE_ARM": arm},
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    line = re.search(
+        r"calls\s+= (\d+) per arm, (\d+) in total", result.stdout
+    )
+    assert line, result.stdout
+    claims = len(probe.CLAIMS)
+    assert int(line.group(1)) == claims * repeats
+    assert int(line.group(2)) == claims * repeats * arms
+    assert f"prompt_arm = {arm}" in result.stdout
 
 
 # --------------------------------------------------------------------------

@@ -33,6 +33,23 @@ name: Audio Accuracy Probe
 #     tests/test_audio_accuracy_probe_knows_its_own_answers.py proves it by
 #     adding a file there and recomputing the hash.
 #
+# Two things arrived after the first paid run, and both change what a dispatch
+# can ask for:
+#
+#   * `prompt_arm`. That run put every criterion under the grader's own header
+#     and so could not separate "the model did not hear it" from "the question
+#     led it". `both` asks each criterion twice -- control header, then an
+#     observation-first header, back to back against the same audio object --
+#     which doubles the call count and is the only setting that yields a paired
+#     comparison. Conditions and analysis were fixed before the run, in
+#     tasks/rebuilding_grading_task/326-prompt-arm-prereg.md.
+#   * A delivery record, written on every run including the free one: the
+#     digest of the bytes actually put on the wire, the WAV header they parse
+#     as, the model name the *response* carried, and whether audio tokens were
+#     billed. Hashes and counts only -- no audio, no prompt text, no model
+#     reasoning. It is what lets a reader tell a judge that answered badly from
+#     a request that never carried the sound.
+#
 # It still spends money, so the paid half sits behind the same `grading`
 # environment gate every other paid path in this repository uses. A gate that
 # is reused rather than duplicated is one fewer approval surface to audit.
@@ -51,10 +68,19 @@ on:
         type: boolean
         default: false
       repeats:
-        description: 'How many times each criterion is put to the model. 3 matches the repeat runs, so stability here is comparable with the 19.35%. Total calls = 20 criteria x repeats.'
+        description: 'How many times each criterion is put to the model. 3 matches the repeat runs, so stability here is comparable with the 19.35%. Total calls = 20 criteria x repeats x arms (arms is 2 when prompt_arm is both).'
         required: false
         type: number
         default: 3
+      prompt_arm:
+        description: 'Which prompt the criteria go under. production = the grading path unchanged. observation = the same request with the header replaced. both = the two interleaved against identical audio, which DOUBLES the call count and is the only setting that supports a paired comparison.'
+        required: false
+        type: choice
+        default: production
+        options:
+          - production
+          - observation
+          - both
 
 # Read-only by default. The paid job adds id-token for OIDC and nothing else:
 # there is no commit, no release, and no dispatch to make.
@@ -104,6 +130,9 @@ jobs:
           cd batch-runner
           python -m pytest tests/test_audio_accuracy_probe_knows_its_own_answers.py -q
 
+      # The arm and the delivery record are exercised here too. A dispatch that
+      # asks for `both` should discover a broken interleave on the free run,
+      # not after buying half of it.
       - name: Dry run
         run: |
           set -euo pipefail
@@ -111,7 +140,9 @@ jobs:
           python scripts/measure_audio_grading_accuracy.py \
             --dry-run \
             --repeats "${{ inputs.repeats }}" \
-            --out "$GITHUB_WORKSPACE/audio-accuracy-dry-run.json"
+            --prompt-arm "${{ inputs.prompt_arm }}" \
+            --out "$GITHUB_WORKSPACE/audio-accuracy-dry-run.json" \
+            --delivery-out "$GITHUB_WORKSPACE/audio-accuracy-dry-run-delivery.json"
 
       # A dry run reports 100% accuracy, because the stub answers from the
       # segment list. That is a shape check and not a result, and the report
@@ -123,22 +154,37 @@ jobs:
           python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
           import json, os
           report = json.load(open(os.path.join(os.environ["GITHUB_WORKSPACE"], "audio-accuracy-dry-run.json")))
-          acc = report["accuracy"]
           print("## Audio accuracy probe — dry run\n")
           print("**This measured nothing about `gpt-audio-1.5`.** The stub answers")
           print("from the segment list, so a perfect score here means the pipeline")
           print("works, not that the model listens.\n")
           print(f"- `measured`: `{json.dumps(report['measured'])}`")
-          print(f"- calls: {acc['overall']['calls']}, billable: {report['cost']['billable_calls']}")
+          print(f"- prompt arms: {', '.join(report['pins']['prompt_arms'])}")
+          # cost.model_calls, not accuracy.overall.calls: the accuracy block
+          # covers the production arm alone, so on a `both` dispatch it is half
+          # the run. A call count that undercounts a paid run is the one number
+          # this file has already got wrong once.
+          print(f"- calls: {report['cost']['model_calls']}, billable: {report['cost']['billable_calls']}")
           print(f"- claims: {report['pins']['claims']} "
                 f"({report['pins']['true_claims']} true / {report['pins']['false_claims']} false)")
           print(f"- cost: `{json.dumps(report['cost']['estimated_cost_usd'])}`")
+          delivery = report.get("delivery")
+          if delivery:
+              print(f"- delivery: {delivery['calls_carrying_audio']}/"
+                    f"{delivery['calls_inspected']} requests carried audio; "
+                    f"clips sending more than one digest: "
+                    f"`{json.dumps(delivery['clips_with_more_than_one_digest'])}`")
+          comparison = report.get("arm_comparison")
+          if comparison:
+              print(f"- pairs available for the arm comparison: {comparison['pairs']}")
           PY
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: audio-accuracy-dry-run
-          path: audio-accuracy-dry-run.json
+          path: |
+            audio-accuracy-dry-run.json
+            audio-accuracy-dry-run-delivery.json
           if-no-files-found: error
 
   # ---------------------------------------------------------------------------
@@ -162,13 +208,21 @@ jobs:
       - name: Record approved request
         env:
           PROBE_REPEATS: ${{ inputs.repeats }}
+          PROBE_ARM: ${{ inputs.prompt_arm }}
         run: |
+          set -euo pipefail
+          # `both` asks every criterion twice. The record has to say so: the
+          # last time this file stated a call count that disagreed with what a
+          # run would spend, it was off by a factor and nobody noticed until
+          # afterwards.
+          if [ "$PROBE_ARM" = "both" ]; then PROBE_ARMS=2; else PROBE_ARMS=1; fi
           printf '%s\n' \
             "Approved paid audio accuracy probe:" \
             "  model      = gpt-audio-1.5 (read from gold_audio_repeat_v2_sol_max.yaml)" \
             "  criteria   = 20 (10 true / 10 false)" \
             "  repeats    = $PROBE_REPEATS" \
-            "  calls      = $((20 * PROBE_REPEATS))" \
+            "  prompt_arm = $PROBE_ARM ($PROBE_ARMS arm(s))" \
+            "  calls      = $((20 * PROBE_REPEATS)) per arm, $((20 * PROBE_REPEATS * PROBE_ARMS)) in total" \
             "  grades     = none. This does not write a grade or touch a corpus."
 
   # ---------------------------------------------------------------------------
@@ -186,7 +240,7 @@ jobs:
           exit 1
 
   measure:
-    name: Measure (paid, ${{ inputs.repeats }} repeats)
+    name: Measure (paid, ${{ inputs.repeats }} repeats, arm ${{ inputs.prompt_arm }})
     needs: approve-paid
     runs-on: ubuntu-24.04
     timeout-minutes: 60
@@ -246,7 +300,9 @@ jobs:
           cd batch-runner
           python scripts/measure_audio_grading_accuracy.py \
             --repeats "${{ inputs.repeats }}" \
-            --out "$GITHUB_WORKSPACE/audio-accuracy-measured.json"
+            --prompt-arm "${{ inputs.prompt_arm }}" \
+            --out "$GITHUB_WORKSPACE/audio-accuracy-measured.json" \
+            --delivery-out "$GITHUB_WORKSPACE/audio-accuracy-measured-delivery.json"
 
       - name: Summarise
         if: always()
@@ -266,7 +322,13 @@ jobs:
           print("## Audio accuracy probe — measured\n")
           print(f"Model `{report['pins']['audio_deployment']}`, "
                 f"{report['pins']['claims']} criteria x {report['pins']['repeats']} repeats "
-                f"= {acc['overall']['calls']} calls.\n")
+                f"x {len(report['pins']['prompt_arms'])} arm(s) "
+                f"= {report['cost']['model_calls']} calls "
+                f"({', '.join(report['pins']['prompt_arms'])}).\n")
+          if len(report["pins"]["prompt_arms"]) > 1:
+              print("The table below is the **production arm alone** — the prompt the")
+              print("grader actually runs. The alternative prompt is never folded in,")
+              print("because an average of the two describes a prompt nothing uses.\n")
           print("| | |")
           print("|---|---|")
           print(f"| accuracy (answered calls) | {pct(acc['overall']['accuracy'])} |")
@@ -290,6 +352,59 @@ jobs:
           print("Thresholds this design can reach: "
                 + (", ".join(str(t) for t in reachable) if reachable else "none")
                 + ".\n")
+
+          delivery = report.get("delivery")
+          if delivery:
+              print("### Did the audio arrive\n")
+              print("Read this before the accuracy. A judge that was never sent the")
+              print("sound scores the same as one that could not hear it.\n")
+              print("| | |")
+              print("|---|---|")
+              print(f"| requests carrying audio | {delivery['calls_carrying_audio']} "
+                    f"/ {delivery['calls_inspected']} |")
+              print(f"| requests carrying none | `{json.dumps(delivery['calls_without_audio'])}` |")
+              print(f"| clips sending more than one digest | "
+                    f"`{json.dumps(delivery['clips_with_more_than_one_digest'])}` |")
+              print(f"| clips whose sent duration differs | "
+                    f"`{json.dumps(delivery['clips_whose_sent_duration_differs'])}` |")
+              print(f"| formats / sample rates / channels | "
+                    f"`{json.dumps(delivery['sent_formats'])}` / "
+                    f"`{json.dumps(delivery['sent_sample_rates_hz'])}` / "
+                    f"`{json.dumps(delivery['sent_channels'])}` |")
+              print(f"| models that answered | `{json.dumps(delivery['response_models'])}` |")
+              print(f"| calls reporting audio tokens | {delivery['audio_tokens_reported']} "
+                    f"/ {delivery['calls_inspected']} |")
+              tokens = delivery["prompt_token_vs_clip_seconds"]
+              print(f"| prompt tokens vs clip seconds (r) | `{json.dumps(tokens['pearson_r'])}` "
+                    f"over n={tokens['n']} |")
+              print()
+              if delivery["clips_with_more_than_one_digest"]:
+                  print("**A clip sent more than one digest.** The arms did not hear the")
+                  print("same bytes, so the comparison below is not a prompt comparison.\n")
+
+          comparison = report.get("arm_comparison")
+          if comparison:
+              ctl, trt = comparison["control"], comparison["treatment"]
+              print("### Prompt arms, paired\n")
+              print(f"Pairing is on (criterion, repeat): {comparison['pairs']} pairs.\n")
+              print("| | accuracy of answered | response rate | J | correct |")
+              print("|---|---|---|---|---|")
+              for name in (ctl, trt):
+                  side = comparison[name]
+                  print(f"| {name} | {pct(side['accuracy_of_answered'])} | "
+                        f"{pct(side['response_rate'])} | {side['discrimination_j']} | "
+                        f"{side['correct']}/{side['attempts']} |")
+              d = comparison["discordant"]
+              print()
+              print(f"- discordant: {ctl} only `{d['control_only_correct']}`, "
+                    f"{trt} only `{d['treatment_only_correct']}` "
+                    f"(both `{d['both_correct']}`, neither `{d['neither_correct']}`)")
+              print(f"- exact two-sided McNemar p: `{json.dumps(comparison['mcnemar_exact_p'])}`")
+              print(f"\n{comparison['reading']}\n")
+              print("**Accuracy is over answered calls and the response rate is over all")
+              print("attempts.** One arm may decline the hard criteria and score better on")
+              print("what is left; the two columns together are what stop that reading.\n")
+
           print("### Cost\n")
           print(f"- billable calls: {report['cost']['billable_calls']}")
           print(f"- pricing complete: `{json.dumps(report['cost']['pricing_complete'])}`")
@@ -304,12 +419,16 @@ jobs:
                     f"{row['false_fail']} | {row['false_pass']} | {row['hedged']} |")
           PY
 
-      # Artifact, not a commit. These are verdicts on synthetic clips and
+      # Artifacts, not a commit. These are verdicts on synthetic clips and
       # they are not grades; putting them in data/grades would make them show
-      # up on the dashboard as if they were.
+      # up on the dashboard as if they were. The delivery file goes up beside
+      # the report and separately from it, because it is the half a reader
+      # needs when the report looks wrong.
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
           name: audio-accuracy-measured
-          path: audio-accuracy-measured.json
+          path: |
+            audio-accuracy-measured.json
+            audio-accuracy-measured-delivery.json
           if-no-files-found: warn
