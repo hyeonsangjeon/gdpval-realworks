@@ -190,6 +190,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from core.cost_metering import resolved_model_of  # noqa: E402
 from core.perception.audio import (  # noqa: E402
     AUDIO_CALL_CAP,
+    AUDIO_RESPONSE_CONTRACT,
     AUDIO_SAMPLE_RATE_HZ,
     AUDIO_TRIM_SECONDS,
     AudioPerception,
@@ -876,6 +877,54 @@ OUTCOME_FALSE_PASS = "false_pass"
 OUTCOME_HEDGED = "hedged"
 OUTCOME_UNANSWERED = "unanswered"
 
+#: Why a call produced no judgement. Three different events, and the reason
+#: they are named apart is that they call for three different responses:
+#:
+#: * ``declined_to_judge`` -- the model followed the contract and said it could
+#:   not hear enough to decide. That is a *result*: it is the sub-judge working
+#:   as designed, and it says something about the clip.
+#: * ``read_failure`` -- the model answered, and the answer did not meet the
+#:   response contract. That is a prompt defect, fixed by editing text.
+#: * ``provider_failure`` -- the call itself did not complete. That is an
+#:   outage, fixed by nobody here.
+#:
+#: Run 34008840627 published all of its 52 non-answers as
+#: ``provider_error:JSONDecodeError`` and so could not distinguish any of the
+#: three; re-read under the contract, every one of them was the second kind.
+#: None of these enters the accuracy: a call that measured nothing is not
+#: evidence either way, whichever of the three it was.
+UNANSWERED_DECLINED = "declined_to_judge"
+UNANSWERED_READ_FAILURE = "read_failure"
+UNANSWERED_PROVIDER_FAILURE = "provider_failure"
+UNANSWERED_KINDS = (
+    UNANSWERED_DECLINED,
+    UNANSWERED_READ_FAILURE,
+    UNANSWERED_PROVIDER_FAILURE,
+)
+
+
+def unanswered_kind(verdict: str, judge_error: Optional[str]) -> Optional[str]:
+    """Which of the three non-answers this was, or ``None`` if it answered.
+
+    Reads the marker ``core.perception.audio`` writes rather than guessing from
+    the text: ``format_error:<kind>`` for a reply that broke the contract,
+    ``sub_judge_declined`` for a model that answered ``judge_error`` on
+    purpose, anything else for a call that failed on the wire.
+
+    A ``judge_error`` carrying no marker at all is called a provider failure,
+    which is the conservative reading: it is the one of the three that says
+    least about the model, so an unlabelled non-answer is never credited as
+    the model having honestly declined.
+    """
+    if verdict != "judge_error":
+        return None
+    marker = judge_error or ""
+    if marker.startswith("format_error:"):
+        return UNANSWERED_READ_FAILURE
+    if marker == "sub_judge_declined":
+        return UNANSWERED_DECLINED
+    return UNANSWERED_PROVIDER_FAILURE
+
 
 def classify(claim: Claim, verdict: str) -> str:
     """Turn one verdict into one outcome.
@@ -889,7 +938,10 @@ def classify(claim: Claim, verdict: str) -> str:
 
     ``judge_error`` is not an answer at all. It never counts as correct and it
     never counts as wrong; it counts as a call that measured nothing, and the
-    denominators below exclude it.
+    denominators below exclude it. Which *kind* of non-answer it was is a
+    separate question, answered by ``unanswered_kind`` and reported beside
+    this outcome -- deliberately not folded in here, because the scoring
+    treats all three identically and only the diagnosis differs.
     """
     if verdict == "judge_error":
         return OUTCOME_UNANSWERED
@@ -921,9 +973,19 @@ class Tally:
     false_pass: int = 0
     hedged: int = 0
     unanswered: int = 0
+    #: The non-answers, split three ways. Kept beside ``unanswered`` rather
+    #: than replacing it, because the three are one thing to the arithmetic
+    #: and three things to a reader deciding what to fix.
+    unanswered_by_kind: dict[str, int] = field(
+        default_factory=lambda: {kind: 0 for kind in UNANSWERED_KINDS}
+    )
 
-    def add(self, outcome: str) -> None:
+    def add(self, outcome: str, kind: Optional[str] = None) -> None:
         setattr(self, outcome, getattr(self, outcome) + 1)
+        if kind is not None:
+            if kind not in self.unanswered_by_kind:
+                raise ValueError(f"unknown unanswered kind: {kind!r}")
+            self.unanswered_by_kind[kind] += 1
 
     @property
     def answered(self) -> int:
@@ -948,6 +1010,13 @@ class Tally:
             "false_pass": self.false_pass,
             "hedged": self.hedged,
             "unanswered": self.unanswered,
+            # The same non-answers, told apart. A run whose unanswered count
+            # is all read_failure needs a prompt edit; one that is all
+            # provider_failure needs an operator; one that is all
+            # declined_to_judge is the sub-judge doing its job on audio that
+            # does not support a verdict. Reporting only the total was how a
+            # prompt defect came to be published as an outage 52 times.
+            "unanswered_by_kind": dict(self.unanswered_by_kind),
             "accuracy": _rate(self.correct, self.answered),
             # Reported beside the accuracy, never folded into it. The accuracy
             # divides by the calls that answered; on its own that lets a model
@@ -1167,6 +1236,15 @@ def compare_arms(
                 len(answered),
             ),
             "response_rate": _rate(len(answered), len(rows)),
+            # Why this arm did not answer, when it did not. An arm can lose a
+            # comparison on response rate alone; whether that is the prompt's
+            # fault or the wire's is the whole difference between "the change
+            # under test made the model stop replying properly" and "the
+            # region had a bad afternoon".
+            "unanswered_by_kind": {
+                kind: sum(1 for r in rows if r.get("unanswered_kind") == kind)
+                for kind in UNANSWERED_KINDS
+            },
             "discrimination_j": discrimination(
                 [(r["holds"], r["verdict"]) for r in rows]
             ),
@@ -1383,6 +1461,16 @@ PRODUCTION_CRITERION_MARKER = "\n\nCriterion:\n"
 #:
 #: What it deliberately does NOT do is tell the model anything about the
 #: answer: no per-item hint, and no statement of how many claims are true.
+#:
+#: **The response contract is not part of the bundle.** It used to be: this
+#: string carried its own "Return the same JSON envelope as the main judge"
+#: paragraph, written separately from the one core sent, and the two drifted.
+#: Run 34008840627 is what that costs -- 60 of this arm's 60 replies failed
+#: the format, 43 unparseably and 17 in a ``true``/``false`` vocabulary, so
+#: the arm's measured response rate was 0.000 and the comparison measured
+#: which paragraph described JSON better rather than which prompt heard
+#: better. ``AUDIO_RESPONSE_CONTRACT`` is now appended verbatim to both arms,
+#: so whatever else differs, the shape being asked for does not.
 OBSERVATION_HEADER = (
     "You are an audio analyst. A short audio clip has been supplied to you as "
     "audio input. Work only from that audio. Nothing you have been told about "
@@ -1398,11 +1486,9 @@ OBSERVATION_HEADER = (
     "an interval, that number is the claim under test, not a fact about the "
     "clip. If the audio does not let you decide, return verdict "
     "\"judge_error\" rather than guessing.\n\n"
-    "Return the same JSON envelope as the main judge: {verdict, "
-    "partial_score, evidence, confidence, reasoning}. In \"evidence\", state "
-    "the value you observed before you state whether the statement holds. "
-    "Keep evidence <= 200 chars. Return JSON only."
-)
+    "In \"evidence\", state the value you observed before you state whether "
+    "the statement holds.\n\n"
+) + AUDIO_RESPONSE_CONTRACT
 
 #: Arm identifiers. ``production`` forwards the request untouched, so the
 #: control arm is the real grading prompt and not a re-implementation of it.
@@ -1816,6 +1902,9 @@ def run_measurement(
                     "holds": claim.holds,
                     "verdict": verdict.verdict,
                     "outcome": classify(claim, verdict.verdict),
+                    "unanswered_kind": unanswered_kind(
+                        verdict.verdict, verdict.judge_error
+                    ),
                     "confidence": verdict.confidence,
                     "evidence": verdict.evidence,
                     "judge_error": verdict.judge_error,
@@ -1838,9 +1927,13 @@ def summarise(calls: Sequence[dict[str, Any]]) -> dict[str, Any]:
     on_false = Tally()
     by_family: dict[str, Tally] = {}
     for call in calls:
-        overall.add(call["outcome"])
-        (on_true if call["holds"] else on_false).add(call["outcome"])
-        by_family.setdefault(call["family"], Tally()).add(call["outcome"])
+        # ``.get`` rather than ``[...]``: a call log written before the split
+        # existed has no such key, and re-summarising an older result must
+        # report an empty breakdown rather than crash or invent one.
+        kind = call.get("unanswered_kind")
+        overall.add(call["outcome"], kind)
+        (on_true if call["holds"] else on_false).add(call["outcome"], kind)
+        by_family.setdefault(call["family"], Tally()).add(call["outcome"], kind)
 
     by_claim: dict[str, Any] = {}
     for claim in CLAIMS:

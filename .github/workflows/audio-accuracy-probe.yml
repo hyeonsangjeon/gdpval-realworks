@@ -336,6 +336,11 @@ jobs:
           print(f"| false-pass rate (on false claims) | {pct(acc['on_false_claims']['false_pass_rate'])} |")
           print(f"| hedged (`partial`) | {acc['overall']['hedged']} |")
           print(f"| unanswered (`judge_error`) | {acc['overall']['unanswered']} |")
+          kinds = acc["overall"].get("unanswered_by_kind") or {}
+          if kinds:
+              print(f"| &nbsp;&nbsp;· model declined to judge | {kinds.get('declined_to_judge', 0)} |")
+              print(f"| &nbsp;&nbsp;· reply broke the response contract | {kinds.get('read_failure', 0)} |")
+              print(f"| &nbsp;&nbsp;· the call itself failed | {kinds.get('provider_failure', 0)} |")
           print(f"| **discrimination (Youden's J)** | **{j['per_call']}** |")
           print(f"| permutation p (one-sided) | {perm['p_one_sided']} |")
           print(f"| smallest p this design can reach | {perm['smallest_attainable_p']} |")
@@ -404,6 +409,20 @@ jobs:
               print("**Accuracy is over answered calls and the response rate is over all")
               print("attempts.** One arm may decline the hard criteria and score better on")
               print("what is left; the two columns together are what stop that reading.\n")
+              print("Read the non-answers by kind before reading the rate. On")
+              print("2026-09-06 the observation arm answered 0 of 60 under the contract,")
+              print("and every one of those 60 was a **read failure** — the reply broke")
+              print("the response format. That is a prompt defect, and it was published")
+              print("as a provider outage because the three were not told apart.\n")
+              print("| | declined | read failure | provider failure |")
+              print("|---|---|---|---|")
+              for name in (ctl, trt):
+                  k = comparison[name].get("unanswered_by_kind") or {}
+                  print(f"| {name} | {k.get('declined_to_judge', 0)} | "
+                        f"{k.get('read_failure', 0)} | "
+                        f"{k.get('provider_failure', 0)} |")
+              print()
+
 
           print("### Cost\n")
           print(f"- billable calls: {report['cost']['billable_calls']}")

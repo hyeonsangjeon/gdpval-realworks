@@ -166,14 +166,38 @@ def test_the_prompt_stops_hardcoding_thirty_seconds():
     assert "30s" not in header
 
 
+def _header_without_the_shared_contract(**kwargs) -> str:
+    """The header with the response contract stripped off the end.
+
+    Every header now ends with ``AUDIO_RESPONSE_CONTRACT``, which names the
+    whole verdict vocabulary -- ``judge_error`` included, because the parser
+    accepts it and a vocabulary that omitted a legal value is the drift this
+    contract exists to stop.
+
+    That makes a bare ``"judge_error" in header`` true for every case and false
+    for none, which would quietly retire the distinction the next two tests are
+    here to hold: whether *this particular note* tells the sub-judge to answer
+    ``judge_error``. So the shared part is removed and the per-case part is
+    what gets asserted on.
+    """
+    from core.perception.audio import AUDIO_RESPONSE_CONTRACT
+
+    header = _audio_prompt_header(**kwargs)
+    assert header.endswith(AUDIO_RESPONSE_CONTRACT), (
+        "the shared contract is no longer the tail of the header, so these "
+        "tests are asserting on the wrong slice"
+    )
+    return header[: -len(AUDIO_RESPONSE_CONTRACT)]
+
+
 def test_an_uncut_window_forbids_reading_silence_as_absence():
     """Not having listened is not having heard nothing."""
-    header = _audio_prompt_header(
+    note = _header_without_the_shared_contract(
         start_seconds=0.0, trim_seconds=30,
         window_note=_AUDIO_WINDOW_UNCUT_NOTE,
     )
-    assert "judge_error" in header
-    assert "have NOT observed it" in header
+    assert "judge_error" in note
+    assert "have NOT observed it" in note
 
 
 def test_a_deliverable_that_ends_early_is_still_gradeable():
@@ -182,13 +206,19 @@ def test_a_deliverable_that_ends_early_is_still_gradeable():
     That is a fact about the work under test, so the note says so and leaves
     the verdict alone -- no ``judge_error`` instruction, unlike the case
     above where the failure is ours.
+
+    The shared contract still *names* ``judge_error`` here, as it does on
+    every call. Naming a legal value is not instructing its use, and the model
+    has to know the value exists: the alternative is what run 34008840627
+    measured, where a sub-judge with no word for "I could not tell" answered
+    ``refuse`` and had it scored against the deliverable.
     """
-    header = _audio_prompt_header(
+    note = _header_without_the_shared_contract(
         start_seconds=0.0, trim_seconds=30,
         window_note=_AUDIO_REGION_ABSENT_NOTE,
     )
-    assert "beyond the end of this deliverable" in header
-    assert "judge_error" not in header
+    assert "beyond the end of this deliverable" in note
+    assert "judge_error" not in note
 
 
 # --------------------------------------------------------------------------
