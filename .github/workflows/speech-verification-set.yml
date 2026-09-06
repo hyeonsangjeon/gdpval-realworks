@@ -1,0 +1,156 @@
+name: Speech Verification Set
+
+# Build the speech fixture that the tone corpus cannot replace.
+#
+# Everything measured about `gpt-audio-1.5` so far has been measured on tones,
+# clicks and beeps. That corpus answered "does the verdict depend on the audio
+# at all". It cannot answer the question the graded corpus turns on, because
+# none of the 31 audio deliverables is a sine wave: can it hear *words*?
+#
+# The clips are synthesised here rather than committed, and the reason is
+# licensing as much as size. eSpeak NG is GPL-3.0-or-later; nothing of it is
+# redistributed by this repository -- no source, no binary, no dictionary and
+# no generated clip. What the repository keeps is the manifest: the version
+# string, the binary digest, the package it came from, the full argv, and the
+# SHA-256 of every WAV. That is enough to rebuild the set and enough to prove a
+# rebuild matched, and it carries no licence obligation.
+#
+# It is also built here because it cannot be built on the machine this work is
+# done from. That host runs kernel 3.10.102 and has no espeak-ng, espeak, piper
+# or flite; `--describe` prints the corpus there, and this workflow renders it.
+#
+# What this workflow does NOT do:
+#   * It does not call a model. No API key is read, no endpoint is touched and
+#     nothing here can cost money. Measuring the judge against this set is a
+#     separate, pre-registered dispatch.
+#   * It does not commit. The clips and the manifest go out as an artifact.
+#   * It does not move any grader fingerprint. `compute_grader_source_hash`
+#     takes exactly one file from batch-runner/scripts/, and this is not it.
+
+on:
+  workflow_dispatch:
+    inputs:
+      expect_manifest:
+        description: 'Optional path in the repository to a previously published manifest.json. When set, the build is compared against it and the job FAILS if any clip digest or corpus count differs — that is the reproducibility check. Leave empty when publishing a set for the first time.'
+        required: false
+        type: string
+        default: ''
+      retention_days:
+        description: 'How long the artifact is kept. The clips are cheap to rebuild from the manifest, so a short window is the honest default.'
+        required: false
+        type: number
+        default: 30
+  # Also on changes to the corpus itself. A sentence edited without a rebuild
+  # leaves the published digests describing a set that no longer exists, and
+  # the point of a fixture is that this is noticed at the edit and not at the
+  # next measurement.
+  pull_request:
+    paths:
+      - 'batch-runner/scripts/build_speech_verification_set.py'
+      - 'batch-runner/tests/test_speech_verification_set.py'
+      - '.github/workflows/speech-verification-set.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: speech-verification-set-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Synthesise and pin
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.10'
+
+      # The corpus checks run before the synthesiser is installed, because they
+      # are the half that decides whether the set is worth building: balance,
+      # matched pairs, and whether a criterion hands over its own answer. None
+      # of that needs audio, and a corpus that leaks should fail here rather
+      # than after twenty WAVs exist to look convincing.
+      - name: Check the corpus is fair and does not leak
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          python -m pytest tests/test_speech_verification_set.py -q
+
+      # Not pinned to a version on purpose. Pinning apt here would be a pin
+      # that lies: the package set moves under a floating ubuntu-24.04 image
+      # regardless, so the version is *recorded from the binary that ran*
+      # rather than asserted in advance. The manifest is where reproducibility
+      # is established, and it reports what was actually used.
+      - name: Install eSpeak NG
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends espeak-ng
+          espeak-ng --version
+
+      - name: Build the set
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          ARGS=(--out-dir "$GITHUB_WORKSPACE/speech-set")
+          if [ -n "${{ inputs.expect_manifest }}" ]; then
+            ARGS+=(--expect-manifest "$GITHUB_WORKSPACE/${{ inputs.expect_manifest }}")
+          fi
+          python scripts/build_speech_verification_set.py "${ARGS[@]}"
+
+      - name: Summarise
+        if: always()
+        run: |
+          set -euo pipefail
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json, os, pathlib
+          path = pathlib.Path(os.environ["GITHUB_WORKSPACE"], "speech-set", "manifest.json")
+          print("## Speech verification set\n")
+          if not path.is_file():
+              print("The build did not produce a manifest. Nothing is pinned.")
+              raise SystemExit(0)
+          m = json.loads(path.read_text())
+          prov = m["provenance"]
+          print("**No model was called and nothing was graded.** This job renders")
+          print("audio and records what it rendered.\n")
+          print("### What produced the clips\n")
+          print("| field | value |")
+          print("| --- | --- |")
+          print(f"| tool | `{prov['version_string']}` |")
+          pkg = prov["package"]
+          print(f"| package | `{pkg['name'] or 'unknown'}` {pkg['version'] or ''} "
+                f"(via {pkg['manager'] or 'no package manager'}) |")
+          print(f"| package source | {pkg['source'] or prov['homepage']} |")
+          print(f"| binary | `{prov['binary_path']}` |")
+          print(f"| binary sha256 | `{prov['binary_sha256']}` |")
+          print(f"| licence | {prov['license']} (redistributed here: "
+                f"`{json.dumps(prov['redistributed_here'])}`) |")
+          print(f"| voice | `{prov['voice']}`, {prov['words_per_minute']} wpm, "
+                f"pitch {prov['pitch']}, amplitude {prov['amplitude']} |")
+          c = m["corpus"]
+          print(f"\n### The set\n")
+          print(f"{c['clips']} clips, {c['claims']} claims in {c['pairs']} matched pairs "
+                f"({c['true_claims']} true / {c['false_claims']} false). Guessing scores 50%.\n")
+          print("| clip | sha256 | seconds |")
+          print("| --- | --- | --- |")
+          for clip in m["clips"]:
+              print(f"| `{clip['clip_id']}` | `{clip['sha256'][:16]}…` | {clip['seconds']:.2f} |")
+          print("\n### What a result on this set would and would not mean\n")
+          print(f"- {m['limits']['reading']}")
+          print(f"- {m['limits']['delivery_is_not_understanding']}")
+          print("\nThe transcripts and the true/false key are in the manifest and are")
+          print("never sent to the model; the judging path is given one `criterion` at")
+          print("a time. Download the artifact to review them.")
+          PY
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: speech-verification-set
+          path: speech-set/
+          retention-days: ${{ inputs.retention_days || 30 }}
+          if-no-files-found: warn

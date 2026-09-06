@@ -53,11 +53,12 @@ from __future__ import annotations
 
 import base64
 import json
+import math
 import os
 import re
 import time
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, Optional, Tuple
+from typing import Any, Callable, Dict, Mapping, Optional, Tuple
 
 from core.cost_metering import read_reported_usage
 from core.public_error import (
@@ -347,12 +348,37 @@ def _audio_prompt_header(
     if window_note:
         parts.append(window_note)
     parts.append(
-        "Grade ONE rubric criterion against what you HEAR. Return the same "
-        "JSON envelope as the main judge: {verdict, partial_score, evidence, "
-        "confidence, reasoning}. The evidence MUST describe an audible "
-        "feature; do not invent. Keep evidence <= 200 chars. Return JSON only."
+        "Grade ONE rubric criterion against what you HEAR. The evidence MUST "
+        "describe an audible feature; do not invent."
     )
+    parts.append(AUDIO_RESPONSE_CONTRACT)
     return " ".join(parts)
+
+
+#: The response contract, stated to the model in the words the parser actually
+#: enforces. What stood here named the five keys and said "Return JSON only",
+#: and left the *values* to the model -- which answered ``true``/``false`` for
+#: 17 of the 60 calls in the 2026-09-06 treatment arm and ``no`` once in the
+#: control arm. Those are reasonable answers to "did the criterion hold?", and
+#: they were never asked for as anything else, so the fault was here.
+#:
+#: One string, appended by ``_audio_prompt_header`` for every caller, so an
+#: experiment comparing two prompts cannot accidentally compare two contracts:
+#: whatever else an arm changes, this paragraph is byte-identical in both.
+AUDIO_RESPONSE_CONTRACT = (
+    "Return a single JSON object and nothing else -- no prose before or "
+    "after, no code fence. It must have exactly these keys: "
+    '"verdict", "partial_score", "evidence", "confidence", "reasoning". '
+    '"verdict" MUST be one of these four strings, lower-case, and no other '
+    'value: "pass" (the criterion holds), "fail" (it does not), "partial" '
+    '(it partly holds), "judge_error" (you could not hear enough of the clip '
+    'to decide). Do NOT answer "true", "false", "yes" or "no". '
+    '"partial_score" and "confidence" MUST be numbers between 0.0 and 1.0. '
+    '"evidence" MUST be a string of at most 200 characters. A reply that '
+    "breaks any of these rules is discarded and the criterion goes ungraded, "
+    "so answer in this shape even when you are unsure -- that is what "
+    '"judge_error" and a low "confidence" are for.'
+)
 
 
 #: Told to the sub-judge when the criterion named a region and the clip could
@@ -375,14 +401,148 @@ _AUDIO_REGION_ABSENT_NOTE = (
 )
 
 
+#: The verdicts a sub-judge reply may carry. Wider than the main judge's
+#: ``{pass, partial, fail}`` by exactly one value, and deliberately: the main
+#: judge must decide, but this sub-judge is *told* to answer ``judge_error``
+#: when the window it was asked about never reached it
+#: (``_AUDIO_WINDOW_UNCUT_NOTE``). A validator that rejected it would reject
+#: the module's own instruction. Matches ``grader.Verdict``.
+AUDIO_VERDICT_VOCABULARY = frozenset({"pass", "partial", "fail", "judge_error"})
+
+#: The kinds of contract breach ``_validated_audio_envelope`` can name. Kept
+#: small and closed for the same reason ``_unanswerable_audio_reason`` keeps
+#: its vocabulary small: a corpus has to be groupable by it. Anything derived
+#: from the reply's *content* belongs in ``failure_detail``, not here.
+AUDIO_FORMAT_ERROR_KINDS = (
+    "empty_text",
+    "unparseable_json",
+    "not_an_object",
+    "verdict_missing",
+    "verdict_not_a_string",
+    "verdict_not_in_vocabulary",
+    "partial_score_not_a_number",
+    "partial_score_out_of_range",
+    "confidence_not_a_number",
+    "confidence_out_of_range",
+)
+
+_SAFE_TOKEN = re.compile(r"^[a-z_][a-z0-9_]{0,23}$")
+
+
+class AudioEnvelopeError(Exception):
+    """A reply arrived, and it does not meet the response contract.
+
+    Separated from every other failure on purpose. Before this existed, a
+    malformed reply was raised as ``JSONDecodeError`` out of the parse call and
+    caught by the same ``except`` that catches a provider outage, so both were
+    published as ``provider_error:...`` -- and the 2026-09-06 prompt A/B spent
+    120 paid calls before anyone could tell that 43 of them were *the model
+    answering in the wrong shape* rather than the provider failing. Those are
+    opposite problems: one is fixed by editing a prompt, the other by waiting.
+    """
+
+    def __init__(self, kind: str, *, detail: Optional[str] = None) -> None:
+        super().__init__(kind)
+        self.kind = kind
+        self.detail = detail
+
+
+def _offending_token(value: object) -> str:
+    """A bounded, publishable name for a value that broke the contract.
+
+    Model output, so it is admitted only in the one shape that cannot carry a
+    payload: a short lower-case identifier. ``true``, ``refuse`` and
+    ``analyze_audio`` -- the three the A/B actually produced -- all survive
+    this, which is the whole point; an operator reading ``verdict_not_in_
+    vocabulary`` alone cannot tell whether to widen the prompt or the parser.
+    Anything else collapses to a class name, so a sentence, a stack trace or a
+    base64 blob can never travel out here.
+    """
+    if not isinstance(value, str):
+        return f"<{type(value).__name__}>"
+    lowered = value.strip().lower()
+    return lowered if _SAFE_TOKEN.match(lowered) else "<non-token>"
+
+
+def _validated_audio_envelope(
+    payload: Any,
+) -> Tuple[str, float, float]:
+    """``(verdict, partial_score, confidence)`` or raise ``AudioEnvelopeError``.
+
+    The check the main judge has had all along
+    (``tool_calling_judge._validated_final_envelope``) and this sub-judge did
+    not. What stood here was::
+
+        verdict=str(payload.get("verdict", "fail"))
+
+    which accepted any string the model chose and, on a reply with no verdict
+    at all, returned ``"fail"`` -- a *grade against the deliverable*, invented
+    by a default argument, indistinguishable in the output from a criterion
+    the sub-judge listened to and rejected. Every branch below fails closed to
+    ``judge_error`` instead, which is excluded from the score rather than
+    counted against it.
+    """
+    if not isinstance(payload, Mapping):
+        raise AudioEnvelopeError(
+            "not_an_object", detail=f"<{type(payload).__name__}>"
+        )
+    if "verdict" not in payload:
+        raise AudioEnvelopeError("verdict_missing")
+    verdict_raw = payload.get("verdict")
+    if not isinstance(verdict_raw, str):
+        raise AudioEnvelopeError(
+            "verdict_not_a_string", detail=_offending_token(verdict_raw)
+        )
+    verdict = verdict_raw.strip().lower()
+    if verdict not in AUDIO_VERDICT_VOCABULARY:
+        raise AudioEnvelopeError(
+            "verdict_not_in_vocabulary", detail=_offending_token(verdict_raw)
+        )
+    # ``bool`` is an ``int`` in Python, so ``True`` would otherwise pass as a
+    # score of 1.0 -- the same trap the main judge's validator names.
+    #
+    # Absence is rejected rather than defaulted, for the reason the verdict is:
+    # a missing ``partial_score`` used to become ``0.0``, which is not "we do
+    # not know" but "zero marks", written into the grade by a default argument.
+    #
+    # What is deliberately *not* checked here is the main judge's coherence
+    # rule (``pass`` implies exactly 1.0, and so on). That one discards a
+    # verdict for disagreeing with its own score, and this validator's job is
+    # the shape of the reply, not its sense. Enforcing it would convert usable
+    # verdicts into ``judge_error`` and push the unanswered rate up for a
+    # reason that has nothing to do with what was heard.
+    numbers: Dict[str, float] = {}
+    for field_name in ("partial_score", "confidence"):
+        if field_name not in payload:
+            raise AudioEnvelopeError(f"{field_name}_not_a_number", detail="<absent>")
+        raw = payload.get(field_name)
+        if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+            raise AudioEnvelopeError(
+                f"{field_name}_not_a_number", detail=f"<{type(raw).__name__}>"
+            )
+        try:
+            number = float(raw)
+        except (OverflowError, TypeError, ValueError):
+            raise AudioEnvelopeError(f"{field_name}_not_a_number") from None
+        if not math.isfinite(number) or not 0.0 <= number <= 1.0:
+            raise AudioEnvelopeError(f"{field_name}_out_of_range")
+        numbers[field_name] = number
+    return verdict, numbers["partial_score"], numbers["confidence"]
+
+
 def _parse_json_envelope(text: str) -> Dict[str, Any]:
+    if not text.strip():
+        raise AudioEnvelopeError("empty_text")
     t = text.strip()
     if t.startswith("```"):
         t = t.strip("`")
         if t.lower().startswith("json"):
             t = t[4:]
         t = t.strip()
-    return json.loads(t)
+    try:
+        return json.loads(t)
+    except (json.JSONDecodeError, ValueError):
+        raise AudioEnvelopeError("unparseable_json") from None
 
 
 def _first_choice_text(response: Any) -> str:
@@ -747,6 +907,7 @@ class AudioPerception:
         output_tokens = 0
         cached_tokens = 0
         usage_complete = False
+        text = ""
         try:
             response = self.client.chat.completions.create(
                 model=self.deployment,
@@ -771,12 +932,47 @@ class AudioPerception:
             usage_complete = reported.usage_complete
             text = _first_choice_text(response)
             payload = _parse_json_envelope(text)
+            verdict, partial_score, confidence = _validated_audio_envelope(
+                payload
+            )
             return AudioVerdict(
-                verdict=str(payload.get("verdict", "fail")),
-                partial_score=float(payload.get("partial_score", 0.0)),
+                verdict=verdict,
+                partial_score=partial_score,
                 evidence=str(payload.get("evidence", ""))[:200],
-                confidence=float(payload.get("confidence", 0.0)),
+                confidence=confidence,
                 reasoning=str(payload.get("reasoning", ""))[:300],
+                # A reply the model shaped as ``judge_error`` is a refusal to
+                # judge, not a judgement, and the field that says why has to be
+                # filled or the item reads downstream as an unexplained blank.
+                judge_error=(
+                    "sub_judge_declined" if verdict == "judge_error" else None
+                ),
+                api_call_count=1,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                cached_tokens=cached_tokens,
+                latency_ms=latency_ms,
+                usage_complete=usage_complete,
+            )
+        except AudioEnvelopeError as exc:
+            # The model answered; the answer does not meet the contract. Not a
+            # provider fault, so it is neither retried nor allowed to set
+            # ``_blocked_reason`` -- both of those are for the wire. The call
+            # is spent either way: tokens came back for it.
+            latency_ms = (time.perf_counter() - call_started) * 1000.0
+            detail = (
+                f"audio envelope rejected: {exc.kind}"
+                + (f" (value={exc.detail})" if exc.detail else "")
+                + f" (chars={len(text)})"
+            )
+            return AudioVerdict(
+                verdict="judge_error",
+                partial_score=0.0,
+                evidence="",
+                confidence=0.0,
+                reasoning=detail,
+                judge_error=f"format_error:{exc.kind}",
+                failure_detail=detail,
                 api_call_count=1,
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
