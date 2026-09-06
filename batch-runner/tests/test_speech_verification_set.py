@@ -561,6 +561,53 @@ def test_the_published_manifest_reproduces_itself() -> None:
     assert speech.compare_to_expected(_published(), _published()) == []
 
 
+def test_a_rebuild_that_does_not_match_stops_the_command_the_paid_job_runs(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """A list of problems only refuses a dispatch once it is an exit code.
+
+    The paid job rebuilds the clips under `set -euo pipefail`, so a non-zero
+    exit here is what stands between a moved eSpeak and sixty billed calls.
+    Every test above stops at `compare_to_expected`; nothing had ever run the
+    command that turns its list into a `1`. The one real execution -- CI run
+    `34027400241` -- matched, so the failure branch had only ever been skipped.
+    That is defect 14's shape: a guard exercised only where it does nothing.
+
+    eSpeak cannot run on this machine (kernel 3.10.102), so the synthesiser is
+    replaced by the published manifest itself. What is under test is the wiring
+    from a mismatch to a stopped run, not the speech.
+    """
+
+    def _fake_build(out_dir: Path, manifest: dict[str, Any]) -> dict[str, Any]:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        return manifest
+
+    # A matching rebuild has to succeed. A check that stopped every dispatch
+    # would be removed for it, and then nothing would be checking.
+    monkeypatch.setattr(speech, "build", lambda d: _fake_build(d, _published()))
+    assert speech.main([
+        "--out-dir", str(tmp_path / "same"),
+        "--expect-manifest", str(PUBLISHED_MANIFEST),
+    ]) == 0
+    assert "reproduces the expected manifest exactly" in capsys.readouterr().out
+
+    # One clip delivered as different bytes -- the shape a moved encoder makes.
+    moved = _published()
+    moved["clips"][3]["sent"]["sha256"] = "f" * 64
+    monkeypatch.setattr(speech, "build", lambda d: _fake_build(d, moved))
+    assert speech.main([
+        "--out-dir", str(tmp_path / "moved"),
+        "--expect-manifest", str(PUBLISHED_MANIFEST),
+    ]) == 1, "a mismatched rebuild exits 0, so the paid job would carry on"
+
+    captured = capsys.readouterr()
+    assert "does NOT reproduce the expected manifest" in captured.err
+    assert moved["clips"][3]["clip_id"] in captured.err, (
+        "the refusal does not say which clip, so the reader rebuilds all ten")
+
+
 def test_no_audio_is_committed_beside_the_manifest() -> None:
     """The licence position is that nothing of eSpeak's ships from here.
 

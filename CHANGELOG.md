@@ -625,6 +625,19 @@ entries land under a fresh dated heading the day they merge to `main`.
   now come from the manifest, and the day the corpora diverge the failure says
   to branch the record on `$CORPUS` the way the clip count already is.
 
+  Not an eighteenth defect, but the fourteenth's shape again and worth the same
+  paragraph. `--expect-manifest` is what stands between a moved eSpeak and a
+  paid dispatch, and only its passing half had ever executed. Eight tests cover
+  `compare_to_expected`; none covered the command that turns the list it
+  returns into the exit code the paid job's `set -euo pipefail` acts on. The
+  one real execution — free CI run `34027400241` — matched, so the refusal was
+  skipped there too. It is now driven both ways, with the published manifest
+  standing in for the synthesiser that cannot run on this kernel: one altered
+  `sent` digest exits 1 and names the clip, while an unaltered rebuild still
+  exits 0, because a check that stops every dispatch is a check that gets
+  removed. Mutation-checked in both directions — a refusal that returns 0, and
+  one that refuses without saying which clip.
+
   330 section 3 pre-registered four stop conditions and nothing enforced them.
   They are now `SPEECH_STOP_RULES`, checked after each call, with a test that
   fails if the constants and the document drift apart: 20 minutes wall clock,
