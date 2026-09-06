@@ -406,12 +406,36 @@ entries land under a fresh dated heading the day they merge to `main`.
 
   eSpeak NG is pinned by version string read at build time, binary SHA-256
   resolved through symlinks, originating package read from `dpkg-query` rather
-  than assumed, full argv, and a SHA-256 per clip; the synthesiser refuses to
-  resample, because a manifest must pin the bytes that are actually sent. It is
-  GPL-3.0-or-later and **nothing of it is redistributed here** — no source, no
-  binary, no dictionary, no generated clip; the clips are CI artifacts and the
-  repository holds only digests. The ground truth lives in the manifest and is
-  never sent; the judging path sees one `criterion` at a time.
+  than assumed, full argv, and **two** SHA-256s per clip. Two, because eSpeak NG
+  has no sample-rate flag — the rate belongs to the voice data, and `en-us`
+  renders at 22050 Hz — while the grading path re-encodes whatever it is handed
+  to 16 kHz mono before the model hears it. The file the synthesiser writes is
+  therefore never the file that is sent, and one digest could not say which.
+  `source` pins what eSpeak wrote and reproduces from eSpeak alone; `sent` pins
+  what the judge actually receives and additionally needs the same ffmpeg. A
+  `sent` mismatch beside a matching `source` blames the encoder, and the
+  comparison says so in those words. The conversion calls the grading path's own
+  `_trim_audio_bytes` rather than shelling out to ffmpeg or sox, so no second
+  tool joins the set of things that have to be pinned. It is GPL-3.0-or-later
+  and **nothing of it is redistributed here** — no source, no binary, no
+  dictionary, no generated clip; the clips are CI artifacts and the repository
+  holds only digests. The ground truth lives in the manifest and is never sent;
+  the judging path sees one `criterion` at a time.
+
+  The set now exists: run
+  [`34022771513`](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/34022771513)
+  built it with eSpeak NG 1.51 (`espeak-ng` 1.51+dfsg-12build1), 31.2350 s of
+  delivered audio across ten clips. All twenty digests match their files, and
+  **the ten `sent` files re-encode byte-for-byte identically on the dev host** —
+  a different machine, same PyAV 17.1.0 / libavcodec 62.28.101 — so the delivered
+  digest is a value anyone can check rather than an artifact of one runner. The
+  manifest is committed as
+  `tasks/rebuilding_grading_task/330-speech-verification-manifest.json` (digests
+  and transcripts only, no audio) to give `--expect-manifest` a target. Four
+  tests hold it to the corpus it was built from: reword a criterion or flip an
+  answer without rebuilding and the committed digests would go on describing a
+  set that no longer exists, which is caught on the dev host without a
+  synthesiser — verified by doing both.
 
   Reported as a field rather than a caveat: synthesised speech is harder to
   follow than a human voice, so **a pass confirms the capability and a failure

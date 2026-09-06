@@ -253,6 +253,38 @@ eSpeak NG는 로봇 목소리다. 사람 목소리보다 **알아듣기 어렵�
 python scripts/build_speech_verification_set.py --describe
 ```
 
+### 실제로 만들어졌고, 지문도 대조했다
+
+실행 [`34022771513`](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/34022771513)에서
+클립 10개가 만들어졌다. eSpeak NG 1.51, 총 재생 31.2350초. artifact를 받아
+**NAS에서** 다시 대조했다. 새 API 호출은 **0번**이다.
+
+| 확인 | 결과 |
+|---|---|
+| 합성 원본 digest = 파일 | 10/10 |
+| 전달본 digest = 파일 | 10/10 |
+| 전달본을 **NAS에서 다시 인코딩**해 비교 | **10/10 바이트 단위 일치** |
+
+세 번째 줄이 이 설계가 값어치를 하는 지점이다. GitHub 러너가 만든 16 kHz 바이트가
+**다른 기계에서 똑같이** 다시 나왔다. 그래서 `sent` 지문은 "그때 그 러너에서만
+나오는 값"이 아니라 누구나 대조할 수 있는 값이다. 값 자체는
+[`330`](./330-speech-diagnostic-prereg.md) §2에 있다.
+
+매니페스트는 **저장소에 커밋했다** —
+[`330-speech-verification-manifest.json`](./330-speech-verification-manifest.json).
+음성 파일은 안 올린다(라이선스). 이렇게 하면 나중에 다시 만들었을 때 명령 한 줄로
+대조된다.
+
+```
+workflow_dispatch → expect_manifest:
+  tasks/rebuilding_grading_task/330-speech-verification-manifest.json
+```
+
+그리고 이걸 커밋한 덕분에 **문장을 고치고 다시 안 만드는 실수**를 테스트가 잡는다.
+지문은 특정 문장에서 나온 값인데, 문장만 고치면 매니페스트는 **없어진 소리의 지문**을
+계속 주장하게 된다. 이건 합성기 없이 NAS에서도 잡히고, 실제로 잡히는지 확인했다
+(문구 수정·정답 뒤집기 둘 다 걸림).
+
 ---
 
 ## 7. 테스트
@@ -261,7 +293,7 @@ python scripts/build_speech_verification_set.py --describe
 |---|---:|---|
 | `tests/test_audio_verdict_contract.py` | 67 | 어휘, 엄격한 검증, 두 갈래 문구 동일성, 미응답 3분류 |
 | `tests/test_audio_format_failure_replay.py` | 19 | 저장된 120번 재해석 수치 |
-| `tests/test_speech_verification_set.py` | 25 | 문항 균형·정답 유출·개인정보·핀·재현 비교 |
+| `tests/test_speech_verification_set.py` | 29 | 문항 균형·정답 유출·개인정보·핀·재현 비교·**발행된 매니페스트 최신성** |
 
 말소리 세트 테스트 하나가 **내 문항의 결함을 잡았다.** `valve_negation` 쌍의 거짓
 주장이 참 주장보다 짧아서, 단어 겹침이 36%밖에 안 됐다. 길이 차이 자체가 단서가

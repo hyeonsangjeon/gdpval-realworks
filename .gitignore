@@ -136,6 +136,7 @@ tasks/rebuilding_grading_task/*
 !tasks/rebuilding_grading_task/328-audio-accuracy-measured-delivery.json
 !tasks/rebuilding_grading_task/329-the-verdict-that-was-never-a-verdict.md
 !tasks/rebuilding_grading_task/330-speech-diagnostic-prereg.md
+!tasks/rebuilding_grading_task/330-speech-verification-manifest.json
 
 # The grading run writes a sqlite mirror of the cost ledger beside every grade
 # file. The published record is the .jsonl next to it; the database is a local

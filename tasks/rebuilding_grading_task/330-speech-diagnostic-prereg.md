@@ -13,8 +13,8 @@
 | 조건 | 상태 |
 |---|---|
 | 응답 형식 계약 PR이 **green으로 병합** | ⬜ PR #435 |
-| 말소리 세트가 **CI에서 실제로 만들어짐** | ⬜ artifact + manifest |
-| 매니페스트 digest를 이 문서에 **기입 완료** | ⬜ §2 |
+| 말소리 세트가 **CI에서 실제로 만들어짐** | ✅ 실행 [`34022771513`](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/34022771513) |
+| 매니페스트 digest를 이 문서에 **기입 완료** | ✅ §2 |
 
 세 개 다 채워지기 전에는 실행하지 않는다. **⬜ 가 하나라도 남아 있으면 이 문서는
 사전등록이 아니라 계획서다.**
@@ -62,23 +62,59 @@
 
 ### 음성
 
-`speech-verification-set.yml` 산출물. **아래는 CI 실행 뒤에 채운다.**
+`speech-verification-set.yml` 산출물. **아래는 실제 CI 실행에서 나온 값이다.**
 
 | | 값 |
 |---|---|
-| espeak-ng 버전 문자열 | ⬜ *(manifest `provenance.version_string`)* |
-| 바이너리 SHA-256 | ⬜ |
-| 패키지·출처 | ⬜ |
-| 재인코더 (PyAV/ffmpeg) 버전 | ⬜ *(manifest `encoder`)* |
-| 생성 명령 | ⬜ *(manifest `clips[].command`)* |
-| 클립 10개 **합성 원본** SHA-256 | ⬜ *(`clips[].source.sha256`, 22050 Hz)* |
-| 클립 10개 **실제 전달본** SHA-256 | ⬜ *(`clips[].sent.sha256`, 16000 Hz — **모델이 듣는 것**)* |
-| 총 재생 길이 | ⬜ 초 |
-| 워크플로 실행 ID | ⬜ |
+| espeak-ng 버전 문자열 | `eSpeak NG text-to-speech: 1.51  Data at: /usr/lib/x86_64-linux-gnu/espeak-ng-data` |
+| 바이너리 SHA-256 | `34191438b1e0f8f5aac5d4fdc5df574762b6fbb3c7a219a8c6f14feceb1bd076` (`/usr/bin/espeak-ng`) |
+| 패키지·출처 | dpkg `espeak-ng` `1.51+dfsg-12build1` — https://github.com/espeak-ng/espeak-ng |
+| 라이선스 | GPL-3.0-or-later. **이 저장소는 아무것도 재배포하지 않는다** |
+| 재인코더 | PyAV 17.1.0 / libavcodec 62.28.101 · libswresample 6.3.101 → 16000 Hz mono s16 |
+| 생성 명령 | `espeak-ng -v en-us -s 150 -p 50 -a 100 -w <clip>.source.wav "<문장>"` |
+| 목소리·속도·높이·크기 | `en-us` / 150 wpm / 50 / 100 |
+| 총 재생 길이 | **31.2350 초** (전달본 기준) |
+| 워크플로 실행 ID | [`34022771513`](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/34022771513) (artifact `speech-verification-set`, 1,658,165 B) |
+
+#### 클립별 지문
+
+| 클립 | 합성 원본 SHA-256 (22050 Hz) | 실제 전달본 SHA-256 (16000 Hz) | 초 |
+|---|---|---|---:|
+| `crate` | `7916f6884f08eb4d979082da4b4a54c0786b35b5faa0eba6de46c3ab5123a4c1` | `7e59f9a516ff6bf39a8462a4718c29124d6de87d4239fdb6eecebb8b6f4d0741` | 3.0151 |
+| `shelf` | `f687cbaf8a37ef6bbb9ec88aa363ad0422687d27e0b91e19be3a1cd6ee80e890` | `2737aed8fa5d09a7ed5e363a9567a22240821ca186617fa40bf507862ed16fc5` | 3.2995 |
+| `dial` | `d2e7914e4c59fa0f1a33abd61320dae5c4c5740cb79cd2843409462fc7800f8b` | `b58bb4f1c471050524a1cc7951c53891c5d8c6c1d318d8ff98d902641e46d352` | 3.3468 |
+| `column` | `a4b661982e7570e2b9952cc2942748b0d0b39fe051140d3ce1160a7581dadf1e` | `6c25533396667dbfc6c64a1287bcab71de7cea6ddb8a55b32f715d93eefc0793` | 3.4364 |
+| `lamp` | `5603d776182fb8df84f5a59ffcd6b092fbaf37396fe0adb6fd6969ca1f71d728` | `00b8b8643b56290f83409d6bd60719835abf040b054fce1c5987f0d641aa63df` | 3.1991 |
+| `powder` | `baf66e533c1f161077b8a9ec6c8ba8ba0152e1e518151788820f5626a1d6ec2b` | `938317e51b983d1725dcbe50cf16a48c7c88164659838a196fab4e586a0893b5` | 2.5756 |
+| `meeting` | `9a876844139e416e29d7b9353a80562482a0f63517fd96a22a4b5a58e018a932` | `c7c5c258133ac4c2d2684bedd604e9826dbea1a9753cf62b208dee9de7d20514` | 3.1288 |
+| `boxes` | `c38be9f319fc0108475de423b58bb0645b9384e75868a4b6817938919be7d93d` | `e3fb726297fa910ff51be0d574d6ab6a6c1fa0911179889795fa29553cbd0890` | 3.3016 |
+| `engine` | `965e9cf93672b50f0f700e42b943a7b495631c657422ce9503052ab325803207` | `0dc859843030440dda3606bc2b74793b1a0882c3e9d528163a6341562d8d7866` | 2.7102 |
+| `valve` | `275ec6c9a38f4c09315fb957bdcfc07a46a9ef9fde9135f204b060d5d058891d` | `f1fe5ed15585618559e22271c9642133ce3b07b31d6aed2ba1fe0ea0a1cea796` | 3.2219 |
 
 지문이 두 개인 이유는 [`329`](./329-the-verdict-that-was-never-a-verdict.md) §6에
 적었다. 한 줄로 줄이면: eSpeak는 22050 Hz로만 쓰고, 채점 경로가 16000 Hz로 다시
 인코딩해서 보낸다. **들려준 게 뭐였냐**를 증명하는 건 `sent` 쪽이다.
+
+#### 이 지문이 진짜 재현되는지 확인했다
+
+artifact를 받아 **다른 기계(NAS)에서** 대조했다. 돈은 안 들었다.
+
+| 확인 | 결과 |
+|---|---|
+| 합성 원본 10개 digest = 파일 | **10/10** |
+| 전달본 10개 digest = 파일 | **10/10** |
+| 전달본을 NAS에서 **다시 만들어** 비교 | **10/10 바이트 단위 일치** |
+
+세 번째 줄이 핵심이다. GitHub 러너에서 만든 16 kHz 바이트가 NAS에서 **똑같이**
+다시 나왔다. 재인코딩이 기계를 안 탄다는 뜻이고, 그래서 `sent` 지문은 "그때 그
+러너에서만 나오는 값"이 아니라 **누구나 대조할 수 있는 값**이다.
+
+eSpeak 자체는 이 NAS에서 못 돈다(커널 3.10.102). 그래서 `source` 쪽 재현은
+CI에서만 확인 가능하고, 여기서 확인한 건 **인코더 단계까지**다.
+
+매니페스트 원본은 [`330-speech-verification-manifest.json`](./330-speech-verification-manifest.json)에
+있다. 다시 만들었을 때 대조하려면 워크플로를 `expect_manifest`에 이 경로를 넣고
+돌리면 된다. 어긋나면 **합성기가 움직였는지 인코더가 움직였는지 갈라서** 알려 준다.
 
 **빈칸을 채우지 않은 채로 실행하면 안 된다.** 어떤 소리를 들려줬는지 나중에
 증명할 수 없는 측정은 측정이 아니다.
@@ -103,8 +139,14 @@
 예상 오디오 토큰 = 10 × (총 재생 길이 초) × 3
 ```
 
-실제 값이 이 식에서 **10% 넘게 벗어나면 그 자체가 보고 대상**이다. 소리가 다르게
-전달됐거나 과금 방식이 바뀐 것이므로.
+총 재생 길이가 **31.2350 초**로 확정됐으므로:
+
+```
+10 × 31.2350 × 3 ≈ 937 오디오 토큰
+```
+
+실제 값이 이 식에서 **10% 넘게 벗어나면**(즉 843 미만 또는 1,031 초과) **그 자체가
+보고 대상**이다. 소리가 다르게 전달됐거나 과금 방식이 바뀐 것이므로.
 
 ### 비용
 

@@ -485,3 +485,92 @@ def test_the_licence_is_recorded_with_what_is_and_is_not_redistributed() -> None
     """
     assert speech.ESPEAK_LICENSE == "GPL-3.0-or-later"
     assert speech.ESPEAK_HOMEPAGE.startswith("https://")
+
+
+# ── The published manifest is a real comparison target ───────────────
+
+
+PUBLISHED_MANIFEST = (
+    Path(__file__).resolve().parents[2]
+    / "tasks"
+    / "rebuilding_grading_task"
+    / "330-speech-verification-manifest.json"
+)
+
+
+def _published() -> dict[str, Any]:
+    return json.loads(PUBLISHED_MANIFEST.read_text(encoding="utf-8"))
+
+
+def test_the_published_manifest_is_the_set_this_script_still_builds() -> None:
+    """A sentence edited without a rebuild leaves the digests describing
+    nothing.
+
+    The digests in the manifest were produced from a specific corpus. Change a
+    criterion or a transcript and the audio changes with it, but the committed
+    file will happily go on claiming the old bytes -- and the next measurement
+    would be pinned to a set that no longer exists. Comparing claim by claim
+    against the corpus in this file catches that at the edit, on the NAS,
+    without a synthesiser.
+    """
+    published = _published()
+    assert {c["clip_id"] for c in published["clips"]} == {
+        c.clip_id for c in speech.CLIPS
+    }
+
+    live = {c.claim_id: c for c in speech.CLAIMS}
+    assert {c["claim_id"] for c in published["claims"]} == set(live)
+    for entry in published["claims"]:
+        claim = live[entry["claim_id"]]
+        assert entry["criterion"] == claim.criterion, entry["claim_id"]
+        assert entry["holds"] == claim.holds, entry["claim_id"]
+        assert entry["clip_id"] == claim.clip_id, entry["claim_id"]
+        assert entry["pair_id"] == claim.pair_id, entry["claim_id"]
+
+
+def test_the_published_manifest_pins_both_ends_of_every_clip() -> None:
+    """Ten clips, twenty digests, and the rates that say which is which.
+
+    One digest per clip would be ambiguous about which file it described. The
+    check that the pair is *usable* is that the source is what eSpeak writes
+    and the sent side is what the grading path delivers -- so the rates are
+    asserted rather than assumed.
+    """
+    published = _published()
+    assert len(published["clips"]) == 10
+    seen: set[str] = set()
+    for clip in published["clips"]:
+        source, sent = clip["source"], clip["sent"]
+        for part in (source, sent):
+            assert len(part["sha256"]) == 64
+            assert part["sha256"] not in seen, "two files, two digests"
+            seen.add(part["sha256"])
+        assert sent["sample_rate_hz"] == speech.SPEECH_SAMPLE_RATE_HZ
+        assert sent["channels"] == 1
+        assert source["sample_rate_hz"] != sent["sample_rate_hz"]
+
+
+def test_the_published_manifest_reproduces_itself() -> None:
+    """Whatever else it is, it has to be a valid target for --expect-manifest.
+
+    The reproducibility check is only worth running if a matching build is
+    reported as matching. Comparing the file to itself is the weakest version
+    of that and the one that catches a manifest whose shape has drifted away
+    from what the comparison reads.
+    """
+    assert speech.compare_to_expected(_published(), _published()) == []
+
+
+def test_no_audio_is_committed_beside_the_manifest() -> None:
+    """The licence position is that nothing of eSpeak's ships from here.
+
+    The manifest names ten WAVs. If one of them were ever committed next to it
+    -- by a hand-published result, say -- the repository would be
+    redistributing GPL-3.0-or-later output while still claiming it does not.
+    """
+    published = _published()
+    assert published["provenance"]["redistributed_here"] is False
+    for clip in published["clips"]:
+        for part in ("source", "sent"):
+            beside = PUBLISHED_MANIFEST.parent / clip[part]["file"]
+            assert not beside.exists(), f"{beside.name} must stay an artifact"
