@@ -2530,21 +2530,69 @@ def test_the_expected_token_count_is_written_down_before_the_run(
         result=result,
         speech=corpus,
     )
+    # The estimate has to describe the audio the run *sends*, and the run
+    # sends one clip per call. Comparing it against the corpus length was the
+    # defect: this fixture asks two criteria of each clip, exactly as the
+    # published set does, so the two formulas differ by 2x and only one of
+    # them is what gets billed.
+    sent = sum(corpus.durations[call["clip_id"]] for call in result["calls"])
+    assert report["speech_set"]["audio_seconds_sent"] == pytest.approx(sent)
     assert report["speech_set"]["expected_audio_tokens"] == round(
-        probe.AUDIO_TOKENS_PER_SECOND * corpus.total_seconds * 3
+        probe.AUDIO_TOKENS_PER_SECOND * sent
     )
+    assert report["speech_set"]["expected_audio_tokens"] != round(
+        probe.AUDIO_TOKENS_PER_SECOND * corpus.total_seconds * 3
+    ), "counting clips again instead of calls"
 
 
-def test_the_published_set_predicts_the_pre_registered_token_count() -> None:
-    """330 states ~937 tokens for three repeats. The code has to agree.
+def test_the_document_and_the_code_agree_on_what_the_run_sends() -> None:
+    """330 §2's token block is read out of the document, not typed in here.
 
-    Two places carrying the same number is how a stop rule quietly stops
-    matching the run it governs.
+    The number it holds is the only pre-dispatch estimate of what this run
+    costs on a model with no published price, and it is what the +/-10%
+    delivery band is measured against. It said 937 -- the corpus length times
+    the repeats -- and the run sends 1,874, because a call carries the clip
+    its criterion is about and twenty criteria share ten clips. A healthy run
+    would have landed 82% above the band, and the summary would have printed
+    *"the billed audio is more than 10% away from the pre-registered figure"*
+    in bold on a run where nothing was wrong. A check that fires on every run
+    is worse than no check: it is the one that would have caught a real
+    delivery failure, spent.
+
+    Reading the block rather than restating it is the point. The old pair of
+    tests asserted the code's formula against itself and the document's number
+    against the same formula, so both were green on the wrong answer.
     """
+    doc = (
+        probe.REPO_ROOT / "tasks" / "rebuilding_grading_task"
+        / "330-speech-diagnostic-prereg.md"
+    ).read_text(encoding="utf-8")
+
+    def _stated(name: str) -> float:
+        found = re.search(rf"^{name}\s*=\s*([0-9.]+)", doc, re.MULTILINE)
+        assert found, f"330 no longer states {name}"
+        return float(found.group(1))
+
+    band = re.search(r"^band_10pct\s*=\s*(\d+) \.\. (\d+)", doc, re.MULTILINE)
+    assert band, "330 no longer states the +/-10% band"
+
     published = json.loads(PUBLISHED_SPEECH_MANIFEST.read_text(encoding="utf-8"))
-    seconds = round(sum(c["sent"]["seconds"] for c in published["clips"]), 4)
-    assert seconds == 31.2350
-    assert round(probe.AUDIO_TOKENS_PER_SECOND * seconds * 3) == 937
+    seconds = {c["clip_id"]: c["sent"]["seconds"] for c in published["clips"]}
+    # What the run sends: one clip per call, every claim, every repeat.
+    sent = round(
+        sum(seconds[claim["clip_id"]] for claim in published["claims"]) * 3, 4
+    )
+    tokens = round(probe.AUDIO_TOKENS_PER_SECOND * sent)
+
+    assert _stated("audio_seconds_sent") == sent
+    assert _stated("expected_audio_tokens") == tokens
+    assert int(band.group(1)) == round(tokens * 0.9)
+    assert int(band.group(2)) == round(tokens * 1.1)
+
+    # And the corpus length is still in there, named as the thing it is, so
+    # the two cannot be read as the same number again.
+    assert _stated("클립 길이 합") == round(sum(seconds.values()), 4)
+    assert _stated("클립 길이 합") * 2 == _stated("한 바퀴에 나가는 소리")
 
 
 def test_the_speech_flags_travel_together() -> None:

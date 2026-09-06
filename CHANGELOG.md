@@ -625,18 +625,39 @@ entries land under a fresh dated heading the day they merge to `main`.
   now come from the manifest, and the day the corpora diverge the failure says
   to branch the record on `$CORPUS` the way the clip count already is.
 
-  Not an eighteenth defect, but the fourteenth's shape again and worth the same
-  paragraph. `--expect-manifest` is what stands between a moved eSpeak and a
-  paid dispatch, and only its passing half had ever executed. Eight tests cover
-  `compare_to_expected`; none covered the command that turns the list it
-  returns into the exit code the paid job's `set -euo pipefail` acts on. The
-  one real execution — free CI run `34027400241` — matched, so the refusal was
-  skipped there too. It is now driven both ways, with the published manifest
-  standing in for the synthesiser that cannot run on this kernel: one altered
-  `sent` digest exits 1 and names the clip, while an unaltered rebuild still
-  exits 0, because a check that stops every dispatch is a check that gets
+  Not a defect — the code was right — but the fourteenth's shape again and
+  worth the same paragraph. `--expect-manifest` is what stands between a moved
+  eSpeak and a paid dispatch, and only its passing half had ever executed.
+  Eight tests cover `compare_to_expected`; none covered the command that turns
+  the list it returns into the exit code the paid job's `set -euo pipefail`
+  acts on. The one real execution — free CI run `34027400241` — matched, so the
+  refusal was skipped there too. It is now driven both ways, with the published
+  manifest standing in for the synthesiser that cannot run on this kernel: one
+  altered `sent` digest exits 1 and names the clip, while an unaltered rebuild
+  still exits 0, because a check that stops every dispatch is a check that gets
   removed. Mutation-checked in both directions — a refusal that returns 0, and
   one that refuses without saying which clip.
+
+  The eighteenth was in the one number that has to be right *before* anything
+  is bought. 330 section 2 predicted 937 audio tokens — the corpus length,
+  31.235 s, times three repeats — and pre-registered a ±10% band around it as
+  the check for whether the sound went out as pinned. But a call carries the
+  clip its own criterion is about, and twenty criteria share ten clips, so one
+  pass over the corpus sends every clip twice: 187.41 s across the sixty calls,
+  1,874 tokens. Exactly double. A run with nothing wrong with it lands 82%
+  above the band, and the summary prints *"the billed audio is more than 10%
+  away from the pre-registered figure — either different sound was sent or the
+  metering changed"* in bold, on the healthy run. That is worse than having no
+  band at all: a check that fires every time is the check that would have
+  caught a real delivery failure, spent in advance on a false alarm. It is also
+  the only pre-dispatch cost estimate for a model with no published price, and
+  it understated that by half. Measured rather than reasoned — summing the clip
+  duration of all sixty calls in a free rehearsal gives 187.41 s. The report now
+  derives the figure from `calls_planned`, so the estimate and the plan cannot
+  disagree, and the document's block is *read* by a test instead of restated in
+  one. The two tests this replaces asserted the code's formula against itself
+  and the document's number against the same formula, so both were green on the
+  wrong answer.
 
   330 section 3 pre-registered four stop conditions and nothing enforced them.
   They are now `SPEECH_STOP_RULES`, checked after each call, with a test that

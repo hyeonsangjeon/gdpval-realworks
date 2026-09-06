@@ -960,6 +960,31 @@ class SpeechCorpus:
     def total_seconds(self) -> float:
         return round(sum(c.seconds or 0.0 for c in self.clips), 4)
 
+    @property
+    def seconds_per_pass(self) -> float:
+        """Audio one pass over the corpus sends. Not ``total_seconds``.
+
+        Every call carries the clip its criterion is about, and this set asks
+        two criteria of each clip, so one pass sends each clip twice. The
+        corpus is 31.235 s of audio and a pass sends 62.47 s of it.
+
+        The difference is not academic: the expected token count is what the
+        pre-registered +/-10% delivery band is measured against, and counting
+        clips instead of calls halves it. A healthy run would then land 100%
+        above the band and be reported as "the audio was delivered
+        differently" -- the false alarm arriving in place of the check that
+        was supposed to catch a real delivery change.
+        """
+        durations = self.durations
+        return round(
+            sum(
+                durations[claim.clip_id]
+                for claim in self.claims
+                if claim.clip_id in durations
+            ),
+            4,
+        )
+
 
 def load_speech_corpus(manifest_path: Path, clip_dir: Path) -> SpeechCorpus:
     """Load the pinned speech set, refusing anything that is not what it says.
@@ -2731,24 +2756,37 @@ def build_report(
         # What was heard, and what it would and would not mean. Carried in the
         # report rather than left in the write-up, because the number and the
         # caveat get copied separately otherwise.
+        #
+        # Passes over the corpus is repeats x arms, but it is taken from the
+        # same planned-call number the report prints rather than recomputed,
+        # so the estimate and the plan cannot disagree.
+        planned = result.get("planned_calls") or 0
+        passes = planned // len(speech.claims) if speech.claims else 0
+        seconds_sent = round(speech.seconds_per_pass * passes, 4)
         report["speech_set"] = {
             "manifest": speech.manifest_path.name,
             "provenance": speech.provenance,
             "encoder": speech.encoder,
             "limits": speech.limits,
             "total_seconds": speech.total_seconds,
+            "audio_seconds_per_pass": speech.seconds_per_pass,
+            "audio_seconds_sent": seconds_sent,
             # 328 saw exactly 10.00 audio tokens per second of clip. Written
             # down before the run so that a delivery failure is checkable
             # against a prediction rather than explained after the fact.
             "expected_audio_tokens": round(
-                AUDIO_TOKENS_PER_SECOND * speech.total_seconds * repeats
+                AUDIO_TOKENS_PER_SECOND * seconds_sent
             ),
             "expected_audio_tokens_basis": (
                 f"{AUDIO_TOKENS_PER_SECOND:.2f} tokens/s x "
-                f"{speech.total_seconds} s x {repeats} repeats, from run "
-                f"34008840627. A measured total outside +/-10% of this is "
-                f"itself a finding: the audio was delivered differently, or "
-                f"billing changed."
+                f"{speech.seconds_per_pass} s per pass x {passes} passes "
+                f"(repeats x arms) = {seconds_sent} s, from run 34008840627. "
+                f"The corpus is {speech.total_seconds} s long, but a pass "
+                f"sends more than that: every call carries the clip its "
+                f"criterion is about, and {len(speech.claims)} criteria share "
+                f"{len(speech.clips)} clips. A measured total outside +/-10% "
+                f"of this is itself a finding: the audio was delivered "
+                f"differently, or billing changed."
             ),
         }
 
