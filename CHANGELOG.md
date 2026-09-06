@@ -11,6 +11,55 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Added
+- **The pre-registered speech diagnostic ran, and the answer was "not shown".**
+  60 paid calls on run `34038371185`, pinned to commit `54180489e` (#439's merge)
+  so a moving `main` could not change what the job saw. Results and both raw
+  reports are preserved as `331-it-said-no-to-almost-everything.md`,
+  `331-audio-accuracy-measured.json` and `-delivery.json`. What the run bought:
+  - **The format failure is gone.** 328's tone run lost 43 of 120 answers to
+    unparseable JSON and answered 17 more with words outside the verdict
+    vocabulary. This run had **0 read failures, 0 provider failures, 0
+    out-of-vocabulary answers** and a 98.33% response rate. That matters for
+    what the numbers below mean: they measure the judge, not the parser.
+  - **The pre-registered primary says nothing was shown.** Exact one-sided
+    binomial on one majority verdict per claim: 12 of 20, **p = 0.2517**. The
+    secondary within-pair permutation agrees — J = 0.2069, p = 0.125.
+  - **61.02% accuracy is not quotable on its own.** The judge answered `fail`
+    53 times out of 60. It got 30 of 30 false claims right — which is exactly
+    what a machine that never listened produces — and 6 of 29 true claims. A
+    constant-`fail` responder scores 10 of 20 on the registered primary; this
+    run scored 12. `false_pass` was 0 and `false_fail` was 23, and the wrong
+    fails carried mean confidence 0.863, so confidence does not separate them.
+  - **2 of 10 pairs were told apart**, both of them confusable-numeral pairs
+    (seventeen/seventy, fifteen/fifty). The other eight got `fail` on both
+    sides. A third number-bearing pair (nine/four boxes) was *not* told apart,
+    so "it heard the numbers" is an over-read of two pairs.
+  - **Delivery is evidenced, comprehension is not.** All 60 requests carried
+    audio, one digest per clip, `wav`/16 kHz/mono, `response_models` exactly
+    `["gpt-audio-1.5"]`, 1,848 audio tokens against the pre-registered band of
+    1,687–2,061, and prompt tokens correlated with clip duration at r = 0.849.
+    Bytes arriving and being billed is not the model understanding them.
+  - **Cost is `null`, not $0.** `gpt-audio-1.5` is absent from the price table,
+    so `pricing_complete: false` and `estimated_cost_usd: null` on 60 billable
+    calls. 1,848 is a usage count, not an invoice.
+  - The one unanswered call was an honest `declined_to_judge`, kept distinct
+    from read failures and provider failures by 329's three-way split rather
+    than collapsed into "wrong".
+  Two other runs are recorded and cost nothing: `34037363820` (rehearsal, no
+  paid calls) and `34038055900`, where dispatching from a tag was **refused by
+  the `grading` environment's branch policy** and the paid job was skipped. The
+  policy was left alone — the tag was not added to the allow-list — and the run
+  was re-dispatched from `main` at the verified SHA.
+
+- **`330-speech-diagnostic-prereg.md` now states it was executed.** Only the
+  status header changed, and it links to `331`. The body — including sentences
+  reading "아직 아무것도 안 샀다" — is left exactly as written before the spend,
+  because a pre-registration edited after the fact is not one. The grader source
+  fingerprint `74e1f478…a558a90` did not move across #439 or #440, so the
+  registered conditions still describe the code that ran and no existing result
+  needs segregating.
+
 ### Changed
 - **The paid summary printed both halves of a model-identity check and did
   neither half.** Its header states the model 330 §2 pins; a table row four
