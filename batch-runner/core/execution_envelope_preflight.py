@@ -96,6 +96,12 @@ from core.execution_environment_readiness import (
 from core.file_preview import reference_file_prompt_budget
 from core.first_request_sections import first_request_section_budget
 from core.prompt_loader import fixed_prompt_characters, load_prompt
+from core.shared_first_request import (
+    SHARED_PROMPT_NAME,
+    UncontrolledDifference,
+    residual_differences_for,
+    shared_section_order,
+)
 
 PLAN_VERSION = "execution-envelope-advance-check-v1"
 COST_POLICY_BLOCK = "block_on_cost_findings"
@@ -153,6 +159,48 @@ class EnvelopePreflight:
     compare it against. It still stops a run, because an unchecked fingerprint
     is not evidence, and it clears for nothing by fetching the pinned revision.
     """
+    uncontrolled_differences: list[UncontrolledDifference] = field(
+        default_factory=list
+    )
+    """What stays different between the run places after everything above passes.
+
+    Not problems. Every entry here is something the comparison cannot remove
+    without becoming a comparison of something else — a different API product, a
+    tool declaration that is how a run place runs code at all, an isolation
+    boundary that is the run place. They are carried on the result, and printed,
+    because a check that returns no problems reads as "these two runs differ
+    only in where the code ran", and that sentence is not true while this list
+    has entries in it. See :data:`core.shared_first_request.
+    UNCONTROLLED_DIFFERENCES`.
+    """
+    first_requests: dict[str, "MeasuredFirstRequest"] = field(default_factory=dict)
+    """What each run place really puts in its first request, built and measured.
+
+    Kept whether or not the places agree, for the same reason ``input_files``
+    is. A rule that returns no problems when the three send one prompt file
+    reads exactly like a rule that was never reached — and the second is what
+    happened for as long as this comparison went unchecked. Printing the
+    measurement turns "nothing was said" into "one file, this wide, made of
+    these parts", which a reader can disagree with.
+
+    The figures are built through the same functions a real attempt builds its
+    request with, so wording edited in a prompt file moves them. They are not
+    copied from anything written down a second time. An empty mapping means no
+    measurement was taken, never that the requests came to nothing.
+    """
+
+    @property
+    def pure_run_place_effect_is_measurable(self) -> bool:
+        """Whether a difference in results could be attributed to the run place alone.
+
+        False while anything is uncontrolled, and it is never expected to be
+        True for these three places: two of them share an API family and the
+        third does not, and nothing in this repository can change that. It is a
+        property rather than a constant so that a comparison of two places that
+        really do differ only in the run place would answer honestly — and so
+        that a reader is told which of the two they have.
+        """
+        return not self.uncontrolled_differences
 
     @property
     def all_problems(self) -> list[str]:
@@ -197,6 +245,18 @@ class EnvelopePreflight:
                 environment: verification.as_dict()
                 for environment, verification in sorted(self.input_files.items())
             },
+            "pure_run_place_effect_is_measurable": (
+                self.pure_run_place_effect_is_measurable
+            ),
+            "uncontrolled_differences": [
+                {
+                    "what": entry.what,
+                    "why_it_stays": entry.why_it_stays,
+                    "what_it_could_do_to_a_result": entry.what_it_could_do_to_a_result,
+                    "run_places": list(entry.run_places),
+                }
+                for entry in self.uncontrolled_differences
+            ],
         }
 
 
@@ -389,6 +449,95 @@ def check_experiment_files_match_conditions(
     problems.extend(
         _check_the_plan_prices_what_the_files_add_to_the_prompt(loaded_settings)
     )
+    problems.extend(
+        _check_the_pinned_api_version_is_the_one_the_code_uses(
+            conditions_by_environment
+        )
+    )
+    return problems
+
+
+def _check_the_pinned_api_version_is_the_one_the_code_uses(
+    conditions_by_environment: Mapping[str, ModelRunConditions],
+) -> list[str]:
+    """Hold the plan's pinned API version against the constants that set it.
+
+    Every other condition here is checked by opening the settings files and
+    comparing them run place against run place. This one cannot be. The
+    settings files carry no API version at all, so there is nothing written
+    in them to compare, and a comparison of them passes whatever version is
+    really in force. What decides that is a constant in the client code —
+    which means the plan can pin one string, the code send another, and every
+    settings check still agree.
+
+    The constants are read by import rather than copied here. A copy is the
+    same failure one level up: it would agree with the plan while the code
+    moved underneath both.
+    """
+    problems: list[str] = []
+    # A run place that pins nothing is filtered out of ``pinned`` below, so it
+    # has to be caught here or it rides along on its neighbours' agreement.
+    unpinned = sorted(
+        environment
+        for environment, conditions in conditions_by_environment.items()
+        if not conditions.api_version
+    )
+    pinned = {
+        conditions.api_version
+        for conditions in conditions_by_environment.values()
+        if conditions.api_version
+    }
+    if not pinned:
+        return [
+            "the plan pins no API version, so a run place could be answered "
+            "on whichever version its client happened to be built with, and "
+            "nothing here would notice"
+        ]
+    if unpinned:
+        problems.append(
+            "these run places pin no API version while the others do ("
+            + ", ".join(unpinned)
+            + "), so they would be held to nothing while the comparison read "
+            "as agreed"
+        )
+    if len(pinned) > 1:
+        return problems + [
+            "the run places pin different API versions ("
+            + ", ".join(sorted(pinned))
+            + "), so they would not be asking the same product in the same way"
+        ]
+
+    want = pinned.pop()
+    for module_name, constant in (
+        ("core.llm_client", "DEFAULT_API_VERSION"),
+        ("core.azure_ai_clients", "DEFAULT_LEGACY_API_VERSION"),
+    ):
+        # Both failures below are reported rather than passed over. A version
+        # that could not be read is not a version that agreed.
+        try:
+            module = import_module(module_name)
+        except ImportError as error:
+            problems.append(
+                f"{module_name} could not be imported ({error}), so the API "
+                f"version the plan pins at {want!r} could not be held against "
+                "the code that sets it. That is unknown, not agreed"
+            )
+            continue
+        if not hasattr(module, constant):
+            problems.append(
+                f"{module_name} no longer defines {constant}, so whatever now "
+                f"decides the API version is unchecked against the {want!r} "
+                "the plan pins"
+            )
+            continue
+        found = getattr(module, constant)
+        if found != want:
+            problems.append(
+                f"the plan pins the API version at {want!r}, but "
+                f"{module_name}.{constant} is {found!r}. The settings files "
+                "carry no API version, so nothing else here catches this — "
+                "the comparison would run on a version it never agreed to"
+            )
     return problems
 
 
@@ -433,6 +582,13 @@ def check_experiment_files_match_conditions(
 # block-level exceptions let through is argued for one by one in
 # tests/test_envelope_preflight_compares_every_setting.py, which fails until a
 # new one is.
+#
+# A 45th setting has since arrived. ``execution.shared_first_request`` is what
+# makes all three run places send one committed prompt file rather than three
+# differently named ones, so a file quietly dropping it would put that run place
+# back on its own wording. It is nobody's exception, so it is compared, and the
+# whole check now reaches 32 of 45. The figures above are left at what they were
+# when they were measured; there were 44 settings then.
 SETTINGS_ALLOWED_TO_DIFFER: Mapping[tuple[str, ...], str] = {
     ("experiment",): (
         "the experiment's own id, name, description, author and date, which "
@@ -595,8 +751,8 @@ def _check_settings_the_plan_does_not_name(
     ones :data:`SETTINGS_ALLOWED_TO_DIFFER` gives a reason for. This is the
     opposite way round from how it was written first, where four blocks were
     named as the ones to compare and everything outside them went unlooked at:
-    against the three files this plan names, that covered 18 of 44 settings,
-    and this covers 26.
+    against the three files this plan names, that covered 18 of the 44 settings
+    they held then, and this covers 27 of the 45 they hold now.
 
     That is the count for this rule alone, not for the check as a whole. Four
     of the eight settings it newly reaches — the time limit, the retry count,
@@ -1311,6 +1467,66 @@ def _runner_first_request_extra_sections(
     return tuple(str(section) for section in declared)
 
 
+def _sends_the_shared_first_request(settings: Mapping[str, Any]) -> bool:
+    """Whether these settings put this run place on the shared first request.
+
+    ``is True`` rather than a truth test, matching
+    ``core/experiment_config.py``: the setting rewrites what every call carries,
+    so a value that is not the boolean True leaves the run place on the path it
+    always used, here and there alike. Reading it any other way here would let
+    this check measure a request the run would not send.
+    """
+    execution = _dig(settings, ("execution",))
+    return execution.get("shared_first_request") is True
+
+
+def _first_request_extra_sections(
+    environment: str, settings: Mapping[str, Any]
+) -> tuple[str, ...] | None:
+    """What this run place adds before the render, under **these** settings.
+
+    The runner classes declare what they *can* add. On the shared first request
+    that declaration stops describing the run: every opted-in place assembles
+    the list in ``prompts/execution_envelope_shared.yaml``, and
+    ``core/shared_first_request.py`` refuses that list to name any of the three
+    the container used to add, so the answer is none of them — for the container
+    too. Reading the class attribute here would charge the container for a
+    contract, a dependency hint and a skills manual it no longer sends, which is
+    the safe direction for a cost ceiling and the wrong one for a comparison
+    that has to say whether the three requests are the same.
+    """
+    if _sends_the_shared_first_request(settings):
+        return ()
+    return _runner_first_request_extra_sections(environment)
+
+
+def _reference_file_prompt_sections(
+    environment: str, settings: Mapping[str, Any]
+) -> tuple[str, ...] | None:
+    """Which sections these settings fill from the reference files.
+
+    On the shared first request all three places fill the same ones, read from
+    the shared prompt file rather than from each runner class. That is a real
+    change for the Azure code interpreter, which used to send only the structure
+    summary and now sends the previews and the file list as well — so its per
+    file demand goes up, and this is where that becomes visible to the sum
+    rather than a surprise on the invoice.
+    """
+    if not _sends_the_shared_first_request(settings):
+        return _runner_reference_file_prompt_sections(environment)
+    try:
+        order = shared_section_order()
+    except Exception:  # noqa: BLE001 - an unreadable shared list is not a zero
+        return None
+    from_the_files = {
+        "file_structure",
+        "previews",
+        "available_files",
+        "available_files_any_run_place",
+    }
+    return tuple(section for section in order if section in from_the_files)
+
+
 def _check_the_plan_prices_what_the_files_add_to_the_prompt(
     loaded_settings: Mapping[str, Mapping[str, Any]],
 ) -> list[str]:
@@ -1358,7 +1574,9 @@ def _check_the_plan_prices_what_the_files_add_to_the_prompt(
     """
     problems: list[str] = []
     for environment in sorted(loaded_settings):
-        sections = _runner_reference_file_prompt_sections(environment)
+        sections = _reference_file_prompt_sections(
+            environment, loaded_settings[environment]
+        )
         if sections is None:
             problems.append(
                 f"the cost sum bills every {environment} reference file at "
@@ -1641,6 +1859,11 @@ def run_envelope_preflight(
     problems: list[str] = []
     input_files: dict[str, InputFileVerification] = {}
     missing_input_file_problems: list[str] = []
+    # Empty rather than absent when the catalogue could not be loaded or the
+    # comparison is not the one that holds the wording still. The report says
+    # "not measured" for an empty one, which is a different sentence from
+    # "measured and they agree" and must not be printed as it.
+    first_requests: dict[str, MeasuredFirstRequest] = {}
 
     if plan.get("plan_version") != PLAN_VERSION:
         problems.append(
@@ -1700,7 +1923,7 @@ def run_envelope_preflight(
         # not what a run costs. It asks whether the one thing this comparison
         # holds still is actually held still, and that question stands whether
         # or not the plan carries a cost sum for anyone to check.
-        problems.extend(
+        asked_the_same, first_requests = (
             _check_every_run_place_is_asked_the_same_thing(
                 conditions,
                 comparison=str(
@@ -1711,6 +1934,7 @@ def run_envelope_preflight(
                 catalog=loaded_catalog,
             )
         )
+        problems.extend(asked_the_same)
 
     cost_block = plan.get("cost")
     cost_block = cost_block if isinstance(cost_block, Mapping) else {}
@@ -1840,6 +2064,11 @@ def run_envelope_preflight(
 
     azure = _diagnose_azure(plan, conditions, environ, problems)
 
+    # Recorded whatever else was found, including when nothing was. The list is
+    # about the run places taking part, not about whether the plan is in order,
+    # and a plan that passes every check still has to publish it.
+    uncontrolled = list(residual_differences_for(sorted(conditions)))
+
     return EnvelopePreflight(
         readiness=readiness,
         cost=ceiling,
@@ -1851,6 +2080,8 @@ def run_envelope_preflight(
         grading_ceiling_problems=grading_ceiling_problems,
         input_files=input_files,
         missing_input_file_problems=missing_input_file_problems,
+        uncontrolled_differences=uncontrolled,
+        first_requests=first_requests,
     )
 
 
@@ -1953,13 +2184,40 @@ def _prompt_files_a_run_place_might_send(
     the prompt priced. An empty tuple means this repository has no runner
     registered for the place, or the one it has declares no default: the caller
     turns that into a refusal rather than into a guess.
+
+    Raises ``ValueError`` where settings ask for the shared first request *and*
+    name a prompt file of their own. Every runner refuses that pair on sight, so
+    those settings cannot run at all; returning either name would price a
+    request no attempt could send.
     """
-    candidates: list[str] = []
+    declared = _runner_default_prompt_name(environment)
+    if declared is None:
+        # Asked before the shared branch on purpose. The shared setting names
+        # its own file and would otherwise answer for a run place this
+        # repository cannot run at all, turning a refusal into a price.
+        return ()
+
     named = _dig(settings, ("execution", "sandbox")).get("prompt_name")
+    if _sends_the_shared_first_request(settings):
+        if named and str(named) != SHARED_PROMPT_NAME:
+            raise ValueError(
+                f"these settings ask for the shared first request and also name "
+                f"execution.sandbox.prompt_name: {named!r}. Every runner raises "
+                f"on that pair rather than choosing between them, so this run "
+                f"place would stop on its first task"
+            )
+        # One candidate, not two, and not the runner's own default alongside it.
+        # ``core/executor.py`` does not choose here: it *forces* the name, and
+        # every runner refuses the setting paired with any other. So the wider
+        # of two is not the honest answer — there is only one file this run
+        # place can send, and pricing a second would charge a request nothing
+        # can produce.
+        return (SHARED_PROMPT_NAME,)
+
+    candidates: list[str] = []
     if named:
         candidates.append(str(named))
-    declared = _runner_default_prompt_name(environment)
-    if declared and declared not in candidates:
+    if declared not in candidates:
         candidates.append(declared)
     return tuple(candidates)
 
@@ -2066,13 +2324,13 @@ def _measure_first_requests(
                 the_plan_names_no_settings_file=True,
             )
             continue
-        extra_sections = _runner_first_request_extra_sections(environment)
         try:
             settings = yaml.safe_load(
                 (root / str(relative)).read_text(encoding="utf-8")
             )
             if not isinstance(settings, Mapping):
                 raise ValueError("it does not hold a mapping at the top level")
+            extra_sections = _first_request_extra_sections(environment, settings)
             candidates = _prompt_files_a_run_place_might_send(environment, settings)
             if not candidates:
                 raise ValueError(
@@ -2161,7 +2419,7 @@ def _check_every_run_place_is_asked_the_same_thing(
     plan: Mapping[str, Any],
     root: Path,
     catalog: TaskCatalog,
-) -> list[str]:
+) -> tuple[list[str], dict[str, MeasuredFirstRequest]]:
     """Confirm the run places really do differ only in where the code runs.
 
     :func:`core.execution_environment_readiness.check_model_run_conditions`
@@ -2171,8 +2429,8 @@ def _check_every_run_place_is_asked_the_same_thing(
     comparison is three copies of one string against each other and cannot
     fail. Worse, the plan says in its own words that the first of them is never
     sent: ``core/prompt_loader.py`` lets a committed prompt file's own
-    ``system_message`` win whenever it has one, and all three committed files
-    have one.
+    ``system_message`` win whenever it has one, and every prompt file these
+    places send has one.
 
     So the wording the check compared was wording no model reads, and the
     wording every model does read — the committed prompt file, that file's own
@@ -2191,9 +2449,17 @@ def _check_every_run_place_is_asked_the_same_thing(
     in what is asked takes the claim away. ``tool_built_in_features`` measures
     what each tool does when left alone and is not started; what it should hold
     still is its own decision to record, and it is not made here.
+
+    Since 2026-09-06 the three settings files set
+    ``execution.shared_first_request: true``, so the file they all send is
+    ``prompts/execution_envelope_shared.yaml`` and this rule passes. What was
+    measured is returned alongside the problems rather than thrown away on
+    success: a rule that says nothing when it agrees leaves the reader unable
+    to tell "all three send one file" from "this was never looked at", and
+    those are the two answers this rule exists to distinguish.
     """
     if comparison != COMPARISON_SAME_GENERATED_CODE:
-        return []
+        return [], {}
     try:
         measured, unmeasurable = _measure_first_requests(
             conditions_by_environment, plan=plan, root=root, catalog=catalog
@@ -2204,7 +2470,7 @@ def _check_every_run_place_is_asked_the_same_thing(
             "but the widest one cannot be taken from the task catalogue, so "
             "whether the three places are asked the same thing cannot be "
             f"worked out: {unreadable}"
-        ]
+        ], {}
 
     problems = [
         f"whether {environment} is asked the same thing as the other run "
@@ -2216,13 +2482,13 @@ def _check_every_run_place_is_asked_the_same_thing(
         # One place on its own is a measurement, not a comparison. Anything
         # that stopped the others from being measured is already a problem
         # above; saying "they all agree" about a single place would not be.
-        return problems
+        return problems, measured
 
     grouped: dict[tuple, list[str]] = {}
     for environment, request in sorted(measured.items()):
         grouped.setdefault(request.wording_identity(), []).append(environment)
     if len(grouped) == 1:
-        return problems
+        return problems, measured
 
     widest = max(measured.values(), key=lambda request: request.characters)
     narrowest = min(measured.values(), key=lambda request: request.characters)
@@ -2245,7 +2511,7 @@ def _check_every_run_place_is_asked_the_same_thing(
         "this name with these three requests would publish the prompt's "
         "difference as the run place's"
     )
-    return problems
+    return problems, measured
 
 
 def _check_instruction_length(
@@ -2538,4 +2804,106 @@ def describe_preflight(result: EnvelopePreflight) -> list[str]:
             f"approved maximum: {result.approved_maximum_usd} United States "
             "dollars"
         )
+    # Printed before the uncontrolled differences on purpose. The first says
+    # what was made the same and shows the figures; the second says what could
+    # not be. Read the other way round, the six differences look like the whole
+    # answer to "are these places asked the same thing", which they are not.
+    lines.extend(describe_first_requests(result))
+    lines.extend(describe_uncontrolled_differences(result))
+    return lines
+
+
+def describe_uncontrolled_differences(result: EnvelopePreflight) -> list[str]:
+    """What the comparison does not control, printed whether or not it passed.
+
+    This is the counterweight to a clean run of every other check. Those checks
+    can all pass — one model, one deployment, one task list, one prompt file,
+    one first request byte for byte — and the sentence a reader forms from that
+    is still wrong if it is "so any difference in the results is the run place".
+    Two of these three places share an API family and the third does not, and no
+    arrangement of settings in this repository changes that.
+
+    So the list is printed at the end of the summary rather than filed under
+    problems: nothing here needs fixing, and nothing here may be left out of a
+    report that states a result.
+    """
+    if result.pure_run_place_effect_is_measurable:
+        return [
+            "uncontrolled differences: none recorded for these run places, so a "
+            "difference in results may be read as the run place's"
+        ]
+    lines = [
+        f"uncontrolled differences: {len(result.uncontrolled_differences)}. "
+        "Every check above may pass and a difference in results still not be "
+        "the run place's alone. A report of this comparison states these:"
+    ]
+    for entry in result.uncontrolled_differences:
+        lines.append(f"    {entry.what} ({', '.join(entry.run_places)})")
+        lines.append(f"        it stays because {entry.why_it_stays}")
+        lines.append(f"        it could mean that {entry.what_it_could_do_to_a_result}")
+    return lines
+
+
+def describe_first_requests(result: EnvelopePreflight) -> list[str]:
+    """State what each run place is asked, whether or not they agree.
+
+    The rule that compares them speaks only when they differ, which is right for
+    a list of problems and wrong for a report. "No problem was raised" is what a
+    reader saw for the whole period when nothing compared these requests at all,
+    and it is what they would see now that all three send one file. The two
+    deserve different sentences, so this writes the measurement out.
+
+    Every figure is built through the functions a real attempt builds its
+    request with. Nothing here is read back from a number written down in the
+    plan.
+    """
+    if not result.first_requests:
+        return [
+            "what each run place is asked: not measured. This is not a finding "
+            "that the three agree — nothing was built, so nothing was compared"
+        ]
+
+    measured = result.first_requests
+    names = {request.prompt_name for request in measured.values()}
+    identities = {request.wording_identity() for request in measured.values()}
+    widths = {request.characters for request in measured.values()}
+
+    if len(identities) == 1 and len({r.silent for r in measured.values()}) == 1:
+        request = next(iter(measured.values()))
+        lines = [
+            f"what each run place is asked: all {len(measured)} send "
+            f"prompts/{request.prompt_name}.yaml, {request.characters} "
+            "characters, part for part the same. Built and compared here, not "
+            "read off the settings files"
+        ]
+        lines.append(f"    made of: {request.made_of()}")
+        lines.append(f"    sent by: {', '.join(sorted(measured))}")
+        return lines
+
+    if len(identities) == 1:
+        # Same parts, different reasons for what was left out. The widths agree
+        # and the rule above is right not to object, but one place's breakdown
+        # can no longer stand in for the others', so each says its own. Printing
+        # one of them under "part for part the same" would attribute a reason to
+        # a run place that does not hold it.
+        lines = [
+            f"what each run place is asked: all {len(measured)} send the same "
+            f"{next(iter(measured.values())).characters} characters, and they "
+            "differ in what was left out and why"
+        ]
+        for environment in sorted(measured):
+            lines.append(f"    {environment}: {measured[environment].made_of()}")
+        return lines
+
+    lines = [
+        f"what each run place is asked: {len(identities)} different first "
+        f"requests across {len(measured)} run place(s), "
+        + (
+            f"{len(names)} differently named prompt file(s), "
+            f"{min(widths)} to {max(widths)} characters"
+        )
+        + ". The problems above say what that costs the comparison"
+    ]
+    for environment in sorted(measured):
+        lines.append(f"    {environment}: {measured[environment].described()}")
     return lines

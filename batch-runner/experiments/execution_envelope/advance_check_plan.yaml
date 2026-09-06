@@ -119,8 +119,11 @@ model_run_conditions:
     # compares them character by character and refuses the run if they drift.
     #
     # It is offered rather than sent. core/prompt_loader.py lets a committed
-    # prompt file's own system_message win whenever it has one, and all three
-    # prompt files have one, so this wording is a fallback that never comes up.
+    # prompt file's own system_message win whenever it has one, and the file all
+    # three now send — prompts/execution_envelope_shared.yaml, since they set
+    # execution.shared_first_request: true — has one, so this wording is a
+    # fallback that never comes up. Measured on that file it contributes 0
+    # characters, against the 233 the prompt file's own system_message sends.
     # Holding the three places to the same fallback is still worth doing — it
     # is one more way they could quietly stop being comparable — but it is not
     # what the model reads, and the cost sum no longer charges for it as though
@@ -132,7 +135,17 @@ model_run_conditions:
       Use libraries such as openpyxl, python-docx, reportlab, python-pptx, and Pillow.
       Always produce complete, runnable code.
 
-    # The instruction appended to every task, word for word. Same rule as above.
+    # The instruction appended to every task, word for word.
+    #
+    # Unlike the standing instruction above, this one is not a fallback. A run
+    # place's own suffix is appended to whatever the committed prompt file
+    # wraps the task in rather than losing to it, so these words really do
+    # reach the model — measured on the shared prompt file they are the 724
+    # characters core/prompt_loader.py reports for what a run place's own
+    # settings add around the task, against the 1,708 the file itself wraps it
+    # in. Copied unchanged into all three experiment settings files; the free
+    # check compares them character by character and refuses the run if they
+    # drift, and here that refusal is protecting wording the model reads.
     task_instruction: |
       If the task requires creating deliverable files (documents, spreadsheets,
       presentations, reports, etc.), you MUST use Python code to generate the
@@ -463,6 +476,22 @@ cost:
     # Still outside this figure, and charged elsewhere in this same sum: the
     # task's own words (per task, from the catalogue's prompt_character_count)
     # and the reference files (per file, at REFERENCE_FILE_CHARACTER_CAP).
+    #
+    # From 2026-09-06 all three send one prompt file. Each of the three
+    # experiment files sets execution.shared_first_request: true, so the file is
+    # prompts/execution_envelope_shared.yaml for every one of them, and its
+    # sections: list asks for none of the three the container's runner builds —
+    # so the container's 2287 is not sent either. What the three really carry is
+    # a good deal narrower than everything described above.
+    #
+    # 7307 stays anyway, and on purpose. It is a ceiling, only the cheap
+    # direction is refused, and it is the width of the widest first request this
+    # comparison's run places have ever sent. Leaving it there means the money
+    # printed by the free check is an over-estimate on this line and says so,
+    # and means the check still refuses any change that puts a run place back
+    # near that width without the figure being looked at again. Lowering it to
+    # today's narrower render would buy a more exact estimate and spend the
+    # headroom that catches exactly the regression this whole section is about.
     instruction_character_count: 7307
 
     # The most times the model may be asked again inside one attempt while it

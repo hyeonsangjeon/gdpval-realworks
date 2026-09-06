@@ -33,6 +33,15 @@ So each runner declares ``REFERENCE_FILE_PROMPT_SECTIONS``, the preflight reads
 it, and ``core/file_preview.py`` adds up what those sections may contribute
 from the caps sitting beside the code that applies them.
 
+A comparison run changes which of them each place sends, and the sum has to
+follow. ``prompts/execution_envelope_shared.yaml`` puts all three places on one
+section list, so Azure stops sending the structure summary alone and starts
+sending the previews and the file list as well; and the file list it sends is
+``available_files_any_run_place``, the same line with the one word that named a
+run place taken out. That fourth id is charged at the same per-file rate as the
+one it replaces, and the two are never sent in the same request — a claim this
+file checks against the committed prompt specs rather than leaving as prose.
+
 Only one direction is refused, as everywhere else in that module. The constant
 is 13 times the widest readable budget, so today it over-charges, and a ceiling
 is allowed to be more careful than the thing it bounds. What is refused is the
@@ -122,6 +131,18 @@ THE_THREE_RUN_PLACES = {
 REFUSAL_OPENING = "the cost sum bills every"
 
 ALL_THREE_SECTIONS = ("file_structure", "previews", "available_files")
+
+#: Every section a reference file reaches, which is one more than any single
+#: run place declares. ``prompts/execution_envelope_shared.yaml`` sends
+#: ``available_files_any_run_place`` — the same list of names with the one word
+#: that named a run place taken out, so that all three places can send the same
+#: sentence — and it is sent *instead of* ``available_files``, never alongside
+#: it. The runners' own ``REFERENCE_FILE_PROMPT_SECTIONS`` still name three,
+#: because that declaration is about their default prompt; the fourth is
+#: reachable only through the shared prompt file.
+SECTIONS_A_REFERENCE_FILE_REACHES = ALL_THREE_SECTIONS + (
+    "available_files_any_run_place",
+)
 
 # Markers the three sections leave in a prompt, so a test can say which of them
 # a run place really sent instead of trusting the declaration under test.
@@ -259,7 +280,7 @@ def test_no_other_section_of_the_container_prompt_reads_a_reference_file(
     Asked of the code rather than of a list: every section provider is run
     twice, once with a reference file and once without, and the ones whose text
     moves are the ones a reference file is billed for. A section that started
-    reading the files would show up here as a fourth name.
+    reading the files would show up here as a name this file does not know.
     """
     with_file = _section_context([str(reference_file)])
     without_file = _section_context([])
@@ -271,7 +292,44 @@ def test_no_other_section_of_the_container_prompt_reads_a_reference_file(
         != SECTION_PROVIDERS[section](without_file)
     }
 
-    assert moved == set(ALL_THREE_SECTIONS)
+    assert moved == set(SECTIONS_A_REFERENCE_FILE_REACHES)
+
+
+def test_the_two_file_list_sections_are_never_sent_in_the_same_request(
+    reference_file: Path,
+):
+    """Priced once means sent once, and this is where "once" is checked.
+
+    ``core/first_request_sections.py`` charges ``available_files_any_run_place``
+    at the same per-file rate as ``available_files`` and says the two are never
+    billed together because no request carries both. That is an arrangement of
+    the prompt files, not a property of the code, so it is read off the prompt
+    files rather than assumed: every committed spec is opened and its section
+    list checked.
+    """
+    both = {"available_files", "available_files_any_run_place"}
+    specs = sorted((BATCH_RUNNER_ROOT / "prompts").glob("*.yaml"))
+    assert specs, "no prompt spec was read, so nothing was checked"
+
+    carries_the_shared_one = []
+    for spec_path in specs:
+        spec = yaml.safe_load(spec_path.read_text(encoding="utf-8")) or {}
+        ids = {
+            entry["id"] if isinstance(entry, dict) else entry
+            for entry in (spec.get("sections") or [])
+        }
+        assert not both <= ids, (
+            f"prompts/{spec_path.name} sends both file-list sections, so a "
+            "reference file is billed once and sent twice"
+        )
+        if "available_files_any_run_place" in ids:
+            carries_the_shared_one.append(spec_path.name)
+
+    # The fallback list every spec without its own ``sections:`` falls back to.
+    assert not both <= set(DEFAULT_SECTIONS)
+    assert carries_the_shared_one == ["execution_envelope_shared.yaml"], (
+        carries_the_shared_one
+    )
 
 
 def test_the_container_can_reach_every_section_it_declares():
@@ -404,7 +462,7 @@ def test_a_section_this_module_does_not_fill_is_refused_not_priced_at_zero():
         reference_file_prompt_budget(("skills_manual",))
 
     assert "skills_manual" not in SECTIONS_THIS_MODULE_FILLS
-    assert SECTIONS_THIS_MODULE_FILLS == set(ALL_THREE_SECTIONS)
+    assert SECTIONS_THIS_MODULE_FILLS == set(SECTIONS_A_REFERENCE_FILE_REACHES)
 
 
 def test_the_budget_is_frozen_so_a_caller_cannot_edit_the_answer():

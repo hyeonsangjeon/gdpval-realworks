@@ -11,7 +11,12 @@ File handling:
       2) Check message content blocks for output_file references
       3) Fallback: scan container via containers.files.list/content API
 
-Requires: Azure OpenAI with Responses API (api_version >= 2025-03-01-preview)
+Requires: Azure OpenAI with the Responses API. Which API version that is
+gets decided by whoever builds the client this runner is handed — this
+module takes no version of its own, so there is one place to look rather
+than two that can drift apart. The comparison pins the version it expects
+in its plan, and core.execution_envelope_preflight holds that pinned string
+against the client-code constants before a run starts.
 
 See https://learn.microsoft.com/en-us/azure/ai-foundry/openai/how-to/code-interpreter?view=foundry-classic&tabs=python
 
@@ -25,6 +30,12 @@ from typing import Optional
 from core.azure_ai_clients import AzureAIWorkload, validate_client_capabilities
 from core.config import DEFAULT_TOKENS
 from core.prompt_loader import load_prompt, render_prompt
+from core.execution_envelope_observed import (
+    API_FAMILY_RESPONSES,
+    RecordsItsFirstRequest,
+)
+from core.execution_environment_readiness import ENVIRONMENT_AZURE_CODE_INTERPRETER
+from core.shared_first_request import SHARED_PROMPT_NAME, build_shared_task_text
 from core.file_preview import build_file_structure_info
 from core.reference_integrity import open_verified_reference
 
@@ -187,8 +198,14 @@ def _close_sync_resources(resources: tuple[tuple[str, object | None], ...]) -> N
         raise first_error
 
 
-class CodeInterpreterRunner:
+class CodeInterpreterRunner(RecordsItsFirstRequest):
     """Synchronous Code Interpreter runner; instances are not thread-safe."""
+
+    #: This run place is the one that does not send chat completions, which is
+    #: itself a declared uncontrolled difference rather than something the
+    #: shared first request removes.
+    OBSERVED_API_FAMILY = API_FAMILY_RESPONSES
+    OBSERVED_RUN_PLACE = ENVIRONMENT_AZURE_CODE_INTERPRETER
 
     #: Whether this run place opens a new request for each turn the model
     #: takes. ``False`` here: ``run`` issues exactly one ``responses.create``
@@ -235,16 +252,24 @@ class CodeInterpreterRunner:
         self,
         api_key: Optional[str] = None,
         endpoint: Optional[str] = None,
-        api_version: str = "2025-03-01-preview",
         prompt_name: Optional[str] = None,
         max_completion_tokens: Optional[int] = None,
         *,
         client=None,
         redact_provider_errors: bool = False,
+        shared_first_request: bool = False,
     ):
         self._closed = False
         self._uploaded_file_ids: set = set()
         self.redact_provider_errors = redact_provider_errors
+        self.shared_first_request = bool(shared_first_request)
+        if self.shared_first_request and (prompt_name or None) != SHARED_PROMPT_NAME:
+            raise ValueError(
+                "shared_first_request needs prompt_name="
+                f"{SHARED_PROMPT_NAME!r}; got {prompt_name!r}. Sharing the "
+                "sections while each run place keeps its own wording leaves "
+                "the difference this setting exists to remove"
+            )
         if endpoint is not None:
             raise ValueError(
                 "endpoint overrides are forbidden; use a typed project route"
@@ -264,7 +289,13 @@ class CodeInterpreterRunner:
             if self.redact_provider_errors
             else client
         )
-        self.prompt_data = load_prompt(prompt_name or self.DEFAULT_PROMPT)
+        # Kept alongside the loaded data, as the other two runners do, so a
+        # finished run can record *which file* this run place read rather than
+        # only what the file said. The comparison's claim is that three run
+        # places loaded one file; a name is what makes that claim checkable
+        # from a run record.
+        self.prompt_name = prompt_name or self.DEFAULT_PROMPT
+        self.prompt_data = load_prompt(self.prompt_name)
         self.max_completion_tokens = (
             max_completion_tokens
             if max_completion_tokens is not None
@@ -323,9 +354,19 @@ class CodeInterpreterRunner:
             self._uploaded_file_ids = set()
 
             # Reference 파일 구조 자동 주입 (컬럼명 하드코딩 에러 방지)
-            file_structure_info = build_file_structure_info(reference_files or [])
-            if file_structure_info:
-                task_prompt = file_structure_info + "\n\n" + task_prompt
+            if self.shared_first_request:
+                # One definition, three run places. The reference files are
+                # still on the host at this point — they are uploaded a few
+                # lines below — so the structure summary and the previews the
+                # other two places build can be built here from the same files.
+                task_prompt = build_shared_task_text(
+                    task_prompt=task_prompt,
+                    reference_files=reference_files or [],
+                )
+            else:
+                file_structure_info = build_file_structure_info(reference_files or [])
+                if file_structure_info:
+                    task_prompt = file_structure_info + "\n\n" + task_prompt
 
             # 1. Render prompt from YAML template
             rendered = render_prompt(
@@ -362,11 +403,20 @@ class CodeInterpreterRunner:
             # 6. Collect output files (outputs parsing + container scan fallback)
             output_files = self._collect_output(response, verbose=verbose)
 
-            return {
+            result = {
                 "success": True,
                 "text": text_response,
                 "files": output_files,
             }
+            self._record_first_request(
+                client=self.client,
+                requested_model=model,
+                system_message=rendered["system_message"],
+                user_prompt=rendered["user_prompt"],
+                response=response,
+                reference_files=reference_files,
+            )
+            return self._with_observation(result)
 
         except Exception as exc:
             error = str(exc)

@@ -56,6 +56,9 @@ from core.execution_metrics import (
 from core.llm_client import complete
 from core.output_qa import run_output_qa
 from core.prompt_loader import load_prompt, render_prompt
+from core.execution_envelope_observed import RecordsItsFirstRequest
+from core.execution_environment_readiness import ENVIRONMENT_DOCKER_CONTAINER
+from core.shared_first_request import SHARED_PROMPT_NAME, build_shared_task_text
 from core.reference_integrity import (
     copy_verified_reference,
     stage_verified_references,
@@ -509,8 +512,13 @@ def docker_image_exists(image: str) -> bool:
         return False
 
 
-class SandboxRunner:
+class SandboxRunner(RecordsItsFirstRequest):
     """LLM code generation → skill-aware, containerized execution."""
+
+    #: The name this run place answers to in the comparison plan. Only used
+    #: when an experiment turns the shared first request on; see
+    #: ``core/execution_envelope_observed.py``.
+    OBSERVED_RUN_PLACE = ENVIRONMENT_DOCKER_CONTAINER
 
     #: Whether this run place opens a new request for each turn the model
     #: takes. ``True`` here: the repair loop in ``run`` is an ordinary Python
@@ -589,9 +597,18 @@ class SandboxRunner:
         cache: Optional[dict] = None,
         contract: Optional[dict] = None,
         metrics: Optional[dict] = None,
+        shared_first_request: bool = False,
     ):
         self.llm_client = llm_client
         self.prompt_name = prompt_name
+        self.shared_first_request = bool(shared_first_request)
+        if self.shared_first_request and prompt_name != SHARED_PROMPT_NAME:
+            raise ValueError(
+                "shared_first_request needs prompt_name="
+                f"{SHARED_PROMPT_NAME!r}; got {prompt_name!r}. Sharing the "
+                "sections while each run place keeps its own wording leaves "
+                "the difference this setting exists to remove"
+            )
         self.prompt_data = load_prompt(prompt_name)
         self.max_completion_tokens = (
             max_completion_tokens
@@ -729,7 +746,7 @@ class SandboxRunner:
                 )
                 if task_wall_time_ms is not None:
                     finalized["execution_metrics"]["task_wall_time_ms"] = task_wall_time_ms
-            return finalized
+            return self._with_observation(finalized)
 
         except Exception as e:  # pragma: no cover - defensive
             return {
@@ -742,9 +759,26 @@ class SandboxRunner:
             if reference_stage_entered:
                 reference_stage.__exit__(None, None, None)
 
+    def _observed_max_attempts(self) -> Optional[int]:
+        """How many times this run place may ask the model about one task.
+
+        Reported in *requests*, which is one more than ``repair.max_attempts``:
+        ``run``'s loop is ``range(max_attempts + 1)``, so a repair count of 1
+        means the model can be asked twice. The other two run places ask once
+        and report 1, and a comparison of "1 request" against "1 meaning 2" is
+        worse than no comparison at all.
+        """
+        if not self.repair_cfg.get("enabled", True):
+            return 1
+        try:
+            return int(self.repair_cfg.get("max_attempts", 1)) + 1
+        except (TypeError, ValueError):
+            # A repair count that is not a number is not a 1. Left unrecorded,
+            # so the check reports it rather than comparing a guess.
+            return None
+
     def _stage_reference_files(self, reference_files: List[str]):
         return stage_verified_references(reference_files)
-
     def _host_reference_access(self) -> bool:
         return True
 
@@ -794,6 +828,19 @@ class SandboxRunner:
             max_completion_tokens=self.max_completion_tokens,
             reasoning_effort=self.reasoning_effort,
         )
+        if attempt_idx == 0:
+            # Only the opening request. A repair round asks a different
+            # question by design — it carries the reflection — so recording it
+            # here would overwrite the one text the three run places were made
+            # to share with one that was never meant to match.
+            self._record_first_request(
+                client=self.llm_client,
+                requested_model=model,
+                system_message=rendered["system_message"],
+                user_prompt=rendered["user_prompt"],
+                response=response,
+                reference_files=ref_files,
+            )
         response_text = response.choices[0].message.content or ""
         code = extract_code(response_text)
 
@@ -1240,7 +1287,30 @@ class SandboxRunner:
         this method only builds the context and delegates the assembly.
         ``perception_text`` (host audio/video analysis) fills the optional
         ``perception_analysis`` section when the spec enables it.
+
+        Under ``shared_first_request`` none of that applies: the text comes from
+        ``core.shared_first_request``, the same call the host process and the
+        Azure code interpreter make, and this run place's extra sections are
+        simply not built. The contract object still exists and the output is
+        still checked against it — what stops is the contract being *told* to
+        the model, which is the half that made the requests differ.
         """
+        if self.shared_first_request:
+            if reflection:
+                raise ValueError(
+                    "shared_first_request cannot carry a repair reflection. "
+                    "The shared section list has no reflection block, because "
+                    "the other two run places have nothing to put in one; "
+                    "sending a repair turn here would hand this run place a "
+                    "second look the others never get. Set "
+                    "execution.sandbox.repair.enabled: false, which the "
+                    "run-place comparison already does"
+                )
+            return build_shared_task_text(
+                task_prompt=task_prompt,
+                reference_files=reference_files or [],
+                host_reference_access=self._host_reference_access(),
+            )
         ctx = SectionContext(
             task_prompt=task_prompt,
             ref_files=reference_files or [],

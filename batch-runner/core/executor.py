@@ -31,12 +31,23 @@ from core.subprocess_runner import SubprocessRunner
 from core.sandbox_runner import SandboxRunner
 from core.json_renderer import JsonRenderer
 from core.hardened_sandbox_runner import HardenedSandboxRunner
+from core.shared_first_request import SHARED_PROMPT_NAME
 
 # Execution modes
 ExecutionMode = Literal[
     "code_interpreter", "subprocess", "sandbox", "agentic_sandbox",
     "agentic_sandbox_v2", "json_renderer",
 ]
+
+#: The modes ``shared_first_request`` is really wired for.
+#:
+#: Three, and only these three, because these are the three the run-place
+#: comparison uses and the three whose runners were changed to call
+#: ``core.shared_first_request.build_shared_task_text``. Any other mode raises
+#: rather than accepting the setting and building its prompt the old way: a
+#: setting that is accepted and ignored produces a run recorded as one first
+#: request and made of two, which is worse than the defect it was meant to fix.
+SHARED_FIRST_REQUEST_MODES = frozenset({"code_interpreter", "subprocess", "sandbox"})
 
 
 def _load_live_approval_scope(
@@ -107,6 +118,7 @@ class TaskExecutor:
         non_paid_test_mode: bool = False,
         code_interpreter_client=None,
         redact_provider_errors: bool = False,
+        shared_first_request: bool = False,
     ):
         """
         Initialize executor with specified mode.
@@ -140,6 +152,33 @@ class TaskExecutor:
         if isinstance(tokens, dict):
             self.tokens.update({k: v for k, v in tokens.items() if v is not None})
 
+        # One first request for every run place, or each run place's own.
+        #
+        # Resolved here rather than in each branch below, because the whole
+        # point is that the three branches stop deciding this separately. The
+        # three branches used to reach past ``prompt_name`` for their own
+        # ``DEFAULT_PROMPT``, which is how three run places that a plan called
+        # identical came to send three different files.
+        self.shared_first_request = bool(shared_first_request)
+        if self.shared_first_request:
+            if mode not in SHARED_FIRST_REQUEST_MODES:
+                raise ValueError(
+                    f"shared_first_request is not implemented for mode {mode!r}. "
+                    f"It is wired for {sorted(SHARED_FIRST_REQUEST_MODES)}, and a "
+                    "mode that silently ignored it would report a comparison "
+                    "nobody held"
+                )
+            if prompt_name not in (None, SHARED_PROMPT_NAME):
+                raise ValueError(
+                    "shared_first_request cannot be combined with "
+                    f"prompt_name={prompt_name!r}. The shared request is one "
+                    f"named file, {SHARED_PROMPT_NAME!r}"
+                )
+            prompt_name = SHARED_PROMPT_NAME
+        shared_kwargs = (
+            {"shared_first_request": True} if self.shared_first_request else {}
+        )
+
         if mode == "code_interpreter":
             # Code Interpreter uses its own client
             self.runner = CodeInterpreterRunner(
@@ -149,6 +188,7 @@ class TaskExecutor:
                 max_completion_tokens=self.tokens.get("code_generation"),
                 client=code_interpreter_client,
                 redact_provider_errors=redact_provider_errors,
+                **shared_kwargs,
             )
 
         elif mode == "subprocess":
@@ -160,12 +200,20 @@ class TaskExecutor:
                 max_completion_tokens=self.tokens.get("code_generation"),
                 timeout=timeout,
                 reasoning_effort=reasoning_effort,
+                **shared_kwargs,
             )
 
         elif mode == "sandbox":
             opts = dict(sandbox_options or {})
             metric_opts = metrics_options if isinstance(metrics_options, dict) else None
             if opts.get("hardened_substrate") is True:
+                if self.shared_first_request:
+                    raise ValueError(
+                        "shared_first_request is not wired for the hardened "
+                        "substrate. Accepting it here and building the prompt "
+                        "the old way would report three run places as asked "
+                        "the same thing while one of them was not"
+                    )
                 normalized_provider = (
                     "azure" if provider == "azure_openai" else provider
                 )
@@ -392,6 +440,7 @@ class TaskExecutor:
                     cache=opts.get("cache"),
                     contract=opts.get("contract"),
                     metrics=metric_opts,
+                    **shared_kwargs,
                 )
 
         elif mode == "agentic_sandbox":
@@ -686,23 +735,23 @@ class TaskExecutor:
             if self._closed:
                 raise RuntimeError("Task executor is closed")
             if self.mode == "code_interpreter":
-                return self.runner.run(
+                return self._note_which_task(self.runner.run(
                     task_prompt=task_prompt,
                     model=model,
                     reference_files=reference_files,
                     occupation=occupation,
                     experiment_prompt=experiment_prompt,
                     verbose=verbose,
-                )
+                ), task_id)
 
             elif self.mode == "subprocess":
-                return self.runner.run(
+                return self._note_which_task(self.runner.run(
                     task_prompt=task_prompt,
                     model=model,
                     reference_files=reference_files,
                     occupation=occupation,
                     experiment_prompt=experiment_prompt,
-                )
+                ), task_id)
 
             elif self.mode == "agentic_sandbox_v2":
                 if model:
@@ -731,7 +780,7 @@ class TaskExecutor:
                         "condition_name": condition_name or "condition_a",
                         "task_id": task_id or "unknown-task",
                     }
-                return self.runner.run(
+                return self._note_which_task(self.runner.run(
                     task_prompt=task_prompt,
                     model=model,
                     reference_files=reference_files,
@@ -739,7 +788,7 @@ class TaskExecutor:
                     experiment_prompt=experiment_prompt,
                     perception_text=perception_text,
                     **extra,
-                )
+                ), task_id)
 
             elif self.mode == "json_renderer":
                 # JSON renderer doesn't use reference files (spec only)
@@ -755,6 +804,28 @@ class TaskExecutor:
                 "files": [],
                 "error": f"Executor error ({self.mode}): {str(exc)}",
             }
+
+    @staticmethod
+    def _note_which_task(result: dict, task_id: Optional[str]) -> dict:
+        """Write the dispatched task id onto the run place's own request record.
+
+        The runner records what it sent; it is not told which task it was. This
+        object is the one layer that knows both, so it is the one that can say
+        so without guessing.
+
+        Left alone when the run place recorded nothing — which is every ordinary
+        experiment, since the record is only kept when ``shared_first_request``
+        is on. Left alone too when the task id is unknown, because an absent
+        task list is read downstream as "cannot be shown to have run the same
+        work", and that is the truthful reading; a placeholder id would read as
+        a match instead.
+        """
+        if not isinstance(result, dict) or not task_id:
+            return result
+        record = result.get("first_request_observation")
+        if isinstance(record, dict) and not record.get("task_ids"):
+            record["task_ids"] = [task_id]
+        return result
 
     @staticmethod
     def validate_mode(mode: str, model_provider: str) -> tuple[bool, Optional[str]]:

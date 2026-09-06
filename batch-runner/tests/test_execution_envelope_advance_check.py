@@ -45,9 +45,11 @@ from core.execution_envelope_preflight import (  # noqa: E402
     COST_POLICY_RECORD_ONLY,
     PLAN_VERSION,
     conditions_from_plan,
+    describe_uncontrolled_differences,
     load_plan,
     run_envelope_preflight,
 )
+from core.shared_first_request import residual_differences_for  # noqa: E402
 from core.execution_envelope_tasks import (  # noqa: E402
     ADVANCE_CHECK_FORMAT_ORDER,
     ADVANCE_CHECK_TASK_COUNT,
@@ -97,11 +99,11 @@ EXPECTED_ADVANCE_CHECK_TASKS = (
 # once here rather than typed into each of them.
 UNPRICED_SOUND_MODEL = "gpt-audio-1.5"
 
-# The committed plan declares ``same_generated_code_rerun``, and the three run
-# places it names each send a differently named prompt file. Several tests below
-# have to name that finding to set it aside, so the phrase is written once here.
-# What it means, and why it is set aside rather than made to go away, is in
-# ``_apart_from_the_sound_model_and_absent_inputs``.
+# The finding raised when a ``same_generated_code_rerun`` plan's run places do
+# not send the same first request. It was true of this plan until 2026-09-06,
+# when the three were put on one prompt file. Several tests below name the
+# phrase to assert it is *absent*, so it is written once here rather than typed
+# into each of them. See ``_apart_from_the_sound_model_and_absent_inputs``.
 THE_THREE_ARE_NOT_ASKED_THE_SAME_THING = "these places are not asked the same thing"
 
 # How many renders marking may spend on one task, read from the settings that
@@ -240,24 +242,25 @@ def _apart_from_the_sound_model_and_absent_inputs(result):
     with the file it names is a fault in the plan, says the same thing on every
     machine, and must fail these tests wherever they run.
 
-    **A third thing is set aside from 2026-09-06, and it is a fault in the
-    plan.** The other two are gaps nothing could settle; this one is a finding,
-    it is true, and it blocks the run on purpose. The plan declares
-    ``same_generated_code_rerun``, and until now the only check of that claim
-    compared ``model_run_conditions.shared``'s two wording blocks — one value
-    each, written once, inherited by all three places, so three copies of one
-    string were held against each other and could not disagree. The plan says in
-    its own words that the first of them is never sent. Measuring instead of
-    reading shows the three places send three differently named prompt files
-    whose first requests come to 3,533, 3,867 and 7,307 characters.
+    **A third thing was set aside between 2026-09-06 and 2026-09-06, and it is
+    not set aside any more, because it was fixed rather than filtered.** The
+    plan declares ``same_generated_code_rerun``, and the only check of that
+    claim used to compare ``model_run_conditions.shared``'s two wording blocks —
+    one value each, written once, inherited by all three places, so three copies
+    of one string were held against each other and could not disagree. The plan
+    says in its own words that the first of them is never sent. Measuring
+    instead of reading showed the three places sending three differently named
+    prompt files of three different widths.
 
-    It is set aside rather than fixed because fixing it is a decision about the
-    experiment, not about this code: either the three are made to send one first
-    request, or the plan records a comparison other than
-    ``same_generated_code_rerun``. Neither is a test's to choose. It is named
-    here, asserted on by name in the test below, and held in place by
-    tests/test_the_three_run_places_are_asked_the_same_thing.py. Weakening the
-    check to make it disappear would put the repository back where it was.
+    The fix was the first of the two the finding left open: the three now send
+    one first request, from ``prompts/execution_envelope_shared.yaml``, because
+    each of their settings files sets ``execution.shared_first_request: true``.
+    So the finding is gone from a ready plan's output, and the filter that used
+    to name it is gone from this helper — a filter for a finding that no longer
+    occurs is a place a returning one could hide. The test below asserts its
+    absence instead, and
+    tests/test_the_three_run_places_really_send_one_request.py holds the three
+    requests equal at the wire.
     """
     return [
         note
@@ -265,7 +268,6 @@ def _apart_from_the_sound_model_and_absent_inputs(result):
         if note not in result.grading_ceiling_problems
         and note not in result.missing_input_file_problems
         and UNPRICED_SOUND_MODEL not in note
-        and THE_THREE_ARE_NOT_ASKED_THE_SAME_THING not in note
     ]
 
 
@@ -288,7 +290,7 @@ def test_a_ready_plan_reports_the_marking_gap_and_nothing_of_its_own(plan):
         for note in result.all_problems
         if note not in result.missing_input_file_problems
     ]
-    assert len(set_aside) == 5
+    assert len(set_aside) == 4
 
     about_the_sound_model = [
         note
@@ -298,19 +300,19 @@ def test_a_ready_plan_reports_the_marking_gap_and_nothing_of_its_own(plan):
     about_the_input_figure = [
         note for note in set_aside if "input per marking call" in note
     ]
-    about_the_three_prompts = [
-        note for note in set_aside if THE_THREE_ARE_NOT_ASKED_THE_SAME_THING in note
-    ]
     assert len(about_the_sound_model) == 4
     # The plan now states what one marking call can carry, so nothing is set
     # aside on that account any more.
     assert about_the_input_figure == []
-    # The one finding that is a fault in the plan rather than a gap nothing
-    # could settle. It names all three run places and what each really sends.
-    assert len(about_the_three_prompts) == 1
-    assert "same_generated_code_rerun" in about_the_three_prompts[0]
-    # Nothing else. Every set-aside note is one of those two.
-    assert len(about_the_sound_model) + len(about_the_three_prompts) == len(set_aside)
+    # Nothing else. Every set-aside note is about the sound model.
+    assert len(about_the_sound_model) == len(set_aside)
+
+    # And the finding this used to carry is absent rather than filtered: the
+    # three run places really are asked the same thing now.
+    assert not any(
+        THE_THREE_ARE_NOT_ASKED_THE_SAME_THING in note
+        for note in result.all_problems
+    ), result.all_problems
 
 
 def test_only_files_that_are_absent_are_ever_set_aside(plan):
@@ -1642,15 +1644,12 @@ def test_record_only_cost_findings_do_not_block_the_owner_approved_run(plan):
     assert set(result.cost_findings).isdisjoint(result.all_problems)
     assert result.readiness.paid_model_calls_approved is True
     # Nothing about money is left in ``all_problems`` — that is what this test
-    # is about. What is left is the absent input files and the one finding that
-    # the three run places are not asked the same thing, which is a technical
-    # inconsistency and blocks under every cost policy there is. Setting a cost
-    # policy has never been able to wave one of those through, and this test
-    # would be claiming it could if it kept saying "input files only".
+    # is about. What is left is the absent input files and nothing else. It said
+    # "and the one finding that the three run places are not asked the same
+    # thing" until 2026-09-06, when that finding was fixed rather than waved
+    # through; a cost policy could never have waved it through either.
     assert all(
-        note in result.missing_input_file_problems
-        or THE_THREE_ARE_NOT_ASKED_THE_SAME_THING in note
-        for note in result.all_problems
+        note in result.missing_input_file_problems for note in result.all_problems
     ), result.all_problems
 
 
@@ -2384,3 +2383,101 @@ def test_the_specifications_are_in_the_repository(relative):
         f"{relative} exists here but git does not track it, so a fresh clone "
         "would not have it. Add it to the allow list in .gitignore."
     )
+
+
+# ── What the comparison does not control ─────────────────────────────────
+#
+# Every other check in this file asks whether the comparison may start. These
+# ask the different question the result has to answer afterwards: with all of
+# them passed, is a difference in the results the run place's? For these three
+# places the answer is no, and the check has to say so rather than let a clean
+# pass be read as a yes.
+
+
+def test_a_clean_pass_still_refuses_the_pure_run_place_verdict(plan):
+    result = _ready_preflight(_approved(plan))
+
+    assert result.pure_run_place_effect_is_measurable is False, (
+        "every setting matching is not the same as only the run place "
+        "differing, and the second is the claim a reader takes away"
+    )
+    assert result.uncontrolled_differences
+
+
+def test_the_differences_named_are_the_ones_the_run_places_carry(plan):
+    """Read from the shared module, not restated here.
+
+    A second list would drift from the first, and the report would state one
+    while the runners were built against the other.
+    """
+    result = _ready_preflight(_approved(plan))
+    expected = residual_differences_for(sorted(COMPARABLE_ENVIRONMENTS))
+
+    assert result.uncontrolled_differences == list(expected)
+    for entry in result.uncontrolled_differences:
+        assert set(entry.run_places) <= set(COMPARABLE_ENVIRONMENTS), entry.what
+
+
+def test_the_azure_time_limit_is_among_them(plan):
+    """The one found by capturing a real request rather than by reading a plan.
+
+    ``CodeInterpreterRunner`` is given no timeout — the service runs its own
+    container on its own clock — while the other two are given the experiment
+    file's 1200 seconds. The plan files say 1200 three times, so only something
+    that reads the sent request finds this.
+    """
+    result = _ready_preflight(_approved(plan))
+    named = {entry.what: entry for entry in result.uncontrolled_differences}
+
+    assert "the per-task time limit" in named, sorted(named)
+    assert named["the per-task time limit"].run_places == (
+        "azure_code_interpreter",
+    )
+
+
+def test_every_uncontrolled_difference_is_printed_with_its_consequence(plan):
+    """A list of headings would let a reader skip what each one could do."""
+    result = _ready_preflight(_approved(plan))
+    printed = "\n".join(describe_uncontrolled_differences(result))
+
+    assert "may pass and a difference in results still not be" in printed
+    for entry in result.uncontrolled_differences:
+        assert entry.what in printed
+        assert entry.why_it_stays in printed
+        assert entry.what_it_could_do_to_a_result in printed
+
+
+def test_a_comparison_of_two_places_is_not_charged_for_azures_differences(plan):
+    """The container and the host share an API family; Azure's entries are not theirs.
+
+    The plan is cut down to two run places rather than the list being filtered
+    afterwards, so what is exercised is the path a two-place comparison would
+    really take. Whether such a plan passes its other checks is not asked here
+    — only which differences it is told it carries.
+    """
+    two_of_them = copy.deepcopy(_approved(plan))
+    by_environment = two_of_them["model_run_conditions"]["by_environment"]
+    del by_environment["azure_code_interpreter"]
+    assert sorted(by_environment) == ["docker_container", "host_python_process"]
+
+    result = _ready_preflight(two_of_them)
+
+    named = {entry.what for entry in result.uncontrolled_differences}
+    assert "the API the request is sent on" not in named, named
+    assert "the per-task time limit" not in named, named
+    assert result.pure_run_place_effect_is_measurable is False, (
+        "the container's isolation and its output check are still uncontrolled"
+    )
+
+
+def test_the_summary_says_so_when_nothing_is_uncontrolled(plan):
+    """The honest wording for the other case, so it is not left to a reader.
+
+    Reached by replacing the list rather than by finding two run places that
+    really do differ in nothing, because none exist here — which is the point.
+    """
+    result = replace(_ready_preflight(_approved(plan)), uncontrolled_differences=[])
+
+    assert result.pure_run_place_effect_is_measurable is True
+    printed = "\n".join(describe_uncontrolled_differences(result))
+    assert "none recorded for these run places" in printed

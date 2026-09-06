@@ -73,7 +73,7 @@ class ReferenceFilePromptBudget:
 #: core/prompt_sections.py routes them. Anything outside this set is refused
 #: rather than priced at nothing.
 SECTIONS_THIS_MODULE_FILLS = frozenset(
-    {"file_structure", "previews", "available_files"}
+    {"file_structure", "previews", "available_files", "available_files_any_run_place"}
 )
 
 
@@ -107,8 +107,11 @@ def _characters_one_file_may_add(section: str) -> Optional[int]:
             + MAX_FILE_NAME_CHARACTERS
             + PREVIEW_BLOCK_WRAPPER_CHARACTERS
         )
-    # available_files: this file's name in the list, with the quotes around it
-    # and the separator that follows.
+    # available_files, and available_files_any_run_place: this file's name in
+    # the list, with the quotes around it and the separator that follows. The
+    # two differ only in the sentence introducing the list — one names a run
+    # place, the other does not — and that sentence is written once per request,
+    # not once per file, so what one *file* adds is the same through either.
     return MAX_FILE_NAME_CHARACTERS + len("', '")
 
 
