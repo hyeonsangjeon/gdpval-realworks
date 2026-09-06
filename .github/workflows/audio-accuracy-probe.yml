@@ -461,6 +461,14 @@ jobs:
           print("| | |")
           print("|---|---|")
           print(f"| accuracy (answered calls) | {pct(acc['overall']['accuracy'])} |")
+          # 330 §4: never the accuracy on its own. 328 published a 47.1% whose
+          # denominator was 17 answers, and the 17 appeared nowhere near it.
+          # The rate is this arm's, like the accuracy above it -- the run's
+          # call count is reported separately and is not this number.
+          print(f"| &nbsp;&nbsp;· answers it was computed from | "
+                f"{acc['overall']['answered']} |")
+          print(f"| **response rate** (this arm's attempts) | "
+                f"**{pct(acc['overall']['response_rate'])}** |")
           print(f"| false-fail rate (on true claims) | {pct(acc['on_true_claims']['false_fail_rate'])} |")
           print(f"| false-pass rate (on false claims) | {pct(acc['on_false_claims']['false_pass_rate'])} |")
           print(f"| hedged (`partial`) | {acc['overall']['hedged']} |")

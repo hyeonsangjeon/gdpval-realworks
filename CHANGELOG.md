@@ -454,6 +454,14 @@ entries land under a fresh dated heading the day they merge to `main`.
   `pass` still scores 50% on this balanced corpus, which accuracy alone reads
   as a near miss.
 
+  And the response rate was in the artifact but not in the summary a person
+  reads, beside the accuracy §4 says it must never appear without. 328's
+  observation arm published 47.1% on 17 answers; the paid table now prints the
+  answers the accuracy was computed from and the rate, so that run would have
+  rendered as `n/a`, `0`, and `0.00%`. Both are this arm's, like the accuracy —
+  the run's call count stays sourced from the cost block, which an existing
+  test keeps separate because a `both` run scores one arm and calls two.
+
   330 section 3 pre-registered four stop conditions and nothing enforced them.
   They are now `SPEECH_STOP_RULES`, checked after each call, with a test that
   fails if the constants and the document drift apart: 20 minutes wall clock,

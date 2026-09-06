@@ -2498,6 +2498,28 @@ def test_the_repeats_are_collapsed_before_the_test_not_after() -> None:
     assert "반복 3회를 독립 시행으로 세면" in doc
 
 
+def test_the_accuracy_never_appears_without_its_denominator() -> None:
+    """328 published 47.1% on 17 answers out of 60 and the 17 was nowhere near
+    the number. 330 §4 requires both figures side by side, so the summary a
+    person reads has to carry the rate, not only the artifact."""
+    body = _step("measure", "Summarise")["run"]
+    assert "response rate" in body
+    assert "answers it was computed from" in body
+    # This arm's rate, beside this arm's accuracy. The run's call count is a
+    # different number and stays sourced from the cost block.
+    assert "acc['overall']['response_rate']" in body
+    assert "acc['overall']['calls']" not in body
+    doc = (
+        probe.REPO_ROOT / "tasks" / "rebuilding_grading_task"
+        / "330-speech-diagnostic-prereg.md"
+    ).read_text(encoding="utf-8")
+    assert "두 숫자를 항상 같이 낸다" in doc
+    # And the fields the summary prints are ones the report actually writes.
+    summary = probe.summarise(_calls(lambda claim: "judge_error"))
+    assert summary["overall"]["response_rate"] == 0.0
+    assert summary["overall"]["answered"] == 0
+
+
 def test_a_judge_that_never_listened_is_visible_as_a_count() -> None:
     """Ten pairs of `pass` scores 50% on a balanced corpus. Accuracy alone
     reads that as a near miss; the pair census reads it as zero pairs told
