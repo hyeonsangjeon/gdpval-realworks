@@ -1696,6 +1696,22 @@ def run_envelope_preflight(
         # a fingerprint is a reason not to start, not a reason to stay quiet.
         problems.extend(missing_input_file_problems)
 
+        # Asked here rather than under ``cost`` below, because what it asks is
+        # not what a run costs. It asks whether the one thing this comparison
+        # holds still is actually held still, and that question stands whether
+        # or not the plan carries a cost sum for anyone to check.
+        problems.extend(
+            _check_every_run_place_is_asked_the_same_thing(
+                conditions,
+                comparison=str(
+                    plan.get("comparison") or COMPARISON_SAME_GENERATED_CODE
+                ),
+                plan=plan,
+                root=root,
+                catalog=loaded_catalog,
+            )
+        )
+
     cost_block = plan.get("cost")
     cost_block = cost_block if isinstance(cost_block, Mapping) else {}
     cost_policy = str(cost_block.get("policy") or COST_POLICY_BLOCK)
@@ -1948,6 +1964,290 @@ def _prompt_files_a_run_place_might_send(
     return tuple(candidates)
 
 
+@dataclass(frozen=True)
+class MeasuredFirstRequest:
+    """What one run place really puts in its first request, measured.
+
+    ``parts`` is every piece the request is made of and how wide each one is:
+    the render's own blocks, and each section the runner builds before the
+    render. ``characters`` is their sum, before the task's own words and its
+    reference files, which are charged per task and per file elsewhere.
+    """
+
+    prompt_name: str
+    parts: tuple[tuple[str, int], ...]
+    characters: int
+    silent: tuple[tuple[str, str], ...]
+
+    def wording_identity(self) -> tuple:
+        """What has to match for two places to be asked the same thing.
+
+        The prompt file's name is in it because three run places sending three
+        differently named files are not being asked one question, whatever the
+        files come to. The widths are in it because one file can be wrapped in
+        different wording by each place's own settings, and because a runner
+        can add sections the render never sees.
+
+        What this cannot tell apart is two different wordings that happen to
+        come to the same width. Nothing in this comparison sends the same file
+        under two names, so that gap has never been reached here; it is written
+        down rather than left for somebody to discover.
+        """
+        return (self.prompt_name, self.parts)
+
+    def made_of(self) -> str:
+        """The breakdown alone, widest piece first, for a caller that has
+        already said which prompt file and how wide the whole thing is."""
+        pieces = ", ".join(
+            f"{width} characters of {what}"
+            for what, width in sorted(self.parts, key=lambda pair: -pair[1])
+            if width
+        )
+        left_out = "".join(
+            f"; {section} adds nothing because {why}" for section, why in self.silent
+        )
+        return f"{pieces}{left_out}"
+
+    def described(self) -> str:
+        """The whole thing in one clause, for a caller naming several places
+        in a row and needing each one to say which file it sends."""
+        return (
+            f"prompts/{self.prompt_name}.yaml, {self.characters} characters "
+            f"({self.made_of()})"
+        )
+
+
+@dataclass(frozen=True)
+class UnbuildableFirstRequest:
+    """Why one run place's first request could not be built, and how far it got.
+
+    ``the_plan_names_no_settings_file`` is kept apart from the rest because it
+    is a different kind of gap: nothing was wrong with the run place, the plan
+    simply never said where to look. The callers word the two differently.
+    """
+
+    reason: str
+    the_plan_names_no_settings_file: bool = False
+
+
+def _measure_first_requests(
+    conditions_by_environment: Mapping[str, ModelRunConditions],
+    *,
+    plan: Mapping[str, Any],
+    root: Path,
+    catalog: TaskCatalog,
+) -> tuple[dict[str, MeasuredFirstRequest], dict[str, UnbuildableFirstRequest]]:
+    """Build each run place's first request the way a real attempt builds it.
+
+    Returns what was measured, and separately why any place could not be. A
+    place that could not be measured is never given a width here: a request
+    nothing could build is not a request of zero characters, and the callers
+    turn the reason into a refusal rather than into a number.
+
+    Where a place's settings name one prompt file and its runner declares a
+    different default, both are built and the wider is returned — see
+    :func:`_prompt_files_a_run_place_might_send` for why the two can disagree
+    and why choosing between them here would be a guess.
+    """
+    files = plan.get("experiment_files")
+    files = files if isinstance(files, Mapping) else {}
+    occupation = widest_occupation(catalog)
+
+    measured: dict[str, MeasuredFirstRequest] = {}
+    unmeasurable: dict[str, UnbuildableFirstRequest] = {}
+    for environment in sorted(conditions_by_environment):
+        relative = files.get(environment)
+        if not relative:
+            unmeasurable[environment] = UnbuildableFirstRequest(
+                reason=(
+                    f"the plan names no experiment settings file for "
+                    f"{environment}, so the prompt it sends cannot be read"
+                ),
+                the_plan_names_no_settings_file=True,
+            )
+            continue
+        extra_sections = _runner_first_request_extra_sections(environment)
+        try:
+            settings = yaml.safe_load(
+                (root / str(relative)).read_text(encoding="utf-8")
+            )
+            if not isinstance(settings, Mapping):
+                raise ValueError("it does not hold a mapping at the top level")
+            candidates = _prompt_files_a_run_place_might_send(environment, settings)
+            if not candidates:
+                raise ValueError(
+                    "no runner is registered for this run place, or the one "
+                    "that is does not declare DEFAULT_PROMPT, so which prompt "
+                    "file it sends is not written down anywhere here"
+                )
+            if extra_sections is None:
+                # An empty tuple would be a claim, and a true one for two of the
+                # three places. ``None`` is silence, and pricing silence at
+                # nothing is how the container's own sections went uncharged for
+                # as long as they did.
+                raise ValueError(
+                    "the runner registered for this run place does not declare "
+                    "FIRST_REQUEST_EXTRA_SECTIONS, so what it puts in its first "
+                    "request past the rendered prompt is not written down "
+                    "anywhere here, and a figure nothing checked is not a "
+                    "figure that holds"
+                )
+            sandbox = _dig(settings, ("execution", "sandbox"))
+            # ``core/executor.py`` passes ``opts.get("max_skills", 5)``, so a
+            # settings file that leaves the key out has the skills manual on.
+            # Defaulting to nothing here would price it out of a run that sends
+            # it. A value that is not a whole number cannot be handed to
+            # ``SkillsRegistry.select`` at all, so it is refused rather than
+            # rounded into something.
+            max_skills = sandbox.get("max_skills", 5)
+            if isinstance(max_skills, bool) or not isinstance(max_skills, int):
+                raise ValueError(
+                    f"execution.sandbox.max_skills is {max_skills!r}, which is "
+                    "not a whole number of skills, so how much skills manual "
+                    "the first request carries cannot be worked out"
+                )
+            built = {
+                candidate: (
+                    fixed_prompt_characters(
+                        load_prompt(candidate),
+                        experiment_prompt=_dig(settings, ("condition_a",)).get(
+                            "prompt"
+                        ),
+                        occupation=occupation,
+                    ),
+                    first_request_section_budget(
+                        extra_sections,
+                        prompt_name=candidate,
+                        max_skills=max_skills,
+                        contract_config=sandbox.get("contract"),
+                    ),
+                )
+                for candidate in candidates
+            }
+        except Exception as unreadable:  # noqa: BLE001 - anything here is a refusal
+            # A missing settings file, a prompt file that is not there, wording
+            # that will not render, a skills directory that cannot be read:
+            # every one of them leaves the request unbuildable. Caught broadly
+            # and turned into a reason rather than allowed to fall through as a
+            # place that raised no objection.
+            unmeasurable[environment] = UnbuildableFirstRequest(str(unreadable))
+            continue
+
+        name = max(
+            built,
+            key=lambda candidate: (
+                sum(built[candidate][0].values()) + built[candidate][1].characters
+            ),
+        )
+        widths, budget = built[name]
+        parts: list[tuple[str, int]] = list(widths.items())
+        parts.extend(
+            (f"{section} built by the runner before the render", width)
+            for section, width in budget.per_section.items()
+        )
+        measured[environment] = MeasuredFirstRequest(
+            prompt_name=name,
+            parts=tuple(sorted(parts)),
+            characters=sum(widths.values()) + budget.characters,
+            silent=tuple(sorted(budget.silent.items())),
+        )
+    return measured, unmeasurable
+
+
+def _check_every_run_place_is_asked_the_same_thing(
+    conditions_by_environment: Mapping[str, ModelRunConditions],
+    *,
+    comparison: str,
+    plan: Mapping[str, Any],
+    root: Path,
+    catalog: TaskCatalog,
+) -> list[str]:
+    """Confirm the run places really do differ only in where the code runs.
+
+    :func:`core.execution_environment_readiness.check_model_run_conditions`
+    already holds the three places to one ``system_instruction`` and one
+    ``task_instruction``. Both of those are single values the plan writes once
+    under ``model_run_conditions.shared`` and every place inherits, so that
+    comparison is three copies of one string against each other and cannot
+    fail. Worse, the plan says in its own words that the first of them is never
+    sent: ``core/prompt_loader.py`` lets a committed prompt file's own
+    ``system_message`` win whenever it has one, and all three committed files
+    have one.
+
+    So the wording the check compared was wording no model reads, and the
+    wording every model does read — the committed prompt file, that file's own
+    standing instruction, and whatever the runner builds before the render —
+    was compared by nothing at all. On 2026-09-01 the three places ran five
+    tasks each and the container's requests carried 350 to 400 more input
+    tokens than the server process's on every one of them, which is what that
+    gap looks like from the outside.
+
+    This rule closes it by measuring instead of reading: each place's first
+    request is built through the same functions a real attempt builds it with,
+    and the three are held against each other.
+
+    Only ``same_generated_code_rerun`` is judged here. That comparison's whole
+    claim is that the run place is the only thing that changed, so a difference
+    in what is asked takes the claim away. ``tool_built_in_features`` measures
+    what each tool does when left alone and is not started; what it should hold
+    still is its own decision to record, and it is not made here.
+    """
+    if comparison != COMPARISON_SAME_GENERATED_CODE:
+        return []
+    try:
+        measured, unmeasurable = _measure_first_requests(
+            conditions_by_environment, plan=plan, root=root, catalog=catalog
+        )
+    except ValueError as unreadable:
+        return [
+            "the prompt every run place sends writes an occupation into it, "
+            "but the widest one cannot be taken from the task catalogue, so "
+            "whether the three places are asked the same thing cannot be "
+            f"worked out: {unreadable}"
+        ]
+
+    problems = [
+        f"whether {environment} is asked the same thing as the other run "
+        f"places cannot be worked out, because its first request cannot be "
+        f"built here: {why.reason}"
+        for environment, why in sorted(unmeasurable.items())
+    ]
+    if len(measured) < 2:
+        # One place on its own is a measurement, not a comparison. Anything
+        # that stopped the others from being measured is already a problem
+        # above; saying "they all agree" about a single place would not be.
+        return problems
+
+    grouped: dict[tuple, list[str]] = {}
+    for environment, request in sorted(measured.items()):
+        grouped.setdefault(request.wording_identity(), []).append(environment)
+    if len(grouped) == 1:
+        return problems
+
+    widest = max(measured.values(), key=lambda request: request.characters)
+    narrowest = min(measured.values(), key=lambda request: request.characters)
+    problems.append(
+        "the comparison that re-runs one model's own code reports its result "
+        "as a difference the run place made, and that only holds if the run "
+        "place is the only thing that differs; these places are not asked the "
+        "same thing. "
+        + ". ".join(
+            f"{environment} sends {measured[environment].described()}"
+            for environment in sorted(measured)
+        )
+        + f". The widest first request is {widest.characters} characters "
+        f"against the narrowest at {narrowest.characters}, a difference of "
+        f"{widest.characters - narrowest.characters} characters carried on "
+        "every call, before the task's own words are added. Either the three "
+        "are made to send one first request, which is what this comparison "
+        "says is already true, or the plan's comparison is recorded as "
+        "something other than same_generated_code_rerun — but a run under "
+        "this name with these three requests would publish the prompt's "
+        "difference as the run place's"
+    )
+    return problems
+
+
 def _check_instruction_length(
     conditions_by_environment: Mapping[str, ModelRunConditions],
     assumptions: CostAssumptions,
@@ -2031,12 +2331,10 @@ def _check_instruction_length(
     ``core/first_request_sections.py`` names each of them and says where, and
     refuses a section that is in neither list.
     """
-    problems: list[str] = []
-    files = plan.get("experiment_files")
-    files = files if isinstance(files, Mapping) else {}
-
     try:
-        occupation = widest_occupation(catalog)
+        measured, unmeasurable = _measure_first_requests(
+            conditions_by_environment, plan=plan, root=root, catalog=catalog
+        )
     except ValueError as unreadable:
         return [
             "the prompt every run place sends writes an occupation into it, "
@@ -2044,123 +2342,34 @@ def _check_instruction_length(
             f"what the prompt comes to cannot be worked out: {unreadable}"
         ]
 
-    for environment in sorted(conditions_by_environment):
-        relative = files.get(environment)
-        if not relative:
-            problems.append(
-                f"the plan names no experiment settings file for {environment}, "
-                "so the prompt it sends cannot be read and the "
-                "instruction_character_count charged for that prompt cannot be "
-                "checked"
-            )
+    problems = [
+        (
+            f"{why.reason} and the instruction_character_count charged for "
+            "that prompt cannot be checked"
+        )
+        if why.the_plan_names_no_settings_file
+        else (
+            f"{environment}'s cost is charged "
+            f"{assumptions.instruction_character_count} characters for "
+            "everything its request carries besides the task and its files, "
+            "but that request cannot be built here and so cannot be priced: "
+            f"{why.reason}"
+        )
+        for environment, why in sorted(unmeasurable.items())
+    ]
+    for environment, request in sorted(measured.items()):
+        if assumptions.instruction_character_count >= request.characters:
             continue
-        extra_sections = _runner_first_request_extra_sections(environment)
-        try:
-            settings = yaml.safe_load(
-                (root / str(relative)).read_text(encoding="utf-8")
-            )
-            if not isinstance(settings, Mapping):
-                raise ValueError("it does not hold a mapping at the top level")
-            candidates = _prompt_files_a_run_place_might_send(environment, settings)
-            if not candidates:
-                raise ValueError(
-                    "no runner is registered for this run place, or the one "
-                    "that is does not declare DEFAULT_PROMPT, so which prompt "
-                    "file it sends is not written down anywhere here"
-                )
-            if extra_sections is None:
-                # An empty tuple would be a claim, and a true one for two of the
-                # three places. ``None`` is silence, and pricing silence at
-                # nothing is how the container's own sections went uncharged for
-                # as long as they did.
-                raise ValueError(
-                    "the runner registered for this run place does not declare "
-                    "FIRST_REQUEST_EXTRA_SECTIONS, so what it puts in its first "
-                    "request past the rendered prompt is not written down "
-                    "anywhere here, and a figure nothing checked is not a "
-                    "figure that holds"
-                )
-            sandbox = _dig(settings, ("execution", "sandbox"))
-            # ``core/executor.py`` passes ``opts.get("max_skills", 5)``, so a
-            # settings file that leaves the key out has the skills manual on.
-            # Defaulting to nothing here would price it out of a run that sends
-            # it. A value that is not a whole number cannot be handed to
-            # ``SkillsRegistry.select`` at all, so it is refused rather than
-            # rounded into something.
-            max_skills = sandbox.get("max_skills", 5)
-            if isinstance(max_skills, bool) or not isinstance(max_skills, int):
-                raise ValueError(
-                    f"execution.sandbox.max_skills is {max_skills!r}, which is "
-                    "not a whole number of skills, so how much skills manual "
-                    "the first request carries cannot be worked out"
-                )
-            measured = {
-                candidate: (
-                    fixed_prompt_characters(
-                        load_prompt(candidate),
-                        experiment_prompt=_dig(settings, ("condition_a",)).get(
-                            "prompt"
-                        ),
-                        occupation=occupation,
-                    ),
-                    first_request_section_budget(
-                        extra_sections,
-                        prompt_name=candidate,
-                        max_skills=max_skills,
-                        contract_config=sandbox.get("contract"),
-                    ),
-                )
-                for candidate in candidates
-            }
-        except Exception as unreadable:  # noqa: BLE001 - anything here is a refusal
-            # A missing settings file, a prompt file that is not there, wording
-            # that will not render, a skills directory that cannot be read:
-            # every one of them leaves the request unpriceable. Caught broadly
-            # and turned into a refusal rather than allowed to pass this rule by
-            # falling through it.
-            problems.append(
-                f"{environment}'s cost is charged "
-                f"{assumptions.instruction_character_count} characters for "
-                "everything its request carries besides the task and its "
-                "files, but that request cannot be built here and so cannot be "
-                f"priced: {unreadable}"
-            )
-            continue
-
-        name = max(
-            measured,
-            key=lambda candidate: (
-                sum(measured[candidate][0].values()) + measured[candidate][1].characters
-            ),
-        )
-        widths, budget = measured[name]
-        characters = sum(widths.values()) + budget.characters
-        if assumptions.instruction_character_count >= characters:
-            continue
-        short_by = characters - assumptions.instruction_character_count
-        parts: list[tuple[str, int]] = list(widths.items())
-        parts.extend(
-            (f"{section} built by the runner before the render", width)
-            for section, width in budget.per_section.items()
-        )
-        made_of = ", ".join(
-            f"{width} characters of {what}"
-            for what, width in sorted(parts, key=lambda pair: -pair[1])
-            if width
-        )
-        left_out = "".join(
-            f"; {section} adds nothing because {why}"
-            for section, why in sorted(budget.silent.items())
-        )
+        short_by = request.characters - assumptions.instruction_character_count
         problems.append(
-            f"{environment} sends prompts/{name}.yaml wrapped in its own "
-            f"condition_a.prompt wording, plus whatever its runner declares it "
-            f"builds before that is rendered; together they come "
-            f"to {characters} characters before the task's own words are added "
-            f"({made_of}){left_out}, but the plan's cost sum charges "
-            f"{assumptions.instruction_character_count} characters for that "
-            f"part of every request — {short_by} characters short, on every "
-            "call this comparison makes"
+            f"{environment} sends prompts/{request.prompt_name}.yaml wrapped "
+            f"in its own condition_a.prompt wording, plus whatever its runner "
+            f"declares it builds before that is rendered; together they come "
+            f"to {request.characters} characters before the task's own words "
+            f"are added ({request.made_of()}), but the plan's cost sum "
+            f"charges {assumptions.instruction_character_count} characters for "
+            f"that part of every request — {short_by} characters short, on "
+            "every call this comparison makes"
         )
     return problems
 
