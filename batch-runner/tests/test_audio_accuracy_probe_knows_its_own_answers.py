@@ -2123,3 +2123,196 @@ def test_a_clip_with_no_pinned_length_is_left_out_rather_than_guessed(
     corpus = probe.load_speech_corpus(manifest_path, clip_dir)
     assert "clip0" not in corpus.durations
     assert "clip1" in corpus.durations
+
+
+# ── Stop rules, which only exist if code obeys them ──────────────────────
+#
+# 330 section 3 names four. A rule that lives only in a document is
+# reconsidered at the exact moment obeying it would cost something.
+
+
+def _rule_calls(n: int, **overrides: Any) -> list[dict]:
+    calls = []
+    for index in range(n):
+        call = _wire_call("a", seconds=1.0, tokens=10)
+        call["claim_id"] = f"c{index}"
+        call["unanswered_kind"] = None
+        call.update(overrides)
+        calls.append(call)
+    return calls
+
+
+def test_the_pre_registered_rules_are_the_ones_the_document_names() -> None:
+    """Four numbers in two files. This is the one that keeps them equal."""
+    rules = probe.SPEECH_STOP_RULES
+    assert rules.wall_clock_seconds == 20 * 60
+    assert rules.zero_response_after == 10
+    assert rules.max_provider_failures == 10
+    assert rules.stop_on_undelivered_audio is True
+
+    doc = (
+        probe.REPO_ROOT / "tasks" / "rebuilding_grading_task"
+        / "330-speech-diagnostic-prereg.md"
+    ).read_text(encoding="utf-8")
+    assert "20분" in doc
+    assert "10번" in doc
+
+
+def test_nothing_stops_a_healthy_run() -> None:
+    assert probe._stop_reason(
+        probe.SPEECH_STOP_RULES, calls=_rule_calls(30), elapsed_s=10.0
+    ) is None
+
+
+def test_the_clock_stops_the_run() -> None:
+    fired = probe._stop_reason(
+        probe.SPEECH_STOP_RULES, calls=_rule_calls(5), elapsed_s=20 * 60 + 1
+    )
+    assert fired["rule"] == "wall_clock_seconds"
+    assert fired["after_calls"] == 5
+
+
+def test_ten_calls_with_no_usable_verdict_stop_the_run() -> None:
+    """This is the rule that would have ended 328's observation arm at ten.
+
+    That run bought all sixty, none of which parsed, and published an
+    accuracy computed over the seventeen replies that happened to contain a
+    word the reader accepted.
+    """
+    calls = _rule_calls(10, unanswered_kind="read_failure")
+    fired = probe._stop_reason(
+        probe.SPEECH_STOP_RULES, calls=calls, elapsed_s=5.0
+    )
+    assert fired["rule"] == "zero_response_after"
+
+    # One usable verdict among the ten is enough to keep going: the question
+    # is whether the format is broken, not whether it is perfect.
+    calls[3]["unanswered_kind"] = None
+    assert probe._stop_reason(
+        probe.SPEECH_STOP_RULES, calls=calls, elapsed_s=5.0
+    ) is None
+
+
+def test_ten_provider_failures_stop_the_run() -> None:
+    calls = _rule_calls(12)
+    for call in calls[:10]:
+        call["unanswered_kind"] = "provider_failure"
+    fired = probe._stop_reason(
+        probe.SPEECH_STOP_RULES, calls=calls, elapsed_s=5.0
+    )
+    assert fired["rule"] == "max_provider_failures"
+
+
+def test_a_request_that_carried_no_audio_stops_the_run_at_once() -> None:
+    """One call, not ten. Everything after it would measure nothing."""
+    calls = _rule_calls(1)
+    calls[-1]["wire"]["requests_with_audio"] = 0
+    fired = probe._stop_reason(
+        probe.SPEECH_STOP_RULES, calls=calls, elapsed_s=1.0
+    )
+    assert fired["rule"] == "stop_on_undelivered_audio"
+
+
+def test_a_reported_zero_and_an_unreported_field_are_not_the_same() -> None:
+    """The distinction the null total exists to preserve, applied.
+
+    A provider that never reports audio tokens must not trip a rule about
+    audio never arriving; a provider that reports zero must.
+    """
+    silent = _rule_calls(1)
+    silent[-1]["wire"].pop("audio_tokens", None)
+    assert probe._audio_was_delivered(silent[-1]) is True
+    assert probe._stop_reason(
+        probe.SPEECH_STOP_RULES, calls=silent, elapsed_s=1.0
+    ) is None
+
+    zero = _rule_calls(1)
+    zero[-1]["wire"]["audio_tokens"] = 0
+    assert probe._audio_was_delivered(zero[-1]) is False
+    assert probe._stop_reason(
+        probe.SPEECH_STOP_RULES, calls=zero, elapsed_s=1.0
+    )["rule"] == "stop_on_undelivered_audio"
+
+
+def test_a_stopped_run_keeps_what_it_bought(tmp_path: Path) -> None:
+    """Stopping is not discarding. 330: the partial result is still reported.
+
+    A stop that threw away the calls would make obeying the rule expensive,
+    which is how a stop rule stops being obeyed.
+    """
+    manifest_path, clip_dir = _speech_fixture(tmp_path, clips=3)
+    corpus = probe.load_speech_corpus(manifest_path, clip_dir)
+    perception = probe.AudioPerception(
+        client=probe.TruthfulStub(corpus.claims),
+        deployment="gpt-audio-1.5",
+        call_cap=AUDIO_CALL_CAP,
+        trim_seconds=AUDIO_TRIM_SECONDS,
+    )
+    ticks = iter([0.0] + [10_000.0] * 500)
+    result = probe.run_measurement(
+        perception=perception,
+        clip_dir=tmp_path / "unused",
+        repeats=3,
+        claims=corpus.claims,
+        prerendered=corpus,
+        stop_rules=probe.StopRules(wall_clock_seconds=60),
+        clock=lambda: next(ticks),
+    )
+    assert result["stopped"]["rule"] == "wall_clock_seconds"
+    # One call made, kept, and the plan it fell short of is recorded.
+    assert len(result["calls"]) == 1
+    assert result["planned_calls"] == 3 * len(corpus.claims)
+
+    report = probe.build_report(
+        identity=probe.pinned_identity(),
+        measured=False,
+        repeats=3,
+        result=result,
+        speech=corpus,
+    )
+    assert report["stopped"]["rule"] == "wall_clock_seconds"
+    assert report["calls_planned"] == 3 * len(corpus.claims)
+    json.dumps(report)
+
+
+def test_a_finished_run_says_so_rather_than_leaving_the_field_out(
+    tmp_path: Path,
+) -> None:
+    """``stopped: null`` beside a full count is a statement. A missing key is
+    something a reader has to interpret."""
+    out = tmp_path / "report.json"
+    assert probe.main(
+        ["--dry-run", "--quiet", "--repeats", "1", "--out", str(out)]
+    ) == 0
+    report = json.loads(out.read_text(encoding="utf-8"))
+    assert "stopped" in report
+    assert report["stopped"] is None
+    assert report["calls_planned"] == len(probe.CLAIMS)
+
+
+def test_the_tone_corpus_runs_without_stop_rules(tmp_path: Path) -> None:
+    """Its numbers are published. Adding rules now would change the design a
+    published result was produced under, after the fact."""
+    source = (
+        probe.REPO_ROOT / "batch-runner" / "scripts"
+        / "measure_audio_grading_accuracy.py"
+    ).read_text(encoding="utf-8")
+    assert "stop_rules=SPEECH_STOP_RULES if speech else None" in source
+
+
+def test_the_paid_summary_says_a_stopped_run_stopped() -> None:
+    """A partial run that looks complete in the summary is how a stop rule
+    turns into a quietly worse result."""
+    step = _step("measure", "Summarise")
+    body = step["run"]
+    assert 'stopped = report.get("stopped")' in body
+    assert "stopped early on the pre-registered rule" in body
+    # The plan it fell short of has to be next to the count it reached,
+    # or "made 12 calls" reads as the design rather than as a shortfall.
+    assert "report['calls_planned']" in body
+    assert "partial run" in body
+
+
+def test_the_dry_run_summary_shows_the_field_exists() -> None:
+    step = _step("dry-run", "Summarise")
+    assert "stopped early" in step["run"]

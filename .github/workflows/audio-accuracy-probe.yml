@@ -237,6 +237,10 @@ jobs:
                     f"{delivery['calls_inspected']} requests carried audio; "
                     f"clips sending more than one digest: "
                     f"`{json.dumps(delivery['clips_with_more_than_one_digest'])}`")
+          stopped = report.get("stopped")
+          print(f"- stopped early: `{json.dumps(stopped and stopped['rule'])}` "
+                f"({len(report.get('calls') or [])} of {report['calls_planned']} "
+                f"planned calls)")
           comparison = report.get("arm_comparison")
           if comparison:
               print(f"- pairs available for the arm comparison: {comparison['pairs']}")
@@ -416,6 +420,14 @@ jobs:
                 f"x {len(report['pins']['prompt_arms'])} arm(s) "
                 f"= {report['cost']['model_calls']} calls "
                 f"({', '.join(report['pins']['prompt_arms'])}).\n")
+          stopped = report.get("stopped")
+          if stopped:
+              print(f"> **This run stopped early on the pre-registered rule "
+                    f"`{stopped['rule']}`.** It made "
+                    f"{stopped['after_calls']} of {report['calls_planned']} "
+                    f"planned calls. {stopped['reading']}\n")
+              print("> Every number below is that partial run's. Do not compare it")
+              print("> with a completed run as though the design were the same.\n")
           speech = report.get("speech_set")
           if speech:
               print("**This is the speech corpus.** It asks whether the judge hears")

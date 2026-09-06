@@ -180,6 +180,7 @@ import os
 import struct
 import sys
 import tempfile
+import time
 import wave
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -2045,6 +2046,144 @@ def delivery_section(
 # --------------------------------------------------------------------------
 
 
+@dataclass(frozen=True)
+class StopRules:
+    """When to walk away from a paid run, decided before it starts.
+
+    Pre-registered in ``330-speech-diagnostic-prereg.md`` section 3. They are
+    written here rather than left to a person watching the log because a rule
+    that only exists in a document is a rule that gets reconsidered at the
+    moment it would cost something -- which is when "just a bit more" wins.
+
+    Stopping is not a failure and not a discarded run. Whatever was collected
+    is reported, with ``stopped`` saying which rule fired and where, so a
+    reader can see the run is partial rather than inferring it from a count.
+
+    ``None`` on any field disables that rule. The tone corpus runs with every
+    rule off, because its results are already published and turning these on
+    for it would change a methodology after the fact.
+    """
+
+    #: Wall clock, seconds. Checked after each call, so a single very slow
+    #: call can overshoot it; the alternative is killing a call mid-flight
+    #: and paying for a response nobody reads.
+    wall_clock_seconds: Optional[float] = None
+    #: If the first N calls yield no usable verdict at all, stop. Sixty calls
+    #: of a broken response format cost the same as sixty good ones and teach
+    #: nothing; this is the rule that would have ended the observation arm of
+    #: 328 after ten.
+    zero_response_after: Optional[int] = None
+    #: Cumulative provider failures. Infrastructure, not capability -- there
+    #: is nothing to learn about the model by retrying it into a wall.
+    max_provider_failures: Optional[int] = None
+    #: Stop on the first call the provider says carried no audio. Measuring
+    #: comprehension of sound that was never delivered produces a number that
+    #: looks exactly like a real one.
+    stop_on_undelivered_audio: bool = False
+
+
+#: The rules named in 330 section 3, in the order that document lists them.
+SPEECH_STOP_RULES = StopRules(
+    wall_clock_seconds=20 * 60,
+    zero_response_after=10,
+    max_provider_failures=10,
+    stop_on_undelivered_audio=True,
+)
+
+
+def _audio_was_delivered(call: dict[str, Any]) -> Optional[bool]:
+    """Did this call carry sound? ``None`` when the provider did not say.
+
+    Three states, not two. A provider that reports nothing is not a provider
+    reporting zero, and only the second is evidence of non-delivery.
+    """
+    wire = call.get("wire")
+    if not isinstance(wire, dict):
+        return None
+    carried = wire.get("requests_with_audio")
+    if carried is not None and not carried:
+        return False
+    tokens = wire.get("audio_tokens")
+    if tokens is not None:
+        return bool(tokens)
+    if carried:
+        return True
+    return None
+
+
+def _stop_reason(
+    rules: StopRules,
+    *,
+    calls: Sequence[dict[str, Any]],
+    elapsed_s: float,
+) -> Optional[dict[str, Any]]:
+    """The first rule that fires, or ``None``. Evaluated after every call."""
+    if rules.wall_clock_seconds is not None and elapsed_s > rules.wall_clock_seconds:
+        return {
+            "rule": "wall_clock_seconds",
+            "limit": rules.wall_clock_seconds,
+            "observed": round(elapsed_s, 3),
+            "after_calls": len(calls),
+            "reading": (
+                "The run exceeded its pre-registered time limit. What is "
+                "below is a partial run and its counts are not the design's."
+            ),
+        }
+
+    if rules.stop_on_undelivered_audio and calls:
+        if _audio_was_delivered(calls[-1]) is False:
+            return {
+                "rule": "stop_on_undelivered_audio",
+                "limit": None,
+                "observed": calls[-1].get("claim_id"),
+                "after_calls": len(calls),
+                "reading": (
+                    "The provider reported a request that carried no audio. "
+                    "Nothing measured after this point would be about "
+                    "hearing, so the run stops rather than producing a "
+                    "number that looks like an accuracy."
+                ),
+            }
+
+    if rules.max_provider_failures is not None:
+        failures = sum(
+            1 for c in calls if c.get("unanswered_kind") == "provider_failure"
+        )
+        if failures >= rules.max_provider_failures:
+            return {
+                "rule": "max_provider_failures",
+                "limit": rules.max_provider_failures,
+                "observed": failures,
+                "after_calls": len(calls),
+                "reading": (
+                    "Infrastructure, not capability. Retrying into a wall "
+                    "buys nothing and says nothing about the model."
+                ),
+            }
+
+    if (
+        rules.zero_response_after is not None
+        and len(calls) >= rules.zero_response_after
+    ):
+        answered = sum(1 for c in calls if c.get("unanswered_kind") is None)
+        if answered == 0:
+            return {
+                "rule": "zero_response_after",
+                "limit": rules.zero_response_after,
+                "observed": 0,
+                "after_calls": len(calls),
+                "reading": (
+                    "No usable verdict in the first "
+                    f"{len(calls)} calls. On 2026-09-06 a run in this state "
+                    "went on to buy all sixty and reported an accuracy over "
+                    "the seventeen replies that happened to parse. This "
+                    "stops instead."
+                ),
+            }
+
+    return None
+
+
 def run_measurement(
     *,
     perception: AudioPerception,
@@ -2056,6 +2195,8 @@ def run_measurement(
     arms: Sequence[str] = ("production",),
     wire: Optional[WireClient] = None,
     prerendered: Optional[SpeechCorpus] = None,
+    stop_rules: Optional[StopRules] = None,
+    clock: Callable[[], float] = time.monotonic,
 ) -> dict[str, Any]:
     """Render the clips, put every claim to the sub-judge, and tally.
 
@@ -2100,9 +2241,17 @@ def run_measurement(
             paths[clip.clip_id] = path
 
     calls: list[dict[str, Any]] = []
+    stopped: Optional[dict[str, Any]] = None
+    started_at = clock()
     for repeat in range(1, repeats + 1):
+        if stopped is not None:
+            break
         for claim in claims:
+            if stopped is not None:
+                break
             for arm in arms:
+                if stopped is not None:
+                    break
                 if wire is not None:
                     wire.arm = arm
                     first_record = len(wire.records)
@@ -2138,7 +2287,18 @@ def run_measurement(
                 if wire is not None:
                     call["wire"] = summarise_wire(wire.records[first_record:])
                 calls.append(call)
-    return {"calls": calls, "clip_sha256": digests}
+                if stop_rules is not None:
+                    # After appending, so the call that tripped the rule is
+                    # in the record rather than dropped from it.
+                    stopped = _stop_reason(
+                        stop_rules, calls=calls, elapsed_s=clock() - started_at
+                    )
+    return {
+        "calls": calls,
+        "clip_sha256": digests,
+        "stopped": stopped,
+        "planned_calls": repeats * len(claims) * len(arms),
+    }
 
 
 def summarise(calls: Sequence[dict[str, Any]]) -> dict[str, Any]:
@@ -2281,6 +2441,11 @@ def build_report(
         ),
         "corpus": corpus_name,
         "measured": measured,
+        # Null on a run that finished. When it is not null the counts below
+        # are a partial run's, and a reader must not compare them with a
+        # complete one as though the design had been the same.
+        "stopped": result.get("stopped"),
+        "calls_planned": result.get("planned_calls"),
         "pins": {
             **identity,
             "clip_sample_rate_hz": (
@@ -2538,6 +2703,10 @@ def main(argv: Optional[list[str]] = None) -> int:
                 arms=arms,
                 wire=wire,
                 prerendered=speech,
+                # Only the speech corpus. The tone results are published and
+                # turning these on for that path would change a methodology
+                # after its numbers were reported.
+                stop_rules=SPEECH_STOP_RULES if speech else None,
             )
     finally:
         if managed is not None:
