@@ -104,13 +104,35 @@ dispatch를 눌러도 돈이 안 나가는 이유가 그 기본값이고, 그게
 
 #### 실행은 움직이지 않는 자리에서 부른다
 
-유료 실행은 `main`이 아니라 태그
-[`speech-diagnostic-run-1`](https://github.com/hyeonsangjeon/gdpval-realworks/releases/tag/speech-diagnostic-run-1)에서
-부른다. 가리키는 커밋은 `5418048`이고, 그 tree(`7da61d0`)는 CI가 통과시킨 PR
+유료 실행은 커밋 `5418048`에서 부른다. 그 tree(`7da61d0`)는 CI가 통과시킨 PR
 머리(`1401933`)와 **바이트가 같다.**
 
 `main`을 쓰면 실행 중에 다른 사람 커밋이 얹혔을 때 "무슨 코드가 돌았나"가 나중에
-불확실해진다. 태그는 안 움직인다.
+불확실해진다 — 는 게 처음 생각이었고, 그래서 태그
+`speech-diagnostic-run-1`(=`5418048`)을 만들어 거기서 불렀다. **거절당했다.**
+
+```
+Tag "speech-diagnostic-run-1" is not allowed to deploy to grading
+due to environment protection rules.
+```
+
+실행 [`34038055900`](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/34038055900)이
+그것이다. `grading` 환경은 **`main` 브랜치만** 배포를 허용하고
+(`can_admins_bypass: false`), 태그는 목록에 없다. 유료 작업은 `skipped`로 끝났고
+**한 푼도 안 나갔다.**
+
+이건 고칠 결함이 아니라 **일부러 걸어 둔 통제**다. 허용 목록에 태그를 끼워 넣는
+것은 통제를 우회하는 것이므로 하지 않는다. 대신 원래 걱정했던 것이 실제로
+문제인지 다시 봤는데, **아니었다.**
+
+workflow_dispatch로 만든 실행은 부르는 순간의 SHA에 **고정된다.** 실행이 도는
+중에 `main`에 커밋이 얹혀도 이미 시작된 실행이 보는 코드는 안 바뀐다. 그러니
+"무슨 코드가 돌았나"의 답은 태그가 아니라 실행 기록의 `headSha`이고, 그 값이
+`5418048`인지 확인하면 끝난다. 태그는 지웠을 때 잃을 게 없어서 남겨 두지만,
+**dispatch에는 못 쓴다.**
+
+부르기 직전에 `main`이 `5418048`인 것을 확인하고, 부른 뒤에 실행의 `headSha`가
+같은 값인지 다시 확인한다. 그 두 줄이 태그가 하려던 일을 그대로 한다.
 
 ---
 
