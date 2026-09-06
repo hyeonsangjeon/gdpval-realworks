@@ -7898,7 +7898,7 @@ execution:
 | 시스템 글 | 공용 지문 파일의 `system_message` 하나 | 같음 (158자) |
 | 파일 구조 요약 · 미리보기 · 파일 목록 | 공용 `sections:` 목록 넷, 같은 순서 | `test_every_run_place_loaded_the_shared_prompt_file` |
 | 모델 · 배포 | 계획서 `model_run_conditions`와 설정 파일 대조 | `check_experiment_files_match_conditions` |
-| API 판 | 설정 파일에는 안 적혀 있어서, 계획서가 못 박은 값을 **코드 상수에 직접** 맞댐 | `test_the_pinned_api_version_is_the_one_the_code_uses.py` (9개) |
+| API 판 | 설정 파일에는 안 적혀 있어서, 계획서가 못 박은 값을 **코드 상수에 직접** 맞댐 | `test_the_pinned_api_version_is_the_one_the_code_uses.py` (10개) |
 | 실제로 답한 모델 | 제공자가 돌려준 모델 이름을 기록 (안 주면 "못 읽음", `null` 아님) | `test_the_model_recorded_is_the_one_the_provider_answered_with` |
 | 과제 5개와 파일 해시 | 과제 목록 지문 + 참조 파일을 **이름이 아니라 내용으로** 기록 | `test_the_reference_files_are_recorded_by_content_not_by_name` |
 | 토큰 · 재시도 · 제한 시간 | 세 설정 파일에서 같은 값인지 대조 | 무료 사전 점검 |
@@ -8030,8 +8030,8 @@ the settings files
 - ~~**API 판 대조 검사가 없습니다**(5항).~~ **넣었습니다.** 계획서가 못 박은
   `2025-04-01-preview`를 `llm_client.DEFAULT_API_VERSION` ·
   `azure_ai_clients.DEFAULT_LEGACY_API_VERSION`에 맞대고, `code_interpreter`에
-  남아 있던 죽은 `2025-03-01-preview` 기본값은 지웠습니다. 검사 5가지 · 성질
-  4가지를 시험 9개로 묶었고, **검사를 무력화하면 그중 5개가 실제로 빨개지는 것을
+  남아 있던 죽은 `2025-03-01-preview` 기본값은 지웠습니다. 검사 6가지 · 성질
+  4가지를 시험 10개로 묶었고, **검사를 무력화하면 그중 5개가 실제로 빨개지는 것을
   확인했습니다** — 한 번도 빨개져 본 적 없는 검사는 아직 증거가 아닙니다.
 - ~~**무료 5개 사전 점검**은 이 코드/시험 PR이 초록색으로 합쳐진 뒤에 돌립니다.~~
   **돌렸습니다**(PR #437이 `6e9e352`로 합쳐진 뒤, 그리고 이번 API 판 검사를 넣은

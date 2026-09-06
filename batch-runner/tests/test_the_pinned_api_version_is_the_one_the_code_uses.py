@@ -170,6 +170,35 @@ def test_a_constant_that_disappeared_is_reported_rather_than_skipped(
     assert "no longer defines" in " ".join(problems)
 
 
+def test_a_module_that_will_not_import_is_reported_rather_than_skipped(
+    conditions, monkeypatch
+):
+    """The same rule one step earlier: an unreadable module is not agreement.
+
+    A module holding one of these constants could stop importing — a moved
+    dependency, a circular import introduced elsewhere. Nothing about that
+    says the version matched, so it is reported with the same weight as a
+    version that did not match.
+    """
+    from core import execution_envelope_preflight
+
+    def refuse_to_import(name):
+        raise ImportError(f"no module named {name}")
+
+    monkeypatch.setattr(
+        execution_envelope_preflight, "import_module", refuse_to_import
+    )
+
+    problems = _check(conditions)
+
+    assert problems, "neither constant could be imported and nothing was said"
+    said = " ".join(problems)
+    assert "could not be imported" in said, said
+    # Both modules are reported, not just the first one that failed.
+    for module_name, _constant in THE_CONSTANTS_THAT_DECIDE_IT:
+        assert module_name in said, f"{module_name} was passed over: {said}"
+
+
 # ── the two properties the old dead default depended on ───────────────────
 
 
