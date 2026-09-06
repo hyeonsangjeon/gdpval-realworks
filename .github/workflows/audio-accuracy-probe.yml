@@ -410,6 +410,8 @@ jobs:
           j = acc["discrimination_j"]
           perm = acc["permutation"]
           binom = acc["pre_registered_binomial"]
+          stab = acc["stability"]
+          flips = stab["repeat_flips"]
 
           def pct(value):
               return "n/a" if value is None else f"{value * 100:.2f}%"
@@ -478,6 +480,18 @@ jobs:
                 f"{binom['correct']} of {binom['n']} |")
           print(f"| p — pre-specified secondary (within-pair permutation) | {perm['p_one_sided']} |")
           print(f"| smallest p the permutation can reach | {perm['smallest_attainable_p']} |")
+          # Same denominator as the 19.35% the dispatch description promises
+          # this run can be compared with. The claim-level count is printed
+          # under it precisely so nobody reads it as the same measure.
+          print(f"| **repeat flip rate** (pairs of repeats) | "
+                f"**{flips['flip_rate_pct']}%** vs {flips['prior_audio_cohort_pct']}% "
+                f"on the graded audio cohort |")
+          print(f"| &nbsp;&nbsp;· comparable pairs | {flips['flips']} flips "
+                f"in {flips['comparable_pairs']} |")
+          print(f"| &nbsp;&nbsp;· pairs dropped (a side never answered) | "
+                f"{flips['pairs_dropped_for_a_missing_answer']} |")
+          print(f"| &nbsp;&nbsp;· claims that ever flipped — *different denominator* | "
+                f"{flips['claims_that_ever_flipped']} of {stab['claims']} |")
           print()
           print("**J = 0 would mean the verdict does not depend on the audio.** A model")
           print("answering `pass` to everything scores 50% accuracy on this balanced")

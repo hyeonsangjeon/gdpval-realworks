@@ -2496,3 +2496,98 @@ def test_the_repeats_are_collapsed_before_the_test_not_after() -> None:
         / "330-speech-diagnostic-prereg.md"
     ).read_text(encoding="utf-8")
     assert "반복 3회를 독립 시행으로 세면" in doc
+
+
+def test_the_flip_rate_uses_the_denominator_it_is_compared_against() -> None:
+    """19.35% was flips over *pairs of runs*. Three repeats give three pairs
+    per claim, so a claim that flips once is one third of that figure and all
+    of the claim-level one."""
+    by_claim = {
+        "steady": {"verdicts": ["pass", "pass", "pass"]},
+        "one_flip": {"verdicts": ["pass", "pass", "fail"]},
+    }
+    got = probe.repeat_flip_rate(by_claim)
+    # 6 pairs, 2 of them disagree (pass/fail twice within `one_flip`).
+    assert got["comparable_pairs"] == 6
+    assert got["flips"] == 2
+    assert got["flip_rate_pct"] == pytest.approx(100.0 * 2 / 6)
+    # The other denominator, kept beside it and labelled, not instead of it.
+    assert got["claims_that_ever_flipped"] == 1
+    assert got["prior_audio_cohort_pct"] == pytest.approx(19.3548, abs=1e-3)
+
+
+def test_the_earlier_figure_quoted_here_is_the_earlier_figure() -> None:
+    """The comparison is only worth printing if the number it is set against
+    is the one the repeat study actually produced."""
+    prior = (
+        probe.REPO_ROOT / "batch-runner" / "tests"
+        / "test_audio_repeat_variation_bounds_what_it_can.py"
+    ).read_text(encoding="utf-8")
+    assert "19.3548" in prior
+    assert "verdict_flip_rate_pct" in prior
+    got = probe.repeat_flip_rate({})
+    assert got["prior_audio_cohort_pct"] == pytest.approx(19.3548, abs=1e-3)
+
+
+def test_a_pair_missing_an_answer_is_not_an_agreement() -> None:
+    """An unanswered repeat did not agree with its partner and did not
+    disagree; folding it in either direction reports steadiness that was
+    never measured."""
+    by_claim = {
+        "half_answered": {"verdicts": ["pass", "judge_error", "fail"]},
+        "silent": {"verdicts": ["judge_error", "judge_error", "judge_error"]},
+    }
+    got = probe.repeat_flip_rate(by_claim)
+    assert got["comparable_pairs"] == 1
+    assert got["flips"] == 1
+    assert got["pairs_dropped_for_a_missing_answer"] == 5
+    assert got["flip_rate_pct"] == pytest.approx(100.0)
+
+
+def test_a_run_with_nothing_to_compare_reports_null_not_zero() -> None:
+    got = probe.repeat_flip_rate({"silent": {"verdicts": ["judge_error"]}})
+    assert got["comparable_pairs"] == 0
+    assert got["flip_rate_pct"] is None
+    assert got["flips"] == 0
+
+
+def test_the_flip_rate_travels_with_the_report() -> None:
+    """It has to be in the artifact, not left as a division a reader might do
+    with the wrong two fields."""
+    # One claim answered three times, disagreeing once: three pairs, two of
+    # which are pass/fail.
+    calls = []
+    for index, verdict in enumerate(("fail", "pass", "pass")):
+        call = dict(_calls(lambda claim: verdict)[0])
+        call["repeat"] = index + 1
+        calls.append(call)
+    summary = probe.summarise(calls, claims=probe.CLAIMS[:1])
+    flips = summary["stability"]["repeat_flips"]
+    assert flips["unit"] == "one pair of repeats for one claim"
+    assert flips["comparable_pairs"] == 3
+    assert flips["flips"] == 2
+    assert flips["claims_that_ever_flipped"] == 1
+
+
+def test_the_summary_prints_both_denominators_and_says_which_is_which() -> None:
+    """Printing one alone is how the units got confused in the first place."""
+    body = _step("measure", "Summarise")["run"]
+    assert "repeat flip rate" in body
+    assert "claims that ever flipped" in body
+    assert "different denominator" in body
+    assert "prior_audio_cohort_pct" in body
+
+
+def test_the_document_names_the_field_the_comparison_uses() -> None:
+    """A pre-registration that says "comparable" without saying to which
+    number leaves the choice for after the numbers exist."""
+    doc = (
+        probe.REPO_ROOT / "tasks" / "rebuilding_grading_task"
+        / "330-speech-diagnostic-prereg.md"
+    ).read_text(encoding="utf-8")
+    assert "accuracy.stability.repeat_flips.flip_rate_pct" in doc
+    assert "claims_that_ever_flipped" in doc
+    assert "pairs_dropped_for_a_missing_answer" in doc
+    # And the field the document names is the field the report writes.
+    summary = probe.summarise(_calls(lambda claim: "pass"))
+    assert "flip_rate_pct" in summary["stability"]["repeat_flips"]

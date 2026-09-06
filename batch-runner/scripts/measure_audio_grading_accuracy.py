@@ -2301,6 +2301,59 @@ def run_measurement(
     }
 
 
+def repeat_flip_rate(by_claim: Mapping[str, Any]) -> dict[str, Any]:
+    """Disagreement between repeats, in the denominator the earlier study used.
+
+    The repeat run this script's header quotes reported 19.35%: verdict flips
+    divided by *pairs of runs*, three such pairs per item at three repeats.
+    ``stability`` below counts something else -- claims whose repeats were all
+    identical -- and one minus that share is the share of claims that flipped
+    *at all*. On three repeats a claim that flips once is 100% of the second
+    figure and 33% of the first, so setting them beside each other reads as a
+    change in steadiness that never happened. 330 section 4 promises the
+    comparison, so the comparable number has to exist.
+
+    Pairs where either side never answered are not disagreements about the
+    audio; they leave the denominator and are counted where a reader can see
+    how much of the run they were.
+    """
+    pairs = 0
+    flips = 0
+    dropped = 0
+    ever_flipped = 0
+    for entry in by_claim.values():
+        verdicts = entry["verdicts"]
+        flipped_here = False
+        for left in range(len(verdicts)):
+            for right in range(left + 1, len(verdicts)):
+                a, b = verdicts[left], verdicts[right]
+                if a == "judge_error" or b == "judge_error":
+                    dropped += 1
+                    continue
+                pairs += 1
+                if a != b:
+                    flips += 1
+                    flipped_here = True
+        ever_flipped += int(flipped_here)
+    return {
+        "unit": "one pair of repeats for one claim",
+        "comparable_pairs": pairs,
+        "pairs_dropped_for_a_missing_answer": dropped,
+        "flips": flips,
+        # Null, not zero, on a run with nothing to compare. Zero would say the
+        # repeats agreed.
+        "flip_rate_pct": (100.0 * flips / pairs) if pairs else None,
+        "claims_that_ever_flipped": ever_flipped,
+        "prior_audio_cohort_pct": 19.3548,
+        "meaning": (
+            "Share of repeat pairs that answered differently, the same "
+            "denominator as the 19.35% measured on the graded audio cohort. "
+            "'claims_that_ever_flipped' is the other denominator and is not "
+            "comparable with that figure."
+        ),
+    }
+
+
 def binomial_majority_test(
     by_claim: Mapping[str, Any],
 ) -> dict[str, Any]:
@@ -2456,6 +2509,11 @@ def summarise(
             "no_majority": sum(
                 1 for entry in by_claim.values() if entry["majority"] is None
             ),
+            # The figure 330 promises to set against the earlier 19.35%. It
+            # lives here rather than being left for a reader to divide,
+            # because the obvious division of the fields above answers a
+            # different question and looks like the same one.
+            "repeat_flips": repeat_flip_rate(by_claim),
         },
     }
 
