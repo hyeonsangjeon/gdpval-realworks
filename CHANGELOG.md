@@ -12,6 +12,46 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Changed
+- **The audio judge accepted answers that were not verdicts, and scored them as
+  `fail`.** Replaying the 120 stored responses from run `34008840627` offline —
+  no new API call — the observation arm's published "47.1% accuracy over 17
+  answers" turns out to have been computed over 17 replies that never contained
+  a verdict: 13 said `true`, 2 `false`, and one each `no`, `refuse` and
+  `analyze_audio`. Anything that was not `pass` counted against the deliverable,
+  so a model answering *correctly* in the wrong vocabulary was scored as having
+  said the criterion did not hold. Under the strict contract that arm answered
+  **0 of 60** (response rate `0.283` → `0.000`); the production arm goes
+  `51` → `50` answered, and the arithmetic closes exactly against the per-arm
+  format-failure counts.
+
+  Three things changed. **One contract, shared byte-for-byte**: both A/B arms
+  ended with their own hand-written paragraph asking for JSON, which made any
+  difference in response rate unattributable to the prompt under test; both now
+  append the same `AUDIO_RESPONSE_CONTRACT`. **Strict validation**: an
+  out-of-vocabulary string, a missing `verdict`, a non-string `verdict`, and
+  unparseable JSON all raise `AudioEnvelopeError` and surface as
+  `format_error:<kind>` instead of defaulting to `fail` — including
+  `"partial_score": true`, which without an explicit `isinstance(raw, bool)`
+  guard would have scored 1.0, since `bool` is an `int` in Python. **Three-way
+  separation of non-answers**: `declined_to_judge` (the model said so),
+  `read_failure` (the reply broke the contract) and `provider_failure` (the call
+  failed) are counted apart and reported beside the accuracy denominator. All
+  three stay out of the accuracy denominator — only the diagnosis differs — and
+  an unlabelled non-answer falls to `provider_failure`, the reading that claims
+  least about the model.
+
+  No verdict is remapped after the fact: the observation arm answered nothing,
+  so whether that prompt is better or worse remains **unknown** rather than
+  quietly re-scored into a new result. `response_format` stays off until a probe
+  confirms `gpt-audio-1.5` accepts it alongside `input_audio`, pinned by
+  `test_no_structured_output_is_requested_until_it_is_verified`.
+
+  This moves the grader fingerprint —
+  `ed3fcd56…` → `8bb8360a…`. The existing 185-run / 31-item grades are kept as
+  they are: not overwritten, not retroactively re-graded, and distinguishable by
+  the hash. No grading run was in flight. Full account in
+  [`329`](tasks/rebuilding_grading_task/329-the-verdict-that-was-never-a-verdict.md).
+
 - **The grader's fingerprint covered half of its own install graph.**
   `compute_grader_source_hash` hashed `batch-runner/requirements.txt` and stopped
   there. That file's fourth line is `-r requirements-renderer.txt`, and the
@@ -354,6 +394,59 @@ entries land under a fresh dated heading the day they merge to `main`.
   "Critical item pass rate" into the report prompt — is closed under **Fixed**.
 
 ### Added
+- **A speech fixture, because every audio measurement so far has been beeps.**
+  The tone corpora answered "does the verdict depend on the audio at all". None
+  of the 31 graded audio deliverables is a sine wave, so the question the corpus
+  actually turns on — *can it hear words?* — has never been asked.
+  `build_speech_verification_set.py` builds ten privacy-free clips and twenty
+  claims in ten matched pairs (ten true, ten false, so guessing scores 50%),
+  with `order`, `binding` and `negation` families whose true claim shares every
+  content word with the clip and differs only in arrangement — unsolvable by a
+  bag-of-words transcriber.
+
+  eSpeak NG is pinned by version string read at build time, binary SHA-256
+  resolved through symlinks, originating package read from `dpkg-query` rather
+  than assumed, full argv, and **two** SHA-256s per clip. Two, because eSpeak NG
+  has no sample-rate flag — the rate belongs to the voice data, and `en-us`
+  renders at 22050 Hz — while the grading path re-encodes whatever it is handed
+  to 16 kHz mono before the model hears it. The file the synthesiser writes is
+  therefore never the file that is sent, and one digest could not say which.
+  `source` pins what eSpeak wrote and reproduces from eSpeak alone; `sent` pins
+  what the judge actually receives and additionally needs the same ffmpeg. A
+  `sent` mismatch beside a matching `source` blames the encoder, and the
+  comparison says so in those words. The conversion calls the grading path's own
+  `_trim_audio_bytes` rather than shelling out to ffmpeg or sox, so no second
+  tool joins the set of things that have to be pinned. It is GPL-3.0-or-later
+  and **nothing of it is redistributed here** — no source, no binary, no
+  dictionary, no generated clip; the clips are CI artifacts and the repository
+  holds only digests. The ground truth lives in the manifest and is never sent;
+  the judging path sees one `criterion` at a time.
+
+  The set now exists: run
+  [`34022771513`](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/34022771513)
+  built it with eSpeak NG 1.51 (`espeak-ng` 1.51+dfsg-12build1), 31.2350 s of
+  delivered audio across ten clips. All twenty digests match their files, and
+  **the ten `sent` files re-encode byte-for-byte identically on the dev host** —
+  a different machine, same PyAV 17.1.0 / libavcodec 62.28.101 — so the delivered
+  digest is a value anyone can check rather than an artifact of one runner. The
+  manifest is committed as
+  `tasks/rebuilding_grading_task/330-speech-verification-manifest.json` (digests
+  and transcripts only, no audio) to give `--expect-manifest` a target. Four
+  tests hold it to the corpus it was built from: reword a criterion or flip an
+  answer without rebuilding and the committed digests would go on describing a
+  set that no longer exists, which is caught on the dev host without a
+  synthesiser — verified by doing both.
+
+  Reported as a field rather than a caveat: synthesised speech is harder to
+  follow than a human voice, so **a pass confirms the capability and a failure
+  cannot refute it**. Built in `speech-verification-set.yml` because the dev
+  host's kernel (3.10.102) cannot run espeak-ng; `--describe` reviews the corpus
+  anywhere. Nothing in this workflow calls a model or costs anything, and one of
+  its own tests caught a defect in the corpus it ships: the `valve_negation`
+  false claim was shorter than its true partner, and length alone is a cue you
+  can act on without listening. The claim was rewritten rather than the
+  threshold lowered.
+
 - **The prompt A/B was bought, and it did not separate the causes — because the
   treatment broke the answer format, not the hearing.** #433's pre-registration
   was executed as written: run

@@ -1,0 +1,638 @@
+{
+  "what_this_is": "A pinned, privacy-free speech set for checking whether the audio sub-judge hears words. Synthetic speech, so a pass is strong evidence and a failure is weak: see limits.reading.",
+  "provenance": {
+    "tool": "espeak-ng",
+    "version_string": "eSpeak NG text-to-speech: 1.51  Data at: /usr/lib/x86_64-linux-gnu/espeak-ng-data",
+    "binary_path": "/usr/bin/espeak-ng",
+    "binary_sha256": "34191438b1e0f8f5aac5d4fdc5df574762b6fbb3c7a219a8c6f14feceb1bd076",
+    "package": {
+      "manager": "dpkg",
+      "name": "espeak-ng",
+      "version": "1.51+dfsg-12build1",
+      "source": "https://github.com/espeak-ng/espeak-ng"
+    },
+    "license": "GPL-3.0-or-later",
+    "homepage": "https://github.com/espeak-ng/espeak-ng",
+    "redistributed_here": false,
+    "license_note": "eSpeak NG is GPL-3.0-or-later. This repository redistributes none of it -- no source, no binary, no dictionary, and no generated clip. The synthesiser is installed in CI, the clips are uploaded as build artifacts, and only digests are committed.",
+    "voice": "en-us",
+    "words_per_minute": 150,
+    "pitch": 50,
+    "amplitude": 100
+  },
+  "encoder": {
+    "library": "PyAV",
+    "version": "17.1.0",
+    "ffmpeg_libraries": {
+      "libavcodec": "62.28.101",
+      "libavdevice": "62.3.101",
+      "libavfilter": "11.14.101",
+      "libavformat": "62.12.101",
+      "libavutil": "60.26.101",
+      "libswresample": "6.3.101",
+      "libswscale": "9.5.101"
+    },
+    "function": "core.perception.audio._trim_audio_bytes",
+    "target": "16000 Hz mono s16",
+    "note": "The `sent` bytes are what this function returns for the `source` file at the default window, which is the call a real grading run makes. A `sent` digest that differs while `source` matches means this encoder moved, not the synthesiser."
+  },
+  "clips": [
+    {
+      "clip_id": "crate",
+      "command": [
+        "espeak-ng",
+        "-v",
+        "en-us",
+        "-s",
+        "150",
+        "-p",
+        "50",
+        "-a",
+        "100",
+        "-w",
+        "/home/runner/work/gdpval-realworks/gdpval-realworks/speech-set/crate.source.wav",
+        "The blue crate holds seventeen bolts."
+      ],
+      "source": {
+        "file": "crate.source.wav",
+        "sha256": "7916f6884f08eb4d979082da4b4a54c0786b35b5faa0eba6de46c3ab5123a4c1",
+        "bytes": 133010,
+        "channels": 1,
+        "sample_width_bytes": 2,
+        "sample_rate_hz": 22050,
+        "frames": 66483,
+        "seconds": 3.0151
+      },
+      "sent": {
+        "file": "crate.sent.wav",
+        "sha256": "7e59f9a516ff6bf39a8462a4718c29124d6de87d4239fdb6eecebb8b6f4d0741",
+        "bytes": 96562,
+        "format": "wav",
+        "channels": 1,
+        "sample_width_bytes": 2,
+        "sample_rate_hz": 16000,
+        "frames": 48242,
+        "seconds": 3.0151
+      }
+    },
+    {
+      "clip_id": "shelf",
+      "command": [
+        "espeak-ng",
+        "-v",
+        "en-us",
+        "-s",
+        "150",
+        "-p",
+        "50",
+        "-a",
+        "100",
+        "-w",
+        "/home/runner/work/gdpval-realworks/gdpval-realworks/speech-set/shelf.source.wav",
+        "The second shelf is fifteen centimetres deep."
+      ],
+      "source": {
+        "file": "shelf.source.wav",
+        "sha256": "f687cbaf8a37ef6bbb9ec88aa363ad0422687d27e0b91e19be3a1cd6ee80e890",
+        "bytes": 145550,
+        "channels": 1,
+        "sample_width_bytes": 2,
+        "sample_rate_hz": 22050,
+        "frames": 72753,
+        "seconds": 3.2995
+      },
+      "sent": {
+        "file": "shelf.sent.wav",
+        "sha256": "2737aed8fa5d09a7ed5e363a9567a22240821ca186617fa40bf507862ed16fc5",
+        "bytes": 105662,
+        "format": "wav",
+        "channels": 1,
+        "sample_width_bytes": 2,
+        "sample_rate_hz": 16000,
+        "frames": 52792,
+        "seconds": 3.2995
+      }
+    },
+    {
+      "clip_id": "dial",
+      "command": [
+        "espeak-ng",
+        "-v",
+        "en-us",
+        "-s",
+        "150",
+        "-p",
+        "50",
+        "-a",
+        "100",
+        "-w",
+        "/home/runner/work/gdpval-realworks/gdpval-realworks/speech-set/dial.source.wav",
+        "Turn the dial to the left before closing the panel."
+      ],
+      "source": {
+        "file": "dial.source.wav",
+        "sha256": "d2e7914e4c59fa0f1a33abd61320dae5c4c5740cb79cd2843409462fc7800f8b",
+        "bytes": 147636,
+        "channels": 1,
+        "sample_width_bytes": 2,
+        "sample_rate_hz": 22050,
+        "frames": 73796,
+        "seconds": 3.3468
+      },
+      "sent": {
+        "file": "dial.sent.wav",
+        "sha256": "b58bb4f1c471050524a1cc7951c53891c5d8c6c1d318d8ff98d902641e46d352",
+        "bytes": 107176,
+        "format": "wav",
+        "channels": 1,
+        "sample_width_bytes": 2,
+        "sample_rate_hz": 16000,
+        "frames": 53549,
+        "seconds": 3.3468
+      }
+    },
+    {
+      "clip_id": "column",
+      "command": [
+        "espeak-ng",
+        "-v",
+        "en-us",
+        "-s",
+        "150",
+        "-p",
+        "50",
+        "-a",
+        "100",
+        "-w",
+        "/home/runner/work/gdpval-realworks/gdpval-realworks/speech-set/column.source.wav",
+        "The report lists thirty items in the second column."
+      ],
+      "source": {
+        "file": "column.source.wav",
+        "sha256": "a4b661982e7570e2b9952cc2942748b0d0b39fe051140d3ce1160a7581dadf1e",
+        "bytes": 151588,
+        "channels": 1,
+        "sample_width_bytes": 2,
+        "sample_rate_hz": 22050,
+        "frames": 75772,
+        "seconds": 3.4364
+      },
+      "sent": {
+        "file": "column.sent.wav",
+        "sha256": "6c25533396667dbfc6c64a1287bcab71de7cea6ddb8a55b32f715d93eefc0793",
+        "bytes": 110042,
+        "format": "wav",
+        "channels": 1,
+        "sample_width_bytes": 2,
+        "sample_rate_hz": 16000,
+        "frames": 54982,
+        "seconds": 3.4364
+      }
+    },
+    {
+      "clip_id": "lamp",
+      "command": [
+        "espeak-ng",
+        "-v",
+        "en-us",
+        "-s",
+        "150",
+        "-p",
+        "50",
+        "-a",
+        "100",
+        "-w",
+        "/home/runner/work/gdpval-realworks/gdpval-realworks/speech-set/lamp.source.wav",
+        "The green lamp switches off when the door opens."
+      ],
+      "source": {
+        "file": "lamp.source.wav",
+        "sha256": "5603d776182fb8df84f5a59ffcd6b092fbaf37396fe0adb6fd6969ca1f71d728",
+        "bytes": 141122,
+        "channels": 1,
+        "sample_width_bytes": 2,
+        "sample_rate_hz": 22050,
+        "frames": 70539,
+        "seconds": 3.199
+      },
+      "sent": {
+        "file": "lamp.sent.wav",
+        "sha256": "00b8b8643b56290f83409d6bd60719835abf040b054fce1c5987f0d641aa63df",
+        "bytes": 102448,
+        "format": "wav",
+        "channels": 1,
+        "sample_width_bytes": 2,
+        "sample_rate_hz": 16000,
+        "frames": 51185,
+        "seconds": 3.1991
+      }
+    },
+    {
+      "clip_id": "powder",
+      "command": [
+        "espeak-ng",
+        "-v",
+        "en-us",
+        "-s",
+        "150",
+        "-p",
+        "50",
+        "-a",
+        "100",
+        "-w",
+        "/home/runner/work/gdpval-realworks/gdpval-realworks/speech-set/powder.source.wav",
+        "Pour the water before you add the powder."
+      ],
+      "source": {
+        "file": "powder.source.wav",
+        "sha256": "baf66e533c1f161077b8a9ec6c8ba8ba0152e1e518151788820f5626a1d6ec2b",
+        "bytes": 113624,
+        "channels": 1,
+        "sample_width_bytes": 2,
+        "sample_rate_hz": 22050,
+        "frames": 56790,
+        "seconds": 2.5755
+      },
+      "sent": {
+        "file": "powder.sent.wav",
+        "sha256": "938317e51b983d1725dcbe50cf16a48c7c88164659838a196fab4e586a0893b5",
+        "bytes": 82496,
+        "format": "wav",
+        "channels": 1,
+        "sample_width_bytes": 2,
+        "sample_rate_hz": 16000,
+        "frames": 41209,
+        "seconds": 2.5756
+      }
+    },
+    {
+      "clip_id": "meeting",
+      "command": [
+        "espeak-ng",
+        "-v",
+        "en-us",
+        "-s",
+        "150",
+        "-p",
+        "50",
+        "-a",
+        "100",
+        "-w",
+        "/home/runner/work/gdpval-realworks/gdpval-realworks/speech-set/meeting.source.wav",
+        "The workshop moved from Tuesday to Thursday."
+      ],
+      "source": {
+        "file": "meeting.source.wav",
+        "sha256": "9a876844139e416e29d7b9353a80562482a0f63517fd96a22a4b5a58e018a932",
+        "bytes": 138022,
+        "channels": 1,
+        "sample_width_bytes": 2,
+        "sample_rate_hz": 22050,
+        "frames": 68989,
+        "seconds": 3.1288
+      },
+      "sent": {
+        "file": "meeting.sent.wav",
+        "sha256": "c7c5c258133ac4c2d2684bedd604e9826dbea1a9753cf62b208dee9de7d20514",
+        "bytes": 100200,
+        "format": "wav",
+        "channels": 1,
+        "sample_width_bytes": 2,
+        "sample_rate_hz": 16000,
+        "frames": 50061,
+        "seconds": 3.1288
+      }
+    },
+    {
+      "clip_id": "boxes",
+      "command": [
+        "espeak-ng",
+        "-v",
+        "en-us",
+        "-s",
+        "150",
+        "-p",
+        "50",
+        "-a",
+        "100",
+        "-w",
+        "/home/runner/work/gdpval-realworks/gdpval-realworks/speech-set/boxes.source.wav",
+        "There are four red boxes and nine blue ones."
+      ],
+      "source": {
+        "file": "boxes.source.wav",
+        "sha256": "c38be9f319fc0108475de423b58bb0645b9384e75868a4b6817938919be7d93d",
+        "bytes": 145642,
+        "channels": 1,
+        "sample_width_bytes": 2,
+        "sample_rate_hz": 22050,
+        "frames": 72799,
+        "seconds": 3.3015
+      },
+      "sent": {
+        "file": "boxes.sent.wav",
+        "sha256": "e3fb726297fa910ff51be0d574d6ab6a6c1fa0911179889795fa29553cbd0890",
+        "bytes": 105728,
+        "format": "wav",
+        "channels": 1,
+        "sample_width_bytes": 2,
+        "sample_rate_hz": 16000,
+        "frames": 52825,
+        "seconds": 3.3016
+      }
+    },
+    {
+      "clip_id": "engine",
+      "command": [
+        "espeak-ng",
+        "-v",
+        "en-us",
+        "-s",
+        "150",
+        "-p",
+        "50",
+        "-a",
+        "100",
+        "-w",
+        "/home/runner/work/gdpval-realworks/gdpval-realworks/speech-set/engine.source.wav",
+        "The engine runs quietly at low speed."
+      ],
+      "source": {
+        "file": "engine.source.wav",
+        "sha256": "965e9cf93672b50f0f700e42b943a7b495631c657422ce9503052ab325803207",
+        "bytes": 119562,
+        "channels": 1,
+        "sample_width_bytes": 2,
+        "sample_rate_hz": 22050,
+        "frames": 59759,
+        "seconds": 2.7102
+      },
+      "sent": {
+        "file": "engine.sent.wav",
+        "sha256": "0dc859843030440dda3606bc2b74793b1a0882c3e9d528163a6341562d8d7866",
+        "bytes": 86804,
+        "format": "wav",
+        "channels": 1,
+        "sample_width_bytes": 2,
+        "sample_rate_hz": 16000,
+        "frames": 43363,
+        "seconds": 2.7102
+      }
+    },
+    {
+      "clip_id": "valve",
+      "command": [
+        "espeak-ng",
+        "-v",
+        "en-us",
+        "-s",
+        "150",
+        "-p",
+        "50",
+        "-a",
+        "100",
+        "-w",
+        "/home/runner/work/gdpval-realworks/gdpval-realworks/speech-set/valve.source.wav",
+        "Do not open the valve until the pressure drops."
+      ],
+      "source": {
+        "file": "valve.source.wav",
+        "sha256": "275ec6c9a38f4c09315fb957bdcfc07a46a9ef9fde9135f204b060d5d058891d",
+        "bytes": 142128,
+        "channels": 1,
+        "sample_width_bytes": 2,
+        "sample_rate_hz": 22050,
+        "frames": 71042,
+        "seconds": 3.2219
+      },
+      "sent": {
+        "file": "valve.sent.wav",
+        "sha256": "f1fe5ed15585618559e22271c9642133ce3b07b31d6aed2ba1fe0ea0a1cea796",
+        "bytes": 103178,
+        "format": "wav",
+        "channels": 1,
+        "sample_width_bytes": 2,
+        "sample_rate_hz": 16000,
+        "frames": 51550,
+        "seconds": 3.2219
+      }
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "crate_seventeen",
+      "pair_id": "crate_number",
+      "clip_id": "crate",
+      "family": "confusable_number",
+      "criterion": "The speaker states a quantity of seventeen.",
+      "holds": true,
+      "because": "the sentence is 'seventeen bolts'"
+    },
+    {
+      "claim_id": "crate_seventy",
+      "pair_id": "crate_number",
+      "clip_id": "crate",
+      "family": "confusable_number",
+      "criterion": "The speaker states a quantity of seventy.",
+      "holds": false,
+      "because": "seventeen, not seventy -- the pair this corpus exists for"
+    },
+    {
+      "claim_id": "shelf_fifteen",
+      "pair_id": "shelf_number",
+      "clip_id": "shelf",
+      "family": "confusable_number",
+      "criterion": "The speaker gives a measurement of fifteen centimetres.",
+      "holds": true,
+      "because": "the sentence is 'fifteen centimetres deep'"
+    },
+    {
+      "claim_id": "shelf_fifty",
+      "pair_id": "shelf_number",
+      "clip_id": "shelf",
+      "family": "confusable_number",
+      "criterion": "The speaker gives a measurement of fifty centimetres.",
+      "holds": false,
+      "because": "fifteen, not fifty"
+    },
+    {
+      "claim_id": "dial_left",
+      "pair_id": "dial_direction",
+      "clip_id": "dial",
+      "family": "direction",
+      "criterion": "The speaker says to turn the dial to the left.",
+      "holds": true,
+      "because": "the sentence is 'turn the dial to the left'"
+    },
+    {
+      "claim_id": "dial_right",
+      "pair_id": "dial_direction",
+      "clip_id": "dial",
+      "family": "direction",
+      "criterion": "The speaker says to turn the dial to the right.",
+      "holds": false,
+      "because": "left, not right"
+    },
+    {
+      "claim_id": "column_second",
+      "pair_id": "column_ordinal",
+      "clip_id": "column",
+      "family": "ordinal",
+      "criterion": "The speaker refers to the second column.",
+      "holds": true,
+      "because": "the sentence is 'in the second column'"
+    },
+    {
+      "claim_id": "column_third",
+      "pair_id": "column_ordinal",
+      "clip_id": "column",
+      "family": "ordinal",
+      "criterion": "The speaker refers to the third column.",
+      "holds": false,
+      "because": "second, not third"
+    },
+    {
+      "claim_id": "lamp_off",
+      "pair_id": "lamp_polarity",
+      "clip_id": "lamp",
+      "family": "polarity",
+      "criterion": "The speaker says the lamp switches off.",
+      "holds": true,
+      "because": "the sentence is 'switches off when the door opens'"
+    },
+    {
+      "claim_id": "lamp_on",
+      "pair_id": "lamp_polarity",
+      "clip_id": "lamp",
+      "family": "polarity",
+      "criterion": "The speaker says the lamp switches on.",
+      "holds": false,
+      "because": "off, not on"
+    },
+    {
+      "claim_id": "powder_water_first",
+      "pair_id": "powder_order",
+      "clip_id": "powder",
+      "family": "order",
+      "criterion": "The speaker says the water goes in before the powder.",
+      "holds": true,
+      "because": "'pour the water before you add the powder'"
+    },
+    {
+      "claim_id": "powder_powder_first",
+      "pair_id": "powder_order",
+      "clip_id": "powder",
+      "family": "order",
+      "criterion": "The speaker says the powder goes in before the water.",
+      "holds": false,
+      "because": "the order is reversed; both words are present, so spotting them is not enough"
+    },
+    {
+      "claim_id": "meeting_to_thursday",
+      "pair_id": "meeting_order",
+      "clip_id": "meeting",
+      "family": "order",
+      "criterion": "The speaker says the workshop was moved to Thursday.",
+      "holds": true,
+      "because": "'moved from Tuesday to Thursday'"
+    },
+    {
+      "claim_id": "meeting_to_tuesday",
+      "pair_id": "meeting_order",
+      "clip_id": "meeting",
+      "family": "order",
+      "criterion": "The speaker says the workshop was moved to Tuesday.",
+      "holds": false,
+      "because": "Tuesday is the day it moved FROM; the word is in the clip"
+    },
+    {
+      "claim_id": "boxes_nine_blue",
+      "pair_id": "boxes_binding",
+      "clip_id": "boxes",
+      "family": "binding",
+      "criterion": "The speaker says there are nine blue boxes.",
+      "holds": true,
+      "because": "'four red boxes and nine blue ones'"
+    },
+    {
+      "claim_id": "boxes_four_blue",
+      "pair_id": "boxes_binding",
+      "clip_id": "boxes",
+      "family": "binding",
+      "criterion": "The speaker says there are four blue boxes.",
+      "holds": false,
+      "because": "four belongs to red; both numbers are in the clip"
+    },
+    {
+      "claim_id": "engine_quiet",
+      "pair_id": "engine_polarity",
+      "clip_id": "engine",
+      "family": "polarity",
+      "criterion": "The speaker says the engine runs quietly.",
+      "holds": true,
+      "because": "'the engine runs quietly at low speed'"
+    },
+    {
+      "claim_id": "engine_loud",
+      "pair_id": "engine_polarity",
+      "clip_id": "engine",
+      "family": "polarity",
+      "criterion": "The speaker says the engine runs loudly.",
+      "holds": false,
+      "because": "quietly, not loudly"
+    },
+    {
+      "claim_id": "valve_wait",
+      "pair_id": "valve_negation",
+      "clip_id": "valve",
+      "family": "negation",
+      "criterion": "The speaker says to wait until the pressure drops before opening the valve.",
+      "holds": true,
+      "because": "'do not open the valve until the pressure drops'"
+    },
+    {
+      "claim_id": "valve_open_now",
+      "pair_id": "valve_negation",
+      "clip_id": "valve",
+      "family": "negation",
+      "criterion": "The speaker says to open the valve before the pressure drops.",
+      "holds": false,
+      "because": "the instruction is a prohibition, and this reverses it while keeping every content word, so only the 'do not ... until' can separate them"
+    }
+  ],
+  "corpus": {
+    "clips": 10,
+    "claims": 20,
+    "true_claims": 10,
+    "false_claims": 10,
+    "pairs": 10,
+    "families": [
+      "binding",
+      "confusable_number",
+      "direction",
+      "negation",
+      "order",
+      "ordinal",
+      "polarity"
+    ]
+  },
+  "limits": {
+    "voice": "synthetic formant synthesis, not a human speaker",
+    "reading": "A pass confirms the judge can hear speech. A failure does NOT show it cannot hear people -- only that it cannot hear eSpeak, which is harder to understand than a human voice. This set can confirm the capability; it cannot refute it.",
+    "language": "en-us only",
+    "not_measured": [
+      "human speech",
+      "accented speech",
+      "overlapping speakers",
+      "background noise",
+      "languages other than English"
+    ],
+    "delivery_is_not_understanding": "Audio token usage shows the sound was delivered and billed. It is not evidence that anything was understood; that is what the paired claims are for."
+  },
+  "privacy": {
+    "recorded_audio": false,
+    "cloned_voice": false,
+    "personal_data": false,
+    "note": "Every sentence was written for this file and names no person, place, organisation, date or identifier."
+  }
+}
