@@ -63,6 +63,13 @@ batch-runner/scripts/*
 !batch-runner/scripts/build_speech_verification_set.py
 !batch-runner/scripts/check_dev_host_migration_triggers.py
 !batch-runner/scripts/analyze_required_item_definition.py
+# Run by .github/workflows/execution-envelope-preflight.yml. Without this line
+# the directory rule above hides it, `git add -A` skips it in silence, and the
+# workflow calls a file that is not in the repository -- so the job dies at the
+# step whose whole purpose is to refuse an unreadable report. Held by
+# tests/test_the_free_check_runs_in_ci.py, which asks git what is tracked
+# rather than trusting this list to have been kept up.
+!batch-runner/scripts/summarise_execution_envelope_check_in_korean.py
 
 
 # Experiment report HTML (skews GitHub language stats)

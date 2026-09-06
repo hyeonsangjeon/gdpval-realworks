@@ -1,0 +1,295 @@
+name: Execution Envelope Preflight
+
+# The run-place comparison has had a free advance check for a while, and until
+# now nothing ran it. It lived in batch-runner/scripts/ and was run by hand, so
+# a change that broke one of the fixed conditions -- the five pinned tasks,
+# their input fingerprints, the one shared prompt, the pinned API version --
+# reached main with nothing saying so. This workflow runs that same tool on
+# every pull request and closes that gap.
+#
+# It spends nothing. No model is called, no cloud account is signed in to, no
+# container is started, and no secret is referenced anywhere below. That is not
+# a limitation to work around: a branch with no credentials cannot verify Azure
+# permission, and this refuses to pretend otherwise. It runs the check in
+# --exit-on-code-and-contract-problems-only mode, which decides the exit code
+# from the faults that read the same on every machine and writes down what this
+# job could not see as *not checked* -- never as passed.
+#
+# So a green run here does NOT mean the comparison may start, and does NOT mean
+# the environment is ready. The policy a real, paid dispatch is held to is the
+# same tool's default, which is fail closed and which this job deliberately
+# never satisfies. The summary and the JSON artifact both say so in as many
+# words, because a green tick that gets read as permission is worse than no
+# check at all.
+#
+# Nothing here is wrapped in continue-on-error. The check's exit code is
+# recorded and re-raised by the last step, so that the Korean summary and the
+# artifact are produced on a failing run too -- a red run is exactly the run
+# whose evidence somebody needs to read.
+
+on:
+  pull_request:
+    paths:
+      # Deliberately wider than the handful of files the check reads. The check
+      # imports core/, and its verdict depends on constants elsewhere in the
+      # package -- DEFAULT_API_VERSION in core/config.py is one. A filter
+      # narrowed to the envelope's own directories would mean a change that
+      # breaks the pinned API version starts no run at all. That failure mode
+      # is measured, not theoretical: #392 changed repo-root scripts/ while
+      # backend-tests.yml did not list that path, and the job that would have
+      # caught it never woke up.
+      - "batch-runner/**"
+      - ".github/workflows/execution-envelope-preflight.yml"
+  push:
+    branches: [main]
+    paths:
+      - "batch-runner/**"
+      - ".github/workflows/execution-envelope-preflight.yml"
+  workflow_dispatch:
+
+# Read-only, and no `secrets.` reference appears anywhere in this file. Both
+# are asserted by batch-runner/tests/test_the_free_check_runs_in_ci.py, because
+# the whole meaning of this job's report is that it was produced by a machine
+# that had been given nothing.
+permissions:
+  contents: read
+
+concurrency:
+  group: execution-envelope-preflight-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  advance-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+
+      # Exact patch, matching backend-tests.yml and the dev venv.
+      # core/agentic_v2_license.py pins LICENSE_EVALUATOR_PYTHON_VERSION =
+      # "3.10.12" and compares it against sys.version_info[:3] at import. The
+      # check below imports core/, so anything else here turns a readiness
+      # report into an import error.
+      - name: Setup Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.10.12"
+          cache: pip
+          cache-dependency-path: batch-runner/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          cd batch-runner
+          pip install -r requirements.txt
+
+      # The report this job produces is only worth reading because the machine
+      # producing it had no credentials. If one of these ever arrived -- an
+      # organisation-level variable, a step above gaining an `env:` block -- the
+      # check would read it, grade the Azure run place on it, and the artifact
+      # would quietly claim more than a secret-less branch is entitled to
+      # claim. Refuse instead.
+      #
+      # The Azure names are every variable core/azure_ai_clients.py names at
+      # module scope, which is where that module says a checker should read
+      # them from rather than retyping them. That includes the ten in
+      # FORBIDDEN_STATIC_AZURE_CREDENTIAL_ENV -- the module already refuses to
+      # run when one of those is set, and this job refuses earlier and for a
+      # different reason: not "that is the wrong way to sign in" but "this job
+      # is not entitled to sign in at all". A test holds this list against
+      # those constants, so a new one added there fails here rather than
+      # slipping into this job unnoticed.
+      #
+      # Only names are printed, never values, and the names are a fixed list
+      # rather than a scan of the environment, so nothing here can put a secret
+      # in a public log.
+      - name: Verify this job was given no credentials
+        run: |
+          set -euo pipefail
+          found=""
+          for name in \
+            AZURE_AI_ROUTE_PROFILE \
+            AZURE_AI_ALLOW_LEGACY_ROLLBACK \
+            AZURE_AI_REQUIRE_EXPECTED_IDENTITIES \
+            AZURE_AI_EXPECTED_DIRECT_ACCOUNT \
+            AZURE_AI_EXPECTED_PROJECT_ACCOUNT \
+            AZURE_AI_EXPECTED_PROJECT_NAME \
+            AZURE_AI_EXPECTED_LEGACY_ACCOUNT \
+            FOUNDRY_PROJECT_ENDPOINT \
+            AZURE_OPENAI_V1_ENDPOINT \
+            AZURE_OPENAI_LEGACY_ENDPOINT \
+            AZURE_OPENAI_ENDPOINT \
+            AZURE_OPENAI_API_KEY \
+            AZURE_API_KEY \
+            AZURE_AI_API_KEY \
+            AZURE_AI_PROJECT_API_KEY \
+            AZURE_OPENAI_AD_TOKEN \
+            AZURE_CLIENT_SECRET \
+            AZURE_CLIENT_CERTIFICATE_PATH \
+            AZURE_CLIENT_CERTIFICATE_PASSWORD \
+            AZURE_USERNAME \
+            AZURE_PASSWORD \
+            AZURE_CLIENT_ID \
+            AZURE_TENANT_ID \
+            OPENAI_API_KEY \
+            ANTHROPIC_API_KEY \
+            HF_TOKEN \
+            HUGGINGFACE_TOKEN
+          do
+            if [ -n "${!name:-}" ]; then
+              found="$found $name"
+            fi
+          done
+          if [ -n "$found" ]; then
+            echo "::error::this job is meant to run with no credentials, but these are set:$found"
+            exit 1
+          fi
+          echo "no credential variable is set, so the report below is a report from a machine that was given nothing"
+
+      # --skip-docker-probe because a runner's Docker service says nothing
+      # about the machine that would host the real comparison, and a probe here
+      # would grade the container run place on the wrong host.
+      #
+      # --azure-route-served is deliberately NOT passed. There is no probe for
+      # it, so passing `yes` would be this workflow asserting an access fact it
+      # has no way to know. Leaving it out reports that run place as not
+      # measured, which is the truth.
+      #
+      # The exit code is captured rather than allowed to end the step, so the
+      # summary and the artifact below are still produced when it is non-zero.
+      # It is re-raised by the last step. This is not continue-on-error: no
+      # failure is swallowed, it is deferred by four steps and then raised with
+      # the evidence attached.
+      - name: Run the free advance check
+        id: check
+        run: |
+          set -uo pipefail
+          cd batch-runner
+          set +e
+          python scripts/check_execution_envelope_advance_check.py \
+            --json \
+            --skip-docker-probe \
+            --exit-on-code-and-contract-problems-only \
+            > "$RUNNER_TEMP/execution_envelope_report.json" \
+            2> "$RUNNER_TEMP/execution_envelope_stderr.txt"
+          code=$?
+          set -e
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          echo "the check exited with $code"
+          if [ -s "$RUNNER_TEMP/execution_envelope_stderr.txt" ]; then
+            echo "::group::what the check wrote to stderr"
+            cat "$RUNNER_TEMP/execution_envelope_stderr.txt"
+            echo "::endgroup::"
+          fi
+
+      # This is where a truncated, empty or key-less report is caught. The
+      # summariser refuses to render one, loudly and non-zero, rather than
+      # printing a short summary that on a build page is indistinguishable from
+      # a summary saying nothing was wrong. Run with `always()` so a report
+      # that failed to appear is reported as a failure here rather than as a
+      # step that was skipped.
+      - name: Write the Korean summary
+        if: always()
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          python scripts/summarise_execution_envelope_check_in_korean.py \
+            "$RUNNER_TEMP/execution_envelope_report.json" \
+            --commit "$GITHUB_SHA" \
+            --out "$RUNNER_TEMP/execution_envelope_summary_ko.md"
+          cat "$RUNNER_TEMP/execution_envelope_summary_ko.md" >> "$GITHUB_STEP_SUMMARY"
+
+      # Uploaded on a red run too. The commit is in the artifact name and in
+      # the summary's evidence section, and the input fingerprints are in the
+      # JSON, so this artifact can be tied to a particular tree and to the
+      # earlier free five-task result by exact values rather than by date.
+      - name: Upload the report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: execution-envelope-preflight-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/execution_envelope_report.json
+            ${{ runner.temp }}/execution_envelope_summary_ko.md
+            ${{ runner.temp }}/execution_envelope_stderr.txt
+          if-no-files-found: error
+          retention-days: 30
+
+      # The recorded exit code, raised. Three things beyond "was it zero" are
+      # checked here, because each is a way a broken run could otherwise pass:
+      #
+      #  - an unset output means the check step never ran, which is not a pass
+      #  - exit 0 while the report lists problems, or exit 1 while it lists
+      #    none, means the tool contradicted itself. A Python traceback also
+      #    exits 1, so "exit 1 and a readable report naming problems" is what
+      #    separates a check that found faults from a check that crashed
+      #  - no summary means the summariser refused the report. It reads keys
+      #    this step does not, so a report that is intact around
+      #    offline_verdict and mangled elsewhere would otherwise be gated as a
+      #    pass by a step that never looked at the mangled part. Measured: a
+      #    report with uncontrolled_differences removed reached this step and
+      #    was passed, while the summary step had already gone red
+      - name: Raise the check's verdict
+        if: always()
+        env:
+          CHECK_EXIT_CODE: ${{ steps.check.outputs.exit_code }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CHECK_EXIT_CODE:-}" ]; then
+            echo "::error::the check step recorded no exit code, so it did not run to the end"
+            exit 1
+          fi
+          cd batch-runner
+          python - "$RUNNER_TEMP/execution_envelope_report.json" "$CHECK_EXIT_CODE" <<'PY'
+          import json
+          import sys
+
+          report_path, recorded = sys.argv[1], sys.argv[2]
+          try:
+              report = json.loads(open(report_path, encoding="utf-8").read())
+              verdict = report["offline_verdict"]
+              problems = verdict["problems"]
+          except Exception as error:
+              print(
+                  "::error::the check exited "
+                  f"{recorded} and left no readable report, so it failed rather "
+                  f"than found faults: {error!r}"
+              )
+              raise SystemExit(1)
+
+          code = int(recorded)
+          if code == 0 and problems:
+              print(
+                  "::error::the check exited 0 while reporting "
+                  f"{len(problems)} fault(s). One of the two is wrong; neither "
+                  "is a pass"
+              )
+              raise SystemExit(1)
+          if code != 0 and not problems:
+              print(
+                  f"::error::the check exited {code} while reporting no fault "
+                  "in the code or the plan. That is the tool failing, not the "
+                  "tree failing"
+              )
+              raise SystemExit(1)
+          if code != 0:
+              print(f"::error::{len(problems)} fault(s) in the code or the plan:")
+              for problem in problems:
+                  print(f"::error::  {problem}")
+              raise SystemExit(code)
+
+          print(
+              "No fault in the code or the plan. This is not permission to "
+              f"start a paid run: run_may_start={verdict['run_may_start']}, "
+              f"and {len(verdict['not_checked_here'])} thing(s) were recorded "
+              "as not checked here."
+          )
+          PY
+          # Reached only when the block above found nothing wrong, so this is
+          # the last thing between a mangled report and a green tick.
+          if [ ! -s "$RUNNER_TEMP/execution_envelope_summary_ko.md" ]; then
+            echo "::error::no Korean summary was written, so the report was not readable end to end. That is a failure, not a pass"
+            exit 1
+          fi
