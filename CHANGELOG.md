@@ -12,6 +12,50 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Changed
+- **The paid summary printed both halves of a model-identity check and did
+  neither half.** Its header states the model 330 §2 pins; a table row four
+  hundred lines down lists what actually answered. Nothing compared the two, so
+  a reader was expected to hold both strings in their head. An Azure deployment
+  can be repointed at a different model without its name changing, and a run
+  answered by a different model is not less accurate — it is a different run
+  than the registered one, which no accuracy figure repairs. A foreign name now
+  gets a banner above the numbers it disqualifies. The comparison was grounded
+  on the real paid run `34008840627`, whose delivery block reads
+  `"response_models": ["gpt-audio-1.5"]` — the pin exactly, no version suffix —
+  rather than on a guess about what Azure returns, because a check that cries
+  wolf on every run is worse than no check. Both wolf-crying directions are
+  pinned by the test: a rehearsal answers `stub-not-a-model` by design and stays
+  quiet, and a run where *nothing* answered (`[]`) is a measurement that did not
+  happen, not an impostor — the same "not measured is not something else" rule
+  as the row below it. Mutation-checked three ways, one per direction.
+
+- **The summary put `None` in the cell that decides whether the audio judge can
+  hear.** Rendering the paid summary against a run where no call was answered —
+  the shape 330 §3's second stop rule exists to produce, and the shape run
+  `34008840627` actually had 52 times — printed `**None**` for Youden's J and
+  again for the pre-registered binomial p, plus three more rows. `None` is
+  Python's repr leaking into a table a person reads, and it landed in the one
+  cell where it is dangerous: a discrimination of **0** is this diagnostic's
+  headline finding, the thing "판별력 0 → 못 믿음" is about, and a run that
+  measured *nothing* was one glance from being recorded as having measured zero.
+  The same three-state discipline the delivery line was fixed for, in the row
+  that carries the conclusion. All six rows now say `not measured`, including
+  the accuracy row that had been saying `n/a` — one table, one vocabulary for
+  one condition. Rehearsals answer every call, so none of these rows had ever
+  rendered without a real number in them; the test builds a judge that answers
+  nothing, executes the workflow's own summary code, and asserts the word `None`
+  appears nowhere in the output, then asserts the healthy run still prints
+  `1.0`. Mutation-checked four ways, including the one that matters: making the
+  helper return `0`.
+
+  Nothing was wrong with the stop-early banner, which is worth recording because
+  the check was not free. Its test grepped the workflow text, and a grep cannot
+  see a `KeyError`; the branch is skipped on every rehearsal, so its first
+  execution would have been a paid run that aborted. Executed against a real
+  stopped run it behaves: the rule name, the shortfall and the reason all
+  render, above the table they qualify. The regression test now asserts the two
+  counts stay distinguishable — `1` bought against `30` planned — because a
+  summary that prints the same figure twice says a partial run went to plan.
 - **The audio judge accepted answers that were not verdicts, and scored them as
   `fail`.** Replaying the 120 stored responses from run `34008840627` offline —
   no new API call — the observation arm's published "47.1% accuracy over 17
