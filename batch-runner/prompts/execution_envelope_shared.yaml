@@ -1,0 +1,78 @@
+name: "execution_envelope_shared"
+description: >-
+  The one first request the run-place comparison sends from every run place.
+  Loaded by the host Python process, the Docker container and the Azure code
+  interpreter alike when an experiment sets execution.shared_first_request:
+  true. Off by default; no other experiment loads this file.
+
+  Every sentence below has to be true in all three places at once. That is the
+  whole constraint, and it is why this file says less than any of the three
+  files it replaces: sandbox_occupation_codegen advertises a Skills toolkit the
+  comparison switches off with max_skills: 0, code_interpreter_occupation_codegen
+  names /mnt/data, and subprocess_occupation_codegen names the current
+  directory. A sentence true in one place and false in another is not a shared
+  prompt, it is a fourth difference.
+
+  What could not be equalised is not hidden here. It is named in
+  core/shared_first_request.UNCONTROLLED_DIFFERENCES, checked by the free
+  advance check, and printed with any result this prompt produces.
+
+# The section list every opted-in run place assembles, in this order.
+#
+# Four ids, and the four are not a preference. Each reads only the task's own
+# words and the reference files as they sit before a run place is chosen, so
+# each can be built identically in all three places. The four left out of
+# core.prompt_sections.DEFAULT_SECTIONS — skills_manual, deps_hint, contract,
+# reflection — are each built from something only the container has, and the
+# container sending them was 2,287 of the 3,774 characters that separated the
+# widest first request from the narrowest.
+#
+# core.shared_first_request.shared_section_order refuses this file if it ever
+# names one of those four, so the gap cannot be reopened by editing here.
+sections:
+  - file_structure
+  - task
+  - previews
+  - available_files_any_run_place
+
+system_message: |
+  You are a professional {occupation}. Reply to the task as an expert in your
+  field, then provide the complete Python code that generates the deliverables.
+
+user_prompt: |
+  You are a professional {occupation} completing a desktop productivity task
+  using Python.
+
+  First, as an expert {occupation}, write a concise professional reply to the
+  task below. Describe what deliverables you will create, including their
+  purpose, contents, and file formats. This description should help a human
+  evaluator understand what to expect before opening the files.
+
+  Then, provide the complete Python code to generate the deliverables.
+
+  RULES:
+  1. Use ONLY these pre-installed libraries (versions shown — use APIs
+     compatible with these versions):
+     - python-docx>=1.0.0  (no _p.add_hyperlink(); use OxmlElement for hyperlinks)
+     - reportlab>=4.0.0
+     - openpyxl>=3.1.0
+     - Pillow>=10.0.0  (no ImageDraw.textsize(); use textbbox() or textlength())
+     - python-pptx>=0.6.0
+     - matplotlib>=3.8.0
+     - pandas>=2.1.0
+  2. Save every deliverable into the working directory your code starts in.
+     Use a relative path and a descriptive filename. Do not write to an
+     absolute path.
+  3. Assume no network access. Do not download anything, and do not call any
+     service over the network.
+  4. Before reading any reference file, inspect its actual structure first
+     (df.columns, df.dtypes, df.head()). Never hardcode column names and never
+     assume data types.
+  5. The task is not complete until the files are written. Describing a file
+     you would create does not create it.
+  6. In your text response, give a plain-text summary only. Do not include
+     download links or sandbox URLs.
+  7. Wrap the code in a single ```python fenced block.
+
+  TASK:
+  {task_prompt}

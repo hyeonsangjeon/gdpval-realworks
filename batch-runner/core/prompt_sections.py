@@ -51,6 +51,26 @@ def _available_files_line(ref_files: List[str]) -> str:
     )
 
 
+def _available_files_line_any_run_place(ref_files: List[str]) -> str:
+    """The same list of names, said without naming a run place.
+
+    ``_available_files_line`` above says "the sandbox working directory", which
+    is true where it is used and false in the two other places the run-place
+    comparison sends the same text to. This one says where the files are in
+    words that hold in all three: a working directory the code starts in,
+    however that directory came to exist.
+
+    It is a second provider rather than a rewording of the first because the
+    first is what every existing sandbox run has sent, and this module is not
+    the place to change what those runs say.
+    """
+    names = [os.path.basename(f) for f in ref_files]
+    return (
+        f"📁 Files available in the working directory your code starts in "
+        f"(use them directly): {names}"
+    )
+
+
 # id -> provider. Each provider returns the section text, or None to omit it.
 # Keep these thin: adapt an existing module, do not add fragment logic here.
 SECTION_PROVIDERS: Dict[str, Callable[[SectionContext], Optional[str]]] = {
@@ -71,6 +91,11 @@ SECTION_PROVIDERS: Dict[str, Callable[[SectionContext], Optional[str]]] = {
         else None
     ),
     "available_files": lambda c: _available_files_line(c.ref_files) if c.ref_files else None,
+    # Used only by the shared first request of the run-place comparison. Kept
+    # out of DEFAULT_SECTIONS below so no existing run reaches it.
+    "available_files_any_run_place": lambda c: (
+        _available_files_line_any_run_place(c.ref_files) if c.ref_files else None
+    ),
 }
 
 

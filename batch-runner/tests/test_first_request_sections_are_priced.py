@@ -23,14 +23,28 @@ per file at ``REFERENCE_FILE_CHARACTER_CAP``. ``SECTIONS_PRICED_SOMEWHERE_ELSE``
 names each of them and says where, and asking this module to price one is an
 error rather than an extra charge.
 
+**Two worlds, and both are tested.** Since 2026-09-06 the comparison's own three
+settings files set ``execution.shared_first_request: true``, and on that path the
+container sends ``prompts/execution_envelope_shared.yaml`` — whose ``sections:``
+list asks for none of the three its runner can build, so all three are priced at
+nothing and ``budget.silent`` says why. That is the last section of this file.
+Every other test here reaches for :func:`_settings_off_the_shared_request`,
+because the pricing rule it holds is not the comparison's: it governs the 34
+committed experiments that never opted in, where ``_augment_prompt`` really does
+build a contract, a dependency hint and a skills manual before the render. A
+rule tested only in the configuration that switches it off is a rule nothing
+holds.
+
 Nothing here calls a model, runs a container, or spends anything.
 """
 
 from __future__ import annotations
 
+import ast
 import copy
 import inspect
 import sys
+import textwrap
 from pathlib import Path
 
 import pytest
@@ -78,6 +92,7 @@ from core.prompt_sections import (  # noqa: E402
     assemble_sections,
 )
 from core.sandbox_runner import SandboxRunner  # noqa: E402
+from core.shared_first_request import SHARED_PROMPT_NAME  # noqa: E402
 from core.skills_registry import SkillsRegistry  # noqa: E402
 from core.subprocess_runner import SubprocessRunner  # noqa: E402
 
@@ -102,20 +117,41 @@ def _settings(environment: str) -> dict:
     return yaml.safe_load((BATCH_RUNNER_ROOT / relative).read_text(encoding="utf-8"))
 
 
+def _settings_off_the_shared_request(environment: str) -> dict:
+    """The same committed file with the shared first request turned back off.
+
+    Removing the key rather than writing ``false`` is the point: absence is the
+    state every experiment outside this comparison is in, and the parse reads
+    the setting with ``is True``, so absence and ``false`` take the same branch
+    but only absence is the shape 34 committed files actually have.
+
+    The assertion is what keeps this honest. If a settings file stops opting in,
+    this helper stops being a copy of anything and starts being the committed
+    file under a misleading name — so it fails here instead, next to the reason.
+    """
+    settings = copy.deepcopy(_settings(environment))
+    turned_off = settings["execution"].pop("shared_first_request", None)
+    assert turned_off is True, (
+        f"{environment} was expected to set shared_first_request: true; "
+        f"found {turned_off!r}"
+    )
+    return settings
+
+
 def _sandbox(settings: dict) -> dict:
     return (settings.get("execution") or {}).get("sandbox") or {}
 
 
 def _prompt_name(environment: str, settings: dict | None = None) -> str:
-    settings = _settings(environment) if settings is None else settings
+    settings = _settings_off_the_shared_request(environment) if settings is None else settings
     names = _prompt_files_a_run_place_might_send(environment, settings)
     assert names, environment
     return names[0]
 
 
 def _budget(environment: str, settings: dict | None = None, **overrides):
-    """The rule's own measurement, from the committed settings for one place."""
-    settings = _settings(environment) if settings is None else settings
+    """The rule's own measurement, for one run place on its runner's own prompt."""
+    settings = _settings_off_the_shared_request(environment) if settings is None else settings
     sandbox = _sandbox(settings)
     declared = _runner_first_request_extra_sections(environment)
     assert declared is not None, environment
@@ -128,9 +164,9 @@ def _budget(environment: str, settings: dict | None = None, **overrides):
     return first_request_section_budget(declared, **call)
 
 
-def _renders_to(environment: str) -> int:
+def _renders_to(environment: str, settings: dict | None = None) -> int:
     """What this run place's prompt file renders to, the task and sections aside."""
-    settings = _settings(environment)
+    settings = _settings_off_the_shared_request(environment) if settings is None else settings
     return sum(
         fixed_prompt_characters(
             load_prompt(_prompt_name(environment, settings)),
@@ -168,6 +204,19 @@ def _plan_naming(environment: str, settings: dict, tmp_path: Path, charged: int)
     plan = _priced_at(charged)
     plan["experiment_files"] = {environment: relative}
     return plan
+
+
+def _plan_off_the_shared_request(environment: str, tmp_path: Path, charged: int):
+    """The committed plan, priced at ``charged``, reading the not-opted-in copy.
+
+    The rule resolves a run place's sections from its settings file, and on the
+    shared first request that answer is *none of them* whatever the runner class
+    says. So a test about what the container's runner builds has to hand the
+    rule a settings file where the container's runner is the thing building.
+    """
+    return _plan_naming(
+        environment, _settings_off_the_shared_request(environment), tmp_path, charged
+    )
 
 
 # ── What each runner declares ─────────────────────────────────────────────────
@@ -244,7 +293,7 @@ def test_a_run_place_that_declares_none_of_them_is_charged_nothing_extra(environ
 
 def test_the_figure_is_a_layout_and_not_a_tally_of_written_down_lengths():
     """Worked out a second way here, so the module cannot mark its own homework."""
-    settings = _settings(THE_CONTAINER)
+    settings = _settings_off_the_shared_request(THE_CONTAINER)
     order = load_prompt(_prompt_name(THE_CONTAINER, settings)).get("sections")
     registry = SkillsRegistry()
     names = widest_reference_file_names(registry)
@@ -338,7 +387,7 @@ def test_a_word_pinned_by_a_run_places_contract_settings_moves_the_bill():
     one has to make the contract wider, or the settings are reaching the bill
     through nothing but their own absence.
     """
-    settings = copy.deepcopy(_settings(THE_CONTAINER))
+    settings = _settings_off_the_shared_request(THE_CONTAINER)
     before = _budget(THE_CONTAINER, settings).per_section["contract"]
     contract = dict(_sandbox(settings).get("contract") or {})
     contract["required_keywords"] = list(contract.get("required_keywords") or []) + [
@@ -435,12 +484,21 @@ def test_a_prompt_file_that_is_not_there_is_raised_rather_than_guessed_at():
         )
 
 
-def test_a_runner_that_stops_declaring_is_refused_by_the_rule(monkeypatch):
-    """The regression this whole change is: silence must not price at nothing."""
+def test_a_runner_that_stops_declaring_is_refused_by_the_rule(monkeypatch, tmp_path):
+    """The regression this whole change is: silence must not price at nothing.
+
+    Asked of a not-opted-in settings file on purpose. On the shared first
+    request the runner class is not the authority — ``prompts/
+    execution_envelope_shared.yaml``'s own ``sections:`` list is, and
+    ``core/shared_first_request.py`` refuses that list to name any of the three
+    — so deleting the attribute there changes no answer and would prove
+    nothing about this rule.
+    """
     monkeypatch.delattr(SandboxRunner, "FIRST_REQUEST_EXTRA_SECTIONS")
     assert _runner_first_request_extra_sections(THE_CONTAINER) is None
 
-    refusals = _problems_for(THE_CONTAINER, _priced_at(1_000_000))
+    plan = _plan_off_the_shared_request(THE_CONTAINER, tmp_path, 1_000_000)
+    refusals = _problems_for(THE_CONTAINER, plan, root=tmp_path)
     assert len(refusals) == 1
     assert "does not declare FIRST_REQUEST_EXTRA_SECTIONS" in refusals[0]
     assert "a figure nothing checked is not a figure that holds" in refusals[0]
@@ -460,7 +518,7 @@ def test_a_max_skills_that_is_not_a_whole_number_is_refused(asked_for, tmp_path)
 
 def test_settings_that_leave_max_skills_out_are_charged_for_the_manual(tmp_path):
     """``executor.py`` passes ``opts.get("max_skills", 5)``, so absent means on."""
-    settings = copy.deepcopy(_settings(THE_CONTAINER))
+    settings = _settings_off_the_shared_request(THE_CONTAINER)
     del settings["execution"]["sandbox"]["max_skills"]
     with_the_manual = _budget(THE_CONTAINER, settings).characters
     assert with_the_manual > _budget(THE_CONTAINER).characters
@@ -533,21 +591,24 @@ def test_the_measurement_is_not_given_the_task_or_its_reference_files():
 # ── The undercount this replaces ──────────────────────────────────────────────
 
 
-def test_charging_only_what_the_container_renders_to_is_refused():
+def test_charging_only_what_the_container_renders_to_is_refused(tmp_path):
     """The old figure exactly: the render, with the runner's sections left out."""
     renders_to = _renders_to(THE_CONTAINER)
-    refusals = _problems_for(THE_CONTAINER, _priced_at(renders_to))
+    plan = _plan_off_the_shared_request(THE_CONTAINER, tmp_path, renders_to)
+    refusals = _problems_for(THE_CONTAINER, plan, root=tmp_path)
     assert len(refusals) == 1
     short_by = int(refusals[0].split(" characters short")[0].split("— ")[-1])
     assert short_by == _budget(THE_CONTAINER).characters
 
 
-def test_one_character_below_the_whole_first_request_is_refused():
+def test_one_character_below_the_whole_first_request_is_refused(tmp_path):
     """The boundary, taken from the measurement rather than from a number typed."""
     sends = _renders_to(THE_CONTAINER) + _budget(THE_CONTAINER).characters
-    assert _problems_for(THE_CONTAINER, _priced_at(sends)) == []
+    exact = _plan_off_the_shared_request(THE_CONTAINER, tmp_path, sends)
+    assert _problems_for(THE_CONTAINER, exact, root=tmp_path) == []
 
-    refusals = _problems_for(THE_CONTAINER, _priced_at(sends - 1))
+    one_short = _plan_off_the_shared_request(THE_CONTAINER, tmp_path, sends - 1)
+    refusals = _problems_for(THE_CONTAINER, one_short, root=tmp_path)
     assert len(refusals) == 1
     assert f"come to {sends} characters" in refusals[0]
     assert "1 characters short" in refusals[0]
@@ -560,8 +621,9 @@ def test_the_committed_plan_charges_the_render_and_the_sections_together():
     assert charged >= _renders_to(THE_CONTAINER) + _budget(THE_CONTAINER).characters
 
 
-def test_a_refusal_names_each_section_the_runner_built_and_what_stayed_silent():
-    refusals = _problems_for(THE_CONTAINER, _priced_at(1))
+def test_a_refusal_names_each_section_the_runner_built_and_what_stayed_silent(tmp_path):
+    plan = _plan_off_the_shared_request(THE_CONTAINER, tmp_path, 1)
+    refusals = _problems_for(THE_CONTAINER, plan, root=tmp_path)
     assert len(refusals) == 1
     said = refusals[0]
     assert "contract built by the runner before the render" in said
@@ -573,6 +635,72 @@ def test_a_refusal_names_each_section_the_runner_built_and_what_stayed_silent():
     assert "available_files" not in said
 
 
+# ── What the comparison's own settings come to now ────────────────────────────
+
+
+def test_the_three_comparison_settings_all_opt_in_to_the_shared_request():
+    """The premise every test below rests on, checked rather than assumed."""
+    for environment in sorted(load_plan(PLAN_PATH)["experiment_files"]):
+        execution = _settings(environment)["execution"]
+        assert execution.get("shared_first_request") is True, environment
+
+
+def test_the_shared_prompt_asks_for_none_of_the_three_so_all_are_priced_at_nothing():
+    """The container's own settings, unedited — the state the comparison runs in.
+
+    Not a weaker version of the tests above: it is the other half of the same
+    rule. ``first_request_section_budget`` prices a section the run place's own
+    prompt spec asks for, and prices at nothing — saying so, by name — one it
+    does not. Turning the shared first request on changed which spec is read,
+    and this is what that change comes to.
+    """
+    budget = _budget(THE_CONTAINER, _settings(THE_CONTAINER))
+    assert budget.characters == 0
+    assert budget.per_section == {}
+    assert set(budget.silent) == set(SandboxRunner.FIRST_REQUEST_EXTRA_SECTIONS)
+    for section, why in budget.silent.items():
+        assert SHARED_PROMPT_NAME in why, (section, why)
+        assert "does not ask for it" in why, (section, why)
+
+
+def test_the_rule_charges_the_comparisons_container_the_render_alone():
+    """So the plan's figure is held to the shared render, sections and all.
+
+    The refusal below is the same one the tests above raise; what differs is
+    what it comes to. Charging one character under what the shared prompt
+    renders to is still refused, and the shortfall is exactly the render —
+    nothing added before it, because on this path nothing is.
+    """
+    settings = _settings(THE_CONTAINER)
+    sends = _renders_to(THE_CONTAINER, settings)
+    assert _budget(THE_CONTAINER, settings).characters == 0
+
+    refusals = _problems_for(THE_CONTAINER, _priced_at(sends - 1))
+    assert len(refusals) == 1
+    assert f"prompts/{SHARED_PROMPT_NAME}.yaml" in refusals[0]
+    assert f"come to {sends} characters" in refusals[0]
+    assert _problems_for(THE_CONTAINER, _priced_at(sends)) == []
+
+
+def test_the_shared_request_is_narrower_than_the_containers_old_one():
+    """Which is why the committed ceiling now over-charges, and says it does.
+
+    ``instruction_character_count`` was set to the widest first request this
+    comparison had ever sent. It is kept there deliberately — a ceiling may be
+    more careful than the thing it bounds, and lowering it would spend the
+    headroom that catches a run place drifting back to that width. What must
+    not happen quietly is the opposite, so the direction is asserted here.
+    """
+    old = _renders_to(THE_CONTAINER) + _budget(THE_CONTAINER).characters
+    now = _renders_to(THE_CONTAINER, _settings(THE_CONTAINER))
+    assert now < old
+
+    charged = load_plan(PLAN_PATH)["cost"]["assumptions"][
+        "instruction_character_count"
+    ]
+    assert charged >= old > now
+
+
 # ── The method stays the one this measurement is valid for ────────────────────
 
 
@@ -582,7 +710,26 @@ def test_augment_prompt_still_only_builds_a_context_and_delegates():
     assert "SectionContext(" in source
     assert "assemble_sections(section_order, ctx)" in source
     assert 'self.prompt_data.get("sections") or DEFAULT_SECTIONS' in source
-    assert source.count("return") == 1
+
+    # Every way out of the method has to be a call to something that lays
+    # sections out, never an expression that builds wording here. Counting the
+    # returns instead would have said the same thing while there was one; it
+    # stopped saying it when the shared first request added a second way out
+    # that delegates just as strictly, to core/shared_first_request.py's
+    # build_shared_task_text — which is itself assemble_sections over a section
+    # list read from a committed prompt file.
+    lays_sections_out = {"assemble_sections", "build_shared_task_text"}
+    method = ast.parse(textwrap.dedent(source)).body[0]
+    returned = [
+        node.value
+        for node in ast.walk(method)
+        if isinstance(node, ast.Return) and node.value is not None
+    ]
+    assert returned, "_augment_prompt returns nothing at all"
+    for value in returned:
+        assert isinstance(value, ast.Call), ast.dump(value)
+        assert isinstance(value.func, ast.Name), ast.dump(value.func)
+        assert value.func.id in lays_sections_out, value.func.id
 
 
 def test_the_runner_hands_that_output_to_render_prompt_as_the_task():

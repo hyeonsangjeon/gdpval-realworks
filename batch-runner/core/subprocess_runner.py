@@ -26,6 +26,9 @@ from core.config import SUBPROCESS_TIMEOUT, SUBPROCESS_MEMORY_GB, DEFAULT_TOKENS
 from core.llm_client import complete
 from core.prompt_loader import load_prompt, render_prompt
 from core.file_preview import generate_all_previews, build_file_structure_info
+from core.execution_envelope_observed import RecordsItsFirstRequest
+from core.execution_environment_readiness import ENVIRONMENT_HOST_PYTHON_PROCESS
+from core.shared_first_request import SHARED_PROMPT_NAME, build_shared_task_text
 from core.execution_errors import classify_execution_error
 from core.reference_integrity import (
     copy_verified_reference,
@@ -203,7 +206,7 @@ def extract_description(text: str) -> str:
     return cleaned
 
 
-class SubprocessRunner:
+class SubprocessRunner(RecordsItsFirstRequest):
     """LLM code generation → safe subprocess execution"""
 
     #: Whether this run place opens a new request for each turn the model
@@ -238,6 +241,11 @@ class SubprocessRunner:
     #: ``CodeInterpreterRunner.FIRST_REQUEST_EXTRA_SECTIONS``.
     FIRST_REQUEST_EXTRA_SECTIONS: tuple[str, ...] = ()
 
+    #: The name this run place answers to in the comparison plan. Only used
+    #: when an experiment turns the shared first request on; see
+    #: ``core/execution_envelope_observed.py``.
+    OBSERVED_RUN_PLACE = ENVIRONMENT_HOST_PYTHON_PROCESS
+
     DEFAULT_PROMPT = "subprocess_occupation_codegen"
 
     def __init__(
@@ -247,6 +255,7 @@ class SubprocessRunner:
         max_completion_tokens: Optional[int] = None,
         timeout: Optional[int] = None,
         reasoning_effort: Optional[str] = None,
+        shared_first_request: bool = False,
     ):
         """
         Initialize Subprocess runner with LLM client.
@@ -257,9 +266,22 @@ class SubprocessRunner:
             max_completion_tokens: Completion token cap override
             timeout: Subprocess timeout override in seconds (default: SUBPROCESS_TIMEOUT)
             reasoning_effort: Optional reasoning effort level ("low", "medium", "high")
+            shared_first_request: Build the task text from
+                ``core.shared_first_request`` instead of from this runner's own
+                inline blocks, so the run-place comparison's three places send
+                one text. Off unless an experiment asks for it; see that module
+                for what equal wording still does not equalise.
         """
         self.llm_client = llm_client
         self.prompt_name = prompt_name
+        self.shared_first_request = bool(shared_first_request)
+        if self.shared_first_request and prompt_name != SHARED_PROMPT_NAME:
+            raise ValueError(
+                "shared_first_request needs prompt_name="
+                f"{SHARED_PROMPT_NAME!r}; got {prompt_name!r}. Sharing the "
+                "sections while each run place keeps its own wording leaves "
+                "the difference this setting exists to remove"
+            )
         self.prompt_data = load_prompt(prompt_name)
         self.max_completion_tokens = (
             max_completion_tokens
@@ -300,23 +322,33 @@ class SubprocessRunner:
         try:
             reference_files = reference_stage.__enter__()
             reference_stage_entered = True
-            # Reference 파일 구조 자동 주입 (컬럼명 하드코딩 에러 방지)
-            file_structure_info = build_file_structure_info(reference_files or [])
-            if file_structure_info:
-                task_prompt = file_structure_info + "\n\n" + task_prompt
-
-            # Step 0: Generate reference file previews and append to task_prompt
-            if reference_files:
-                previews = generate_all_previews(reference_files)
-                if previews:
-                    task_prompt = task_prompt + "\n\n" + previews
-
-                # Explicitly list available files for LLM code generation
-                available_files = [os.path.basename(f) for f in reference_files]
-                task_prompt = (
-                    task_prompt
-                    + f"\n\n📁 Files available in current directory (you can use them directly): {available_files}"
+            if self.shared_first_request:
+                # One definition, three run places. Deliberately not the block
+                # below: that block's wording is this run place's own, and the
+                # comparison this branch serves needs the container and the
+                # Azure code interpreter to receive the same characters.
+                task_prompt = build_shared_task_text(
+                    task_prompt=task_prompt,
+                    reference_files=reference_files or [],
                 )
+            else:
+                # Reference 파일 구조 자동 주입 (컬럼명 하드코딩 에러 방지)
+                file_structure_info = build_file_structure_info(reference_files or [])
+                if file_structure_info:
+                    task_prompt = file_structure_info + "\n\n" + task_prompt
+
+                # Step 0: Generate reference file previews and append to task_prompt
+                if reference_files:
+                    previews = generate_all_previews(reference_files)
+                    if previews:
+                        task_prompt = task_prompt + "\n\n" + previews
+
+                    # Explicitly list available files for LLM code generation
+                    available_files = [os.path.basename(f) for f in reference_files]
+                    task_prompt = (
+                        task_prompt
+                        + f"\n\n📁 Files available in current directory (you can use them directly): {available_files}"
+                    )
 
             # Step 1: Generate code using LLM
             rendered = render_prompt(
@@ -341,16 +373,25 @@ class SubprocessRunner:
 
             response_text = response.choices[0].message.content
 
+            self._record_first_request(
+                client=self.llm_client,
+                requested_model=model,
+                system_message=rendered["system_message"],
+                user_prompt=rendered["user_prompt"],
+                response=response,
+                reference_files=reference_files,
+            )
+
             # Step 2: Extract code and description from response
             code = self._extract_code(response_text)
             if not code:
-                return {
+                return self._with_observation({
                     "success": False,
                     "text": "",
                     "deliverable_text": "",
                     "files": [],
                     "error": f"No Python code found in LLM response. Response: {response_text[:200]}..."
-                }
+                })
 
             # Extract the descriptive text (non-code portion of LLM response)
             deliverable_text = self._extract_description(response_text)
@@ -358,7 +399,7 @@ class SubprocessRunner:
             # Step 3: Execute safely in isolated environment
             result = self._execute_safely(code, reference_files)
             result["deliverable_text"] = deliverable_text
-            return result
+            return self._with_observation(result)
 
         except Exception as e:
             return {
