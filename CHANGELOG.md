@@ -662,6 +662,21 @@ entries land under a fresh dated heading the day they merge to `main`.
   with itself about what a run costs, so the test now requires every labelled
   statement of the figure to be the same one.
 
+  Fixing that number exposed the nineteenth: the line that *compares* against it
+  had never executed anywhere. All six tests that run this summary feed it a free
+  rehearsal report, and no free call reports an audio token count, so
+  `delivery.audio_tokens_total` is always `None` and the whole block is skipped —
+  the fourteenth's shape a fourth time, except that here the input which does
+  exercise it is the paid run itself. The skip was the defect, too. The measurer
+  is deliberately three-state: `None` when nothing reported the field, *not* `0`,
+  because `0` is a claim about metering. The summary collapsed that back to two
+  by printing nothing, so a reader checking whether the ±10% band held saw the
+  same blank space whether it held or was never measured. It now says which of
+  the three happened, and a test renders all of them — unreported, exact, 9%,
+  11%, and metered at zero. Mutation-checked four ways: restoring the silent
+  skip, widening the band to 20%, making the banner fire on every run, and
+  reporting the unmeasured case as `0`.
+
   330 section 3 pre-registered four stop conditions and nothing enforced them.
   They are now `SPEECH_STOP_RULES`, checked after each call, with a test that
   fails if the constants and the document drift apart: 20 minutes wall clock,

@@ -493,8 +493,19 @@ jobs:
                     f"`{os.path.basename(speech['manifest'])}`")
               print(f"- expected audio tokens: {speech['expected_audio_tokens']} "
                     f"({speech['expected_audio_tokens_basis']})")
+              # Three states, not two. The measurer is careful to record None
+              # when no call reported the field -- it is not 0, because 0 is a
+              # claim -- and printing nothing here throws that away: a reader
+              # checking whether the +/-10% delivery band held sees the same
+              # empty space whether it held or was never measured. Every free
+              # rehearsal has None here, so this branch first executes on the
+              # paid run.
               delivered = (report.get("delivery") or {}).get("audio_tokens_total")
-              if delivered is not None:
+              if delivered is None:
+                  print("- audio tokens actually billed: **not reported** by the "
+                        "provider, so the +/-10% delivery check did not run. Not 0, "
+                        "and not agreement with the expected figure above.")
+              else:
                   expected = speech["expected_audio_tokens"]
                   drift = None if not expected else abs(delivered - expected) / expected
                   print(f"- audio tokens actually billed: {delivered}"

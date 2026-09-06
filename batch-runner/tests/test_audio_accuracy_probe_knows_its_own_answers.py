@@ -2607,6 +2607,75 @@ def test_the_document_and_the_code_agree_on_what_the_run_sends() -> None:
     assert stated == {tokens}, f"330 states more than one token figure: {stated}"
 
 
+def test_the_billed_audio_line_says_which_of_the_three_things_happened(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """The +/-10% band's own branch had never been executed anywhere.
+
+    The test above fixes the *number* the band is measured against. It does not
+    render the line that does the measuring, and nothing else did either: every
+    rehearsal report has ``delivery.audio_tokens_total = None``, because no free
+    call reports the field, so the whole block was skipped in each of the six
+    tests that execute this summary. Defect 14's shape a fourth time -- a guard
+    exercised only on the input where it does nothing -- and here the input where
+    it does something is *the paid run*. It would have run for the first time
+    against money.
+
+    And the skip was itself the defect. The measurer is careful about three
+    states: ``None`` is recorded when no call reported the field, deliberately
+    not ``0``, because ``0`` is a claim about metering. The summary collapsed it
+    back to two by printing nothing -- so a reader checking whether the band held
+    saw identical blank space whether it held, or was never measured at all.
+    That is the same silence that made the free page useless against defect 1.
+    """
+    manifest_path, clip_dir = _speech_fixture(tmp_path, clips=5)
+    out = tmp_path / "billed.json"
+    assert probe.main([
+        "--dry-run", "--quiet", "--repeats", "3",
+        "--speech-set", str(manifest_path),
+        "--speech-clips", str(clip_dir),
+        "--out", str(out),
+    ]) == 0
+    base = json.loads(out.read_text(encoding="utf-8"))
+    expected = base["speech_set"]["expected_audio_tokens"]
+    assert base["delivery"]["audio_tokens_total"] is None, (
+        "the rehearsal now reports billed audio, so this test no longer covers "
+        "the branch the paid run takes first"
+    )
+
+    def _rendered(total: object) -> str:
+        report = json.loads(json.dumps(base))
+        report["delivery"]["audio_tokens_total"] = total
+        return _render_paid_summary(report, tmp_path, monkeypatch, capsys)
+
+    BANNER = "billed audio is more than 10% away"
+
+    silent = _rendered(None)
+    assert "not reported" in silent, "no call reported the field and the page said nothing"
+    assert "did not run" in silent, "silence reads as agreement with the expected figure"
+    assert BANNER not in silent, "a band that was not measured cannot have been missed"
+
+    exact = _rendered(expected)
+    assert f"actually billed: {expected}" in exact
+    assert "(0.0% from expected)" in exact
+    assert BANNER not in exact, "the banner fires on a run that matched exactly"
+    assert "not reported" not in exact
+
+    inside = _rendered(round(expected * 1.09))
+    assert BANNER not in inside, "9% drift is inside the pre-registered band"
+
+    outside = _rendered(round(expected * 1.11))
+    assert BANNER in outside, "11% drift is outside the band and the page stayed quiet"
+
+    # Metered at a real zero: §3's fourth stop rule ends the run, but a run
+    # stopped after some calls still writes a report and still gets summarised.
+    # 100% away is the loudest case the band has, so it must not be the case
+    # that gets rounded into silence.
+    zeroed = _rendered(0)
+    assert "actually billed: 0" in zeroed
+    assert BANNER in zeroed
+
+
 def test_the_speech_flags_travel_together() -> None:
     """A manifest with no clips is a run that cannot start, not one that
     quietly falls back to tones."""
