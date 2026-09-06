@@ -7894,6 +7894,40 @@ execution:
 **보안 격리나 실행 제한, 필수 안전 조치를 없애서 문자열을 맞추지 않았습니다.**
 4번은 일부러 남겼습니다.
 
+#### 6-1. 무료 점검 보고서가 이제 **찾은 것을 말합니다**
+
+세 자리를 비교하는 규칙은 **다를 때만** 말합니다. 문제 목록으로는 맞지만
+보고서로는 틀립니다 — "아무 문제 없음"은 이 요청들을 **아무도 비교하지 않던
+시절에** 읽는 사람이 보던 바로 그 문장이고, 셋이 한 파일을 보내는 지금도 똑같이
+보이는 문장입니다. 이 규칙이 구분하라고 있는 두 답이 보고서에서 구분이 안
+됐습니다.
+
+그래서 잰 것을 결과에 싣고 찍습니다.
+
+```
+what each run place is asked: all 3 send prompts/execution_envelope_shared.yaml,
+2665 characters, part for part the same. Built and compared here, not read off
+the settings files
+    made of: 1708 characters of the wording the committed prompt file wraps the
+    task in, 724 characters of the wording this run place's own settings add
+    around it, 233 characters of the standing instruction the committed prompt
+    file holds
+    sent by: azure_code_interpreter, docker_container, host_python_process
+```
+
+- **6가지 차이보다 먼저 찍습니다.** 순서가 반대면 6가지가 "셋이 같은 걸 듣는가"의
+  답 전체처럼 읽힙니다. 아닙니다 — 먼저 맞춘 것을 숫자로 보이고, 그다음 못 맞춘
+  것을 말합니다.
+- **잰 게 없으면 "not measured"라고 적고, "셋이 일치한다는 뜻이 아니다"라고 덧붙입니다.**
+  아무것도 안 만든 것과 셋이 일치하는 것은 다른 발견입니다.
+- 셋이 **너비는 같은데 무엇을 왜 안 만들었는지가 다르면**(`silent`은 일치 판정에
+  안 들어가므로 규칙은 통과합니다) 한 자리 설명이 나머지를 대표하지 않고 **각자
+  말합니다.**
+
+찍히는 숫자는 전부 이 점검이 **직접 만든 것**입니다. 계획서에 적힌 숫자를 되읽지
+않습니다 — 시험 하나가 찍힌 너비가 계획서의 천장(7,307)과 같아지면 "이제 이
+시험은 잰 값과 되읽은 값을 구분하지 못한다"며 실패합니다.
+
 #### 7. 그래서 판정은
 
 무료 사전 점검은 `pure_run_place_effect_is_measurable`을 **`false`로 적습니다.**
