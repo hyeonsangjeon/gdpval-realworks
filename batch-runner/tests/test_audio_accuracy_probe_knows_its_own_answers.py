@@ -1846,6 +1846,45 @@ def test_the_published_criteria_do_not_answer_themselves() -> None:
         assert first["criterion"] != second["criterion"], pair_id
 
 
+def test_the_document_states_the_family_sizes_the_corpus_has() -> None:
+    """A family of two claims can only score 0, 50 or 100 per cent.
+
+    ``negation: 100%`` on two claims is two coin flips landing heads -- one
+    time in four -- and it reads as a finding. 330 §4 hangs "hears words but
+    not sentences" on three families, and two of them are that size, so the
+    document states every family's count beside the accuracies it can produce.
+    Those counts are the corpus's, and a claim added or moved without the
+    table following would leave the reading attached to the wrong denominator.
+    """
+    published = json.loads(
+        PUBLISHED_SPEECH_MANIFEST.read_text(encoding="utf-8")
+    )
+    sizes: dict[str, int] = {}
+    for claim in published["claims"]:
+        family = str(claim["family"])
+        sizes[family] = sizes.get(family, 0) + 1
+
+    doc = (
+        PUBLISHED_SPEECH_MANIFEST.parent / "330-speech-diagnostic-prereg.md"
+    ).read_text(encoding="utf-8")
+    section = doc.split("#### 종류별 숫자는", 1)
+    assert len(section) == 2, "the family-size subsection is gone"
+    # Cut at the bullet that follows the subsection so the rows come from
+    # this table and not from some other one further down the document.
+    table = section[1].split("\n* ", 1)[0]
+
+    stated = dict(
+        re.findall(r"^\|\s*`([a-z_]+)`\s*\|\s*(\d+)\s*\|", table, re.M)
+    )
+    assert {k: int(v) for k, v in stated.items()} == sizes
+    assert sum(sizes.values()) == 20
+
+    # The three families §4 reasons from have to be in the corpus at all --
+    # naming a family that is not there is the failure this file keeps finding.
+    for family in ("order", "binding", "negation"):
+        assert family in sizes, family
+
+
 def test_the_report_describes_the_corpus_that_ran(tmp_path: Path) -> None:
     """Reporting the tone corpus's counts beside a speech run's calls would be
     a mislabel of exactly the kind this file exists to stop."""
