@@ -1492,47 +1492,142 @@ def test_pinned_config_is_the_audio_repeat_config() -> None:
     assert probe.PINNED_CONFIG.name == "gold_audio_repeat_v2_sol_max.yaml"
 
 
-def test_the_fingerprint_330_pins_is_the_one_this_head_computes() -> None:
+def test_a_grader_the_document_does_not_pin_stops_the_run(
+    tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
     """The pre-registration pins a grader fingerprint and nothing checked it.
 
-    ``8bb8360a…`` appears in exactly two places, both of them prose. It is the
-    hash of the grader source and config the paid run will use, and it is the
-    field that decides whether the run describes the same grader the 19.35%
-    came off. Written by hand and never recomputed, it says whatever it said
-    on the day it was typed: edit anything the hash covers -- ``core/**.py``,
-    ``step8_grade.py``, the schema, the requirements closure, the prompt
-    template -- and the document still claims this one, for a run that is no
-    longer the run it describes.
+    It is the hash of the grader source and config the paid run will use, and
+    it is the field that decides whether the run describes the same grader the
+    19.35% came off. Written by hand and never recomputed, it says whatever it
+    said on the day it was typed: edit anything the hash covers --
+    ``core/**.py``, ``step8_grade.py``, the schema, the requirements closure,
+    the prompt template -- and the document still claims the old one, for a run
+    that is no longer the run it describes. Same shape as every other defect in
+    this file: the document names a safeguard, and the safeguard is a sentence.
 
-    Same shape as every other defect in this file: the document names a
-    safeguard, and the safeguard is a sentence.
+    The check does **not** live in a unit test. What the hash covers is mostly
+    files this workstream does not own, so it moves when somebody else merges
+    something perfectly correct -- and an equality asserted here would turn
+    that into a red build on their PR. It already did move once, which is how
+    this was found.
 
-    The equality is required **only while nothing has been bought.** After the
-    run, the pin stops being a promise and becomes a record of what actually
-    executed, and making a record track a moved ``HEAD`` to keep CI green is
-    falsifying it. So the check keys on 330's own unspent marker, and what it
-    asks for before the run is: re-pin §2, do not delete this test.
+    So it is enforced where it protects something: at dispatch, before a call
+    goes out, next to the clip-digest check that works the same way. A run
+    whose grader is not the pinned one stops, and stopping costs a dispatch;
+    discovering it afterwards costs the run's meaning.
     """
-    from step8_grade import compute_grader_source_hash
+    computed = probe.grader_source_hash()
 
-    doc = (
+    wrong = tmp_path / "prereg-wrong.md"
+    wrong.write_text(f"| 채점기 지문 | `{'a' * 64}` |\n", encoding="utf-8")
+    manifest_path, clip_dir = _speech_fixture(tmp_path, clips=2)
+    args = [
+        "--dry-run", "--quiet", "--repeats", "1",
+        "--speech-set", str(manifest_path),
+        "--speech-clips", str(clip_dir),
+        "--out", str(tmp_path / "out.json"),
+    ]
+
+    assert probe.main([*args, "--expect-grader-pin", str(wrong)]) == 3
+    stderr = capsys.readouterr().err
+    assert "a" * 64 in stderr and computed in stderr, (
+        "a refusal has to name both fingerprints, or the reader cannot tell "
+        "which end moved"
+    )
+    assert not (tmp_path / "out.json").exists(), (
+        "it stopped after writing a report, which is not stopping"
+    )
+
+    right = tmp_path / "prereg-right.md"
+    right.write_text(f"| 채점기 지문 | `{computed}` |\n", encoding="utf-8")
+    assert probe.main([*args, "--expect-grader-pin", str(right)]) == 0
+    assert (tmp_path / "out.json").exists()
+
+
+def test_the_run_records_the_grader_it_actually_used(tmp_path: Path) -> None:
+    """Checking the pin is not the same as keeping it.
+
+    After the run the fingerprint stops being a promise and becomes the record
+    of which grader produced these numbers. If that record lives only in a
+    markdown file somebody typed, it is the state this check exists to end.
+    """
+    manifest_path, clip_dir = _speech_fixture(tmp_path, clips=2)
+    out = tmp_path / "out.json"
+    assert probe.main([
+        "--dry-run", "--quiet", "--repeats", "1",
+        "--speech-set", str(manifest_path),
+        "--speech-clips", str(clip_dir),
+        "--out", str(out),
+    ]) == 0
+    pins = json.loads(out.read_text(encoding="utf-8"))["pins"]
+    assert pins["grader_source_sha256"] == probe.grader_source_hash()
+
+
+def test_a_document_that_pins_no_grader_is_not_a_pin(tmp_path: Path) -> None:
+    """Two ways the document can fail to say which grader, both refusals.
+
+    Neither is hypothetical: §2 is a markdown table, and tables get edited.
+    Silently skipping the check when the row is missing would make deleting
+    the row the way to make the check pass.
+    """
+    empty = tmp_path / "silent.md"
+    empty.write_text("# 330\n\nno fingerprint here\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="states no grader fingerprint"):
+        probe.grader_pin_stated_in(empty)
+
+    two = tmp_path / "two.md"
+    two.write_text(
+        f"| 채점기 지문 | `{'a' * 64}` |\n| 채점기 지문 | `{'b' * 64}` |\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="2 different grader fingerprints"):
+        probe.grader_pin_stated_in(two)
+
+    real = (
         probe.REPO_ROOT / "tasks" / "rebuilding_grading_task"
         / "330-speech-diagnostic-prereg.md"
-    ).read_text(encoding="utf-8")
-    stated = re.search(r"채점기 지문 \| `([0-9a-f]{64})`", doc)
-    assert stated, "330 §2 no longer states a grader fingerprint"
-
-    if "아직 한 푼도 안 썼다" not in doc:
-        return
-
-    config_path = probe.PINNED_CONFIG
-    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
-    assert compute_grader_source_hash(config_path, config) == stated.group(1), (
-        "330 §2's grader fingerprint is not what this HEAD computes. The run "
-        "has not happened yet, so the fix is to re-pin §2 to the value above "
-        "-- something the hash covers moved, and a pre-registration that "
-        "names a grader which no longer exists is not pinning anything."
     )
+    pinned = probe.grader_pin_stated_in(real)
+    assert re.fullmatch(r"[0-9a-f]{64}", pinned), (
+        "330 §2 no longer states a grader fingerprint the run can be held to"
+    )
+
+
+def test_both_jobs_hold_a_speech_run_to_the_document_it_belongs_to() -> None:
+    """The gate is only a gate if the speech run goes through it.
+
+    Including the free job. The whole reason the fingerprint check is at
+    dispatch rather than in a test is that it should be discovered without
+    buying anything, and that only works if ``dry_run`` carries it too.
+    """
+    text = (
+        probe.REPO_ROOT / ".github" / "workflows" / "audio-accuracy-probe.yml"
+    ).read_text(encoding="utf-8")
+    prereg = re.search(r"^  SPEECH_PREREG: .*/(\S+\.md)$", text, re.MULTILINE)
+    assert prereg, "the workflow no longer names a pre-registration"
+    assert (
+        probe.REPO_ROOT / "tasks" / "rebuilding_grading_task" / prereg.group(1)
+    ).is_file(), "SPEECH_PREREG points at a file that is not in the repo"
+
+    invocations = [
+        block for block in text.split("\n\n")
+        if "measure_audio_grading_accuracy.py" in block
+        and "ARGS=(" in block
+    ]
+    assert len(invocations) == 2, (
+        f"expected the free and paid measure steps, found {len(invocations)}"
+    )
+    for block in invocations:
+        assert "--speech-set" in block and "--expect-grader-pin" in block, (
+            "a speech run that does not pass --expect-grader-pin is not "
+            "pinned to any grader; the document just says it is"
+        )
+        speech_branch = block.index('= "speech"')
+        assert block.index("--expect-grader-pin") > speech_branch, (
+            "the pin is passed outside the speech branch, so the published "
+            "tone runs would be re-gated on a document they predate"
+        )
 
 
 # --------------------------------------------------------------------------

@@ -177,6 +177,7 @@ import itertools
 import json
 import math
 import os
+import re
 import struct
 import sys
 import tempfile
@@ -1520,6 +1521,45 @@ def pinned_identity(config_path: Path = PINNED_CONFIG) -> dict[str, Any]:
     }
 
 
+#: The row a pre-registration writes its grader fingerprint into. Read rather
+#: than restated here: the operator reads that table before dispatching, and a
+#: constant in this file would be a second place for the value to live and a
+#: second place for it to go stale.
+_GRADER_PIN_ROW = re.compile(
+    r"^\|\s*채점기 지문\s*\|\s*`([0-9a-f]{64})`\s*\|", re.MULTILINE
+)
+
+
+def grader_source_hash(config_path: Path = PINNED_CONFIG) -> str:
+    """What this checkout's grader fingerprints as, computed not quoted.
+
+    ``step8_grade``'s own function, on the config this measurement borrows.
+    It covers the grading entry point, every ``core/**`` module, the grade
+    schema, the requirements closure, the prompt template and the config
+    file, so any of them moving changes the answer.
+    """
+    from step8_grade import compute_grader_source_hash
+
+    return compute_grader_source_hash(config_path, _read_yaml(config_path))
+
+
+def grader_pin_stated_in(doc_path: Path) -> str:
+    """The fingerprint a pre-registration pins, taken out of its own table."""
+    found = set(_GRADER_PIN_ROW.findall(doc_path.read_text(encoding="utf-8")))
+    if not found:
+        raise ValueError(
+            f"{doc_path} states no grader fingerprint, so there is nothing to "
+            f"hold this run to. A pre-registration that does not name a "
+            f"grader is not pinning one."
+        )
+    if len(found) > 1:
+        raise ValueError(
+            f"{doc_path} states {len(found)} different grader fingerprints; "
+            f"which one this run is supposed to be is not decidable"
+        )
+    return found.pop()
+
+
 # --------------------------------------------------------------------------
 # The stub, for the free run
 # --------------------------------------------------------------------------
@@ -2796,6 +2836,16 @@ def main(argv: Optional[list[str]] = None) -> int:
         ),
     )
     parser.add_argument(
+        "--expect-grader-pin",
+        type=Path,
+        default=None,
+        help=(
+            "Path to the pre-registration this run belongs to. Its grader "
+            "fingerprint is compared against the one this checkout computes, "
+            "and a mismatch stops the run before a single call goes out."
+        ),
+    )
+    parser.add_argument(
         "--delivery-out",
         type=Path,
         default=None,
@@ -2832,6 +2882,34 @@ def main(argv: Optional[list[str]] = None) -> int:
                 "--prompt-arm would make it a different, unregistered run"
             )
 
+    # Before the identity, before the client, before anything is bought: is
+    # the grader this checkout would use the one the pre-registration names?
+    # The fingerprint is what makes "we measured the grader in §2" a checkable
+    # sentence, and it covers files this workstream does not own -- so it
+    # moves without anyone here touching it. Finding that at dispatch time
+    # costs a stopped run; finding it afterwards costs the run's meaning.
+    if args.expect_grader_pin is not None:
+        try:
+            pinned = grader_pin_stated_in(args.expect_grader_pin)
+            computed = grader_source_hash(args.config)
+        except (OSError, ValueError, KeyError) as exc:
+            print(f"::error::{exc}", file=sys.stderr)
+            return 3
+        if pinned != computed:
+            print(
+                f"::error::this is not the grader "
+                f"{args.expect_grader_pin.name} pins. It names "
+                f"{pinned}, this checkout computes {computed}. Something the "
+                f"fingerprint covers moved -- core/**, step8_grade.py, the "
+                f"grade schema, the requirements closure, the prompt template "
+                f"or {args.config.name}. Re-pin the document to the computed "
+                f"value and record what moved, or run this on the grader it "
+                f"names. Filing the result under a fingerprint that was not "
+                f"the one that ran is the one option that is not available.",
+                file=sys.stderr,
+            )
+            return 3
+
     try:
         identity = pinned_identity(args.config)
     except ValueError as exc:
@@ -2840,6 +2918,11 @@ def main(argv: Optional[list[str]] = None) -> int:
         # which model it is describing has nothing to report.
         print(f"::error::{exc}", file=sys.stderr)
         return 3
+    # Recorded, not just checked. After the run this string stops being a
+    # promise and becomes the record of which grader produced these numbers,
+    # and a record that lives only in a markdown file someone typed is the
+    # thing this whole check exists to replace.
+    identity["grader_source_sha256"] = grader_source_hash(args.config)
     if identity["audio_clip_seconds"] != AUDIO_TRIM_SECONDS:
         # Not fatal to the arithmetic, but it means the clips the model hears
         # here are cut to a different length than the ones it heard in the

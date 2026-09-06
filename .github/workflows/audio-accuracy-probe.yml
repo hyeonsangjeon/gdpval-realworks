@@ -123,6 +123,11 @@ permissions:
 env:
   SPEECH_MANIFEST: ${{ github.workspace }}/tasks/rebuilding_grading_task/330-speech-verification-manifest.json
   SPEECH_CLIPS: ${{ github.workspace }}/speech-set
+  # The document the speech run belongs to. Handed to the measurer so the run
+  # is held to the grader fingerprint §2 pins -- the fingerprint covers files
+  # nobody here edits, so it can move without this workflow changing, and the
+  # free job is where that should surface.
+  SPEECH_PREREG: ${{ github.workspace }}/tasks/rebuilding_grading_task/330-speech-diagnostic-prereg.md
 
 # One at a time. Two concurrent probes would interleave their calls against the
 # same deployment's TPM budget and each would measure the other's throttling.
@@ -203,6 +208,7 @@ jobs:
                 --delivery-out "$GITHUB_WORKSPACE/audio-accuracy-dry-run-delivery.json")
           if [ "${{ inputs.corpus }}" = "speech" ]; then
             ARGS+=(--speech-set "$SPEECH_MANIFEST" --speech-clips "$SPEECH_CLIPS")
+            ARGS+=(--expect-grader-pin "$SPEECH_PREREG")
           fi
           python scripts/measure_audio_grading_accuracy.py "${ARGS[@]}"
 
@@ -395,6 +401,7 @@ jobs:
                 --delivery-out "$GITHUB_WORKSPACE/audio-accuracy-measured-delivery.json")
           if [ "${{ inputs.corpus }}" = "speech" ]; then
             ARGS+=(--speech-set "$SPEECH_MANIFEST" --speech-clips "$SPEECH_CLIPS")
+            ARGS+=(--expect-grader-pin "$SPEECH_PREREG")
           fi
           python scripts/measure_audio_grading_accuracy.py "${ARGS[@]}"
 

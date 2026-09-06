@@ -536,14 +536,25 @@ entries land under a fresh dated heading the day they merge to `main`.
   in exactly two places, both prose, and nothing recomputed it. That one string
   covers `core/**.py`, `step8_grade.py`, the grade schema, the requirements
   closure and the prompt template, so any of them moving leaves the document
-  pinning a grader that no longer exists — while still reading like a pin. A
-  test now recomputes it from `compute_grader_source_hash` and compares. It
-  requires equality **only while nothing has been bought**: after the run the
-  same string stops being a promise and becomes the record of what executed,
-  and editing a record to track a moved `HEAD` is falsifying it to keep CI
-  green. So the check keys on 330's own unspent marker and retires itself. When
-  it fails before the run it says what to do — re-pin section 2, do not delete
-  the test.
+  pinning a grader that no longer exists — while still reading like a pin.
+  Recomputing it found that it had already happened: another workstream added
+  and edited files under `core/`, nothing to do with this diagnostic and
+  correct on its own terms, and the pinned `8bb8360a…` became a grader that is
+  not in this repository. Section 2 is re-pinned to `74e1f478…` with the old
+  value kept beside it, which is the right move only because nothing has been
+  bought yet; after the run that string is the record of what executed, and
+  editing a record to track a moved `HEAD` is falsifying it to keep CI green.
+
+  Where the check lives matters as much as the check. An equality asserted in a
+  unit test would go red on somebody else's correct `core/` merge — a tripwire
+  across a colleague's path, not a safeguard. It is enforced at dispatch
+  instead: `--expect-grader-pin` hands the measurer the document, which reads
+  section 2's own row, recomputes the fingerprint from this checkout and
+  refuses before a single call goes out — the same place and shape as the
+  `--expect-manifest` clip check. The free `dry_run` job passes it too, so
+  drift surfaces without buying a dispatch to discover it. And the computed
+  value is written into the report as `pins.grader_source_sha256`, so what ran
+  is recorded by the run rather than by a string somebody typed.
 
   The thirteenth is the column in section 0 that tells the operator which
   inputs to type. Five rows, three marked "differs from the default" and two
