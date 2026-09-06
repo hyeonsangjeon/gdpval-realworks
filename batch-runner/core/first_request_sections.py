@@ -97,6 +97,14 @@ SECTIONS_PRICED_SOMEWHERE_ELSE: Mapping[str, str] = {
         "built from the reference files, billed per file at "
         "REFERENCE_FILE_CHARACTER_CAP — same rule as file_structure"
     ),
+    "available_files_any_run_place": (
+        "the same line as available_files with the one word that named a run "
+        "place taken out, so that all three places can send it; built from the "
+        "reference files and billed per file at REFERENCE_FILE_CHARACTER_CAP — "
+        "same rule as file_structure. Only the shared first request names it, "
+        "and a request that names it does not also name available_files, so no "
+        "request is billed for both"
+    ),
     "reflection": (
         "no first request carries it: SandboxRunner.run opens with "
         "reflection = None and only fills it from a finished attempt, so it "

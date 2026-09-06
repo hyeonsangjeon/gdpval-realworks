@@ -116,6 +116,16 @@ class ExecutionConfig:
     agentic: Optional[Dict[str, Any]] = None  # agentic-mode settings (execution.agentic block)
     agentic_v2: Optional[Dict[str, Any]] = None  # v2 contract/profile identity
     metrics: Optional[Dict[str, Any]] = None  # opt-in job metrics (execution.metrics block)
+    # One first request for every run place, instead of each run place's own.
+    #
+    # Off, so every experiment written before this field keeps the prompt file
+    # its runner class declares and the section blocks that runner builds. On,
+    # all three run places load prompts/execution_envelope_shared.yaml and
+    # assemble the same four sections, which is what makes
+    # comparison: same_generated_code_rerun mean what it says. See
+    # core/shared_first_request.py, including what equal wording does not
+    # equalise.
+    shared_first_request: bool = False
 
 
 def _validate_preprocessors(
@@ -294,6 +304,12 @@ class ExperimentConfig:
             tokens=execution_tokens,
             timeout=execution_data.get("timeout"),
             sandbox=execution_data.get("sandbox"),
+            # ``is True`` rather than a truth test. A YAML file that says
+            # "yes", 1, or a non-empty string here is a file whose author meant
+            # something this repository has not agreed on, and turning any of
+            # them into a run that quietly changes every prompt is the kind of
+            # thing a comparison should not be able to do by accident.
+            shared_first_request=execution_data.get("shared_first_request") is True,
             agentic=(
                 dict(execution_data["agentic"])
                 if isinstance(execution_data.get("agentic"), dict)
@@ -416,6 +432,13 @@ class ExperimentConfig:
                 "tokens": dict(self.execution.tokens),
                 "timeout": self.execution.timeout,
                 "sandbox": self.execution.sandbox,
+                # Written only when on, so the prepared file of every existing
+                # experiment is byte-for-byte what it was.
+                **(
+                    {"shared_first_request": True}
+                    if self.execution.shared_first_request
+                    else {}
+                ),
                 **({"agentic": self.execution.agentic} if self.execution.agentic is not None else {}),
                 **({"agentic_v2": self.execution.agentic_v2} if self.execution.agentic_v2 is not None else {}),
                 **({"metrics": self.execution.metrics} if self.execution.metrics is not None else {}),

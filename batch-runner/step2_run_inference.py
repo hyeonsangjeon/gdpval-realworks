@@ -2853,6 +2853,10 @@ def _run_inference_impl(
     }
     # Sandbox-mode settings (execution.sandbox block in the experiment YAML).
     sandbox_options = execution_cfg.get("sandbox", {}) or {}
+    # One first request for every run place. ``is True`` for the same reason the
+    # config parser uses it: a prepared file carrying anything else here means
+    # something nobody agreed on, and this setting rewrites every prompt.
+    shared_first_request = execution_cfg.get("shared_first_request") is True
     agentic_options = execution_cfg.get("agentic", {}) or {}
     hardened_requested = (
         execution_mode == "agentic_sandbox"
@@ -3395,6 +3399,7 @@ def _run_inference_impl(
             mode=execution_mode, tokens=tokens_cfg,
             timeout=timeout, reasoning_effort=reasoning_effort,
             sandbox_options=sandbox_options,
+            shared_first_request=shared_first_request,
             metrics_options=metrics_cfg,
             provider=provider,
             client_factory=client_factory,

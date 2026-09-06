@@ -24,14 +24,26 @@
 # with this file" until 2026-09-06, which is what a written-down claim does when
 # nothing re-reads it.
 #
-# What "agree on everything except where the code runs" does not yet cover: the
-# prompt. Each of the three sends the prompt file its own runner class declares,
-# and the three are different files. Measured through the builders a real
-# attempt uses, the first requests come to 3,533, 3,867 and 7,307 characters.
-# The free check reports this and will not start the comparison under the name
-# same_generated_code_rerun while it holds. Which way to settle it — one prompt
-# for all three, or a different name for the comparison — is a decision about
-# the experiment and has not been made here.
+# The prompt used not to be covered by "agree on everything except where the
+# code runs". Each of the three sent the prompt file its own runner class
+# declares, and the three are different files; measured through the builders a
+# real attempt uses, the first requests came to 3,533, 3,867 and 7,307
+# characters for what this plan called one question. It has been settled the
+# first way: one prompt for all three. `shared_first_request: true` in the
+# execution block below puts every one of them on
+# prompts/execution_envelope_shared.yaml, and
+# tests/test_the_three_run_places_really_send_one_request.py holds a fake client
+# where the provider client goes and fails if the three texts stop matching
+# byte for byte.
+#
+# What is equal now is the text. What is not equal is written down rather than
+# implied: core/shared_first_request.py's UNCONTROLLED_DIFFERENCES names the
+# API family, the tool declaration only Azure sends, how the reference files
+# arrive, the isolation each place carries, the container's own output check
+# and the per-task time limit Azure is never given. The free check prints all
+# of them and reports pure_run_place_effect_is_measurable as false while any
+# remain, so a result from this comparison may not be read as the run place's
+# effect on its own.
 
 experiment:
   id: "exp032_envelope_azure_code_interpreter"
@@ -117,6 +129,26 @@ condition_a:
 
 execution:
   mode: "code_interpreter"
+
+  # One first request for all three run places.
+  #
+  # Without this, each run place loads the prompt file its own runner class
+  # names in its DEFAULT_PROMPT, and the three are three different files. The
+  # header of this file recorded the sizes that produced: 3,533 characters here,
+  # 3,867 in the container and 7,307 through Azure, for what the plan called one
+  # question. Set on all three files together, this makes every opted-in run
+  # place load prompts/execution_envelope_shared.yaml instead.
+  #
+  # Off everywhere else, and it has to be written as a real true — anything else
+  # leaves the run place on the path it always used, in the config parser and in
+  # the free check alike. Every other experiment in this repository builds its
+  # first request exactly as before.
+  #
+  # What this does not equalise is written down rather than left to be assumed:
+  # core/shared_first_request.py's UNCONTROLLED_DIFFERENCES, which the free
+  # check prints at the end of its summary and which is why this comparison
+  # still refuses the verdict "the difference is the run place's alone".
+  shared_first_request: true
   # 1200 seconds in all three files. The service also removes an idle container
   # of its own accord after twenty minutes, which is documented behaviour on
   # Microsoft's side and not something this file controls.

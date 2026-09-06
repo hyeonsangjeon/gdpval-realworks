@@ -32,6 +32,13 @@ declare they are holding ``prompt_strategy`` still. It has a rule of its own
 now, taking the check to 31 of 44, and the settings the two block exceptions
 let through are argued for here one at a time.
 
+Then a 45th setting arrived. ``execution.shared_first_request`` is what makes
+all three run places send one committed prompt file instead of three
+differently named ones, so a file quietly dropping it would put that run place
+back on its own wording — the exact difference this comparison exists to
+remove. It is reached, and the count is 32 of 45. Every figure above is left at
+what it was when it was measured; there were 44 settings then.
+
 The tests here hold that from both ends. The sweep is derived, not typed: it
 reads the settings out of the committed files, changes each one in a single run
 place, and requires either a refusal or a stated reason. Nothing here calls a
@@ -974,12 +981,19 @@ def test_the_number_this_module_claims_is_the_number_it_reaches(plan, copied_roo
             encoding="utf-8",
         )
 
-    assert (len(noticed), len(settings)) == (31, 44), (
+    assert (len(noticed), len(settings)) == (32, 45), (
         f"the comments in this module and in core/execution_envelope_"
-        f"preflight.py say the check reaches 31 of 44 settings; it now "
-        f"reaches {len(noticed)} of {len(settings)}. Update both."
+        f"preflight.py say the check reaches 32 of 45 settings; it now "
+        f"reaches {len(noticed)} of {len(settings)}. Update both, and say "
+        f"which settings moved: reached {', '.join(noticed)}"
     )
     assert "execution.sandbox.max_skills" in noticed
+    assert "execution.shared_first_request" in noticed, (
+        "a run place that quietly dropped execution.shared_first_request would "
+        "go back to sending its own prompt file while the other two send the "
+        "shared one, which is the difference this whole comparison exists to "
+        "remove; the check must refuse it"
+    )
 
 
 # ---------------------------------------------------------------------------

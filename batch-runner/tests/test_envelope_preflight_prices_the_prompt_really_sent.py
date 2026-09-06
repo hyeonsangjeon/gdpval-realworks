@@ -22,26 +22,33 @@ So the figure is a render now. Each run place's prompt file is resolved the way
 ``core/executor.py`` resolves it, rendered through ``fixed_prompt_characters``
 with that place's own ``condition_a.prompt`` block and the widest occupation
 name in the committed catalogue, and the plan is refused where it charges less
-than came back. The container's render comes to 5,020 characters — not 1,068.
-No test in this file types 5,020, 3,867 or 3,533: every one of them renders.
+than came back. No test in this file types the width of any prompt file: every
+one of them renders.
 
-Where a settings file names a prompt and the runner declares a different
-default, both are rendered and the longer charged. That is not indecision:
-``executor.py`` follows ``execution.sandbox.prompt_name`` on the sandbox branch
-and reaches straight past it on the subprocess branch, so which one a run place
-takes is settled by wiring this cannot read back.
+Which file gets resolved is now the settings' own answer. All three of this
+comparison's files set ``execution.shared_first_request: true``, so all three
+send ``prompts/execution_envelope_shared.yaml`` and there is exactly one
+candidate — ``executor.py`` forces the name there rather than choosing, and
+every runner raises on that setting paired with any other file. Where a settings
+file does *not* opt in, which is every other experiment in this repository, two
+candidates are rendered and the longer charged: ``executor.py`` follows
+``execution.sandbox.prompt_name`` on the sandbox branch and reaches straight
+past it on the subprocess branch, so which one a run place takes is settled by
+wiring this cannot read back. Both rules are held below, the second from a
+committed file with the one key removed.
 
-The render is not everything the first request carries. ``_augment_prompt``
-builds a deliverable contract, a dependency hint and a skills manual, lays them
-out with the task, and hands the result to ``render_prompt`` **as** the task —
-and ``fixed_prompt_characters`` renders with a one-character stand-in task on
-purpose, so its stand-in was replacing all three. Each runner now declares what
-it adds, in ``FIRST_REQUEST_EXTRA_SECTIONS``, and
-``core/first_request_sections.py`` measures it through the same builders a real
-attempt uses. The container's first request comes to 7,307 characters: the 5,020
-it renders to plus 2,287 its runner built beforehand. A runner that declares
-nothing is refused rather than charged nothing. No test here types 7,307 or
-2,287 either.
+The render is not everything a first request carries. ``_augment_prompt`` builds
+a deliverable contract, a dependency hint and a skills manual, lays them out
+with the task, and hands the result to ``render_prompt`` **as** the task — and
+``fixed_prompt_characters`` renders with a one-character stand-in task on
+purpose, so its stand-in was replacing all three. Each runner declares what it
+adds, in ``FIRST_REQUEST_EXTRA_SECTIONS``, and ``core/first_request_sections.py``
+measures it through the same builders a real attempt uses. A runner that
+declares nothing is refused rather than charged nothing. On the shared first
+request those three sections are not sent at all — the shared prompt's own
+``sections:`` list names none of them, and ``core/shared_first_request.py``
+refuses it to — so the container's extra now measures to nothing by that route
+as well as by the settings.
 
 Nothing here calls a model, runs a container, or spends anything.
 """
@@ -80,6 +87,7 @@ from core.prompt_loader import (  # noqa: E402
     load_prompt,
     render_prompt,
 )
+from core.shared_first_request import SHARED_PROMPT_NAME  # noqa: E402
 
 PLAN_PATH = (
     BATCH_RUNNER_ROOT
@@ -138,6 +146,25 @@ def _problems_for(
 def _settings(environment: str) -> dict:
     relative = load_plan(PLAN_PATH)["experiment_files"][environment]
     return yaml.safe_load((BATCH_RUNNER_ROOT / relative).read_text(encoding="utf-8"))
+
+
+def _settings_that_did_not_opt_in(environment: str) -> dict:
+    """A committed settings file with the shared first request turned back off.
+
+    All three of this comparison's files opt in, so the rules about falling back
+    to a runner's own prompt and about pricing two candidates no longer describe
+    any of them. Those rules still govern the rest of the repository's
+    experiments, which is why the tests below keep them — worked from a real
+    settings file with the one key removed, rather than from a dictionary
+    invented here that could drift from what an experiment really looks like.
+
+    The assertion is part of the point: if a committed file stops opting in,
+    this fails rather than quietly testing the same path twice.
+    """
+    settings = copy.deepcopy(_settings(environment))
+    turned_off = settings["execution"].pop("shared_first_request", None)
+    assert turned_off is True, f"{environment} was expected to opt in"
+    return settings
 
 
 def _wrapping(environment: str) -> dict | None:
@@ -338,9 +365,34 @@ def test_a_template_that_will_not_render_is_raised_rather_than_guessed_at():
 
 
 @pytest.mark.parametrize("environment", THE_THREE_RUN_PLACES)
-def test_each_run_place_falls_back_to_its_own_runners_prompt(environment):
-    """None of the three names a prompt, so each gets its runner's declared one."""
+def test_each_run_place_sends_the_one_shared_prompt_file(environment):
+    """All three opted in, so there is one candidate and it is the shared file.
+
+    The two-candidate rule below does not apply to them: ``executor.py`` does
+    not choose here, it forces the name, and every runner refuses the setting
+    paired with any other file. A second candidate would be a request nothing
+    could send.
+    """
     settings = _settings(environment)
+    assert settings["execution"]["shared_first_request"] is True
+    assert not (settings.get("execution", {}).get("sandbox", {}) or {}).get(
+        "prompt_name"
+    )
+    assert _prompt_files_a_run_place_might_send(environment, settings) == (
+        SHARED_PROMPT_NAME,
+    )
+    # And the file charged is not the one this run place used to send, which is
+    # the whole reason the figure had to be measured again.
+    assert _runner_default_prompt_name(environment) != SHARED_PROMPT_NAME
+
+
+@pytest.mark.parametrize("environment", THE_THREE_RUN_PLACES)
+def test_a_run_place_that_did_not_opt_in_falls_back_to_its_runners_prompt(environment):
+    """The path every other experiment in this repository still takes.
+
+    None of them names a prompt either, so each gets its runner's declared one.
+    """
+    settings = _settings_that_did_not_opt_in(environment)
     assert not (settings.get("execution", {}).get("sandbox", {}) or {}).get(
         "prompt_name"
     )
@@ -351,13 +403,36 @@ def test_each_run_place_falls_back_to_its_own_runners_prompt(environment):
 
 def test_a_prompt_named_in_the_settings_is_priced_alongside_the_default():
     """Both, because ``executor.py`` follows the setting in one branch only."""
-    settings = copy.deepcopy(_settings("docker_container"))
+    settings = _settings_that_did_not_opt_in("docker_container")
     settings["execution"]["sandbox"]["prompt_name"] = "subprocess_occupation_codegen"
     candidates = _prompt_files_a_run_place_might_send("docker_container", settings)
     assert set(candidates) == {
         "subprocess_occupation_codegen",
         _runner_default_prompt_name("docker_container"),
     }
+
+
+def test_the_shared_request_paired_with_a_named_prompt_is_refused_not_priced():
+    """Settings no attempt could run must not come back with a price.
+
+    ``TaskExecutor`` and all three runner classes raise on this pair rather than
+    letting one win — ``tests/test_shared_first_request_defaults_unchanged.py``
+    holds each of them to it. A figure returned here would be for a first
+    request that stops on the first task.
+    """
+    settings = copy.deepcopy(_settings("docker_container"))
+    settings["execution"]["sandbox"]["prompt_name"] = "subprocess_occupation_codegen"
+    with pytest.raises(ValueError, match="shared first request"):
+        _prompt_files_a_run_place_might_send("docker_container", settings)
+
+
+def test_naming_the_shared_prompt_itself_is_not_a_conflict():
+    """Saying the same thing twice is agreement, and the runners allow it."""
+    settings = copy.deepcopy(_settings("docker_container"))
+    settings["execution"]["sandbox"]["prompt_name"] = SHARED_PROMPT_NAME
+    assert _prompt_files_a_run_place_might_send("docker_container", settings) == (
+        SHARED_PROMPT_NAME,
+    )
 
 
 def test_a_run_place_no_runner_serves_names_no_prompt_file():
@@ -367,11 +442,27 @@ def test_a_run_place_no_runner_serves_names_no_prompt_file():
     )
 
 
+def test_the_shared_setting_does_not_answer_for_a_run_place_nothing_can_run():
+    """The registry is read first, so the shared file cannot stand in for a runner.
+
+    Otherwise a settings file could name any run place at all, opt in, and be
+    priced at the shared prompt's width — a figure for a run this repository
+    has no code to perform.
+    """
+    assert (
+        _prompt_files_a_run_place_might_send(
+            A_RUN_PLACE_NO_RUNNER_SERVES,
+            {"execution": {"shared_first_request": True}},
+        )
+        == ()
+    )
+
+
 def test_the_widest_candidate_prompt_file_is_the_one_charged(tmp_path):
     """Two candidates, and the demand is the longer — worked out here, not read."""
     a_narrower_prompt = "code_interpreter_occupation_codegen"
     wrapping = _wrapping("docker_container")
-    settings = copy.deepcopy(_settings("docker_container"))
+    settings = _settings_that_did_not_opt_in("docker_container")
     settings["execution"]["sandbox"]["prompt_name"] = a_narrower_prompt
 
     # Both halves of each candidate, because the runner's own sections are part
@@ -467,7 +558,13 @@ def test_the_figure_this_replaces_is_refused_for_every_run_place():
 def test_a_refusal_names_the_prompt_file_and_says_what_the_figure_is_made_of():
     refused = _problems(_priced_at(1))
     container = next(p for p in refused if p.startswith("docker_container"))
-    assert "prompts/sandbox_occupation_codegen.yaml" in container
+    # Read from the rule rather than typed, so the sentence follows the settings
+    # file. It names the shared prompt today and would name whatever a run place
+    # is put on tomorrow, with no test edited.
+    sends = _prompt_files_a_run_place_might_send(
+        "docker_container", _settings("docker_container")
+    )[0]
+    assert f"prompts/{sends}.yaml" in container
     assert f"come to {_sent('docker_container')} characters" in container
     assert "the wording the committed prompt file wraps the task in" in container
     assert "the standing instruction the committed prompt file holds" in container
@@ -515,7 +612,7 @@ def test_a_settings_file_that_holds_no_mapping_is_refused(tmp_path):
 
 def test_a_named_prompt_that_is_not_a_prompt_is_refused(tmp_path):
     """A committed file missing the keys ``load_prompt`` requires stops the sum."""
-    settings = copy.deepcopy(_settings("docker_container"))
+    settings = _settings_that_did_not_opt_in("docker_container")
     settings["execution"]["sandbox"][
         "prompt_name"
     ] = A_COMMITTED_FILE_THAT_IS_NOT_A_PROMPT
@@ -532,6 +629,13 @@ def test_a_named_prompt_that_is_not_a_prompt_is_refused(tmp_path):
 
 
 def test_a_run_place_no_runner_serves_is_refused_rather_than_priced(tmp_path):
+    """Nothing here can run this place, so nothing here may put a price on it.
+
+    The settings written out are a real one of the three, so they ask for the
+    shared first request. That is the harder case: the shared setting names a
+    prompt file of its own, and if it were read before the runner registry it
+    would answer for a run place this repository has no code to perform.
+    """
     (tmp_path / "experiments").mkdir()
     (tmp_path / "experiments" / "nowhere.yaml").write_text(
         yaml.safe_dump(_settings("docker_container")), encoding="utf-8"
