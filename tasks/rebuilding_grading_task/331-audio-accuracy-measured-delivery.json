@@ -1,0 +1,95 @@
+{
+  "measured": true,
+  "pins": {
+    "config": "gold_audio_repeat_v2_sol_max.yaml",
+    "audio_model": "gpt-audio-1.5",
+    "audio_deployment": "gpt-audio-1.5",
+    "audio_clip_seconds": 30,
+    "audio_call_cap_per_task": 32,
+    "provider": "azure_openai",
+    "grader_source_sha256": "74e1f478161feebbc0127884f269c6963b713fcb38bcdabd28b101e20a558a90",
+    "clip_sample_rate_hz": 16000,
+    "grader_resample_rate_hz": 16000,
+    "repeats": 3,
+    "claims": 20,
+    "clips": 10,
+    "true_claims": 10,
+    "false_claims": 10,
+    "prompt_arms": [
+      "production"
+    ]
+  },
+  "clip_sha256": {
+    "crate": "7e59f9a516ff6bf39a8462a4718c29124d6de87d4239fdb6eecebb8b6f4d0741",
+    "shelf": "2737aed8fa5d09a7ed5e363a9567a22240821ca186617fa40bf507862ed16fc5",
+    "dial": "b58bb4f1c471050524a1cc7951c53891c5d8c6c1d318d8ff98d902641e46d352",
+    "column": "6c25533396667dbfc6c64a1287bcab71de7cea6ddb8a55b32f715d93eefc0793",
+    "lamp": "00b8b8643b56290f83409d6bd60719835abf040b054fce1c5987f0d641aa63df",
+    "powder": "938317e51b983d1725dcbe50cf16a48c7c88164659838a196fab4e586a0893b5",
+    "meeting": "c7c5c258133ac4c2d2684bedd604e9826dbea1a9753cf62b208dee9de7d20514",
+    "boxes": "e3fb726297fa910ff51be0d574d6ab6a6c1fa0911179889795fa29553cbd0890",
+    "engine": "0dc859843030440dda3606bc2b74793b1a0882c3e9d528163a6341562d8d7866",
+    "valve": "f1fe5ed15585618559e22271c9642133ce3b07b31d6aed2ba1fe0ea0a1cea796"
+  },
+  "delivery": {
+    "measured": true,
+    "calls_inspected": 60,
+    "calls_carrying_audio": 60,
+    "calls_without_audio": [],
+    "sent_formats": [
+      "wav"
+    ],
+    "sent_sample_rates_hz": [
+      16000
+    ],
+    "sent_channels": [
+      1
+    ],
+    "digests_per_clip": {
+      "boxes": [
+        "e3fb726297fa910ff51be0d574d6ab6a6c1fa0911179889795fa29553cbd0890"
+      ],
+      "column": [
+        "6c25533396667dbfc6c64a1287bcab71de7cea6ddb8a55b32f715d93eefc0793"
+      ],
+      "crate": [
+        "7e59f9a516ff6bf39a8462a4718c29124d6de87d4239fdb6eecebb8b6f4d0741"
+      ],
+      "dial": [
+        "b58bb4f1c471050524a1cc7951c53891c5d8c6c1d318d8ff98d902641e46d352"
+      ],
+      "engine": [
+        "0dc859843030440dda3606bc2b74793b1a0882c3e9d528163a6341562d8d7866"
+      ],
+      "lamp": [
+        "00b8b8643b56290f83409d6bd60719835abf040b054fce1c5987f0d641aa63df"
+      ],
+      "meeting": [
+        "c7c5c258133ac4c2d2684bedd604e9826dbea1a9753cf62b208dee9de7d20514"
+      ],
+      "powder": [
+        "938317e51b983d1725dcbe50cf16a48c7c88164659838a196fab4e586a0893b5"
+      ],
+      "shelf": [
+        "2737aed8fa5d09a7ed5e363a9567a22240821ca186617fa40bf507862ed16fc5"
+      ],
+      "valve": [
+        "f1fe5ed15585618559e22271c9642133ce3b07b31d6aed2ba1fe0ea0a1cea796"
+      ]
+    },
+    "clips_with_more_than_one_digest": [],
+    "clips_whose_sent_duration_differs": [],
+    "response_models": [
+      "gpt-audio-1.5"
+    ],
+    "audio_tokens_reported": 60,
+    "requests_total": 60,
+    "audio_tokens_total": 1848,
+    "prompt_token_vs_clip_seconds": {
+      "n": 60,
+      "pearson_r": 0.8487929787394638,
+      "meaning": "Prompt tokens against clip duration. Near 1 means the count scales with the audio, which a request that did not carry it cannot do. Near 0 with audio parts present would mean the part was accepted and not charged for -- a different and worse failure than never sending it."
+    },
+    "not_covered": "This shows the bytes left this process correctly and were billed as audio. It cannot show what the model did with them."
+  }
+}
