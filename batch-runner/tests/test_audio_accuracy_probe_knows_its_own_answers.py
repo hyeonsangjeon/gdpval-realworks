@@ -1139,6 +1139,73 @@ def test_a_judge_that_separated_nothing_says_so_above_the_accuracy(
     )
 
 
+def test_the_arrival_banner_fires_on_the_shape_it_exists_for(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """The line 330 §3 calls the fix for 324 had never been rendered.
+
+    The test above it checks that the banner's *text* sits earlier in the
+    workflow source than the accuracy row. That is an ordering check over a
+    string, and it holds whether or not the condition beneath it is right --
+    the branch that prints the banner has only ever run on healthy reports,
+    where it prints nothing.
+
+    Which is the wrong way round. The banner exists for the unhealthy run:
+    ``WireClient`` deliberately does not raise when a request carried no audio
+    or a clip was the wrong length, so that shape completes all sixty calls and
+    prints a headline number. If the banner throws there, the summary dies on
+    the one run it was added for -- which is what the null-floor crash did, on
+    the one run §3's second stop rule exists to produce.
+
+    So: render all three shapes and read what came out.
+    """
+    manifest_path, clip_dir = _speech_fixture(tmp_path, clips=5)
+    out = tmp_path / "healthy.json"
+    assert probe.main([
+        "--dry-run", "--quiet", "--repeats", "3",
+        "--speech-set", str(manifest_path),
+        "--speech-clips", str(clip_dir),
+        "--out", str(out),
+    ]) == 0
+    healthy = json.loads(out.read_text(encoding="utf-8"))
+
+    delivered = healthy["delivery"]
+    assert delivered["calls_carrying_audio"] == delivered["calls_inspected"]
+    assert delivered["clips_whose_sent_duration_differs"] == []
+
+    printed = _render_paid_summary(healthy, tmp_path, monkeypatch, capsys)
+    assert "Read this before the accuracy below" not in printed, (
+        "a banner that prints on a clean run is decoration"
+    )
+    assert "### Did the audio arrive" in printed, "the detail section still runs"
+
+    def _mutated(**delivery: object) -> str:
+        report = json.loads(json.dumps(healthy))
+        report["delivery"].update(delivery)
+        return _render_paid_summary(report, tmp_path, monkeypatch, capsys)
+
+    # 324: the calls that carried no audio at all. Not caught by §3's stop
+    # rule, which fires on audio metered at a real 0 rather than absent.
+    inspected = delivered["calls_inspected"]
+    printed = _mutated(calls_carrying_audio=0, calls_without_audio=list(range(inspected)))
+    banner = printed.index("Read this before the accuracy below")
+    accuracy = printed.index("| accuracy (answered calls) |")
+    assert banner < accuracy, "the warning prints under the number it is about"
+    assert f"{inspected} of {inspected} requests carried no audio" in printed
+    assert "it is not this model hearing these clips" in printed
+
+    # The other half of the condition: audio arrived, and was not the pinned
+    # audio. The accuracy is about a corpus §2 did not fingerprint.
+    printed = _mutated(clips_whose_sent_duration_differs=["boxes", "crate"])
+    assert printed.index("Read this before the accuracy below") < printed.index(
+        "| accuracy (answered calls) |"
+    )
+    assert "2 clip(s) were not the pinned length" in printed
+    assert "requests carried no audio" not in printed, (
+        "it should name the fault it found, not both"
+    )
+
+
 @pytest.mark.parametrize("arm,arms", [
     ("production", 1),
     ("observation", 1),

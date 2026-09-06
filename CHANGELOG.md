@@ -558,6 +558,19 @@ entries land under a fresh dated heading the day they merge to `main`.
   column is now derived from the workflow's own defaults and compared row by
   row. Every row was already right; nothing had checked it.
 
+  The fourteenth is the arrival banner itself — the line 330 section 3 calls
+  the fix for 324, and the only one in the summary that tells a reader the
+  number below is not this model hearing these clips. Its test checked that
+  the banner's text sits earlier in the workflow source than the accuracy row:
+  an ordering check over a string, true whether or not the condition beneath
+  it is. The branch had only ever run on healthy reports, where it prints
+  nothing — the wrong way round, because the banner exists for the run where
+  `WireClient` recorded missing audio or a clip of the wrong length and
+  deliberately did not raise. All three shapes are now rendered and read: no
+  audio at all, a clip that is not the pinned length, and a clean run that has
+  to stay quiet. Mutation-checked four ways, including `or` → `and`, which
+  silences the wrong-length half alone and is the edit a tidy-up makes.
+
   330 section 3 pre-registered four stop conditions and nothing enforced them.
   They are now `SPEECH_STOP_RULES`, checked after each call, with a test that
   fails if the constants and the document drift apart: 20 minutes wall clock,
