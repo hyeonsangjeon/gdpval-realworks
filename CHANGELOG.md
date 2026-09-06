@@ -545,6 +545,19 @@ entries land under a fresh dated heading the day they merge to `main`.
   it fails before the run it says what to do — re-pin section 2, do not delete
   the test.
 
+  The thirteenth is the column in section 0 that tells the operator which
+  inputs to type. Five rows, three marked "differs from the default" and two
+  marked "same" — and the two marked same are the two nobody types, which is
+  what the column is for. It was written by hand, so a default moving in the
+  workflow does not produce a wrong document so much as a wrong dispatch.
+  Neither "same" row spends on its own: `repeats` was already pinned, and a
+  `prompt_arm` default of `both` is refused for a speech set before the
+  identity resolves. But it stops, and section 0 says the pre-registration is
+  those five values and not a sixth combination. The other direction is
+  `dry_run`, whose `true` default is what makes a careless dispatch free. The
+  column is now derived from the workflow's own defaults and compared row by
+  row. Every row was already right; nothing had checked it.
+
   330 section 3 pre-registered four stop conditions and nothing enforced them.
   They are now `SPEECH_STOP_RULES`, checked after each call, with a test that
   fails if the constants and the document drift apart: 20 minutes wall clock,

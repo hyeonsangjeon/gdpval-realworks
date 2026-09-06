@@ -2765,6 +2765,56 @@ def test_the_dispatch_the_document_names_is_a_dispatch_the_workflow_accepts() ->
     assert "20 × 3 × 1 = 60" in doc
 
 
+def test_the_column_saying_which_inputs_must_be_typed_is_derived() -> None:
+    """§0's third column is the one the operator acts on, and it was prose.
+
+    The table has a "does this differ from the default?" column. Three rows say
+    yes, two say no, and the two that say no are the two the operator will not
+    type -- that is what the column is *for*. So a default moving underneath it
+    does not produce a wrong document so much as a wrong dispatch.
+
+    Neither 같음 row is a spending risk on its own. ``repeats`` is pinned by the
+    test above, and if ``prompt_arm``'s default became ``both`` the measurer
+    refuses that combination with a speech set before it resolves the identity,
+    so the run stops rather than buying 120 calls. But it stops, and stopping is
+    not what §0 describes: "아래 다섯 개 말고 다른 조합은 이 사전등록이 아니다."
+
+    The 다름 rows carry the other half. ``dry_run`` defaults to ``true``, and
+    that default is what makes a careless dispatch free; if it ever became
+    ``false`` this column would still be telling the operator to type something
+    the workflow no longer needs telling.
+
+    Every row is right today. Nothing checked that, which is the whole shape:
+    a true sentence with no guard is only true until someone edits elsewhere.
+    """
+    doc = (
+        probe.REPO_ROOT / "tasks" / "rebuilding_grading_task"
+        / "330-speech-diagnostic-prereg.md"
+    ).read_text(encoding="utf-8")
+    inputs = _workflow()[True]["workflow_dispatch"]["inputs"]
+
+    rows = re.findall(
+        r"^\| `([a-z_]+)` \| `([^`]+)` \| (✅ 다름|같음) \|$", doc, re.MULTILINE
+    )
+    assert [name for name, _, _ in rows] == [
+        "dry_run",
+        "paid_approval",
+        "repeats",
+        "prompt_arm",
+        "corpus",
+    ], "§0's dispatch table is no longer the five inputs it pre-registers"
+
+    for name, stated_value, stated_verdict in rows:
+        default = str(inputs[name]["default"]).lower()
+        differs = default != stated_value.lower()
+        assert differs == (stated_verdict == "✅ 다름"), (
+            f"§0 says `{name}` is {stated_verdict!r} from the default, but the "
+            f"workflow's default is {inputs[name]['default']!r} and the "
+            f"pre-registered value is {stated_value!r}. The column tells the "
+            f"operator which inputs to type; re-derive it, do not re-word it."
+        )
+
+
 # ── The per-claim table, which is where the primary analysis lives ───────
 #
 # Third instance of one bug: an analysis function defaulting to the tone
