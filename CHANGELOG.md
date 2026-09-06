@@ -595,6 +595,20 @@ entries land under a fresh dated heading the day they merge to `main`.
   test runs the shell rather than reading it — shell that is never executed is
   a suggestion.
 
+  The sixteenth is the fourteenth on the other page. Both delivery conditions
+  are bannered above the accuracy in the *paid* summary; the *free* one printed
+  the arrival count and the digest list and stopped there, saying nothing about
+  a clip that is not its pinned length. The free run is the whole point of
+  having a free run — it is what finds, for nothing, what would otherwise be
+  found by buying a dispatch. On the run where defect 1 was live, with all ten
+  speech clips measured against the tone corpus's durations, that page read
+  `60/60 requests carried audio; clips sending more than one digest: []` and
+  nothing else. It looked clean; the defect was found by opening the JSON by
+  hand. The free page now prints both values and, when either is wrong, says
+  not to dispatch the paid run yet — and stays quiet when they are right.
+  Mutation-checked three ways: guard never fires, guard always fires, bullet
+  drops the field.
+
   330 section 3 pre-registered four stop conditions and nothing enforced them.
   They are now `SPEECH_STOP_RULES`, checked after each call, with a test that
   fails if the constants and the document drift apart: 20 minutes wall clock,

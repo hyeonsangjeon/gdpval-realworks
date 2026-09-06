@@ -386,6 +386,21 @@ python scripts/measure_audio_grading_accuracy.py --dry-run --repeats 3 \
 자기가 찾은 문제를 이름으로 말해야 하고, 마지막은 **조용해야 한다**
 (`test_the_arrival_banner_fires_on_the_shape_it_exists_for`).
 
+##### 무료 실행 페이지에도 같은 줄이 있어야 한다
+
+위 경고는 **유료 요약**에만 있었다. 그런데 이 두 문제를 **돈 안 쓰고** 잡으라고
+있는 게 무료 dry-run이다. 그 페이지는 "몇 건에 소리가 실렸나"와 "클립 하나가
+지문 두 개를 보냈나"만 찍고, **길이가 어긋난 클립은 안 찍었다.**
+
+결함 1이 살아 있던 그 실행에서 이 페이지는 이렇게 나왔을 것이다 —
+`60/60 requests carried audio; clips sending more than one digest: []`.
+**깨끗하게 읽힌다.** 열 개 클립이 전부 고정한 길이가 아닌데도. 실제로 그 결함은
+CI 페이지가 아니라 JSON 파일을 손으로 열어 보고 찾았다.
+
+지금은 무료 페이지도 두 값을 다 찍고, 둘 중 하나라도 어긋나면 **"아직 유료
+dispatch 하지 말라"**를 적는다. 멀쩡하면 안 찍는다. 이것도 **실제로 실행해서**
+확인한다(`test_the_free_page_says_when_the_audio_did_not_go_out_as_pinned`).
+
 **톤 코퍼스에는 이 규칙을 안 건다.** 그 숫자는 이미 발표됐고, 지금 규칙을 붙이면
 발표된 결과가 나온 조건을 사후에 바꾸는 게 된다.
 

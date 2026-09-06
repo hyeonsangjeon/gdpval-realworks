@@ -242,7 +242,21 @@ jobs:
               print(f"- delivery: {delivery['calls_carrying_audio']}/"
                     f"{delivery['calls_inspected']} requests carried audio; "
                     f"clips sending more than one digest: "
-                    f"`{json.dumps(delivery['clips_with_more_than_one_digest'])}`")
+                    f"`{json.dumps(delivery['clips_with_more_than_one_digest'])}`; "
+                    f"clips off their pinned length: "
+                    f"`{json.dumps(delivery['clips_whose_sent_duration_differs'])}`")
+              # This page is the whole reason the free job exists: to find out
+              # for nothing what would otherwise be found by buying a dispatch.
+              # Neither condition below stops a run -- that is deliberate, §3 --
+              # so if this page stays quiet about them, nothing free says a word.
+              if (delivery["calls_carrying_audio"] < delivery["calls_inspected"]
+                      or delivery["clips_whose_sent_duration_differs"]):
+                  print()
+                  print("> **Do not dispatch the paid run yet.** The audio did not")
+                  print("> go out the way `330` §2 pins it. Neither of these stops a")
+                  print("> run, so the paid dispatch would spend the whole budget and")
+                  print("> print an accuracy with this same evidence against it.")
+                  print()
           stopped = report.get("stopped")
           print(f"- stopped early: `{json.dumps(stopped and stopped['rule'])}` "
                 f"({len(report.get('calls') or [])} of {report['calls_planned']} "

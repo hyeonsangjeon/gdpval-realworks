@@ -932,18 +932,43 @@ def test_whether_the_audio_arrived_is_printed_above_the_accuracy() -> None:
     assert "clips_whose_sent_duration_differs" in summary[:accuracy]
 
 
-def _summarise_body() -> str:
-    """The python the paid Summarise step actually runs, on its own.
+def _summarise_body(job: str = "measure") -> str:
+    """The python a Summarise step actually runs, on its own.
 
     Extracted rather than re-implemented: a copy in this file would drift and
     then pass while the workflow failed, which is the whole failure mode.
     """
-    lines = _step("measure", "Summarise")["run"].splitlines()
+    lines = _step(job, "Summarise")["run"].splitlines()
     start = next(
         i for i, line in enumerate(lines) if line.startswith("python - <<")
     )
     end = next(i for i in range(start + 1, len(lines)) if lines[i] == "PY")
     return "\n".join(lines[start + 1 : end])
+
+
+def _render_summary(
+    job: str,
+    report_name: str,
+    report: dict,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture,
+) -> str:
+    """Run a Summarise step over a report and return what it printed.
+
+    Executing it is the point. A grep over the workflow text cannot see a
+    ``TypeError``, and every defect this file has caught in the summary was a
+    line that rendered fine on the shape its author had in mind.
+    """
+    workspace = tmp_path / f"ws{len(list(tmp_path.iterdir()))}"
+    workspace.mkdir()
+    (workspace / report_name).write_text(json.dumps(report), encoding="utf-8")
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(workspace))
+    exec(  # noqa: S102 - running the workflow's own code is the point
+        compile(_summarise_body(job), f"<{job} Summarise>", "exec"),
+        {"__name__": "__main__"},
+    )
+    return capsys.readouterr().out
 
 
 def _render_paid_summary(
@@ -952,23 +977,70 @@ def _render_paid_summary(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture,
 ) -> str:
-    """Run the paid Summarise step over a report and return what it printed.
+    return _render_summary(
+        "measure",
+        "audio-accuracy-measured.json",
+        report,
+        tmp_path,
+        monkeypatch,
+        capsys,
+    )
 
-    Executing it is the point. A grep over the workflow text cannot see a
-    ``TypeError``, and every defect this file has caught in the summary was a
-    line that rendered fine on the shape its author had in mind.
+
+def test_the_free_page_says_when_the_audio_did_not_go_out_as_pinned(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """The free run exists to find for nothing what a paid dispatch would.
+
+    §3 deliberately lets a run finish when a request carried no audio part, or
+    when a clip is not its pinned length: a diagnostic that dies on the defect
+    it hunts cannot describe that defect. The paid summary therefore banners
+    both conditions above the accuracy. The free page banners neither -- it
+    printed the arrival count and the digest list and stopped there.
+
+    That page is what a dispatcher reads *before* deciding to buy. When defect
+    1 was live -- durations compared against the tone corpus, so all ten speech
+    clips were off their pinned length -- this page said "60/60 requests
+    carried audio; clips sending more than one digest: `[]`" and nothing else.
+    It read clean. The defect was found by reading a JSON file by hand.
+
+    Executed, not grepped: the free step is python too.
     """
-    workspace = tmp_path / f"ws{len(list(tmp_path.iterdir()))}"
-    workspace.mkdir()
-    (workspace / "audio-accuracy-measured.json").write_text(
-        json.dumps(report), encoding="utf-8"
+    manifest_path, clip_dir = _speech_fixture(tmp_path, clips=5)
+    out = tmp_path / "dry.json"
+    assert probe.main([
+        "--dry-run", "--quiet", "--repeats", "1",
+        "--speech-set", str(manifest_path),
+        "--speech-clips", str(clip_dir),
+        "--out", str(out),
+    ]) == 0
+    healthy = json.loads(out.read_text(encoding="utf-8"))
+    delivery = healthy["delivery"]
+    assert delivery["calls_carrying_audio"] == delivery["calls_inspected"]
+    assert delivery["clips_whose_sent_duration_differs"] == []
+
+    def _page(report: dict) -> str:
+        return _render_summary(
+            "dry-run", "audio-accuracy-dry-run.json", report,
+            tmp_path, monkeypatch, capsys,
+        )
+
+    # A healthy rehearsal must stay quiet. A warning on every run is decoration.
+    assert "Do not dispatch" not in _page(healthy)
+
+    wrong_length = json.loads(json.dumps(healthy))
+    named = sorted(delivery["digests_per_clip"])[:1]
+    wrong_length["delivery"]["clips_whose_sent_duration_differs"] = named
+    printed = _page(wrong_length)
+    assert "Do not dispatch" in printed, (
+        "the free page is silent about a clip that is not the pinned clip, so "
+        "the paid dispatch is what finds out"
     )
-    monkeypatch.setenv("GITHUB_WORKSPACE", str(workspace))
-    exec(  # noqa: S102 - running the workflow's own code is the point
-        compile(_summarise_body(), "<Summarise>", "exec"),
-        {"__name__": "__main__"},
-    )
-    return capsys.readouterr().out
+    assert named[0] in printed, "it does not say which clip"
+
+    no_audio = json.loads(json.dumps(healthy))
+    no_audio["delivery"]["calls_carrying_audio"] = 0
+    assert "Do not dispatch" in _page(no_audio)
 
 
 def test_the_threshold_line_is_about_the_test_the_document_calls_primary() -> None:
