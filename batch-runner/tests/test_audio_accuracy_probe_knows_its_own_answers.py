@@ -906,6 +906,32 @@ def test_the_paid_summary_names_the_arm_its_table_describes() -> None:
     assert "production arm alone" in _step("measure", "Summarise")["run"]
 
 
+def test_whether_the_audio_arrived_is_printed_above_the_accuracy() -> None:
+    """324's failure survives every rule this file has so far.
+
+    §3's stop rule fires on audio metered at a real ``0``. It does not fire on
+    a request that carried no audio part at all, and not on a clip that is not
+    the pinned length -- ``WireClient`` records both and deliberately does not
+    raise, because a diagnostic that crashes on the defect it is looking for
+    cannot describe it. So the run completes all sixty calls and prints an
+    accuracy, with ``calls_carrying_audio: 0`` in a section sixty lines below.
+
+    §2 puts these checks before the accuracy for that reason. The detail can
+    stay where it is; the line that says whether to read on cannot.
+    """
+    summary = _step("measure", "Summarise")["run"]
+    banner = summary.index("Read this before the accuracy below")
+    arrived = summary.index("| audio actually sent |")
+    accuracy = summary.index("| accuracy (answered calls) |")
+    assert banner < accuracy, "the warning prints under the number it is about"
+    assert arrived < accuracy, "the arrival count prints under the accuracy"
+
+    # Both conditions, not just the missing-audio one: a clip of the wrong
+    # length is audio that arrived and was not the pinned audio.
+    assert "calls_carrying_audio" in summary
+    assert "clips_whose_sent_duration_differs" in summary[:accuracy]
+
+
 @pytest.mark.parametrize("arm,arms", [
     ("production", 1),
     ("observation", 1),

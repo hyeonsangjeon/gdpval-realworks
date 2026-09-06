@@ -454,12 +454,39 @@ jobs:
                             "pre-registered figure.** Either different sound was sent or "
                             "the metering changed; read that before reading the accuracy.\n")
               print()
+          # 330 §2 puts the delivery checks *before* the accuracy: an accuracy
+          # measured on calls that carried no audio is 324 again -- the speech
+          # it heard in silence. §3's stop rule catches audio metered at a real
+          # 0, but not a request that carried no audio part at all, and not a
+          # clip whose length is not the pinned one. Those produce a complete
+          # 60-call run with a headline accuracy and the evidence sixty lines
+          # below it. The detail stays in "Did the audio arrive"; what moves up
+          # here is the one line saying whether to read on.
+          arrival = report.get("delivery") or {}
+          if arrival:
+              carried = arrival["calls_carrying_audio"]
+              inspected = arrival["calls_inspected"]
+              wrong_length = arrival["clips_whose_sent_duration_differs"]
+              if carried < inspected or wrong_length:
+                  print("> **Read this before the accuracy below.** ", end="")
+                  if carried < inspected:
+                      print(f"{inspected - carried} of {inspected} requests "
+                            f"carried no audio. ", end="")
+                  if wrong_length:
+                      print(f"{len(wrong_length)} clip(s) were not the pinned "
+                            f"length. ", end="")
+                  print("\n> Whatever the number below describes, it is not "
+                        "this model hearing these clips.\n")
           if len(report["pins"]["prompt_arms"]) > 1:
               print("The table below is the **production arm alone** — the prompt the")
               print("grader actually runs. The alternative prompt is never folded in,")
               print("because an average of the two describes a prompt nothing uses.\n")
           print("| | |")
           print("|---|---|")
+          if arrival:
+              print(f"| audio actually sent | "
+                    f"**{arrival['calls_carrying_audio']} / "
+                    f"{arrival['calls_inspected']}** requests |")
           print(f"| accuracy (answered calls) | {pct(acc['overall']['accuracy'])} |")
           # 330 §4: never the accuracy on its own. 328 published a 47.1% whose
           # denominator was 17 answers, and the 17 appeared nowhere near it.

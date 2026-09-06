@@ -473,6 +473,27 @@ entries land under a fresh dated heading the day they merge to `main`.
   the same way — no criterion states its own truth value or quotes its
   transcript, and each pair differs by one confusable word on the same clip.
 
+  The eighth and ninth are both the report saying more than the run can
+  support. §4 reads "solves the other families but not these three" as *hears
+  words, not sentences* — but `binding` and `negation` hold two claims each, so
+  they can only score 0, 50 or 100%, and 100% is two coin flips landing heads
+  (p = 0.25) printed as a discovery. The family sizes are now written into the
+  document beside the accuracies each can produce, taken from the manifest and
+  kept honest by a test, and that reading is restricted to `order`, the only
+  one of the three with four claims. Then the delivery checks: §2 says to read
+  them *before* trusting the accuracy, and the paid summary printed them sixty
+  lines below it. §3's fourth stop rule covers audio metered at a real `0`. It
+  does not cover a request that carried no audio part at all, and it does not
+  cover a clip that is not the pinned length — `WireClient` records both and
+  deliberately does not raise, because a diagnostic that dies on the defect it
+  exists to find cannot describe it. The result is a complete sixty-call run
+  with a headline number and the evidence against it far enough down the page
+  to miss, which is 324 exactly. The count of requests that actually carried
+  audio now prints in the row above the accuracy, with a banner when either
+  check fails saying that whatever the number below describes, it is not this
+  model hearing these clips. The detail stays where it was; only the line that
+  decides whether to read on moved. A test pins the order.
+
   330 section 3 pre-registered four stop conditions and nothing enforced them.
   They are now `SPEECH_STOP_RULES`, checked after each call, with a test that
   fails if the constants and the document drift apart: 20 minutes wall clock,
