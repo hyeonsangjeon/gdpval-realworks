@@ -7897,10 +7897,31 @@ execution:
 | 과제 지시문 | 한 정의(`build_shared_task_text`)에서 만들어 세 자리에 그대로 | 나간 요청 지문 3개 일치 |
 | 시스템 글 | 공용 지문 파일의 `system_message` 하나 | 같음 (158자) |
 | 파일 구조 요약 · 미리보기 · 파일 목록 | 공용 `sections:` 목록 넷, 같은 순서 | `test_every_run_place_loaded_the_shared_prompt_file` |
-| 모델 · 배포 · API 판 | 계획서 `model_run_conditions`와 설정 파일 대조 | `check_experiment_files_match_conditions` |
+| 모델 · 배포 | 계획서 `model_run_conditions`와 설정 파일 대조 | `check_experiment_files_match_conditions` |
 | 실제로 답한 모델 | 제공자가 돌려준 모델 이름을 기록 (안 주면 "못 읽음", `null` 아님) | `test_the_model_recorded_is_the_one_the_provider_answered_with` |
 | 과제 5개와 파일 해시 | 과제 목록 지문 + 참조 파일을 **이름이 아니라 내용으로** 기록 | `test_the_reference_files_are_recorded_by_content_not_by_name` |
 | 토큰 · 재시도 · 제한 시간 | 세 설정 파일에서 같은 값인지 대조 | 무료 사전 점검 |
+
+**API 판은 아직 대조하지 않습니다 — 앞서 이 표에 맞췄다고 적었던 것을 고칩니다.**
+계획서는 `api_version: "2025-04-01-preview"`로 못 박아 두었지만, 설정 파일을
+대조하는 `_compare_one_experiment_file`은 제공자와 배포만 보고 API 판은 **읽지도
+않습니다.** 확인한 그대로 적으면:
+
+| | 값 | 어디서 오나 |
+|---|---|---|
+| 계획서가 못 박은 값 | `2025-04-01-preview` | `model_run_conditions.shared.api_version` |
+| `core/llm_client.py` 기본값 | `2025-04-01-preview` | 계획서와 **같음** |
+| `core/azure_ai_clients.py` 기본값 | `2025-04-01-preview` | 계획서와 **같음** |
+| `core/code_interpreter.py` 매개변수 기본값 | `2025-03-01-preview` | 계획서와 **다름** |
+
+마지막 줄은 지금은 해를 끼치지 않습니다. 그 `api_version` 매개변수는 받기만 하고
+**어디에도 쓰이지 않는 죽은 매개변수**이고(파일 전체에서 250행 선언과 14행 주석
+말고는 나오지 않습니다), 이 실행기는 이미 만들어진 클라이언트를 넣어 줘야만
+시작합니다(`client is None`이면 거부). 그래서 실제 판은 클라이언트를 만든 쪽에서
+옵니다. 다만 **다른 판을 광고하는 죽은 기본값**이 남아 있고 대조하는 검사가
+없으므로, "API 판까지 같다"는 말은 지금 근거가 없습니다. 설정 파일에는 API 판이
+아예 안 적혀 있어서 설정 대조로는 잡을 수도 없습니다 — 잡으려면 계획서가 못 박은
+값과 **코드 상수**를 맞대야 합니다. 다음 PR에서 그 검사를 넣습니다(10항).
 
 #### 6. 맞출 수 없는 것 — 6가지
 
@@ -7997,6 +8018,11 @@ the settings files
 - **Azure 프로젝트 경로 권한은 그대로 막혀 있습니다**(13.49 §8). 승인 문구가
   Azure 권한을 만들어 주지는 않습니다. 정확한 프로젝트 범위 · 주체 · 필요한 역할
   ID를 적어 두고, 권한 결과를 반복해서 찔러보지 않습니다.
+- **API 판 대조 검사가 없습니다**(5항). 계획서는 `2025-04-01-preview`로 못 박아
+  뒀고 `llm_client` · `azure_ai_clients` 기본값도 같지만, 그걸 **맞대 보는 검사가
+  없습니다.** `code_interpreter`에는 `2025-03-01-preview`라는 다른 값이 죽은
+  매개변수로 남아 있습니다. 다음 PR에서 계획서 값과 코드 상수를 맞대는 검사와
+  죽은 매개변수 정리를 함께 합니다.
 - **무료 5개 사전 점검**은 이 코드/시험 PR이 초록색으로 합쳐진 뒤에 돌립니다.
 - **Agentic Sandbox V2 · Codex 기본 에이전트는 미구현 그대로**입니다. 구현된 것처럼
   다루지 않았고, 다른 실행기로 **바꿔치기하지 않았습니다**(5.5 · 5.6).
