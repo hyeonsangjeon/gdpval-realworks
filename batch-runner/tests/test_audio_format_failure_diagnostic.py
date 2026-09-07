@@ -955,3 +955,220 @@ def test_the_summary_steps_only_read_fields_the_report_actually_has():
                 assert written, f"the report never writes {key!r}"
 
 
+
+
+# --------------------------------------------------------------------------
+# The committed report.
+#
+# The run is over and its artifact expires. Everything below asks the file in
+# the repository -- not the workflow, not the artifact, not this test's memory
+# of what was dispatched -- whether the record that survives is the one the
+# document registered and whether it is safe to have committed.
+# --------------------------------------------------------------------------
+
+
+REPORT = (
+    REPO_ROOT / "tasks" / "rebuilding_grading_task" / "335-audio-format-diagnostic.json"
+)
+
+
+def _report() -> dict:
+    if not REPORT.exists():
+        pytest.skip("the paid diagnostic has not been run and committed yet")
+    return json.loads(REPORT.read_text(encoding="utf-8"))
+
+
+def test_the_committed_report_is_tracked_and_not_swallowed_by_gitignore():
+    """``tasks/rebuilding_grading_task/*`` is deny-by-default.
+
+    Without a ``!`` line the file sits in the working tree, ``git add -A``
+    passes over it without a word, and the only copy of the masked excerpts is
+    a CI artifact with an expiry date. git is asked directly rather than the
+    ignore list being re-read, because the question is what a fresh clone gets.
+    """
+    import subprocess
+
+    if not REPORT.exists():
+        pytest.skip("the paid diagnostic has not been run and committed yet")
+    tracked = subprocess.run(
+        ["git", "ls-files", "--error-unmatch", "--", str(REPORT)],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+    )
+    assert tracked.returncode == 0, (
+        "the diagnostic report is present but git is not tracking it, so a "
+        "clone of this repository does not have it. Add a '!' line for it in "
+        f".gitignore. git said: {tracked.stderr.strip()!r}"
+    )
+
+
+def test_the_committed_report_carries_the_pins_the_document_registers():
+    """A report from some other run is worse than no report.
+
+    Each of these is machine-read from the document rather than restated here,
+    so a report produced against a moved grader or a different arm header
+    cannot be filed under this pre-registration.
+    """
+    report = _report()
+    assert report["diagnostic_kind"] == diag.DIAGNOSTIC_KIND
+    assert report["grader_source_sha256"] == probe.grader_pin_stated_in(PREREG)
+    assert report["fixed_sample"] == list(diag.FIXED_SAMPLE)
+    assert report["max_model_requests"] == diag.MAX_MODEL_REQUESTS
+    assert report["excerpt_hard_limit"] == diag.EXCERPT_HARD_LIMIT
+    assert report["observation_header_sha256"] in PREREG.read_text(encoding="utf-8")
+
+
+def test_the_committed_report_did_not_outspend_the_registered_cap():
+    report = _report()
+    assert report["requests_used"] <= diag.MAX_MODEL_REQUESTS
+    placed = sum(len(p.get("wire", [])) for p in report["probes"])
+    assert placed == report["requests_used"], (
+        "the wire records and the counter disagree about how many requests "
+        "were placed; the counter is what the cap was enforced against"
+    )
+
+
+def test_the_committed_report_collected_no_reasoning():
+    """§4 says a reasoning block leaves a boolean and nothing else."""
+    report = _report()
+    assert report["reasoning_blocks_collected"] is False
+    assert report["summary"]["reasoning_blocks_seen"] == 0
+    for probe_record in report["probes"]:
+        for wire in probe_record.get("wire", []):
+            assert isinstance(wire.get("reasoning_present"), (bool, type(None)))
+
+
+def test_no_excerpt_in_the_committed_report_exceeds_the_hard_limit():
+    """Masking runs before truncation, so the bound is on the masked text.
+
+    A truncated excerpt carries a ``…(+N chars)`` marker, which is metadata
+    about what was dropped rather than dropped content; the limit is checked
+    against the text in front of it.
+    """
+    report = _report()
+    for probe_record in report["probes"]:
+        for wire in probe_record.get("wire", []):
+            excerpt = wire.get("text_excerpt_masked")
+            if excerpt is None:
+                continue
+            head = excerpt.split("…(+")[0]
+            assert len(head) <= diag.EXCERPT_HARD_LIMIT, (
+                f"{probe_record['probe']} kept {len(head)} characters of "
+                f"response text, over the {diag.EXCERPT_HARD_LIMIT} limit"
+            )
+
+
+def test_the_committed_report_holds_nothing_credential_shaped():
+    """The masking is unit-tested against fabricated bodies elsewhere.
+
+    This asks the different question: whether the file that was actually
+    committed came out clean. sha256 digests are the one long hex string that
+    belongs here, so they are excluded by value rather than by pattern.
+    """
+    import re
+
+    if not REPORT.exists():
+        pytest.skip("the paid diagnostic has not been run and committed yet")
+    text = REPORT.read_text(encoding="utf-8")
+    report = json.loads(text)
+
+    expected_digests = {report["grader_source_sha256"]}
+    expected_digests |= set(report["clip_sha256"].values())
+    expected_digests.add(report["observation_header_sha256"])
+    for probe_record in report["probes"]:
+        for wire in probe_record.get("wire", []):
+            for key in ("prompt_sha256", "text_sha256", "audio_sha256"):
+                if wire.get(key):
+                    expected_digests.add(wire[key])
+
+    patterns = {
+        "an email address": r"[\w.+-]+@[\w-]+\.[\w.]{2,}",
+        "an OpenAI-style key": r"sk-[A-Za-z0-9]{8,}",
+        "a GitHub token": r"gh[pousr]_[A-Za-z0-9]{8,}",
+        "an AWS access key id": r"AKIA[0-9A-Z]{12,}",
+        "a JWT": r"eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}",
+        "a URL": r"https?://",
+    }
+    for what, pattern in patterns.items():
+        found = re.findall(pattern, text)
+        assert not found, f"the committed report looks like it contains {what}"
+
+    for blob in re.findall(r"(?<![a-f0-9])[a-f0-9]{32,}(?![a-f0-9])", text):
+        assert blob in expected_digests, (
+            f"the committed report holds a long hex string that is not one of "
+            f"its own recorded digests: {blob[:8]}…"
+        )
+
+
+def test_the_committed_report_does_not_price_a_paid_run_at_zero():
+    """The failure mode is a cost *field* reading zero, not the string "$0".
+
+    ``pricing_note`` says in words that the run did not cost $0, so a blanket
+    search for that substring would forbid the sentence that exists to prevent
+    the mistake. The value-carrying fields are checked instead, and the note is
+    required to keep saying it.
+    """
+    report = _report()
+    summary = report["summary"]
+    assert summary["pricing_complete"] is False
+    assert summary["estimated_cost_usd"] is None
+    assert "$0" in summary["pricing_note"], (
+        "the note that refuses to write $0 is gone from the report"
+    )
+    priced = {
+        key: value
+        for key, value in summary.items()
+        if "cost" in key or "usd" in key or "price" in key.lower()
+    }
+    for key, value in priced.items():
+        assert value in (None, False), (
+            f"{key} is {value!r}; an unregistered price is null or partial, "
+            "never a number"
+        )
+    assert isinstance(summary["input_tokens"], int)
+    assert isinstance(summary["output_tokens"], int)
+
+
+def test_the_results_section_reports_the_run_that_was_committed():
+    """§11 is prose, and prose drifts from the file it describes.
+
+    Only the load-bearing identifiers are checked -- the request count, the
+    truncation verdict and the report's own filename -- because those are the
+    ones a reader would act on.
+    """
+    report = _report()
+    text = PREREG.read_text(encoding="utf-8")
+    assert "*(실행 후에 채운다." in text, (
+        "the pre-registration rule line was removed from §11; it is the reason "
+        "the sections above it can still be read as pre-registered"
+    )
+    assert REPORT.name in text, "§11 does not link the report it is describing"
+    assert f"**{report['requests_used']}회 / 상한 " in text, (
+        "§11 states a request count that is not the one in the report"
+    )
+    if report["summary"]["truncation_evidence"].startswith("not_truncated"):
+        assert "잘리지" in text
+
+
+def test_the_masked_excerpts_stayed_in_the_report_and_out_of_the_document():
+    """§4 puts the excerpts in the committed JSON and nowhere else.
+
+    Copying a sentence of model output into the write-up would move it into a
+    file that is read far more often than the artifact, which is exactly the
+    spread the rule exists to stop.
+    """
+    report = _report()
+    text = PREREG.read_text(encoding="utf-8")
+    for probe_record in report["probes"]:
+        for wire in probe_record.get("wire", []):
+            excerpt = wire.get("text_excerpt_masked")
+            if not excerpt:
+                continue
+            head = excerpt.split("…(+")[0][:40].strip()
+            if len(head) < 20:
+                continue
+            assert head not in text, (
+                f"{probe_record['probe']}'s response text was copied into "
+                "the document; §4 keeps it in the report only"
+            )
