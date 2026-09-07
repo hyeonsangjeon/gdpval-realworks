@@ -1,0 +1,381 @@
+name: Audio Format Diagnostic
+
+# Why the observation arm's answers could not be read. Not a re-run of 334.
+#
+# 334 bought 120 calls and reported that 51 of the observation arm's 60 came
+# back unparseable. It could not say what was wrong with them, because that
+# run stored no response bodies -- core.perception.audio labels a malformed
+# envelope and drops it, so the only surviving fact was the label.
+#
+# This workflow places at most EIGHT model requests, on a sample fixed in
+# tasks/rebuilding_grading_task/335-why-the-format-failed.md, and records the
+# structure of what comes back: finish_reason, refusal, which field the text
+# was read from, code fences, where the JSON parser stopped, which of the five
+# contract keys were present and of what type.
+#
+# The cap is not a spending limit. It is the reproduction budget: if the
+# failure does not appear in the fixed sample, the run reports "not
+# reproduced" and stops. There is no ninth request to go looking with.
+#
+# What it does NOT do, deliberately:
+#   * It does not measure anything. The sample was chosen *because* those
+#     claims failed in 334, so a count over it describes the choice, not the
+#     arm. Every summary this run writes carries that sentence next to it.
+#   * It does not re-run the A/B. No new scores, no p-value, no threshold, no
+#     change to any stability figure. 334's numbers stand.
+#   * It does not move a grader fingerprint. The diagnostic lives in
+#     batch-runner/scripts/ and collects by wrapping the client core is
+#     handed; core/ is not edited, so compute_grader_source_hash returns the
+#     same digest 333 §2 pins.
+#   * It does not change grading configuration. gold_audio_repeat_v2_sol_max
+#     .yaml is read for the model identity and never written.
+#   * It does not store prompts, credentials, personal documents, or the
+#     model's reasoning. The default is structural metadata only; response
+#     text can be excerpted at 240 characters maximum, masked before it is
+#     truncated, into the committed report and never into a CI log.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Resolve the plan, the fixed sample, the grader pin and the clip digests without placing a single call. Run this first. It is free and it is where a mis-pinned document should be found.'
+        required: true
+        type: boolean
+        default: true
+      paid_approval:
+        description: 'Required for the eight-request run. Unchecked plus dry_run false is refused in seconds rather than left pending on a gate.'
+        required: true
+        type: boolean
+        default: false
+      excerpt_chars:
+        description: 'Masked excerpt length per response, written to the report only. 0 disables excerpts entirely. The script refuses anything above 240 whatever is typed here, because the limit belongs to the specification and not to the dispatcher.'
+        required: false
+        type: number
+        default: 240
+
+# Read-only by default. The paid job adds id-token for OIDC and nothing else:
+# nothing is committed, released or dispatched from here.
+permissions:
+  contents: read
+
+env:
+  SPEECH_MANIFEST: ${{ github.workspace }}/tasks/rebuilding_grading_task/330-speech-verification-manifest.json
+  SPEECH_CLIPS: ${{ github.workspace }}/speech-set
+  # The document this run belongs to. The script refuses to start unless this
+  # file declares 진단 종류 `audio-format-failure` and pins the grader digest
+  # this checkout actually computes -- so the opt-in lives in the document
+  # rather than in a path somebody typed on a dispatch form.
+  DIAG_PREREG: ${{ github.workspace }}/tasks/rebuilding_grading_task/335-why-the-format-failed.md
+
+# Shared with the accuracy probe on purpose, not by accident. Both reach the
+# same gpt-audio-1.5 deployment, and a diagnostic that ran alongside a 120-call
+# probe would collect that probe's throttling and record it as a transport
+# failure of its own. Eight requests will not hold the queue long.
+concurrency:
+  group: audio-accuracy-probe
+  cancel-in-progress: false
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # The free half. Runs on every dispatch, including the paid one, and the paid
+  # job waits on it. The whole refusal surface -- document kind, grader pin,
+  # clip digests, sample membership, excerpt bound -- runs here, before a
+  # reviewer is asked to approve anything.
+  # ---------------------------------------------------------------------------
+  dry-run:
+    name: Dry run (no model call, no cost)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+          cache-dependency-path: batch-runner/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          pip install -r requirements.txt
+
+      # The privacy rules and the request cap are only worth what this suite
+      # says they are. It runs against fabricated response objects -- no
+      # credentials, no calls -- and checks that masking happens before
+      # truncation, that the hard limit cannot be raised from the command line,
+      # that a non-string body cannot escape through __repr__, that a reasoning
+      # block leaves a boolean and nothing else, that no model text reaches
+      # stdout, that a provider error message is masked, and that the eighth
+      # request is refused before it is placed rather than after.
+      - name: Prove the collector cannot leak and cannot overspend
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          python -m pytest tests/test_audio_format_failure_diagnostic.py -q
+
+      # Same rebuild the accuracy probe performs, against the same committed
+      # digests. The clips are not carried over from 334 as an artifact; they
+      # are rebuilt and required to match, which is what makes them the same
+      # audio rather than merely audio that travelled together.
+      #
+      # eSpeak NG is deliberately not version-pinned. What has to reproduce is
+      # the bytes, and the manifest holds their digests -- if the runner's
+      # synthesiser has moved, --expect-manifest stops the run and says so.
+      - name: Build and verify the pinned speech set
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends espeak-ng
+          espeak-ng --version
+          cd batch-runner
+          python scripts/build_speech_verification_set.py \
+            --out-dir "$SPEECH_CLIPS" \
+            --expect-manifest "$SPEECH_MANIFEST"
+
+      # Everything the paid run does except the calls: reads the document,
+      # checks the declared kind, recomputes the grader digest and compares it
+      # with the one 335 §2 pins, loads the corpus, resolves the three fixed
+      # claims against it, and writes the plan out. If the plan that appears
+      # here is not the plan in the document, the paid dispatch is wrong.
+      - name: Resolve the plan and the pins
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          python scripts/diagnose_audio_format_failure.py \
+            --prereg "$DIAG_PREREG" \
+            --speech-manifest "$SPEECH_MANIFEST" \
+            --speech-clips "$SPEECH_CLIPS" \
+            --excerpt-chars "${{ inputs.excerpt_chars }}" \
+            --out "$GITHUB_WORKSPACE/audio-format-diagnostic-dry-run.json" \
+            --dry-run
+
+      - name: Summarise the plan
+        run: |
+          set -euo pipefail
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json, os
+          p = os.path.join(os.environ["GITHUB_WORKSPACE"],
+                           "audio-format-diagnostic-dry-run.json")
+          h = json.load(open(p))
+          print("## Audio format diagnostic — dry run")
+          print()
+          print(f"* diagnostic: `{h['diagnostic_kind']}` registered by `{h['prereg']}`")
+          print(f"* grader source: `{h['grader_source_sha256'][:16]}…`")
+          print(f"* model: `{h['identity']['audio_deployment']}`")
+          print(f"* requests: {h['requests_planned']} planned, "
+                f"{h['requests_reserved_for_transport_retry']} reserved, "
+                f"cap {h['max_model_requests']}")
+          print(f"* excerpts: {h['excerpt_chars']} chars "
+                f"(hard limit {h['excerpt_hard_limit']}), "
+                f"reasoning collected: {h['reasoning_blocks_collected']}")
+          print()
+          print("| # | probe | claim | arm | response_format |")
+          print("|---|---|---|---|---|")
+          for i, step in enumerate(h["plan"], 1):
+              print(f"| {i} | `{step['label']}` | `{step['claim_id']}` | "
+                    f"{step['arm']} | `{step['response_format']}` |")
+          print()
+          print("**No calls were placed.** " + h["sample_is_outcome_selected"])
+          PY
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: audio-format-diagnostic-dry-run
+          path: audio-format-diagnostic-dry-run.json
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # The gate. Same reusable `grading` environment as every other paid path here,
+  # so approving this is the same act, in the same place, as approving a run.
+  # ---------------------------------------------------------------------------
+  approve-paid:
+    name: Approve paid audio format diagnostic
+    needs: dry-run
+    if: ${{ inputs.dry_run == false && inputs.paid_approval == true }}
+    runs-on: ubuntu-24.04
+    environment:
+      name: grading
+    steps:
+      # The arithmetic is restated here because this job has no checkout -- it
+      # is a gate, and handing it the repository to read would be more
+      # machinery than a log line is worth. The numbers are small enough to
+      # check by eye against 335 §5, which is the point of keeping them small.
+      - name: Record approved request
+        env:
+          DIAG_EXCERPT_CHARS: ${{ inputs.excerpt_chars }}
+        run: |
+          set -euo pipefail
+          printf '%s\n' \
+            "Approved paid audio format diagnostic:" \
+            "  model      = gpt-audio-1.5 (read from gold_audio_repeat_v2_sol_max.yaml)" \
+            "  requests   = 7 planned + 1 reserved for a transport retry, cap 8" \
+            "               3 reproduce (observation arm, the three fixed claims)" \
+            "               2 contrast  (production arm, two of the same claims)" \
+            "               2 compat    (json_object, json_schema)" \
+            "  retries    = none in the judge; the reserved request covers a" \
+            "               transport failure only, and only once" \
+            "  sample     = fixed in 335 §3 and chosen because it failed in 334." \
+            "               Counts over it describe the choice, not the arm." \
+            "  excerpts   = ${DIAG_EXCERPT_CHARS:-240} chars, masked, report only" \
+            "  reasoning  = not collected" \
+            "  pricing    = gpt-audio-1.5 is unregistered; the report writes" \
+            "               pricing_complete false and estimated_cost_usd null." \
+            "               It does not write \$0." \
+            "  grades     = none. This writes no grade and touches no corpus."
+
+  # ---------------------------------------------------------------------------
+  # A dispatch with dry_run false and paid_approval unchecked is a mistake, and
+  # it should cost seconds rather than a reviewer's attention.
+  # ---------------------------------------------------------------------------
+  refuse-unapproved:
+    name: Refuse an unapproved paid dispatch
+    if: ${{ inputs.dry_run == false && inputs.paid_approval != true }}
+    runs-on: ubuntu-24.04
+    steps:
+      - run: |
+          echo "::error::dry_run is false but paid_approval is not checked; refusing before the gate"
+          exit 1
+
+  diagnose:
+    name: Diagnose (paid, at most 8 requests)
+    needs: approve-paid
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+          cache-dependency-path: batch-runner/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          pip install -r requirements.txt
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca # v3.0.1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Verify Azure OIDC session identity
+        env:
+          AZURE_AI_EXPECTED_CLIENT_ID: ${{ vars.AZURE_AI_EXPECTED_CLIENT_ID }}
+          AZURE_AI_EXPECTED_TENANT_ID: ${{ vars.AZURE_AI_EXPECTED_TENANT_ID }}
+          AZURE_AI_EXPECTED_SUBSCRIPTION_ID: ${{ vars.AZURE_AI_EXPECTED_SUBSCRIPTION_ID }}
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          python scripts/azure_oidc_identity_preflight.py --verify-session
+
+      - name: Build and verify the pinned speech set
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends espeak-ng
+          espeak-ng --version
+          cd batch-runner
+          python scripts/build_speech_verification_set.py \
+            --out-dir "$SPEECH_CLIPS" \
+            --expect-manifest "$SPEECH_MANIFEST"
+
+      # Same route profile and the same identity assertions the grading run
+      # uses. The failure being reproduced happened on that path; reaching the
+      # model by a different one would reproduce something else.
+      - name: Diagnose
+        env:
+          AZURE_AI_ROUTE_PROFILE: direct-v1
+          FOUNDRY_PROJECT_ENDPOINT: ${{ secrets.FOUNDRY_PROJECT_ENDPOINT }}
+          AZURE_AI_REQUIRE_EXPECTED_IDENTITIES: '1'
+          AZURE_AI_EXPECTED_DIRECT_ACCOUNT: ${{ vars.AZURE_AI_EXPECTED_DIRECT_ACCOUNT }}
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          python scripts/diagnose_audio_format_failure.py \
+            --prereg "$DIAG_PREREG" \
+            --speech-manifest "$SPEECH_MANIFEST" \
+            --speech-clips "$SPEECH_CLIPS" \
+            --excerpt-chars "${{ inputs.excerpt_chars }}" \
+            --out "$GITHUB_WORKSPACE/audio-format-diagnostic.json"
+
+      - name: Summarise
+        if: always()
+        run: |
+          set -euo pipefail
+          # No report means the run stopped before writing one, and this page is
+          # where somebody looks first. The two ways to get here differ by
+          # whether money was spent, which is not something to leave to a guess.
+          if [ ! -f "$GITHUB_WORKSPACE/audio-format-diagnostic.json" ]; then
+            {
+              echo "## Audio format diagnostic — no report was written"
+              echo
+              echo "**The reason is on the failed step above, as an annotation**"
+              echo "— this page cannot see it."
+              echo
+              echo "Two different things look like this:"
+              echo
+              echo "* **A pre-flight refusal.** The document not declaring this"
+              echo "  diagnostic, the grader digest not matching the pin, the"
+              echo "  rebuilt clips not matching the manifest, or the identity"
+              echo "  assertions failing. All of these run before the first"
+              echo "  request, so nothing was bought."
+              echo "* **A failure after the requests started.** The report is"
+              echo "  written at the end, so there is none — but those requests"
+              echo "  were billed."
+              echo
+              echo "Which one it was is in the annotation. Do not file this run"
+              echo "as having cost nothing without reading it."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          # Structural fields only. The report may hold masked excerpts; the
+          # step summary is a CI log with a different retention story, and the
+          # specification says excerpts live in the committed report and
+          # nowhere else.
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json, os
+          r = json.load(open(os.path.join(os.environ["GITHUB_WORKSPACE"],
+                                          "audio-format-diagnostic.json")))
+          s = r["summary"]
+          print("## Audio format diagnostic")
+          print()
+          print(f"* requests used: **{r['requests_used']}/{r['max_model_requests']}**")
+          print(f"* truncation: **{s['truncation_evidence']}** "
+                "(read off finish_reason, never off token counts)")
+          print(f"* refusals: {s['refusals']} · "
+                f"reasoning blocks seen: {s['reasoning_blocks_seen']} · "
+                f"collector disagreed with core: {s['collector_disagreed_with_core']}")
+          print()
+          print("| finish_reason | n |")
+          print("|---|---|")
+          for k, v in sorted(s["finish_reason_counts"].items()):
+              print(f"| `{k}` | {v} |")
+          print()
+          print("| core's label | n |")
+          print("|---|---|")
+          for k, v in sorted(s["core_kind_counts"].items()):
+              print(f"| `{k}` | {v} |")
+          print()
+          print(f"* pricing_complete: `{s['pricing_complete']}` · "
+                f"estimated_cost_usd: `{s['estimated_cost_usd']}` "
+                "(gpt-audio-1.5 is unregistered; this is not $0)")
+          print()
+          print("> " + r["sample_is_outcome_selected"])
+          PY
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: audio-format-diagnostic
+          path: audio-format-diagnostic.json
+          if-no-files-found: warn

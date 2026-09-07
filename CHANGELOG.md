@@ -12,6 +12,89 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Added
+- **The observation arm's replies were not malformed JSON. They were not JSON
+  at all.** The eight-request diagnostic ran at commit `1e06e452` and used
+  seven; `335-audio-format-diagnostic.json` holds the result. All three
+  reproduce probes failed exactly as `334` recorded, and all three failed the
+  same way: zero braces, zero code fences, `json.loads` stopping at character 0
+  with `Expecting value` and the whole reply still unconsumed, none of the five
+  contract keys present. Every reply that arrived carried `finish_reason:
+  stop`, so these three were not truncated — read off the field itself, which
+  is what `335` §7 said would have to settle it after `334` §3 inferred it from
+  output token counts. No refusals, no reasoning blocks, and the collector
+  agreed with core on all five. The two contrast probes returned clean
+  five-key JSON from the same code against the same clips minutes apart, so
+  the failures are not an artifact of the collector. Counts here describe a
+  sample chosen *because* it failed in `334`; they do not estimate a rate.
+- **Structured outputs are unavailable on this audio deployment, which
+  `334` §10 left open and the documentation did not settle.** Both
+  compatibility probes were rejected `400 invalid_request_error` on
+  `param: response_format` — `'json_object' ... is not supported with this
+  model` and `'json_schema' ... is not supported with this model`. Neither was
+  re-sent without the rejected parameter: the rejection is the result, and a
+  parameter-free retry reported as "supported" would be a fabrication. The
+  reserved eighth request was therefore not spent, since a deterministic 400 is
+  an answer rather than a lost response body.
+- **A diagnostic that can see what `334` could not: the response bodies.**
+  `334` reported that 51 of the observation arm's 60 replies were
+  `format_error:unparseable_json` and stopped there, because that run stored no
+  response bodies — `core.perception.audio` labels a malformed envelope and
+  drops it, so the label was the only surviving fact.
+  `scripts/diagnose_audio_format_failure.py` collects the structure instead:
+  `finish_reason`, refusal presence, which field the text came from, code fence
+  position and language tag, brace balance, where `json.loads` stopped and with
+  what error, which of the five contract keys were present and of what type,
+  and whether the collector's reading agrees with core's own. Registered by
+  `335-why-the-format-failed.md` and run by
+  `.github/workflows/audio-format-diagnostic.yml`, which has the same free
+  dry-run, the same `grading` environment gate and the same OIDC identity
+  preflight as the accuracy probe.
+- **It is capped at eight model requests including retries, and the cap is
+  enforced before each call rather than counted after.** Seven probes are fixed
+  in the document — three reproduce the failure on the observation arm, two
+  contrast against the production arm on the same claims, two check whether
+  `response_format` is accepted alongside `input_audio` at all — and the eighth
+  is reserved for a single transport-level retry. A failed request still counts,
+  because a request lost to a timeout may have run. If the failure does not
+  reproduce in the fixed sample, the run reports "not reproduced" rather than
+  looking further:
+  `test_one_judge_call_is_one_request_so_the_plan_length_is_the_call_count`
+  asserts the arithmetic against the real `AudioPerception`, so a retry loop
+  added to core later breaks the test instead of silently tripling the spend.
+- **The sample is fixed, and the artifact says why that limits it.** The three
+  claims were selected by a rule written before it was applied — every
+  observation-arm claim that failed all three repeats in `334`, then the first
+  three by `claim_id` on distinct clips. `test_the_fixed_sample_is_what_the_rule_selects`
+  re-derives them from `334-audio-accuracy-measured.json` rather than trusting
+  the constant. Because they were chosen for having failed, no count over them
+  estimates a rate, and that sentence is stored next to every summary the run
+  writes.
+- **The collection rules are enforced by tests that need no credentials and
+  place no calls.** 68 of them, against fabricated response objects: masking
+  runs before truncation (the other order leaves the first 12 characters of a
+  60-character key in the file), the 240-character limit cannot be raised from
+  the command line, a non-string body is recorded as a type marker rather than
+  through `__repr__`, a reasoning block leaves one boolean and nothing else, no
+  model text reaches stdout, and a provider error message is masked before it is
+  stored. Excerpts are off by default and go only to the committed report, never
+  to a CI log.
+- **Documentation on `input_audio` + `response_format` is inconclusive, and the
+  document says so instead of guessing.** The Azure Foundry chat REST reference
+  documents both in the same request schema with no stated interaction;
+  OpenAI's audio guide never mentions structured outputs; OpenAI's
+  structured-outputs guide never mentions audio. `335` §6 also names the trap:
+  the Azure *audio* reference does have a `response_format`, but it is
+  `audioResponseFormat` on `/audio/transcriptions`, a different parameter on a
+  different endpoint. Two probes settle it by asking. A rejection is the result
+  — there is no parameter-free retry path in the module, and
+  `test_there_is_no_parameter_free_retry_anywhere_in_the_module` keeps it that
+  way, because reporting a retry-without-the-parameter as "supported" would be
+  a fabrication.
+- Nothing under `core/` changed. Collection happens by wrapping the client core
+  is handed, so core's request assembly, prompt and parsing all run unmodified
+  and `compute_grader_source_hash` returns the same digest `333` §2 pins —
+  verified with the new files present.
+
 - **The pre-registered speech prompt A/B ran once, and the intervention broke
   the response format instead of the verdict.** `333` asked whether the
   grader's own prompt pushes it toward `fail` on speech. The paid run
@@ -41,6 +124,17 @@ entries land under a fresh dated heading the day they merge to `main`.
   repository checked a result document against its own raw file.
 
 ### Fixed
+- **`334` §3 inferred "not truncated" from output token counts, and that
+  inference was not supported.** Token count is a proxy; `finish_reason` is the
+  only field that settles truncation, and `334`'s run did not store it — so the
+  honest reading of that data is "unknown", not "not truncated". The original
+  wording is preserved with an explicit correction record beside it, and none of
+  `334`'s numbers move: 51/60, 12/20 vs 5/7, p = 0.0654 and the 27-call streak
+  all stand. The new diagnostic reads `finish_reason` directly and reports
+  `unsettled` when it is absent rather than filling the gap with token lengths;
+  `test_truncation_is_read_off_finish_reason_and_never_off_token_counts` uses a
+  short reply with `finish_reason="length"` so the token-length argument cannot
+  quietly return.
 - **`zero_response_after` could not fire in a two-arm run, and that is why
   `334` bought 120 calls while one arm was silent.** The rule counted answered
   calls across the whole run, but a two-arm run interleaves the arms, so the
