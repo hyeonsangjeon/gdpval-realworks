@@ -1,6 +1,8 @@
 # 333 — 말소리 프롬프트 A/B 사전등록
 
-**상태: 아직 실행하지 않음. 이 문서는 돈을 쓰기 전에 적는다.**
+**상태: 실행 완료 (2026-09-07). 결과는 [`334`](./334-the-arm-that-broke-the-format.md)에 있다.**
+**이 문서는 돈을 쓰기 전에 적었고, 실행 후에 한 글자도 안 고쳤다** — 아래 §0의
+체크 표시와 이 줄, 그리고 §11의 실행 기록만 더했다.
 
 [`331`](./331-it-said-no-to-almost-everything.md)이 남긴 질문은 하나다.
 채점기가 참인 주장 29개 중 6개만 맞히고 거짓인 주장 30개를 30개 다 맞힌 것이
@@ -18,10 +20,10 @@
 
 | 조건 | 상태 |
 |---|---|
-| 준비 PR이 **green으로 병합** | ⬜ |
-| 무료 dry-run이 **못 박은 클립으로 두 갈래를 만들어 냄** | ⬜ §10 |
-| 이 문서가 못 박은 dispatch를 워크플로가 **실제로 받음** | ⬜ §10 |
-| 채점기 지문이 §2 값과 **일치** | ⬜ 준비 시점엔 일치(§10). 실행 시점에 다시 계산해 대조한다 |
+| 준비 PR이 **green으로 병합** | ✅ [#445](https://github.com/hyeonsangjeon/gdpval-realworks/pull/445) → `1583caf` |
+| 무료 dry-run이 **못 박은 클립으로 두 갈래를 만들어 냄** | ✅ 실행 [34117383489](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/34117383489) (§11) |
+| 이 문서가 못 박은 dispatch를 워크플로가 **실제로 받음** | ✅ 같은 실행이 접수·통과 (§11) |
+| 채점기 지문이 §2 값과 **일치** | ✅ 유료 실행이 계산한 값이 §2와 같음 (§11) |
 
 **⬜ 가 하나라도 남아 있으면 이 문서는 사전등록이 아니라 계획서다.**
 
@@ -291,4 +293,53 @@
 | 워크플로가 이 dispatch를 실제로 받음 | 같은 dispatch가 접수되고 클립 digest 대조를 통과하는 것 |
 
 **이 두 줄이 안 채워지면 유료 dispatch는 안 넣는다.**
+
+---
+
+## 11. 실행 기록 (실행 후에 더한 유일한 절)
+
+**위의 §1–§10은 실행 후에 한 글자도 안 고쳤다.** 여기에 무슨 일이 있었는지만 적는다.
+숫자와 해석은 전부 [`334`](./334-the-arm-that-broke-the-format.md)에 있다.
+
+### 먼저 무료로 (돈 안 씀)
+
+| | 값 |
+|---|---|
+| 실행 | [34117383489](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/34117383489), 2026-09-07 11:35:17Z, success |
+| 커밋 | `1583cafc9ce228e76ed75ae71d3435d68c7b77fd` |
+| 클립 | eSpeak NG 1.51로 재생성 → `reproduces the expected manifest exactly` |
+| 갈래 | `["production", "observation"]`, `calls_planned: 120`, `measured: false` |
+| 비교 단위 | `unit: "call"` 60쌍 **과** `unit: "claim"` 20쌍 둘 다 나옴 |
+| 채점기 지문 | `7506ce5008bd…` — §2와 일치 |
+
+§0의 남은 두 줄이 이걸로 채워졌다. **그 다음에** 돈을 썼다.
+
+### 그 다음 유료로 (한 번)
+
+| | 값 |
+|---|---|
+| 실행 | [34117749459](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/34117749459), success |
+| 커밋 | **같은 `1583cafc9ce228e76ed75ae71d3435d68c7b77fd`** — 무료로 확인한 그 커밋 |
+| 입력 | `dry_run=false`, `paid_approval=true`, `repeats=3`, `prompt_arm=production`, `corpus=speech-prompt-ab` — §0 표와 **완전히 같음** |
+| 승인 기록 | `prompt_arm = production (2 arm(s))`, `calls = 60 per arm, 120 in total` |
+| 호출 | 120 / 120, `stopped: null` |
+| 시각 | 11:43:08Z → 11:48:05Z (4분 57초) |
+| 비용 | `pricing_complete: false`, `estimated_cost_usd: null` (§9대로) |
+
+**한 번만 돌렸다**(§7). p가 α를 못 넘었지만 다시 부르지 않았다.
+
+### 사전등록이 실제로 값을 한 자리
+
+* §5가 미응답을 **3분할**로 못 박아 뒀기 때문에, 관찰 갈래가 진 이유가
+  "다르게 판정해서"가 아니라 **"읽기 실패 51번"**이라는 게 바로 드러났다.
+  분할을 안 정해 뒀으면 `p = 0.0654`를 판정 차이로 읽었을 것이다.
+* §4가 **문항 단위**를 1차로 못 박아 뒀기 때문에, 호출 단위의
+  `p = 6.94e-08`을 헤드라인으로 쓰지 않았다. 그 숫자는 배달 실패를 잰 것이다.
+* §5의 **상수 `fail` 기준선 0.50**이 없었으면 production의 0.60을
+  실력으로 읽었을 것이다.
+
+### 사전등록이 못 막은 것
+
+§6의 중단 규칙이 **안 걸렸다.** 두 갈래가 번갈아 도는 실행에서 규칙이
+실행 전체를 한 덩어리로 세기 때문이다. 자세한 건 [`334`](./334-the-arm-that-broke-the-format.md) §6.
 

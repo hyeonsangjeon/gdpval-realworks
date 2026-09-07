@@ -2434,10 +2434,13 @@ class StopRules:
     #: call can overshoot it; the alternative is killing a call mid-flight
     #: and paying for a response nobody reads.
     wall_clock_seconds: Optional[float] = None
-    #: If the first N calls yield no usable verdict at all, stop. Sixty calls
-    #: of a broken response format cost the same as sixty good ones and teach
-    #: nothing; this is the rule that would have ended the observation arm of
-    #: 328 after ten.
+    #: If the first N calls of *one arm* yield no usable verdict at all, stop.
+    #: Sixty calls of a broken response format cost the same as sixty good
+    #: ones and teach nothing; this is the rule that would have ended the
+    #: observation arm of 328 after ten. Per arm rather than per run because
+    #: a two-arm run interleaves them and the healthy arm otherwise hides the
+    #: silent one -- see ``_stop_reason`` and 334 section 6, which also says
+    #: why this scoping alone would not have stopped 334.
     zero_response_after: Optional[int] = None
     #: Cumulative provider failures. Infrastructure, not capability -- there
     #: is nothing to learn about the model by retrying it into a wall.
@@ -2527,25 +2530,48 @@ def _stop_reason(
                 ),
             }
 
-    if (
-        rules.zero_response_after is not None
-        and len(calls) >= rules.zero_response_after
-    ):
-        answered = sum(1 for c in calls if c.get("unanswered_kind") is None)
-        if answered == 0:
-            return {
-                "rule": "zero_response_after",
-                "limit": rules.zero_response_after,
-                "observed": 0,
-                "after_calls": len(calls),
-                "reading": (
-                    "No usable verdict in the first "
-                    f"{len(calls)} calls. On 2026-09-06 a run in this state "
-                    "went on to buy all sixty and reported an accuracy over "
-                    "the seventeen replies that happened to parse. This "
-                    "stops instead."
-                ),
-            }
+    if rules.zero_response_after is not None:
+        # Counted per arm, not over the whole run. A two-arm run interleaves
+        # production and observation, so a whole-run count is satisfied by
+        # the healthy arm answering and the rule can never fire -- which is
+        # exactly what happened in 334: the observation arm went 27 calls in
+        # a row without a readable verdict and nothing stopped it, because
+        # call 1 was production and it answered.
+        #
+        # A single-arm run has one group holding every call, so this is the
+        # same rule it has always been for the runs already published.
+        #
+        # This is necessary and NOT sufficient. The shape of the rule is
+        # "no answer at all in the leading window", and 334's observation arm
+        # answered once on its fourth call, so even per-arm this would not
+        # have fired there. Stopping an arm that answers 15% of the time
+        # needs a response-rate rule, and its threshold has to be pinned
+        # before a run rather than chosen after seeing one. See 334 section 6.
+        by_arm: dict[Any, list[dict[str, Any]]] = {}
+        for call in calls:
+            by_arm.setdefault(call.get("arm"), []).append(call)
+        for arm, arm_calls in by_arm.items():
+            if len(arm_calls) < rules.zero_response_after:
+                continue
+            answered = sum(
+                1 for c in arm_calls if c.get("unanswered_kind") is None
+            )
+            if answered == 0:
+                return {
+                    "rule": "zero_response_after",
+                    "limit": rules.zero_response_after,
+                    "observed": 0,
+                    "arm": arm,
+                    "after_calls": len(calls),
+                    "after_calls_in_arm": len(arm_calls),
+                    "reading": (
+                        "No usable verdict in the first "
+                        f"{len(arm_calls)} calls of arm {arm!r}. On "
+                        "2026-09-06 a run in this state went on to buy all "
+                        "sixty and reported an accuracy over the seventeen "
+                        "replies that happened to parse. This stops instead."
+                    ),
+                }
 
     return None
 

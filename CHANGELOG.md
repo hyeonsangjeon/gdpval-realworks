@@ -12,6 +12,54 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Added
+- **The pre-registered speech prompt A/B ran once, and the intervention broke
+  the response format instead of the verdict.** `333` asked whether the
+  grader's own prompt pushes it toward `fail` on speech. The paid run
+  ([34117749459](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/34117749459),
+  120 calls at `1583caf`) is preserved verbatim as
+  `334-audio-accuracy-measured.json` and read in
+  `334-the-arm-that-broke-the-format.md`. The design held — clip digests
+  reproduced `330`'s manifest exactly, both arms got the same audio bytes and
+  the same 1,848 audio tokens, and the prompts differed by exactly 739
+  characters on every criterion — but 51 of the observation arm's 60 replies
+  came back as `format_error:unparseable_json`, against 0 read failures in the
+  control arm. The pre-registered primary test (20 paired criteria, exact
+  McNemar) gives **p = 0.0654**, and the report says plainly that this p is
+  mostly measuring *an arm that produced no readable verdict*, not two arms
+  that judged differently. **The original question is still unanswered**, and
+  the run was not repeated to chase a smaller p — `333` §7 forbade that before
+  the numbers existed. Cost stays `null`: `gpt-audio-1.5` is not in the price
+  table, and unmeasured is not zero.
+- The control arm reproduced `331` closely on a moved grader fingerprint
+  (0.627 vs 0.610 over the same 59 answered calls, identical audio tokens),
+  which is recorded as a replication observation and explicitly *not* as this
+  A/B's control — `333` §7 forbids using `331` as a concurrent control, and
+  the report labels it a historical reference where it appears.
+- `test_the_334_report_quotes_the_run_it_preserved` and
+  `test_the_334_report_does_not_overwrite_what_331_bought` tie the report's
+  headline figures to the JSON it was written from. Nothing else in the
+  repository checked a result document against its own raw file.
+
+### Fixed
+- **`zero_response_after` could not fire in a two-arm run, and that is why
+  `334` bought 120 calls while one arm was silent.** The rule counted answered
+  calls across the whole run, but a two-arm run interleaves the arms, so the
+  healthy arm answering on call 1 made `answered == 0` false for the rest of
+  the run — while the observation arm went 27 calls in a row without a
+  readable verdict. The second arm was added in #445, so the defect is that
+  change's. The rule now counts per arm and names the arm it stopped;
+  single-arm runs are unaffected because their one group is the whole call
+  list. **This is necessary and not sufficient, and the test suite says so:**
+  `334`'s observation arm answered once on its fourth call, so even the
+  per-arm rule would not have stopped it.
+  `test_the_per_arm_rule_would_still_not_have_stopped_334` pins that limit so
+  the fix cannot be read as a guarantee. Catching an arm that answers 15% of
+  the time needs a response-rate rule whose threshold is pinned *before* a
+  run; choosing one now, with `334`'s numbers in view, would be fitting the
+  guard to the result, so it is left to its own pre-registration.
+- None of this changes `334`'s numbers. The 120 calls are already bought and
+  stored; stop rules affect acquisition only.
+
 - **A second speech diagnostic is pre-registered, and nothing has been bought
   for it.** `331` measured one prompt and so could not separate "it did not
   hear the words" from "the question pushed it toward `fail`". This registers
