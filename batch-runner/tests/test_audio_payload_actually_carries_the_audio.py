@@ -626,6 +626,27 @@ def _pair(claim_id: str, repeat: int, arm: str, outcome: str, holds: bool) -> di
     }
 
 
+def _claims_for(*specs: tuple[str, bool]) -> list[probe.Claim]:
+    """The corpus the synthetic calls above are criteria of.
+
+    ``compare_arms`` needs the ground truth to collapse the repeats into one
+    verdict per criterion. The calls carry ``holds`` as well, but reading it
+    off the corpus is what the production path does, and a test that took the
+    shortcut would not exercise the argument the production path passes.
+    """
+    return [
+        probe.Claim(
+            claim_id=claim_id,
+            clip_id=f"clip_{claim_id}",
+            family="synthetic",
+            criterion=f"synthetic criterion {claim_id}",
+            holds=holds,
+            because="constructed for this test",
+        )
+        for claim_id, holds in specs
+    ]
+
+
 def test_mcnemar_is_exact_at_the_counts_this_corpus_produces() -> None:
     """Checked against the binomial by hand, not against another library.
 
@@ -657,7 +678,7 @@ def test_the_comparison_reading_refuses_to_call_a_null_result_equivalence() -> N
         _pair("a", 1, arm, probe.OUTCOME_CORRECT, True)
         for arm in probe.PROMPT_ARMS
     ]
-    comparison = probe.compare_arms(calls)
+    comparison = probe.compare_arms(calls, claims=_claims_for(("a", True)))
     assert comparison is not None
     assert "does NOT mean the prompts are equivalent" in comparison["reading"]
 
@@ -669,7 +690,9 @@ def test_only_calls_with_a_partner_on_the_other_side_are_paired() -> None:
         # No observation partner: dropped rather than averaged in.
         _pair("b", 1, "production", probe.OUTCOME_CORRECT, True),
     ]
-    comparison = probe.compare_arms(calls)
+    comparison = probe.compare_arms(
+        calls, claims=_claims_for(("a", True), ("b", True))
+    )
     assert comparison is not None
     assert comparison["pairs"] == 1
     assert comparison["discordant"]["control_only_correct"] == 1
@@ -682,7 +705,7 @@ def test_a_hedge_is_not_an_improvement() -> None:
         _pair("a", 1, "production", probe.OUTCOME_FALSE_FAIL, True),
         _pair("a", 1, "observation", probe.OUTCOME_HEDGED, True),
     ]
-    comparison = probe.compare_arms(calls)
+    comparison = probe.compare_arms(calls, claims=_claims_for(("a", True)))
     assert comparison is not None
     assert comparison["discordant"]["neither_correct"] == 1
     assert comparison["observation"]["correct"] == 0
@@ -696,7 +719,9 @@ def test_a_non_answer_lowers_the_response_rate_and_not_the_accuracy() -> None:
         _pair("a", 1, "production", probe.OUTCOME_CORRECT, True),
         _pair("b", 1, "production", probe.OUTCOME_CORRECT, False),
     ]
-    comparison = probe.compare_arms(calls)
+    comparison = probe.compare_arms(
+        calls, claims=_claims_for(("a", True), ("b", False))
+    )
     assert comparison is not None
     side = comparison["observation"]
     assert side["attempts"] == 2
@@ -707,7 +732,102 @@ def test_a_non_answer_lowers_the_response_rate_and_not_the_accuracy() -> None:
 
 def test_one_arm_alone_has_nothing_to_compare() -> None:
     calls = [_pair("a", 1, "production", probe.OUTCOME_CORRECT, True)]
-    assert probe.compare_arms(calls) is None
+    assert probe.compare_arms(calls, claims=_claims_for(("a", True))) is None
+
+
+# --------------------------------------------------------------------------
+# The same comparison at the unit a pre-registration can name as primary
+#
+# The call-level pairing above is the finest grain a delivery difference shows
+# up at, and it is kept. It is also the wrong headline: three repeats of one
+# criterion are the same question asked again, so sixty of them are not sixty
+# items. These three tests are about the claim-level block that sits beside it.
+# --------------------------------------------------------------------------
+
+
+def test_the_claim_level_pairing_does_not_count_a_repeat_as_a_new_criterion() -> None:
+    """Sixty answers per arm are twenty criteria asked three times.
+
+    330 names the majority vote as its primary analysis for exactly this
+    reason, and a comparison that offered only the call-level p would be
+    claiming sixty independent items from a twenty-item corpus.
+    """
+    claims = _claims_for(*((f"c{i}", i % 2 == 0) for i in range(20)))
+    calls = [
+        _pair(claim.claim_id, repeat, arm, probe.OUTCOME_CORRECT, claim.holds)
+        for claim in claims
+        for repeat in (1, 2, 3)
+        for arm in probe.PROMPT_ARMS
+    ]
+    comparison = probe.compare_arms(calls, claims=claims)
+    assert comparison is not None
+    assert comparison["unit"] == "call"
+    assert comparison["pairs"] == 60
+
+    majority = comparison["per_claim_majority"]
+    assert majority["unit"] == "claim"
+    assert majority["pairs"] == 20
+    assert majority["production"]["settled"] == 20
+    assert majority["production"]["correct"] == 20
+
+
+def test_a_criterion_with_no_majority_is_unsettled_and_not_wrong() -> None:
+    """An arm that answered differently every time has not answered.
+
+    Scoring the three-way split as an error would put the flip rate inside the
+    accuracy without saying so. It still loses the pair -- not answering is not
+    getting it right -- but it does not enter the accuracy denominator, which
+    is the same split the call-level block already makes.
+    """
+    calls = [
+        *(
+            _pair("a", repeat, "production", probe.OUTCOME_CORRECT, True)
+            for repeat in (1, 2, 3)
+        ),
+        _pair("a", 1, "observation", probe.OUTCOME_CORRECT, True),
+        _pair("a", 2, "observation", probe.OUTCOME_FALSE_FAIL, True),
+        _pair("a", 3, "observation", probe.OUTCOME_HEDGED, True),
+    ]
+    comparison = probe.compare_arms(calls, claims=_claims_for(("a", True)))
+    assert comparison is not None
+    majority = comparison["per_claim_majority"]
+
+    side = majority["observation"]
+    assert side["settled"] == 0
+    assert side["correct"] == 0
+    # None, not 0.0: nothing was divided, and the two must not print the same.
+    assert side["accuracy_of_settled"] is None
+    assert side["unsettled"] == {
+        "no_answer_at_all": 0,
+        "answered_without_a_majority": 1,
+    }
+    assert majority["discordant"]["control_only_correct"] == 1
+
+
+def test_every_accuracy_is_printed_beside_what_always_saying_fail_scores() -> None:
+    """Half of these criteria are false, so refusing to ever agree is worth 50%.
+
+    331's production arm scored 0.61 with 30/30 on the false claims. Without
+    this number beside it, 0.61 reads as partial skill rather than as a hair
+    above a machine that cannot hear at all.
+    """
+    claims = _claims_for(("t1", True), ("t2", True), ("f1", False), ("f2", False))
+    calls = [
+        _pair(claim.claim_id, 1, arm, probe.OUTCOME_CORRECT, claim.holds)
+        for claim in claims
+        for arm in probe.PROMPT_ARMS
+    ]
+    comparison = probe.compare_arms(calls, claims=claims)
+    assert comparison is not None
+    baseline = comparison["per_claim_majority"]["constant_fail_baseline"]
+    assert baseline["correct"] == 2
+    assert baseline["of"] == 4
+    assert baseline["accuracy"] == pytest.approx(0.5)
+    assert baseline["discrimination_j"] == pytest.approx(0.0)
+    # And the arms that actually answered are separated from it.
+    assert comparison["per_claim_majority"]["production"][
+        "discrimination_j"
+    ] == pytest.approx(1.0)
 
 
 def test_every_tally_reports_the_denominator_the_accuracy_hides() -> None:

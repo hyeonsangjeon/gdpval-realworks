@@ -21,6 +21,7 @@ the test that matters is the one asserting its discrimination is **zero**.
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import io
 import json
@@ -42,6 +43,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from core.perception.audio import (  # noqa: E402
     AUDIO_CALL_CAP,
+    AUDIO_RESPONSE_CONTRACT,
     AUDIO_SAMPLE_RATE_HZ,
     AUDIO_TRIM_SECONDS,
     AUDIO_VERDICT_VOCABULARY,
@@ -2053,11 +2055,15 @@ def test_both_jobs_hold_a_speech_run_to_the_document_it_belongs_to() -> None:
     text = (
         probe.REPO_ROOT / ".github" / "workflows" / "audio-accuracy-probe.yml"
     ).read_text(encoding="utf-8")
-    prereg = re.search(r"^  SPEECH_PREREG: .*/(\S+\.md)$", text, re.MULTILINE)
-    assert prereg, "the workflow no longer names a pre-registration"
-    assert (
-        probe.REPO_ROOT / "tasks" / "rebuilding_grading_task" / prereg.group(1)
-    ).is_file(), "SPEECH_PREREG points at a file that is not in the repo"
+    # Both documents, because there are two speech runs now and each is held
+    # to its own. A workflow that named only one would leave the other's
+    # dispatch unpinned while still looking checked.
+    for row in ("SPEECH_PREREG", "SPEECH_AB_PREREG"):
+        prereg = re.search(rf"^  {row}: .*/(\S+\.md)$", text, re.MULTILINE)
+        assert prereg, f"the workflow no longer names {row}"
+        assert (
+            probe.REPO_ROOT / "tasks" / "rebuilding_grading_task" / prereg.group(1)
+        ).is_file(), f"{row} points at a file that is not in the repo"
 
     invocations = [
         block for block in text.split("\n\n")
@@ -2068,15 +2074,33 @@ def test_both_jobs_hold_a_speech_run_to_the_document_it_belongs_to() -> None:
         f"expected the free and paid measure steps, found {len(invocations)}"
     )
     for block in invocations:
-        assert "--speech-set" in block and "--expect-grader-pin" in block, (
-            "a speech run that does not pass --expect-grader-pin is not "
-            "pinned to any grader; the document just says it is"
-        )
-        speech_branch = block.index('= "speech"')
-        assert block.index("--expect-grader-pin") > speech_branch, (
-            "the pin is passed outside the speech branch, so the published "
-            "tone runs would be re-gated on a document they predate"
-        )
+        assert "--speech-set" in block
+        # The condition is written the other way round now -- everything that
+        # is not tones needs a speech document -- so a third speech corpus
+        # cannot arrive unpinned by being absent from a list of names.
+        corpus_branch = block.index('!= "tones"')
+        for flag, document in (
+            ("--expect-grader-pin", "$SPEECH_PREREG"),
+            ("--speech-prompt-ab", "$SPEECH_AB_PREREG"),
+        ):
+            assert flag in block, (
+                f"a speech run without {flag} is pinned to no grader; the "
+                f"document just says it is"
+            )
+            assert block.index(flag) > corpus_branch, (
+                "the pin is passed outside the speech branch, so the published "
+                "tone runs would be re-gated on a document they predate"
+            )
+            assert document in block[block.index(flag):], (
+                f"{flag} is not handed {document}, so the run would be held "
+                f"to the wrong document"
+            )
+        # And never both at once: two documents pinning one run is the state
+        # the measurer exits 2 on, and discovering that from a dispatch is
+        # discovering it later than here.
+        assert "else" in block[
+            block.index("--speech-prompt-ab"):block.index("--expect-grader-pin")
+        ]
 
 
 # --------------------------------------------------------------------------
@@ -3024,6 +3048,344 @@ def test_a_speech_set_that_cannot_be_loaded_exits_three_not_traceback(
     assert "::error::" in capsys.readouterr().err
 
 
+# ── The speech prompt A/B: a second door, and what has to hold behind it ──
+#
+# 331 could not say whether the judge's near-constant ``fail`` came from the
+# audio or from the wording of the prompt asking about it. Answering that
+# needs two prompts on the same clips -- which is exactly what the block
+# above refuses. So the refusal stays and a separately registered door is
+# added beside it, and these are the tests that the door leads somewhere
+# honest: same audio, same question, same response contract, one difference.
+
+
+def _pair_discriminating_tokens() -> set[str]:
+    """The words that separate one half of a pinned pair from the other.
+
+    Derived from the published manifest, not listed here. A list would be a
+    second copy of the corpus that stops being true the moment a claim is
+    edited, and the thing being guarded -- "the alternative prompt does not
+    hand the model an answer" -- is a property of the corpus that ran.
+
+    The symmetric difference is what makes this work without a stopword list:
+    both halves of a pair ask about the same clip in the same shape, so ``the``
+    and ``speaker`` cancel and ``seventeen``/``seventy`` do not.
+    """
+    manifest = json.loads(
+        (
+            probe.REPO_ROOT / "tasks" / "rebuilding_grading_task"
+            / "330-speech-verification-manifest.json"
+        ).read_text(encoding="utf-8")
+    )
+    by_pair: dict[str, list[str]] = {}
+    for claim in manifest["claims"]:
+        by_pair.setdefault(claim["pair_id"], []).append(claim["criterion"])
+    tokens: set[str] = set()
+    for criteria in by_pair.values():
+        assert len(criteria) == 2, "the corpus stopped being paired"
+        first, second = (set(re.findall(r"[a-z]+", c.lower())) for c in criteria)
+        tokens |= first ^ second
+    return tokens
+
+
+def _intervention(header: str) -> str:
+    """The header without core's response contract.
+
+    The contract is appended verbatim to both arms and to production, so it
+    is not part of what the A/B varies. Guards that ask "what does this arm
+    say" mean this string; asking them of the whole header measures core's
+    wording instead of ours.
+    """
+    assert header.endswith(AUDIO_RESPONSE_CONTRACT)
+    return header[: -len(AUDIO_RESPONSE_CONTRACT)]
+
+
+def test_the_speech_observation_header_leaks_no_answer() -> None:
+    """The alternative prompt must not name either side of any pair.
+
+    A header carrying ``seventeen`` would make the true half of that pair
+    answerable without listening, and the arm would win for a reason that has
+    nothing to do with observation-first prompting.
+
+    **What is checked is the intervention**, meaning the header without the
+    response contract. Not a convenience: core's contract says ``"verdict"
+    MUST be one of these four strings``, and ``four`` is one half of the
+    binding pair. It is core's string, it is frozen, it went out identically
+    in 331's paid run, and it is appended to *both* arms -- so it cannot tilt
+    one arm against the other, which is the question an A/B asks. It is
+    recorded here rather than filtered silently, because "the corpus shares a
+    number word with the response contract" is a real observation about the
+    corpus and belongs in a list somebody reads.
+
+    **What this cannot cover.** One pair -- the word-order pair -- differs by
+    ordering alone, so its two criteria use the same words and contribute
+    nothing to the guarded set. That is a real gap and it is not closable by
+    a token check; it is why the header is also read by a person.
+    """
+    discriminating = _pair_discriminating_tokens()
+    assert len(discriminating) >= 18, (
+        "the corpus stopped distinguishing its pairs by wording, which would "
+        "make this guard vacuous rather than passing"
+    )
+
+    header_tokens = set(
+        re.findall(
+            r"[a-z]+", _intervention(probe.SPEECH_OBSERVATION_HEADER).lower()
+        )
+    )
+    leaked = sorted(header_tokens & discriminating)
+    assert not leaked, f"the observation header hands over: {leaked}"
+
+    # And the same guard against the header the tone corpus uses, because
+    # nothing stops someone pointing the speech run at it.
+    assert not set(
+        re.findall(r"[a-z]+", _intervention(probe.OBSERVATION_HEADER).lower())
+    ) & discriminating
+
+    # The one token the contract does share, pinned so that it stays the only
+    # one: a second word appearing here should stop a build, not pass quietly.
+    assert sorted(
+        set(re.findall(r"[a-z]+", AUDIO_RESPONSE_CONTRACT.lower()))
+        & discriminating
+    ) == ["four"]
+
+
+def test_the_speech_arm_asks_about_speech_and_keeps_everything_else() -> None:
+    """One difference between the corpora, and it is the observation list.
+
+    The tone header asks for pitches, intervals, harmonic content, a tempo and
+    a key. A spoken sentence has none of those to report, so sending it with
+    speech would handicap the alternative arm and the run would measure the
+    mismatch instead of the intervention.
+
+    The rest has to stay word-for-word identical or the two corpora are no
+    longer testing the same change.
+    """
+    speech = probe.SPEECH_OBSERVATION_HEADER
+    tone = probe.OBSERVATION_HEADER
+    assert speech != tone
+
+    for word in ("pitch", "interval", "harmonic", "tempo", "key", "beep"):
+        # The intervention, not the whole header: core's contract names the
+        # JSON "keys" it wants, and that is not this arm asking about a
+        # musical key.
+        assert word not in _intervention(speech).lower(), (
+            f"the speech arm asks about {word!r}, which is not in a sentence"
+        )
+        assert word in _intervention(tone).lower() or word in ("beep",), (
+            f"the tone arm stopped asking about {word!r}, so this guard is "
+            f"no longer separating the two corpora"
+        )
+
+    opening = (
+        "You are an audio analyst. A short audio clip has been supplied to "
+        "you as audio input. Work only from that audio. Nothing you have been "
+        "told about the clip is a substitute for listening to it."
+    )
+    for header in (speech, tone):
+        assert header.startswith(opening)
+        assert header.endswith(AUDIO_RESPONSE_CONTRACT)
+        # The response contract is not part of the intervention. Writing a
+        # second one is what made run 34008840627 measure which paragraph
+        # described JSON better; it is core's string or it is nothing.
+        assert header.count(AUDIO_RESPONSE_CONTRACT) == 1
+        assert "may be true or it may be false" in header
+        assert '"judge_error"' in header
+
+
+def _prompt_ab_doc(tmp_path: Path, *, kind: str = "speech-prompt-ab",
+                   pin: str | None = None, name: str = "prereg.md") -> Path:
+    doc = tmp_path / name
+    lines = [f"| 진단 종류 | `{kind}` |"] if kind else []
+    if pin is None:
+        pin = probe.grader_source_hash()
+    if pin:
+        lines.append(f"| 채점기 지문 | `{pin}` |")
+    doc.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return doc
+
+
+def _speech_ab_args(tmp_path: Path, manifest_path: Path, clip_dir: Path,
+                    out: Path) -> list[str]:
+    return [
+        "--dry-run", "--quiet", "--repeats", "1",
+        "--speech-set", str(manifest_path),
+        "--speech-clips", str(clip_dir),
+        "--out", str(out),
+    ]
+
+
+def test_the_prompt_ab_door_only_opens_for_a_document_that_registered_it(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A path on a command line is not consent.
+
+    Every refusal here is a way the door could otherwise have become "the
+    single-arm rule, with a flag that turns it off" -- which is the thing the
+    line above it exists to prevent.
+    """
+    manifest_path, clip_dir = _speech_fixture(tmp_path, clips=2)
+    out = tmp_path / "out.json"
+    args = _speech_ab_args(tmp_path, manifest_path, clip_dir, out)
+
+    # Without a speech set there is nothing to compare two prompts on.
+    with pytest.raises(SystemExit):
+        probe.main([
+            "--dry-run", "--quiet",
+            "--speech-prompt-ab", str(_prompt_ab_doc(tmp_path)),
+        ])
+
+    # A document that declares nothing has agreed to nothing.
+    silent = tmp_path / "silent.md"
+    silent.write_text("# just a file\n", encoding="utf-8")
+    assert probe.main([*args, "--speech-prompt-ab", str(silent)]) == 3
+    assert "declares no diagnostic kind" in capsys.readouterr().err
+
+    # A document that registered some other diagnostic.
+    other = _prompt_ab_doc(tmp_path, kind="tone-sweep", name="other.md")
+    assert probe.main([*args, "--speech-prompt-ab", str(other)]) == 3
+    assert "not 'speech-prompt-ab'" in capsys.readouterr().err
+
+    # Declaring itself is not enough: it still has to pin the grader, and the
+    # pin is checked by the same code --expect-grader-pin uses.
+    unpinned = _prompt_ab_doc(tmp_path, pin="", name="unpinned.md")
+    assert probe.main([*args, "--speech-prompt-ab", str(unpinned)]) == 3
+    assert "states no grader fingerprint" in capsys.readouterr().err
+
+    stale = _prompt_ab_doc(tmp_path, pin="a" * 64, name="stale.md")
+    assert probe.main([*args, "--speech-prompt-ab", str(stale)]) == 3
+    assert probe.grader_source_hash() in capsys.readouterr().err
+
+    # Two documents naming different graders is a run filed under one
+    # fingerprint while held to another.
+    good = _prompt_ab_doc(tmp_path)
+    with pytest.raises(SystemExit):
+        probe.main([
+            *args, "--speech-prompt-ab", str(good),
+            "--expect-grader-pin", str(_prompt_ab_doc(tmp_path, name="second.md")),
+        ])
+
+    assert not out.exists(), "a refused run wrote a report"
+
+    # And --prompt-arm still cannot reach the second arm, door or no door.
+    with pytest.raises(SystemExit):
+        probe.main([*args, "--prompt-arm", "both",
+                    "--speech-prompt-ab", str(good)])
+
+    assert probe.main([*args, "--speech-prompt-ab", str(good)]) == 0
+    assert json.loads(out.read_text(encoding="utf-8"))["pins"][
+        "prompt_arms"
+    ] == list(probe.PROMPT_ARMS)
+
+
+def _requests_from_an_ab_dry_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> tuple[list[dict], dict]:
+    """Run the door end to end against a stub API and keep what went out.
+
+    ``TruthfulStub`` already records every ``create`` call verbatim -- it is
+    the mock API this needs -- so the only thing added is a handle on the
+    instance ``main`` built. Nothing about the request path is faked: core
+    assembles the prompt, ``WireClient`` swaps the arm, and what lands in
+    ``requests`` is the payload a paid run would post.
+    """
+    manifest_path, clip_dir = _speech_fixture(tmp_path, clips=3)
+    out = tmp_path / "out.json"
+    made: list[probe.TruthfulStub] = []
+
+    class _Handle(probe.TruthfulStub):
+        def __init__(self, claims: Sequence[probe.Claim]) -> None:
+            super().__init__(claims)
+            made.append(self)
+
+    monkeypatch.setattr(probe, "TruthfulStub", _Handle)
+    assert probe.main([
+        *_speech_ab_args(tmp_path, manifest_path, clip_dir, out),
+        "--speech-prompt-ab", str(_prompt_ab_doc(tmp_path)),
+    ]) == 0
+    assert len(made) == 1
+    return made[0].requests, json.loads(out.read_text(encoding="utf-8"))
+
+
+def test_the_two_speech_arms_differ_by_the_header_and_by_nothing_else(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The claim the A/B rests on, checked against the wire.
+
+    If the arms differ anywhere but the header, the run measures that
+    difference too and cannot attribute anything to the prompt. Each of these
+    is a way that has actually gone wrong before: 328 sent a home-written
+    response contract, and the two-digest banner exists because audio can
+    stop being identical without anything raising.
+    """
+    requests, report = _requests_from_an_ab_dry_run(tmp_path, monkeypatch)
+
+    by_arm: dict[str, dict[str, dict]] = {"production": {}, "observation": {}}
+    for kwargs in requests:
+        text = ""
+        audio: list[dict] = []
+        for part in kwargs["messages"][0]["content"]:
+            if part.get("type") == "text":
+                text = part["text"]
+            elif part.get("type") == "input_audio":
+                audio.append(part["input_audio"])
+
+        assert kwargs["modalities"] == ["text"]
+        # 332 §4: not until the provider is on record that this model accepts
+        # it alongside input_audio. A flag that appears here for one arm would
+        # also be a difference between the arms.
+        assert "response_format" not in kwargs
+        assert len(audio) == 1 and audio[0]["format"] in SUPPORTED_AUDIO_FORMATS
+
+        if probe.PRODUCTION_CRITERION_MARKER in text:
+            arm, header, criterion = (
+                "production", *probe.split_production_text(text)
+            )
+        else:
+            header, _, criterion = text.partition("\n\nStatement:\n")
+            arm = "observation"
+            assert header == probe.SPEECH_OBSERVATION_HEADER
+        digest = hashlib.sha256(
+            base64.b64decode(audio[0]["data"], validate=True)
+        ).hexdigest()
+        by_arm[arm][criterion] = {"digest": digest, "header": header}
+
+    assert len(by_arm["production"]) == 6
+    assert set(by_arm["production"]) == set(by_arm["observation"]), (
+        "the arms were asked different questions, so nothing pairs"
+    )
+    for criterion, sent in by_arm["production"].items():
+        other = by_arm["observation"][criterion]
+        assert sent["digest"] == other["digest"], (
+            f"{criterion!r} was judged on different audio in the two arms; "
+            f"this is a comparison of clips, not of prompts"
+        )
+        assert sent["header"] != other["header"]
+        for header in (sent["header"], other["header"]):
+            assert header.endswith(AUDIO_RESPONSE_CONTRACT)
+
+    # And the report says which alternative prompt those observation calls
+    # carried, so the run can be checked against the header the
+    # pre-registration pinned rather than against this file.
+    assert report["pins"]["observation_header_sha256"] == hashlib.sha256(
+        probe.SPEECH_OBSERVATION_HEADER.encode("utf-8")
+    ).hexdigest()
+
+
+def test_a_single_arm_run_does_not_claim_an_alternative_prompt(
+    tmp_path: Path
+) -> None:
+    """A fingerprint for a prompt nothing sent is a fact about the source
+    file, not about the run -- and a reader would take it for the latter."""
+    manifest_path, clip_dir = _speech_fixture(tmp_path, clips=2)
+    out = tmp_path / "out.json"
+    assert probe.main(
+        _speech_ab_args(tmp_path, manifest_path, clip_dir, out)
+    ) == 0
+    assert "observation_header_sha256" not in json.loads(
+        out.read_text(encoding="utf-8")
+    )["pins"]
+
+
 # ── The paid entry point has to be able to ask for the speech corpus ─────
 #
 # Everything above is about the script. These are about the only file that
@@ -3046,7 +3408,7 @@ def test_the_workflow_can_ask_for_either_corpus() -> None:
     inputs = _workflow()[True]["workflow_dispatch"]["inputs"]
     corpus = inputs["corpus"]
     assert corpus["type"] == "choice"
-    assert sorted(corpus["options"]) == ["speech", "tones"]
+    assert sorted(corpus["options"]) == ["speech", "speech-prompt-ab", "tones"]
     assert corpus["default"] == "tones"
 
 
@@ -3064,7 +3426,10 @@ def test_both_jobs_rebuild_the_speech_set_against_the_committed_pin(
     so the audio actually sent is the audio that was checked.
     """
     step = _step(job, "Build and verify the pinned speech set")
-    assert step["if"].strip() == "${{ inputs.corpus == 'speech' }}"
+    # Every corpus that is not tones needs the clips, and the condition says so
+    # that way round on purpose: a third speech corpus arriving must not
+    # silently skip the rebuild and measure whatever was left in the directory.
+    assert step["if"].strip() == "${{ inputs.corpus != 'tones' }}"
     assert "--expect-manifest" in step["run"]
     assert "$SPEECH_MANIFEST" in step["run"]
     assert "--out-dir" in step["run"]
@@ -3102,7 +3467,7 @@ def test_both_runs_forward_the_speech_flags_together(
     assert "inputs.corpus" in run
 
 
-@pytest.mark.parametrize("corpus", ["tones", "speech"])
+@pytest.mark.parametrize("corpus", ["tones", "speech", "speech-prompt-ab"])
 def test_the_approval_record_names_the_corpus_it_authorised(corpus: str) -> None:
     """Run the gate's own shell, as the call-count test does.
 
@@ -3131,6 +3496,10 @@ def test_the_approval_record_names_the_corpus_it_authorised(corpus: str) -> None
         "speech": sum(1 for claim in published["claims"] if claim["holds"]),
     }
     clips = {"tones": len(probe.CLIPS), "speech": len(published["clips"])}
+    # The A/B buys the same clips and the same criteria; only the arm count
+    # differs, and that is the next test.
+    for table in (criteria, true_claims, clips):
+        table["speech-prompt-ab"] = table["speech"]
 
     assert criteria["tones"] == criteria["speech"], (
         "the corpora no longer hold the same number of criteria, so the "
@@ -3164,6 +3533,59 @@ def test_the_approval_record_names_the_corpus_it_authorised(corpus: str) -> None
     assert f"calls      = {criteria[corpus] * 3} per arm" in result.stdout
 
 
+def test_the_gate_counts_the_second_arm_the_document_opens() -> None:
+    """``prompt_arm`` stays ``production`` and the run still makes two arms.
+
+    Every previous version of this record read the arm count off
+    ``prompt_arm`` alone. That was right while ``both`` was the only way to a
+    second arm. The speech A/B opens one from its pre-registration instead, so
+    a record that still read the flag would authorise 60 calls for a run that
+    makes 120 -- the ``calls = 36`` failure, on the dispatch that spends.
+    """
+    bash = shutil.which("bash")
+    if bash is None:  # pragma: no cover - CI and dev boxes both have bash
+        pytest.skip("no bash to run the gate's own script with")
+
+    published = json.loads(
+        (probe.REPO_ROOT / SPEECH_MANIFEST_REPO_PATH).read_text(encoding="utf-8")
+    )
+    criteria = len(published["claims"])
+    arms = len(probe.PROMPT_ARMS)
+
+    result = subprocess.run(
+        [bash, "-c", _step("approve-paid", "Record approved request")["run"]],
+        env={
+            **os.environ,
+            "PROBE_REPEATS": "3",
+            "PROBE_ARM": "production",
+            "PROBE_CORPUS": "speech-prompt-ab",
+        },
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert "prompt_arm = production (2 arm(s))" in result.stdout
+    assert (
+        f"calls      = {criteria * 3} per arm, {criteria * 3 * arms} in total"
+    ) in result.stdout
+
+    # And the single-arm speech run is unchanged by that branch existing.
+    single = subprocess.run(
+        [bash, "-c", _step("approve-paid", "Record approved request")["run"]],
+        env={
+            **os.environ,
+            "PROBE_REPEATS": "3",
+            "PROBE_ARM": "production",
+            "PROBE_CORPUS": "speech",
+        },
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert "prompt_arm = production (1 arm(s))" in single.stdout
+    assert f"calls      = {criteria * 3} per arm, {criteria * 3} in total" in single.stdout
+
+
 def test_the_gate_states_the_clip_counts_the_corpora_actually_have() -> None:
     """The gate has no checkout, so those two numbers are restatements.
 
@@ -3171,8 +3593,8 @@ def test_the_gate_states_the_clip_counts_the_corpora_actually_have() -> None:
     authorised, disagreeing with what exists.
     """
     run = _step("approve-paid", "Record approved request")["run"]
-    tone_clips = re.search(r"else CLIPS=(\d+)", run)
-    speech_clips = re.search(r'if \[ "\$CORPUS" = "speech" \]; then CLIPS=(\d+)', run)
+    tone_clips = re.search(r"case \"\$CORPUS\" in speech\*\) CLIPS=\d+ ;; \*\) CLIPS=(\d+)", run)
+    speech_clips = re.search(r"case \"\$CORPUS\" in speech\*\) CLIPS=(\d+)", run)
     assert tone_clips and speech_clips
     assert int(tone_clips.group(1)) == len(probe.CLIPS)
     published = json.loads(
@@ -3857,6 +4279,102 @@ def test_the_column_saying_which_inputs_must_be_typed_is_derived() -> None:
             f"pre-registered value is {stated_value!r}. The column tells the "
             f"operator which inputs to type; re-derive it, do not re-word it."
         )
+
+
+def test_the_prompt_ab_document_names_a_dispatch_the_workflow_accepts() -> None:
+    """333's §0 table, checked the same two ways 330's is.
+
+    The row that matters is ``prompt_arm``. It stays ``production`` while the
+    run makes two arms, because the second arm is opened by the document and
+    not by that flag. It is the one line in this table an operator is most
+    likely to "correct" on the way to dispatching, and correcting it costs a
+    run: ``observation`` and ``both`` are both refused with a speech set.
+    """
+    doc = (
+        probe.REPO_ROOT / "tasks" / "rebuilding_grading_task"
+        / "333-speech-prompt-ab-prereg.md"
+    ).read_text(encoding="utf-8")
+    inputs = _workflow()[True]["workflow_dispatch"]["inputs"]
+
+    rows = re.findall(
+        r"^\| `([a-z_]+)` \| `([^`]+)` \| (✅ 다름|같음) \|$", doc, re.MULTILINE
+    )
+    assert [name for name, _, _ in rows] == [
+        "dry_run",
+        "paid_approval",
+        "repeats",
+        "prompt_arm",
+        "corpus",
+    ], "333's dispatch table is no longer the five inputs it pre-registers"
+
+    stated = dict((name, value) for name, value, _ in rows)
+    assert stated["prompt_arm"] == "production"
+    assert stated["corpus"] == "speech-prompt-ab"
+    assert stated["corpus"] in inputs["corpus"]["options"]
+
+    for name, stated_value, stated_verdict in rows:
+        default = str(inputs[name]["default"]).lower()
+        differs = default != stated_value.lower()
+        assert differs == (stated_verdict == "✅ 다름"), (
+            f"333 §0 says `{name}` is {stated_verdict!r} from the default, but "
+            f"the workflow's default is {inputs[name]['default']!r}"
+        )
+
+    # The document's arithmetic has to be the workflow's, and it is the count
+    # the approval record will authorise.
+    published = json.loads(
+        (probe.REPO_ROOT / SPEECH_MANIFEST_REPO_PATH).read_text(encoding="utf-8")
+    )
+    criteria = len(published["claims"])
+    repeats = int(inputs["repeats"]["default"])
+    arms = len(probe.PROMPT_ARMS)
+    assert f"{criteria} × {repeats} × {arms} = {criteria * repeats * arms}" in doc
+    assert f"| 진단 종류 | `{probe.SPEECH_PROMPT_AB_KIND}` |" in doc
+
+
+def test_the_prompt_ab_document_pins_the_grader_this_checkout_computes() -> None:
+    """The pinned fingerprint is this tree's, not a value copied from 330.
+
+    The first draft of this test asserted 333 and 330 pinned the same grader.
+    They no longer do: ``compute_grader_source_hash`` hashes every ``core/**``
+    module by content, so a commit that only touched cost accounting moved it.
+    Asserting the old equality would have held the A/B to a fingerprint the
+    run can no longer produce -- the probe would have refused at dispatch,
+    after the job started, instead of here.
+
+    So the check is against what this checkout actually computes. While 333
+    says it has not run, a core change turns this red and the document has to
+    be re-pinned before anything is bought. Once it has run the pin is history
+    and must not be edited, which is what the status line gates.
+    """
+    prereg = probe.REPO_ROOT / "tasks" / "rebuilding_grading_task"
+    document = prereg / "333-speech-prompt-ab-prereg.md"
+    if "상태: 아직 실행하지 않음" not in document.read_text(encoding="utf-8"):
+        pytest.skip("333 has run; its pin records what was bought, not this tree")
+    assert probe.grader_pin_stated_in(document) == probe.grader_source_hash()
+
+
+def test_the_prompt_ab_document_says_where_it_parted_from_the_single_arm_run() -> None:
+    """A fingerprint that differs from 330's has to be explained in the document.
+
+    Silence here would read as "same grader as 331" to anyone putting the two
+    result sets side by side. The divergence is fine -- the A/B's control arm
+    runs inside the same job -- but only because that is written down.
+    """
+    prereg = probe.REPO_ROOT / "tasks" / "rebuilding_grading_task"
+    document = prereg / "333-speech-prompt-ab-prereg.md"
+    text = document.read_text(encoding="utf-8")
+    single_arm = probe.grader_pin_stated_in(prereg / "330-speech-diagnostic-prereg.md")
+    if probe.grader_pin_stated_in(document) == single_arm:
+        return
+    assert single_arm[:8] in text, (
+        "333 pins a different grader from 330 and does not name 330's, so the "
+        "difference is invisible to whoever reads the two results together"
+    )
+    assert "core/cost_metering.py" in text and "#444" in text, (
+        "the document has to say which commit moved the fingerprint; "
+        "'it changed' is not a record"
+    )
 
 
 # ── The per-claim table, which is where the primary analysis lives ───────
