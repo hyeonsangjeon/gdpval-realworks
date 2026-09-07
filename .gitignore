@@ -60,6 +60,11 @@ batch-runner/scripts/*
 !batch-runner/scripts/analyze_audio_repeat_variation.py
 !batch-runner/scripts/measure_audio_grading_accuracy.py
 !batch-runner/scripts/replay_audio_format_failures.py
+# Run by .github/workflows/audio-format-diagnostic.yml, on the free job as well
+# as the paid one. `replay_audio_format_failures.py` above answers what the
+# *recorded outcomes* reclassify to; this one places the calls that produce the
+# response bodies nobody stored, which is the only way to see why they failed.
+!batch-runner/scripts/diagnose_audio_format_failure.py
 !batch-runner/scripts/build_speech_verification_set.py
 !batch-runner/scripts/check_dev_host_migration_triggers.py
 !batch-runner/scripts/analyze_required_item_definition.py
@@ -159,6 +164,7 @@ tasks/rebuilding_grading_task/*
 !tasks/rebuilding_grading_task/334-the-arm-that-broke-the-format.md
 !tasks/rebuilding_grading_task/334-audio-accuracy-measured.json
 !tasks/rebuilding_grading_task/334-audio-accuracy-measured-delivery.json
+!tasks/rebuilding_grading_task/335-why-the-format-failed.md
 
 # The grading run writes a sqlite mirror of the cost ledger beside every grade
 # file. The published record is the .jsonl next to it; the database is a local
