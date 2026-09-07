@@ -1,0 +1,142 @@
+{
+  "schema_version": "grading-cost-ledger-corpus-v1",
+  "as_of": "2026-09-07",
+  "measured_for": "models_deliberately_not_priced['azure:gpt-5.6-sol']['measured_from_committed_ledgers'] in model_price_table.json",
+  "what_this_is": "The exact set of committed grading cost ledgers the figures in that entry were computed from. Every count there -- ledgers, rows, distinct_call_ids, duplicate_rows, and the 5.6-sol call and token figures built on them -- is a measurement of these 33 files and of nothing else.",
+  "why_pinned_rather_than_walked": "The entry is a measurement of a corpus at a moment, not a description of the repository as it stands. Recomputing it from a live walk of data/grades made those two the same thing, so every legitimate new receipt turned the counts red: the 2026-09-07 smoke published a 33rd ledger and #448 had to hand-edit three numbers to restore green, having first confirmed the 5.6-sol figures were unchanged. The next honoured smoke would have done it again. Pinning the list moves the check onto what the counts were actually protecting -- that no file this measurement rests on has been deleted, truncated or rewritten -- and lets a 34th ledger arrive without touching anything here. Growing this snapshot is a deliberate act: re-measure, re-read the prose, regenerate this file and restate its digest in the entry.",
+  "how_to_verify": "Each sha256 below is of the ledger's bytes as committed. batch-runner/tests/test_the_grading_ledger_no_longer_dies_with_the_runner.py recomputes every figure in the entry from exactly these paths, checks each digest, and separately checks that nothing here has vanished from the tree.",
+  "ledgers": [
+    {
+      "path": "data/grades/_diagnostic/17e2607b1a293be8802a36f1c1ca8e75b96e3437f99d707bfac13d9a9af247b1/exp026c_cost_receipt_smoke__judge_gpt-5_4__cost_smoke_exp026c_v2_gpt54__cfg_5b77131b1e1fc221__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_0d1d6df224d71aec23a0199ba1e7b272044b500b__src_f4931215d1ec316b__v2.2.cost_ledger.jsonl",
+      "sha256": "7d3919a2ba0032b5841a2218877380802ec27338256d84b9eb3f24355cf07b85"
+    },
+    {
+      "path": "data/grades/_diagnostic/17e2607b1a293be8802a36f1c1ca8e75b96e3437f99d707bfac13d9a9af247b1/exp026c_cost_receipt_smoke__judge_gpt-5_4__cost_smoke_exp026c_v2_gpt54__cfg_c4348e8fa153ce8d__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_0d1d6df224d71aec23a0199ba1e7b272044b500b__src_7ca55f907056df2d__v2.2.cost_ledger.jsonl",
+      "sha256": "d1ee3cbe41ade6256a81cc01a3ea5cd7e2806fb2984a0ae8e00e65cdacbbdfda"
+    },
+    {
+      "path": "data/grades/_diagnostic/8e8569d557634ee40e29c456fdaa057cdedc7084fac61444a5a02c3152d1b809/exp_gold_baseline__judge_gpt-5_6-sol__gold_smoke_audio_v2_sol_max__cfg_7392238d5f21a1f8__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_e23d7898c04f6b63__v2.2.cost_ledger.jsonl",
+      "sha256": "aaedbc7631322011bd294fa88e888bd95fee7563d5854a5d2311c9b0d116c8fc"
+    },
+    {
+      "path": "data/grades/_diagnostic/916c151265850ae5deb8368e8aecfb528309c0f00bb3fe071f40b643e06afa64/exp_gold_baseline__judge_gpt-5_6-sol__gold_smoke_audio_v2_sol_max__cfg_57684c7c4318f28b__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_4992ad4fc8ec5027__v2.2.cost_ledger.jsonl",
+      "sha256": "c0033655b9b1c57599ae01f80af8ec683158cb803e6d19a409d5cf3745994232"
+    },
+    {
+      "path": "data/grades/_diagnostic/916c151265850ae5deb8368e8aecfb528309c0f00bb3fe071f40b643e06afa64/exp_gold_baseline__judge_gpt-5_6-sol__gold_smoke_audio_v2_sol_max__cfg_67e0836c459114ee__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_322a6c10c2939c44__v2.2.cost_ledger.jsonl",
+      "sha256": "65ef007269a22345c33fdda2320e3ddeb60945f41db08a475d6843b0393112df"
+    },
+    {
+      "path": "data/grades/_diagnostic/916c151265850ae5deb8368e8aecfb528309c0f00bb3fe071f40b643e06afa64/exp_gold_baseline__judge_gpt-5_6-sol__gold_smoke_audio_v2_sol_max__cfg_ddacb72418fc5400__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_2dd404b2dadbec54__v2.2.cost_ledger.jsonl",
+      "sha256": "39264f500c146cee9c21734fe9d8e1f13a1fa8c677228c4443b326a7d004a3b4"
+    },
+    {
+      "path": "data/grades/_diagnostic/916c151265850ae5deb8368e8aecfb528309c0f00bb3fe071f40b643e06afa64/exp_gold_baseline__judge_gpt-5_6-sol__gold_smoke_audio_v2_sol_max__cfg_ddacb72418fc5400__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_f9ecc9e27ceb57b4__v2.2.cost_ledger.jsonl",
+      "sha256": "6fd121e8f799ba33ad497a1bccb4980fe17f7aaecf39a4439bc24866f4c6f831"
+    },
+    {
+      "path": "data/grades/_diagnostic/b16d9b188a763fa9382d9b18df796b2f08cf284b47619195a2feba963149063c/_repeats/run-002/exp_gold_baseline__judge_gpt-5_6-sol__gold_audio_repeat_v2_sol_max__cfg_ed9ac99c7332a184__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_29c3cfe7e94e4881__v2.2.cost_ledger.jsonl",
+      "sha256": "f7db6a58108ff49adb4efc250ed73fabd9004c0fd5bf93ba73589175eb6aeaf6"
+    },
+    {
+      "path": "data/grades/_diagnostic/b16d9b188a763fa9382d9b18df796b2f08cf284b47619195a2feba963149063c/_repeats/run-003/exp_gold_baseline__judge_gpt-5_6-sol__gold_audio_repeat_v2_sol_max__cfg_ed9ac99c7332a184__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_29c3cfe7e94e4881__v2.2.cost_ledger.jsonl",
+      "sha256": "426436f52ab7195cf5e534dc6ceaea41b676775e4a0e50dc6bdad90df9fb3e1f"
+    },
+    {
+      "path": "data/grades/_diagnostic/b16d9b188a763fa9382d9b18df796b2f08cf284b47619195a2feba963149063c/exp_gold_baseline__judge_gpt-5_6-sol__gold_audio_repeat_v2_sol_max__cfg_ed9ac99c7332a184__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_29c3cfe7e94e4881__v2.2.cost_ledger.jsonl",
+      "sha256": "4bc458e37d987f1b5e5f316cdae467179952a7c237215a3857108c8119bf3330"
+    },
+    {
+      "path": "data/grades/_diagnostic/cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18/_shards/exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_185_v2_sol_max__cfg_b3609ec13f8fa51e__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_955be41edc4aff19__v2.2/shard-000-of-011.cost_ledger.jsonl",
+      "sha256": "da1005caf70751dc2cafd8f95d217e4070511a8ca028d977de9bd1b907220fda"
+    },
+    {
+      "path": "data/grades/_diagnostic/cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18/_shards/exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_185_v2_sol_max__cfg_b3609ec13f8fa51e__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_955be41edc4aff19__v2.2/shard-001-of-011.cost_ledger.jsonl",
+      "sha256": "153e9056a811492fd1043733313fc250156986f817c66e19ae51b4f7d29dd86f"
+    },
+    {
+      "path": "data/grades/_diagnostic/cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18/_shards/exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_185_v2_sol_max__cfg_b3609ec13f8fa51e__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_955be41edc4aff19__v2.2/shard-002-of-011.cost_ledger.jsonl",
+      "sha256": "77963be17f3606debda5dcd990fe6a948e70bb8b32d95e27a8aad7cdb7058802"
+    },
+    {
+      "path": "data/grades/_diagnostic/cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18/_shards/exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_185_v2_sol_max__cfg_b3609ec13f8fa51e__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_955be41edc4aff19__v2.2/shard-003-of-011.cost_ledger.jsonl",
+      "sha256": "47b8ff45be737541f127f61464698df0de4c545a1d461ddb770fb89422274036"
+    },
+    {
+      "path": "data/grades/_diagnostic/cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18/_shards/exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_185_v2_sol_max__cfg_b3609ec13f8fa51e__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_955be41edc4aff19__v2.2/shard-004-of-011.cost_ledger.jsonl",
+      "sha256": "4fba7e3d4c1205c8e76c3c60591b313d660bf6782681bed8a2ca6d24c668eebc"
+    },
+    {
+      "path": "data/grades/_diagnostic/cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18/_shards/exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_185_v2_sol_max__cfg_b3609ec13f8fa51e__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_955be41edc4aff19__v2.2/shard-005-of-011.cost_ledger.jsonl",
+      "sha256": "55b3546059aaafe293ec77f88b21e57847aff03cdc1f68849b444a4c3c9f55c3"
+    },
+    {
+      "path": "data/grades/_diagnostic/cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18/_shards/exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_185_v2_sol_max__cfg_b3609ec13f8fa51e__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_955be41edc4aff19__v2.2/shard-006-of-011.cost_ledger.jsonl",
+      "sha256": "17c7a55935079665071b4477cca49c8b01f2895b1a1bd88a2525e1e700c3d3d7"
+    },
+    {
+      "path": "data/grades/_diagnostic/cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18/_shards/exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_185_v2_sol_max__cfg_b3609ec13f8fa51e__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_955be41edc4aff19__v2.2/shard-007-of-011.cost_ledger.jsonl",
+      "sha256": "80c5f219ed39f4236f25c1175046cc81a56c174dc8563b2d931437a609f2a01d"
+    },
+    {
+      "path": "data/grades/_diagnostic/cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18/_shards/exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_185_v2_sol_max__cfg_b3609ec13f8fa51e__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_955be41edc4aff19__v2.2/shard-008-of-011.cost_ledger.jsonl",
+      "sha256": "da9b29c83e3c945a7b553be1ea7693d45073bfe8fbc73838078af7f32e0868aa"
+    },
+    {
+      "path": "data/grades/_diagnostic/cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18/_shards/exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_185_v2_sol_max__cfg_b3609ec13f8fa51e__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_955be41edc4aff19__v2.2/shard-009-of-011.cost_ledger.jsonl",
+      "sha256": "adb900e6264ca8112215dfc7986c76c27d0f82a6d4fcb4333cd53f428f7e75fe"
+    },
+    {
+      "path": "data/grades/_diagnostic/cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18/_shards/exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_185_v2_sol_max__cfg_b3609ec13f8fa51e__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_955be41edc4aff19__v2.2/shard-010-of-011.cost_ledger.jsonl",
+      "sha256": "827e6dba6ee99aa96903a25e5bdcb8111d2ff2c6bfa4e7c00ea008de93824741"
+    },
+    {
+      "path": "data/grades/_diagnostic/cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18/_shards/exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_185_v2_sol_max__cfg_f9c5f7bab9bd1530__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_79c2f5035c4aa826__v2.2/shard-000-of-011.cost_ledger.jsonl",
+      "sha256": "c9cc35b331c7d2cdf212994e36efa2ff515d79076d93c8b190f7e44d0fc3903f"
+    },
+    {
+      "path": "data/grades/_diagnostic/cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18/_shards/exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_185_v2_sol_max__cfg_f9c5f7bab9bd1530__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_79c2f5035c4aa826__v2.2/shard-001-of-011.cost_ledger.jsonl",
+      "sha256": "f78633bfd0f1c52e62e4098fbf329c5e0162bf0d43597a14fb3a5a1cf9875e15"
+    },
+    {
+      "path": "data/grades/_diagnostic/cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18/_shards/exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_185_v2_sol_max__cfg_f9c5f7bab9bd1530__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_79c2f5035c4aa826__v2.2/shard-002-of-011.cost_ledger.jsonl",
+      "sha256": "cd8e02411b619f3b8ff7dad0c63261b6f7bebed41019165f384fa3a22b270682"
+    },
+    {
+      "path": "data/grades/_diagnostic/cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18/_shards/exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_185_v2_sol_max__cfg_f9c5f7bab9bd1530__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_79c2f5035c4aa826__v2.2/shard-003-of-011.cost_ledger.jsonl",
+      "sha256": "1582281981e5aa798ca5cc3d1cac26934ede3e47328e34790e88147b4b8e80cd"
+    },
+    {
+      "path": "data/grades/_diagnostic/cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18/_shards/exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_185_v2_sol_max__cfg_f9c5f7bab9bd1530__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_79c2f5035c4aa826__v2.2/shard-004-of-011.cost_ledger.jsonl",
+      "sha256": "21223e7fee10f1b2cedce267c2b99359383885361ce7662293287c2fb4ce6fed"
+    },
+    {
+      "path": "data/grades/_diagnostic/cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18/_shards/exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_185_v2_sol_max__cfg_f9c5f7bab9bd1530__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_79c2f5035c4aa826__v2.2/shard-005-of-011.cost_ledger.jsonl",
+      "sha256": "79cf6fe0d85ad0b44c30415d6e8b26837bf9fc9549b58c75e061a5d2bc957520"
+    },
+    {
+      "path": "data/grades/_diagnostic/cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18/_shards/exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_185_v2_sol_max__cfg_f9c5f7bab9bd1530__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_79c2f5035c4aa826__v2.2/shard-006-of-011.cost_ledger.jsonl",
+      "sha256": "037cba6359cdb608ec8fdb008f1b1891d731caa9bc6325f51d8704c327494171"
+    },
+    {
+      "path": "data/grades/_diagnostic/cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18/_shards/exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_185_v2_sol_max__cfg_f9c5f7bab9bd1530__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_79c2f5035c4aa826__v2.2/shard-007-of-011.cost_ledger.jsonl",
+      "sha256": "dab290db77b6f1319b288c572d0f39bceb9c268bd014737e1685c7822aeb2bac"
+    },
+    {
+      "path": "data/grades/_diagnostic/cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18/_shards/exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_185_v2_sol_max__cfg_f9c5f7bab9bd1530__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_79c2f5035c4aa826__v2.2/shard-008-of-011.cost_ledger.jsonl",
+      "sha256": "48da6eaf8a3cc416d9df120f27882dec4ebc0efea964716a84a77eeb3afdc2e5"
+    },
+    {
+      "path": "data/grades/_diagnostic/cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18/_shards/exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_185_v2_sol_max__cfg_f9c5f7bab9bd1530__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_79c2f5035c4aa826__v2.2/shard-009-of-011.cost_ledger.jsonl",
+      "sha256": "7ff96126575a513e99ea0e7867c45dbd607d94077dce40b873863020075ce923"
+    },
+    {
+      "path": "data/grades/_diagnostic/cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18/_shards/exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_185_v2_sol_max__cfg_f9c5f7bab9bd1530__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_79c2f5035c4aa826__v2.2/shard-010-of-011.cost_ledger.jsonl",
+      "sha256": "017786b10fee42fd947370ad9484489e3cd013bebb03ae59b1b68ca5fd58069d"
+    },
+    {
+      "path": "data/grades/_diagnostic/cef3a5b9f1305f19437d6ee337936a065965f979325b95a41d1001747e6bfa18/exp_gold_baseline__judge_gpt-5_6-sol__gold_ceiling_185_v2_sol_max__cfg_f9c5f7bab9bd1530__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_11e7900cdcac61bc4daf59e65feb238acda98fbf__src_79c2f5035c4aa826__v2.2.cost_ledger.jsonl",
+      "sha256": "1b1d2d198ad034ddad703e27b7905176306be18b08ccb76f04e509d20a45192c"
+    }
+  ]
+}

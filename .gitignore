@@ -76,6 +76,12 @@ batch-runner/scripts/*
 # cannot be run against the next paid run. Held by
 # tests/test_verify_cost_ledger.py.
 !batch-runner/scripts/verify_cost_ledger.py
+# The follow-up check that runs on the commit a grading run actually pushed.
+# It is invoked by the verify-published job in grade-run.yml, so the directory
+# rule hiding it would leave that job calling a file the checkout does not
+# have -- the exact failure this whole path exists to stop, reproduced one
+# level up. Held by tests/test_verify_published_grades.py.
+!batch-runner/scripts/verify_published_grades.py
 
 
 # Experiment report HTML (skews GitHub language stats)
