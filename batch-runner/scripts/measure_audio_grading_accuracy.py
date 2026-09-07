@@ -197,8 +197,10 @@ from core.perception.audio import (  # noqa: E402
     AUDIO_RESPONSE_CONTRACT,
     AUDIO_SAMPLE_RATE_HZ,
     AUDIO_TRIM_SECONDS,
+    AUDIO_VERDICT_VOCABULARY,
     AudioPerception,
     AudioVerdict,
+    _offending_token,
     criterion_listen_start,
 )
 
@@ -1159,7 +1161,28 @@ def classify(claim: Claim, verdict: str) -> str:
     separate question, answered by ``unanswered_kind`` and reported beside
     this outcome -- deliberately not folded in here, because the scoring
     treats all three identically and only the diagnosis differs.
+
+    A verdict outside :data:`AUDIO_VERDICT_VOCABULARY` raises rather than
+    scoring. The vocabulary is core's, not a second copy: ``core.perception.
+    audio`` already rejects an out-of-vocabulary reply as
+    ``verdict_not_in_vocabulary`` before it can reach here, so this is the
+    second half of one check and not a new rule. It is unreachable today for
+    exactly that reason -- and the branch it guards was the silent one. The
+    ``fail`` arm below is a plain ``else``: ``verdict == "pass"`` being false
+    made ``true``, ``false``, ``refuse`` and ``analyze_audio`` -- the four
+    out-of-vocabulary strings run ``34008840627`` actually produced -- score as
+    confident ``fail`` verdicts, correct on every false claim. Raising is the
+    same answer ``Tally.add`` gives an unknown kind, and it fails closed: no
+    number gets published from a reply nobody validated.
     """
+    if verdict not in AUDIO_VERDICT_VOCABULARY:
+        # Named through core's own bounded renderer, because this string came
+        # from a model. ``_offending_token`` admits ``true`` and ``refuse``
+        # and collapses anything that could carry a payload.
+        raise ValueError(
+            f"verdict outside the response contract's vocabulary: "
+            f"{_offending_token(verdict)}"
+        )
     if verdict == "judge_error":
         return OUTCOME_UNANSWERED
     if verdict == "partial":

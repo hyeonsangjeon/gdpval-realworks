@@ -44,6 +44,7 @@ from core.perception.audio import (  # noqa: E402
     AUDIO_CALL_CAP,
     AUDIO_SAMPLE_RATE_HZ,
     AUDIO_TRIM_SECONDS,
+    AUDIO_VERDICT_VOCABULARY,
     SUPPORTED_AUDIO_FORMATS,
     AudioPerception,
     criterion_listen_start,
@@ -946,6 +947,27 @@ def _summarise_body(job: str = "measure") -> str:
     return "\n".join(lines[start + 1 : end])
 
 
+def _stamped_identity() -> dict:
+    """The pins a real run writes, not the ones ``pinned_identity`` returns.
+
+    ``main`` reads the config into an identity and then *stamps the grader
+    fingerprint onto it*, because after the run that string stops being a
+    promise and becomes the record of which grader produced the numbers. Every
+    report this script has ever written therefore carries
+    ``pins.grader_source_sha256``; a report built straight off
+    ``pinned_identity()`` does not, and is a shape nothing emits.
+
+    Which mattered the moment the summary started printing the field: four
+    tests handed it a report no run could produce and got a ``KeyError`` that
+    said nothing about the summary. Fixtures that are the wrong shape do not
+    fail honestly -- they fail somewhere else.
+    """
+    return {
+        **probe.pinned_identity(),
+        "grader_source_sha256": probe.grader_source_hash(),
+    }
+
+
 def _render_summary(
     job: str,
     report_name: str,
@@ -1189,7 +1211,7 @@ def test_the_paid_summary_survives_a_run_where_nothing_answered(
         prerendered=corpus,
     )
     report = probe.build_report(
-        identity=probe.pinned_identity(),
+        identity=_stamped_identity(),
         measured=True,
         repeats=3,
         result=result,
@@ -1243,7 +1265,7 @@ def test_a_judge_that_separated_nothing_says_so_above_the_accuracy(
                 )
 
         return probe.build_report(
-            identity=probe.pinned_identity(),
+            identity=_stamped_identity(),
             measured=True,
             repeats=3,
             result=probe.run_measurement(
@@ -1344,6 +1366,247 @@ def test_the_arrival_banner_fires_on_the_shape_it_exists_for(
     )
 
 
+# --------------------------------------------------------------------------
+# The lines that first ran against money
+#
+# `331` §10 lists five branches of the paid summary that no test executed.
+# Four of them printed for the first time during run 34038371185 -- the paid
+# one -- and the fifth prints only when a comparison ran. A branch whose only
+# exercising input is the purchase is a branch that gets debugged with the
+# receipt in hand, and every one of these is on the page a reader uses to
+# decide whether the number above it means anything.
+#
+# Rendered, not grepped, for the reason `_render_summary` gives: a grep over
+# the workflow text cannot see a KeyError, and `test_the_paid_summary_names_
+# the_arm_its_table_describes` above is exactly such a grep -- it proves the
+# sentence is in the file and not that the branch holding it ever runs.
+# --------------------------------------------------------------------------
+
+
+def _tones_dry_run(tmp_path: Path, *, arm: str = "production") -> dict:
+    """A real report off the tone corpus, through the script's own CLI."""
+    out = tmp_path / f"tones-{arm}.json"
+    assert probe.main([
+        "--dry-run", "--quiet", "--repeats", "1",
+        "--prompt-arm", arm,
+        "--out", str(out),
+    ]) == 0
+    return json.loads(out.read_text(encoding="utf-8"))
+
+
+def test_the_paid_summary_prints_the_grader_it_ran_under(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """`330` §2 pins a grader fingerprint; the page never showed one.
+
+    The run computes it, ``--expect-grader-pin`` refuses to start when it
+    disagrees with the pre-registration, and the value has sat in
+    ``pins.grader_source_sha256`` of every report since. None of that reaches
+    the person reading the summary: the header named the model, the corpus and
+    the call count, and stopped. So "the grader was the pre-registered one"
+    was checkable only by downloading the JSON -- which is the position the
+    delivery evidence was in before §2 moved it up.
+
+    Whole, not abbreviated: the comparison it exists for is against a
+    64-character constant in a table.
+    """
+    report = _tones_dry_run(tmp_path)
+    fingerprint = report["pins"]["grader_source_sha256"]
+    assert re.fullmatch(r"[0-9a-f]{64}", fingerprint), fingerprint
+
+    printed = _render_paid_summary(report, tmp_path, monkeypatch, capsys)
+    assert fingerprint in printed, "the summary still does not say which grader"
+    assert printed.index(fingerprint) < printed.index(
+        "| accuracy (answered calls) |"
+    ), "provenance under the number it qualifies is provenance nobody reads"
+
+    # A different fingerprint has to print differently, or the line is a
+    # constant that happens to match today's checkout.
+    moved = json.loads(json.dumps(report))
+    moved["pins"]["grader_source_sha256"] = "b" * 64
+    assert "b" * 64 in _render_paid_summary(
+        moved, tmp_path, monkeypatch, capsys
+    )
+
+
+def test_the_arrival_row_carries_the_counts_it_was_handed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """`331` §5's first row, executed.
+
+    The row above the accuracy that says how many requests carried audio. The
+    banner beside it is covered by the arrival-banner test above, but the
+    banner only fires when something is wrong; this row prints on every run,
+    including the clean one, and nothing asserted the two numbers were the
+    right way round.
+    """
+    report = _tones_dry_run(tmp_path)
+    inspected = report["delivery"]["calls_inspected"]
+    printed = _render_paid_summary(report, tmp_path, monkeypatch, capsys)
+    assert f"| audio actually sent | **{inspected} / {inspected}** requests |" in printed
+
+    partial = json.loads(json.dumps(report))
+    partial["delivery"]["calls_carrying_audio"] = 3
+    printed = _render_paid_summary(partial, tmp_path, monkeypatch, capsys)
+    assert f"| audio actually sent | **3 / {inspected}** requests |" in printed, (
+        "carried and inspected must not be swapped, and neither may be the "
+        "other's value"
+    )
+
+
+class _NonAnswersOfEveryKind:
+    """Three different non-answers, in known and unequal numbers.
+
+    The markers are the ones ``core.perception.audio`` actually writes, so
+    ``unanswered_kind`` reads them rather than being told. Unequal on purpose:
+    at 10/10/10 a page that printed the three rows in the wrong order, or read
+    one key three times, would still look right.
+    """
+
+    def __init__(self, *, declined: int, read_failures: int) -> None:
+        self._declined = declined
+        self._read_failures = read_failures
+        self._seen = 0
+
+    def reset(self) -> None:
+        return None
+
+    def judge(self, **_kwargs: object) -> probe.AudioVerdict:
+        self._seen += 1
+        if self._seen <= self._declined:
+            marker = "sub_judge_declined"
+        elif self._seen <= self._declined + self._read_failures:
+            marker = "format_error:unparseable_json"
+        else:
+            marker = "provider_error:TimeoutError"
+        return probe.AudioVerdict(
+            verdict="judge_error",
+            partial_score=0.0,
+            evidence="",
+            confidence=0.0,
+            reasoning="",
+            judge_error=marker,
+        )
+
+
+def test_the_three_kinds_of_non_answer_print_under_their_own_labels(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """`331` §10.1. The split exists because run 34008840627 did not have it.
+
+    That run published all 52 of its non-answers as ``provider_error:
+    JSONDecodeError`` and so could not tell an outage from a prompt defect --
+    opposite problems, one fixed by waiting and one by editing text. The
+    counting was fixed and tested; the three rows that *show* it were not, and
+    they printed for the first time on the paid run.
+
+    Distinct counts are the point. The failure this catches is not a crash,
+    it is 5 and 16 appearing under each other's labels, which reads as an
+    outage when it was a prompt.
+    """
+    manifest_path, clip_dir = _speech_fixture(tmp_path, clips=5)
+    corpus = probe.load_speech_corpus(manifest_path, clip_dir)
+    result = probe.run_measurement(
+        perception=_NonAnswersOfEveryKind(declined=5, read_failures=9),
+        clip_dir=tmp_path / "unused",
+        repeats=3,
+        claims=corpus.claims,
+        prerendered=corpus,
+    )
+    report = probe.build_report(
+        identity=_stamped_identity(),
+        measured=True,
+        repeats=3,
+        result=result,
+        speech=corpus,
+    )
+    overall = report["accuracy"]["overall"]
+    assert overall["unanswered"] == 30
+    assert overall["unanswered_by_kind"] == {
+        "declined_to_judge": 5,
+        "read_failure": 9,
+        "provider_failure": 16,
+    }
+
+    printed = _render_paid_summary(report, tmp_path, monkeypatch, capsys)
+    assert "| unanswered (`judge_error`) | 30 |" in printed
+    assert "| &nbsp;&nbsp;· model declined to judge | 5 |" in printed
+    assert "| &nbsp;&nbsp;· reply broke the response contract | 9 |" in printed
+    assert "| &nbsp;&nbsp;· the call itself failed | 16 |" in printed
+
+
+def test_two_arms_get_the_note_and_the_paired_table_one_arm_must_not(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """`331` §10.2, both halves: the multi-arm note and the comparison block.
+
+    Neither has ever rendered under a test. The pre-registered speech run is
+    single-arm, so the branches sat behind a condition every rehearsal in this
+    file makes false -- and the note exists precisely to stop a reader taking
+    the single table below it for the whole run.
+    """
+    one = _tones_dry_run(tmp_path, arm="production")
+    two = _tones_dry_run(tmp_path, arm="both")
+    assert one["pins"]["prompt_arms"] == ["production"]
+    assert two["pins"]["prompt_arms"] == ["production", "observation"]
+    assert "arm_comparison" not in one and two["arm_comparison"]
+
+    single = _render_paid_summary(one, tmp_path, monkeypatch, capsys)
+    assert "production arm alone" not in single, (
+        "a note about which of two arms this is, on a run that had one arm"
+    )
+    assert "### Prompt arms, paired" not in single
+
+    paired = _render_paid_summary(two, tmp_path, monkeypatch, capsys)
+    assert "production arm alone" in paired
+    assert paired.index("production arm alone") < paired.index(
+        "| accuracy (answered calls) |"
+    ), "the note has to reach the reader before the table it qualifies"
+
+    # The comparison block itself: every row of it, because it is the section
+    # a prompt A/B is bought for.
+    assert "### Prompt arms, paired" in paired
+    assert f"Pairing is on (criterion, repeat): {two['arm_comparison']['pairs']} pairs" in paired
+    for name in ("production", "observation"):
+        side = two["arm_comparison"][name]
+        assert f"| {name} | " in paired
+        assert f"{side['correct']}/{side['attempts']} |" in paired
+    discordant = two["arm_comparison"]["discordant"]
+    assert f"both `{discordant['both_correct']}`" in paired
+    assert "exact two-sided McNemar p" in paired
+    assert two["arm_comparison"]["reading"] in paired
+    # And the per-arm non-answer split under it, which is the other half of
+    # "one arm may decline the hard criteria and score better on what is left".
+    assert "| | declined | read failure | provider failure |" in paired
+
+
+def test_a_clip_that_sent_two_digests_banners_above_the_comparison(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """`331` §10.2's third branch. It only fires when the arms heard different bytes.
+
+    Which is the one condition that makes a prompt comparison meaningless: two
+    digests for one clip means the two arms were not asked about the same
+    audio, so whatever the table below shows, it is not the prompts differing.
+    Unreachable in a rehearsal -- the stub re-encodes deterministically -- so
+    it is reached here by saying so in the report.
+    """
+    report = _tones_dry_run(tmp_path, arm="both")
+    clean = _render_paid_summary(report, tmp_path, monkeypatch, capsys)
+    assert "A clip sent more than one digest" not in clean, (
+        "a banner that fires on a run where every clip sent one digest"
+    )
+
+    split = json.loads(json.dumps(report))
+    split["delivery"]["clips_with_more_than_one_digest"] = ["three_beeps"]
+    printed = _render_paid_summary(split, tmp_path, monkeypatch, capsys)
+    assert "**A clip sent more than one digest.**" in printed
+    assert "the comparison below is not a prompt comparison" in printed
+    assert printed.index("A clip sent more than one digest") < printed.index(
+        "### Prompt arms, paired"
+    ), "the reason not to read the table has to arrive before the table"
+
+
 @pytest.mark.parametrize("arm,arms", [
     ("production", 1),
     ("observation", 1),
@@ -1417,6 +1680,54 @@ def test_classify_maps_each_verdict_to_the_error_it_is() -> None:
     assert probe.classify(true_claim, "fail") == probe.OUTCOME_FALSE_FAIL
     assert probe.classify(false_claim, "pass") == probe.OUTCOME_FALSE_PASS
     assert probe.classify(false_claim, "fail") == probe.OUTCOME_CORRECT
+
+
+def _classify_error(claim: probe.Claim, verdict: str) -> str:
+    with pytest.raises(ValueError) as caught:
+        probe.classify(claim, verdict)
+    return str(caught.value)
+
+
+def test_a_verdict_outside_the_contract_vocabulary_is_never_scored() -> None:
+    """`331` §10.4. The scorer's ``fail`` arm was a plain ``else``.
+
+    ``said_pass = verdict == "pass"`` is false for ``pass`` misspelt, for
+    ``true``, ``false``, ``refuse`` and ``analyze_audio`` -- the four
+    out-of-vocabulary strings run ``34008840627`` actually produced -- and
+    every one of them then scored as a
+    confident ``fail``: correct on all thirty false claims, which is the exact
+    shape of the constant-``fail`` baseline `331` §4 warns about. A reply
+    nobody validated would have arrived as a result nobody could tell from one.
+
+    ``core.perception.audio`` rejects these before they reach here, which is
+    why nothing has ever hit this branch and why the check is worth having:
+    the two halves are one rule, and the second half is the one that would
+    still be standing if the first were edited.
+
+    The vocabulary is core's object, asserted rather than assumed -- a
+    duplicated frozenset here would drift and then agree with itself.
+    """
+    assert probe.AUDIO_VERDICT_VOCABULARY is AUDIO_VERDICT_VOCABULARY
+
+    claim = next(c for c in probe.CLAIMS if not c.holds)
+    for verdict in sorted(AUDIO_VERDICT_VOCABULARY):
+        assert probe.classify(claim, verdict) in {
+            probe.OUTCOME_CORRECT,
+            probe.OUTCOME_FALSE_FAIL,
+            probe.OUTCOME_FALSE_PASS,
+            probe.OUTCOME_HEDGED,
+            probe.OUTCOME_UNANSWERED,
+        }
+
+    for verdict in ("true", "false", "refuse", "analyze_audio", "Pass", "", "FAIL"):
+        with pytest.raises(ValueError) as caught:
+            probe.classify(claim, verdict)
+        assert "vocabulary" in str(caught.value)
+
+    # Model output, so the message is bounded by core's own renderer rather
+    # than by an f-string here: a token survives, a sentence does not.
+    assert "analyze_audio" in _classify_error(claim, "analyze_audio")
+    assert "<non-token>" in _classify_error(claim, "the audio was ambiguous")
 
 
 def test_a_hedge_is_never_counted_as_correct() -> None:
@@ -1811,7 +2122,7 @@ def test_dry_run_reports_a_perfect_score_and_says_it_measured_nothing(
         perception=perception, clip_dir=tmp_path, repeats=1
     )
     report = probe.build_report(
-        identity=probe.pinned_identity(),
+        identity=_stamped_identity(),
         measured=False,
         repeats=1,
         result=result,
@@ -1841,7 +2152,7 @@ def test_a_measured_run_records_cost_as_unknown_not_zero(tmp_path: Path) -> None
         perception=perception, clip_dir=tmp_path, repeats=1
     )
     report = probe.build_report(
-        identity=probe.pinned_identity(),
+        identity=_stamped_identity(),
         measured=True,
         repeats=1,
         result=result,
@@ -1864,7 +2175,7 @@ def test_report_is_json_serialisable_and_carries_the_clip_digests(
         perception=perception, clip_dir=tmp_path, repeats=1
     )
     report = probe.build_report(
-        identity=probe.pinned_identity(), measured=False, repeats=1, result=result
+        identity=_stamped_identity(), measured=False, repeats=1, result=result
     )
     encoded = json.loads(json.dumps(report, ensure_ascii=False))
     assert set(encoded["clip_sha256"]) == set(probe.CLIPS_BY_ID)
@@ -2480,7 +2791,7 @@ def test_the_report_describes_the_corpus_that_ran(tmp_path: Path) -> None:
         prerendered=corpus,
     )
     report = probe.build_report(
-        identity=probe.pinned_identity(),
+        identity=_stamped_identity(),
         measured=False,
         repeats=1,
         result=result,
@@ -2524,7 +2835,7 @@ def test_the_expected_token_count_is_written_down_before_the_run(
         prerendered=corpus,
     )
     report = probe.build_report(
-        identity=probe.pinned_identity(),
+        identity=_stamped_identity(),
         measured=False,
         repeats=3,
         result=result,
@@ -3260,7 +3571,7 @@ def test_a_stopped_run_keeps_what_it_bought(tmp_path: Path) -> None:
     assert result["planned_calls"] == 3 * len(corpus.claims)
 
     report = probe.build_report(
-        identity=probe.pinned_identity(),
+        identity=_stamped_identity(),
         measured=False,
         repeats=3,
         result=result,
@@ -3346,7 +3657,7 @@ def test_the_stop_banner_is_executed_and_not_merely_present(
         clock=lambda: next(ticks),
     )
     stopped = probe.build_report(
-        identity=probe.pinned_identity(),
+        identity=_stamped_identity(),
         measured=False,
         repeats=3,
         result=result,
@@ -3418,7 +3729,7 @@ def test_a_run_that_answered_nothing_does_not_print_a_discrimination_of_none(
             )
 
     report = probe.build_report(
-        identity=probe.pinned_identity(),
+        identity=_stamped_identity(),
         measured=True,
         repeats=3,
         result=probe.run_measurement(
@@ -3573,7 +3884,7 @@ def test_every_claim_that_ran_has_a_row(tmp_path: Path) -> None:
         prerendered=corpus,
     )
     report = probe.build_report(
-        identity=probe.pinned_identity(),
+        identity=_stamped_identity(),
         measured=False,
         repeats=3,
         result=result,

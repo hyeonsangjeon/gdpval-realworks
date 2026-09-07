@@ -12,6 +12,59 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Added
+- **The summary lines that had only ever run against money now run for free.**
+  `331` §10 listed six follow-ups; this closes them without buying anything.
+  No paid call, no edit to an existing number, and nothing under
+  `batch-runner/core/` was touched — so the grader fingerprint
+  `74e1f478…a558a90` is unmoved and `330`'s pre-registration still names the
+  code `331` actually bought. Recorded as
+  `332-the-lines-that-first-ran-against-money.md`.
+  - **Four branches of the paid summary page are now executed by tests, not
+    grepped.** A rehearsal makes every one of their conditions false — no
+    unanswered calls, one arm, no digest conflict — so "only prints when
+    something is wrong" meant "first runs after the money is gone". The tests
+    pull the python heredoc out of the workflow's own `run:` block and `exec`
+    it against a report on disk: the three-way `unanswered_by_kind` split (with
+    deliberately unequal 5/9/16 counts, so a swapped label shows up as a
+    number), the arrival usage row, the multi-arm note and paired table, and
+    the two-digest banner. A grep proves a sentence is in the file, not that
+    the branch holding it ever runs.
+  - **The paid summary now prints `pins.grader_source_sha256`.** The value was
+    already in the report; only the reading of it was missing, so "this is the
+    pre-registered grader" was a sentence a reader had to take on trust while
+    the model name and call count sat one line above. Printed whole, for
+    comparison against the 64-character constant in the pre-registration.
+  - **An out-of-vocabulary verdict can no longer be scored.** `classify()`'s
+    `fail` arm was a plain `else`, so `true`, `false`, `refuse` and
+    `analyze_audio` — the four out-of-vocabulary strings run `34008840627`
+    actually produced — became confident `fail` verdicts,
+    correct on every false claim. This reuses `core.perception.audio`'s own
+    `AUDIO_VERDICT_VOCABULARY` and `_offending_token` rather than adding a
+    second rule: core already rejects those replies on the wire, and this is
+    the second reader of the same value. Unreachable today for exactly that
+    reason, which is why it was silent.
+  - **`--prompt-arm observation` with a speech set exits 2, and that is
+    documented rather than removed.** The mechanism is `argparse`'s
+    `parser.error()`, at argument-validation time — before a client exists and
+    before anything is billable. The reason is that `330` pre-registers one
+    arm; two questions in one run is what left 328 unable to answer either.
+    Verified by running it: `observation` → 2, `both` → 2, `production` → 0.
+  - **Structured output stays off and unverified.** `response_format` is still
+    not sent; `core/audio_analyzer.py:108` and
+    `test_no_structured_output_is_requested_until_it_is_verified` hold that
+    decision. Nobody has observed `gpt-audio-1.5` accepting it alongside
+    `input_audio`, and sending it to a deployment that rejects it turns every
+    audio call into a 400. Turning it on requires either official evidence for
+    that API/model pair or a separate minimum compatibility check — not a
+    quiet swap of `331`'s comparison inputs, which would make the format
+    success rate unattributable.
+  - A fixture honesty note: adding the fingerprint line broke five existing
+    tests with `KeyError: 'grader_source_sha256'`, because `pinned_identity()`
+    does not carry it and `main()` stamps it. Fixed by making the fixtures
+    build the shape a real run emits, **not** by adding a `.get()` fallback in
+    the workflow — that would let the page render green without saying which
+    grader produced the numbers.
+
 - **The pre-registered speech diagnostic ran, and the answer was "not shown".**
   60 paid calls on run `34038371185`, pinned to commit `54180489e` (#439's merge)
   so a moving `main` could not change what the job saw. Results and both raw
