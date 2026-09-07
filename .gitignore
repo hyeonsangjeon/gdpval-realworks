@@ -70,6 +70,12 @@ batch-runner/scripts/*
 # tests/test_the_free_check_runs_in_ci.py, which asks git what is tracked
 # rather than trusting this list to have been kept up.
 !batch-runner/scripts/summarise_execution_envelope_check_in_korean.py
+# The offline check that a published grade's cost receipt is backed by its own
+# ledger. Same reason as the line above: the directory rule hides it, `git add`
+# skips it without a word, and a receipt check that is not in the repository
+# cannot be run against the next paid run. Held by
+# tests/test_verify_cost_ledger.py.
+!batch-runner/scripts/verify_cost_ledger.py
 
 
 # Experiment report HTML (skews GitHub language stats)
