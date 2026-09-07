@@ -69,9 +69,18 @@ SMOKE_CONFIG = (
     / "batch-runner/grading_configs/cost_smoke_exp026c_v2_gpt54.yaml"
 )
 
-#: Located by shape, not pinned: the diagnostic fork directory is named for a
-#: scope hash, and the grade filename carries a grader fingerprint.
+#: Located by shape, then picked out by grader fingerprint. The diagnostic fork
+#: directory is named for a scope hash and the filename carries the fingerprint
+#: of the grader that wrote it, so a re-run at a new fingerprint lands *beside*
+#: this one rather than replacing it. That is the whole point of the fork, and
+#: the 2026-09-07 re-run at src_f4931215d1ec316b made it real: a second file
+#: appeared, the glob matched two, and every fixture below stopped resolving at
+#: setup. The totals in this file are the first run's, so it names that run
+#: instead of assuming it is alone. A sibling is the contract working, not a
+#: collision -- the re-run reconciles under its own check in
+#: tests/test_verify_cost_ledger.py.
 GRADING_GLOB = "data/grades/_diagnostic/*/exp026c_cost_receipt_smoke*__v2.2.json"
+GRADING_SOURCE = "src_7ca55f907056df2d"
 
 #: The single task both halves are about.
 TASK_ID = "83d10b06-26d1-4636-a32c-23f92c57f30b"
@@ -104,16 +113,26 @@ def solving_rows() -> list[dict]:
 
 
 @pytest.fixture(scope="module")
-def grading_grade() -> dict:
+def grading_path() -> Path:
     matches = sorted(REPO_ROOT.glob(GRADING_GLOB))
-    assert len(matches) == 1, f"expected exactly one grade JSON, found {matches}"
-    return json.loads(matches[0].read_text(encoding="utf-8"))
+    assert matches, f"nothing matches {GRADING_GLOB}"
+    pinned = [m for m in matches if GRADING_SOURCE in m.name]
+    assert len(pinned) == 1, (
+        f"expected one exp026c grade at grader source {GRADING_SOURCE}, found "
+        f"{[m.name for m in pinned]} among {len(matches)} exp026c grade(s). The "
+        "totals below are that run's and cannot be checked against another's."
+    )
+    return pinned[0]
 
 
 @pytest.fixture(scope="module")
-def grading_rows(grading_grade: dict) -> list[dict]:
-    matches = sorted(REPO_ROOT.glob(GRADING_GLOB))
-    ledger = matches[0].with_name(grading_grade["cost_ledger"]["path"])
+def grading_grade(grading_path: Path) -> dict:
+    return json.loads(grading_path.read_text(encoding="utf-8"))
+
+
+@pytest.fixture(scope="module")
+def grading_rows(grading_path: Path, grading_grade: dict) -> list[dict]:
+    ledger = grading_path.with_name(grading_grade["cost_ledger"]["path"])
     assert ledger.is_file(), f"grade JSON names a ledger that is not here: {ledger}"
     return _rows(ledger)
 
