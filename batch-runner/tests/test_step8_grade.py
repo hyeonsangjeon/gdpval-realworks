@@ -3349,6 +3349,7 @@ def test_grade_workflow_rc7_requires_valid_committed_partial():
         "approve-paid",
         "grade-dry-run",
         "grade",
+        "verify-published",
     ]
     assert parsed["permissions"] == {"contents": "read"}
 
@@ -3407,6 +3408,64 @@ def test_grade_workflow_rc7_requires_valid_committed_partial():
         "id-token": "write",
         "actions": "write",
     }
+    assert grade_job["outputs"] == {
+        "published_commits": "${{ steps.published.outputs.commits }}",
+        "published_head": "${{ steps.published.outputs.head }}",
+    }
+
+    # The job list above is pinned rather than checked for membership, so that
+    # nothing joins a workflow that spends money without being described here.
+    # Adding a name to it weakens that unless the newcomer is pinned too.
+    verify_job = parsed["jobs"]["verify-published"]
+    assert verify_job["needs"] == ["grade"]
+    # Not `success()`. A run that pushed its grade and then died later is
+    # exactly the run whose published commit nobody has looked at; gating on
+    # the paid job's overall result would skip precisely that case. Pinned so
+    # the condition cannot be "simplified" back into skipping it.
+    assert _gh_expr(verify_job["if"]) == (
+        "always() && needs.grade.outputs.published_commits != ''"
+    )
+    # Strictly narrower than the job it follows, and asserted rather than
+    # assumed: this one reads the tree and reports. Write access would let a
+    # verification step rewrite what it is verifying.
+    assert verify_job["permissions"] == {"contents": "read"}
+    # No environment, so it cannot consume the paid approval; no OIDC identity
+    # and no secrets, so it cannot reach a model endpoint at all. That is what
+    # makes "verification cannot re-trigger paid grading" structural rather
+    # than a promise about what the script happens to do today.
+    assert "environment" not in verify_job
+    verify_dump = yaml.safe_dump(verify_job)
+    assert "secrets." not in verify_dump
+    assert "id-token" not in verify_dump
+    assert "azure/login" not in verify_dump
+    assert "workflow_dispatch" not in verify_dump
+    # A verification that can be told to pass is not a verification. This is
+    # the flag that would make a red check quietly green.
+    assert "continue-on-error" not in verify_dump
+
+    verify_by_name = {
+        step.get("name"): step for step in verify_job["steps"] if step.get("name")
+    }
+    published_checkout = verify_by_name["Checkout the exact published commit"]
+    assert published_checkout["with"] == {
+        # The published SHA, not `main`. main's tip is a superset -- a commit
+        # landing between the push and this job would silently become part of
+        # what the report vouches for.
+        "ref": "${{ needs.grade.outputs.published_head }}",
+        # The ancestry proof asks whether those commits are reachable from
+        # origin/main, and a shallow clone cannot answer that.
+        "fetch-depth": 0,
+        "persist-credentials": False,
+    }
+    assert (
+        "scripts/verify_published_grades.py"
+        in verify_by_name["Verify what this run published"]["run"]
+    )
+    assert verify_by_name["Upload the verification report"]["if"] == "always()", (
+        "the report of a *failed* verification is the one that has to survive; "
+        "uploading only on success keeps the evidence for the runs that did "
+        "not need it"
+    )
 
     validate_steps = validate_job["steps"]
     validate_inputs = next(

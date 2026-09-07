@@ -25,6 +25,7 @@ Nothing here calls a model, grades anything, or spends anything.
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import subprocess
@@ -871,6 +872,81 @@ def test_the_cli_refuses_a_stale_path_before_touching_anything(tmp_path: Path):
     )
 
 
+def _semantics_diverged(payload):
+    """The gate ``backfill_one`` writes by, asked as a question.
+
+    That function computes exactly this list and then withholds every derived
+    field when it is non-empty. It is recomputed here rather than read off the
+    function's report because the function declines to look at a sealed file at
+    all, and six payloads on disk are sealed -- including the 185-task gold
+    ceiling. Reading the gate through it would quietly skip the files this
+    repository most wants held. ``test_the_census_reads_the_same_gate_the_script
+    _writes_by`` holds this copy against the original everywhere both can speak.
+    """
+    old = (payload.get("summary") or {}).get("wow") or {}
+    recomputed = backfill._compute_summary(copy.deepcopy(payload["tasks"]))["wow"]
+    return [k for k in backfill.SCALAR_RATES if old.get(k) != recomputed.get(k)]
+
+
+def _denominator_invariant(grades_dir: Path) -> tuple[list[str], list[str]]:
+    """Check the gate over a tree; return which payloads landed on each side.
+
+    Taken out of the test below so a synthetic corpus can be pushed through the
+    same code. A regression test that re-implements the rule it is guarding
+    proves only that two copies agree.
+    """
+    agreeing: list[str] = []
+    diverged: list[str] = []
+    for path in backfill.collect_grade_files(grades_dir):
+        payload = json.loads(path.read_text())
+        if not isinstance(payload.get("tasks"), list):
+            continue
+        wow = (payload.get("summary") or {}).get("wow")
+        if not isinstance(wow, dict):
+            continue
+        name = backfill._display(path)
+
+        if _semantics_diverged(payload):
+            diverged.append(name)
+            # The sharper half of the gate. A recomputed denominator under a
+            # published numerator it does not belong to states a fraction nobody
+            # ever computed, which is worse than the absence it replaces --
+            # absent at least reads as unknown.
+            assert "item_counts" not in wow, (
+                f"{name} carries denominators the current summariser disagrees "
+                "with; its published rates were divided by something else"
+            )
+            continue
+
+        agreeing.append(name)
+        counts = wow.get("item_counts")
+        assert counts is not None, (
+            f"{name} agrees with the current summariser, so the backfill had "
+            "licence to recover its denominators and did not"
+        )
+        assert set(counts) == {
+            "rubric_items",
+            "critical_items",
+            "precheck_items",
+            "judge_items",
+        }, f"{name} carries {sorted(counts)}"
+        assert counts["judge_items"] >= 0
+        # Every sector row must carry its own denominators too.
+        # SectorHeatmap.tsx draws a cell per sector off those rates, so a
+        # run-level count alone would leave each cell as ambiguous as it was.
+        by_sector = wow.get("by_sector") or {}
+        if payload["tasks"]:
+            assert not backfill._is_empty(by_sector), (
+                f"{name} graded {len(payload['tasks'])} tasks and agrees with "
+                "the current summariser, so an empty by_sector is unexplained"
+            )
+        for sector, row in by_sector.items():
+            assert "item_counts" in row, (
+                f"{name} sector {sector} has rates but no denominators"
+            )
+    return agreeing, diverged
+
+
 def test_the_committed_backfill_added_denominators_and_nothing_else():
     """What actually landed in the diff, read off the committed tree.
 
@@ -882,64 +958,124 @@ def test_the_committed_backfill_added_denominators_and_nothing_else():
     it carries beyond what ``_compute_summary`` would refuse is the one this
     change is for.
 
-    The counts moved once, when the five sealed payloads were unsealed and
-    backfilled: 22 -> 27 payloads, 62 -> 86 sector rows (21 existing rows
-    gained denominators and the anchor payload gained three rows it never
-    had), and one fewer empty ``by_sector`` for that same anchor. Every one of
-    those deltas is a file this suite can name.
+    This used to be a census: 28 payloads carrying denominators, 87 sector rows,
+    6 with an empty ``by_sector``. It is a walk of the whole repository, so
+    those numbers were a description of the corpus rather than a property of it,
+    and every legitimate new receipt moved them. That is not hypothetical -- the
+    figures had already been hand-edited twice, 22 -> 27 when the sealed
+    payloads were unsealed and 27 -> 28 in #448 when the 2026-09-07 smoke
+    published a grade at the new grader fingerprint. Nothing was wrong either
+    time. The contract asks for a smoke whenever the fingerprint moves, so the
+    same edit was owed on the next one, and a test whose failure is routine
+    stops being read.
 
-    They moved a second time on 2026-09-07, and by exactly one file. The
-    grader fingerprint moved, the contract asks for a paid smoke whenever it
-    does, and exp026c was graded again into the same ``_diagnostic`` fork:
-    27 -> 28 payloads and 86 -> 87 sector rows. ``empty_analytics`` does not
-    move, because the new payload carries a ``by_sector`` of its own -- the
-    same single sector and the same 38 rubric items as the run beside it. A
-    re-run lands *beside* its predecessor instead of replacing it, which is
-    what the fork is for, so this census grows by one each time the
-    fingerprint moves and the smoke is honoured.
+    What the counts were standing in for is a biconditional, and it is the thing
+    ``backfill_one`` actually enforces: a payload carries recovered denominators
+    **if and only if** the current summariser still reproduces its published
+    rates. 28 was just how many agreed; 6 was how many did not; 87 was the sector
+    rows under the 28. Asserting the rule instead is strictly stronger -- it
+    fails on a single payload landing on the wrong side, which no count can see
+    once two errors cancel -- and a 29th agreeing receipt costs nothing.
     """
-    grades = REPO_ROOT / "data" / "grades"
-    carried, sector_rows, empty_analytics = 0, 0, 0
-    for path in backfill.collect_grade_files(grades):
-        payload = json.loads(path.read_text())
-        if not isinstance(payload.get("tasks"), list):
-            continue
-        wow = (payload.get("summary") or {}).get("wow") or {}
-        if "item_counts" in wow:
-            carried += 1
-            counts = wow["item_counts"]
-            assert set(counts) == {
-                "rubric_items",
-                "critical_items",
-                "precheck_items",
-                "judge_items",
-            }, f"{backfill._display(path)} carries {sorted(counts)}"
-            assert counts["judge_items"] >= 0
-            # Every sector row must carry its own denominators too.
-            # SectorHeatmap.tsx draws a cell per sector off those rates, so a
-            # run-level count alone would leave each cell as ambiguous as it
-            # was.
-            for sector, row in (wow.get("by_sector") or {}).items():
-                assert "item_counts" in row, (
-                    f"{backfill._display(path)} sector {sector} has rates but "
-                    "no denominators"
-                )
-                sector_rows += 1
-        # by_rubric_category is empty everywhere on purpose; the other three
-        # are only empty where a guard refused them.
-        if backfill._is_empty(wow.get("by_sector")):
-            empty_analytics += 1
+    agreeing, diverged = _denominator_invariant(REPO_ROOT / "data" / "grades")
 
-    assert carried == 28, (
-        f"28 payloads should carry recovered denominators; {carried} do"
+    # Without this the rule passes vacuously on an empty corpus, which is the
+    # one way a count was doing work a property does not.
+    assert agreeing, "no payload agrees with the current summariser"
+    assert diverged, (
+        "no payload diverges, so the withholding half of the gate went "
+        "unexercised by this walk"
     )
-    assert sector_rows == 87, (
-        f"87 sector rows should carry them as well; {sector_rows} do"
+
+
+def test_the_census_reads_the_same_gate_the_script_writes_by():
+    """The copied gate has to stay the original.
+
+    ``_semantics_diverged`` recomputes what ``backfill_one`` computes, because
+    that function refuses sealed files and the test above must still hold them.
+    A copy is a place for the two to drift apart, so every payload the script
+    *will* speak about is checked against what the script says.
+    """
+    checked = 0
+    for path in backfill.collect_grade_files(REPO_ROOT / "data" / "grades"):
+        report = backfill.backfill_one(path, apply=False)
+        if "diverged" not in report:
+            # sealed, or no tasks/summary to gate on
+            continue
+        payload = json.loads(path.read_text())
+        assert report["diverged"] == _semantics_diverged(payload), (
+            f"{report['path']}: the census reads the gate differently from the "
+            "script it is describing"
+        )
+        checked += 1
+    assert checked, "backfill_one spoke about no payload at all"
+
+
+def test_a_receipt_published_after_this_change_does_not_move_the_verdict(
+    tmp_path: Path,
+):
+    """The #448 regression, run rather than asserted about.
+
+    #448 spent three hand-edits restoring green after the 2026-09-07 smoke
+    published one grade, and every recorded number it corrected had been right.
+    The census could not tell a new receipt from a defect. This pushes a corpus
+    through the same walk twice -- once, then again with a freshly published
+    agreeing payload added -- and requires the verdict to be unchanged.
+
+    The new payload is produced by running the real script over a pre-backfill
+    file, so it is in the state a published grade is actually in rather than a
+    shape hand-built to pass.
+    """
+    grades = tmp_path / "grades"
+    _write(grades, "diverged.json", _payload(MEASURED, judge_pass_rate=0.123))
+    _write(grades, "agreeing.json", _payload(MEASURED))
+    assert _run(grades, "--apply").returncode == 0
+    before = _denominator_invariant(grades)
+    assert before[0] and before[1], "the fixture must exercise both sides"
+
+    _write(grades, "published_later.json", _payload(NEVER_PRECHECKED))
+    assert _run(grades, "--apply").returncode == 0
+
+    after = _denominator_invariant(grades)
+    assert set(after[1]) == set(before[1]), "a new receipt changed the refused set"
+    assert set(after[0]) == set(before[0]) | {"published_later.json"}, (
+        "a new receipt has to join the agreeing side and disturb nothing else"
     )
-    assert empty_analytics == 6, (
-        "six payloads have no by_sector and every one is semantics-diverged; "
-        f"found {empty_analytics}"
-    )
+
+
+def test_the_walk_still_fails_a_payload_that_landed_on_the_wrong_side(
+    tmp_path: Path,
+):
+    """The negative control the counts used to provide.
+
+    Dropping a census is only safe if what replaces it still bites. Both halves
+    of the gate are broken here on purpose: an agreeing payload stripped of the
+    denominators it was entitled to, and a diverged one given denominators it
+    was refused. A count of 28 sees neither if they land in the same walk --
+    they cancel.
+    """
+    grades = tmp_path / "grades"
+    _write(grades, "agreeing.json", _payload(MEASURED))
+    assert _run(grades, "--apply").returncode == 0
+    stripped = json.loads((grades / "agreeing.json").read_text())
+    stripped["summary"]["wow"].pop("item_counts")
+    _write(grades, "agreeing.json", stripped)
+
+    with pytest.raises(AssertionError, match="licence to recover"):
+        _denominator_invariant(grades)
+
+    smuggled = _payload(MEASURED, judge_pass_rate=0.123)
+    smuggled["summary"]["wow"]["item_counts"] = {
+        "rubric_items": 3,
+        "critical_items": 3,
+        "precheck_items": 1,
+        "judge_items": 2,
+    }
+    other = tmp_path / "other"
+    _write(other, "smuggled.json", smuggled)
+
+    with pytest.raises(AssertionError, match="published rates were divided by"):
+        _denominator_invariant(other)
 
 
 def test_the_six_sealed_files_on_disk_are_still_sealed():

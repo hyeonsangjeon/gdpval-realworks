@@ -694,7 +694,19 @@ jobs:
       contents: write
       id-token: write
       actions: write  # required for the auto-resume workflow dispatch
+    # Handed to verify-published below. A grading run pushes with GITHUB_TOKEN,
+    # and GitHub starts no workflow for a push that token made, so nothing has
+    # ever run on the commit a paid run publishes. The SHAs collected here are
+    # what makes the follow-up job able to check that exact commit instead of
+    # whatever `main` happens to point at by the time it starts.
+    outputs:
+      published_commits: ${{ steps.published.outputs.commits }}
+      published_head: ${{ steps.published.outputs.head }}
     env:
+      # Appended to by each step that successfully pushes. A file rather than a
+      # step output because three different steps contribute and any of them
+      # may be the last one to run.
+      PUBLISHED_COMMITS_FILE: ${{ runner.temp }}/published_commits.txt
       GRADE_EXPERIMENT_YAML: ${{ inputs.experiment_yaml }}
       # The same name as one component. An experiment may sit in a directory,
       # and a GitHub artifact name may not contain a separator, so the two
@@ -1383,6 +1395,12 @@ jobs:
             echo "::error::could not push the grade file to ${GITHUB_REF_NAME} after 6 attempts"
             exit 1
           fi
+          # The commit that actually landed, read after the push succeeded. Not
+          # the SHA this job started at and not the one it built before the
+          # rebase: both of those name a tree nobody else has, and verifying
+          # either of them while calling it "the published result" is the
+          # pretence this record exists to prevent.
+          git rev-parse HEAD >> "$PUBLISHED_COMMITS_FILE"
           echo "committed=true" >> "$GITHUB_OUTPUT"
 
       - name: Auto-retrigger next chunk (time budget hit)
@@ -1643,6 +1661,11 @@ jobs:
               echo "::error::could not push the merged grade to ${GITHUB_REF_NAME} after 6 attempts"
               exit 1
             fi
+            # Same reason as the grade push above. The other branch of this
+            # `if` deliberately records nothing: an identical merge already on
+            # main is a commit some *other* shard published, and this run
+            # claiming it would attribute a tree it did not write.
+            git rev-parse HEAD >> "$PUBLISHED_COMMITS_FILE"
           fi
           echo "merged=true" >> "$GITHUB_OUTPUT"
           echo "grade_file=$FINAL_FILE" >> "$GITHUB_OUTPUT"
@@ -1719,6 +1742,33 @@ jobs:
             echo "::error::could not push the analysis to ${GITHUB_REF_NAME} after 6 attempts"
             exit 1
           fi
+          git rev-parse HEAD >> "$PUBLISHED_COMMITS_FILE"
+
+      # Runs whatever happened above, because the state that most needs
+      # recording is the one where a grade was pushed and a later step then
+      # failed: the commit is on main either way, and a job that dies before
+      # naming it leaves nothing for the verification to check.
+      - name: Record published commits
+        id: published
+        if: always() && inputs.dry_run == false
+        run: |
+          set -euo pipefail
+          if [[ ! -s "$PUBLISHED_COMMITS_FILE" ]]; then
+            echo "commits=" >> "$GITHUB_OUTPUT"
+            echo "head=" >> "$GITHUB_OUTPUT"
+            echo "[publish] nothing was pushed to ${GITHUB_REF_NAME} by this run"
+            exit 0
+          fi
+          # Deduplicated and space-joined. The analysis push rebases onto the
+          # grade push, so in a single-shot run the two SHAs differ; in a
+          # skip-cache hit there may be none at all.
+          COMMITS="$(awk '!seen[$0]++' "$PUBLISHED_COMMITS_FILE" | tr '\n' ' ' | sed 's/ *$//')"
+          echo "commits=$COMMITS" >> "$GITHUB_OUTPUT"
+          # The last one is the tree to check out: each push here is built on
+          # the one before it, so the newest commit is the only one whose tree
+          # holds every file this run published.
+          echo "head=${COMMITS##* }" >> "$GITHUB_OUTPUT"
+          echo "[publish] this run pushed: $COMMITS"
 
       - name: Upload cost ledger
         # Deliberately *not* gated on steps.grade.outputs.grade_file. That
@@ -1756,3 +1806,122 @@ jobs:
             ${{ steps.merge_shards.outputs.grade_file }}
             ${{ steps.analysis.outputs.analysis_file }}
           retention-days: 30
+
+  # The job that closes the gap this whole workflow had.
+  #
+  # `grade` pushes to main with GITHUB_TOKEN. GitHub documents that events
+  # triggered by that token do not create a workflow run, with only
+  # workflow_dispatch and repository_dispatch exempt -- so the result of a paid
+  # grading run has always landed on main with *no* run row against it. Not a
+  # red check: no check. On 2026-09-07 that let 94bb8fa and 602cea4 publish a
+  # re-graded smoke that broke five tests, main stayed red for two hours behind
+  # a green badge, and the failures surfaced only when an unrelated pull
+  # request rebuilt from the changed main.
+  #
+  # This runs in the same workflow, so no event is involved and there is
+  # nothing for a token to trigger -- the cycle risk of a publish re-arming a
+  # paid run is structurally zero rather than merely guarded. It is a separate
+  # job rather than another step in `grade` because `grade` runs inside the
+  # pinned grading container, which has no node and therefore cannot run the
+  # dashboard aggregation.
+  #
+  # Dispatching backend-tests.yml at the SHA was the other candidate and was
+  # rejected: `gh workflow run --ref` resolves a *branch*, and eleven shards
+  # push to main, so a dispatch would routinely be pinned to a main that had
+  # already moved past the commit it was meant to check -- red for a race
+  # rather than for a defect. `actions/checkout` takes a SHA directly, so this
+  # verifies the published commit itself with no race to lose.
+  verify-published:
+    needs: [grade]
+    # Not `success()`. A run that pushed its grade and then died at a later
+    # step is exactly the run whose published commit is unverified, and gating
+    # on the paid job's overall result would skip precisely that case.
+    if: always() && needs.grade.outputs.published_commits != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    # Strictly narrower than the job it follows. This one reads the tree and
+    # reports; it has no business writing to the repository, dispatching a
+    # workflow, or holding an OIDC identity, and saying so here is cheaper than
+    # trusting that it never will.
+    permissions:
+      contents: read
+    steps:
+      # The commit itself, by SHA -- not the branch. Checking out main's tip
+      # would verify a tree that *contains* what was published, which is a
+      # superset and a different claim; a later commit landing between the push
+      # and this job would silently become part of what the report vouches for.
+      # The last published SHA is the newest tree this run wrote, so it holds
+      # every file the earlier pushes added.
+      #
+      # fetch-depth: 0 because the ancestry proof below asks whether those
+      # commits are reachable from origin/main, and a shallow clone cannot
+      # answer that. `git merge-base --is-ancestor` on a missing object exits
+      # non-zero, which would read as "not published" -- a false failure in the
+      # one check that must not have any.
+      - name: Checkout the exact published commit
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ needs.grade.outputs.published_head }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      # What GitHub said, checked against what is on disk. The checkout above
+      # is told a SHA; this is where the run refuses to be a different one.
+      - name: Verify the published commits are on main
+        env:
+          PUBLISHED_COMMITS: ${{ needs.grade.outputs.published_commits }}
+          PUBLISHED_HEAD: ${{ needs.grade.outputs.published_head }}
+        run: |
+          set -euo pipefail
+          for sha in $PUBLISHED_COMMITS; do
+            [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || {
+              echo "::error::not a commit SHA: $sha"
+              exit 1
+            }
+          done
+          [[ "$(git rev-parse HEAD)" == "$PUBLISHED_HEAD" ]] || {
+            echo "::error::checked out $(git rev-parse HEAD), expected $PUBLISHED_HEAD"
+            exit 1
+          }
+          git fetch --no-tags origin main
+          echo "origin/main is at $(git rev-parse origin/main)"
+          echo "verifying at $PUBLISHED_HEAD: $PUBLISHED_COMMITS"
+
+      - name: Setup Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.10.12"
+          cache: pip
+          cache-dependency-path: batch-runner/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          cd batch-runner
+          pip install -r requirements.txt
+
+      # No continue-on-error, and no flag that turns a check off. A failure
+      # here fails the workflow with the commit and the check named in the job
+      # summary. It does not revert, rewrite or delete what was published: the
+      # artifact is the evidence, and the fix goes forward.
+      - name: Verify what this run published
+        env:
+          PUBLISHED_COMMITS: ${{ needs.grade.outputs.published_commits }}
+        run: |
+          set -euo pipefail
+          python batch-runner/scripts/verify_published_grades.py \
+            --commits $PUBLISHED_COMMITS \
+            --ref origin/main \
+            --summary "$GITHUB_STEP_SUMMARY" \
+            --report published-verification.json
+
+      # always(), so the report of a *failed* verification is the one that
+      # survives. Uploading only on success would keep the evidence for the
+      # runs that did not need it.
+      - name: Upload the verification report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: published-verification-${{ github.run_id }}-${{ github.run_attempt }}
+          path: published-verification.json
+          if-no-files-found: warn
+          retention-days: 90

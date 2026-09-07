@@ -11,7 +11,7 @@ Every figure it records is recomputed here from the ledgers themselves, because
 a measurement written into a file by hand is exactly the kind of number that
 goes quietly stale -- which is the failure this whole entry is about.
 
-Four things this file is careful about.
+Five things this file is careful about.
 
 **Committed means tracked, not present.** The claim is about what someone gets
 from a clone. A directory walk would also pass on a ledger that exists only in
@@ -39,8 +39,20 @@ break.
 context threshold for 5.6-sol, so this file asserts the model is still *unpriced*
 alongside asserting the numbers. A future change that used these figures to give
 5.6-sol a rate would fail here, which is the point.
+
+**It measures a corpus, not the repository.** The figures come from the 33
+ledgers pinned in ``gpt56sol_ledger_corpus.json`` by path and sha256, and that
+file's own digest is stated in the entry. Reading them from a live walk of
+``data/grades`` instead conflated a snapshot with a census: the 2026-09-07 smoke
+published a 33rd ledger and three recorded figures went red without one of them
+being wrong, and #448 restored green by hand. The contract asks for a smoke
+whenever the grader fingerprint moves, so that edit was owed again on the next
+one. What the live walk is still read for is the thing a count cannot say --
+that no pinned ledger has left the tree -- and the surplus is reported rather
+than compared to a number.
 """
 
+import hashlib
 import json
 import subprocess
 from collections import defaultdict
@@ -59,6 +71,13 @@ PRICE_TABLE_PATH = (
 )
 GRADES = REPO_ROOT / "data" / "grades"
 
+#: The ledgers the entry's figures were measured from, pinned by path and digest.
+#: Named by the entry itself, so the two cannot drift apart silently.
+CORPUS_PATH = (
+    REPO_ROOT
+    / "batch-runner/experiments/execution_envelope/gpt56sol_ledger_corpus.json"
+)
+
 #: The model this file is about. Unpriced, and expected to stay that way.
 MODEL = "gpt-5.6-sol"
 
@@ -72,17 +91,25 @@ SIBLING_CONTEXT_SPLIT = 272_000
 SHARD_DIR = "_shards"
 REPEAT_DIR = "_repeats"
 
+#: The grader source the 185-task gold-ceiling run was published at. The dollar
+#: bound below is that run's arithmetic, so the ledger is named rather than
+#: assumed unique -- a re-grade forks beside it, which is what the fork is for.
+GOLD_CEILING_SOURCE = "src_79c2f5035c4aa826"
+
 MILLION = Decimal(1_000_000)
 
 
 def _restate(field, recorded, recomputed):
     """Say what to write, so a stale figure is a correction and not a hunt."""
     return (
-        f"{field}: the entry records {recorded!r}; the committed ledgers say "
-        f"{recomputed!r}. Publishing a grade run moves these. Write "
-        f"{recomputed!r} into models_deliberately_not_priced['azure:{MODEL}']"
-        f"['measured_from_committed_ledgers']['{field}'] once you have checked "
-        "that the prose around it still reads true."
+        f"{field}: the entry records {recorded!r}; the pinned corpus says "
+        f"{recomputed!r}. Publishing a grade run no longer moves these -- the "
+        f"figures are measured from the {CORPUS_PATH.name} list, not from a walk "
+        "of data/grades -- so a disagreement here means a pinned ledger's bytes "
+        "changed or the list was regenerated without re-measuring. Recompute, "
+        f"re-read the prose, then write {recomputed!r} into "
+        f"models_deliberately_not_priced['azure:{MODEL}']"
+        f"['measured_from_committed_ledgers']['{field}']."
     )
 
 
@@ -101,11 +128,90 @@ def measured(entry):
 
 
 @pytest.fixture(scope="module")
-def ledger_paths():
-    """Every committed grading cost ledger, located by shape rather than name."""
-    found = sorted(GRADES.rglob("*.cost_ledger.jsonl"))
-    assert found, "no grading cost ledgers under data/grades"
-    return found
+def corpus(measured):
+    """The pinned list of ledgers every figure in the entry was measured from.
+
+    Read through its digest rather than merely opened. The list is what stops a
+    new receipt from turning correct figures red; the digest is what stops the
+    list itself from growing quietly, which would put the counts back to being
+    unchecked in a way no assertion below could see.
+    """
+    text = CORPUS_PATH.read_text(encoding="utf-8")
+    actual = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    assert actual == measured["corpus_sha256"], (
+        f"{CORPUS_PATH.name} has been edited: the entry states "
+        f"{measured['corpus_sha256']}, the file hashes to {actual}. If ledgers "
+        "were deliberately added to the snapshot, re-measure every figure in "
+        "measured_from_committed_ledgers, re-read the prose around them, and "
+        "restate corpus_sha256. If they were not, this file changed under a "
+        "measurement that still claims to describe it."
+    )
+    document = json.loads(text)
+    assert document["measured_for"].startswith(
+        "models_deliberately_not_priced['azure:gpt-5.6-sol']"
+    ), "the corpus file no longer says which entry it belongs to"
+    assert measured["corpus_file"].endswith(CORPUS_PATH.name), (
+        "the entry names a different corpus file than this test reads"
+    )
+    return document
+
+
+def _resolve_pinned(document, root):
+    """The pinned ledgers as paths, refusing any that left the tree.
+
+    Taken out of the fixture so a synthetic corpus can be pushed through the
+    same code. A regression test that re-implements the resolution it guards
+    proves only that two copies agree.
+    """
+    paths = [root / item["path"] for item in document["ledgers"]]
+    missing = [str(p.relative_to(root)) for p in paths if not p.is_file()]
+    assert not missing, (
+        "the snapshot rests on ledgers that are no longer in the tree: "
+        f"{missing}. A published receipt is not deleted; find where they went "
+        "before touching any figure that was measured from them."
+    )
+    return paths
+
+
+def _surplus(document, root, grades_dir):
+    """Ledgers on disk the snapshot was not measured from.
+
+    Returned rather than counted. The direction is the whole point: extra
+    ledgers are the contract being honoured, a missing one is a published
+    receipt that left the tree, and only the second is a failure.
+    """
+    on_disk = {
+        str(p.relative_to(root)) for p in grades_dir.rglob("*.cost_ledger.jsonl")
+    }
+    pinned = {item["path"] for item in document["ledgers"]}
+    assert pinned <= on_disk, (
+        "pinned ledgers are missing from the tree: " + str(sorted(pinned - on_disk))
+    )
+    return sorted(on_disk - pinned)
+
+
+def _rewritten(document, root):
+    """Pinned ledgers whose bytes no longer hash to what was measured."""
+    return [
+        f"{item['path']}: {item['sha256']} -> {actual}"
+        for item in document["ledgers"]
+        for actual in [hashlib.sha256((root / item["path"]).read_bytes()).hexdigest()]
+        if actual != item["sha256"]
+    ]
+
+
+@pytest.fixture(scope="module")
+def ledger_paths(corpus):
+    """The pinned ledgers, resolved to paths.
+
+    This used to be ``GRADES.rglob("*.cost_ledger.jsonl")``. That made a
+    measurement of a corpus indistinguishable from a description of the
+    repository: the 2026-09-07 smoke published a 33rd ledger and three recorded
+    figures went red without a single recorded figure being wrong. #448 restored
+    them by hand. The contract asks for a smoke whenever the grader fingerprint
+    moves, so the same edit was owed again on the next one.
+    """
+    return _resolve_pinned(corpus, REPO_ROOT)
 
 
 @pytest.fixture(scope="module")
@@ -175,6 +281,146 @@ def test_the_recorded_counts_recompute_from_the_ledgers(measured, calls, ledger_
     assert measured["duplicate_rows"] == calls["duplicates"], _restate(
         "duplicate_rows", measured["duplicate_rows"], calls["duplicates"]
     )
+
+
+def test_every_pinned_ledger_still_holds_the_bytes_it_was_measured_from(corpus):
+    """The digests are what the counts used to be standing in for.
+
+    A row count is a weak proxy for "this file is intact": it moves when a
+    ledger is deleted, but it also moves when an unrelated run publishes, and it
+    does not move at all if a line is edited in place. The digest answers the
+    question the count was being asked -- has anything this measurement rests on
+    been rewritten -- and answers it per file, so a failure names the ledger
+    rather than a delta.
+    """
+    changed = _rewritten(corpus, REPO_ROOT)
+    assert not changed, (
+        "a ledger under the measurement was rewritten after it was measured. "
+        "A published receipt is append-only; nothing in the grading run edits "
+        "one in place. Figures computed from these files are now describing "
+        "bytes that no longer exist:\n  " + "\n  ".join(changed)
+    )
+
+
+def test_a_ledger_published_after_the_snapshot_does_not_move_these_figures(
+    corpus, ledger_paths
+):
+    """The growth case, stated as the property rather than as a count.
+
+    This is the failure #448 had to repair by hand and the reason the corpus is
+    pinned at all. A grading run publishes a ledger; the tree now holds more
+    than the snapshot does; nothing recorded here is wrong. So the live walk is
+    read for one thing only -- that the snapshot is still a subset of what is on
+    disk -- and the surplus is reported, never asserted against a number.
+
+    The direction matters. Extra ledgers are the contract being honoured. A
+    *missing* one is a published receipt that left the tree, which is not
+    growth, and ``_resolve_pinned`` refuses that before this test is reached.
+    """
+    for relative in _surplus(corpus, REPO_ROOT, GRADES):
+        # Not counted, but not unread either: a ledger nobody can parse is worth
+        # failing on whether or not this snapshot was measured from it.
+        for number, line in enumerate(
+            (REPO_ROOT / relative).read_text(encoding="utf-8").splitlines(), 1
+        ):
+            if not line.strip():
+                continue
+            try:
+                json.loads(line)
+            except json.JSONDecodeError as exc:
+                pytest.fail(f"{relative}:{number} is not JSON: {exc}")
+    assert len(ledger_paths) == len(corpus["ledgers"])
+
+
+def _plant(root, relative, body):
+    path = root / relative
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(body, encoding="utf-8")
+    return {"path": relative, "sha256": hashlib.sha256(body.encode()).hexdigest()}
+
+
+@pytest.fixture
+def synthetic(tmp_path):
+    """Two pinned ledgers in a throwaway tree, so the real ones stay untouched."""
+    grades = tmp_path / "data" / "grades"
+    ledgers = [
+        _plant(
+            tmp_path,
+            f"data/grades/run-{n}/r.cost_ledger.jsonl",
+            json.dumps({"call_id": f"c{n}", "resolved_model": MODEL}) + "\n",
+        )
+        for n in (1, 2)
+    ]
+    return tmp_path, grades, {"ledgers": ledgers}
+
+
+def test_a_receipt_published_after_this_change_does_not_move_the_verdict(synthetic):
+    """The #448 regression, run rather than asserted about.
+
+    #448 spent three hand-edits restoring green after the 2026-09-07 smoke
+    published one ledger, and every figure it corrected had been right. The live
+    walk could not tell a new receipt from a defect. Here a third ledger is
+    published into a pinned corpus of two: the resolution is unchanged, the
+    digests are unchanged, and the newcomer is reported as surplus rather than
+    counted.
+    """
+    root, grades, document = synthetic
+    before = _resolve_pinned(document, root)
+    assert _surplus(document, root, grades) == []
+
+    _plant(
+        root,
+        "data/grades/run-3/r.cost_ledger.jsonl",
+        json.dumps({"call_id": "c3", "resolved_model": MODEL}) + "\n",
+    )
+
+    assert _resolve_pinned(document, root) == before, "a new receipt moved the corpus"
+    assert _rewritten(document, root) == [], "a new receipt disturbed a digest"
+    assert _surplus(document, root, grades) == ["data/grades/run-3/r.cost_ledger.jsonl"]
+
+
+def test_the_snapshot_still_bites_when_a_pinned_ledger_changes(synthetic):
+    """The negative control the counts used to provide.
+
+    Dropping a live count is only safe if what replaces it still fails on the
+    thing the count could see. Both losses are exercised: a pinned ledger
+    deleted, and a pinned ledger rewritten in place -- which no row count ever
+    caught, because editing a line leaves the total alone.
+    """
+    root, grades, document = synthetic
+    pinned = document["ledgers"][0]["path"]
+
+    (root / pinned).write_text("{}\n", encoding="utf-8")
+    assert _rewritten(document, root), "a rewritten ledger passed unnoticed"
+
+    (root / pinned).unlink()
+    with pytest.raises(AssertionError, match="no longer in the tree"):
+        _resolve_pinned(document, root)
+    with pytest.raises(AssertionError, match="missing from the tree"):
+        _surplus(document, root, grades)
+
+
+def test_the_sibling_receipt_check_still_names_the_run_it_checks():
+    """#448's second fix, held against the file it was made in.
+
+    ``test_both_cost_halves_recompute_from_their_ledgers.py`` located its grade
+    by shape and asserted it was the only match. The ``_diagnostic`` fork exists
+    so a re-run lands beside its predecessor, so that assertion was going to fail
+    the first time the fingerprint contract was honoured -- and did. #448 gave it
+    the grader source to select on. This is the same class of defect as the
+    census above and reverts the same way: someone deletes the selector because
+    "there is only one anyway", and it passes until the next smoke.
+    """
+    source = (
+        REPO_ROOT
+        / "batch-runner/tests/test_both_cost_halves_recompute_from_their_ledgers.py"
+    ).read_text(encoding="utf-8")
+    assert "GRADING_SOURCE" in source, (
+        "the sibling receipt check stopped naming the run whose totals it "
+        "verifies; a re-grade at a new fingerprint will pair its numbers with "
+        "another run's ledger or fail at setup"
+    )
+    assert "src_" in source, "GRADING_SOURCE no longer pins a grader fingerprint"
 
 
 def _run_dir(path):
@@ -419,11 +665,27 @@ def test_no_committed_request_reaches_the_sibling_split(measured, calls):
 
 
 def test_the_stated_dollar_bound_recomputes_from_the_published_meters(measured):
-    """$549.50 to $980.84 is arithmetic on the merged run, not an estimate."""
+    """$549.50 to $980.84 is arithmetic on the merged run, not an estimate.
+
+    The run is named by its grader fingerprint rather than assumed to be the
+    only gold-ceiling ledger on disk. It was the second: the glob matched one
+    file and asserted so, which is the same assumption #448 had to remove from
+    test_both_cost_halves_recompute_from_their_ledgers.py after the 2026-09-07
+    re-run published a sibling. The bound below is this run's, and a re-grade at
+    a new fingerprint lands beside it rather than replacing it -- so naming the
+    run is what keeps the arithmetic attached to the numbers it came from.
+    """
     raw = _load_table()
     meters = raw["azure_published_meters"][MODEL]
-    merged = sorted(GRADES.rglob("*gold_ceiling_185*.cost_ledger.jsonl"))
-    assert len(merged) == 1
+    merged = sorted(
+        p
+        for p in GRADES.rglob("*gold_ceiling_185*.cost_ledger.jsonl")
+        if GOLD_CEILING_SOURCE in p.name and SHARD_DIR not in p.parts
+    )
+    assert len(merged) == 1, (
+        f"expected exactly one merged ledger at {GOLD_CEILING_SOURCE}; found "
+        f"{[p.name for p in merged]}"
+    )
     rows = [
         json.loads(line)
         for line in merged[0].read_text(encoding="utf-8").splitlines()
