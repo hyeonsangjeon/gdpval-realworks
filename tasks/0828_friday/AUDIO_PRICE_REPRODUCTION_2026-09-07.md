@@ -24,25 +24,36 @@
 
 ## 1. 재현: 지금 커밋된 원장이 실제로 어떤 상태인가
 
-`data/grades/**` 와 `batch-runner/results/**` 의 모든 `*.cost_ledger.jsonl`을 읽었다.
+`data/grades/**` 의 커밋된 `*.cost_ledger.jsonl` 32개를 읽었다. 아래 수치는 전부
+이 저장소에 커밋된 파일만으로 다시 낸 것이다 (재현 스크립트는 §6 참조).
 
 ```
-전체 원장 행                          68,616
-  azure:gpt-5.6-sol                   68,350
-  azure:gpt-audio-1.5                    176
-  azure:gpt-5.4                           84
-  azure:gpt-5.4-2026-03-05                 6
+원장 파일                                 32
+전체 행                               68,610      settled 68,587 / reserved 23
 ```
+
+모델별 행 수는 **어느 이름으로 세느냐에 따라 다르다.** 둘 다 적는다.
+
+| 모델 | 요청한 이름으로 | 응답이 보고한 이름으로 |
+|------|---------------|---------------------|
+| `azure:gpt-5.6-sol` | 68,350 | 68,338 |
+| `azure:gpt-audio-1.5` | **176** | **165** |
+| `azure:gpt-5.4` | 84 | 84 |
+| (이름 없음) | — | 23 |
+
+차이 23행은 **응답을 못 받아 정산되지 않은 예약**이다. 예약 시점에는 요청한 이름만
+있고 응답이 보고한 이름이 아직 없다. 가격표는 §4의 규칙대로 **응답이 보고한 이름**으로
+찾으므로, 값 매기기에 쓰이는 수는 오른쪽 열이다.
 
 소리 모델 176행만 보면:
 
 ```
 단계          perception 176 (전부)
 상태          settled 165 / reserved 11
-사유          price_missing 165 / (미정산 11)
+사유          price_missing 165 (미정산 11은 사유가 붙기 전)
 금액이 붙은 행                             0
 소리 몫을 담고 있는 행                      0   ← (c)의 증거
-입력 합계 72,634 · 출력 12,638 · 캐시 0 · 추론 0
+입력 합계 72,634 · 출력 12,038 · 캐시 0 · 추론 0
 ```
 
 11개 `reserved`는 정산되지 않은 예약이다. 명세 §6.2대로 사라지지 않고 남아
@@ -50,6 +61,18 @@
 
 **소리 몫을 담은 행은 0개다.** 이 176개는 계측이 소리를 볼 수 있게 되기 전에
 쓰였다. 그래서 이 행들의 소리 몫은 원장에서 복원할 수 없다.
+
+### 1.1 앞선 초안의 숫자 여섯 개를 정정한다
+
+이 문서 초안과 PR 본문 초안은 68,616행 / 정산 68,593 / 일치 90 / 지문 네 종류라고
+적었고, `azure:gpt-5.4-2026-03-05` 6행을 목록에 넣었다. **커밋된 나무에는 그런 행이
+없다.** 초안의 집계가 저장소에 없는 파일까지 훑은 것이다. 위 표는 커밋된 32개
+파일만으로 다시 낸 값이며, 누구든 §6의 스크립트로 같은 수를 얻는다.
+
+**결론은 하나도 바뀌지 않는다** — 달라진 행 0개, 뒤집힌 행 0개, 소리 값 못 매김,
+지배적 원인은 여전히 `gpt-5.6-sol`이다. 바뀐 것은 자릿수뿐이지만, 재현되지 않는
+숫자를 적어 두는 것 자체가 이 문서가 막으려는 일이므로 고쳐 적는다.
+
 
 ## 2. 원인 (a) — 요율이 없다 · 열려 있음
 
@@ -161,18 +184,20 @@ self._perception_client = cost_recorder.meter(
 
 ## 6. 재산정: 무엇이 가능하고 무엇이 불가능한가
 
-커밋된 원장 68,593개 정산 행 전부를 **오늘 표**로 다시 계산해 저장된 금액과 비교했다.
+커밋된 원장의 **정산된 68,587행 전부**를 **오늘 표**로 다시 계산해 저장된 금액과
+비교했다.
 
 ```
-재계산 == 저장값                90      (gpt-5.4 계열 전부)
+재계산 == 저장값                84      (gpt-5.4 84행 전부)
 다름                             0
 저장값 있는데 재계산 안 됨        0
 저장값 없는데 재계산됨            0
 둘 다 없음 (값 매길 수 없음)  68,503
 ```
 
-**한 행도 달라지지 않았다.** 숫자가 있던 행은 그대로고, 없던 행은 그대로 없다.
-가격표 지문이 움직인 이유는 요율이 아니라 문서라는 §4.2의 서술이 여기서 확인된다.
+84 + 68,503 = 68,587. **한 행도 달라지지 않았다.** 숫자가 있던 행은 그대로고, 없던
+행은 그대로 없다. 가격표 지문이 움직인 이유는 요율이 아니라 문서라는 §4.2의 서술이
+여기서 확인된다.
 
 값 매길 수 없는 68,503행의 내역:
 
@@ -205,6 +230,47 @@ self._perception_client = cost_recorder.meter(
 이 문서에 나오는 모든 금액은 **커밋된 원장 + 커밋된 가격표로 재계산한 값**이다.
 실제 청구서를 조회한 적이 없고 (로컬 az 테넌트는 워크플로 테넌트와 다르다),
 조회했다고 표시하지도 않는다.
+
+### 재현 방법
+
+위 수치는 전부 이 저장소 안의 것만으로 다시 낼 수 있다. `batch-runner/`에서:
+
+```python
+import json
+from pathlib import Path
+from core.cost_receipts import CallUsage, load_receipt_price_table, price_call
+
+root = Path(".").resolve().parent
+table = load_receipt_price_table(
+    root / "batch-runner/experiments/execution_envelope/model_price_table.json"
+)
+for path in sorted(root.glob("data/grades/**/*.cost_ledger.jsonl")):
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        row = json.loads(line)
+        if row.get("state") != "settled":
+            continue
+        usage = CallUsage(
+            input_tokens=row.get("input_tokens"),
+            cached_input_tokens=row.get("cached_input_tokens"),
+            output_tokens=row.get("output_tokens"),
+            reasoning_tokens=row.get("reasoning_tokens"),
+            audio_input_tokens=row.get("audio_input_tokens"),
+            audio_output_tokens=row.get("audio_output_tokens"),
+        )
+        again = price_call(
+            table.lookup(row.get("provider") or "", row.get("resolved_model") or ""),
+            usage,
+        ).cost_usd
+        # 저장값 row["model_cost_usd"] 와 비교
+```
+
+두 가지만 주의한다. `price_call`은 **가격을 먼저, 사용량을 나중에** 받고, 조회
+키는 요청한 이름이 아니라 **응답이 보고한 이름**(`resolved_model`)이다. 요청한
+이름으로 조회하면 정산되지 않은 23행이 조용히 다른 모델로 세어지고, 그것이 §1.1의
+초안 숫자가 어긋난 방향이다.
+
 
 ## 7. 이번에 고정한 것
 
@@ -260,6 +326,8 @@ step9가 열한 개 지문 불일치로 거절하는데, 그 거절은 돈이 �
 
 | 검사 | 결과 |
 |------|------|
+| 이 변경의 새 테스트 (`test_speech_is_not_charged_at_the_price_of_prose.py`) | **41 passed** (1.89초) |
+| 전체 백엔드 스위트 (로컬) | **8431 passed, 8 skipped, 45 deselected** (17분 13초, exit 0) |
 | 채점기 지문 동결 (`check_grader_hash_freeze.py`) | **PASS** — 진행 중 유료 실행 없음 |
 | 실행 환경 사전검사 (`check_execution_envelope_advance_check.py`) | 로컬 exit 1 — **이 변경과 무관** |
 
