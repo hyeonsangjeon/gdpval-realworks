@@ -165,6 +165,12 @@ tasks/rebuilding_grading_task/*
 !tasks/rebuilding_grading_task/334-audio-accuracy-measured.json
 !tasks/rebuilding_grading_task/334-audio-accuracy-measured-delivery.json
 !tasks/rebuilding_grading_task/335-why-the-format-failed.md
+# The report the eight-request diagnostic wrote. This is the only place the
+# masked response excerpts are kept -- §4 of the document above puts them here
+# and nowhere else, so if this file is not committed the excerpts exist only in
+# a CI artifact that expires. Held by
+# tests/test_audio_format_failure_diagnostic.py.
+!tasks/rebuilding_grading_task/335-audio-format-diagnostic.json
 
 # The grading run writes a sqlite mirror of the cost ledger beside every grade
 # file. The published record is the .jsonl next to it; the database is a local

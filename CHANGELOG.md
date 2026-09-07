@@ -12,6 +12,29 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Added
+- **The observation arm's replies were not malformed JSON. They were not JSON
+  at all.** The eight-request diagnostic ran at commit `1e06e452` and used
+  seven; `335-audio-format-diagnostic.json` holds the result. All three
+  reproduce probes failed exactly as `334` recorded, and all three failed the
+  same way: zero braces, zero code fences, `json.loads` stopping at character 0
+  with `Expecting value` and the whole reply still unconsumed, none of the five
+  contract keys present. Every reply that arrived carried `finish_reason:
+  stop`, so these three were not truncated — read off the field itself, which
+  is what `335` §7 said would have to settle it after `334` §3 inferred it from
+  output token counts. No refusals, no reasoning blocks, and the collector
+  agreed with core on all five. The two contrast probes returned clean
+  five-key JSON from the same code against the same clips minutes apart, so
+  the failures are not an artifact of the collector. Counts here describe a
+  sample chosen *because* it failed in `334`; they do not estimate a rate.
+- **Structured outputs are unavailable on this audio deployment, which
+  `334` §10 left open and the documentation did not settle.** Both
+  compatibility probes were rejected `400 invalid_request_error` on
+  `param: response_format` — `'json_object' ... is not supported with this
+  model` and `'json_schema' ... is not supported with this model`. Neither was
+  re-sent without the rejected parameter: the rejection is the result, and a
+  parameter-free retry reported as "supported" would be a fabrication. The
+  reserved eighth request was therefore not spent, since a deterministic 400 is
+  an answer rather than a lost response body.
 - **A diagnostic that can see what `334` could not: the response bodies.**
   `334` reported that 51 of the observation arm's 60 replies were
   `format_error:unparseable_json` and stopped there, because that run stored no
