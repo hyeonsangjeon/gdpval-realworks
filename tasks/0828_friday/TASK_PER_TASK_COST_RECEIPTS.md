@@ -192,6 +192,9 @@ grade schema를 수정하지 않는다. 계약 변경이 필요하면 Project �
       "output_usd_per_million": "…",
       "reasoning_billed_as": "output | separate | unknown",
       "reasoning_usd_per_million": "…",
+      "audio_billed_as": "separate | unpriced",
+      "audio_input_usd_per_million": "…",
+      "audio_output_usd_per_million": "…",
       "source": "<가격 고지 URL>",
       "last_reviewed": "YYYY-MM-DD",
       "currency": "USD",
@@ -214,6 +217,60 @@ grade schema를 수정하지 않는다. 계약 변경이 필요하면 Project �
   나중에 어느 가격표로 계산했는지 재현할 수 있게 한다.
 - `attribution: "shared"`인 실행 환경은 작업에 배분하지 않는다 (P5).
 - 항목 추가·수정은 `source`와 `last_reviewed` 없이 허용하지 않는다.
+
+### 4.1 소리 토큰 요율 (`audio_billed_as`)
+
+세 필드 모두 **선택**이다. 없으면 그 항목은 `unpriced`, 즉 **소리를 값 매기지
+않는다**는 뜻이다. 기존 항목을 한 글자도 고치지 않고도 fail closed가 되도록 기본값을
+그렇게 두었다.
+
+| 값 | 뜻 | 요율 필드 |
+|----|-----|-----------|
+| `separate` | 소리 입력·출력이 글 요율과 **다른 자기 요율**로 청구된다 | 두 개 다 필수 |
+| `unpriced` (기본) | 이 항목으로는 소리를 값 매길 수 없다 | 없어야 한다 |
+
+**"소리도 글 요율로 청구된다"는 세 번째 값은 두지 않는다.** 그렇게 고지한 사업자를
+찾지 못했다. 값이 없다는 이유로 옆 칸 숫자를 빌려 쓰는 통로가 바로 그 세 번째
+값이므로, 만들지 않는 것이 이 표의 안전장치다.
+
+로더가 거절하는 경우:
+
+- `audio_billed_as`가 위 두 값이 아니다 → `ValueError`
+- `separate`인데 두 요율 중 하나가 없다 → `ValueError` (없는 필드 이름을 말한다)
+- 요율은 있는데 `audio_billed_as`가 `separate`가 아니다 → `ValueError`
+  (적용될 일 없는 숫자가 표에 앉아 있으면 다음 사람이 적용된다고 읽는다)
+
+값을 매기지 못하는 모델은 `providers`에 넣지 않고
+`models_deliberately_not_priced`에 **사유·조회한 질의·조회 날짜·무엇이 있으면
+해결되는가**를 적는다. 빈 항목이나 `0` 요율로 채우지 않는다 (P1, P2).
+
+### 4.2 이번에 고정한 가격표
+
+| 항목 | 값 |
+|------|-----|
+| 스키마 | `cost-receipt-price-table-v1` (변경 없음) |
+| 지문 (파일 전체 바이트 SHA-256) | `a2d60e1c96390313f41b4a249a7dea3606b62522858902f49f152da30941d2d4` |
+| 직전 지문 | `fd09d28c7247e9d40f1f9218d01aa961d6545d377cdaccf51d0857ea6e43c741` |
+| 검토일 | 2026-09-07 |
+| 출처 | 공개 Azure Retail Prices API (비로그인). 질의 원문은 파일 안 `models_deliberately_not_priced` / `azure_published_meters`에 있다 |
+| 요율 변경 | **없음.** `providers`의 네 항목은 바이트 단위로 동일하다 |
+| 적용 근거 | 새로 더한 것은 §4.1의 소리 필드 정의와 조회 기록뿐이다. 지문이 움직인 이유는 요율이 아니라 문서다 |
+
+**기존에 고정된 영수증을 덮어쓰지 않는다** — 확인한 내용은 다음과 같다.
+
+- 커밋된 영수증·원장이 이미 고정한 지문은 네 종류(`f878bb9e…` 46,433행,
+  `d4203181…` 21,704행, `ff85f9f5…` 1,051행, `fc7f25e4…` 160행)이며 **전부 직전
+  파일과도 이미 다르다.** 지문은 "이 행을 값 매긴 표"의 기록이지 "지금 파일이 이
+  내용"이라는 주장이 아니다.
+- `build_receipt`는 각 행이 스스로 적은 표를 먼저 읽고, 인자로 받은 지문은 행이
+  아무 말도 하지 않을 때만 쓴다 (`core/cost_receipts.py`). 그래서 어제 표로 값
+  매긴 행을 오늘 표로 연 재개 라운드가 과거 기록을 고쳐 쓰지 않는다.
+- 직전 지문 `fd09d28c…`를 고정한 커밋된 산출물은 **하나도 없다.**
+- 살아 있는 파일의 해시를 대조해 실패시키는 코드는
+  `core/agentic_pricing.load_pinned_model_pricing` 하나뿐인데, 그것은 스키마가
+  `agentic-pricing-v1`이고 최상위 키가 `{schema_version, models}`뿐인 **다른**
+  파일을 본다. 이 파일은 그 검사에 애초에 통과하지 못하는 모양이므로 그 경로가
+  가리키는 파일이 아니다.
 
 ## 5. 계측
 
@@ -246,7 +303,8 @@ grade schema를 수정하지 않는다. 계약 변경이 필요하면 Project �
 
 ### 5.3 이중 과금 방지
 
-두 가지를 반드시 지킨다.
+세 가지를 반드시 지킨다. 셋 다 같은 모양의 문제다 — 사업자가 보고하는 큰 수 안에
+작은 수가 **이미 들어 있는데**, 그 작은 수를 밖에서 한 번 더 곱하는 것.
 
 1. **캐시된 입력 토큰**: 사업자가 보고하는 `input_tokens`는 보통 캐시 적중분을
    **포함한** 총량이다. 따라서 과금 대상 입력은
@@ -255,6 +313,41 @@ grade schema를 수정하지 않는다. 계약 변경이 필요하면 Project �
 2. **추론 토큰**: `reasoning_billed_as`가 `output`이면 이미 `output_tokens`에
    포함되어 있으므로 **다시 곱하지 않는다**. `separate`일 때만 별도 단가를
    적용한다. `unknown`이면 값을 매기지 않고 `usage_partial`이다.
+3. **소리 토큰**: `audio_tokens`도 `input_tokens` / `output_tokens` 안에 들어 있다
+   (§5.5의 측정 근거). 항목이 `separate`면 세 몫으로 갈라 각각 한 번씩만 곱한다.
+
+   ```
+   글 입력  = input_tokens - cached_input_tokens - audio_input_tokens
+   캐시     = cached_input_tokens
+   소리 입력 = audio_input_tokens
+   글 출력  = output_tokens - audio_output_tokens
+   소리 출력 = audio_output_tokens
+   ```
+
+   각 항은 음수가 되지 않게 0에서 자른다. `audio > input`(또는 출력 쪽)이면 포함
+   관계가 깨진 것이므로 §5.3.1의 모순 규칙을 따른다.
+
+#### 5.3.1 소리가 값을 못 받는 경우
+
+| 상황 | 처리 |
+|------|------|
+| 소리 토큰이 있는데 항목이 소리를 값 매기지 않는다 | `price_missing`, 금액 없음 |
+| 항목은 소리를 값 매기는데 두 소리 수 중 하나가 보고되지 않았다 | `usage_partial` |
+| `audio_input > input` 또는 `audio_output > output` | `usage_partial` |
+| 소리와 캐시가 같은 호출에 함께 있다 | `usage_partial` (아래) |
+
+마지막 줄이 열려 있는 축이다. 캐시 적중분 안에 소리가 얼마나 들어 있는지 어느
+사업자도 고지하지 않는다. 둘 다 0보다 크면 위 뺄셈이 소리를 캐시에서도 빼는지
+아닌지 알 수 없으므로, 짐작해서 한쪽으로 정하지 않고 그 호출을 `usage_partial`로
+둔다. 고지가 나오면 그때 규칙을 정한다.
+
+**소리 몫만으로 총액을 만들지 않는다.** 저장된 60개 호출에서 소리는 입력의
+9.8%(18,924 중 1,848)다. 소리 수만 곱한 값은 총액이 아니라 총액의 일부이며,
+`complete`가 될 수 없다.
+
+`missing_reasons`에 새 열거값을 만들지 않았다. §3.4의 8개는 `grade.schema.json`이
+닫아 둔 목록이고, 위 상황은 전부 기존 `price_missing`·`usage_partial`로 정확히
+읽힌다. 아홉 번째 값을 더하면 이미 게시된 채점 산출물이 스키마 검증에 걸린다.
 
 ### 5.4 연결 지점
 
@@ -273,6 +366,73 @@ grade schema를 수정하지 않는다. 계약 변경이 필요하면 Project �
 **미지원 경로**: Agentic Sandbox V2와 Native Codex처럼 실제 모델 실행 경로가
 없거나 확인되지 않은 곳은 비용을 만들어내지 않는다. `stage_unsupported`를 달고
 `partial`, 실행되지 않았으면 `not_run`이다.
+
+#### 5.4.1 소리 판독 경로는 이미 연결되어 있다
+
+`perception` 줄은 세션 B 소유 파일(`core/perception/audio.py`,
+`core/perception/vision.py`)을 가리키지만, **원장에 쓰는 주체는 그 파일이 아니다.**
+`core/grader.py`가 계측 래퍼를 씌우고
+
+```python
+self._perception_client = cost_recorder.meter(
+    client, provider="azure", stage=STAGE_PERCEPTION
+)
+```
+
+그 래퍼가 호출 전 `reserve`, 응답 후 `extract_usage(response)`로 `settle`한다.
+`meter`·`extract_usage`·`CallUsage`·원장 스키마는 전부 세션 A 파일이다. 따라서
+소리 토큰이 원장에 남게 하는 데 **B 파일 수정은 필요하지 않았고, 하지 않았다.**
+판독기는 자기 클라이언트를 래퍼에 넘길 뿐이고 기록은 래퍼가 한다.
+
+`core/perception/audio.py`가 부르는 `read_reported_usage`는 B가 보고서용으로
+따로 굴리는 누계이며 원장에 들어가지 않는다. 그쪽은 지금도 소리 몫을 보지 않지만,
+**보지 않아도 원장은 정확하다.** B가 화면·보고서에 소리 몫을 보이고 싶어지면 그때
+`ReportedUsage`에 필드를 더하는 것이 A 쪽 계약 변경이며, 그전까지는 없는 층을
+미리 만들지 않는다.
+
+이 연결은 짐작이 아니라 검증했다 —
+`tests/test_speech_is_not_charged_at_the_price_of_prose.py`의 「the connection」
+절이 실제 `meter()` 래퍼로 모의 응답을 통과시켜 원장 행에 소리 몫이 남는 것,
+그 행이 글 요율로 값 매겨지지 않는 것, 소리가 없는 호출은 같은 래퍼·같은 표로
+여전히 값이 매겨지는 것을 각각 확인한다.
+
+### 5.5 포함 관계는 측정한 것이다
+
+§5.3의 3번은 규약이 아니라 **저장된 자료에서 나온 결과**다. B의 331건 소리 진단이
+남긴 60개 호출에는 각 요청이 실은 소리 길이와 프롬프트 길이가 함께 있다.
+
+| 검사 | `input` 그대로 | `input - audio` |
+|------|---------------|-----------------|
+| 소리 길이와의 상관 | +0.8488 | **+0.0134** |
+| 프롬프트 글자수와의 상관 | +0.4589 | **+0.9224** |
+| 글자당 토큰 (평균 ± 표준편차) | 0.28787 ± 0.00276 | **0.25976 ± 0.00093** |
+
+소리 토큰을 빼면 입력이 소리 길이와 무관해지고 프롬프트 길이와 거의 일치한다.
+남은 것이 글이라는 뜻이다. 소리 토큰 자체는 길이와 +0.9918로 붙어 있고 초당
+9.8597개인데, 이는 사전 등록된 10.00/초와 사실상 같다. 60개 전부에서
+`audio_tokens == audio_tokens_billed`였다.
+
+합계는 입력 18,924, 그중 소리 1,848, 출력 4,223이다. 즉 **글 입력 17,076, 소리는
+입력의 9.8%**다.
+
+빼기가 아니라 더하기였다면(소리가 입력 *바깥*이었다면) 위 두 열은 반대로 움직였을
+것이다. 그러지 않았으므로 뺀다.
+
+### 5.6 값을 매기지 않는 이유는 기록으로 남긴다
+
+`azure:gpt-audio-1.5`는 여전히 `providers`에 없다. 2026-08-30에 이어
+**2026-09-07에 다시 확인**했고, 공개(비로그인) Azure Retail Prices API에 질의한
+내용·결과·행 수를 `models_deliberately_not_priced`에 그대로 적었다. 새 계정도,
+새 Azure 권한도 만들지 않았다.
+
+다섯 질의 모두 이 모델의 미터를 내놓지 않았다. `productName eq 'Azure OpenAI GPT5'`
+는 8,321행 9페이지 410개 미터를 돌려주는데 그중 소리를 말하는 것은 없다. 8일 전
+같은 질의는 7,235행 8페이지였다. **주변 제품이 늘어나는 동안에도 계속 없다는 것은
+누락이 아니라 상태다.**
+
+그래서 금액은 계속 `null`이다. 비슷한 이름의 모델 요율을 빌리지 않았고, 직판
+가격을 Azure 가격으로 간주하지 않았다. 해결에 필요한 것은 **두 개의 요율**(소리
+입력과 소리 출력)이며, 하나로 뭉친 값은 §5.3의 세 몫 계산에 넣을 수 없다.
 
 ## 6. 원장 (`CostReceiptLedger`)
 
@@ -337,6 +497,20 @@ abandon(call_id, reason=…)
   `summary.grading_cost`가 값이 붙은 영수증을 담당한다.
 - exp003처럼 비용 필드가 없는 기존 결과와 구형 보고서는 계속 열려야 한다.
 
+### 7.1 게시되는 `usage`는 네 칸으로 닫혀 있다
+
+`grade.schema.json`의 `costUsage` 정의는 `additionalProperties: false`이고 칸이
+정확히 네 개다: `input_tokens`, `cached_input_tokens`, `output_tokens`,
+`reasoning_tokens`. 그러므로 **소리 몫은 영수증에 새 칸으로 올라가지 않는다.**
+올렸다면 이미 게시된 채점 산출물 전부가 스키마 검증에 걸린다.
+
+소리 몫은 **원장 행**에 산다 — SQLite 열 `audio_input_tokens`,
+`audio_output_tokens`와 내보낸 JSONL의 같은 이름 필드. 원장이 감사 기록이고,
+영수증은 그 요약이다. 요약이 좁다고 해서 기록이 좁아지는 것은 아니다.
+
+`build_receipt`가 합산하는 칸도 그 네 개뿐이므로, 소리 몫이 총량에 두 번 더해질
+자리 자체가 없다.
+
 ## 8. 검증
 
 ### 8.1 산술
@@ -368,6 +542,18 @@ abandon(call_id, reason=…)
 14. 문제 풀이·채점 비용 미혼합
 15. exp003 및 구형 보고서 읽기 호환
 16. 공유 실행 환경 — 배분 금지, `partial` 유지
+17. 소리 토큰이 있는데 항목이 소리를 값 매기지 않는다 — `price_missing`, 글 요율
+    대체 금지
+18. 소리 토큰 이중 과금 없음 — 글·캐시·소리 세 몫이 각각 한 번씩
+19. 보고된 소리 `0`은 소리가 아니다 — 값이 정상으로 매겨진다
+20. 소리와 추론이 같은 호출에 있어도 각각 자기 총량 안에서 한 번씩
+21. 소리와 캐시가 겹치면 `usage_partial` — 짐작으로 정하지 않는다
+22. 재시도마다 자기 소리 몫을 갖는다 — 마지막 것으로 덮이지 않는다
+23. 소리 몫이 내보내기·가져오기(재개·shard 병합)를 건너 살아남는다
+24. 게시되는 영수증 `usage`는 여전히 네 칸이다 (§7)
+
+전부 `tests/test_speech_is_not_charged_at_the_price_of_prose.py`에 있으며,
+17~24는 단위 규칙과 **실제 계측 래퍼를 통과하는 경로** 양쪽에서 확인한다.
 
 ### 8.3 유료 실행 금지
 
@@ -394,3 +580,11 @@ abandon(call_id, reason=…)
 5. 모델 없는 end-to-end fixture로 작업별·실험별 합계 검증
 6. 통합 담당 세션에서만 실제 Smoke 1회
 7. Smoke가 완전하면 Pilot, 이후 Full
+
+6번은 선택이 아니다. `core/cost_receipts.py`·`core/cost_metering.py`는
+`_HASHED_TREES` 아래에 있어 고치면 `grader_source_hash`가 움직인다. 저장소 자체
+검사(`scripts/check_grader_hash_freeze.py`)가 "This diff does move the grader
+source hash … the next paid run has to be preceded by a fresh smoke at the new
+fingerprint"라고 말한다. shard가 도는 중에 병합하면 `step9`가 열한 개 지문
+불일치로 거절하는데 **그 거절은 돈이 다 나간 뒤에 온다.** 그래서 병합 전에
+진행 중인 유료 채점이 없음을 먼저 확인한다.

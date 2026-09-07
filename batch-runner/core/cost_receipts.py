@@ -161,6 +161,22 @@ REASONING_BILLED_AS_OUTPUT = "output"
 REASONING_BILLED_SEPARATELY = "separate"
 REASONING_BILLED_UNKNOWN = "unknown"
 
+#: How a price entry says *audio* tokens are billed. Same shape as
+#: ``reasoning_billed_as``, and there for the same reason: which arithmetic is
+#: right cannot be read off the token counts, so the table has to say it.
+#:
+#: ``separate`` means the entry carries its own audio rates and audio tokens
+#: are charged at them. ``unpriced`` means the entry states no audio rate, and
+#: is the default for an entry that does not mention audio at all — so a table
+#: written before audio existed fails closed rather than silently charging
+#: speech at the text rate. There is deliberately no third value meaning "audio
+#: bills at the text rate": no provider consulted here documents that, and a
+#: billing mode nobody publishes is not one this table may assume.
+AUDIO_BILLED_SEPARATELY = "separate"
+AUDIO_BILLED_UNPRICED = "unpriced"
+
+AUDIO_BILLING_MODES = (AUDIO_BILLED_SEPARATELY, AUDIO_BILLED_UNPRICED)
+
 
 class LedgerIntegrityError(RuntimeError):
     """The ledger was asked to contradict something it already recorded.
@@ -183,6 +199,15 @@ class ModelReceiptPrice:
     it reports, those tokens are already paid for by ``output_usd_per_million``
     and must not be multiplied again; where it bills them separately they must.
     Where nobody has established which, the call cannot be priced.
+
+    ``audio_billed_as`` stops a different mistake: charging speech at the price
+    of prose. A provider that accepts audio reports the audio share of a call
+    as a *part* of the input and output counts, not as an addition to them, and
+    bills that share at its own rate. An entry with only the text rates
+    therefore cannot price such a call at all — the text rate applied to the
+    whole input would be a number, but not this call's number. The default is
+    :data:`AUDIO_BILLED_UNPRICED`, so an entry that says nothing about audio
+    refuses audio work rather than mispricing it.
     """
 
     provider: str
@@ -196,6 +221,18 @@ class ModelReceiptPrice:
     last_reviewed: str
     currency: str
     unit: str
+    audio_billed_as: str = AUDIO_BILLED_UNPRICED
+    audio_input_usd_per_million: Decimal | None = None
+    audio_output_usd_per_million: Decimal | None = None
+
+    @property
+    def prices_audio(self) -> bool:
+        """Whether this entry can put a number on audio tokens."""
+        return (
+            self.audio_billed_as == AUDIO_BILLED_SEPARATELY
+            and self.audio_input_usd_per_million is not None
+            and self.audio_output_usd_per_million is not None
+        )
 
     @property
     def key(self) -> str:
@@ -327,6 +364,47 @@ def load_receipt_price_table(
                 entry["reasoning_usd_per_million"],
                 field_name=f"{key}.reasoning_usd_per_million",
             )
+        # Absent means unpriced, so an entry written before audio existed
+        # refuses audio work instead of charging it at the text rate.
+        audio_billed_as = str(
+            entry.get("audio_billed_as") or AUDIO_BILLED_UNPRICED
+        )
+        if audio_billed_as not in AUDIO_BILLING_MODES:
+            raise ValueError(
+                f"the price entry for {key} does not say how audio tokens are "
+                f"billed; it must be one of {', '.join(AUDIO_BILLING_MODES)}"
+            )
+        audio_input_rate: Decimal | None = None
+        audio_output_rate: Decimal | None = None
+        if audio_billed_as == AUDIO_BILLED_SEPARATELY:
+            for required in (
+                "audio_input_usd_per_million",
+                "audio_output_usd_per_million",
+            ):
+                if required not in entry:
+                    raise ValueError(
+                        f"the price entry for {key} bills audio separately but "
+                        f"states no {required}; half a rate prices nothing"
+                    )
+            audio_input_rate = _decimal(
+                entry["audio_input_usd_per_million"],
+                field_name=f"{key}.audio_input_usd_per_million",
+            )
+            audio_output_rate = _decimal(
+                entry["audio_output_usd_per_million"],
+                field_name=f"{key}.audio_output_usd_per_million",
+            )
+        elif (
+            "audio_input_usd_per_million" in entry
+            or "audio_output_usd_per_million" in entry
+        ):
+            # A rate sitting in an entry that does not claim to bill audio
+            # separately would never be applied. Left silent, it reads as
+            # priced audio to anyone opening the file.
+            raise ValueError(
+                f"the price entry for {key} states an audio rate but does not "
+                "set audio_billed_as to separate; the rate would never apply"
+            )
         models[str(key)] = ModelReceiptPrice(
             provider=provider,
             model=model,
@@ -348,6 +426,9 @@ def load_receipt_price_table(
             last_reviewed=str(entry["last_reviewed"]),
             currency="USD",
             unit=str(entry.get("unit") or "per 1,000,000 tokens"),
+            audio_billed_as=audio_billed_as,
+            audio_input_usd_per_million=audio_input_rate,
+            audio_output_usd_per_million=audio_output_rate,
         )
 
     runtimes: dict[str, RuntimePrice] = {}
@@ -396,12 +477,28 @@ class CallUsage:
     ``cached_input_tokens`` is understood the way providers report it: as a
     part of ``input_tokens``, not an addition to it. The billable input is
     therefore the difference, which is what :func:`price_call` charges.
+
+    ``audio_input_tokens`` and ``audio_output_tokens`` are read the same way —
+    the audio *share* of the counts above, not extra tokens beside them. That
+    is not an assumption inherited from the cached case; it was measured. Over
+    the sixty stored speech calls of the 331 diagnostic, subtracting the
+    reported audio tokens from the reported input collapses the input's
+    correlation with clip length (r = +0.85 → +0.01) and sharpens its
+    correlation with prompt length (r = +0.46 → +0.92), while the audio count
+    alone tracks clip length at r = +0.99. Audio sits inside the input; it is
+    not added to it.
+
+    Which is also why pricing must not work from the audio count alone. In that
+    same run the audio tokens were 1,848 of 18,924 input tokens — 9.8%. A total
+    built from them would have priced a tenth of the call.
     """
 
     input_tokens: int | None = None
     cached_input_tokens: int | None = None
     output_tokens: int | None = None
     reasoning_tokens: int | None = None
+    audio_input_tokens: int | None = None
+    audio_output_tokens: int | None = None
 
     @property
     def is_empty(self) -> bool:
@@ -410,7 +507,19 @@ class CallUsage:
             and self.output_tokens is None
             and self.cached_input_tokens is None
             and self.reasoning_tokens is None
+            and self.audio_input_tokens is None
+            and self.audio_output_tokens is None
         )
+
+    @property
+    def has_audio(self) -> bool:
+        """Whether this call is known to have carried audio.
+
+        ``None`` is not audio and it is not the absence of audio either; it is
+        an unreported breakdown. Only a positive count makes this true, so a
+        text call never trips the audio rules.
+        """
+        return bool(self.audio_input_tokens) or bool(self.audio_output_tokens)
 
     def as_dict(self) -> dict[str, int | None]:
         return {
@@ -418,6 +527,8 @@ class CallUsage:
             "cached_input_tokens": self.cached_input_tokens,
             "output_tokens": self.output_tokens,
             "reasoning_tokens": self.reasoning_tokens,
+            "audio_input_tokens": self.audio_input_tokens,
+            "audio_output_tokens": self.audio_output_tokens,
         }
 
 
@@ -438,7 +549,7 @@ def price_call(
 ) -> PricedCall:
     """Charge one call, or say why it cannot be charged.
 
-    The two traps this exists to avoid:
+    The three traps this exists to avoid:
 
     *Cached input counted twice.* Providers report ``input_tokens`` inclusive of
     whatever they served from cache. Charging the full input at the full rate
@@ -450,6 +561,14 @@ def price_call(
     thinking. The price entry says which it is, and where it says ``unknown``
     and reasoning actually happened, the call is left unpriced rather than
     guessed.
+
+    *Audio charged as prose.* Audio tokens are part of the reported input and
+    output, not an addition to them, so an entry holding only text rates would
+    happily multiply the whole input — speech included — by the text rate and
+    return a confident number. It would be the wrong number, and it would carry
+    no doubt with it. An entry that does not price audio therefore refuses a
+    call that carried audio, and one that does price audio charges the audio
+    share at its own rate and the remainder at the text rate.
     """
     reasons: list[str] = []
     if usage.is_empty:
@@ -457,15 +576,47 @@ def price_call(
     elif usage.input_tokens is None or usage.output_tokens is None:
         reasons.append(REASON_USAGE_PARTIAL)
 
+    def doubt() -> None:
+        if REASON_USAGE_PARTIAL not in reasons:
+            reasons.append(REASON_USAGE_PARTIAL)
+
     cached = usage.cached_input_tokens or 0
     if usage.input_tokens is not None and cached > usage.input_tokens:
         # More was served from cache than was sent. One of the two numbers is
         # wrong and there is no way to tell which, so neither is trusted.
-        if REASON_USAGE_PARTIAL not in reasons:
-            reasons.append(REASON_USAGE_PARTIAL)
+        doubt()
+
+    audio_input = usage.audio_input_tokens or 0
+    audio_output = usage.audio_output_tokens or 0
+    # Audio is a share of the counts, so a share larger than the whole is a
+    # contradiction in the reported usage itself, whatever the price says.
+    if usage.input_tokens is not None and audio_input > usage.input_tokens:
+        doubt()
+    if usage.output_tokens is not None and audio_output > usage.output_tokens:
+        doubt()
 
     if price is None:
         reasons.append(REASON_PRICE_MISSING)
+    elif usage.has_audio and not price.prices_audio:
+        # The call carried speech and this entry has no rate for speech. The
+        # text rate is a rate, but it is not this call's rate — so the price
+        # for what actually happened is missing, exactly as it is when the
+        # model is absent from the table altogether.
+        reasons.append(REASON_PRICE_MISSING)
+    elif price.prices_audio and (
+        usage.audio_input_tokens is None or usage.audio_output_tokens is None
+    ):
+        # Two rates apply to this entry and nothing says where the boundary
+        # falls. A provider that bills audio separately reports the split —
+        # reports it as zero on a text-only call rather than omitting it — so
+        # an absent split here is an unread breakdown, not an absent one.
+        doubt()
+    elif price.prices_audio and cached > 0 and audio_input > 0:
+        # Both a cache rate and an audio rate would apply to this input, and
+        # nothing in the reported usage says whether the cached tokens are the
+        # audio ones. Splitting it would require picking an overlap; no
+        # provider consulted here documents one, so it is not picked.
+        doubt()
 
     reasoning = usage.reasoning_tokens or 0
     if (
@@ -473,19 +624,36 @@ def price_call(
         and reasoning > 0
         and price.reasoning_billed_as == REASONING_BILLED_UNKNOWN
     ):
-        if REASON_USAGE_PARTIAL not in reasons:
-            reasons.append(REASON_USAGE_PARTIAL)
+        doubt()
 
     if reasons:
         return PricedCall(cost_usd=None, missing_reasons=tuple(reasons))
 
     assert price is not None  # narrowed by the checks above
-    billable_input = Decimal(max((usage.input_tokens or 0) - cached, 0))
-    cost = (
-        billable_input * price.input_usd_per_million
-        + Decimal(cached) * price.cached_input_usd_per_million
-        + Decimal(usage.output_tokens or 0) * price.output_usd_per_million
-    )
+    input_tokens = usage.input_tokens or 0
+    output_tokens = usage.output_tokens or 0
+    if price.prices_audio:
+        assert price.audio_input_usd_per_million is not None
+        assert price.audio_output_usd_per_million is not None
+        # Three disjoint slices of the input, one rate each, every token
+        # charged exactly once: what came from cache, what came as audio, and
+        # what is left over as text.
+        text_input = Decimal(max(input_tokens - cached - audio_input, 0))
+        text_output = Decimal(max(output_tokens - audio_output, 0))
+        cost = (
+            text_input * price.input_usd_per_million
+            + Decimal(cached) * price.cached_input_usd_per_million
+            + Decimal(audio_input) * price.audio_input_usd_per_million
+            + text_output * price.output_usd_per_million
+            + Decimal(audio_output) * price.audio_output_usd_per_million
+        )
+    else:
+        billable_input = Decimal(max(input_tokens - cached, 0))
+        cost = (
+            billable_input * price.input_usd_per_million
+            + Decimal(cached) * price.cached_input_usd_per_million
+            + Decimal(output_tokens) * price.output_usd_per_million
+        )
     if (
         price.reasoning_billed_as == REASONING_BILLED_SEPARATELY
         and price.reasoning_usd_per_million is not None
@@ -859,6 +1027,8 @@ CREATE TABLE IF NOT EXISTS cost_calls (
     cached_input_tokens INTEGER,
     output_tokens       INTEGER,
     reasoning_tokens    INTEGER,
+    audio_input_tokens  INTEGER,
+    audio_output_tokens INTEGER,
     model_cost_usd      TEXT,
     missing_reasons     TEXT NOT NULL DEFAULT '[]',
     price_table_sha256  TEXT,
@@ -897,6 +1067,8 @@ _CALL_COLUMNS = (
     "cached_input_tokens",
     "output_tokens",
     "reasoning_tokens",
+    "audio_input_tokens",
+    "audio_output_tokens",
     "model_cost_usd",
     "missing_reasons",
     "price_table_sha256",
@@ -924,6 +1096,35 @@ _RUNTIME_COLUMNS = (
 _IDENTITY_COLUMNS = frozenset(
     {"provider", "deployment", "requested_model", "resolved_model", "api_version"}
 )
+
+#: The columns holding token counts. Named because they are the ones whose
+#: *type* can differ between two ledgers holding the same number.
+#: :meth:`CostReceiptLedger._migrate_columns` can only add a column as ``TEXT``,
+#: so a ledger that gained a token column by migration stores ``'30'`` where a
+#: ledger created with that column stores ``30``. Left alone, the same call
+#: settled twice on a resumed ledger would compare ``'30'`` against ``30``,
+#: differ, and be reported as ledger corruption — which is the one thing that
+#: comparison exists to detect and must therefore not invent.
+_TOKEN_COLUMNS = frozenset(
+    {
+        "input_tokens",
+        "cached_input_tokens",
+        "output_tokens",
+        "reasoning_tokens",
+        "audio_input_tokens",
+        "audio_output_tokens",
+    }
+)
+
+
+def _token_count(value: Any) -> int | None:
+    """A stored token count as a number, keeping "not recorded" as ``None``."""
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 class CostReceiptLedger:
@@ -1128,7 +1329,8 @@ class CostReceiptLedger:
         self._connection.execute(
             "UPDATE cost_calls SET state = ?, resolved_model = ?, "
             "input_tokens = ?, cached_input_tokens = ?, output_tokens = ?, "
-            "reasoning_tokens = ?, model_cost_usd = ?, missing_reasons = ?, "
+            "reasoning_tokens = ?, audio_input_tokens = ?, "
+            "audio_output_tokens = ?, model_cost_usd = ?, missing_reasons = ?, "
             "price_table_sha256 = ? WHERE call_id = ?",
             (
                 STATE_SETTLED,
@@ -1137,6 +1339,8 @@ class CostReceiptLedger:
                 usage.cached_input_tokens,
                 usage.output_tokens,
                 usage.reasoning_tokens,
+                usage.audio_input_tokens,
+                usage.audio_output_tokens,
                 None if cost is None else str(cost),
                 json.dumps(sorted(reasons)),
                 None if table is None else table.sha256,
@@ -1444,10 +1648,12 @@ class CostReceiptLedger:
         reasons: Sequence[str],
     ) -> None:
         recorded = (
-            row["input_tokens"],
-            row["cached_input_tokens"],
-            row["output_tokens"],
-            row["reasoning_tokens"],
+            _token_count(row["input_tokens"]),
+            _token_count(row["cached_input_tokens"]),
+            _token_count(row["output_tokens"]),
+            _token_count(row["reasoning_tokens"]),
+            _token_count(row["audio_input_tokens"]),
+            _token_count(row["audio_output_tokens"]),
             str(row["resolved_model"] or ""),
             row["model_cost_usd"],
             row["missing_reasons"],
@@ -1457,6 +1663,8 @@ class CostReceiptLedger:
             usage.cached_input_tokens,
             usage.output_tokens,
             usage.reasoning_tokens,
+            usage.audio_input_tokens,
+            usage.audio_output_tokens,
             model,
             None if cost is None else str(cost),
             json.dumps(sorted(reasons)),
@@ -1818,6 +2026,8 @@ def _row_to_dict(row: sqlite3.Row, columns: Sequence[str]) -> dict[str, Any]:
         value = row[column]
         if column == "missing_reasons":
             record[column] = sorted(_decode_reasons(value))
+        elif column in _TOKEN_COLUMNS:
+            record[column] = _token_count(value)
         else:
             record[column] = value
     return record
