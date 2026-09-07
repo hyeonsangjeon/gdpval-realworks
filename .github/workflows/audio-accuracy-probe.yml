@@ -103,13 +103,14 @@ on:
           - observation
           - both
       corpus:
-        description: 'Which sounds. tones = clicks, beeps and sine waves; answers whether the verdict depends on the audio at all. speech = ten synthesised sentences with a known transcript; answers whether it hears words. speech rebuilds its clips and refuses to run if they do not match the committed digests, and accepts the production arm only.'
+        description: 'Which sounds. tones = clicks, beeps and sine waves; answers whether the verdict depends on the audio at all. speech = ten synthesised sentences with a known transcript; answers whether it hears words. speech-prompt-ab = the same ten sentences under two prompts, which DOUBLES the call count; it is the only speech setting that runs a second arm, and it runs it because 333 registers it, not because prompt_arm was changed. Both speech settings rebuild their clips and refuse to run if they do not match the committed digests.'
         required: false
         type: choice
         default: tones
         options:
           - tones
           - speech
+          - speech-prompt-ab
 
 # Read-only by default. The paid job adds id-token for OIDC and nothing else:
 # there is no commit, no release, and no dispatch to make.
@@ -128,6 +129,13 @@ env:
   # nobody here edits, so it can move without this workflow changing, and the
   # free job is where that should surface.
   SPEECH_PREREG: ${{ github.workspace }}/tasks/rebuilding_grading_task/330-speech-diagnostic-prereg.md
+  # The document the two-arm speech run belongs to. A separate file, and a
+  # separate result id, because 330 registered one arm and ran it. Reusing 330
+  # here would make the published single-arm run retroactively describe a
+  # different experiment. The measurer refuses this file unless it says which
+  # diagnostic it is, so the opt-in lives in the document rather than in a path
+  # somebody typed on a command line.
+  SPEECH_AB_PREREG: ${{ github.workspace }}/tasks/rebuilding_grading_task/333-speech-prompt-ab-prereg.md
 
 # One at a time. Two concurrent probes would interleave their calls against the
 # same deployment's TPM budget and each would measure the other's throttling.
@@ -183,7 +191,7 @@ jobs:
       # the synthesiser or the encoder. Silently accepting different audio
       # would be worse than stopping.
       - name: Build and verify the pinned speech set
-        if: ${{ inputs.corpus == 'speech' }}
+        if: ${{ inputs.corpus != 'tones' }}
         run: |
           set -euo pipefail
           sudo apt-get update
@@ -206,9 +214,16 @@ jobs:
                 --prompt-arm "${{ inputs.prompt_arm }}"
                 --out "$GITHUB_WORKSPACE/audio-accuracy-dry-run.json"
                 --delivery-out "$GITHUB_WORKSPACE/audio-accuracy-dry-run-delivery.json")
-          if [ "${{ inputs.corpus }}" = "speech" ]; then
+          if [ "${{ inputs.corpus }}" != "tones" ]; then
             ARGS+=(--speech-set "$SPEECH_MANIFEST" --speech-clips "$SPEECH_CLIPS")
-            ARGS+=(--expect-grader-pin "$SPEECH_PREREG")
+            # Which document this run belongs to, and therefore how many arms
+            # it has. --speech-prompt-ab carries its own fingerprint check, so
+            # the two flags are alternatives and never both.
+            if [ "${{ inputs.corpus }}" = "speech-prompt-ab" ]; then
+              ARGS+=(--speech-prompt-ab "$SPEECH_AB_PREREG")
+            else
+              ARGS+=(--expect-grader-pin "$SPEECH_PREREG")
+            fi
           fi
           python scripts/measure_audio_grading_accuracy.py "${ARGS[@]}"
 
@@ -303,7 +318,6 @@ jobs:
           # last time this file stated a call count that disagreed with what a
           # run would spend, it was off by a factor and nobody noticed until
           # afterwards.
-          if [ "$PROBE_ARM" = "both" ]; then PROBE_ARMS=2; else PROBE_ARMS=1; fi
           # Defaulted because this job has no checkout and is executed
           # directly by a test that sets only the two variables above. The
           # two corpora have the same criteria count and differ only in clips
@@ -311,7 +325,18 @@ jobs:
           # criteria count sets the call count below, and it was pinned
           # against the tone corpus alone, which is not the one this buys.
           CORPUS="${PROBE_CORPUS:-tones}"
-          if [ "$CORPUS" = "speech" ]; then CLIPS=10; else CLIPS=9; fi
+          # The arm count is not read off prompt_arm alone any more. The speech
+          # A/B runs two arms with prompt_arm left at `production`, because the
+          # second arm is opened by the document 333 and not by that flag. A
+          # record that read only the flag would authorise 60 calls for a run
+          # that makes 120 -- the `calls = 36` failure again, on the dispatch
+          # that spends the money.
+          if [ "$PROBE_ARM" = "both" ] || [ "$CORPUS" = "speech-prompt-ab" ]; then
+            PROBE_ARMS=2
+          else
+            PROBE_ARMS=1
+          fi
+          case "$CORPUS" in speech*) CLIPS=10 ;; *) CLIPS=9 ;; esac
           printf '%s\n' \
             "Approved paid audio accuracy probe:" \
             "  model      = gpt-audio-1.5 (read from gold_audio_repeat_v2_sol_max.yaml)" \
@@ -388,7 +413,7 @@ jobs:
       # jobs check against the same committed digests, so agreeing with the
       # pin is what makes them the same audio, not having travelled together.
       - name: Build and verify the pinned speech set
-        if: ${{ inputs.corpus == 'speech' }}
+        if: ${{ inputs.corpus != 'tones' }}
         run: |
           set -euo pipefail
           sudo apt-get update
@@ -416,9 +441,16 @@ jobs:
                 --prompt-arm "${{ inputs.prompt_arm }}"
                 --out "$GITHUB_WORKSPACE/audio-accuracy-measured.json"
                 --delivery-out "$GITHUB_WORKSPACE/audio-accuracy-measured-delivery.json")
-          if [ "${{ inputs.corpus }}" = "speech" ]; then
+          if [ "${{ inputs.corpus }}" != "tones" ]; then
             ARGS+=(--speech-set "$SPEECH_MANIFEST" --speech-clips "$SPEECH_CLIPS")
-            ARGS+=(--expect-grader-pin "$SPEECH_PREREG")
+            # Which document this run belongs to, and therefore how many arms
+            # it has. --speech-prompt-ab carries its own fingerprint check, so
+            # the two flags are alternatives and never both.
+            if [ "${{ inputs.corpus }}" = "speech-prompt-ab" ]; then
+              ARGS+=(--speech-prompt-ab "$SPEECH_AB_PREREG")
+            else
+              ARGS+=(--expect-grader-pin "$SPEECH_PREREG")
+            fi
           fi
           python scripts/measure_audio_grading_accuracy.py "${ARGS[@]}"
 

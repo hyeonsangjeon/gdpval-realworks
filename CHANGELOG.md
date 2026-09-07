@@ -12,6 +12,65 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Added
+- **A second speech diagnostic is pre-registered, and nothing has been bought
+  for it.** `331` measured one prompt and so could not separate "it did not
+  hear the words" from "the question pushed it toward `fail`". This registers
+  the run that separates them — the same ten clips and twenty criteria under
+  two headers, 20 × 3 × 2 = 120 calls — as
+  `333-speech-prompt-ab-prereg.md`, before any dispatch. `330`, `331` and
+  their two raw reports are untouched; this is a new number, a new result ID
+  and a new run.
+  - **The second arm is opened by the document, not by `--prompt-arm`.**
+    `330`'s single-arm rule stays exactly as it was: `--prompt-arm observation`
+    or `both` with a speech set still exits 2 at argument-validation time. The
+    A/B goes through a separate `--speech-prompt-ab <document>` door that only
+    opens when the file itself says `진단 종류 = speech-prompt-ab`, because a
+    path on a command line says nothing about what the file agreed to. The
+    door reuses `--expect-grader-pin`'s fingerprint comparison rather than
+    adding a second one, and a run that names both flags is refused.
+  - **Repeats are no longer counted as extra criteria.** `compare_arms` now
+    emits a claim-level comparison beside the call-level one, labelled
+    `unit: "claim"` and `unit: "call"` so neither can be mistaken for the
+    other. The collapse is `majority_verdict` then `classify` — the two steps
+    `summarise` already uses, in that order, not a third scoring rule. 20
+    criteria × 3 repeats is **20** paired units, not 60; the 60-pair test is
+    kept as a secondary because delivery differences surface there first.
+    `claims` is a required keyword argument, so the "defaults to the tone
+    corpus and silently pairs nothing on a speech run" failure cannot recur.
+  - **Every accuracy is printed beside what always answering `fail` scores.**
+    With ten true and ten false claims that machine scores 0.50 / 1.00 on
+    false / 0.00 on true / J = 0. `constant_fail_baseline` is recomputed from
+    the claims actually paired, not typed in, so it cannot drift if the corpus
+    balance changes. A criterion whose three repeats disagree is **unsettled,
+    not wrong**: out of the accuracy denominator, still in McNemar's
+    discordant count, and reported split into "never answered" and "answered
+    without a majority" so flip rate cannot hide inside accuracy.
+  - **The approval record counts the arms the document opens.** The gate read
+    the arm count off `prompt_arm` alone, which would have authorised 60 calls
+    for a 120-call dispatch — the `calls = 36` failure this workflow's own
+    header describes, on the input that spends. It now resolves the corpus
+    first, and a test runs the gate's shell to check both the two-arm and the
+    one-arm arithmetic.
+  - **The pinned fingerprint is this tree's, and the divergence is written
+    down.** `#444` changed `core/cost_metering.py` and `core/cost_receipts.py`;
+    `compute_grader_source_hash` hashes every `core/**` module by content, so
+    the value moved to `7506ce50…c52b6168` even though the audio grading path
+    did not change. `333` names `330`'s old `74e1f478…a558a90` and says which
+    commit moved it, and a test holds the document to what this checkout
+    computes for as long as it says it has not run. Nothing was loosened to
+    make the old value fit; the run-time comparison still stops before the
+    first model call.
+  - **Structured output is still off.** `response_format` alongside
+    `input_audio` remains unverified for this API/model pair, so the A/B
+    inherits `331`'s format exactly — changing it here would make the two
+    arms' format success rates unattributable.
+  - **What has not happened.** No paid call, no dispatch, no allow-list
+    change, no edit to the 185-run/31-item results or to any published score.
+    `331` is not a control arm for this comparison — the control is the
+    `production` arm running inside the same job — and the run is registered
+    to happen **once**. Cost is `null`: `gpt-audio-1.5` is still absent from
+    the price table.
+
 - **The summary lines that had only ever run against money now run for free.**
   `331` §10 listed six follow-ups; this closes them without buying anything.
   No paid call, no edit to an existing number, and nothing under

@@ -1423,16 +1423,72 @@ def _arm_of(call: dict[str, Any]) -> str:
     return str(call.get("arm") or "production")
 
 
+def _majority_by_claim(
+    calls: Sequence[dict[str, Any]], claims: Sequence[Claim]
+) -> dict[str, dict[str, Any]]:
+    """One collapsed answer per claim: the two steps :func:`summarise` uses.
+
+    ``majority_verdict`` over the repeats, then ``classify``. Not a second
+    scoring rule -- the same two functions in the same order -- because a
+    claim-level accuracy computed any other way here would silently disagree
+    with the per-arm table printed beside it.
+
+    ``majority`` and ``outcome`` are ``None`` together when the repeats
+    produced no majority. That is a claim this arm did not settle, not a claim
+    it got wrong, and the counts below keep the two apart.
+    """
+    verdicts_by_claim: dict[str, list[str]] = {}
+    for call in calls:
+        verdicts_by_claim.setdefault(call["claim_id"], []).append(call["verdict"])
+    collapsed: dict[str, dict[str, Any]] = {}
+    for claim in claims:
+        verdicts = verdicts_by_claim.get(claim.claim_id)
+        if not verdicts:
+            continue
+        majority = majority_verdict(verdicts)
+        collapsed[claim.claim_id] = {
+            "holds": claim.holds,
+            "majority": majority,
+            "outcome": classify(claim, majority) if majority is not None else None,
+            # Which of the two ways a claim can fail to settle. An arm that
+            # never answered and an arm that answered three different things
+            # are both "no majority" and are not the same failure.
+            "answered_calls": sum(1 for v in verdicts if v != "judge_error"),
+        }
+    return collapsed
+
+
 def compare_arms(
     calls: Sequence[dict[str, Any]],
     *,
+    claims: Sequence[Claim],
     control: str = "production",
     treatment: str = "observation",
 ) -> Optional[dict[str, Any]]:
     """The paired difference between two prompts, or ``None`` if one is absent.
 
-    Pairing is on ``(claim, repeat)``: the same criterion, the same clip, the
-    same repeat index, put twice in immediate succession under two prompts.
+    Two pairings, reported side by side and labelled, because they answer
+    different questions and the wrong one read as the headline overstates the
+    evidence:
+
+    ``pairs`` / ``mcnemar_exact_p`` pair on ``(claim, repeat)`` -- the same
+    criterion, the same clip, the same repeat index, put twice in immediate
+    succession under two prompts. Twenty criteria at three repeats make sixty
+    of these, and they are *not* sixty independent items: the three repeats of
+    one criterion are the same question asked again, so this p is anti-
+    conservative as a test of the prompt and is kept because it is the finest
+    grain at which a delivery difference shows up.
+
+    ``per_claim_majority`` collapses each arm's repeats to one verdict per
+    claim first, giving one pair per criterion. That is the unit a
+    pre-registration can name as primary without counting a repeat as a new
+    question.
+
+    ``claims`` is required rather than defaulted. The default that would be
+    convenient here -- the tone corpus -- matches no claim id on a speech run,
+    and the whole claim-level block would come back empty while the per-call
+    block looked healthy.
+
     Only calls with a partner on the other side are counted, because a call
     whose partner failed to come back is not a pair and averaging it in would
     quietly compare different corpora.
@@ -1504,6 +1560,7 @@ def compare_arms(
             "neither_correct": neither,
         },
         "mcnemar_exact_p": p_value,
+        "unit": "call",
         "reading": (
             "Exact two-sided McNemar on the discordant calls. A large p means "
             "this corpus did not detect a difference between the prompts; it "
@@ -1511,6 +1568,112 @@ def compare_arms(
             f"{b + c} discordant calls out of {len(paired)}, only a large "
             "effect could have shown up at all, and the interval on the "
             "difference is correspondingly wide."
+        ),
+        "per_claim_majority": _compare_majorities(
+            calls, claims, control=control, treatment=treatment
+        ),
+    }
+
+
+def _compare_majorities(
+    calls: Sequence[dict[str, Any]],
+    claims: Sequence[Claim],
+    *,
+    control: str,
+    treatment: str,
+) -> Optional[dict[str, Any]]:
+    """The same comparison with each arm's repeats collapsed to one answer.
+
+    One pair per criterion instead of one per repeat. ``None`` when no
+    criterion was settled by both arms, which is the honest reading of "there
+    was nothing to pair" rather than a table of zeroes.
+    """
+    ctl = _majority_by_claim(
+        [c for c in calls if _arm_of(c) == control], claims
+    )
+    trt = _majority_by_claim(
+        [c for c in calls if _arm_of(c) == treatment], claims
+    )
+    shared = sorted(set(ctl) & set(trt))
+    if not shared:
+        return None
+
+    b = c = both = neither = 0
+    for claim_id in shared:
+        ctl_ok = ctl[claim_id]["outcome"] == OUTCOME_CORRECT
+        trt_ok = trt[claim_id]["outcome"] == OUTCOME_CORRECT
+        if ctl_ok and trt_ok:
+            both += 1
+        elif ctl_ok:
+            b += 1
+        elif trt_ok:
+            c += 1
+        else:
+            neither += 1
+
+    def _side(collapsed: dict[str, dict[str, Any]]) -> dict[str, Any]:
+        rows = [collapsed[claim_id] for claim_id in shared]
+        settled = [r for r in rows if r["majority"] is not None]
+        correct = sum(1 for r in rows if r["outcome"] == OUTCOME_CORRECT)
+        return {
+            "claims": len(rows),
+            "settled": len(settled),
+            "correct": correct,
+            "accuracy_of_settled": _rate(correct, len(settled)),
+            "settled_rate": _rate(len(settled), len(rows)),
+            # A tie and a silence are both "no majority" and mean opposite
+            # things about the model. Split, never summed into one number.
+            "unsettled": {
+                "no_answer_at_all": sum(
+                    1
+                    for r in rows
+                    if r["majority"] is None and r["answered_calls"] == 0
+                ),
+                "answered_without_a_majority": sum(
+                    1
+                    for r in rows
+                    if r["majority"] is None and r["answered_calls"] > 0
+                ),
+            },
+            "discrimination_j": discrimination(
+                [(r["holds"], r["majority"]) for r in settled]
+            ),
+        }
+
+    # What a machine that says "fail" to everything scores on these same
+    # criteria. Printed beside the accuracies because on a corpus that is half
+    # false, refusing to ever agree is worth 50% and no discrimination at all,
+    # and an accuracy near that number is not evidence of hearing anything.
+    always_fail = [(ctl[claim_id]["holds"], "fail") for claim_id in shared]
+    return {
+        "unit": "claim",
+        "pairs": len(shared),
+        "control": control,
+        "treatment": treatment,
+        control: _side(ctl),
+        treatment: _side(trt),
+        "discordant": {
+            "control_only_correct": b,
+            "treatment_only_correct": c,
+            "both_correct": both,
+            "neither_correct": neither,
+        },
+        "mcnemar_exact_p": mcnemar_exact(b, c),
+        "constant_fail_baseline": {
+            "correct": sum(1 for holds, _ in always_fail if not holds),
+            "of": len(always_fail),
+            "accuracy": _rate(
+                sum(1 for holds, _ in always_fail if not holds), len(always_fail)
+            ),
+            "discrimination_j": discrimination(always_fail),
+        },
+        "reading": (
+            "Exact two-sided McNemar with the repeats collapsed to one verdict "
+            f"per criterion, so {len(shared)} pairs and not "
+            f"{len(shared)} x repeats. A large p means this corpus did not "
+            "detect a difference between the prompts; it does NOT mean the "
+            "prompts are equivalent. Compare each accuracy against "
+            "constant_fail_baseline before reading it as skill."
         ),
     }
 
@@ -1604,6 +1767,36 @@ def grader_pin_stated_in(doc_path: Path) -> str:
         raise ValueError(
             f"{doc_path} states {len(found)} different grader fingerprints; "
             f"which one this run is supposed to be is not decidable"
+        )
+    return found.pop()
+
+
+#: The row a pre-registration writes to say *which* diagnostic it registers.
+#: Same shape and same reason as :data:`_GRADER_PIN_ROW`: a visible table row
+#: the operator reads before dispatching, parsed rather than restated. A file
+#: path on a command line says nothing about what the file agreed to; this
+#: makes the document itself the thing that opts in.
+_DIAGNOSTIC_KIND_ROW = re.compile(
+    r"^\|\s*진단 종류\s*\|\s*`([a-z0-9-]{1,40})`\s*\|", re.MULTILINE
+)
+
+#: What a speech prompt-A/B pre-registration has to call itself.
+SPEECH_PROMPT_AB_KIND = "speech-prompt-ab"
+
+
+def diagnostic_kind_stated_in(doc_path: Path) -> str:
+    """Which diagnostic a pre-registration declares itself to be."""
+    found = set(_DIAGNOSTIC_KIND_ROW.findall(doc_path.read_text(encoding="utf-8")))
+    if not found:
+        raise ValueError(
+            f"{doc_path} declares no diagnostic kind, so it has not agreed to "
+            f"anything. Pointing a run at a document does not make that "
+            f"document its pre-registration."
+        )
+    if len(found) > 1:
+        raise ValueError(
+            f"{doc_path} declares {len(found)} different diagnostic kinds; "
+            f"which run it registers is not decidable"
         )
     return found.pop()
 
@@ -1769,6 +1962,52 @@ OBSERVATION_HEADER = (
     "the statement holds.\n\n"
 ) + AUDIO_RESPONSE_CONTRACT
 
+#: The observation arm's header for the *speech* corpus.
+#:
+#: A separate constant rather than a reuse, because
+#: :data:`OBSERVATION_HEADER` asks for "pitches, intervals and harmonic
+#: content" and says "if it names a count, a tempo, a key or an interval".
+#: None of that exists in a spoken sentence. Sending it with speech would put
+#: the alternative arm at a disadvantage this corpus never meant to test, and
+#: the resulting difference would be "we asked the wrong question of one arm",
+#: not "observation-first helps or does not".
+#:
+#: Everything else is deliberately word-for-word the same as the tone arm's:
+#: the opening framing, the "may be true or may be false" clause, the offer of
+#: ``judge_error``, the evidence-before-verdict instruction, the "Statement"
+#: label, and the verbatim :data:`AUDIO_RESPONSE_CONTRACT`. Only the
+#: observation list is rewritten, so the two corpora are testing the same
+#: intervention.
+#:
+#: It leaks no answer: it names no token that separates either half of a
+#: pinned pair, and ``test_the_speech_observation_header_leaks_no_answer``
+#: derives that token set from the manifest rather than from a list here.
+#:
+#: **A limit, stated where the string lives.** Asking for a verbatim
+#: transcript is itself the kind of attention this corpus rewards. If this arm
+#: wins, one available reading is "a prompt that names the observable helped",
+#: which is not the same claim as "observation-first prompts hear better". The
+#: pre-registration carries this; a reader of the code should not have to go
+#: find it.
+SPEECH_OBSERVATION_HEADER = (
+    "You are an audio analyst. A short audio clip has been supplied to you as "
+    "audio input. Work only from that audio. Nothing you have been told about "
+    "the clip is a substitute for listening to it.\n\n"
+    "FIRST, before treating the statement below as anything but words, listen "
+    "to the clip and write down what it actually contains: whether any speech "
+    "is present at all; the words you hear, in the sequence you hear them, as "
+    "close to verbatim as you can manage; and, where a word is easy to "
+    "mishear, what you believe was actually said rather than what would make "
+    "the most sense.\n\n"
+    "THEN judge the statement against that transcript. The statement may be "
+    "true or it may be false. Do not assume it is true, and do not let its "
+    "wording tell you what you heard: whatever it names is the claim under "
+    "test, not a fact about the clip. If the audio does not let you decide, "
+    "return verdict \"judge_error\" rather than guessing.\n\n"
+    "In \"evidence\", quote the words you heard before you state whether the "
+    "statement is supported.\n\n"
+) + AUDIO_RESPONSE_CONTRACT
+
 #: Arm identifiers. ``production`` forwards the request untouched, so the
 #: control arm is the real grading prompt and not a re-implementation of it.
 PROMPT_ARMS = ("production", "observation")
@@ -1861,13 +2100,22 @@ def split_production_text(text: str) -> tuple[str, str]:
     return text[:index], text[index + len(PRODUCTION_CRITERION_MARKER):]
 
 
-def apply_arm(kwargs: dict[str, Any], arm: str) -> dict[str, Any]:
+def apply_arm(
+    kwargs: dict[str, Any],
+    arm: str,
+    *,
+    observation_header: str = OBSERVATION_HEADER,
+) -> dict[str, Any]:
     """Rewrite the outgoing request for ``arm``, touching only the text part.
 
     Everything that is not the prompt -- model, modalities, and above all the
     ``input_audio`` part -- is passed through by reference. The two arms
     therefore send byte-identical audio by construction rather than by
     assertion, and a test still asserts it.
+
+    ``observation_header`` is a parameter and not a lookup because the caller
+    is the only thing that knows which corpus is being measured, and a table
+    in here would be a second place for that decision to live.
     """
     if arm == "production":
         return kwargs
@@ -1881,7 +2129,7 @@ def apply_arm(kwargs: dict[str, Any], arm: str) -> dict[str, Any]:
                 _, criterion = split_production_text(part["text"])
                 content.append({
                     "type": "text",
-                    "text": f"{OBSERVATION_HEADER}\n\nStatement:\n{criterion}",
+                    "text": f"{observation_header}\n\nStatement:\n{criterion}",
                 })
             else:
                 content.append(part)
@@ -1898,16 +2146,25 @@ class WireClient:
     actually carried.
     """
 
-    def __init__(self, inner: Any, *, arm: str = "production") -> None:
+    def __init__(
+        self,
+        inner: Any,
+        *,
+        arm: str = "production",
+        observation_header: str = OBSERVATION_HEADER,
+    ) -> None:
         self._inner = inner
         self.arm = arm
+        self.observation_header = observation_header
         self.records: list[dict[str, Any]] = []
         self.chat = type("_Chat", (), {"completions": self})()
 
     def create(self, **kwargs: Any) -> Any:
         record: dict[str, Any] = {"arm": self.arm}
         record.update(self._inspect(kwargs))
-        sent = apply_arm(kwargs, self.arm)
+        sent = apply_arm(
+            kwargs, self.arm, observation_header=self.observation_header
+        )
         # Recorded after the swap: the point of the record is what went out,
         # and under the observation arm that is not what came in.
         for message in sent["messages"]:
@@ -2841,7 +3098,7 @@ def build_report(
             )
             for arm in arms_present
         }
-        report["arm_comparison"] = compare_arms(calls)
+        report["arm_comparison"] = compare_arms(calls, claims=report_claims)
     return report
 
 
@@ -2928,6 +3185,21 @@ def main(argv: Optional[list[str]] = None) -> int:
         ),
     )
     parser.add_argument(
+        "--speech-prompt-ab",
+        type=Path,
+        default=None,
+        help=(
+            "Run the speech set as a two-arm prompt comparison, under the "
+            "pre-registration at this path. The document must declare itself "
+            "with a `speech-prompt-ab` diagnostic-kind row and must pin the "
+            "grader fingerprint, which is then checked exactly as "
+            "--expect-grader-pin checks it. This does not relax the "
+            "single-arm rule the published speech run was registered under: "
+            "it is a different, separately registered run, and --prompt-arm "
+            "still cannot reach it."
+        ),
+    )
+    parser.add_argument(
         "--delivery-out",
         type=Path,
         default=None,
@@ -2944,6 +3216,16 @@ def main(argv: Optional[list[str]] = None) -> int:
     arms = PROMPT_ARMS if args.prompt_arm == "both" else (args.prompt_arm,)
     if (args.speech_set is None) != (args.speech_clips is None):
         parser.error("--speech-set and --speech-clips go together")
+    if args.speech_prompt_ab is not None and args.speech_set is None:
+        parser.error(
+            "--speech-prompt-ab compares two prompts on the pinned speech "
+            "set; without --speech-set there is no speech to compare them on"
+        )
+
+    # The document the grader fingerprint is checked against. Two flags can
+    # name it, so it is resolved to one variable before the check rather than
+    # the check being written twice.
+    pin_doc: Optional[Path] = args.expect_grader_pin
 
     speech: Optional[SpeechCorpus] = None
     if args.speech_set is not None:
@@ -2963,6 +3245,35 @@ def main(argv: Optional[list[str]] = None) -> int:
                 "the speech set is pre-registered as a single production arm; "
                 "--prompt-arm would make it a different, unregistered run"
             )
+        if args.speech_prompt_ab is not None:
+            # That different, unregistered run, made registered. The block
+            # above stays exactly as it was -- this is a second door with its
+            # own document, not the same door with the lock taken off. The
+            # arms are set here and not chosen on the command line, so
+            # "which prompts ran" is a property of the pre-registration.
+            try:
+                kind = diagnostic_kind_stated_in(args.speech_prompt_ab)
+            except (OSError, ValueError) as exc:
+                print(f"::error::{exc}", file=sys.stderr)
+                return 3
+            if kind != SPEECH_PROMPT_AB_KIND:
+                print(
+                    f"::error::{args.speech_prompt_ab.name} registers "
+                    f"'{kind}', not '{SPEECH_PROMPT_AB_KIND}'. A document "
+                    f"that registered some other diagnostic has not agreed "
+                    f"to this one.",
+                    file=sys.stderr,
+                )
+                return 3
+            arms = PROMPT_ARMS
+            if pin_doc is None:
+                pin_doc = args.speech_prompt_ab
+            elif pin_doc != args.speech_prompt_ab:
+                parser.error(
+                    "--expect-grader-pin and --speech-prompt-ab name "
+                    "different documents; the run would be held to one "
+                    "document's fingerprint while filed under another's"
+                )
 
     # Before the identity, before the client, before anything is bought: is
     # the grader this checkout would use the one the pre-registration names?
@@ -2970,9 +3281,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     # sentence, and it covers files this workstream does not own -- so it
     # moves without anyone here touching it. Finding that at dispatch time
     # costs a stopped run; finding it afterwards costs the run's meaning.
-    if args.expect_grader_pin is not None:
+    if pin_doc is not None:
         try:
-            pinned = grader_pin_stated_in(args.expect_grader_pin)
+            pinned = grader_pin_stated_in(pin_doc)
             computed = grader_source_hash(args.config)
         except (OSError, ValueError, KeyError) as exc:
             print(f"::error::{exc}", file=sys.stderr)
@@ -2980,7 +3291,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         if pinned != computed:
             print(
                 f"::error::this is not the grader "
-                f"{args.expect_grader_pin.name} pins. It names "
+                f"{pin_doc.name} pins. It names "
                 f"{pinned}, this checkout computes {computed}. Something the "
                 f"fingerprint covers moved -- core/**, step8_grade.py, the "
                 f"grade schema, the requirements closure, the prompt template "
@@ -3005,6 +3316,20 @@ def main(argv: Optional[list[str]] = None) -> int:
     # and a record that lives only in a markdown file someone typed is the
     # thing this whole check exists to replace.
     identity["grader_source_sha256"] = grader_source_hash(args.config)
+    # Which alternative prompt this run put opposite production, recorded the
+    # same way and for the same reason. The per-call ``prompt_sha256`` already
+    # says what went out, but nothing in the report says which *named* header
+    # that hash is, so a reader could not check the run against the header the
+    # pre-registration pinned. Only stamped when a second arm actually ran:
+    # a fingerprint for a prompt nothing sent is a fact about this file, not
+    # about the run.
+    observation_header = (
+        SPEECH_OBSERVATION_HEADER if speech else OBSERVATION_HEADER
+    )
+    if len(arms) > 1:
+        identity["observation_header_sha256"] = hashlib.sha256(
+            observation_header.encode("utf-8")
+        ).hexdigest()
     if identity["audio_clip_seconds"] != AUDIO_TRIM_SECONDS:
         # Not fatal to the arithmetic, but it means the clips the model hears
         # here are cut to a different length than the ones it heard in the
@@ -3040,7 +3365,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     # Always wrapped, even for a single production arm: the delivery evidence
     # is the reason this run exists, and making it conditional would mean the
     # cheap runs are the ones that cannot say whether the audio arrived.
-    wire = WireClient(client, arm=arms[0])
+    wire = WireClient(
+        client, arm=arms[0], observation_header=observation_header
+    )
 
     try:
         perception = AudioPerception(
