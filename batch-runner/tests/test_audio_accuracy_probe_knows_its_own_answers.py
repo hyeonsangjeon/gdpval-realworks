@@ -3922,6 +3922,65 @@ def test_ten_calls_with_no_usable_verdict_stop_the_run() -> None:
     ) is None
 
 
+def test_one_silent_arm_is_not_hidden_by_the_other_arm_answering() -> None:
+    """The rule counts per arm, because 334 proved a run-wide count cannot fire.
+
+    334 interleaved ``production`` and ``observation`` one call apart. Call 1
+    was production and it answered, so a run-wide ``answered == 0`` was false
+    from the first call onward and stayed false while the observation arm went
+    27 calls in a row without a readable verdict. All 120 were bought.
+    """
+    calls = []
+    for index in range(10):
+        good = _rule_calls(1, arm="production")[0]
+        good["claim_id"] = f"c{index}"
+        calls.append(good)
+        bad = _rule_calls(1, arm="observation", unanswered_kind="read_failure")[0]
+        bad["claim_id"] = f"c{index}"
+        calls.append(bad)
+
+    fired = probe._stop_reason(
+        probe.SPEECH_STOP_RULES, calls=calls, elapsed_s=5.0
+    )
+    assert fired is not None, "the silent arm was hidden by the healthy one"
+    assert fired["rule"] == "zero_response_after"
+    assert fired["arm"] == "observation"
+    # Both counts are reported: the arm's, which tripped it, and the run's,
+    # which is what was actually paid for by that point.
+    assert fired["after_calls_in_arm"] == 10
+    assert fired["after_calls"] == 20
+
+
+def test_the_per_arm_rule_would_still_not_have_stopped_334() -> None:
+    """Necessary, not sufficient -- and the limit is pinned here, not just said.
+
+    334's observation arm answered once, on its fourth call, and then failed
+    27 in a row. ``answered == 0`` over the leading window is false the moment
+    that one reply lands, so scoping the rule per arm does not stop a run that
+    answers 15% of the time. Catching that needs a response-rate rule whose
+    threshold is pinned before a run, which 334 section 10 leaves to its own
+    pre-registration rather than choosing now with the numbers in view.
+
+    If someone later adds that rule, this test should fail and be replaced.
+    Until then it stops the fix above from being read as a guarantee.
+    """
+    calls = []
+    for index in range(30):
+        good = _rule_calls(1, arm="production")[0]
+        good["claim_id"] = f"c{index}"
+        calls.append(good)
+        bad = _rule_calls(1, arm="observation", unanswered_kind="read_failure")[0]
+        bad["claim_id"] = f"c{index}"
+        # The single reply that landed on the observation arm's fourth call.
+        if index == 3:
+            bad["unanswered_kind"] = None
+        calls.append(bad)
+
+    assert probe._stop_reason(
+        probe.SPEECH_STOP_RULES, calls=calls, elapsed_s=5.0
+    ) is None
+
+
 def test_ten_provider_failures_stop_the_run() -> None:
     calls = _rule_calls(12)
     for call in calls[:10]:
@@ -4842,3 +4901,79 @@ def test_a_foreign_model_answering_is_bannered_and_not_merely_listed(
     mixed = _page(_measured([pinned, "gpt-4o-audio-preview"]))
     assert BANNER in mixed
     assert "gpt-4o-audio-preview" in mixed
+
+
+# ── The 334 report against the bytes it was written from ─────────────────
+#
+# 334 quotes about thirty figures out of a run that will never happen again.
+# Nothing else in this repository checks a report against its own raw file,
+# which is how a number in a document drifts from the number that was bought.
+# This is not a parser for the document; it is the headline set, pinned.
+
+
+def _report_334() -> tuple[str, dict]:
+    here = probe.REPO_ROOT / "tasks" / "rebuilding_grading_task"
+    text = (here / "334-the-arm-that-broke-the-format.md").read_text(
+        encoding="utf-8"
+    )
+    raw = json.loads(
+        (here / "334-audio-accuracy-measured.json").read_text(encoding="utf-8")
+    )
+    return text, raw
+
+
+def test_the_334_report_quotes_the_run_it_preserved() -> None:
+    """Every headline figure in 334 comes out of 334's own JSON."""
+    text, raw = _report_334()
+    per_call = raw["arm_comparison"]
+    per_claim = per_call["per_claim_majority"]
+
+    # The run itself.
+    assert raw["calls_planned"] == 120 and len(raw["calls"]) == 120
+    assert "120" in text
+    assert raw["stopped"] is None
+    assert "`stopped: null`" in text
+    assert raw["pins"]["grader_source_sha256"].startswith("7506ce5008bd")
+    assert "7506ce5008bd" in text
+
+    # The finding: the treatment arm stopped answering.
+    obs = per_call["observation"]
+    assert obs["unanswered_by_kind"]["read_failure"] == 51
+    assert "51" in text
+    assert obs["response_rate"] == 0.15
+    assert "15%" in text or "15.0%" in text
+    assert obs["unanswered_by_kind"]["provider_failure"] == 0
+    assert obs["unanswered_by_kind"]["declined_to_judge"] == 0
+
+    # The pre-registered primary metric, and the claim counts under it.
+    assert per_claim["unit"] == "claim" and per_claim["pairs"] == 20
+    assert round(per_claim["mcnemar_exact_p"], 4) == 0.0654
+    assert "0.0654" in text
+    assert per_claim["production"]["settled"] == 20
+    assert per_claim["production"]["correct"] == 12
+    assert per_claim["observation"]["settled"] == 7
+    assert per_claim["observation"]["correct"] == 5
+    assert per_claim["observation"]["unsettled"]["no_answer_at_all"] == 13
+    assert "13" in text
+    assert per_claim["constant_fail_baseline"]["accuracy"] == 0.5
+
+    # Cost stays unmeasured rather than zero.
+    assert raw["cost"]["estimated_cost_usd"] is None
+    assert raw["cost"]["pricing_complete"] is False
+    assert "`null`" in text
+    assert "0달러가 아니다" in text
+
+
+def test_the_334_report_does_not_overwrite_what_331_bought() -> None:
+    """331's numbers are quoted as history and are still 331's numbers."""
+    text, _ = _report_334()
+    here = probe.REPO_ROOT / "tasks" / "rebuilding_grading_task"
+    prior = json.loads(
+        (here / "331-audio-accuracy-measured.json").read_text(encoding="utf-8")
+    )
+    overall = prior["accuracy"]["overall"]
+    assert overall["correct"] == 36 and overall["answered"] == 59
+    assert round(overall["accuracy"], 4) == 0.6102
+    assert "0.610" in text
+    # And the document says out loud what 333 section 7 required of it.
+    assert "역사적 참고치" in text
