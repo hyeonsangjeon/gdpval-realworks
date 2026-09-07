@@ -493,6 +493,16 @@ jobs:
                 f"x {len(report['pins']['prompt_arms'])} arm(s) "
                 f"= {report['cost']['model_calls']} calls "
                 f"({', '.join(report['pins']['prompt_arms'])}).\n")
+          # `330` §2 pins the grader by fingerprint and every run computes its
+          # own, but the page a dispatcher actually reads never printed it. So
+          # "this is the pre-registered grader" was a sentence a reader had to
+          # take on trust, or go download the JSON to check -- while the model
+          # name, the corpus and the call count all sat one line above. The
+          # value is already in the report; only the reading of it was
+          # missing. Printed whole, because the comparison it exists for is
+          # against a 64-character constant in a pre-registration table.
+          print(f"Grader source `{report['pins']['grader_source_sha256']}` — "
+                f"compare with the fingerprint the pre-registration pins.\n")
           stopped = report.get("stopped")
           if stopped:
               print(f"> **This run stopped early on the pre-registered rule "
