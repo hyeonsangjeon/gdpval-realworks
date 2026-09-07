@@ -1152,3 +1152,86 @@ prompt template)은 **한 파일도 건드리지 않았다** — `git diff origi
   여기서 더 주장하지 않는다.
 - §11.9의 미해결 항목(호출 수 증가 원인, 판정 4/38 이동 원인, 소리 계측
   미검증)은 **그대로 열려 있다.** 이번 작업은 그 원인들을 건드리지 않았다.
+
+### 12.10 이 수정 자체가 같은 실수를 저질렀다 (그리고 그것을 고쳤다)
+
+**있는 그대로 적는다.** PR #451이 `9126ee3`로 병합된 직후, `main`에 이런 실행
+기록이 하나 생겼다.
+
+```
+workflowName: .github/workflows/grade-run.yml   ← 워크플로 "이름"이 아니라 "경로"
+event       : push
+conclusion  : failure
+jobs        : 0            ← job이 하나도 없다
+headSha     : 9126ee3ad941e38254c84d51adab736d931f3f30
+```
+
+job이 0개인 실패는 **워크플로 파일 자체를 GitHub이 읽지 못했다**는 뜻이다.
+`gh run view`도 그렇게 말한다 — *"This run likely failed because of a workflow
+file issue."* 병합 직전 네 개 commit(`5704cf8`·`1e06e45`·`3ede896`·`972f52a`)에는
+이 기록이 없으므로, **내 변경으로 새로 생긴 것**이다. 그동안 채점 워크플로는
+**실행 자체가 불가능**했다.
+
+**원인은 한 줄이다.**
+
+```yaml
+jobs:
+  grade:
+    env:
+      PUBLISHED_COMMITS_FILE: ${{ runner.temp }}/published_commits.txt   # ← 여기
+```
+
+GitHub 공식 문서의 컨텍스트 가용성 표에 따르면 `jobs.<id>.env`가 읽을 수 있는
+것은 `github`·`needs`·`strategy`·`matrix`·`vars`·`secrets`·`inputs` **일곱
+개뿐**이다. `runner`는 없다. runner가 아직 배정되기 전에 평가되는 자리이기
+때문이다. 그리고 이 경우 **빈 문자열이 되는 게 아니라 파일 전체가 로드되지
+않는다.**
+
+**왜 테스트가 못 잡았나.** 이건 문법상 **완전히 올바른 YAML**이다. 그래서
+`yaml.safe_load`는 아무 불평 없이 읽었고, 이 워크플로의 모양을 검사하는 기존
+단언 251개도 전부 초록이었다. 파싱으로는 절대 못 잡는 종류다.
+
+**고침.** job의 `env:`에서 빼고, runner를 읽어도 되는 **step**으로 옮겼다.
+
+```yaml
+- name: Name the file that records what this run publishes
+  run: |
+    echo "PUBLISHED_COMMITS_FILE=$RUNNER_TEMP/published_commits.txt" \
+      >> "$GITHUB_ENV"
+```
+
+`grade` job의 맨 앞쪽(체크아웃보다도 앞)에 **조건 없이** 두었다. 뒤따르는 세
+개의 push 기록 step보다 반드시 먼저 돈다.
+
+**한 줄만 고치고 끝내지 않았다.** 같은 *종류*의 편집을 전부 막는 검사를
+`tests/test_step8_grade.py`에 넣었다.
+
+| 검사 | 대상 |
+|---|---|
+| `..._reads_a_context_github_refuses_to_provide_there` | 워크플로 **16개 전부**, job 31개의 job-level `env:`와 `if:` |
+| rc7 테스트에 추가한 단언 | 이 이름을 **step이** 정하는가, **쓰기 전에** 정하는가 |
+
+검사가 진짜로 무는지 확인했다. 문제의 줄을 **원래 모습 그대로 되돌려 놓고**
+돌렸더니 두 테스트가 실패하며 파일·job·키·컨텍스트를 이름으로 지목했다.
+
+```
+grade-run.yml: jobs.grade.env.PUBLISHED_COMMITS_FILE reads `runner`
+```
+
+이름 짓는 step을 append보다 **뒤로** 옮겨서도 돌려 봤고, 그것도 실패한다.
+확인 후 원상복구했다.
+
+정규식을 짤 때 하마터면 놓칠 뻔한 함정도 하나 적어 둔다. `needs.validate-request
+.outputs.…`처럼 job 이름에 하이픈이 있으면, 단순한 패턴은 하이픈에서 토큰이
+끊겨 **`request`라는 없는 컨텍스트를 읽었다고 오탐**한다. 실제로 처음 판에서
+오탐 4건이 났다. 정상 표현식 두 종류를 테스트에 **정탐으로 못 박아** 두었다.
+
+그리고 `if:`는 `${{ }}` 없이도 쓸 수 있다(`if: inputs.dry_run == true`). 실제로
+이 저장소 18개 중 **10개가 괄호 없는 형태**다. 괄호 안만 보는 검사였다면 그
+10개를 통째로 놓쳤을 것이다. 두 형태를 모두 본다.
+
+**이 항목을 남기는 이유.** §12 전체가 *"게시된 변경을 아무 검사도 보지 않았다"*는
+문제를 닫는 작업인데, 그 수정 자체가 **정확히 같은 방식으로** 실패했다. 검사가
+없는 자리에 새 코드를 넣으면 그 코드도 검사받지 못한다. 지우고 조용히 고치는
+편이 보기에는 낫겠지만, 그러면 이 문서가 기록하려던 바로 그 실패 사례를 없애는
+셈이 된다.

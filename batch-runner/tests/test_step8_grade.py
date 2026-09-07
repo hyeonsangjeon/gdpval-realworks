@@ -3338,6 +3338,110 @@ def _gh_expr(raw):
     return " ".join(str(raw).strip().removeprefix("${{").removesuffix("}}").split())
 
 
+# GitHub's context-availability table, verbatim in scope:
+#   jobs.<job_id>.env -> github, needs, strategy, matrix, vars, secrets, inputs
+#   jobs.<job_id>.if  -> github, needs, vars, inputs
+# `runner` and `job` exist only once a job has a runner, which is after these
+# two keys are evaluated. Using one of them here does not resolve to an empty
+# string -- it makes the whole file fail to load, so the workflow cannot be
+# dispatched at all and no job runs to report why.
+_JOB_ENV_CONTEXTS = frozenset(
+    {"github", "needs", "strategy", "matrix", "vars", "secrets", "inputs"}
+)
+_JOB_IF_CONTEXTS = frozenset({"github", "needs", "vars", "inputs"})
+
+_TEMPLATED = re.compile(r"\$\{\{(.*?)\}\}", re.DOTALL)
+# The leading name of a dotted path. The lookbehind has to exclude `-` as well
+# as word characters, or `needs.validate-request.outputs.x` reports a context
+# called `request`: the hyphen ends the token and leaves `request.` looking
+# like the head of a path.
+_CONTEXT_HEAD = re.compile(r"(?<![\w.\-'\"])([a-z][a-z_]*)\s*\.")
+
+
+def _contexts_used(value, bare_is_an_expression=False):
+    """Context names read by a workflow value.
+
+    `if:` may be written with or without `${{ }}` -- GitHub evaluates a bare
+    condition as an expression either way -- so an extractor that only looks
+    inside the braces silently passes every unwrapped condition.
+    """
+    text = str(value)
+    expressions = _TEMPLATED.findall(text)
+    if bare_is_an_expression and not expressions:
+        expressions = [text]
+    return {name for expr in expressions for name in _CONTEXT_HEAD.findall(expr)}
+
+
+def test_no_job_level_key_reads_a_context_github_refuses_to_provide_there():
+    """A whole class of edit that publishes an undispatchable workflow.
+
+    `PUBLISHED_COMMITS_FILE: ${{ runner.temp }}/...` in this workflow's `grade`
+    job did exactly that: valid YAML, so `yaml.safe_load` was happy and every
+    shape assertion below still passed, but GitHub refused to load the file.
+    The only symptom is a run entry named after the workflow *path* with zero
+    jobs and no annotations. Nothing in the suite objected, which is the same
+    failure -- a change published to main that no check caught -- that
+    `verify-published` exists to stop.
+    """
+    violations = []
+    jobs_scanned = 0
+    env_contexts = set()
+    if_contexts = set()
+
+    workflows = sorted(Path("../.github/workflows").glob("*.yml"))
+    assert workflows, "no workflow files found; the scan would pass vacuously"
+
+    for path in workflows:
+        parsed = yaml.safe_load(path.read_text(encoding="utf-8"))
+        for job_name, job in (parsed.get("jobs") or {}).items():
+            if not isinstance(job, dict):
+                continue
+            jobs_scanned += 1
+            for key, value in (job.get("env") or {}).items():
+                used = _contexts_used(value)
+                env_contexts |= used
+                violations += [
+                    f"{path.name}: jobs.{job_name}.env.{key} reads `{name}`"
+                    for name in sorted(used - _JOB_ENV_CONTEXTS)
+                ]
+            if "if" in job:
+                used = _contexts_used(job["if"], bare_is_an_expression=True)
+                if_contexts |= used
+                violations += [
+                    f"{path.name}: jobs.{job_name}.if reads `{name}`"
+                    for name in sorted(used - _JOB_IF_CONTEXTS)
+                ]
+
+    assert not violations, (
+        "job-level key reads a context GitHub does not provide there, so the "
+        "workflow will not load:\n  "
+        + "\n  ".join(violations)
+        + "\nMove it into a step -- a step may read `runner`, or set the value "
+        'from the runner\'s own environment: `echo "NAME=$RUNNER_TEMP/..." '
+        '>> "$GITHUB_ENV"`.'
+    )
+
+    # Anti-vacuity. Each of these has failed silently at least once while the
+    # assertion above still read as green.
+    assert jobs_scanned >= 20, f"only {jobs_scanned} jobs scanned"
+    assert env_contexts and if_contexts, (
+        "the extractor found no contexts at all in job-level env/if, so it "
+        "would not have found a bad one either"
+    )
+    assert _contexts_used("${{ runner.temp }}/published_commits.txt") == {"runner"}
+    assert _contexts_used("runner.os == 'Linux'", bare_is_an_expression=True) == {
+        "runner"
+    }
+    # The hyphen case, pinned: these are legitimate and must not be reported.
+    assert _contexts_used(
+        "${{ needs.validate-request.outputs.approval_inherited }}"
+    ) == {"needs"}
+    assert _contexts_used(
+        "!cancelled() && needs.approve-paid.result == 'success'",
+        bare_is_an_expression=True,
+    ) == {"needs"}
+
+
 def test_grade_workflow_rc7_requires_valid_committed_partial():
     workflow_path = Path("../.github/workflows/grade-run.yml")
     workflow = workflow_path.read_text(
@@ -3412,6 +3516,32 @@ def test_grade_workflow_rc7_requires_valid_committed_partial():
         "published_commits": "${{ steps.published.outputs.commits }}",
         "published_head": "${{ steps.published.outputs.head }}",
     }
+
+    # Where that file gets its name, and in what order. It has to be a step:
+    # the job's `env:` block cannot read `runner`, and putting it there does
+    # not fail loudly, it stops the workflow from loading at all. See
+    # test_no_job_level_key_reads_a_context_github_refuses_to_provide_there.
+    assert "PUBLISHED_COMMITS_FILE" not in (grade_job.get("env") or {})
+    grade_step_runs = [step.get("run") or "" for step in grade_job["steps"]]
+    names_it = [
+        index
+        for index, run in enumerate(grade_step_runs)
+        if "PUBLISHED_COMMITS_FILE=" in run and "$GITHUB_ENV" in run
+    ]
+    uses_it = [
+        index
+        for index, run in enumerate(grade_step_runs)
+        if '"$PUBLISHED_COMMITS_FILE"' in run
+    ]
+    assert len(names_it) == 1, "exactly one step should name the file"
+    assert uses_it, "nothing reads the file the naming step exists for"
+    # An unconditional step, so the name is set even on the paths where an
+    # early failure means only one of the three pushes ever happens.
+    assert "if" not in grade_job["steps"][names_it[0]]
+    assert names_it[0] < min(uses_it), (
+        "the file is appended to before it is named; the append would go to "
+        "a bare '>>' with an empty path and the push would go unrecorded"
+    )
 
     # The job list above is pinned rather than checked for membership, so that
     # nothing joins a workflow that spends money without being described here.

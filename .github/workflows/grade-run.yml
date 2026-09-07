@@ -703,10 +703,6 @@ jobs:
       published_commits: ${{ steps.published.outputs.commits }}
       published_head: ${{ steps.published.outputs.head }}
     env:
-      # Appended to by each step that successfully pushes. A file rather than a
-      # step output because three different steps contribute and any of them
-      # may be the last one to run.
-      PUBLISHED_COMMITS_FILE: ${{ runner.temp }}/published_commits.txt
       GRADE_EXPERIMENT_YAML: ${{ inputs.experiment_yaml }}
       # The same name as one component. An experiment may sit in a directory,
       # and a GitHub artifact name may not contain a separator, so the two
@@ -782,6 +778,22 @@ jobs:
       # every one of those runs after the corpus has been judged and paid for.
       - name: Trust the checkout inside the container
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      # Appended to by each step that successfully pushes. A file rather than a
+      # step output because three different steps contribute and any of them
+      # may be the last one to run.
+      #
+      # Named here rather than in the job's `env:` block because that block
+      # cannot see the `runner` context -- GitHub's context-availability table
+      # gives `jobs.<id>.env` only github/needs/strategy/matrix/vars/secrets/
+      # inputs, and `${{ runner.temp }}` there does not resolve to an empty
+      # string, it makes the whole workflow refuse to load. That cost a
+      # dispatch-blocked `main` for the length of one fix;
+      # tests/test_step8_grade.py now refuses the entire class.
+      - name: Name the file that records what this run publishes
+        run: |
+          echo "PUBLISHED_COMMITS_FILE=$RUNNER_TEMP/published_commits.txt" \
+            >> "$GITHUB_ENV"
 
       # Held on the v5 line on purpose. checkout v6 moved persisted
       # credentials out of .git/config into a separate file referenced by an
