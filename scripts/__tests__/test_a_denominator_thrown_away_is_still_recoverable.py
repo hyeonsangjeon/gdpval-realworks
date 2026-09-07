@@ -887,6 +887,16 @@ def test_the_committed_backfill_added_denominators_and_nothing_else():
     gained denominators and the anchor payload gained three rows it never
     had), and one fewer empty ``by_sector`` for that same anchor. Every one of
     those deltas is a file this suite can name.
+
+    They moved a second time on 2026-09-07, and by exactly one file. The
+    grader fingerprint moved, the contract asks for a paid smoke whenever it
+    does, and exp026c was graded again into the same ``_diagnostic`` fork:
+    27 -> 28 payloads and 86 -> 87 sector rows. ``empty_analytics`` does not
+    move, because the new payload carries a ``by_sector`` of its own -- the
+    same single sector and the same 38 rubric items as the run beside it. A
+    re-run lands *beside* its predecessor instead of replacing it, which is
+    what the fork is for, so this census grows by one each time the
+    fingerprint moves and the smoke is honoured.
     """
     grades = REPO_ROOT / "data" / "grades"
     carried, sector_rows, empty_analytics = 0, 0, 0
@@ -920,11 +930,11 @@ def test_the_committed_backfill_added_denominators_and_nothing_else():
         if backfill._is_empty(wow.get("by_sector")):
             empty_analytics += 1
 
-    assert carried == 27, (
-        f"27 payloads should carry recovered denominators; {carried} do"
+    assert carried == 28, (
+        f"28 payloads should carry recovered denominators; {carried} do"
     )
-    assert sector_rows == 86, (
-        f"86 sector rows should carry them as well; {sector_rows} do"
+    assert sector_rows == 87, (
+        f"87 sector rows should carry them as well; {sector_rows} do"
     )
     assert empty_analytics == 6, (
         "six payloads have no by_sector and every one is semantics-diverged; "
