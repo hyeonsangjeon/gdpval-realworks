@@ -233,7 +233,10 @@ self._perception_client = cost_recorder.meter(
 
 ### 재현 방법
 
-위 수치는 전부 이 저장소 안의 것만으로 다시 낼 수 있다. `batch-runner/`에서:
+위 수치는 전부 이 저장소 안의 것만으로 다시 낼 수 있다. **`batch-runner/`를 작업
+디렉터리로 두고** 돌린다 — `core`는 설치된 꾸러미가 아니라 그 디렉터리 안에 있어서,
+다른 데 저장한 파일로 실행하면 `ModuleNotFoundError: No module named 'core'`가 난다.
+`cd batch-runner && python - < 스크립트` 또는 그 디렉터리 안에서 실행하면 된다.
 
 ```python
 import json
