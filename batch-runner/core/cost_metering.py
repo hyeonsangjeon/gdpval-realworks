@@ -194,6 +194,12 @@ def extract_usage(response: Any) -> CallUsage:
 
     A field that is absent stays ``None``. It is not defaulted to zero — a
     provider that reported nothing has not told us the call was free.
+
+    The audio counts are read from the same details blocks the cached and
+    reasoning counts come from. They were previously dropped here, which is why
+    the grading ledger holds speech calls whose rows show an input count with
+    no indication that any of it was speech: the breakdown arrived, and this
+    function did not look at it.
     """
     usage = _get(response, "usage")
     if usage is None:
@@ -219,11 +225,25 @@ def extract_usage(response: Any) -> CallUsage:
             if reasoning is not None:
                 break
 
+    audio_input = None
+    for details_name in ("prompt_tokens_details", "input_tokens_details"):
+        audio_input = _first_int(_get(usage, details_name), "audio_tokens")
+        if audio_input is not None:
+            break
+
+    audio_output = None
+    for details_name in ("completion_tokens_details", "output_tokens_details"):
+        audio_output = _first_int(_get(usage, details_name), "audio_tokens")
+        if audio_output is not None:
+            break
+
     return CallUsage(
         input_tokens=input_tokens,
         cached_input_tokens=cached,
         output_tokens=output_tokens,
         reasoning_tokens=reasoning,
+        audio_input_tokens=audio_input,
+        audio_output_tokens=audio_output,
     )
 
 
