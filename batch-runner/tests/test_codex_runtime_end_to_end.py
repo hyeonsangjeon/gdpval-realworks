@@ -32,17 +32,30 @@ command's token is accepted, or that the pinned Codex version is compatible
 with our region — the scripted server accepts anything. Those three are the
 blockers recorded in ``core.execution_environment_readiness``.
 
-Sandboxing and this machine
----------------------------
+Sandboxing, and the two machines that will not do it
+----------------------------------------------------
 
 The agent's file writes go through ``exec_command``, which Codex runs inside a
-sandbox. On a kernel without usable unprivileged user namespaces the sandbox
-cannot start at all — the NAS this repository is often edited on runs 3.10, and
-both of Codex's Linux backends fail there. Where that happens, the assertions
-that depend on a command having *run* skip with the runtime's own error text,
-and the rest of the chain is still asserted. The sandbox is never turned off to
-make a test pass: a run with the sandbox disabled would not be the
-configuration anything else uses.
+sandbox. Neither machine this repository currently runs on gives it one, and
+they fail differently:
+
+* the NAS this repository is often edited on runs kernel 3.10, which has no
+  usable unprivileged user namespaces, so the sandbox cannot start at all;
+* the GitHub hosted runner grants the namespace and then denies the capability
+  inside it, so bwrap dies bringing up the loopback interface of the network
+  Codex unshares.
+
+Where either happens, the assertions that depend on a command having *run* skip
+with the runtime's own error text, and the rest of the chain is still asserted.
+The sandbox is never turned off, and network access is never granted to make
+the second failure go away: a run configured that way would not be the
+configuration anything else uses, and a green test bought that way would be
+describing a run place nobody will use.
+
+That leaves one leg of this file unproven anywhere available today — Codex
+actually executing a command inside its sandbox. It needs a host with working
+unprivileged user namespaces, which is the execution-host card's subject, not
+this one's.
 """
 
 from __future__ import annotations
@@ -334,12 +347,29 @@ class ScriptedResponses:
 
 # ── Sandbox availability on the host running the test ───────────────────────
 
-#: What Codex says when the kernel will not give it a sandbox. Matched rather
-#: than guessed at: both alternatives are quoted from a real run on a 3.10
-#: kernel, one per Linux backend Codex has.
+#: What Codex says when the machine will not give it a working sandbox.
+#:
+#: Every message bwrap aborts with is prefixed ``bwrap: `` on its own line, and
+#: it prints them *instead of* running the command, so the line's presence is
+#: the signal -- not any one wording. Two have been seen for real, and they are
+#: different failures on different machines, which is why the match is the
+#: prefix rather than either text:
+#:
+#:   - ``bwrap: Creating new namespace failed`` -- this NAS, kernel 3.10, which
+#:     has no unprivileged user namespaces at all.
+#:   - ``bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted`` -- the
+#:     GitHub hosted runner, which grants the namespace and then denies the
+#:     capability inside it, so the network Codex unshares cannot be brought up.
+#:
+#: The second one is why this is a prefix match. It was found by this file
+#: failing on CI with an assertion about a missing file, which reads as "the
+#: agent did not write the deliverable" and is not what happened.
+#:
+#: The last alternative is Codex's other Linux backend saying the same thing.
 _SANDBOX_CANNOT_START = re.compile(
-    r"bwrap: Creating new namespace failed"
-    r"|permission profiles requiring direct runtime enforcement"
+    r"^bwrap: "
+    r"|permission profiles requiring direct runtime enforcement",
+    re.MULTILINE,
 )
 
 
@@ -349,6 +379,11 @@ def sandbox_refused(server: ScriptedResponses) -> str | None:
     ``None`` when a command actually ran, whatever its exit status. A command
     that ran and failed is a test failure; a sandbox that could not start is a
     property of the machine, and the tests that need one say so and skip.
+
+    Never widen this to a substring search. ``bwrap:`` at the start of a line is
+    bwrap's own abort; the same text in the middle of a line could be output
+    from a command that ran, and swallowing that would turn a real regression
+    into a green skip.
     """
     text = server.tool_output_text()
     if _SANDBOX_CANNOT_START.search(text):
@@ -474,8 +509,8 @@ def test_a_turn_starts_a_runtime_calls_a_tool_and_comes_back_with_a_file(
 
     if refusal:
         pytest.skip(
-            "this kernel gives Codex no sandbox, so the command it was asked "
-            f"to run could not execute: {refusal}"
+            "this machine gives Codex no working sandbox, so the command it "
+            f"was asked to run could not execute: {refusal}"
         )
 
     # The deliverable exists and was built from the staged reference. The
@@ -563,8 +598,8 @@ def test_the_agent_cannot_see_the_other_tasks_files(tmp_path: Path):
             refusal = sandbox_refused(server)
             if refusal:
                 pytest.skip(
-                    "this kernel gives Codex no sandbox, so the agent could "
-                    f"not be asked what it can see: {refusal}"
+                    "this machine gives Codex no working sandbox, so the "
+                    f"agent could not be asked what it can see: {refusal}"
                 )
             listings.append(server.tool_output_text())
 

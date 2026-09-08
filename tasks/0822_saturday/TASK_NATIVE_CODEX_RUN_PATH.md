@@ -186,12 +186,27 @@ Responses server on the loopback interface. No paid deployment takes part, and
 the agent's own settings are not relaxed for it: `Sandbox.workspace_write` and
 `ApprovalMode.deny_all`, with no argument that turns either off.
 
-One host limit is worth writing down. The development box runs a NAS kernel
-(Linux 3.10) without user namespaces, so the sandbox cannot start there and the
-two assertions that need a command to actually *execute* skip, printing the
-runtime's own `bwrap: Creating new namespace failed` message. They are not
-skipped in CI, which installs the pinned runtime on `ubuntu-latest` and runs
-them for real. The isolation is never disabled to make them pass.
+One host limit is worth writing down, because the first attempt to write it
+down got it wrong. The development box runs a NAS kernel (Linux 3.10) without
+user namespaces, so the sandbox cannot start there, and the two assertions that
+need a command to actually *execute* skip with the runtime's own
+`bwrap: Creating new namespace failed`. That much was known. What was assumed
+without checking is that CI would run them for real — `ubuntu-latest` does
+install the pinned runtime and does start the sandbox, and then bwrap dies
+anyway with `bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted`: the
+namespace is granted and the capability inside it is not, so the network Codex
+unshares cannot be brought up. The assumption cost a red CI run, which is how it
+was found.
+
+So the honest statement is that **neither machine available today runs that
+leg**, and the skip now matches any `bwrap:` abort rather than one wording. Two
+ways to make it green were available and both were refused: turning the sandbox
+off, and granting the sandboxed command network access so nothing has to be
+unshared. Either would produce a passing test about a configuration no run would
+use. What it needs instead is a host with working unprivileged user namespaces —
+the same requirement the existing execution-host card carries, and the same one
+`agentic-sandbox-preflight.yml` already waits on with its `self-hosted,
+agentic-sandbox` runner label.
 
 ## 4. A distinction that is easy to get wrong
 
@@ -371,7 +386,12 @@ paid run must be preceded by a fresh smoke at the new fingerprint.
 - [x] The question in section 7 is answered from official documentation.
 - [x] A run place exists, with the settings in code rather than in prose.
 - [x] The chain from runtime start to cost collection is checked without a paid
-      deployment.
+      deployment — with one leg still open: Codex actually *executing* a command
+      inside its sandbox, which no machine available today will do. See section
+      3b.
+- [ ] Codex executes a command inside its sandbox on a host with working
+      unprivileged user namespaces. Blocked on the execution-host card, not on
+      this one.
 - [ ] One request reaches the real deployment and is accepted.
 - [ ] A test proves the deployment it addresses is the same one the other
       columns address.
@@ -387,10 +407,13 @@ paid run must be preceded by a fresh smoke at the new fingerprint.
 - **Blocked on a live request.** Version, authentication and per-region
   compatibility against our own deployment are separate facts from the
   documentation, and only a request settles them.
-- The exec leg of the mock check is proven in CI rather than on the development
-  box, whose kernel cannot start the sandbox. That is a host limit, not a
+- The exec leg of the mock check is **not proven on any machine available
+  today**: the development box has no user namespaces, and the hosted runner
+  denies the capability inside the one it grants. That is a host limit, not a
   finding about the run place, and it is not worked around by disabling
-  isolation.
+  isolation or by giving the sandboxed command network access. It needs a host
+  with working unprivileged user namespaces — the execution-host card's
+  subject.
 - The next decision is whoever can run one paid request against the pinned
   deployment. Until it succeeds, the column stays empty and is reported as
   unconfirmed. It is not filled with a substitute.
