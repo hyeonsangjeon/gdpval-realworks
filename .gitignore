@@ -86,6 +86,16 @@ batch-runner/scripts/*
 # cannot be run against the next paid run. Held by
 # tests/test_verify_cost_ledger.py.
 !batch-runner/scripts/verify_cost_ledger.py
+# The check for 340 §6.2's nine metering conditions, written before the run it
+# judges so the conditions cannot be chosen after seeing the result. Different
+# question from `verify_cost_ledger.py` above -- that one asks whether a
+# published grade's receipt is backed by its ledger; this one asks whether an
+# audio diagnostic's spend reached a ledger at all, which is what 337 turned
+# out not to have done. Same reason it has to be named: the directory rule
+# hides it, `git add -A` skips it in silence, and a check that is not in the
+# repository cannot be run against the paid run it was written for. Held by
+# tests/test_the_metering_check_can_fail.py.
+!batch-runner/scripts/verify_audio_metering_run.py
 # The follow-up check that runs on the commit a grading run actually pushed.
 # It is invoked by the verify-published job in grade-run.yml, so the directory
 # rule hiding it would leave that job calling a file the checkout does not
@@ -232,6 +242,10 @@ tasks/rebuilding_grading_task/*
 !tasks/rebuilding_grading_task/337-audio-accuracy-measured.json
 !tasks/rebuilding_grading_task/337-audio-accuracy-measured-delivery.json
 !tasks/rebuilding_grading_task/339-the-sentence-that-changed-nothing.md
+!tasks/rebuilding_grading_task/340-we-have-not-seen-audio-metering.md
+!tasks/rebuilding_grading_task/341-what-a-refused-call-costs.md
+!tasks/rebuilding_grading_task/342-audio-cost-metering-prereg.md
+!tasks/rebuilding_grading_task/343-audio-metering-rehearsal.md
 
 # The grading run writes a sqlite mirror of the cost ledger beside every grade
 # file. The published record is the .jsonl next to it; the database is a local

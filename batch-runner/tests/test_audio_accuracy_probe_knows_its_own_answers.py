@@ -2179,8 +2179,13 @@ def test_dry_run_reports_a_perfect_score_and_says_it_measured_nothing(
     assert report["accuracy"]["overall"]["accuracy"] == pytest.approx(1.0)
     assert report["accuracy"]["discrimination_j"]["per_call"] == pytest.approx(1.0)
     assert report["cost"]["estimated_cost_usd"] is None
-    assert report["cost"]["pricing_complete"] is True
+    # Not ``True``. Nothing was called, so there is no bill and no claim to
+    # make about whether every model on it has a rate -- and ``true`` for a
+    # run that bought nothing is the vacuously-right sentence 340 §2.2 caught
+    # being read as "this run's costs are fully accounted for".
+    assert report["cost"]["pricing_complete"] is None
     assert report["cost"]["unpriced_models"] == []
+    assert "cost nothing" in report["cost"]["note"]
     # 20 calls went out to the stub and none of them were billed. A report
     # that said "billable_calls: 20" here is the figure someone copies.
     assert report["cost"]["model_calls"] == 20
@@ -4186,12 +4191,60 @@ def test_a_finished_run_says_so_rather_than_leaving_the_field_out(
 
 def test_the_tone_corpus_runs_without_stop_rules(tmp_path: Path) -> None:
     """Its numbers are published. Adding rules now would change the design a
-    published result was produced under, after the fact."""
-    source = (
-        probe.REPO_ROOT / "batch-runner" / "scripts"
-        / "measure_audio_grading_accuracy.py"
-    ).read_text(encoding="utf-8")
-    assert "stop_rules=SPEECH_STOP_RULES if speech else None" in source
+    published result was produced under, after the fact.
+
+    This used to grep the source for the one line that decided it. The grep
+    broke the day the metering branch was added -- while the property it was
+    defending was still perfectly true -- so it reads the decision by calling
+    it now. ``metering`` is answered first because **a metering run is a
+    speech run too**, and 342 section 5's ten-minute clock has to win over the
+    twenty-minute one it is derived from rather than lose to it.
+    """
+    manifest_path, clip_dir = _speech_fixture(tmp_path, clips=2)
+    corpus = probe.load_speech_corpus(manifest_path, clip_dir)
+
+    # The published tone run: no speech set, not metering, and so no rules.
+    assert probe.stop_rules_for(metering=False, speech=None) is None
+    # The speech run: 330's four rules plus 336's, on twenty minutes.
+    assert probe.stop_rules_for(metering=False, speech=corpus) is (
+        probe.SPEECH_STOP_RULES
+    )
+
+    metered = probe.stop_rules_for(metering=True, speech=corpus)
+    assert metered is probe.AUDIO_COST_METERING_STOP_RULES
+    assert metered.wall_clock_seconds == probe.AUDIO_COST_METERING_WALL_CLOCK_SECONDS
+    assert metered.wall_clock_seconds < probe.SPEECH_STOP_RULES.wall_clock_seconds
+    # Derived, not restated: everything the speech run stops on still stops
+    # the metering run. A shorter clock is the only difference there is.
+    assert metered.stop_on_undelivered_audio is True
+    assert metered.zero_response_after == probe.SPEECH_STOP_RULES.zero_response_after
+    assert metered.max_provider_failures == probe.SPEECH_STOP_RULES.max_provider_failures
+
+
+def test_the_tone_run_really_reaches_the_measurement_with_no_rules(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The test above checks the decision. This checks the call site uses it.
+
+    Between the two sits the failure the grep version could not see: a
+    correct decision function that nothing calls. So the tone path is run
+    through ``main`` and the argument ``run_measurement`` is actually handed
+    is the thing asserted.
+    """
+    seen: dict[str, Any] = {}
+    real = probe.run_measurement
+
+    def capture(**kwargs: Any) -> Any:
+        seen.update(kwargs)
+        return real(**kwargs)
+
+    monkeypatch.setattr(probe, "run_measurement", capture)
+    out = tmp_path / "report.json"
+    assert probe.main(
+        ["--dry-run", "--repeats", "1", "--quiet", "--out", str(out)]
+    ) == 0
+    assert "stop_rules" in seen
+    assert seen["stop_rules"] is None
 
 
 def test_the_paid_summary_says_a_stopped_run_stopped() -> None:

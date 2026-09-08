@@ -12,6 +12,234 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Added
+- **A refusal now reaches the audio checker as a refusal, and a paid run whose
+  every call was declined is `inconclusive` rather than `rehearsal_ok`.** The
+  shared fix `341` proposed landed in the common metering code (not this
+  branch's work, and not edited here): a verifiable HTTP refusal settles as
+  **`refused` / `call_refused_unpriced`** instead of leaving a standing
+  reservation. `340`'s pinned expectation moved with it — `[refused]` is now
+  `refused` and `[broke]` (5xx) stays `reserved` / `call_reachability_unknown`
+  — and both branches are pinned **by state and by reason**, separately,
+  because a test written to accept either would still pass on the day the
+  distinction is lost. A refused row is **counted as a call, claims no amount,
+  and holds the receipt at `partial`**; routing it to `abandoned` instead
+  would drop it out of `model_calls` and close an all-refused run as a
+  **complete receipt for `$0`**, which says the run spent nothing rather than
+  that its cost is unclaimed.
+- **Condition 7 tells a reply apart from a request that never got one.** It
+  used to require a settled row for every broken verdict, which on an
+  all-refused run produced the sentence *"a reply that could not be parsed was
+  still a reply, and it was still billed"* about calls that were never
+  answered — a false statement, found by running the integration rather than
+  by reading it. It now reads `requests_that_raised` off the wire records and
+  asks two things separately: replies must have settled rows, raises must have
+  refused-or-reserved ones. **The loose form was rejected on purpose** —
+  "settled or refused, either is fine" is one line shorter and passes on the
+  day a reply's row goes missing, so a deliberate test deletes a settled row
+  and requires condition 7 to fail. A report that does not carry the raised
+  count **says it cannot tell them apart** instead of pretending to, and that
+  fallback has its own test.
+- **`inconclusive` — a fourth verdict, for a paid run that failed nothing and
+  answered nothing.** Condition 2 becomes `unanswerable` by two different
+  routes now, carried in `unanswerable_because`: `rehearsal`, where there was
+  no provider to answer, and `no_model_ran`, where the calls were all refused.
+  The second is not a rehearsal — that word belongs to runs that spent
+  nothing, and a paid artifact wearing it reads as free — and it is not
+  `measured_ok` either, which would claim a measurement nobody made. The exit
+  status stays **0**, because what the status answers is *does this cost
+  record hold together*; whether the run learned what it wanted is the
+  **verdict word**, and callers that need the second must read `verdict`
+  rather than the status. `342` §1 and `343` §5.4 now state the two exit-code
+  scales side by side: the measurement's `2` means the **accuracy** question
+  went unanswered, the checker's `0` means the **cost** question was answered,
+  and a run can honestly be both at once.
+- **All eight ways a metered audio call can end are walked end to end** in
+  `tests/test_every_way_an_audio_call_can_end_is_metered.py` (13 tests), from
+  the production adapter through the receipt to all nine checker conditions. A
+  verifiable refusal is a counted call with no amount; a request stopped by
+  the ceiling leaves **no row and no wire record at all**, because the cap
+  raises inside `WireClient` above the metered client, which is what keeps
+  condition 1 an equality rather than an inequality; a timeout stays
+  `reserved`, since a request that may have been served is not the same as one
+  that provably was not; a reply with no usage block settles as `usage_absent`
+  because the reply itself is the evidence it was billed; an unpriced model
+  reports `null`, never `$0`; an unreadable reply settles carrying its usage;
+  re-reading the export reproduces a refusal unchanged; a recorded cost is not
+  overwritten by a second, differing settlement; and `refused` is terminal —
+  settling or abandoning one raises. One asymmetry is worth knowing before
+  reading the rows: a **refusal writes its reason onto the row**, while a
+  reserved row's `missing_reasons` is empty and `call_reachability_unknown` is
+  **derived by the receipt** from the row still being open, so that ending is
+  asserted on the receipt and not on the row.
+- **None of this changed what the rehearsal reports, and nothing was bought.**
+  The checker still returns **8 passed, 0 failed, 1 unanswerable —
+  `rehearsal_ok`** on the offline run; it was not turned into 9/9. The grader
+  fingerprint moved with the shared fix, `50f6f8bb…` → `ee1ca0b0…`,
+  recomputed here rather than taken on report; the price table did not move
+  (`b01b384c…`), which is the point of pinning the two separately. Both were
+  then **re-measured on merged `main` (`9159465`) with this branch applied**
+  and came out unchanged, so `342` §0's two fingerprint rows are now ticked
+  against a named SHA — and they re-open on the next merge that touches
+  `core/`, which is why `343` §5.1 is run again immediately before any paid
+  dispatch. The paid run stays unstarted: `gpt-audio-1.5` was not called,
+  no ledger row was bought, and `337`'s artifacts and pre-registration are
+  untouched.
+- **The metering path `340` found missing now runs end to end, with no model
+  called and nothing bought.** `measure_audio_grading_accuracy.py` opens the
+  production `cost_recorder`, meters the client **inside** `WireClient` rather
+  than around it — that client rewrites the request before calling `create`,
+  so a meter on the outside would digest a body nobody sent — and runs the
+  perception calls inside `attributed(task_id="audio_accuracy_diagnostic",
+  stage=STAGE_PERCEPTION)`. The cost block that `340` showed to be four
+  constants is now the ledger's own answer: `pricing_complete`,
+  `unpriced_models`, `estimated_cost_usd` and the receipt come from a lookup
+  against the pinned price table, and **usage-missing and price-missing are
+  separate fields** (`missing_reasons.usage` vs `.price`) rather than one
+  sentence. **No second ledger was built** — only the public API of
+  `core/cost_receipts.py`, which this work reads and does not edit. `337`'s
+  artifacts and pre-registration are untouched; no request ID and no ledger
+  row was reconstructed for calls made when there was no ledger.
+- **`--metering-run` refuses before it spends, and the checker was written
+  before the run.** The flag takes `342` as a document and stops with `exit 3`
+  on a mismatched diagnostic kind, a claim count other than two, repeats other
+  than the registered one, a plan larger than its registered ceiling, and each
+  of three independent fingerprints — grader source, price table, speech
+  manifest. **The manifest pin is the one that is easy to miss**: a swapped
+  corpus passes every clip digest in `load_speech_corpus`, because the file
+  making the claim is the file being checked, so consistency only becomes
+  identity once the document names the manifest's own digest. Judgement is
+  `scripts/verify_audio_metering_run.py`, which reads the report and the
+  ledger export and nothing else — no model, no credentials, no network — and
+  reports `measured_ok` / `rehearsal_ok` / `inconclusive` / `failed`. A
+  rehearsal cannot reach
+  `measured_ok`: the stub has no audio tokens, so condition 2 is recorded as
+  **`unanswerable`, a third state that is neither pass nor fail**, and the
+  verdict stops one short of the paid one.
+- **The whole path was rehearsed offline and reached `rehearsal_ok`.** Two
+  planned requests produced **two ledger rows, no duplicates**, both under the
+  diagnostic's task with the problem-solving bucket left `not_run`;
+  `provider: stub` and `resolved_model: stub-not-a-model` on every row;
+  `pricing_complete: false`, `missing_reasons.price: ["price_missing"]`,
+  `usage_complete: true`, receipt `status: partial`, and
+  **`estimated_cost_usd: null` rather than `$0`**. The checker returned
+  **8 passed, 0 failed, 1 unanswerable — `rehearsal_ok`, exit 0**. The corpus
+  is two synthetic tones the test builds in a temp directory and never
+  commits, so no artifact can later be mistaken for `330`'s speech set, and
+  `342`'s real document stays pinned to `330`'s manifest. It carries **four
+  claims for a two-question run**, because the loader requires every
+  `pair_id` to hold exactly one true and one false claim and narrowing does
+  not re-run that check. **A rehearsal is not evidence about `gpt-audio-1.5`**
+  — it is kept apart at three layers: `record_kind` in the report, the
+  provider and model on every row, and a ledger that refuses to accept rows of
+  the other kind.
+- **Breaking the verdict does not erase the cost, and neither does the
+  ceiling.** With every reply broken — one unreadable envelope, one valid JSON
+  declining to judge, which take different code paths — the run exits **2, "no
+  verdict was reached"**, while both cost rows survive, the receipt closes,
+  and the checker still returns `rehearsal_ok`. **The two exit codes hold the
+  two questions apart**: `2` from the measurement means *we did not hear*, `0`
+  from the checker means *we recorded what we spent*, and neither covers for
+  the other. A run stopped by its request ceiling exits 3 and **still exports
+  the request that already went out**, because export happens in `finally` —
+  exporting only on success would delete the record of exactly the spend
+  nobody planned. Sixty-six tests across four files —
+  `tests/test_the_metering_run_goes_end_to_end.py` (19),
+  `tests/test_the_metering_check_can_fail.py` (20),
+  `tests/test_a_broken_audio_reply_still_costs_what_it_cost.py` (14) and
+  `tests/test_every_way_an_audio_call_can_end_is_metered.py` (13); the second
+  feeds the
+  checker wrong task attribution, duplicate rows, an unsettled call, an
+  inflated `pricing_complete` and an amount on a row with no rate, and
+  requires **the condition that claims to catch each one** to be the one that
+  does. `check_grader_hash_freeze.py` reports "PASS: no grader-source file in
+  this diff" for every path changed here. **`342` §2's grader and price
+  fingerprints remain provisional and must be recomputed at the merged SHA
+  before anything is bought; `337`/`338`'s thresholds are unchanged and the
+  120-call experiment is not resumed.**
+- **`340` — the audio calls `337` bought never reached the ledger, so §11.9's
+  "sound metering is unverified" is still true.** The probe that spent those
+  ten calls builds `AudioPerception(client=wire, …)` with an unmetered client;
+  across all 4,131 lines of `measure_audio_grading_accuracy.py` there is no
+  `MeteredClient`, `CostRecorder`, `CostReceiptLedger`, `open_cost_recorder`
+  or `price_call`, where the production grader wraps the same client in
+  `cost_recorder.meter(…, stage=STAGE_PERCEPTION)`. Its cost block reads like
+  a lookup and is not one: `pricing_complete` is `not billable`,
+  `unpriced_models` copies the deployment name through,
+  `estimated_cost_usd` is the literal `None`, and the note naming the model as
+  absent from the price table is a sentence someone wrote rather than a
+  finding — all four would have printed identically had `gpt-audio-1.5` been
+  priced, and a dry run, which is billable for nothing, prints
+  `pricing_complete: true` about the same unpriced model. The values are right
+  (`azure:gpt-audio-1.5` is genuinely in `models_deliberately_not_priced` with
+  `official_price_exists: false`, re-verified 2026-09-07) and they are
+  right by coincidence. So `337`'s artifacts prove the **adapter** leg and
+  only that: usage complete on 10/10 calls, 4,095 input and 553 output tokens,
+  320 audio tokens, one digest per clip. Ledger rows: zero. Priced calls:
+  zero. Receipts: zero.
+- **The production metering path is now driven end to end with broken
+  replies** — `Grader` → `cost_recorder.meter()` → `AudioPerception` →
+  `MeteredClient` → `CostReceiptLedger` → receipt, reading its settings from
+  `grading_configs/default_v2.yaml` rather than restating them, with only the
+  provider response faked. `tests/test_a_broken_audio_reply_still_costs_what_it_cost.py`
+  is 14 tests and covers what the existing suite does not: the paths that
+  fail. A reply that is prose rather than JSON and a reply that is valid JSON
+  declining to judge both settle with 1000/200/30/10 intact, because `_around`
+  settles before anything parses the envelope; a reply with no usage block
+  settles as a call with no number and still counts as a call; a failure
+  before the wire files no row at all; an unknown call does not erase the
+  known money beside it ($0.118 of a three-call task survives one 500); the
+  audio share is charged inside the input count ($0.059) and not on top
+  ($0.061); a resumed run adds its round to the ledger it reopened; and a
+  second settle with different figures raises `LedgerIntegrityError` rather
+  than overwriting what was recorded. Perception spend lands in
+  `grading_cost` and never in `problem_solving_cost`. **Fourteen green tests
+  on the first run are the least trustworthy result available**, so the
+  production code was broken eight ways by monkeypatch — settle made a no-op,
+  settle moved after the parse, usage-less rows dropped, audio added on top,
+  audio priced as prose, one unknown call sinking the task, resume forgetting
+  its round, contradictory settles overwriting — and every one is caught by
+  the test that claims to guard it. Moving settle after the parse fails only
+  the unparseable-prose case and not the declined-verdict one, which is the
+  distinction `339` §2 paid to establish.
+- **Price-missing and usage-missing are verified separately, and neither ever
+  becomes `$0`.** Two different causes share `price_missing` by design — a
+  model absent from the table, and a model priced for text while the call
+  carried speech — so the second is pinned against a negative control: the
+  same table prices a zero-audio call, which is what makes the refusal about
+  the speech rather than about the table. Contradictory usage (an audio share
+  larger than the total it belongs to, a split that is `None` under audio
+  rates) stays `usage_partial` and does not leak into `price_missing`. No rate
+  was invented for `gpt-audio-1.5` and none was borrowed from a similar model.
+- **`341` — a provider refusal is filed as a call that might have run.** The
+  eight statuses `core/perception/audio.py` already knows are unbilled
+  (`400`, `401`, `403`, `404`, `413`, `415`, `422`, `429`) reach the ledger as
+  nothing at all: `_around` has no `except`, so the reservation stands and the
+  receipt reports `call_reachability_unknown` — the specification's「API 도달
+  여부 불명확」— about a request that provably reached the API and provably came
+  back. **The amount is right and the reason is wrong**; a standing
+  reservation is the safe direction, and what a rate-limited run would produce
+  is false "might owe money" flags crowding out the real unknowns beside them.
+  `abandon` as documented is not the existing answer either — it requires the
+  call to have never left. The document carries a test that fails on all eight
+  statuses today, a three-file proposed diff, and a measurement of its blast
+  radius: applied by monkeypatch the eight pass and the filtered suite gives
+  1 failed / 1,666 passed / 4 skipped, the single failure being `340`'s own
+  assertion recording today's behaviour while its 500 branch keeps passing.
+  Shared metering code is read, quoted and not edited.
+- **A pre-registration-ready plan for the smallest real metering run**, kept
+  strictly apart from the accuracy work: one task, two criteria, six requests,
+  zero transport retries, a ten-minute paid-window ceiling, and no re-dispatch
+  if it fails. Its nine pass criteria are all about the ledger and none about
+  verdict correctness — a run whose verdicts all break is a *good* test here.
+  The clips are `crate` and `shelf` from the committed
+  `330-speech-verification-manifest.json`, whose `crate` digest
+  `7e59f9a5…` is the one `337` actually put on the wire, so the pin is a value
+  that has already survived a real dispatch. Because the model has no rate,
+  the ceiling is stated in requests rather than dollars — **no amount ceiling
+  was introduced**; the six is a per-diagnostic entry in the existing
+  `SPEECH_REQUEST_CAPS`, counted on the wire, and the config's
+  `audio_call_cap_per_task` is read as it stands rather than lowered.
+  **Nothing was dispatched and no model was called.**
 - **`339` — the pilot ran, the candidate missed its bar, and `338` is not
   bought.** Ten paid calls at commit `e7a820e2`, run `34211419777`, ten
   requests counted against a registered ceiling of twelve, each call one
@@ -270,6 +498,13 @@ entries land under a fresh dated heading the day they merge to `main`.
   repository checked a result document against its own raw file.
 
 ### Fixed
+- **`339` §11's call-count summary said 8 where its own run record said 7.**
+  The line above it reads seven used with one spare unspent, and the artifact
+  agrees; the summary is corrected to `7회 (상한 8회, 예비 1회 안 씀)`. The same
+  table conflated `337`'s one readable envelope with its zero usable verdicts,
+  which the body of `339` had already separated — corrected to name both. Only
+  the summary wording changed; every measured figure in `330`–`339` is
+  untouched, and the correction cites the originals it was checked against.
 - **The record of what `333` and `334` actually varied: the observation arm
   changes the label in front of the criterion as well as the header above it.**
   `apply_arm` writes `Statement:` where production writes `Criterion:`. Both
@@ -500,6 +735,19 @@ entries land under a fresh dated heading the day they merge to `main`.
   needs segregating.
 
 ### Changed
+- **A guard that grepped for a line broke while the property it guards stayed
+  true.** `test_the_tone_corpus_runs_without_stop_rules` asserted the literal
+  `stop_rules=SPEECH_STOP_RULES if speech else None` was present in the
+  measurement script; adding the metering branch rewrote that expression and
+  failed the test, though the tone corpus still got no stop rules and no
+  published number moved. The decision is now `stop_rules_for(metering=,
+  speech=)` and the guard **calls** it for all three inputs — and, because a
+  correct decision nothing calls is the failure a grep also cannot see, a
+  second test runs the tone path through `main` with `run_measurement`
+  captured and asserts the argument that arrives is `None`. **`metering` is
+  answered before `speech`**, since a metering run is a speech run too and
+  `342` §5's ten-minute clock has to beat the twenty-minute one it derives
+  from.
 - **The paid summary printed both halves of a model-identity check and did
   neither half.** Its header states the model 330 §2 pins; a table row four
   hundred lines down lists what actually answered. Nothing compared the two, so
