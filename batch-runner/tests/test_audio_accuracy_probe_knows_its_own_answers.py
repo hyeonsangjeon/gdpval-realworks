@@ -5453,7 +5453,28 @@ def test_the_pilot_document_pins_what_this_checkout_would_dispatch() -> None:
     assert header is probe.SPEECH_OBSERVATION_HEADER_V2
 
     # And the grader fingerprint, which moves without anyone here touching it.
-    assert probe.grader_source_hash() in text
+    #
+    # Before the pilot ran this was held against what the checkout computes:
+    # a stale pin there is a run that dies after the job starts instead of
+    # here. The pilot has run, so the pin is history -- it records what the
+    # ten paid calls went out under, and #455 moved the live value two
+    # minutes after the paid job ended. Editing it to match today's tree
+    # would make this table say when it was read rather than what ran.
+    #
+    # So it is held against the artifact the paid run wrote, which is the one
+    # thing that can still contradict it. That is a stronger check than the
+    # one it replaces, not a relaxation of it: the run recomputes the
+    # fingerprint before it calls the model and refuses a document that
+    # disagrees (see the stale-pin test below), so this asks whether the
+    # document tells the truth about a run that already happened.
+    measured = json.loads(
+        (_PILOT_DOC.parent / "337-audio-accuracy-measured.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert probe.grader_pin_stated_in(_PILOT_DOC) == (
+        measured["pins"]["grader_source_sha256"]
+    )
 
 
 def _pilot_doc(
@@ -5839,7 +5860,26 @@ def test_the_main_comparison_document_pins_what_this_checkout_would_dispatch(
     assert probe.diagnostic_kind_stated_in(_MAIN_DOC) == (
         probe.SPEECH_PROMPT_AB_V2_KIND
     )
-    assert probe.grader_pin_stated_in(_MAIN_DOC) == probe.grader_source_hash()
+
+    # The pin. While a plan is open for dispatch this has to be what the
+    # checkout computes, because the run recomputes it before calling the
+    # model -- a stale pin there costs a started job rather than a red test.
+    # 338 is closed: the pilot returned readable JSON on one call of five
+    # against a bar of five, so §0's first row failed and nothing will be
+    # dispatched against this file. Its pin records the tree it was written
+    # beside, which is the pilot's. Re-pinning a closed plan to today's value
+    # would dress it up as one still waiting to be bought.
+    #
+    # The branch is the point: re-open the document and the freshness demand
+    # comes back on its own.
+    if "상태: 안 샀다. 그리고 안 산다." in text:
+        assert probe.grader_pin_stated_in(_MAIN_DOC) == (
+            probe.grader_pin_stated_in(_PILOT_DOC)
+        )
+    else:
+        assert probe.grader_pin_stated_in(_MAIN_DOC) == (
+            probe.grader_source_hash()
+        )
 
     # Whole-manifest: it must NOT narrow, and it must not fix repeats. Both
     # are checked through the registries the door actually reads, not through
