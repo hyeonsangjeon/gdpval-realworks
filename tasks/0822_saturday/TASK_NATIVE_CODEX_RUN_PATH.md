@@ -7,11 +7,14 @@
   run place was built against the pinned runtime and checked without a paid
   deployment. Running it on a host that can sandbox then found a defect in the
   run place itself. See section 3b.
-- Status: **built, not connected, and the execution leg is unproven.** The code
-  exists and most of the chain is checked against the real Codex binary; the
-  agent has never been observed executing a command anywhere, and no request has
-  yet reached the Foundry deployment, so the run place is graded
-  `structure_check_only` and a batch run in this mode is refused.
+- Status: **built, executing on one host, and not connected.** The code exists
+  and most of the chain is checked against the real Codex binary. As of
+  2026-09-08 the agent has been observed executing a command inside its sandbox
+  — once, on GitHub's `ubuntu-22.04` runner, against a scripted provider, and
+  only after a defect in this repository's own run place was found and fixed
+  (§3b). No request has yet reached the Foundry deployment, so the run place is
+  still graded `structure_check_only` and a batch run in this mode is still
+  refused.
 - Related GitHub Project: hyeonsangjeon/projects/5 — cards
   "같은 GPT 모델의 실행 환경별 성능 비교" and
   "Codex SDK와 Foundry GPT를 연결해 220문제 실험 실행"
@@ -223,24 +226,32 @@ comes back, the turn ends, usage is collected off `ThreadTokenUsage`, the call
 is settled into the receipt with its missing-information reasons, and the
 process exits without leaking a session.
 
-**Not driven anywhere yet:** the sandboxed command executing, the file it writes
-appearing on disk, and the tool result carrying that command's real output back
-to the model. Those are the two assertions that used to skip everywhere. They
-now *run* on GitHub's `ubuntu-22.04` runner, under `CODEX_SANDBOX_MUST_RUN=1`,
-where a skip is a failure — and the first time they ran, they failed. What they
-found is below. Until that job is green, no document here may say this leg
-works, on one machine or on any.
+**Driven, but on exactly one machine:** the sandboxed command executing, the
+file it writes appearing on disk, and the tool result carrying that command's
+real output back to the model. Those are the two assertions that used to skip
+everywhere. They now run on GitHub's `ubuntu-22.04` runner under
+`CODEX_SANDBOX_MUST_RUN=1`, where a skip is a failure, and on 2026-09-08 they
+passed there for the first time — the whole file reading `17 passed` where every
+other host in this project reads `15 passed, 2 skipped`. Nowhere else. On every
+other host the two still skip, and that skip is still the correct answer for
+those hosts.
 
-Finding that machine is what `scripts/diagnose_codex_sandbox_host.py` was for.
+That sentence is one commit old, and the commit before it said the opposite, so
+it is worth recording why rather than only what. The first run of those
+assertions on that machine was **red**, and it was right to be. What it found is
+below.
+
+Finding the machine is what `scripts/diagnose_codex_sandbox_host.py` was for.
 The rule it replaced — *until one machine reports `ready`, no document here may
-call the chain end-to-end verified* — is half met. One machine reports `ready`,
-by measurement rather than by argument. The other half is not met at all: the
-sentence that stood here before, "the chain has been driven end to end once, on
-one runner image", was written from the expectation that the job would pass,
-before it had run. It had not, and it did not.
+call the chain end-to-end verified* — has been met, and met by measurement
+rather than by argument. What may be said is still narrower than "verified": the
+chain has been driven end to end **once, on one runner image, against a scripted
+provider**, and the run place needed a repair to get there. What may not be said
+is that it works against a paid deployment, which is §3's other open leg and is
+not a sandbox question at all.
 
-**What the red run found.** Both assertions failed the same way, and not on the
-sandbox:
+**What the red run found, and why it was worth the red.** Both assertions failed
+the same way, and not on the sandbox:
 
     bwrap: execvp codex-linux-sandbox: No such file or directory
 
@@ -283,9 +294,12 @@ moving anything, and would also move the sandbox's writable carve-out — Codex'
 permission model names `tmpdir` and `slash_tmp` separately — in a way nothing
 here has measured.
 
-What may be said today is only that the defect is understood and a fix is under
-test. What still may not be said is that the chain runs against a paid
-deployment, which is §3's other open leg and is not a sandbox question at all.
+What may be said today is that the defect is understood, fixed, and the fix
+watched: with the task directory moved, `prove-execution` is green — the two
+assertions that need a command to execute pass, and the whole end-to-end file
+reads `17 passed` on that host. What still may not be said is that the chain
+runs against a paid deployment, which is §3's other open leg and is not a
+sandbox question at all.
 
 The host survey is worth writing down in full, because the first attempt to
 write it down got it wrong twice. All of it is in
@@ -524,12 +538,15 @@ paid run must be preceded by a fresh smoke at the new fingerprint.
 - [x] A run place exists, with the settings in code rather than in prose.
 - [x] The chain from runtime start to cost collection is checked without a paid
       deployment.
-- [ ] Codex executes a command inside its sandbox. A host that can is now
-      known — GitHub's `ubuntu-22.04` runner, measured `ready` and then held
-      there by `CODEX_SANDBOX_MUST_RUN=1` — and running there is what showed
-      that the run place itself was building `CODEX_HOME` somewhere Codex will
-      not create its sandbox helper. Fix under test; see section 3b. This stays
-      unticked until that job is green, and the image is being retired anyway.
+- [x] Codex executes a command inside its sandbox. Observed on 2026-09-08 on
+      GitHub's `ubuntu-22.04` runner — the one host measured `ready` — with
+      `CODEX_SANDBOX_MUST_RUN=1` turning a skip into a failure, so the whole
+      end-to-end file reads `17 passed` there where every other host in this
+      project reads `15 passed, 2 skipped`. Getting there needed a fix: running
+      on a host that can sandbox is what showed that the run place itself was
+      building `CODEX_HOME` somewhere Codex will not create its sandbox helper
+      (§3b). Ticked for what it says and no more — one host, one runner image
+      that is being retired, and a scripted provider rather than a paid one.
 - [ ] One request reaches the real deployment and is accepted.
 - [ ] A test proves the deployment it addresses is the same one the other
       columns address.
@@ -545,17 +562,18 @@ paid run must be preceded by a fresh smoke at the new fingerprint.
 - **Blocked on a live request.** Version, authentication and per-region
   compatibility against our own deployment are separate facts from the
   documentation, and only a request settles them.
-- **The exec leg is open again, and for a different reason than before.** The
+- **The exec leg is closed, on one host, and it took a repair to close it.** The
   host limit was real and was closed by finding a host rather than by removing
   isolation: no sandbox was disabled, no network was opened, no container was
-  privileged, and no host's security policy was changed. But the first run on
-  that host was red, and what it found was ours: `CODEX_HOME` under `/tmp`, so
-  Codex never builds `codex-linux-sandbox`, so the agent's first command dies
-  whatever the host allows (§3b). The fix is in this branch and unconfirmed
-  until `prove-execution` passes. The development box (Linux 3.10, no user
-  namespaces) and `ubuntu-latest` (namespace granted, capability stripped) still
-  cannot run it and still skip. The execution-host card stays open, because one
-  retiring runner image is a reprieve rather than an answer.
+  privileged, and no host's security policy was changed. The first run on that
+  host was red, and what it found was ours: `CODEX_HOME` under `/tmp`, so Codex
+  never builds `codex-linux-sandbox`, so the agent's first command dies whatever
+  the host allows (§3b). With that fixed, `prove-execution` is green — the two
+  assertions that need a command to run pass, and so does the whole file. The
+  development box (Linux 3.10, no user namespaces) and `ubuntu-latest`
+  (namespace granted, capability stripped) still cannot run it and still skip.
+  The execution-host card stays open, because one retiring runner image is a
+  reprieve rather than an answer.
 - The next decision is whoever can run one paid request against the pinned
   deployment. Until it succeeds, the column stays empty and is reported as
   unconfirmed. It is not filled with a substitute.
