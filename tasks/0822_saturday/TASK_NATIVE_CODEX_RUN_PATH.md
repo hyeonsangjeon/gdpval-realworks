@@ -6,7 +6,8 @@
 - Updated: 2026-09-08 — the documentation now covers the Azure provider, and the
   run place was built against the pinned runtime and checked without a paid
   deployment. Running it on a host that can sandbox then found a defect in the
-  run place itself. See section 3b.
+  run place itself. See section 3b. The instrument that will ask the deployment
+  is built and has not been fired; see section 3c.
 - Status: **built, executing on one host, and not connected.** The code exists
   and most of the chain is checked against the real Codex binary. As of
   2026-09-08 the agent has been observed executing a command inside its sandbox
@@ -346,6 +347,83 @@ could probably run — it is the *legacy* sandbox, so a green test there would b
 measuring a run place no real run configures. It is recorded in the
 diagnostic's output as an observation and never as readiness.
 
+## 3c. The other leg: a way to ask the deployment, and to hear which "no"
+
+Section 7's question is answered by a request. Sending one and reading
+"the turn failed" would have answered almost nothing, so before sending anything
+the failure had to be made legible.
+
+`core/execution_environment_readiness.py` names three separate unmeasured
+things, and they are fixed in three different places:
+
+  a. the token `core/codex_azure_token.py` mints has only ever been *minted*,
+     never *accepted* by anything;
+  b. which API contract this deployment serves Codex on is unmeasured;
+  c. whether the pinned Codex build's request shape survives this resource's
+     model version and content filters is a third question again.
+
+A single `RuntimeError` distinguishes none of them — and that is not incidental,
+it is the SDK's own doing. `openai_codex/_run.py::_raise_for_failed_turn` raises
+`RuntimeError(turn.error.message)` and drops `turn.error.codex_error_info`,
+which is where the error's name lives and, for four of its variants, an
+`http_status_code`. `scripts/diagnose_codex_foundry_connection.py` consumes
+`TurnHandle.stream()` itself rather than calling `run()`, so it recovers both
+**from the first request**: a refused sign-in (401/403), a rejected payload
+(400/422), an absent deployment (404) and a content filter each come back under
+their own name, with no second paid call to tell them apart.
+
+Seventeen verdicts, a closed vocabulary, and no guessing from message text. The
+status code beats the error name where both exist, and an error variant this
+pin has never seen reports **its own name** rather than being folded into
+`other` — a future SDK adding a case must not silently become "something went
+wrong".
+
+Four things it deliberately does not do, each of which would have been easier:
+
+* **It does not clear a blocker.** It records evidence and a person decides. A
+  diagnostic that flipped the readiness gate would be a manual override wearing
+  a diagnostic's name, which is the thing §9 exists to prevent.
+* **It does not establish the run place.** The prompt forbids commands, files
+  and tools on purpose, and `tool_execution_observed` is `false` in every record
+  it can produce, `connected` ones included. The record carries four sentences
+  saying which legs a text turn leaves standing — the tool leg, the deliverable
+  leg, the batch leg and the cost leg — rather than leaving that to be inferred
+  by whoever reads a green verdict. §3b's exec leg and this one are different
+  questions and the artifact says so in its own words.
+* **It does not fall back.** No second model, no second provider, no dated
+  legacy route. A run that cannot reach the deployment it was asked about
+  reports that, rather than reporting a different deployment's health — §6's
+  second and fourth prohibitions, enforced instead of promised.
+* **It does not name the resource.** This one needed a different mechanism than
+  the obvious one. The account and project names live in repository
+  *variables*, and a variable is reprinted verbatim in a step's `env` header —
+  so pinning identity the ordinary way, with
+  `AZURE_AI_REQUIRE_EXPECTED_IDENTITIES` and `AZURE_AI_EXPECTED_DIRECT_ACCOUNT`,
+  would publish the name of the resource in the log of the job built not to name
+  it. The pin is a **sha256 of the endpoint host** instead: printable, still
+  sensitive to the endpoint secret being repointed, and worth nothing to anyone
+  who reads it. The names that must be blanked out of runtime messages are mined
+  from the endpoint secret itself with `classify_endpoint`, the way
+  `scripts/azure_rbac_diagnostic.py` already does, and the workflow re-greps its
+  own artifact afterwards rather than trusting the redactor to have worked.
+
+`send_request` defaults to `false`, and with it nothing is sent: the job prints
+the plan — deployment, route profile, host fingerprint, prompt hash, call count,
+retry count — and stops. Plan and result share one schema, so what was fixed
+beforehand and what happened can be compared field by field afterwards. Every
+exit writes its record, including the one where nothing could be configured,
+because an empty artifact and a run that never happened used to look identical.
+
+`core/codex_runner.py` grew `open_runtime()` and `start_thread()` out of its
+private `_build_codex` so that the diagnostic and a real task construct the
+runtime through **one** path — a diagnostic that describes a configuration no
+run uses is worse than none. The sandbox preset and approval mode are read off
+the runner rather than taken as arguments, so nothing can ask this path for
+weaker isolation.
+
+None of this has been sent yet. What exists is the instrument; §11's fifth box
+stays unticked until a request has actually been answered.
+
 ## 4. A distinction that is easy to get wrong
 
 Azure offers models whose names contain "codex", and Azure's own agent service
@@ -393,7 +471,8 @@ by tests. What is left is the one thing a document cannot settle:
 > the pinned Codex build sends, with an Entra token from a directory sign-in?
 
 That is answered by one request against the real deployment, not by more
-reading. Until such a request has succeeded, the run place stays at
+reading. The instrument that asks it now exists — §3c — and has not been fired.
+Until such a request has succeeded, the run place stays at
 `structure_check_only`: the code exists, the mock chain passes, and
 `step2_run_inference` still refuses to start a batch in this mode.
 
@@ -436,7 +515,9 @@ until the evidence exists.
 | File | Role |
 |---|---|
 | `batch-runner/core/codex_runtime_config.py` | Version pins, environment isolation, provider settings, and the loopback stand-in. |
-| `batch-runner/core/codex_runner.py` | Starts the runtime per task, hands over the prompt and reference files, collects deliverables, enforces the time limit, and cleans up. |
+| `batch-runner/core/codex_runner.py` | Starts the runtime per task, hands over the prompt and reference files, collects deliverables, enforces the time limit, and cleans up. `open_runtime()` and `start_thread()` are the one construction path the diagnostic shares. |
+| `batch-runner/scripts/diagnose_codex_foundry_connection.py` | Asks the deployment one question and names which "no" came back, by reading the turn stream the SDK's collector discards (§3c). |
+| `.github/workflows/codex-foundry-connection-diagnostic.yml` | Runs it from `main` under the existing OIDC sign-in. `send_request` defaults off; the plan step always runs. |
 | `batch-runner/core/codex_azure_token.py` | Prints an Entra token to stdout for `auth.command`. |
 | `batch-runner/core/codex_cost.py` | Adapts thread-cumulative usage onto the repository's existing receipt contract. |
 | `batch-runner/core/executor.py` | Gained the `codex_foundry` mode and its dispatch entry. |
@@ -528,6 +609,18 @@ paid run must be preceded by a fresh smoke at the new fingerprint.
   `prove-execution` job runs the end-to-end file on `ubuntu-22.04` with
   `CODEX_SANDBOX_MUST_RUN=1`, which is what stops the execution leg from
   reverting to a silent skip on the one host that can exercise it.
+- `batch-runner/scripts/diagnose_codex_foundry_connection.py` asks the pinned
+  deployment one question and classifies the answer into a closed vocabulary of
+  seventeen verdicts, so that a refusal names *which* refusal it was.
+  `batch-runner/tests/test_codex_foundry_connection_probe.py` holds it to that:
+  the status code beats the error name, an unknown future error variant reports
+  its own name, nothing is guessed from message text, and the redactor blanks
+  the account and project names it derives from the endpoint secret. Half of the
+  file holds the workflow instead of the script — `send_request` gated on the
+  input, no `AZURE_AI_EXPECTED_*` name anywhere in it, the plan step before the
+  send step, pinned action SHAs, and the embedded leak check pulled back out of
+  its heredoc and run against five crafted leaks and a clean record, so the
+  check that guards the artifact is itself checked.
 - Still to be written, when section 7 is answered: a test that the deployment
   Codex addresses is the same one the other columns address, which is the
   condition that motivated this whole document.
@@ -559,9 +652,14 @@ paid run must be preceded by a fresh smoke at the new fingerprint.
   covers the Azure provider and `query_params`, and the settings are built. The
   old "no Azure settings / cannot pass an api-version" conclusion is superseded
   and must not be reused as a current blocker.
-- **Blocked on a live request.** Version, authentication and per-region
-  compatibility against our own deployment are separate facts from the
-  documentation, and only a request settles them.
+- **Blocked on a live request — but no longer on being able to read its
+  answer.** Version, authentication and per-region compatibility against our own
+  deployment are separate facts from the documentation, and only a request
+  settles them. As of 2026-09-08 the instrument that asks exists (§3c) and
+  separates a refused sign-in, a rejected request shape and an absent deployment
+  from one another out of a single turn. It has not been fired. Firing it is a
+  `workflow_dispatch` from `main` with `send_request: true`, and it costs one
+  turn of roughly 135 characters with no tools and no retries.
 - **The exec leg is closed, on one host, and it took a repair to close it.** The
   host limit was real and was closed by finding a host rather than by removing
   isolation: no sandbox was disabled, no network was opened, no container was
