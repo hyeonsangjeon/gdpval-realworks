@@ -254,7 +254,11 @@ JSON — **한 글자도 안 바꿨다.** `334`의 숫자를 다시 계산한 �
 
 ## 4. ③ 모의 테스트로 못 박은 것
 
-전부 `batch-runner/tests/test_silence_is_not_agreement.py`. **모델을 안 부른다.**
+아래 표에서 **"요약 페이지" 줄 하나만**
+`batch-runner/tests/test_audio_accuracy_probe_knows_its_own_answers.py`에 있고,
+**나머지는 전부** `batch-runner/tests/test_silence_is_not_agreement.py`에 있다.
+그 한 줄은 워크플로 안의 파이썬을 **실제로 실행**해서 보는 검사라 그 파일에 있는 게
+맞다. **어느 것도 모델을 부르지 않는다.**
 
 | 상황 | 무엇을 확인하나 |
 |---|---|
