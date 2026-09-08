@@ -20,11 +20,13 @@ could do.
 """
 
 import json
+import os
 import re
 import subprocess
 from pathlib import Path
 
 import pytest
+import yaml
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -45,6 +47,47 @@ MINUS = "−"
 
 # A row of a markdown table, split on the pipes with the outer ones dropped.
 TABLE_ROW = re.compile(r"^\|(.+)\|\s*$")
+
+# The first line of the paid gate's approval record, which the document quotes
+# inside a fenced block.
+APPROVAL_HEADING = "Approved paid audio accuracy probe:"
+
+
+def _approval_record(corpus: str, arm: str, repeats: str) -> str:
+    """Run the paid gate's record step and return what it prints.
+
+    The step is plain shell with no checkout behind it, so it can be executed
+    here. That is the point: a copy of its wording in a test rots the same way
+    a copy in a document does.
+    """
+    workflow = yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))
+    steps = workflow["jobs"]["approve-paid"]["steps"]
+    step = next(
+        (s for s in steps if s.get("name") == "Record approved request"), None
+    )
+    assert step is not None, "the paid gate no longer records what it approved"
+
+    finished = subprocess.run(
+        ["bash", "-c", step["run"]],
+        env={
+            **os.environ,
+            "PROBE_CORPUS": corpus,
+            "PROBE_ARM": arm,
+            "PROBE_REPEATS": repeats,
+        },
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return finished.stdout
+
+
+def _quoted_approval_block(doc: str) -> list[str]:
+    """The lines of the fenced block in which the document quotes the record."""
+    for block in re.findall(r"```[a-z]*\n(.*?)```", doc, re.DOTALL):
+        if block.startswith(APPROVAL_HEADING):
+            return [line for line in block.splitlines() if line.strip()]
+    return []
 
 
 def _cells(line: str) -> list[str]:
@@ -573,22 +616,48 @@ def test_the_approval_record_the_document_quotes_is_the_real_one(doc, report):
     This is the line that says what was authorised. It went stale once
     already -- it said twelve criteria after the corpus became twenty -- and
     a copy of it in a document is one more place for that to happen.
+
+    The gate no longer prints those figures as literals. 337 added a corpus
+    that runs five criteria rather than twenty, so the record computes them,
+    and looking for ``criteria   = 20`` in the workflow *text* would now mean
+    rewriting this test every time the shell around it moves -- which is the
+    opposite of what it is for. It runs the gate instead, with the corpus and
+    the repeat count of the run 324 actually measured: nine clips, three
+    repeats, one arm. Every line the document quotes has to come back out of
+    it. 324's own text is the fixed side of the comparison and is not edited
+    to fit; if the gate stops printing what it quotes, that is the failure.
+
+    The quoted block is a subset of today's record, not a copy of it. The
+    record has since gained ``corpus``, ``narrowed`` and ``prompt_arm`` lines
+    that did not exist when 324 ran, and its call line now gives the per-arm
+    and the total figure separately. What is required is that the lines still
+    printed are still printed with the same words.
     """
-    workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+    record = _approval_record(corpus="tones", arm="production", repeats="3")
+
+    quoted = _quoted_approval_block(doc)
+    assert quoted, "the document no longer quotes the approval record"
+    for line in quoted:
+        assert line in record, (
+            f"the gate no longer prints {line!r}, which 324 quotes as the "
+            f"record of what its run was authorised to spend"
+        )
+
     claims = report["pins"]["claims"]
     repeats = report["pins"]["repeats"]
+    calls = claims * repeats
 
-    criteria_line = (
+    # The loop above holds the record against the document. These hold it
+    # against the report, which is the other thing the document could have
+    # drifted from.
+    assert f"corpus     = tones ({report['pins']['clips']} clips)" in record
+    assert (
         f"criteria   = {claims} "
         f"({report['pins']['true_claims']} true / "
         f"{report['pins']['false_claims']} false)"
-    )
-    assert criteria_line in workflow
-    assert criteria_line in doc
-
-    assert f"$(({claims} * PROBE_REPEATS))" in workflow
-    assert f"calls      = {claims * repeats}" in doc
-    assert claims * repeats == report["accuracy"]["overall"]["calls"]
+    ) in record
+    assert f"calls      = {calls} per arm, {calls} in total" in record
+    assert calls == report["accuracy"]["overall"]["calls"]
 
 
 def test_the_prompt_line_the_document_blames_is_still_there(doc):

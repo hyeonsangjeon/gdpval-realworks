@@ -188,6 +188,16 @@ tasks/rebuilding_grading_task/*
 # if it is not committed, the published figures stay the only figures and the
 # correction lives nowhere. Held by tests/test_silence_is_not_agreement.py.
 !tasks/rebuilding_grading_task/336-334-stability-reanalysed.json
+# The two documents that take 334 §10's fourth item. 337 pre-registers a
+# ten-call format pilot for a candidate observation header; 338 pre-registers
+# the comparison that only gets bought if the pilot passes. Both are read at
+# run time, not just by people: the measurer takes the sample, the repeat count
+# and the diagnostic kind out of the file it is handed, and refuses a run whose
+# document does not name them. An uncommitted pre-registration is a run held to
+# a file that is not in the checkout. Held by
+# tests/test_audio_accuracy_probe_knows_its_own_answers.py.
+!tasks/rebuilding_grading_task/337-format-safe-observation-pilot.md
+!tasks/rebuilding_grading_task/338-format-safe-observation-ab.md
 
 # The grading run writes a sqlite mirror of the cost ledger beside every grade
 # file. The published record is the .jsonl next to it; the database is a local
