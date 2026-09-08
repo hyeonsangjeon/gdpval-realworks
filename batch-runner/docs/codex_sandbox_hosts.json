@@ -1,0 +1,67 @@
+{
+  "_comment": [
+    "What each machine actually does when Codex tries to sandbox a command.",
+    "",
+    "Every entry here was measured by scripts/diagnose_codex_sandbox_host.py on",
+    "the machine it names, and nothing is written here from expectation. A host",
+    "with no entry is a host nobody has looked at: the checker treats that as a",
+    "failure to be resolved by measuring, never as a pass.",
+    "",
+    "The workflow .github/workflows/codex-sandbox-host-survey.yml re-measures the",
+    "GitHub-hosted entries on every relevant change, and fails when a host stops",
+    "matching its record. That is the point of the file. Hosted runner images are",
+    "rebuilt continuously, so the day one of them starts running a command under",
+    "bubblewrap is the day this project gains an execution host for free -- and",
+    "without something watching, nobody would find out.",
+    "",
+    "'ready' is the only value that means a command actually ran inside the",
+    "sandbox. Every other value is a named wall; see the docstring of the",
+    "diagnostic for what each one means and which of them a person can move.",
+    "",
+    "The three GitHub entries below are a controlled experiment, not a survey of",
+    "convenience. ubuntu-24.04 and ubuntu-22.04 are the same hosted-runner",
+    "infrastructure with the same LSM stack; they differ in one sysctl, and only",
+    "the restricted one fails. That attributes the failure to the policy rather",
+    "than leaving it as a guess -- which is what the previous round of this work",
+    "did, calling every bwrap error the same problem."
+  ],
+  "hosts": {
+    "xenology-nas": {
+      "readiness": "kernel_lacks_user_namespaces",
+      "measured_on": "2026-09-08",
+      "kernel": "3.10.102",
+      "os": "Ubuntu 22.04.5 LTS userspace on a Synology DSM kernel",
+      "note": "No /proc/sys/user at all -- user namespaces became a sysctl in 4.9, and this kernel is 3.10. Nothing installable or configurable on this box changes the answer, which is why the execution host has to come from somewhere else.",
+      "measured_by": "scripts/diagnose_codex_sandbox_host.py, run directly on the box"
+    },
+    "ubuntu-24.04-host": {
+      "readiness": "user_namespaces_restricted_by_security_policy",
+      "measured_on": "2026-09-08",
+      "kernel": "6.17.0-1022-azure",
+      "os": "GitHub-hosted runner, ubuntu-24.04 -- what `ubuntu-latest` resolves to",
+      "apparmor_restrict_unprivileged_userns": "1",
+      "bwrap_error": "bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted",
+      "note": "The namespace is created and then stripped: `unshare --user --map-root-user` gets as far as `write failed /proc/self/uid_map: Operation not permitted`, and bwrap dies bringing up the loopback interface of the network Codex unshares. Without --unshare-net it dies one step earlier, at `setting up uid map`. This is the machine every CI job in the repository runs on, so this row is why the execution leg was never observed working. The fix is an AppArmor profile for the one binary -- not clearing the sysctl, which would remove the restriction from every process on the runner.",
+      "measured_by": "codex-sandbox-host-survey.yml, run 34202380505"
+    },
+    "ubuntu-24.04-container": {
+      "readiness": "user_namespaces_restricted_by_security_policy",
+      "measured_on": "2026-09-08",
+      "kernel": "6.17.0-1022-azure",
+      "os": "docker run ubuntu:24.04 on the ubuntu-24.04 runner, no --privileged, no --cap-add, no --security-opt",
+      "apparmor_restrict_unprivileged_userns": "1",
+      "bwrap_error": "bwrap: No permissions to create new namespace, likely because the kernel does not allow non-privileged user namespaces.",
+      "note": "Same verdict as its host and the same cause -- a container shares the host kernel and its sysctls -- but the symptom is not identical, and the difference is worth keeping. On the host the namespace is created and then loses its capabilities; in the container the creation itself is refused (`unshare: unshare failed: Operation not permitted`), because the container's own seccomp and capability set stop it before the policy has to. Two enforcement points, one policy. Also: /sys/kernel/security/lsm is unreadable in here, so the landlock observation could not be made -- which is a fact about the container, not about the kernel.",
+      "measured_by": "codex-sandbox-host-survey.yml, run 34202380505"
+    },
+    "ubuntu-22.04-host": {
+      "readiness": "ready",
+      "measured_on": "2026-09-08",
+      "kernel": "6.8.0-1064-azure",
+      "os": "GitHub-hosted runner, ubuntu-22.04",
+      "apparmor_restrict_unprivileged_userns": "0",
+      "note": "A command ran inside the sandbox. This is the only host this project currently has that can execute the Codex execution leg, and .github/workflows/codex-sandbox-host-survey.yml runs test_codex_runtime_end_to_end.py here with CODEX_SANDBOX_MUST_RUN=1 so that a skip on this machine is a failure. Two things to be honest about: nothing was disabled to get this -- 22.04's default posture simply predates kernel.apparmor_restrict_unprivileged_userns, so it is more permissive than 24.04 out of the box rather than more correct; and GitHub is retiring the 22.04 image, so this row has an expiry date and the execution-host question is deferred, not closed.",
+      "measured_by": "codex-sandbox-host-survey.yml, run 34202380505"
+    }
+  }
+}

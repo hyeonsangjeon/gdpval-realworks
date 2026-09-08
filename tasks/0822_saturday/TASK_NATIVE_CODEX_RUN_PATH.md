@@ -5,11 +5,17 @@
   open question is now answered. See section 3a.
 - Updated: 2026-09-08 — the documentation now covers the Azure provider, and the
   run place was built against the pinned runtime and checked without a paid
-  deployment. See section 3b.
-- Status: **built, not connected.** The code exists and the whole chain is
-  checked against the real Codex binary; no request has yet reached the Foundry
-  deployment, so the run place is graded `structure_check_only` and a batch run
-  in this mode is refused.
+  deployment. Running it on a host that can sandbox then found a defect in the
+  run place itself. See section 3b. The instrument that will ask the deployment
+  is built and has not been fired; see section 3c.
+- Status: **built, executing on one host, and not connected.** The code exists
+  and most of the chain is checked against the real Codex binary. As of
+  2026-09-08 the agent has been observed executing a command inside its sandbox
+  — once, on GitHub's `ubuntu-22.04` runner, against a scripted provider, and
+  only after a defect in this repository's own run place was found and fixed
+  (§3b). No request has yet reached the Foundry deployment, so the run place is
+  still graded `structure_check_only` and a batch run in this mode is still
+  refused.
 - Related GitHub Project: hyeonsangjeon/projects/5 — cards
   "같은 GPT 모델의 실행 환경별 성능 비교" and
   "Codex SDK와 Foundry GPT를 연결해 220문제 실험 실행"
@@ -173,40 +179,250 @@ read off the pinned code rather than off documentation:
    belongs to the legacy route. `CodexProviderSettings` refuses a plan that puts
    one in `query_params` alongside the undated endpoint, because that would
    describe a route we are not using.
-4. **Usage is reported per thread, cumulatively, not per request.** Two turns
-   of 11 and 40 input tokens settle as 51, not as two rows of 11 and 40. The
-   cost adapter subtracts a before-total for this reason; the receipt contract
-   is the repository's existing one and no new price table was added.
+4. **Usage arrives per request; Codex reports it summed per thread.** The
+   earlier wording here — "two turns of 11 and 40 settle as 51" — was wrong, and
+   wrong in a way that matters, because 11 + 40 = 51 and 40 − 11 = 29 are both
+   defensible readings of it. The actual shape, read off the SDK and pinned by
+   the end-to-end fixture: the upstream server reports **11 tokens for the
+   tool-call request and 40 for the final request, both inside one turn**.
+   `ThreadTokenUsage.total` is Codex's running sum across the thread, so it
+   reads **51**, and that is what the receipt records for the turn.
+   `ThreadTokenUsage.last` would read 40 — the final request only — which is
+   why the adapter uses `total` and not `last`. There is no reading under which
+   the answer is 29.
 
-The chain "runtime starts → tool call → reference file read → deliverable
-written → tool result returned → exit → files and cost collected" is driven
-against the real binary in
-`batch-runner/tests/test_codex_runtime_end_to_end.py`, using a stand-in
-Responses server on the loopback interface. No paid deployment takes part, and
-the agent's own settings are not relaxed for it: `Sandbox.workspace_write` and
-`ApprovalMode.deny_all`, with no argument that turns either off.
+   The per-request 11 and 40 are visible only because the fixture is the server.
+   A real run sees the thread total and nothing else: the SDK exposes no
+   per-request breakdown, which is exactly what
+   `REASON_CALL_REACHABILITY_UNKNOWN` on every Codex settlement says out loud.
 
-One host limit is worth writing down, because the first attempt to write it
-down got it wrong. The development box runs a NAS kernel (Linux 3.10) without
-user namespaces, so the sandbox cannot start there, and the two assertions that
-need a command to actually *execute* skip with the runtime's own
-`bwrap: Creating new namespace failed`. That much was known. What was assumed
-without checking is that CI would run them for real — `ubuntu-latest` does
-install the pinned runtime and does start the sandbox, and then bwrap dies
-anyway with `bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted`: the
-namespace is granted and the capability inside it is not, so the network Codex
-unshares cannot be brought up. The assumption cost a red CI run, which is how it
-was found.
+   `turn_usage_delta` subtracts a before-total so that a second turn on the same
+   thread cannot re-charge the first. Today that subtraction never changes an
+   answer: `codex_runner.py` opens a fresh thread per task and runs one turn in
+   it, so `before` is `CodexTokenTotals.zero()` every time. It is guarding a
+   future, not doing present work, and the earlier text implying otherwise was
+   overstating what runs. `tests/test_codex_cost_adapter.py` pins both the
+   arithmetic and the refusals — a cumulative counter that goes backwards is an
+   error rather than a clamp, and `cache_write_input_tokens`, which the receipt
+   has no field for, produces `usage_partial` rather than a total that looks
+   complete.
 
-So the honest statement is that **neither machine available today runs that
-leg**, and the skip now matches any `bwrap:` abort rather than one wording. Two
-ways to make it green were available and both were refused: turning the sandbox
-off, and granting the sandboxed command network access so nothing has to be
-unshared. Either would produce a passing test about a configuration no run would
-use. What it needs instead is a host with working unprivileged user namespaces —
-the same requirement the existing execution-host card carries, and the same one
-`agentic-sandbox-preflight.yml` already waits on with its `self-hosted,
-agentic-sandbox` runner label.
+   The receipt contract is the repository's existing one and no new price table
+   was added.
+
+`batch-runner/tests/test_codex_runtime_end_to_end.py` drives the real pinned
+binary against a stand-in Responses server on the loopback interface. No paid
+deployment takes part, and the agent's own settings are not relaxed for it:
+`Sandbox.workspace_write` and `ApprovalMode.deny_all`, with no argument that
+turns either off.
+
+It is worth being exact about which links of the chain that actually covers,
+because the earlier version of this paragraph claimed all of them and the test
+file's own skip records said otherwise.
+
+**Driven on every machine, including this one:** the runtime starts, the
+JSON-RPC session opens against the pinned `app-server`, a turn begins, the
+request reaches the provider with the settings we chose, the model's tool call
+comes back, the turn ends, usage is collected off `ThreadTokenUsage`, the call
+is settled into the receipt with its missing-information reasons, and the
+process exits without leaking a session.
+
+**Driven, but on exactly one machine:** the sandboxed command executing, the
+file it writes appearing on disk, and the tool result carrying that command's
+real output back to the model. Those are the two assertions that used to skip
+everywhere. They now run on GitHub's `ubuntu-22.04` runner under
+`CODEX_SANDBOX_MUST_RUN=1`, where a skip is a failure, and on 2026-09-08 they
+passed there for the first time — the whole file reading `17 passed` where every
+other host in this project reads `15 passed, 2 skipped`. Nowhere else. On every
+other host the two still skip, and that skip is still the correct answer for
+those hosts.
+
+That sentence is one commit old, and the commit before it said the opposite, so
+it is worth recording why rather than only what. The first run of those
+assertions on that machine was **red**, and it was right to be. What it found is
+below.
+
+Finding the machine is what `scripts/diagnose_codex_sandbox_host.py` was for.
+The rule it replaced — *until one machine reports `ready`, no document here may
+call the chain end-to-end verified* — has been met, and met by measurement
+rather than by argument. What may be said is still narrower than "verified": the
+chain has been driven end to end **once, on one runner image, against a scripted
+provider**, and the run place needed a repair to get there. What may not be said
+is that it works against a paid deployment, which is §3's other open leg and is
+not a sandbox question at all.
+
+**What the red run found, and why it was worth the red.** Both assertions failed
+the same way, and not on the sandbox:
+
+    bwrap: execvp codex-linux-sandbox: No such file or directory
+
+The sandbox started. It then could not find the helper it was told to exec.
+There is no `codex-linux-sandbox` file anywhere in the wheel: at start-up Codex
+creates `$CODEX_HOME/tmp/arg0/codex-arg0XXXXXX/` and fills it with symlinks back
+to the single `codex` binary, named `codex-linux-sandbox`,
+`codex-execve-wrapper`, `apply_patch` and `applypatch`, then puts that directory
+on its children's `PATH`. The binary dispatches on `argv[0]`. And it refuses to
+build those symlinks when `CODEX_HOME` is inside the temporary directory — which
+it says on stderr, and then carries on regardless:
+
+    WARNING: proceeding, even though we could not create PATH aliases:
+    Refusing to create helper binaries under temporary dir "/tmp"
+
+Every task directory in this repository was made with `tempfile.mkdtemp()`, so
+`CODEX_HOME` was always under `/tmp`, so the helper was never built, on any
+host. The execution leg could not have worked anywhere — including in the paid
+runs section 12 pins, where it would have failed at the agent's first command,
+after the money was spent.
+
+Two repairs, both in this branch:
+
+* `core.codex_runtime_config.resolve_run_root_base` picks a run root outside the
+  temporary directory — `$GDPVAL_CODEX_RUN_ROOT` used verbatim, else
+  `$XDG_CACHE_HOME/gdpval-codex-runs`, else `~/.cache/gdpval-codex-runs` — and
+  raises rather than falling back when all three are missing or land inside the
+  temporary directory, the explicit override included. `CodexWorkspace.create`
+  builds the task directory there instead. `tests/test_codex_run_root.py` pins
+  the rule, and needs neither a sandbox nor the binary to do it.
+* The end-to-end file no longer reads that message as "this machine has no
+  sandbox". It had been caught by the `^bwrap: ` prefix that means exactly
+  that — which is why a defect present on every host produced a green skip on
+  every host, and why turning skips into failures on one host was worth doing.
+  A missing helper now fails, naming the helper, before the prefix is consulted.
+
+The shortcut was refused, and the refusal is written into the code: pointing the
+*child's* `TMPDIR` at the task directory would satisfy Codex's check without
+moving anything, and would also move the sandbox's writable carve-out — Codex's
+permission model names `tmpdir` and `slash_tmp` separately — in a way nothing
+here has measured.
+
+What may be said today is that the defect is understood, fixed, and the fix
+watched: with the task directory moved, `prove-execution` is green — the two
+assertions that need a command to execute pass, and the whole end-to-end file
+reads `17 passed` on that host. What still may not be said is that the chain
+runs against a paid deployment, which is §3's other open leg and is not a
+sandbox question at all.
+
+The host survey is worth writing down in full, because the first attempt to
+write it down got it wrong twice. All of it is in
+`batch-runner/docs/codex_sandbox_hosts.json`, measured by the diagnostic and
+re-measured by `.github/workflows/codex-sandbox-host-survey.yml`:
+
+| host | kernel | `apparmor_restrict_unprivileged_userns` | verdict |
+|---|---|---|---|
+| Xenology NAS (the dev box) | 3.10.102 | absent — no `/proc/sys/user` at all | `kernel_lacks_user_namespaces` |
+| GitHub `ubuntu-24.04` = `ubuntu-latest` | 6.17.0-1022-azure | `1` | `user_namespaces_restricted_by_security_policy` |
+| plain `ubuntu:24.04` container on that runner | 6.17.0-1022-azure | `1` | `user_namespaces_restricted_by_security_policy` |
+| GitHub `ubuntu-22.04` | 6.8.0-1064-azure | `0` | **`ready`** |
+
+The first row was known. The second is what was *assumed* without checking:
+`ubuntu-latest` does install the pinned runtime and does start the sandbox, and
+then bwrap dies anyway with
+`bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted` — the namespace
+is granted and the capability inside it is not, so the network Codex unshares
+cannot be brought up. That assumption cost a red CI run, which is how it was
+found. The third row shares the second's cause and not its symptom: inside the
+container the namespace creation is refused outright rather than stripped
+afterwards, because the container's own seccomp profile stops it first.
+
+The fourth row is the one that matters, and the reason it is evidence rather
+than luck is that rows two and four are the same hosted-runner infrastructure
+with the same LSM stack, differing in one sysctl — so the failure is
+attributable to the policy and to very little else.
+
+Two things about that row have to be said plainly rather than celebrated.
+`ubuntu-22.04` is not better configured; it is *older*, and its default posture
+simply predates `kernel.apparmor_restrict_unprivileged_userns`. And GitHub is
+retiring the 22.04 image, so this result has an expiry date. The execution-host
+card is therefore **deferred by this finding, not closed by it**.
+
+Four ways to make the test green were available and all four were refused:
+turning the sandbox off; granting the sandboxed command network access so
+nothing has to be unshared; running the probe in a privileged container; and
+clearing the sysctl on the 24.04 runner. The first two produce a passing test
+about a configuration no run would use. The third measures a container nobody
+would deploy. The fourth removes the restriction from every process on the
+machine, which is not a fix but the absence of one. A fifth was considered and
+also refused: Codex's `use_legacy_landlock` backend, which both 24.04 and 22.04
+could probably run — it is the *legacy* sandbox, so a green test there would be
+measuring a run place no real run configures. It is recorded in the
+diagnostic's output as an observation and never as readiness.
+
+## 3c. The other leg: a way to ask the deployment, and to hear which "no"
+
+Section 7's question is answered by a request. Sending one and reading
+"the turn failed" would have answered almost nothing, so before sending anything
+the failure had to be made legible.
+
+`core/execution_environment_readiness.py` names three separate unmeasured
+things, and they are fixed in three different places:
+
+  a. the token `core/codex_azure_token.py` mints has only ever been *minted*,
+     never *accepted* by anything;
+  b. which API contract this deployment serves Codex on is unmeasured;
+  c. whether the pinned Codex build's request shape survives this resource's
+     model version and content filters is a third question again.
+
+A single `RuntimeError` distinguishes none of them — and that is not incidental,
+it is the SDK's own doing. `openai_codex/_run.py::_raise_for_failed_turn` raises
+`RuntimeError(turn.error.message)` and drops `turn.error.codex_error_info`,
+which is where the error's name lives and, for four of its variants, an
+`http_status_code`. `scripts/diagnose_codex_foundry_connection.py` consumes
+`TurnHandle.stream()` itself rather than calling `run()`, so it recovers both
+**from the first request**: a refused sign-in (401/403), a rejected payload
+(400/422), an absent deployment (404) and a content filter each come back under
+their own name, with no second paid call to tell them apart.
+
+Seventeen verdicts, a closed vocabulary, and no guessing from message text. The
+status code beats the error name where both exist, and an error variant this
+pin has never seen reports **its own name** rather than being folded into
+`other` — a future SDK adding a case must not silently become "something went
+wrong".
+
+Four things it deliberately does not do, each of which would have been easier:
+
+* **It does not clear a blocker.** It records evidence and a person decides. A
+  diagnostic that flipped the readiness gate would be a manual override wearing
+  a diagnostic's name, which is the thing §9 exists to prevent.
+* **It does not establish the run place.** The prompt forbids commands, files
+  and tools on purpose, and `tool_execution_observed` is `false` in every record
+  it can produce, `connected` ones included. The record carries four sentences
+  saying which legs a text turn leaves standing — the tool leg, the deliverable
+  leg, the batch leg and the cost leg — rather than leaving that to be inferred
+  by whoever reads a green verdict. §3b's exec leg and this one are different
+  questions and the artifact says so in its own words.
+* **It does not fall back.** No second model, no second provider, no dated
+  legacy route. A run that cannot reach the deployment it was asked about
+  reports that, rather than reporting a different deployment's health — §6's
+  second and fourth prohibitions, enforced instead of promised.
+* **It does not name the resource.** This one needed a different mechanism than
+  the obvious one. The account and project names live in repository
+  *variables*, and a variable is reprinted verbatim in a step's `env` header —
+  so pinning identity the ordinary way, with
+  `AZURE_AI_REQUIRE_EXPECTED_IDENTITIES` and `AZURE_AI_EXPECTED_DIRECT_ACCOUNT`,
+  would publish the name of the resource in the log of the job built not to name
+  it. The pin is a **sha256 of the endpoint host** instead: printable, still
+  sensitive to the endpoint secret being repointed, and worth nothing to anyone
+  who reads it. The names that must be blanked out of runtime messages are mined
+  from the endpoint secret itself with `classify_endpoint`, the way
+  `scripts/azure_rbac_diagnostic.py` already does, and the workflow re-greps its
+  own artifact afterwards rather than trusting the redactor to have worked.
+
+`send_request` defaults to `false`, and with it nothing is sent: the job prints
+the plan — deployment, route profile, host fingerprint, prompt hash, call count,
+retry count — and stops. Plan and result share one schema, so what was fixed
+beforehand and what happened can be compared field by field afterwards. Every
+exit writes its record, including the one where nothing could be configured,
+because an empty artifact and a run that never happened used to look identical.
+
+`core/codex_runner.py` grew `open_runtime()` and `start_thread()` out of its
+private `_build_codex` so that the diagnostic and a real task construct the
+runtime through **one** path — a diagnostic that describes a configuration no
+run uses is worse than none. The sandbox preset and approval mode are read off
+the runner rather than taken as arguments, so nothing can ask this path for
+weaker isolation.
+
+None of this has been sent yet. What exists is the instrument; §11's fifth box
+stays unticked until a request has actually been answered.
 
 ## 4. A distinction that is easy to get wrong
 
@@ -255,7 +471,8 @@ by tests. What is left is the one thing a document cannot settle:
 > the pinned Codex build sends, with an Entra token from a directory sign-in?
 
 That is answered by one request against the real deployment, not by more
-reading. Until such a request has succeeded, the run place stays at
+reading. The instrument that asks it now exists — §3c — and has not been fired.
+Until such a request has succeeded, the run place stays at
 `structure_check_only`: the code exists, the mock chain passes, and
 `step2_run_inference` still refuses to start a batch in this mode.
 
@@ -298,7 +515,9 @@ until the evidence exists.
 | File | Role |
 |---|---|
 | `batch-runner/core/codex_runtime_config.py` | Version pins, environment isolation, provider settings, and the loopback stand-in. |
-| `batch-runner/core/codex_runner.py` | Starts the runtime per task, hands over the prompt and reference files, collects deliverables, enforces the time limit, and cleans up. |
+| `batch-runner/core/codex_runner.py` | Starts the runtime per task, hands over the prompt and reference files, collects deliverables, enforces the time limit, and cleans up. `open_runtime()` and `start_thread()` are the one construction path the diagnostic shares. |
+| `batch-runner/scripts/diagnose_codex_foundry_connection.py` | Asks the deployment one question and names which "no" came back, by reading the turn stream the SDK's collector discards (§3c). |
+| `.github/workflows/codex-foundry-connection-diagnostic.yml` | Runs it from `main` under the existing OIDC sign-in. `send_request` defaults off; the plan step always runs. |
 | `batch-runner/core/codex_azure_token.py` | Prints an Entra token to stdout for `auth.command`. |
 | `batch-runner/core/codex_cost.py` | Adapts thread-cumulative usage onto the repository's existing receipt contract. |
 | `batch-runner/core/executor.py` | Gained the `codex_foundry` mode and its dispatch entry. |
@@ -377,6 +596,31 @@ paid run must be preceded by a fresh smoke at the new fingerprint.
   is not done here.
 - `batch-runner/tests/test_three_more_run_places.py` pins the grade: the run
   place has code, and having code is still not being able to run.
+- `batch-runner/scripts/diagnose_codex_sandbox_host.py` answers, for one
+  machine, whether Codex can execute a command there — and when it cannot, which
+  of six named walls it hit. Its own tests
+  (`batch-runner/tests/test_codex_sandbox_host_diagnosis.py`) hold it to the
+  distinctions that matter, chief among them that only a command which actually
+  ran counts as `ready`.
+- `.github/workflows/codex-sandbox-host-survey.yml` re-measures the hosted
+  runners against `batch-runner/docs/codex_sandbox_hosts.json` and fails on any
+  disagreement in either direction, so a runner image that quietly gains or
+  loses the ability to sandbox shows up as a change rather than as nothing. Its
+  `prove-execution` job runs the end-to-end file on `ubuntu-22.04` with
+  `CODEX_SANDBOX_MUST_RUN=1`, which is what stops the execution leg from
+  reverting to a silent skip on the one host that can exercise it.
+- `batch-runner/scripts/diagnose_codex_foundry_connection.py` asks the pinned
+  deployment one question and classifies the answer into a closed vocabulary of
+  seventeen verdicts, so that a refusal names *which* refusal it was.
+  `batch-runner/tests/test_codex_foundry_connection_probe.py` holds it to that:
+  the status code beats the error name, an unknown future error variant reports
+  its own name, nothing is guessed from message text, and the redactor blanks
+  the account and project names it derives from the endpoint secret. Half of the
+  file holds the workflow instead of the script — `send_request` gated on the
+  input, no `AZURE_AI_EXPECTED_*` name anywhere in it, the plan step before the
+  send step, pinned action SHAs, and the embedded leak check pulled back out of
+  its heredoc and run against five crafted leaks and a clean record, so the
+  check that guards the artifact is itself checked.
 - Still to be written, when section 7 is answered: a test that the deployment
   Codex addresses is the same one the other columns address, which is the
   condition that motivated this whole document.
@@ -386,12 +630,16 @@ paid run must be preceded by a fresh smoke at the new fingerprint.
 - [x] The question in section 7 is answered from official documentation.
 - [x] A run place exists, with the settings in code rather than in prose.
 - [x] The chain from runtime start to cost collection is checked without a paid
-      deployment — with one leg still open: Codex actually *executing* a command
-      inside its sandbox, which no machine available today will do. See section
-      3b.
-- [ ] Codex executes a command inside its sandbox on a host with working
-      unprivileged user namespaces. Blocked on the execution-host card, not on
-      this one.
+      deployment.
+- [x] Codex executes a command inside its sandbox. Observed on 2026-09-08 on
+      GitHub's `ubuntu-22.04` runner — the one host measured `ready` — with
+      `CODEX_SANDBOX_MUST_RUN=1` turning a skip into a failure, so the whole
+      end-to-end file reads `17 passed` there where every other host in this
+      project reads `15 passed, 2 skipped`. Getting there needed a fix: running
+      on a host that can sandbox is what showed that the run place itself was
+      building `CODEX_HOME` somewhere Codex will not create its sandbox helper
+      (§3b). Ticked for what it says and no more — one host, one runner image
+      that is being retired, and a scripted provider rather than a paid one.
 - [ ] One request reaches the real deployment and is accepted.
 - [ ] A test proves the deployment it addresses is the same one the other
       columns address.
@@ -404,16 +652,26 @@ paid run must be preceded by a fresh smoke at the new fingerprint.
   covers the Azure provider and `query_params`, and the settings are built. The
   old "no Azure settings / cannot pass an api-version" conclusion is superseded
   and must not be reused as a current blocker.
-- **Blocked on a live request.** Version, authentication and per-region
-  compatibility against our own deployment are separate facts from the
-  documentation, and only a request settles them.
-- The exec leg of the mock check is **not proven on any machine available
-  today**: the development box has no user namespaces, and the hosted runner
-  denies the capability inside the one it grants. That is a host limit, not a
-  finding about the run place, and it is not worked around by disabling
-  isolation or by giving the sandboxed command network access. It needs a host
-  with working unprivileged user namespaces — the execution-host card's
-  subject.
+- **Blocked on a live request — but no longer on being able to read its
+  answer.** Version, authentication and per-region compatibility against our own
+  deployment are separate facts from the documentation, and only a request
+  settles them. As of 2026-09-08 the instrument that asks exists (§3c) and
+  separates a refused sign-in, a rejected request shape and an absent deployment
+  from one another out of a single turn. It has not been fired. Firing it is a
+  `workflow_dispatch` from `main` with `send_request: true`, and it costs one
+  turn of roughly 135 characters with no tools and no retries.
+- **The exec leg is closed, on one host, and it took a repair to close it.** The
+  host limit was real and was closed by finding a host rather than by removing
+  isolation: no sandbox was disabled, no network was opened, no container was
+  privileged, and no host's security policy was changed. The first run on that
+  host was red, and what it found was ours: `CODEX_HOME` under `/tmp`, so Codex
+  never builds `codex-linux-sandbox`, so the agent's first command dies whatever
+  the host allows (§3b). With that fixed, `prove-execution` is green — the two
+  assertions that need a command to run pass, and so does the whole file. The
+  development box (Linux 3.10, no user namespaces) and `ubuntu-latest`
+  (namespace granted, capability stripped) still cannot run it and still skip.
+  The execution-host card stays open, because one retiring runner image is a
+  reprieve rather than an answer.
 - The next decision is whoever can run one paid request against the pinned
   deployment. Until it succeeds, the column stays empty and is reported as
   unconfirmed. It is not filled with a substitute.

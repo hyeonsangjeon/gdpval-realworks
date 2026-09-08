@@ -32,30 +32,40 @@ command's token is accepted, or that the pinned Codex version is compatible
 with our region — the scripted server accepts anything. Those three are the
 blockers recorded in ``core.execution_environment_readiness``.
 
-Sandboxing, and the two machines that will not do it
-----------------------------------------------------
+Sandboxing, and the machines that will and will not do it
+---------------------------------------------------------
 
 The agent's file writes go through ``exec_command``, which Codex runs inside a
-sandbox. Neither machine this repository currently runs on gives it one, and
-they fail differently:
+sandbox. Whether that sandbox starts is a property of the host, and the hosts
+this project can reach do not agree. Measured by
+``scripts/diagnose_codex_sandbox_host.py`` and recorded in
+``docs/codex_sandbox_hosts.json``:
 
 * the NAS this repository is often edited on runs kernel 3.10, which has no
-  usable unprivileged user namespaces, so the sandbox cannot start at all;
-* the GitHub hosted runner grants the namespace and then denies the capability
-  inside it, so bwrap dies bringing up the loopback interface of the network
-  Codex unshares.
+  ``CONFIG_USER_NS`` at all, so the sandbox cannot start and no setting on that
+  box changes it;
+* GitHub's ``ubuntu-24.04`` runner — what ``ubuntu-latest`` resolves to — ships
+  ``kernel.apparmor_restrict_unprivileged_userns=1``. It grants the namespace
+  and then denies the capabilities inside it, so bwrap dies bringing up the
+  loopback interface of the network Codex unshares;
+* GitHub's ``ubuntu-22.04`` runner has that restriction set to ``0`` and runs
+  the command. **This is where the execution leg is actually proven.**
 
-Where either happens, the assertions that depend on a command having *run* skip
-with the runtime's own error text, and the rest of the chain is still asserted.
-The sandbox is never turned off, and network access is never granted to make
-the second failure go away: a run configured that way would not be the
-configuration anything else uses, and a green test bought that way would be
-describing a run place nobody will use.
+That last line was found by measurement, not by argument: the two runner images
+share infrastructure and differ in the policy, so the difference between them
+attributes the failure to the policy and to very little else.
 
-That leaves one leg of this file unproven anywhere available today — Codex
-actually executing a command inside its sandbox. It needs a host with working
-unprivileged user namespaces, which is the execution-host card's subject, not
-this one's.
+Where the sandbox cannot start, the assertions that depend on a command having
+*run* skip with the runtime's own error text, and the rest of the chain is
+still asserted. Where it can, skipping is forbidden —
+``CODEX_SANDBOX_MUST_RUN=1`` turns those skips into failures, so that the
+execution leg cannot quietly stop being exercised on the one host that
+exercises it. See :func:`skipped_or_failed_by`.
+
+The sandbox is never turned off; network access is never granted to make the
+24.04 failure go away; no container is given extra privileges; and no host's
+security policy is modified. Every one of those would produce a green test
+about a run place nobody will use, which is worth less than an honest skip.
 """
 
 from __future__ import annotations
@@ -69,7 +79,7 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, NoReturn
 
 import pytest
 
@@ -83,6 +93,7 @@ from core.codex_runtime_config import (
     CodexRuntimeUnavailable,
     LoopbackCodexProvider,
     require_pinned_runtime,
+    resolve_run_root_base,
 )
 from core.cost_receipts import (
     REASON_USAGE_ABSENT,
@@ -372,6 +383,25 @@ _SANDBOX_CANNOT_START = re.compile(
     re.MULTILINE,
 )
 
+#: bwrap started, took the namespace, and then could not find the program it was
+#: told to run.
+#:
+#: This is not a machine that will not sandbox. It is a machine that sandboxed
+#: correctly and was handed a broken command, and it is *never* a reason to
+#: skip: the helper is part of what this repository sets up, so its absence is a
+#: defect here that would reappear on every host. It looked like a host problem
+#: for exactly as long as nobody had a host that could sandbox — the message
+#: begins ``bwrap: `` and so matched the prefix above, and the test skipped.
+#:
+#: The cause was ``CODEX_HOME`` under ``/tmp``; the fix is in
+#: ``core.codex_runtime_config.resolve_run_root_base``. This pattern stays
+#: because the next thing that goes missing from the sandbox's PATH should also
+#: be told apart from a machine that cannot sandbox at all.
+_SANDBOX_HELPER_MISSING = re.compile(
+    r"^bwrap: execvp (?P<program>\S+): No such file or directory",
+    re.MULTILINE,
+)
+
 
 def sandbox_refused(server: ScriptedResponses) -> str | None:
     """The reason the sandbox could not run a command, if that is what happened.
@@ -380,15 +410,71 @@ def sandbox_refused(server: ScriptedResponses) -> str | None:
     that ran and failed is a test failure; a sandbox that could not start is a
     property of the machine, and the tests that need one say so and skip.
 
+    One shape never reaches that decision: a sandbox that started and could not
+    find the program it was given fails here and now, on every host. See
+    :data:`_SANDBOX_HELPER_MISSING` for why that distinction is the difference
+    between a green suite and a run place that could never have worked.
+
     Never widen this to a substring search. ``bwrap:`` at the start of a line is
     bwrap's own abort; the same text in the middle of a line could be output
     from a command that ran, and swallowing that would turn a real regression
     into a green skip.
     """
     text = server.tool_output_text()
+    missing = _SANDBOX_HELPER_MISSING.search(text)
+    if missing:
+        pytest.fail(
+            "the sandbox started and then could not find "
+            f"`{missing.group('program')}` on the PATH it gives the agent. "
+            "This is not a property of the machine and must not be skipped on "
+            "any host. Codex builds that program as a symlink under "
+            "$CODEX_HOME/tmp/arg0/ at start-up, and refuses to build it when "
+            "CODEX_HOME is inside the temporary directory — see "
+            "core.codex_runtime_config.resolve_run_root_base. Full output:\n"
+            f"{text.strip()}"
+        )
     if _SANDBOX_CANNOT_START.search(text):
         return text.strip().splitlines()[-1]
     return None
+
+
+#: Set by CI on a host whose sandbox has been *measured* working, by
+#: ``scripts/diagnose_codex_sandbox_host.py`` reporting ``ready`` earlier in the
+#: same job.
+#:
+#: This closes the hole that let "the chain is verified end to end" get written
+#: while the execution leg had never run. The two assertions below skip when the
+#: sandbox will not start, which is right, and for months that skip fired
+#: everywhere -- so the suite was green and the leg was unproven, and those two
+#: states were indistinguishable from the outside.
+#:
+#: Where the sandbox demonstrably works, a skip is no longer a fact about the
+#: machine. It is the execution leg silently not being exercised, which is the
+#: thing we most need to hear about. So on such a host this turns the skip into
+#: a failure that names what was expected.
+#:
+#: Deliberately opt-in per host rather than inferred: guessing "this looks like
+#: it should work, so demand it" would make the suite red on contributors'
+#: laptops for a property nobody promised them.
+SANDBOX_MUST_RUN = os.environ.get("CODEX_SANDBOX_MUST_RUN") == "1"
+
+
+def skipped_or_failed_by(refusal: str, what: str) -> NoReturn:
+    """End the test on a sandbox refusal -- as a skip, or as a failure.
+
+    The difference is the whole point. On a machine with no working sandbox
+    this is a skip, because the machine cannot answer the question. On a
+    machine that measured ``ready`` minutes ago in the same job, the sandbox
+    can answer it, so a refusal here is a real defect wearing a skip's clothes.
+    """
+    if SANDBOX_MUST_RUN:
+        pytest.fail(
+            "CODEX_SANDBOX_MUST_RUN is set, so this host measured `ready` -- "
+            "scripts/diagnose_codex_sandbox_host.py watched bubblewrap run a "
+            f"command here. The sandbox then refused anyway while {what}, "
+            f"which is a regression and not a property of the machine: {refusal}"
+        )
+    pytest.skip(f"this machine gives Codex no working sandbox, so {what}: {refusal}")
 
 
 # ── Fixtures and helpers ────────────────────────────────────────────────────
@@ -508,9 +594,8 @@ def test_a_turn_starts_a_runtime_calls_a_tool_and_comes_back_with_a_file(
     assert CODEX_STRUCTURAL_REASONS[0] in calls[0]["missing_reasons"]
 
     if refusal:
-        pytest.skip(
-            "this machine gives Codex no working sandbox, so the command it "
-            f"was asked to run could not execute: {refusal}"
+        skipped_or_failed_by(
+            refusal, "the command it was asked to run could not execute"
         )
 
     # The deliverable exists and was built from the staged reference. The
@@ -597,9 +682,8 @@ def test_the_agent_cannot_see_the_other_tasks_files(tmp_path: Path):
             assert result["success"] is True, result.get("error")
             refusal = sandbox_refused(server)
             if refusal:
-                pytest.skip(
-                    "this machine gives Codex no working sandbox, so the "
-                    f"agent could not be asked what it can see: {refusal}"
+                skipped_or_failed_by(
+                    refusal, "the agent could not be asked what it can see"
                 )
             listings.append(server.tool_output_text())
 
@@ -610,17 +694,37 @@ def test_the_agent_cannot_see_the_other_tasks_files(tmp_path: Path):
 
 
 def test_the_task_directory_is_removed_when_the_task_ends(reference_file: str):
-    """Nothing is left on disk afterwards, including the read-only copies."""
-    parent = Path(tempfile.gettempdir())
-    before = {entry.name for entry in parent.glob("gdpval-codex-*")}
+    """Nothing is left on disk afterwards, including the read-only copies.
+
+    Watches the directory task roots are actually made in. It used to watch
+    ``tempfile.gettempdir()``, which was right until the roots moved out of it —
+    at which point the test would have gone on passing while watching a
+    directory nothing was ever created in. So it proves the watch is aimed
+    correctly before it concludes anything from an empty result.
+    """
+    parent = resolve_run_root_base()
+
+    def listing() -> set[str]:
+        if not parent.is_dir():
+            return set()
+        return {entry.name for entry in parent.glob("gdpval-codex-*")}
+
+    before = listing()
+
+    sentinel = CodexWorkspace.create(task_id="task-cleanup-watch")
+    try:
+        assert sentinel.root.parent.resolve() == parent.resolve()
+        assert sentinel.root.name in listing()
+    finally:
+        sentinel.cleanup()
+
     with ScriptedResponses([says("done")]) as server:
         runner_for(server).run(
             "Do nothing.",
             reference_files=[reference_file],
             task_id="task-cleanup",
         )
-    after = {entry.name for entry in parent.glob("gdpval-codex-*")}
-    assert after - before == set()
+    assert listing() - before == set()
 
 
 def test_the_runtime_gets_none_of_the_operators_codex_state():
@@ -665,6 +769,98 @@ def test_the_runtime_gets_none_of_the_operators_codex_state():
         )
     finally:
         shutil.rmtree(workspace.root, ignore_errors=True)
+
+
+# ── The helper the sandbox needs on its PATH ────────────────────────────────
+#
+# These two run the real binary and read its stderr. They are a pair on
+# purpose: the first says our task directories are acceptable to it, and the
+# second says the rule that makes them acceptable is still there. Either alone
+# could pass while meaning nothing — a warning that changed wording would make
+# the first vacuous, and the second is what would notice.
+
+
+#: What Codex prints when it will not build the argv[0] symlinks — among them
+#: ``codex-linux-sandbox``, which is the sandbox helper — because ``CODEX_HOME``
+#: is inside the temporary directory. Matched loosely on the two halves that
+#: carry the meaning, since the path in the middle varies.
+_ALIASES_REFUSED = re.compile(
+    r"could not create PATH aliases.*"
+    r"Refusing to create helper binaries under temporary dir",
+    re.DOTALL,
+)
+
+
+def runtime_startup_warnings(codex_home: Path) -> str:
+    """Start the pinned binary with this ``CODEX_HOME`` and return its stderr.
+
+    ``app-server --listen stdio://`` is the entry point the SDK spawns, so this
+    exercises the same start-up path a task does. Closed stdin ends it at once;
+    it neither signs in nor calls a model, so this costs nothing.
+    """
+    import subprocess
+
+    from codex_cli_bin import bundled_codex_path
+
+    environment = dict(os.environ)
+    environment["CODEX_HOME"] = str(codex_home)
+    finished = subprocess.run(
+        [str(bundled_codex_path()), "app-server", "--listen", "stdio://"],
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        env=environment,
+    )
+    return finished.stderr
+
+
+def test_a_task_directory_is_somewhere_codex_will_build_its_sandbox_helper():
+    """The runtime accepts a real task's ``CODEX_HOME`` without complaint.
+
+    This is the assertion that would have caught the defect. Every task
+    directory used to be made by ``tempfile.mkdtemp()`` with no ``dir``, so
+    ``CODEX_HOME`` was inside ``/tmp``, so Codex silently declined to build
+    ``codex-linux-sandbox`` — and the first command the agent tried to run died
+    with ``bwrap: execvp codex-linux-sandbox: No such file or directory``, which
+    every machine without a working sandbox was already skipping on.
+
+    It needs no sandbox of its own, so it holds on hosts that cannot run one.
+    """
+    workspace = CodexWorkspace.create(task_id="task-aliases")
+    try:
+        warnings = runtime_startup_warnings(workspace.codex_home)
+        assert not _ALIASES_REFUSED.search(warnings), (
+            "Codex refused to build its argv[0] helpers for a task directory, "
+            "so the agent would be unable to execute anything:\n"
+            f"{warnings.strip()}"
+        )
+    finally:
+        workspace.cleanup()
+
+
+def test_the_runtime_still_refuses_a_codex_home_inside_the_temporary_directory():
+    """The rule the layout is built around is the runtime's, and still holds.
+
+    Without this, the test above is a claim about nothing: if a later Codex
+    dropped the restriction, or reworded the warning, it would keep passing
+    while the reason for the layout had quietly evaporated. Here that shows up
+    as this test failing, which is the correct place to have the conversation.
+    """
+    inside_the_temporary_directory = Path(
+        tempfile.mkdtemp(prefix="gdpval-codex-alias-rule-")
+    )
+    try:
+        warnings = runtime_startup_warnings(inside_the_temporary_directory)
+        assert _ALIASES_REFUSED.search(warnings), (
+            "Codex no longer refuses to build its helpers under the temporary "
+            "directory, or says so differently. Read this before changing it: "
+            "core.codex_runtime_config.resolve_run_root_base exists only "
+            "because of that refusal.\n"
+            f"stderr was:\n{warnings.strip()}"
+        )
+    finally:
+        shutil.rmtree(inside_the_temporary_directory, ignore_errors=True)
 
 
 # ── Failure, refusal, and the absence of a fallback ─────────────────────────

@@ -320,6 +320,150 @@ def inherited_names_that_survive(
     )
 
 
+# ── Where a task's runtime may live ─────────────────────────────────────────
+#
+# There is no separate ``codex-linux-sandbox`` program. The sandbox helper is
+# the ``codex`` binary itself under a different argv[0], and the runtime makes
+# that possible at start-up by writing a directory of symlinks back to itself —
+# ``codex-linux-sandbox``, ``codex-execve-wrapper``, ``apply_patch`` — under
+# ``$CODEX_HOME/tmp/arg0/`` and putting that directory on the PATH its children
+# inherit.
+#
+# It refuses to write them when ``CODEX_HOME`` is inside the process's own
+# temporary directory, and says so on stderr:
+#
+#     WARNING: proceeding, even though we could not create PATH aliases:
+#     Refusing to create helper binaries under temporary dir "/tmp"
+#
+# "Proceeding" is the trap. Start-up succeeds, a session opens, a turn runs, and
+# nothing goes wrong until the agent first tries to execute something:
+#
+#     bwrap: execvp codex-linux-sandbox: No such file or directory
+#
+# Which reads like a machine with no working sandbox and is the opposite of one.
+# bubblewrap started, took the namespace, and then could not find the program it
+# had been told to run. Every task directory here was built with
+# ``tempfile.mkdtemp()``, so ``CODEX_HOME`` was always under ``/tmp``, so the
+# helper was never created — the execution leg could not have worked on any
+# host, and on the hosts where the sandbox genuinely will not start the two
+# causes were indistinguishable. This was found by running the end-to-end file
+# on the one runner image measured able to sandbox, with skips turned into
+# failures; on every other machine it had been a green skip.
+#
+# So per-task roots are made somewhere that is not the temporary directory.
+#
+# What is deliberately *not* done: pointing the child's ``TMPDIR`` at a
+# directory inside the task would satisfy the same check, because
+# ``std::env::temp_dir`` reads ``TMPDIR`` — and would leave the files exactly
+# where they are. It is left alone for a second reason as well: Codex derives a
+# writable sandbox carve-out from ``TMPDIR`` (its permission model names
+# ``tmpdir`` and ``slash_tmp`` separately), so moving it changes what the agent
+# is allowed to write, and nothing here has measured what that does.
+
+#: Overrides where per-task roots are created. For a host whose home directory
+#: is itself inside the temporary directory, and for anyone who wants the run
+#: directories on a particular disk.
+RUN_ROOT_ENV_NAME = "GDPVAL_CODEX_RUN_ROOT"
+
+#: Appended to the cache directory when nothing overrides it.
+RUN_ROOT_DIR_NAME = "gdpval-codex-runs"
+
+
+class CodexRunRootError(RuntimeError):
+    """There is nowhere to put a task's runtime that Codex will accept.
+
+    Raised rather than falling back to the temporary directory. Falling back
+    would restore exactly the failure this class exists to prevent, and would
+    restore it silently — the run would start, and only the first command the
+    agent tried to execute would go wrong.
+    """
+
+
+def system_temporary_directory(
+    environment: Mapping[str, str] | None = None,
+) -> Path:
+    """What the Codex process will consider "the temporary directory".
+
+    Rust's ``std::env::temp_dir`` on unix is ``$TMPDIR`` when that is set and
+    non-empty, and ``/tmp`` otherwise. Python's :func:`tempfile.gettempdir`
+    consults a longer list and would sometimes answer differently; the value
+    that matters is the one the binary computes, not the one we would.
+    """
+    source = os.environ if environment is None else environment
+    value = source.get("TMPDIR") or ""
+    return Path(value) if value else Path("/tmp")
+
+
+def path_is_within(
+    child: str | os.PathLike[str], parent: str | os.PathLike[str]
+) -> bool:
+    """True when ``child`` is ``parent`` or sits under it, symlinks resolved.
+
+    Resolved rather than compared as text because ``/tmp`` is a symlink on some
+    systems, and a check that a symlink defeats is not a check.
+    """
+    try:
+        resolved_child = Path(child).resolve()
+        resolved_parent = Path(parent).resolve()
+    except OSError:  # pragma: no cover - depends on the filesystem
+        return False
+    return (
+        resolved_child == resolved_parent
+        or resolved_parent in resolved_child.parents
+    )
+
+
+def resolve_run_root_base(
+    environment: Mapping[str, str] | None = None,
+) -> Path:
+    """The directory per-task roots are made in. Never the temporary directory.
+
+    In order: :data:`RUN_ROOT_ENV_NAME`, then ``XDG_CACHE_HOME``, then
+    ``~/.cache``. Whatever is chosen is checked against
+    :func:`system_temporary_directory` and refused if it is inside it, including
+    when it was named explicitly — an override is a statement about *where*, not
+    permission to reintroduce the fault.
+
+    The directory is not created here. Callers make it, so that a caller which
+    only wants to know the answer does not leave one behind.
+    """
+    source = dict(os.environ if environment is None else environment)
+    temporary = system_temporary_directory(source)
+
+    override = source.get(RUN_ROOT_ENV_NAME, "").strip()
+    cache_home = source.get("XDG_CACHE_HOME", "").strip()
+    home = source.get("HOME", "").strip()
+
+    if override:
+        candidate, chosen_because = Path(override), f"{RUN_ROOT_ENV_NAME}={override}"
+    elif cache_home:
+        candidate = Path(cache_home) / RUN_ROOT_DIR_NAME
+        chosen_because = f"XDG_CACHE_HOME={cache_home}"
+    elif home:
+        candidate = Path(home) / ".cache" / RUN_ROOT_DIR_NAME
+        chosen_because = f"HOME={home}"
+    else:
+        raise CodexRunRootError(
+            "a Codex task needs a directory to live in and this process has no "
+            f"HOME, no XDG_CACHE_HOME and no {RUN_ROOT_ENV_NAME}. The "
+            "temporary directory is not a fallback: the runtime will not "
+            "create its codex-linux-sandbox helper under one, and the agent "
+            "would then be unable to execute anything."
+        )
+
+    if path_is_within(candidate, temporary):
+        raise CodexRunRootError(
+            f"{candidate} is inside the temporary directory {temporary}, and "
+            "Codex refuses to create its codex-linux-sandbox helper under a "
+            "temporary directory. A run started there would look healthy until "
+            "the agent's first command failed with `bwrap: execvp "
+            "codex-linux-sandbox: No such file or directory`. The candidate "
+            f"came from {chosen_because}; set {RUN_ROOT_ENV_NAME} to a "
+            f"directory outside {temporary}."
+        )
+    return candidate
+
+
 # ── Provider settings ───────────────────────────────────────────────────────
 
 #: The only wire format Codex's provider reference accepts. Kept as a constant
