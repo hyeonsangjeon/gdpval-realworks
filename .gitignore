@@ -232,6 +232,8 @@ tasks/rebuilding_grading_task/*
 !tasks/rebuilding_grading_task/337-audio-accuracy-measured.json
 !tasks/rebuilding_grading_task/337-audio-accuracy-measured-delivery.json
 !tasks/rebuilding_grading_task/339-the-sentence-that-changed-nothing.md
+!tasks/rebuilding_grading_task/340-we-have-not-seen-audio-metering.md
+!tasks/rebuilding_grading_task/341-what-a-refused-call-costs.md
 
 # The grading run writes a sqlite mirror of the cost ledger beside every grade
 # file. The published record is the .jsonl next to it; the database is a local
