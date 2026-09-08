@@ -292,6 +292,11 @@ const MISSING_REASON_LABELS: Record<string, string> = {
   usage_partial: '사용량 일부 누락',
   price_missing: '가격표에 없는 모델',
   call_reachability_unknown: '호출 도달 여부 불명',
+  // Sits next to the line above on purpose: the two are the halves that used
+  // to be one row. A refusal *did* reach the API — the status code is the
+  // proof — so what is unknown is only whether it was billed. The cell already
+  // says 미확정; this says which of the two unknowns it is.
+  call_refused_unpriced: '호출이 거절되어 사용량 없음',
   runtime_cost_unattributable: '실행 환경 공유로 귀속 불가',
   runtime_cost_unpriced: '실행 환경 단가 없음',
   ledger_absent: '이 실행에 원장 없음',
