@@ -59,6 +59,11 @@ batch-runner/scripts/*
 !batch-runner/scripts/analyze_repeat_variation.py
 !batch-runner/scripts/analyze_audio_repeat_variation.py
 !batch-runner/scripts/measure_audio_grading_accuracy.py
+# Reads 334's artifact read-only and writes 336's re-analysis beside it. Not
+# run by any workflow -- it produces a committed file that the tests pin, so it
+# only runs when a person regenerates that file on purpose. Committed anyway
+# because a number nobody can reproduce is a number nobody can check.
+!batch-runner/scripts/reanalyse_audio_stability.py
 !batch-runner/scripts/replay_audio_format_failures.py
 # Run by .github/workflows/audio-format-diagnostic.yml, on the free job as well
 # as the paid one. `replay_audio_format_failures.py` above answers what the
@@ -177,6 +182,12 @@ tasks/rebuilding_grading_task/*
 # a CI artifact that expires. Held by
 # tests/test_audio_format_failure_diagnostic.py.
 !tasks/rebuilding_grading_task/335-audio-format-diagnostic.json
+!tasks/rebuilding_grading_task/336-silence-is-not-agreement.md
+# 334's stability figures recomputed after the counting fix. 334's own artifact
+# is unchanged, so this file is the *only* place the corrected numbers exist --
+# if it is not committed, the published figures stay the only figures and the
+# correction lives nowhere. Held by tests/test_silence_is_not_agreement.py.
+!tasks/rebuilding_grading_task/336-334-stability-reanalysed.json
 
 # The grading run writes a sqlite mirror of the cost ledger beside every grade
 # file. The published record is the .jsonl next to it; the database is a local

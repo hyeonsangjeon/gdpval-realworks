@@ -543,6 +543,21 @@ jobs:
                     f"planned calls. {stopped['reading']}\n")
               print("> Every number below is that partial run's. Do not compare it")
               print("> with a completed run as though the design were the same.\n")
+              # The stop lands between calls and the arms interleave, so the
+              # last claim can hold one arm and not the other. Printed here
+              # rather than left in the JSON because the sentence it carries
+              # is addressed to whoever is about to quote a p-value off this
+              # page, and that person is reading the summary, not the
+              # artifact. 336 §3.
+              left = stopped.get("left_behind")
+              if left:
+                  missing = left["claims_missing_an_arm_entirely"]
+                  unequal = left["claims_with_unequal_calls_across_arms"]
+                  print(f"> Left unpaired: {len(missing)} claim(s) missing an arm "
+                        f"entirely, {len(unequal)} with unequal calls across arms.")
+                  if missing:
+                      print(f"> Missing an arm: `{', '.join(missing)}`.")
+                  print(f"> {left['inference']}\n")
           speech = report.get("speech_set")
           if speech:
               print("**This is the speech corpus.** It asks whether the judge hears")
@@ -688,8 +703,27 @@ jobs:
                 f"in {flips['comparable_pairs']} |")
           print(f"| &nbsp;&nbsp;· pairs dropped (a side never answered) | "
                 f"{flips['pairs_dropped_for_a_missing_answer']} |")
+          # Out of the claims that *had* a comparable pair, not out of the
+          # corpus. 334's observation arm rendered "0 of 20" here off two
+          # comparable pairs, which reads as twenty steady claims and
+          # describes two. 336 §1.
           print(f"| &nbsp;&nbsp;· claims that ever flipped — *different denominator* | "
-                f"{flips['claims_that_ever_flipped']} of {stab['claims']} |")
+                f"{flips['claims_that_ever_flipped']} of {flips['claims_compared']} "
+                f"compared ({flips['claims_with_no_comparable_pair']} had no "
+                f"comparable pair) |")
+          # The other half of the same correction. A claim needs two answered
+          # repeats before "did the repeats agree" is a question with an
+          # answer, so the three counts below are printed with their own
+          # denominator and the share is blank when there is nothing in it.
+          share = stab["identical_share_of_comparable"]
+          print(f"| **claims identical across answered repeats** | "
+                f"**{stab['identical_across_repeats']} of "
+                f"{stab['claims_with_two_or_more_answers']}** "
+                f"({pct(share) if share is not None else 'nothing comparable'}) |")
+          print(f"| &nbsp;&nbsp;· differed across answered repeats | "
+                f"{stab['differed_across_repeats']} |")
+          print(f"| &nbsp;&nbsp;· fewer than two answers — *not counted either way* | "
+                f"{stab['claims_without_two_answers']} of {stab['claims']} |")
           print()
           print("**J = 0 would mean the verdict does not depend on the audio.** A model")
           print("answering `pass` to everything scores 50% accuracy on this balanced")
