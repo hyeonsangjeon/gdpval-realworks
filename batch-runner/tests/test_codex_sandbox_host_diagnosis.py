@@ -42,17 +42,20 @@ import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
+import check_recorded_sandbox_verdicts as checker  # noqa: E402
 import diagnose_codex_sandbox_host as host  # noqa: E402
 
-SCRIPT = (
-    Path(__file__).resolve().parent.parent
-    / "scripts"
-    / "diagnose_codex_sandbox_host.py"
-)
+BATCH_RUNNER = Path(__file__).resolve().parent.parent
+REPO_ROOT = BATCH_RUNNER.parent
+
+SCRIPT = BATCH_RUNNER / "scripts" / "diagnose_codex_sandbox_host.py"
+RECORD = BATCH_RUNNER / "docs" / "codex_sandbox_hosts.json"
+SURVEY_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "codex-sandbox-host-survey.yml"
 
 # --- real failure text, copied from the machines that produced it -----------
 
@@ -450,3 +453,245 @@ def test_it_runs_on_this_machine_and_reaches_a_named_verdict() -> None:
 @pytest.mark.parametrize("wall", host.ALL_READINESS_VALUES)
 def test_no_two_walls_share_a_name(wall: str) -> None:
     assert host.ALL_READINESS_VALUES.count(wall) == 1
+
+
+# ---------------------------------------------------------------------------
+# The record, and the workflow that is supposed to be held to it
+# ---------------------------------------------------------------------------
+#
+# `docs/codex_sandbox_hosts.json` opens by promising that every entry was
+# measured and that nothing in it was written from expectation. A promise in a
+# comment is worth what anyone remembers of it, so the parts of that promise a
+# test can check are checked here.
+#
+# The rest of this section exists because of a specific failure shape. The
+# survey workflow and the record are two files that have to agree about host
+# keys, and the diagnostic and the record have to agree about verdict spellings.
+# Neither agreement is visible when you edit one of them. A typo'd verdict makes
+# the survey permanently red for a reason that has nothing to do with any host;
+# a host key present in one file and absent from the other makes it permanently
+# red for a host nobody forgot to measure. Both read as "the sandbox check is
+# broken again", and both teach people to stop reading it.
+
+
+def recorded_hosts() -> dict:
+    return json.loads(RECORD.read_text(encoding="utf-8"))["hosts"]
+
+
+def survey_workflow() -> dict:
+    return yaml.safe_load(SURVEY_WORKFLOW.read_text(encoding="utf-8"))
+
+
+def test_every_recorded_verdict_is_one_the_diagnostic_can_produce() -> None:
+    """A verdict the tool cannot emit can never match, so it can never go green.
+
+    This is the cheap half of keeping the record honest: it does not know
+    whether a row is *true*, but it does know whether a row is *reachable*.
+    """
+    for name, entry in recorded_hosts().items():
+        assert entry["readiness"] in host.ALL_READINESS_VALUES, (
+            f"{name} is recorded as {entry['readiness']!r}, which "
+            "scripts/diagnose_codex_sandbox_host.py never emits"
+        )
+
+
+def test_every_recorded_host_says_who_measured_it_and_when() -> None:
+    """The file's own claim is that somebody looked. Make it say so per row."""
+    for name, entry in recorded_hosts().items():
+        assert entry.get("measured_by"), f"{name} does not say how it was measured"
+        assert entry.get("measured_on"), f"{name} does not say when"
+        assert entry.get("note"), f"{name} records a verdict with no reading of it"
+
+
+def test_every_host_the_survey_measures_has_a_record() -> None:
+    """Otherwise the survey is red forever on a host nobody forgot to measure.
+
+    The checker exits 3 for an unrecorded key on purpose -- it refuses to write
+    its own expectation. That is right on the day a host is first measured and
+    wrong as a steady state, so the two files are held together here instead.
+    """
+    workflow = survey_workflow()
+    matrix = workflow["jobs"]["survey"]["strategy"]["matrix"]["include"]
+    keys = {leg["host_key"] for leg in matrix}
+
+    # The container leg is compared too, and its key is written into the step
+    # rather than into the matrix, so it is named here as well.
+    keys.add("ubuntu-24.04-container")
+
+    missing = keys - set(recorded_hosts())
+    assert not missing, f"the survey measures {sorted(missing)} and nothing records them"
+
+
+def test_the_host_the_suite_demands_a_sandbox_from_is_one_it_measured_ready() -> None:
+    """`CODEX_SANDBOX_MUST_RUN=1` is only honest where the sandbox works.
+
+    Setting it on a host that cannot sandbox would turn a true skip into a false
+    failure, which is the same crime as the one this whole line of work exists
+    to undo, pointed the other way. So the job that sets it must run on a host
+    the record calls `ready`.
+    """
+    workflow = survey_workflow()
+    job = workflow["jobs"]["prove-execution"]
+
+    demanding = [
+        step
+        for step in job["steps"]
+        if (step.get("env") or {}).get("CODEX_SANDBOX_MUST_RUN") == "1"
+    ]
+    assert demanding, "no step demands the sandbox actually run"
+
+    runner = job["runs-on"]
+    recorded = recorded_hosts().get(f"{runner}-host")
+    assert recorded is not None, f"{runner} runs the demanding job and is unrecorded"
+    assert recorded["readiness"] == host.READY, (
+        f"{runner} is recorded as {recorded['readiness']!r}, so demanding that "
+        "the sandbox run there would fail the suite for a property of the machine"
+    )
+
+
+def test_the_demanding_job_checks_readiness_before_it_demands_it() -> None:
+    """The record can go stale; the host is asked again in the same job.
+
+    Without this the job would be trusting a JSON file about a machine that is
+    re-imaged on somebody else's schedule. With it, a 22.04 image that gains the
+    restriction stops at the diagnostic -- which names the wall -- instead of at
+    a pytest failure that would read as a broken run place.
+    """
+    job = survey_workflow()["jobs"]["prove-execution"]
+    steps = job["steps"]
+
+    diagnosed = next(
+        (i for i, s in enumerate(steps) if "diagnose_codex_sandbox_host.py" in (s.get("run") or "")),
+        None,
+    )
+    demanded = next(
+        (
+            i
+            for i, s in enumerate(steps)
+            if (s.get("env") or {}).get("CODEX_SANDBOX_MUST_RUN") == "1"
+        ),
+        None,
+    )
+    assert diagnosed is not None, "the job never asks whether this host can sandbox"
+    assert demanded is not None
+    assert diagnosed < demanded, "readiness is demanded before it is measured"
+
+    gate = steps[diagnosed]
+    assert not gate.get("continue-on-error"), (
+        "the readiness gate cannot be advisory: a host that stopped sandboxing "
+        "would sail past it into a pytest failure that names the wrong cause"
+    )
+
+
+def test_nothing_in_the_survey_buys_a_pass_by_weakening_isolation() -> None:
+    """The four refused shortcuts, refused in a way that a diff would show.
+
+    Any of these would make the tests green against a run place nobody uses. The
+    check is textual on purpose -- it is looking for the flags themselves, so
+    that adding one is a visible edit to this file's expectations rather than a
+    line in a workflow nobody re-reads.
+    """
+    text = SURVEY_WORKFLOW.read_text(encoding="utf-8")
+    for forbidden in (
+        "--privileged",
+        "--cap-add",
+        "--security-opt",
+        "--userns=host",
+        "sysctl -w",
+        "--dangerously-bypass-approvals-and-sandbox",
+        "--use-legacy-landlock",
+    ):
+        offending = [
+            line
+            for line in text.splitlines()
+            if forbidden in line and not line.lstrip().startswith("#")
+        ]
+        assert not offending, f"{forbidden} appears outside a comment: {offending}"
+
+
+# ---------------------------------------------------------------------------
+# The checker, against the real record
+# ---------------------------------------------------------------------------
+
+
+def measurement(tmp_path: Path, readiness: str) -> Path:
+    path = tmp_path / "observed.json"
+    path.write_text(
+        json.dumps({"readiness": readiness, "explanation": "written by a test"}),
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_a_host_that_still_behaves_as_recorded_passes(tmp_path: Path) -> None:
+    for name, entry in recorded_hosts().items():
+        observed = measurement(tmp_path, entry["readiness"])
+        assert checker.main(["--host-key", name, "--observed", str(observed)]) == 0
+
+
+def test_a_host_that_changed_fails_in_either_direction(tmp_path: Path) -> None:
+    """Gaining the ability to sandbox is as important to hear about as losing it.
+
+    A hosted runner image that quietly starts running commands under bubblewrap
+    is a free execution host nobody would otherwise notice for months, which is
+    the exact position this project spent weeks in.
+    """
+    was_ready = [n for n, e in recorded_hosts().items() if e["readiness"] == host.READY]
+    was_not = [n for n, e in recorded_hosts().items() if e["readiness"] != host.READY]
+    assert was_ready and was_not, "the record has lost one side of the comparison"
+
+    became_unready = measurement(tmp_path, host.USER_NAMESPACES_RESTRICTED_BY_SECURITY_POLICY)
+    assert checker.main(["--host-key", was_ready[0], "--observed", str(became_unready)]) == 1
+
+    became_ready = measurement(tmp_path, host.READY)
+    assert checker.main(["--host-key", was_not[0], "--observed", str(became_ready)]) == 1
+
+
+def test_an_unmeasured_host_is_refused_rather_than_accepted(tmp_path: Path) -> None:
+    observed = measurement(tmp_path, host.READY)
+    assert checker.main(["--host-key", "a-machine-nobody-has-run", "--observed", str(observed)]) == 3
+
+
+def test_an_unreadable_measurement_is_not_a_pass(tmp_path: Path) -> None:
+    missing = tmp_path / "never-written.json"
+    assert checker.main(["--host-key", "xenology-nas", "--observed", str(missing)]) == 2
+
+    garbled = tmp_path / "garbled.json"
+    garbled.write_text("{not json", encoding="utf-8")
+    assert checker.main(["--host-key", "xenology-nas", "--observed", str(garbled)]) == 2
+
+
+def test_an_unreadable_record_fails_closed(tmp_path: Path) -> None:
+    """An empty record would accept every observation. That is the wrong default.
+
+    Each of these is a way the file could stop being readable, and none of them
+    may be mistaken for "nothing has been recorded yet".
+    """
+    observed = measurement(tmp_path, host.READY)
+
+    for content in ("{not json", json.dumps({"no_hosts_key": {}})):
+        broken = tmp_path / "record.json"
+        broken.write_text(content, encoding="utf-8")
+        with pytest.raises(SystemExit):
+            checker.main(
+                [
+                    "--host-key",
+                    "xenology-nas",
+                    "--observed",
+                    str(observed),
+                    "--record",
+                    str(broken),
+                ]
+            )
+
+    with pytest.raises(SystemExit):
+        checker.main(
+            [
+                "--host-key",
+                "xenology-nas",
+                "--observed",
+                str(observed),
+                "--record",
+                str(tmp_path / "absent.json"),
+            ]
+        )

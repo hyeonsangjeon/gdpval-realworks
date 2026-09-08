@@ -173,40 +173,114 @@ read off the pinned code rather than off documentation:
    belongs to the legacy route. `CodexProviderSettings` refuses a plan that puts
    one in `query_params` alongside the undated endpoint, because that would
    describe a route we are not using.
-4. **Usage is reported per thread, cumulatively, not per request.** Two turns
-   of 11 and 40 input tokens settle as 51, not as two rows of 11 and 40. The
-   cost adapter subtracts a before-total for this reason; the receipt contract
-   is the repository's existing one and no new price table was added.
+4. **Usage arrives per request; Codex reports it summed per thread.** The
+   earlier wording here — "two turns of 11 and 40 settle as 51" — was wrong, and
+   wrong in a way that matters, because 11 + 40 = 51 and 40 − 11 = 29 are both
+   defensible readings of it. The actual shape, read off the SDK and pinned by
+   the end-to-end fixture: the upstream server reports **11 tokens for the
+   tool-call request and 40 for the final request, both inside one turn**.
+   `ThreadTokenUsage.total` is Codex's running sum across the thread, so it
+   reads **51**, and that is what the receipt records for the turn.
+   `ThreadTokenUsage.last` would read 40 — the final request only — which is
+   why the adapter uses `total` and not `last`. There is no reading under which
+   the answer is 29.
 
-The chain "runtime starts → tool call → reference file read → deliverable
-written → tool result returned → exit → files and cost collected" is driven
-against the real binary in
-`batch-runner/tests/test_codex_runtime_end_to_end.py`, using a stand-in
-Responses server on the loopback interface. No paid deployment takes part, and
-the agent's own settings are not relaxed for it: `Sandbox.workspace_write` and
-`ApprovalMode.deny_all`, with no argument that turns either off.
+   The per-request 11 and 40 are visible only because the fixture is the server.
+   A real run sees the thread total and nothing else: the SDK exposes no
+   per-request breakdown, which is exactly what
+   `REASON_CALL_REACHABILITY_UNKNOWN` on every Codex settlement says out loud.
 
-One host limit is worth writing down, because the first attempt to write it
-down got it wrong. The development box runs a NAS kernel (Linux 3.10) without
-user namespaces, so the sandbox cannot start there, and the two assertions that
-need a command to actually *execute* skip with the runtime's own
-`bwrap: Creating new namespace failed`. That much was known. What was assumed
-without checking is that CI would run them for real — `ubuntu-latest` does
-install the pinned runtime and does start the sandbox, and then bwrap dies
-anyway with `bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted`: the
-namespace is granted and the capability inside it is not, so the network Codex
-unshares cannot be brought up. The assumption cost a red CI run, which is how it
-was found.
+   `turn_usage_delta` subtracts a before-total so that a second turn on the same
+   thread cannot re-charge the first. Today that subtraction never changes an
+   answer: `codex_runner.py` opens a fresh thread per task and runs one turn in
+   it, so `before` is `CodexTokenTotals.zero()` every time. It is guarding a
+   future, not doing present work, and the earlier text implying otherwise was
+   overstating what runs. `tests/test_codex_cost_adapter.py` pins both the
+   arithmetic and the refusals — a cumulative counter that goes backwards is an
+   error rather than a clamp, and `cache_write_input_tokens`, which the receipt
+   has no field for, produces `usage_partial` rather than a total that looks
+   complete.
 
-So the honest statement is that **neither machine available today runs that
-leg**, and the skip now matches any `bwrap:` abort rather than one wording. Two
-ways to make it green were available and both were refused: turning the sandbox
-off, and granting the sandboxed command network access so nothing has to be
-unshared. Either would produce a passing test about a configuration no run would
-use. What it needs instead is a host with working unprivileged user namespaces —
-the same requirement the existing execution-host card carries, and the same one
-`agentic-sandbox-preflight.yml` already waits on with its `self-hosted,
-agentic-sandbox` runner label.
+   The receipt contract is the repository's existing one and no new price table
+   was added.
+
+`batch-runner/tests/test_codex_runtime_end_to_end.py` drives the real pinned
+binary against a stand-in Responses server on the loopback interface. No paid
+deployment takes part, and the agent's own settings are not relaxed for it:
+`Sandbox.workspace_write` and `ApprovalMode.deny_all`, with no argument that
+turns either off.
+
+It is worth being exact about which links of the chain that actually covers,
+because the earlier version of this paragraph claimed all of them and the test
+file's own skip records said otherwise.
+
+**Driven on every machine, including this one:** the runtime starts, the
+JSON-RPC session opens against the pinned `app-server`, a turn begins, the
+request reaches the provider with the settings we chose, the model's tool call
+comes back, the turn ends, usage is collected off `ThreadTokenUsage`, the call
+is settled into the receipt with its missing-information reasons, and the
+process exits without leaking a session.
+
+**Driven, but on exactly one machine:** the sandboxed command executing, the
+file it writes appearing on disk, and the tool result carrying that command's
+real output back to the model. Those are the two assertions that used to skip
+everywhere. They now run on GitHub's `ubuntu-22.04` runner, under
+`CODEX_SANDBOX_MUST_RUN=1`, where a skip is a failure. Nowhere else. On every
+other host this project has, they still skip, and that skip is still the
+correct answer for those hosts.
+
+Finding that machine is what `scripts/diagnose_codex_sandbox_host.py` was for.
+The rule it replaced — *until one machine reports `ready`, no document here may
+call the chain end-to-end verified* — has been met, and met by measurement
+rather than by argument. What may now be said is narrower than "verified": the
+chain has been driven end to end **once, on one runner image, against a
+scripted provider**. What still may not be said is that it works against a paid
+deployment, which is §3's other open leg and is not a sandbox question at all.
+
+The host survey is worth writing down in full, because the first attempt to
+write it down got it wrong twice. All of it is in
+`batch-runner/docs/codex_sandbox_hosts.json`, measured by the diagnostic and
+re-measured by `.github/workflows/codex-sandbox-host-survey.yml`:
+
+| host | kernel | `apparmor_restrict_unprivileged_userns` | verdict |
+|---|---|---|---|
+| Xenology NAS (the dev box) | 3.10.102 | absent — no `/proc/sys/user` at all | `kernel_lacks_user_namespaces` |
+| GitHub `ubuntu-24.04` = `ubuntu-latest` | 6.17.0-1022-azure | `1` | `user_namespaces_restricted_by_security_policy` |
+| plain `ubuntu:24.04` container on that runner | 6.17.0-1022-azure | `1` | `user_namespaces_restricted_by_security_policy` |
+| GitHub `ubuntu-22.04` | 6.8.0-1064-azure | `0` | **`ready`** |
+
+The first row was known. The second is what was *assumed* without checking:
+`ubuntu-latest` does install the pinned runtime and does start the sandbox, and
+then bwrap dies anyway with
+`bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted` — the namespace
+is granted and the capability inside it is not, so the network Codex unshares
+cannot be brought up. That assumption cost a red CI run, which is how it was
+found. The third row shares the second's cause and not its symptom: inside the
+container the namespace creation is refused outright rather than stripped
+afterwards, because the container's own seccomp profile stops it first.
+
+The fourth row is the one that matters, and the reason it is evidence rather
+than luck is that rows two and four are the same hosted-runner infrastructure
+with the same LSM stack, differing in one sysctl — so the failure is
+attributable to the policy and to very little else.
+
+Two things about that row have to be said plainly rather than celebrated.
+`ubuntu-22.04` is not better configured; it is *older*, and its default posture
+simply predates `kernel.apparmor_restrict_unprivileged_userns`. And GitHub is
+retiring the 22.04 image, so this result has an expiry date. The execution-host
+card is therefore **deferred by this finding, not closed by it**.
+
+Four ways to make the test green were available and all four were refused:
+turning the sandbox off; granting the sandboxed command network access so
+nothing has to be unshared; running the probe in a privileged container; and
+clearing the sysctl on the 24.04 runner. The first two produce a passing test
+about a configuration no run would use. The third measures a container nobody
+would deploy. The fourth removes the restriction from every process on the
+machine, which is not a fix but the absence of one. A fifth was considered and
+also refused: Codex's `use_legacy_landlock` backend, which both 24.04 and 22.04
+could probably run — it is the *legacy* sandbox, so a green test there would be
+measuring a run place no real run configures. It is recorded in the
+diagnostic's output as an observation and never as readiness.
 
 ## 4. A distinction that is easy to get wrong
 
@@ -377,6 +451,19 @@ paid run must be preceded by a fresh smoke at the new fingerprint.
   is not done here.
 - `batch-runner/tests/test_three_more_run_places.py` pins the grade: the run
   place has code, and having code is still not being able to run.
+- `batch-runner/scripts/diagnose_codex_sandbox_host.py` answers, for one
+  machine, whether Codex can execute a command there — and when it cannot, which
+  of six named walls it hit. Its own tests
+  (`batch-runner/tests/test_codex_sandbox_host_diagnosis.py`) hold it to the
+  distinctions that matter, chief among them that only a command which actually
+  ran counts as `ready`.
+- `.github/workflows/codex-sandbox-host-survey.yml` re-measures the hosted
+  runners against `batch-runner/docs/codex_sandbox_hosts.json` and fails on any
+  disagreement in either direction, so a runner image that quietly gains or
+  loses the ability to sandbox shows up as a change rather than as nothing. Its
+  `prove-execution` job runs the end-to-end file on `ubuntu-22.04` with
+  `CODEX_SANDBOX_MUST_RUN=1`, which is what stops the execution leg from
+  reverting to a silent skip on the one host that can exercise it.
 - Still to be written, when section 7 is answered: a test that the deployment
   Codex addresses is the same one the other columns address, which is the
   condition that motivated this whole document.
@@ -386,12 +473,13 @@ paid run must be preceded by a fresh smoke at the new fingerprint.
 - [x] The question in section 7 is answered from official documentation.
 - [x] A run place exists, with the settings in code rather than in prose.
 - [x] The chain from runtime start to cost collection is checked without a paid
-      deployment — with one leg still open: Codex actually *executing* a command
-      inside its sandbox, which no machine available today will do. See section
-      3b.
-- [ ] Codex executes a command inside its sandbox on a host with working
-      unprivileged user namespaces. Blocked on the execution-host card, not on
-      this one.
+      deployment.
+- [x] Codex executes a command inside its sandbox on a host with working
+      unprivileged user namespaces — GitHub's `ubuntu-22.04` runner, measured
+      `ready` and then held there by `CODEX_SANDBOX_MUST_RUN=1`. One host, one
+      runner image, against a scripted provider. See section 3b for what that
+      does and does not license anyone to say, including that the image is being
+      retired.
 - [ ] One request reaches the real deployment and is accepted.
 - [ ] A test proves the deployment it addresses is the same one the other
       columns address.
@@ -406,14 +494,16 @@ paid run must be preceded by a fresh smoke at the new fingerprint.
   and must not be reused as a current blocker.
 - **Blocked on a live request.** Version, authentication and per-region
   compatibility against our own deployment are separate facts from the
-  documentation, and only a request settles them.
-- The exec leg of the mock check is **not proven on any machine available
-  today**: the development box has no user namespaces, and the hosted runner
-  denies the capability inside the one it grants. That is a host limit, not a
-  finding about the run place, and it is not worked around by disabling
-  isolation or by giving the sandboxed command network access. It needs a host
-  with working unprivileged user namespaces — the execution-host card's
-  subject.
+  documentation, and only a request settles them. This is now the *only* open
+  leg of this task.
+- **The exec leg is no longer blocked, and was never a finding about the run
+  place.** It was a host limit, and it was closed by finding a host rather than
+  by removing isolation: no sandbox was disabled, no network was opened, no
+  container was privileged, and no host's security policy was changed. The
+  development box (Linux 3.10, no user namespaces) and `ubuntu-latest`
+  (namespace granted, capability stripped) still cannot run it and still skip.
+  The execution-host card stays open, because one retiring runner image is a
+  reprieve rather than an answer.
 - The next decision is whoever can run one paid request against the pinned
   deployment. Until it succeeds, the column stays empty and is reported as
   unconfirmed. It is not filled with a substitute.

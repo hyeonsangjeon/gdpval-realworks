@@ -32,30 +32,40 @@ command's token is accepted, or that the pinned Codex version is compatible
 with our region — the scripted server accepts anything. Those three are the
 blockers recorded in ``core.execution_environment_readiness``.
 
-Sandboxing, and the two machines that will not do it
-----------------------------------------------------
+Sandboxing, and the machines that will and will not do it
+---------------------------------------------------------
 
 The agent's file writes go through ``exec_command``, which Codex runs inside a
-sandbox. Neither machine this repository currently runs on gives it one, and
-they fail differently:
+sandbox. Whether that sandbox starts is a property of the host, and the hosts
+this project can reach do not agree. Measured by
+``scripts/diagnose_codex_sandbox_host.py`` and recorded in
+``docs/codex_sandbox_hosts.json``:
 
 * the NAS this repository is often edited on runs kernel 3.10, which has no
-  usable unprivileged user namespaces, so the sandbox cannot start at all;
-* the GitHub hosted runner grants the namespace and then denies the capability
-  inside it, so bwrap dies bringing up the loopback interface of the network
-  Codex unshares.
+  ``CONFIG_USER_NS`` at all, so the sandbox cannot start and no setting on that
+  box changes it;
+* GitHub's ``ubuntu-24.04`` runner — what ``ubuntu-latest`` resolves to — ships
+  ``kernel.apparmor_restrict_unprivileged_userns=1``. It grants the namespace
+  and then denies the capabilities inside it, so bwrap dies bringing up the
+  loopback interface of the network Codex unshares;
+* GitHub's ``ubuntu-22.04`` runner has that restriction set to ``0`` and runs
+  the command. **This is where the execution leg is actually proven.**
 
-Where either happens, the assertions that depend on a command having *run* skip
-with the runtime's own error text, and the rest of the chain is still asserted.
-The sandbox is never turned off, and network access is never granted to make
-the second failure go away: a run configured that way would not be the
-configuration anything else uses, and a green test bought that way would be
-describing a run place nobody will use.
+That last line was found by measurement, not by argument: the two runner images
+share infrastructure and differ in the policy, so the difference between them
+attributes the failure to the policy and to very little else.
 
-That leaves one leg of this file unproven anywhere available today — Codex
-actually executing a command inside its sandbox. It needs a host with working
-unprivileged user namespaces, which is the execution-host card's subject, not
-this one's.
+Where the sandbox cannot start, the assertions that depend on a command having
+*run* skip with the runtime's own error text, and the rest of the chain is
+still asserted. Where it can, skipping is forbidden —
+``CODEX_SANDBOX_MUST_RUN=1`` turns those skips into failures, so that the
+execution leg cannot quietly stop being exercised on the one host that
+exercises it. See :func:`skipped_or_failed_by`.
+
+The sandbox is never turned off; network access is never granted to make the
+24.04 failure go away; no container is given extra privileges; and no host's
+security policy is modified. Every one of those would produce a green test
+about a run place nobody will use, which is worth less than an honest skip.
 """
 
 from __future__ import annotations
@@ -69,7 +79,7 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, NoReturn
 
 import pytest
 
@@ -391,6 +401,45 @@ def sandbox_refused(server: ScriptedResponses) -> str | None:
     return None
 
 
+#: Set by CI on a host whose sandbox has been *measured* working, by
+#: ``scripts/diagnose_codex_sandbox_host.py`` reporting ``ready`` earlier in the
+#: same job.
+#:
+#: This closes the hole that let "the chain is verified end to end" get written
+#: while the execution leg had never run. The two assertions below skip when the
+#: sandbox will not start, which is right, and for months that skip fired
+#: everywhere -- so the suite was green and the leg was unproven, and those two
+#: states were indistinguishable from the outside.
+#:
+#: Where the sandbox demonstrably works, a skip is no longer a fact about the
+#: machine. It is the execution leg silently not being exercised, which is the
+#: thing we most need to hear about. So on such a host this turns the skip into
+#: a failure that names what was expected.
+#:
+#: Deliberately opt-in per host rather than inferred: guessing "this looks like
+#: it should work, so demand it" would make the suite red on contributors'
+#: laptops for a property nobody promised them.
+SANDBOX_MUST_RUN = os.environ.get("CODEX_SANDBOX_MUST_RUN") == "1"
+
+
+def skipped_or_failed_by(refusal: str, what: str) -> NoReturn:
+    """End the test on a sandbox refusal -- as a skip, or as a failure.
+
+    The difference is the whole point. On a machine with no working sandbox
+    this is a skip, because the machine cannot answer the question. On a
+    machine that measured ``ready`` minutes ago in the same job, the sandbox
+    can answer it, so a refusal here is a real defect wearing a skip's clothes.
+    """
+    if SANDBOX_MUST_RUN:
+        pytest.fail(
+            "CODEX_SANDBOX_MUST_RUN is set, so this host measured `ready` -- "
+            "scripts/diagnose_codex_sandbox_host.py watched bubblewrap run a "
+            f"command here. The sandbox then refused anyway while {what}, "
+            f"which is a regression and not a property of the machine: {refusal}"
+        )
+    pytest.skip(f"this machine gives Codex no working sandbox, so {what}: {refusal}")
+
+
 # ── Fixtures and helpers ────────────────────────────────────────────────────
 
 
@@ -508,9 +557,8 @@ def test_a_turn_starts_a_runtime_calls_a_tool_and_comes_back_with_a_file(
     assert CODEX_STRUCTURAL_REASONS[0] in calls[0]["missing_reasons"]
 
     if refusal:
-        pytest.skip(
-            "this machine gives Codex no working sandbox, so the command it "
-            f"was asked to run could not execute: {refusal}"
+        skipped_or_failed_by(
+            refusal, "the command it was asked to run could not execute"
         )
 
     # The deliverable exists and was built from the staged reference. The
@@ -597,9 +645,8 @@ def test_the_agent_cannot_see_the_other_tasks_files(tmp_path: Path):
             assert result["success"] is True, result.get("error")
             refusal = sandbox_refused(server)
             if refusal:
-                pytest.skip(
-                    "this machine gives Codex no working sandbox, so the "
-                    f"agent could not be asked what it can see: {refusal}"
+                skipped_or_failed_by(
+                    refusal, "the agent could not be asked what it can see"
                 )
             listings.append(server.tool_output_text())
 
