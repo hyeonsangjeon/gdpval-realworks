@@ -2412,11 +2412,102 @@ def delivery_section(
 # --------------------------------------------------------------------------
 
 
+def _binomial_at_most(k: int, n: int, p: float) -> float:
+    """``P(X <= k)`` for ``X ~ Binomial(n, p)``. Exact, no approximation."""
+    if k < 0:
+        return 0.0
+    if k >= n:
+        return 1.0
+    return sum(
+        math.comb(n, i) * (p ** i) * ((1.0 - p) ** (n - i)) for i in range(k + 1)
+    )
+
+
+def minimum_settled_claims(alpha: float = 0.05) -> int:
+    """How many settled claims the primary test needs before it *can* pass.
+
+    330 section 4's primary analysis is an exact one-sided binomial against
+    p = 0.5, so a perfect score on ``n`` claims produces ``1 / 2**n`` and
+    nothing smaller. Below the ``n`` returned here no result the design can
+    produce clears ``alpha``, however well the model does.
+
+    This is arithmetic about the test, not about any run. ``binomial_majority_test``
+    already publishes the same quantity per run as ``smallest_attainable_p``.
+    """
+    n = 1
+    while 1 / (2 ** n) > alpha:
+        n += 1
+    return n
+
+
+def required_response_rate(
+    *, claims: int, repeats: int, settled_claims_needed: int
+) -> float:
+    """The per-call answer rate this *design* needs, derived from the design.
+
+    A claim earns a place in both of 330's claim-level figures -- the majority
+    the binomial test scores, and the stability count -- only when at least two
+    of its repeats answered. One answer gives a majority that is a single draw
+    and no comparable pair at all; zero gives neither.
+
+    So: with ``claims`` criteria asked ``repeats`` times each, and calls that
+    answer independently with probability ``r``, the expected number of claims
+    with two or more answers is ``claims * P(X >= 2)`` for ``X ~ B(repeats, r)``.
+    The rate returned is the smallest ``r`` at which that expectation reaches
+    ``settled_claims_needed``.
+
+    Every input is a property of the design and none of them is a measurement.
+    Feed it 330's corpus -- 20 claims, 3 repeats, 5 settled claims from
+    :func:`minimum_settled_claims` -- and it answers 0.3264 without having seen
+    a run. That is the point: a threshold read off an arm's observed failure
+    rate is a threshold fitted to the run it is meant to judge.
+
+    Independence is an assumption and it is the optimistic one. If failures
+    cluster by claim -- one criterion the model will not answer for, whatever
+    the repeat -- the same overall rate yields *fewer* claims with two answers
+    than this formula says. Treat the result as a floor.
+    """
+    if repeats < 2:
+        raise ValueError(
+            "a claim needs two answered repeats to be comparable, so a design "
+            f"with repeats={repeats} has no response rate that satisfies it"
+        )
+    if not 0 < settled_claims_needed <= claims:
+        raise ValueError(
+            f"settled_claims_needed={settled_claims_needed} is not reachable "
+            f"with claims={claims}"
+        )
+    target = settled_claims_needed / claims
+    low, high = 0.0, 1.0
+    for _ in range(200):  # bisection: the expectation is increasing in r
+        mid = (low + high) / 2
+        # P(X >= 2) = 1 - P(X <= 1)
+        if 1.0 - _binomial_at_most(1, repeats, mid) < target:
+            low = mid
+        else:
+            high = mid
+    return high
+
+
+#: 330's corpus: 20 criteria, 3 repeats. :func:`minimum_settled_claims` puts
+#: the floor at 5 settled claims (1/2**5 = 0.03125, the first that clears
+#: 0.05), and :func:`required_response_rate` turns that into 0.3264. Rounded
+#: **up** to a third, which is the direction that protects the design's sample
+#: requirement rather than the arm's benefit of the doubt; the evidence gate
+#: below is what keeps that from stopping a healthy arm on noise.
+#:
+#: Derived before the counterfactual in 336 section 6 was computed, and pinned
+#: by ``test_the_response_rate_threshold_comes_from_the_design_not_from_334``,
+#: which recomputes it from the corpus rather than reading this literal.
+MIN_RESPONSE_RATE = 1 / 3
+
+
 @dataclass(frozen=True)
 class StopRules:
     """When to walk away from a paid run, decided before it starts.
 
-    Pre-registered in ``330-speech-diagnostic-prereg.md`` section 3. They are
+    Pre-registered in ``330-speech-diagnostic-prereg.md`` section 3, and
+    extended once, in ``336-silence-is-not-agreement.md`` section 3. They are
     written here rather than left to a person watching the log because a rule
     that only exists in a document is a rule that gets reconsidered at the
     moment it would cost something -- which is when "just a bit more" wins.
@@ -2449,14 +2540,38 @@ class StopRules:
     #: comprehension of sound that was never delivered produces a number that
     #: looks exactly like a real one.
     stop_on_undelivered_audio: bool = False
+    #: The answer rate the design needs from an arm, as a share of its calls.
+    #: The rule above cannot reach an arm that answers *sometimes*: 334's
+    #: observation arm answered on its fourth call and then failed 27 in a
+    #: row, so "no answer at all in the leading window" was false from call
+    #: four and all 120 were bought. This is the rate below which the run has
+    #: no design left; see :data:`MIN_RESPONSE_RATE` for where the number
+    #: comes from, which is the corpus and not that arm.
+    min_response_rate: Optional[float] = None
+    #: Calls in one arm before the rate rule may fire at all. Nine answers out
+    #: of nine calls and zero out of two are the same evidence about a rate.
+    response_rate_min_observations: Optional[int] = None
+    #: The rule fires when ``P(answers this few | the arm meets the rate)``
+    #: falls to or below this. A point comparison would stop a healthy arm
+    #: sitting exactly at the requirement more than half the time on a short
+    #: window; this asks for evidence instead. Checked after every call, so the
+    #: run-level false-stop rate is higher than this figure -- 336 section 5
+    #: measures it rather than waving at it.
+    response_rate_alpha: float = 0.05
 
 
-#: The rules named in 330 section 3, in the order that document lists them.
+#: The rules named in 330 section 3, in the order that document lists them,
+#: plus the response-rate rule 334 section 10 item 2 asked for and 336 section
+#: 3 pins. The four values 330 registered are unchanged; the new rule can only
+#: stop runs that have not happened yet, and no published figure moves.
 SPEECH_STOP_RULES = StopRules(
     wall_clock_seconds=20 * 60,
     zero_response_after=10,
     max_provider_failures=10,
     stop_on_undelivered_audio=True,
+    min_response_rate=MIN_RESPONSE_RATE,
+    response_rate_min_observations=10,
+    response_rate_alpha=0.05,
 )
 
 
@@ -2573,7 +2688,106 @@ def _stop_reason(
                     ),
                 }
 
+    if (
+        rules.min_response_rate is not None
+        and rules.response_rate_min_observations is not None
+    ):
+        # The rule the one above cannot be: an arm that answers *sometimes*.
+        # Checked per arm for the same reason, and placed after it so that a
+        # window with no answers at all is still reported under the older,
+        # simpler name rather than being re-described in terms of a p-value.
+        #
+        # Not a point comparison. An arm whose true rate is exactly the
+        # requirement lands below it on about half of short windows, and
+        # stopping on that would be stopping on noise. What fires here is
+        # evidence: the probability of seeing this few answers *if the arm
+        # met the requirement*. At the minimum window of ten that reduces to
+        # "zero answers" -- P(<=1 | 10, 1/3) is 0.104, above alpha -- so the
+        # new rule starts exactly where the old one already was and gains its
+        # reach only as calls accumulate. It cannot have been tuned to make
+        # any particular run stop early, because at its first opportunity it
+        # does nothing the pre-existing rule did not already do.
+        by_arm_rate: dict[Any, list[dict[str, Any]]] = {}
+        for call in calls:
+            by_arm_rate.setdefault(call.get("arm"), []).append(call)
+        for arm, arm_calls in by_arm_rate.items():
+            n = len(arm_calls)
+            if n < rules.response_rate_min_observations:
+                continue
+            answered = sum(
+                1 for c in arm_calls if c.get("unanswered_kind") is None
+            )
+            p_value = _binomial_at_most(answered, n, rules.min_response_rate)
+            if p_value <= rules.response_rate_alpha:
+                return {
+                    "rule": "min_response_rate",
+                    "limit": rules.min_response_rate,
+                    "observed": answered / n,
+                    "answered_in_arm": answered,
+                    "arm": arm,
+                    "after_calls": len(calls),
+                    "after_calls_in_arm": n,
+                    "p_if_the_arm_met_the_limit": p_value,
+                    "alpha": rules.response_rate_alpha,
+                    "reading": (
+                        f"Arm {arm!r} answered {answered} of {n}. If it were "
+                        f"answering at the rate the design needs "
+                        f"({rules.min_response_rate:.4f}), a window this thin "
+                        f"would happen with probability {p_value:.5f}. The "
+                        "remaining calls would buy an arm that cannot reach "
+                        "the minimum sample the primary test needs. This is a "
+                        "spending rule, not a finding about the model: it "
+                        "says the run has no design left, not that the arm is "
+                        "worse."
+                    ),
+                }
+
     return None
+
+
+def _stop_census(
+    calls: Sequence[dict[str, Any]], arms: Sequence[str]
+) -> dict[str, Any]:
+    """What a stop left half-finished, and what that does to the analysis.
+
+    A stop lands between calls, and the arms are interleaved within a claim,
+    so the last claim can hold a production call and no observation one. The
+    run does not buy the partner call to tidy the record -- that would spend
+    money after the decision to stop spending it -- so the imbalance is
+    reported instead, by name, for every analysis downstream that assumes the
+    arms are paired.
+    """
+    per_arm: dict[str, dict[str, int]] = {}
+    for call in calls:
+        per_arm.setdefault(str(call["claim_id"]), {})
+        arm = str(call.get("arm"))
+        per_arm[str(call["claim_id"])][arm] = (
+            per_arm[str(call["claim_id"])].get(arm, 0) + 1
+        )
+    names = [str(a) for a in arms]
+    missing = sorted(
+        claim_id
+        for claim_id, counts in per_arm.items()
+        if any(name not in counts for name in names)
+    )
+    unequal = sorted(
+        claim_id
+        for claim_id, counts in per_arm.items()
+        if len({counts.get(name, 0) for name in names}) > 1
+    )
+    return {
+        "claims_missing_an_arm_entirely": missing,
+        "claims_with_unequal_calls_across_arms": unequal,
+        "inference": (
+            "A stop makes the sample size depend on the data, so this run's "
+            "pre-registered tests are no longer the tests that were "
+            "registered -- their n was chosen by the rule. Report the counts "
+            "and the stop. Do not report a p-value computed over the pairs "
+            "that survived as though the design had produced them, and do not "
+            "compare a stopped arm's accuracy with a complete one's: the "
+            "calls it did not make are not missing at random."
+        ),
+    }
 
 
 def run_measurement(
@@ -2685,6 +2899,12 @@ def run_measurement(
                     stopped = _stop_reason(
                         stop_rules, calls=calls, elapsed_s=clock() - started_at
                     )
+    if stopped is not None:
+        # The stop is not bought out of by finishing the claim in flight. The
+        # partner call would cost money the rule just decided not to spend,
+        # so the record says what is unpaired instead of quietly evening it up.
+        stopped = dict(stopped)
+        stopped["left_behind"] = _stop_census(calls, [str(a) for a in arms])
     return {
         "calls": calls,
         "clip_sha256": digests,
@@ -2765,9 +2985,11 @@ def repeat_flip_rate(by_claim: Mapping[str, Any]) -> dict[str, Any]:
     flips = 0
     dropped = 0
     ever_flipped = 0
+    claims_compared = 0
     for entry in by_claim.values():
         verdicts = entry["verdicts"]
         flipped_here = False
+        pairs_here = 0
         for left in range(len(verdicts)):
             for right in range(left + 1, len(verdicts)):
                 a, b = verdicts[left], verdicts[right]
@@ -2775,10 +2997,22 @@ def repeat_flip_rate(by_claim: Mapping[str, Any]) -> dict[str, Any]:
                     dropped += 1
                     continue
                 pairs += 1
+                pairs_here += 1
                 if a != b:
                     flips += 1
                     flipped_here = True
-        ever_flipped += int(flipped_here)
+        # A claim with no comparable pair neither flipped nor held steady.
+        # Counting it as "did not flip" is the same mistake as calling three
+        # unanswered repeats identical, and 334 published both at once: its
+        # observation arm reported ``claims_that_ever_flipped: 0`` beside
+        # ``comparable_pairs: 2`` and 58 pairs dropped, which reads as twenty
+        # steady claims and describes two. 330 section 4 already fixed the rule
+        # for the pair denominator -- "한쪽이라도 답이 안 온 쌍은 분모에서
+        # 뺀다. 안 온 답은 일치도 불일치도 아니다" -- and this is the same
+        # sentence applied to the claim denominator it also has to hold for.
+        if pairs_here:
+            claims_compared += 1
+            ever_flipped += int(flipped_here)
     return {
         "unit": "one pair of repeats for one claim",
         "comparable_pairs": pairs,
@@ -2788,12 +3022,19 @@ def repeat_flip_rate(by_claim: Mapping[str, Any]) -> dict[str, Any]:
         # repeats agreed.
         "flip_rate_pct": (100.0 * flips / pairs) if pairs else None,
         "claims_that_ever_flipped": ever_flipped,
+        # The denominator that figure belongs to. Without it a reader divides
+        # by the corpus size and gets a steadiness that includes every claim
+        # the arm never answered.
+        "claims_compared": claims_compared,
+        "claims_with_no_comparable_pair": len(by_claim) - claims_compared,
         "prior_audio_cohort_pct": 19.3548,
         "meaning": (
             "Share of repeat pairs that answered differently, the same "
             "denominator as the 19.35% measured on the graded audio cohort. "
-            "'claims_that_ever_flipped' is the other denominator and is not "
-            "comparable with that figure."
+            "'claims_that_ever_flipped' is the other denominator, is out of "
+            "'claims_compared' rather than out of the corpus, and is not "
+            "comparable with that figure. Claims with fewer than two answered "
+            "repeats are in neither count."
         ),
     }
 
@@ -2889,6 +3130,7 @@ def summarise(
         if not verdicts:
             continue
         majority = majority_verdict(verdicts)
+        answered = [v for v in verdicts if v != "judge_error"]
         by_claim[claim.claim_id] = {
             "holds": claim.holds,
             "family": claim.family,
@@ -2897,13 +3139,32 @@ def summarise(
             "pair_id": claim.pair_id,
             "verdicts": verdicts,
             "majority": majority,
-            "stable": len(set(verdicts)) == 1,
+            "repeats": len(verdicts),
+            "answered_repeats": len(answered),
+            # Three states, not two. ``None`` is "there was nothing to
+            # compare", and it is not ``False`` either: a claim answered once
+            # did not disagree with itself.
+            #
+            # This used to be ``len(set(verdicts)) == 1``, which made three
+            # unanswered repeats collapse to a one-element set and report as
+            # perfectly consistent. 334's observation arm published
+            # ``identical_across_repeats: 13`` under that rule, and all
+            # thirteen of those claims had never produced a verdict at all --
+            # the count of consistently *answered* claims was zero. 330
+            # section 4 had already written the rule for the pair denominator;
+            # this is the same rule where it was missing.
+            "stable": (
+                (len(set(answered)) == 1) if len(answered) >= 2 else None
+            ),
             "majority_outcome": (
                 classify(claim, majority) if majority is not None else None
             ),
         }
 
     per_call = discrimination([(c["holds"], c["verdict"]) for c in calls])
+    comparable_claims = sum(
+        1 for entry in by_claim.values() if entry["stable"] is not None
+    )
     majority_labelled = [
         (entry["holds"], entry["majority"])
         for entry in by_claim.values()
@@ -2952,8 +3213,24 @@ def summarise(
         },
         "stability": {
             "claims": len(by_claim),
+            # The denominator, printed beside the count rather than left for a
+            # reader to assume is ``claims``. A claim needs two answered
+            # repeats before "did they agree" is a question with an answer.
+            "claims_with_two_or_more_answers": comparable_claims,
             "identical_across_repeats": sum(
-                1 for entry in by_claim.values() if entry["stable"]
+                1 for entry in by_claim.values() if entry["stable"] is True
+            ),
+            "differed_across_repeats": sum(
+                1 for entry in by_claim.values() if entry["stable"] is False
+            ),
+            "claims_without_two_answers": sum(
+                1 for entry in by_claim.values() if entry["stable"] is None
+            ),
+            # Null, not zero, when nothing was comparable -- the same rule
+            # ``flip_rate_pct`` follows two fields down.
+            "identical_share_of_comparable": _rate(
+                sum(1 for entry in by_claim.values() if entry["stable"] is True),
+                comparable_claims,
             ),
             "no_majority": sum(
                 1 for entry in by_claim.values() if entry["majority"] is None
@@ -2963,6 +3240,16 @@ def summarise(
             # because the obvious division of the fields above answers a
             # different question and looks like the same one.
             "repeat_flips": repeat_flip_rate(by_claim),
+            "meaning": (
+                "'identical_across_repeats' counts claims whose *answered* "
+                "repeats all agreed, out of 'claims_with_two_or_more_answers' "
+                "and not out of 'claims'. Before 336 it counted a claim whose "
+                "repeats were every one of them unanswered as identical, "
+                "which is how 334's observation arm published 13 of 20 while "
+                "the number of consistently answered claims was 0. Runs "
+                "published before 336 carry the older count and are not "
+                "comparable with this field."
+            ),
         },
     }
 

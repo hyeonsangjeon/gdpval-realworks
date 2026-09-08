@@ -12,7 +12,51 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Added
-- **The observation arm's replies were not malformed JSON. They were not JSON
+- **A response-rate stop rule, pre-registered before it was pointed at any
+  run.** `330`'s `zero_response_after` stops an arm that never answers; it
+  cannot reach an arm that answers *sometimes*, which is why `334`'s
+  observation arm answered on its fourth call, failed 27 in a row, and still
+  bought all 120. The new rule asks a different question, per arm, after every
+  call: *if this arm were meeting the rate the design needs, how often would a
+  window this thin happen?* It fires at `p ≤ 0.05` after a minimum of ten calls
+  in that arm. The rate — 1/3 — is derived from the corpus, not from `334`'s
+  failure rate: an exact one-sided binomial cannot clear α = 0.05 on fewer than
+  five settled claims (`0.5**5 = 0.03125`), a claim needs two answered repeats
+  to be settled, and 20 claims × 3 repeats reaches five settled claims at
+  r = 0.3264, rounded up. `required_response_rate` recomputes it from those
+  design parameters and a test pins the literal against the recomputation
+  rather than against itself. Because it is an evidence gate and not a point
+  comparison, at its minimum window of ten it fires only on zero answers —
+  exactly where `zero_response_after` already fired — so it buys nothing new
+  on its first opportunity and gains reach only as calls accumulate. The
+  false-stop rate is measured, not assumed: ~14.6% for an arm sitting exactly
+  at the requirement over 60 calls, under 2% at r = 0.5, zero at `334`'s
+  production rate. It applies to runs after this commit and changes no
+  published figure. `330`'s four registered values are unchanged.
+- **A stopped run now records what it left unpaired, and what that forbids.**
+  A stop lands between calls and the arms interleave, so the last claim can
+  hold one arm and not the other. The run does not buy the partner call to
+  tidy the record — that would spend the money the rule just declined — so
+  `stopped.left_behind` names the claims instead, and carries the sentence the
+  imbalance implies: a stop makes n depend on the data, so the run's
+  pre-registered tests are no longer the tests that were registered. Do not
+  report a p-value over the pairs that survived, and do not compare a stopped
+  arm's accuracy with a complete one's. The workflow summary prints it beside
+  the numbers, because the person about to quote a figure is reading that page
+  and not the artifact.
+- **`336-334-stability-reanalysed.json` — `334`'s stability figures under the
+  corrected count, in a new file with its own fingerprint.** `334`'s artifact
+  is opened read-only and is byte-identical; its published numbers stand as
+  published. The re-analysis records the source digest, both readings side by
+  side, and how each was counted. Observation `identical_across_repeats` 13 →
+  2 (18 claims moved to "fewer than two answers", not to "differed");
+  production 15 → 16. It also records where the new stop rule would have landed
+  on `334`'s recorded call log — arm `observation`, call 26 of 120, one answer
+  in 13 arm calls, `p = 0.0385`, 94 calls not bought — with the ordering stated
+  in the field itself: the threshold was pinned before that replay was run.
+  `334` was not re-run and is not being re-run; this is the rule's reach as a
+  number rather than as a claim, and it is not a finding about
+  `gpt-audio-1.5`. Zero model calls were made for any of the above.
   at all.** The eight-request diagnostic ran at commit `1e06e452` and used
   seven; `335-audio-format-diagnostic.json` holds the result. All three
   reproduce probes failed exactly as `334` recorded, and all three failed the
@@ -124,6 +168,34 @@ entries land under a fresh dated heading the day they merge to `main`.
   repository checked a result document against its own raw file.
 
 ### Fixed
+- **A claim nobody answered was being counted as a claim the repeats agreed
+  on — and, in the other direction, one missing repeat beside two matching
+  answers was counted as a disagreement.** `summarise` asked whether the three
+  verdicts formed a one-element set, with `judge_error` an element like any
+  other, so silence was read as evidence in whichever direction it happened to
+  fall. `334`'s observation arm published `identical_across_repeats: 13` when
+  all thirteen of those claims had never produced a verdict; its production arm
+  published `15` when `column_second` (`judge_error`, `fail`, `fail`) had
+  answered twice and answered the same way both times. The observation arm went
+  13 → 2 without losing eleven claims: the published thirteen and the corrected
+  two are disjoint sets. All thirteen left the comparison entirely and none
+  became a disagreement, while both survivors are claims the old rule had
+  called *not* identical — the key counts different claims now, not fewer of
+  the same ones. `stable` is now three-valued — `None` means there was nothing
+  to compare, and it is not `False` — and the published block carries
+  `claims_with_two_or_more_answers`, `differed_across_repeats`,
+  `claims_without_two_answers` and an `identical_share_of_comparable` that is
+  `null` rather than `0.0` or `1.0` when no claim was comparable. The same
+  omission in `repeat_flip_rate` is fixed the same way: a claim with no
+  comparable pair no longer counts toward `claims_that_ever_flipped`, which now
+  prints out of the new `claims_compared` rather than out of the corpus — the
+  field that let `334`'s observation arm render "0 of 20" off two comparable
+  pairs. `330` §4 had already written this rule for the *pair* denominator
+  ("안 온 답은 일치도 불일치도 아니다"); this is
+  the same sentence where the *claim* denominator was missing it. No key was
+  removed and no run was re-executed. `334`'s primary metric is the per-claim
+  majority McNemar `p = 0.0654`, which does not read the stability block, so no
+  headline figure moves — recorded as `primary_metric_changed: false`.
 - **`334` §3 inferred "not truncated" from output token counts, and that
   inference was not supported.** Token count is a proxy; `finish_reason` is the
   only field that settles truncation, and `334`'s run did not store it — so the

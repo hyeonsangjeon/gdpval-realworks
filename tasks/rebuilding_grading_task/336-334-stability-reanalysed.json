@@ -1,0 +1,90 @@
+{
+  "what_this_is": "334's stability figures recomputed under 336's rule. A separate file under a separate name: 334's artifact is unchanged and its published numbers stand as published. Where the two disagree, 336's is the one to use going forward and 334's is what was reported at the time.",
+  "source": {
+    "file": "334-audio-accuracy-measured.json",
+    "sha256": "a942a07dfb739e9805667d99641b9c7bee650cf13ce2262d4659bd32bac959b3",
+    "written_by": "334, unmodified. This script opens it read-only."
+  },
+  "produced_by": {
+    "script": "batch-runner/scripts/reanalyse_audio_stability.py",
+    "measure_script_sha256": "48122634509351ed65e357d8fbe40ff8b8a363a6f9d61af0180c78d9e3f2602c"
+  },
+  "what_changed": "judge_error used to be a verdict like any other when asking whether the repeats agreed. Three non-answers were one distinct value and counted as agreement; one non-answer beside two equal answers was a second distinct value and counted as disagreement. Silence was being read as evidence in whichever direction it happened to fall.",
+  "primary_metric_changed": false,
+  "primary_metric_note": "334's primary metric is the per-claim majority vote and its exact McNemar p of 0.0654. Neither reads the stability block, so no headline figure in 334 moves. The corrected figures below are secondary, which is why fixing them now is a repair and not a re-analysis of a result.",
+  "arms": {
+    "observation": {
+      "before": {
+        "claims": 20,
+        "identical_across_repeats": 13,
+        "no_majority": 13,
+        "comparable_pairs": 2,
+        "pairs_dropped_for_a_missing_answer": 58,
+        "flips": 0,
+        "flip_rate_pct": 0.0,
+        "claims_that_ever_flipped": 0,
+        "how_it_was_counted": "A claim counted as identical when its three verdicts formed a one-element set, and judge_error was an element like any other. claims_that_ever_flipped counted every claim, including claims with no comparable pair, as not having flipped."
+      },
+      "after": {
+        "claims": 20,
+        "claims_with_two_or_more_answers": 2,
+        "identical_across_repeats": 2,
+        "differed_across_repeats": 0,
+        "claims_without_two_answers": 18,
+        "identical_share_of_comparable": 1.0,
+        "no_majority": 13,
+        "comparable_pairs": 2,
+        "pairs_dropped_for_a_missing_answer": 58,
+        "flips": 0,
+        "flip_rate_pct": 0.0,
+        "claims_compared": 2,
+        "claims_with_no_comparable_pair": 18,
+        "claims_that_ever_flipped": 0,
+        "how_it_is_counted": "judge_error is dropped before the comparison. A claim with fewer than two answered repeats is neither identical nor differing; it is counted separately and is in no share's denominator."
+      }
+    },
+    "production": {
+      "before": {
+        "claims": 20,
+        "identical_across_repeats": 15,
+        "no_majority": 0,
+        "comparable_pairs": 58,
+        "pairs_dropped_for_a_missing_answer": 2,
+        "flips": 8,
+        "flip_rate_pct": 13.793103448275861,
+        "claims_that_ever_flipped": 4,
+        "how_it_was_counted": "A claim counted as identical when its three verdicts formed a one-element set, and judge_error was an element like any other. claims_that_ever_flipped counted every claim, including claims with no comparable pair, as not having flipped."
+      },
+      "after": {
+        "claims": 20,
+        "claims_with_two_or_more_answers": 20,
+        "identical_across_repeats": 16,
+        "differed_across_repeats": 4,
+        "claims_without_two_answers": 0,
+        "identical_share_of_comparable": 0.8,
+        "no_majority": 0,
+        "comparable_pairs": 58,
+        "pairs_dropped_for_a_missing_answer": 2,
+        "flips": 8,
+        "flip_rate_pct": 13.793103448275861,
+        "claims_compared": 20,
+        "claims_with_no_comparable_pair": 0,
+        "claims_that_ever_flipped": 4,
+        "how_it_is_counted": "judge_error is dropped before the comparison. A claim with fewer than two answered repeats is neither identical nor differing; it is counted separately and is in no share's denominator."
+      }
+    }
+  },
+  "stop_rule_counterfactual": {
+    "would_have_stopped": true,
+    "arm": "observation",
+    "rule": "min_response_rate",
+    "would_have_stopped_after_calls": 26,
+    "would_have_stopped_after_calls_in_arm": 13,
+    "answered_in_arm_at_that_point": 1,
+    "p_if_the_arm_met_the_limit": 0.038536733146294744,
+    "calls_bought": 120,
+    "calls_not_bought": 94,
+    "pinned_before_this_was_computed": "The threshold was derived from the corpus -- 20 claims, 3 repeats, a claim needs two answered repeats, five settled claims is the smallest corpus that can reach alpha -- and pinned at 1/3 before this replay was run. This number was computed after that. Stated here because a reader cannot tell the order from the figure alone.",
+    "reading": "334 was not re-run and is not being re-run. This says what the rule would have done, so that the rule's cost and reach are on the record as a number rather than as a claim. It is not a finding about gpt-audio-1.5."
+  }
+}

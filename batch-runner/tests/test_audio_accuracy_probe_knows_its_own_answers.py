@@ -3951,18 +3951,19 @@ def test_one_silent_arm_is_not_hidden_by_the_other_arm_answering() -> None:
     assert fired["after_calls"] == 20
 
 
-def test_the_per_arm_rule_would_still_not_have_stopped_334() -> None:
-    """Necessary, not sufficient -- and the limit is pinned here, not just said.
+def test_the_response_rate_rule_is_what_finally_stops_a_334_shaped_arm() -> None:
+    """The replacement the test that used to stand here asked for.
 
-    334's observation arm answered once, on its fourth call, and then failed
-    27 in a row. ``answered == 0`` over the leading window is false the moment
-    that one reply lands, so scoping the rule per arm does not stop a run that
-    answers 15% of the time. Catching that needs a response-rate rule whose
-    threshold is pinned before a run, which 334 section 10 leaves to its own
-    pre-registration rather than choosing now with the numbers in view.
+    Its predecessor asserted that no rule stopped a 334-shaped arm, and said
+    in its own docstring that whoever added the missing rule should delete it.
+    336 added it, so this is the same scenario with the opposite expectation.
 
-    If someone later adds that rule, this test should fail and be replaced.
-    Until then it stops the fix above from being read as a guarantee.
+    334's observation arm answered once, on its fourth call, and failed the
+    rest. ``answered == 0`` is false from that fourth call onward, so the
+    per-arm zero-response rule cannot catch it -- that part of the old test
+    was right and is asserted below rather than dropped. What catches it is
+    the response-rate rule, and it catches it while the run still has most of
+    its money.
     """
     calls = []
     for index in range(30):
@@ -3976,9 +3977,73 @@ def test_the_per_arm_rule_would_still_not_have_stopped_334() -> None:
             bad["unanswered_kind"] = None
         calls.append(bad)
 
-    assert probe._stop_reason(
+    fired = probe._stop_reason(
         probe.SPEECH_STOP_RULES, calls=calls, elapsed_s=5.0
+    )
+    assert fired is not None, "the rule 334 section 10 asked for is missing"
+    assert fired["rule"] == "min_response_rate"
+    assert fired["arm"] == "observation"
+
+    # And the older rule still does not fire here, which is why this one had
+    # to exist. Asserting it keeps the reason on the record.
+    silent_only = probe.StopRules(
+        wall_clock_seconds=probe.SPEECH_STOP_RULES.wall_clock_seconds,
+        zero_response_after=probe.SPEECH_STOP_RULES.zero_response_after,
+        max_provider_failures=probe.SPEECH_STOP_RULES.max_provider_failures,
+        stop_on_undelivered_audio=True,
+    )
+    assert probe._stop_reason(
+        silent_only, calls=calls, elapsed_s=5.0
     ) is None
+
+
+def test_the_stop_lands_early_enough_to_matter_on_the_real_334_log() -> None:
+    """Replayed against the bought calls, not a reconstruction of them.
+
+    The point of a stop rule is money, so the figure that matters is where in
+    the 120 it would have landed. This reads the committed 334 log, feeds the
+    calls in the order they were made, and checks the rule after each one --
+    exactly what the runner does.
+
+    334 itself is not re-analysed here and its file is opened read-only.
+    """
+    source = (
+        Path(__file__).resolve().parents[2]
+        / "tasks"
+        / "rebuilding_grading_task"
+        / "334-audio-accuracy-measured.json"
+    )
+    calls = json.loads(source.read_text(encoding="utf-8"))["calls"]
+    assert len(calls) == 120
+
+    seen: list[dict] = []
+    fired = None
+    for call in calls:
+        seen.append(call)
+        fired = probe._stop_reason(
+            probe.SPEECH_STOP_RULES, calls=seen, elapsed_s=0.0
+        )
+        if fired is not None:
+            break
+
+    assert fired is not None
+    assert fired["rule"] == "min_response_rate"
+    assert fired["arm"] == "observation"
+    assert fired["after_calls"] == 26
+    assert fired["after_calls_in_arm"] == 13
+    assert fired["answered_in_arm"] == 1
+    assert fired["p_if_the_arm_met_the_limit"] < 0.05
+
+    # The healthy arm is never touched. A rule that also stopped the arm that
+    # was answering 98% of the time would be a rule about run length, not
+    # about response rate.
+    production = [c for c in calls if c["arm"] == "production"]
+    seen = []
+    for call in production:
+        seen.append(call)
+        assert probe._stop_reason(
+            probe.SPEECH_STOP_RULES, calls=seen, elapsed_s=0.0
+        ) is None
 
 
 def test_ten_provider_failures_stop_the_run() -> None:
@@ -4171,6 +4236,88 @@ def test_the_stop_banner_is_executed_and_not_merely_present(
     # Above the numbers it qualifies. A caveat printed under a table of rates
     # is read after the rates have been believed.
     assert printed.index(BANNER) < printed.index("accuracy (answered calls)")
+
+
+def test_the_stop_banner_names_what_was_left_unpaired(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """The census, on the page, not only in the artifact.
+
+    A stop lands between calls and the arms interleave inside a claim, so the
+    last claim can hold a production call and no observation one. The run does
+    not buy the partner call to even the record up -- that would spend the
+    money the rule just declined -- so what is unpaired has to be said.
+
+    Whoever is about to quote a figure off a stopped run is reading this page,
+    not the JSON. The sentence that matters is the one forbidding a p-value
+    over the pairs that survived: a stop makes n depend on the data, so the
+    surviving pairs are not the sample the pre-registration described. It is
+    the easiest mistake to make from a summary that shows a clean table and
+    says nothing about how the table came to be that size.
+
+    ``run_measurement`` folding the census in is pinned separately, in
+    ``test_silence_is_not_agreement.py``; this is the rendering half, and the
+    census here is the real function's output over a two-arm log so the shape
+    is not one this test invented.
+    """
+    manifest_path, clip_dir = _speech_fixture(tmp_path, clips=3)
+    corpus = probe.load_speech_corpus(manifest_path, clip_dir)
+    perception = probe.AudioPerception(
+        client=probe.TruthfulStub(corpus.claims),
+        deployment="gpt-audio-1.5",
+        call_cap=AUDIO_CALL_CAP,
+        trim_seconds=AUDIO_TRIM_SECONDS,
+    )
+    ticks = iter([0.0] + [10_000.0] * 500)
+    result = probe.run_measurement(
+        perception=perception,
+        clip_dir=tmp_path / "unused",
+        repeats=3,
+        claims=corpus.claims,
+        prerendered=corpus,
+        stop_rules=probe.StopRules(wall_clock_seconds=60),
+        clock=lambda: next(ticks),
+    )
+    # The measurer attaches it; a report without it would render the banner
+    # and drop the half that says what the banner costs.
+    assert "left_behind" in result["stopped"]
+
+    report = probe.build_report(
+        identity=_stamped_identity(),
+        measured=False,
+        repeats=3,
+        result=result,
+        speech=corpus,
+    )
+    # A single-arm run leaves nothing unpaired -- there is no partner arm to
+    # be missing -- so the two-arm shape is built from the real census over a
+    # log that stops mid-claim, which is the case the fields exist for.
+    two_arm_log = [
+        {"claim_id": "c1", "arm": "production"},
+        {"claim_id": "c1", "arm": "observation"},
+        {"claim_id": "c2", "arm": "production"},
+        {"claim_id": "c2", "arm": "observation"},
+        {"claim_id": "c3", "arm": "production"},
+    ]
+    census = probe._stop_census(two_arm_log, ["production", "observation"])
+    assert census["claims_missing_an_arm_entirely"] == ["c3"]
+    assert census["claims_with_unequal_calls_across_arms"] == ["c3"]
+    report["stopped"]["left_behind"] = census
+
+    printed = _render_paid_summary(report, tmp_path, monkeypatch, capsys)
+    assert "Left unpaired: 1 claim(s) missing an arm entirely" in printed
+    assert "`c3`" in printed
+    # The instruction, verbatim from the artifact rather than paraphrased on
+    # the page -- two wordings of the same rule drift apart, and the one that
+    # is read is not always the one that is maintained.
+    assert census["inference"] in printed
+    assert "Do not report a p-value computed over the pairs that survived" in (
+        census["inference"]
+    )
+    # And it stays above the table it is about.
+    assert printed.index("Left unpaired") < printed.index(
+        "accuracy (answered calls)"
+    )
 
 
 def test_a_run_that_answered_nothing_does_not_print_a_discrimination_of_none(
