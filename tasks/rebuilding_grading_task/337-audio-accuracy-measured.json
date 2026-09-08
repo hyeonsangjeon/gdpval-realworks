@@ -1,0 +1,1412 @@
+{
+  "what_this_measures": "Whether the audio sub-judge hears words. The clips are synthesised speech with a known transcript, and the criteria come in matched true/false pairs on the same clip, so guessing scores 50%. Synthesised speech is harder to follow than a human voice: a pass is strong evidence, a failure is weak. This is a different question from the tone corpus and its numbers are not comparable.",
+  "corpus": "speech",
+  "measured": true,
+  "stopped": null,
+  "calls_planned": 10,
+  "pins": {
+    "config": "gold_audio_repeat_v2_sol_max.yaml",
+    "audio_model": "gpt-audio-1.5",
+    "audio_deployment": "gpt-audio-1.5",
+    "audio_clip_seconds": 30,
+    "audio_call_cap_per_task": 32,
+    "provider": "azure_openai",
+    "grader_source_sha256": "6970a67c9bf5e83c434116b2638eaafe8270ec0acd896b978b51646cd8b85b36",
+    "observation_header_sha256": "93239fe70dd470ab9a516a7c386c3d95c74bf4abcf87bd9a715c7edd96c17781",
+    "observation_header_name": "SPEECH_OBSERVATION_HEADER_V2",
+    "clip_sample_rate_hz": 16000,
+    "grader_resample_rate_hz": 16000,
+    "repeats": 1,
+    "claims": 5,
+    "clips": 5,
+    "true_claims": 3,
+    "false_claims": 2,
+    "prompt_arms": [
+      "production",
+      "observation"
+    ]
+  },
+  "clips": [
+    {
+      "clip_id": "crate",
+      "file": "crate.sent.wav",
+      "sha256": "7e59f9a516ff6bf39a8462a4718c29124d6de87d4239fdb6eecebb8b6f4d0741",
+      "seconds": 3.0151,
+      "sample_rate_hz": 16000
+    },
+    {
+      "clip_id": "shelf",
+      "file": "shelf.sent.wav",
+      "sha256": "2737aed8fa5d09a7ed5e363a9567a22240821ca186617fa40bf507862ed16fc5",
+      "seconds": 3.2995,
+      "sample_rate_hz": 16000
+    },
+    {
+      "clip_id": "dial",
+      "file": "dial.sent.wav",
+      "sha256": "b58bb4f1c471050524a1cc7951c53891c5d8c6c1d318d8ff98d902641e46d352",
+      "seconds": 3.3468,
+      "sample_rate_hz": 16000
+    },
+    {
+      "clip_id": "column",
+      "file": "column.sent.wav",
+      "sha256": "6c25533396667dbfc6c64a1287bcab71de7cea6ddb8a55b32f715d93eefc0793",
+      "seconds": 3.4364,
+      "sample_rate_hz": 16000
+    },
+    {
+      "clip_id": "lamp",
+      "file": "lamp.sent.wav",
+      "sha256": "00b8b8643b56290f83409d6bd60719835abf040b054fce1c5987f0d641aa63df",
+      "seconds": 3.1991,
+      "sample_rate_hz": 16000
+    }
+  ],
+  "clip_sha256": {
+    "crate": "7e59f9a516ff6bf39a8462a4718c29124d6de87d4239fdb6eecebb8b6f4d0741",
+    "shelf": "2737aed8fa5d09a7ed5e363a9567a22240821ca186617fa40bf507862ed16fc5",
+    "dial": "b58bb4f1c471050524a1cc7951c53891c5d8c6c1d318d8ff98d902641e46d352",
+    "column": "6c25533396667dbfc6c64a1287bcab71de7cea6ddb8a55b32f715d93eefc0793",
+    "lamp": "00b8b8643b56290f83409d6bd60719835abf040b054fce1c5987f0d641aa63df"
+  },
+  "claims": [
+    {
+      "claim_id": "crate_seventeen",
+      "clip_id": "crate",
+      "family": "confusable_number",
+      "criterion": "The speaker states a quantity of seventeen.",
+      "holds": true,
+      "because": "the sentence is 'seventeen bolts'",
+      "pair_id": "crate_number"
+    },
+    {
+      "claim_id": "shelf_fifty",
+      "clip_id": "shelf",
+      "family": "confusable_number",
+      "criterion": "The speaker gives a measurement of fifty centimetres.",
+      "holds": false,
+      "because": "fifteen, not fifty",
+      "pair_id": "shelf_number"
+    },
+    {
+      "claim_id": "dial_left",
+      "clip_id": "dial",
+      "family": "direction",
+      "criterion": "The speaker says to turn the dial to the left.",
+      "holds": true,
+      "because": "the sentence is 'turn the dial to the left'",
+      "pair_id": "dial_direction"
+    },
+    {
+      "claim_id": "column_third",
+      "clip_id": "column",
+      "family": "ordinal",
+      "criterion": "The speaker refers to the third column.",
+      "holds": false,
+      "because": "second, not third",
+      "pair_id": "column_ordinal"
+    },
+    {
+      "claim_id": "lamp_off",
+      "clip_id": "lamp",
+      "family": "polarity",
+      "criterion": "The speaker says the lamp switches off.",
+      "holds": true,
+      "because": "the sentence is 'switches off when the door opens'",
+      "pair_id": "lamp_polarity"
+    }
+  ],
+  "calls": [
+    {
+      "repeat": 1,
+      "arm": "production",
+      "claim_id": "crate_seventeen",
+      "pair_id": "crate_number",
+      "clip_id": "crate",
+      "family": "confusable_number",
+      "holds": true,
+      "verdict": "fail",
+      "outcome": "false_fail",
+      "unanswered_kind": null,
+      "confidence": 0.57,
+      "evidence": "The speaker says 'The blue crate holds seventeen bowls' without stating the quantity of seventeen explicitly.",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 313,
+      "output_tokens": 87,
+      "latency_ms": 2599.111,
+      "usage_complete": true,
+      "wire": {
+        "requests": 1,
+        "requests_with_audio": 1,
+        "audio_sha256": "7e59f9a516ff6bf39a8462a4718c29124d6de87d4239fdb6eecebb8b6f4d0741",
+        "audio_bytes": 96562,
+        "audio_sample_rate_hz": 16000,
+        "audio_channels": 1,
+        "audio_duration_s": 3.0151,
+        "audio_format": "wav",
+        "prompt_sha256": "d990dba860c5704143e653d44ef4a309e2347d26f941a802a325cc41bb8516d0",
+        "prompt_chars": 1091,
+        "response_model": "gpt-audio-1.5",
+        "audio_tokens": 30,
+        "audio_tokens_billed": 30
+      }
+    },
+    {
+      "repeat": 1,
+      "arm": "observation",
+      "claim_id": "crate_seventeen",
+      "pair_id": "crate_number",
+      "clip_id": "crate",
+      "family": "confusable_number",
+      "holds": true,
+      "verdict": "judge_error",
+      "outcome": "unanswered",
+      "unanswered_kind": "read_failure",
+      "confidence": 0.0,
+      "evidence": "",
+      "judge_error": "format_error:unparseable_json",
+      "api_call_count": 1,
+      "input_tokens": 500,
+      "output_tokens": 22,
+      "latency_ms": 1150.193,
+      "usage_complete": true,
+      "wire": {
+        "requests": 1,
+        "requests_with_audio": 1,
+        "audio_sha256": "7e59f9a516ff6bf39a8462a4718c29124d6de87d4239fdb6eecebb8b6f4d0741",
+        "audio_bytes": 96562,
+        "audio_sample_rate_hz": 16000,
+        "audio_channels": 1,
+        "audio_duration_s": 3.0151,
+        "audio_format": "wav",
+        "prompt_sha256": "1cfadfd4bb8fd5977abaf59cc992c8df094283423a4f3b4945a575383e0dd789",
+        "prompt_chars": 1989,
+        "response_model": "gpt-audio-1.5",
+        "audio_tokens": 30,
+        "audio_tokens_billed": 30
+      }
+    },
+    {
+      "repeat": 1,
+      "arm": "production",
+      "claim_id": "shelf_fifty",
+      "pair_id": "shelf_number",
+      "clip_id": "shelf",
+      "family": "confusable_number",
+      "holds": false,
+      "verdict": "fail",
+      "outcome": "correct",
+      "unanswered_kind": null,
+      "confidence": 0.85,
+      "evidence": "No measurement of fifty centimetres was mentioned in the audio.",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 317,
+      "output_tokens": 71,
+      "latency_ms": 1512.179,
+      "usage_complete": true,
+      "wire": {
+        "requests": 1,
+        "requests_with_audio": 1,
+        "audio_sha256": "2737aed8fa5d09a7ed5e363a9567a22240821ca186617fa40bf507862ed16fc5",
+        "audio_bytes": 105662,
+        "audio_sample_rate_hz": 16000,
+        "audio_channels": 1,
+        "audio_duration_s": 3.2995,
+        "audio_format": "wav",
+        "prompt_sha256": "a3e7fbe6c133dbb23343cc42615f5ed60f4c84a51f4c78fb1c78ba30aec5f2f7",
+        "prompt_chars": 1101,
+        "response_model": "gpt-audio-1.5",
+        "audio_tokens": 32,
+        "audio_tokens_billed": 32
+      }
+    },
+    {
+      "repeat": 1,
+      "arm": "observation",
+      "claim_id": "shelf_fifty",
+      "pair_id": "shelf_number",
+      "clip_id": "shelf",
+      "family": "confusable_number",
+      "holds": false,
+      "verdict": "judge_error",
+      "outcome": "unanswered",
+      "unanswered_kind": "read_failure",
+      "confidence": 0.0,
+      "evidence": "",
+      "judge_error": "format_error:unparseable_json",
+      "api_call_count": 1,
+      "input_tokens": 504,
+      "output_tokens": 24,
+      "latency_ms": 1187.583,
+      "usage_complete": true,
+      "wire": {
+        "requests": 1,
+        "requests_with_audio": 1,
+        "audio_sha256": "2737aed8fa5d09a7ed5e363a9567a22240821ca186617fa40bf507862ed16fc5",
+        "audio_bytes": 105662,
+        "audio_sample_rate_hz": 16000,
+        "audio_channels": 1,
+        "audio_duration_s": 3.2995,
+        "audio_format": "wav",
+        "prompt_sha256": "1a1e2b705d7457ae96ced099a3c287634980425cd32430c1b7454aa4bfdde083",
+        "prompt_chars": 1999,
+        "response_model": "gpt-audio-1.5",
+        "audio_tokens": 32,
+        "audio_tokens_billed": 32
+      }
+    },
+    {
+      "repeat": 1,
+      "arm": "production",
+      "claim_id": "dial_left",
+      "pair_id": "dial_direction",
+      "clip_id": "dial",
+      "family": "direction",
+      "holds": true,
+      "verdict": "fail",
+      "outcome": "false_fail",
+      "unanswered_kind": null,
+      "confidence": 0.91,
+      "evidence": "The speaker did not mention turning the dial to the left in the first 30 seconds",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 319,
+      "output_tokens": 78,
+      "latency_ms": 1562.441,
+      "usage_complete": true,
+      "wire": {
+        "requests": 1,
+        "requests_with_audio": 1,
+        "audio_sha256": "b58bb4f1c471050524a1cc7951c53891c5d8c6c1d318d8ff98d902641e46d352",
+        "audio_bytes": 107176,
+        "audio_sample_rate_hz": 16000,
+        "audio_channels": 1,
+        "audio_duration_s": 3.3468,
+        "audio_format": "wav",
+        "prompt_sha256": "7f96e6010c87f776f3eeebc87ed1dfef101c87f6297d58420ac4b8046d67bb7c",
+        "prompt_chars": 1094,
+        "response_model": "gpt-audio-1.5",
+        "audio_tokens": 33,
+        "audio_tokens_billed": 33
+      }
+    },
+    {
+      "repeat": 1,
+      "arm": "observation",
+      "claim_id": "dial_left",
+      "pair_id": "dial_direction",
+      "clip_id": "dial",
+      "family": "direction",
+      "holds": true,
+      "verdict": "judge_error",
+      "outcome": "unanswered",
+      "unanswered_kind": "read_failure",
+      "confidence": 0.0,
+      "evidence": "",
+      "judge_error": "format_error:unparseable_json",
+      "api_call_count": 1,
+      "input_tokens": 506,
+      "output_tokens": 29,
+      "latency_ms": 1190.488,
+      "usage_complete": true,
+      "wire": {
+        "requests": 1,
+        "requests_with_audio": 1,
+        "audio_sha256": "b58bb4f1c471050524a1cc7951c53891c5d8c6c1d318d8ff98d902641e46d352",
+        "audio_bytes": 107176,
+        "audio_sample_rate_hz": 16000,
+        "audio_channels": 1,
+        "audio_duration_s": 3.3468,
+        "audio_format": "wav",
+        "prompt_sha256": "25ce4ca7254ae37791d243c1430330adc3cc80c7b3dd883af980822448966583",
+        "prompt_chars": 1992,
+        "response_model": "gpt-audio-1.5",
+        "audio_tokens": 33,
+        "audio_tokens_billed": 33
+      }
+    },
+    {
+      "repeat": 1,
+      "arm": "production",
+      "claim_id": "column_third",
+      "pair_id": "column_ordinal",
+      "clip_id": "column",
+      "family": "ordinal",
+      "holds": false,
+      "verdict": "fail",
+      "outcome": "correct",
+      "unanswered_kind": null,
+      "confidence": 0.86,
+      "evidence": "No mention of a third column is heard in the first 30 seconds.",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 317,
+      "output_tokens": 72,
+      "latency_ms": 1497.135,
+      "usage_complete": true,
+      "wire": {
+        "requests": 1,
+        "requests_with_audio": 1,
+        "audio_sha256": "6c25533396667dbfc6c64a1287bcab71de7cea6ddb8a55b32f715d93eefc0793",
+        "audio_bytes": 110042,
+        "audio_sample_rate_hz": 16000,
+        "audio_channels": 1,
+        "audio_duration_s": 3.4364,
+        "audio_format": "wav",
+        "prompt_sha256": "f5a9ee657c3442122f8684fe313eecacbb500cea84f4d866e408029585ad024c",
+        "prompt_chars": 1087,
+        "response_model": "gpt-audio-1.5",
+        "audio_tokens": 34,
+        "audio_tokens_billed": 34
+      }
+    },
+    {
+      "repeat": 1,
+      "arm": "observation",
+      "claim_id": "column_third",
+      "pair_id": "column_ordinal",
+      "clip_id": "column",
+      "family": "ordinal",
+      "holds": false,
+      "verdict": "judge_error",
+      "outcome": "unanswered",
+      "unanswered_kind": "declined_to_judge",
+      "confidence": 0.0,
+      "evidence": "Unable to hear the audio clearly",
+      "judge_error": "sub_judge_declined",
+      "api_call_count": 1,
+      "input_tokens": 504,
+      "output_tokens": 73,
+      "latency_ms": 1631.011,
+      "usage_complete": true,
+      "wire": {
+        "requests": 1,
+        "requests_with_audio": 1,
+        "audio_sha256": "6c25533396667dbfc6c64a1287bcab71de7cea6ddb8a55b32f715d93eefc0793",
+        "audio_bytes": 110042,
+        "audio_sample_rate_hz": 16000,
+        "audio_channels": 1,
+        "audio_duration_s": 3.4364,
+        "audio_format": "wav",
+        "prompt_sha256": "1409c242322549b3013d22efc1710399b9519094d06d934622b5df041d283d76",
+        "prompt_chars": 1985,
+        "response_model": "gpt-audio-1.5",
+        "audio_tokens": 34,
+        "audio_tokens_billed": 34
+      }
+    },
+    {
+      "repeat": 1,
+      "arm": "production",
+      "claim_id": "lamp_off",
+      "pair_id": "lamp_polarity",
+      "clip_id": "lamp",
+      "family": "polarity",
+      "holds": true,
+      "verdict": "fail",
+      "outcome": "false_fail",
+      "unanswered_kind": null,
+      "confidence": 0.93,
+      "evidence": "The speaker did not mention anything about a lamp switching off.",
+      "judge_error": null,
+      "api_call_count": 1,
+      "input_tokens": 314,
+      "output_tokens": 74,
+      "latency_ms": 1591.247,
+      "usage_complete": true,
+      "wire": {
+        "requests": 1,
+        "requests_with_audio": 1,
+        "audio_sha256": "00b8b8643b56290f83409d6bd60719835abf040b054fce1c5987f0d641aa63df",
+        "audio_bytes": 102448,
+        "audio_sample_rate_hz": 16000,
+        "audio_channels": 1,
+        "audio_duration_s": 3.1991,
+        "audio_format": "wav",
+        "prompt_sha256": "7ec96897cb8f6abddced8ebdf9e0dd99d988f712797b624a258fdf70caf58015",
+        "prompt_chars": 1087,
+        "response_model": "gpt-audio-1.5",
+        "audio_tokens": 31,
+        "audio_tokens_billed": 31
+      }
+    },
+    {
+      "repeat": 1,
+      "arm": "observation",
+      "claim_id": "lamp_off",
+      "pair_id": "lamp_polarity",
+      "clip_id": "lamp",
+      "family": "polarity",
+      "holds": true,
+      "verdict": "judge_error",
+      "outcome": "unanswered",
+      "unanswered_kind": "read_failure",
+      "confidence": 0.0,
+      "evidence": "",
+      "judge_error": "format_error:unparseable_json",
+      "api_call_count": 1,
+      "input_tokens": 501,
+      "output_tokens": 23,
+      "latency_ms": 1270.738,
+      "usage_complete": true,
+      "wire": {
+        "requests": 1,
+        "requests_with_audio": 1,
+        "audio_sha256": "00b8b8643b56290f83409d6bd60719835abf040b054fce1c5987f0d641aa63df",
+        "audio_bytes": 102448,
+        "audio_sample_rate_hz": 16000,
+        "audio_channels": 1,
+        "audio_duration_s": 3.1991,
+        "audio_format": "wav",
+        "prompt_sha256": "65f38d85adc4389d2cf16fab4e0a62f118f12b93773f06ce568cbebfcb4336d7",
+        "prompt_chars": 1985,
+        "response_model": "gpt-audio-1.5",
+        "audio_tokens": 31,
+        "audio_tokens_billed": 31
+      }
+    }
+  ],
+  "accuracy": {
+    "overall": {
+      "calls": 5,
+      "answered": 5,
+      "correct": 2,
+      "false_fail": 3,
+      "false_pass": 0,
+      "hedged": 0,
+      "unanswered": 0,
+      "unanswered_by_kind": {
+        "declined_to_judge": 0,
+        "read_failure": 0,
+        "provider_failure": 0
+      },
+      "accuracy": 0.4,
+      "response_rate": 1.0
+    },
+    "on_true_claims": {
+      "calls": 3,
+      "answered": 3,
+      "correct": 0,
+      "false_fail": 3,
+      "false_pass": 0,
+      "hedged": 0,
+      "unanswered": 0,
+      "unanswered_by_kind": {
+        "declined_to_judge": 0,
+        "read_failure": 0,
+        "provider_failure": 0
+      },
+      "accuracy": 0.0,
+      "response_rate": 1.0,
+      "false_fail_rate": 1.0
+    },
+    "on_false_claims": {
+      "calls": 2,
+      "answered": 2,
+      "correct": 2,
+      "false_fail": 0,
+      "false_pass": 0,
+      "hedged": 0,
+      "unanswered": 0,
+      "unanswered_by_kind": {
+        "declined_to_judge": 0,
+        "read_failure": 0,
+        "provider_failure": 0
+      },
+      "accuracy": 1.0,
+      "response_rate": 1.0,
+      "false_pass_rate": 0.0
+    },
+    "by_family": {
+      "confusable_number": {
+        "calls": 2,
+        "answered": 2,
+        "correct": 1,
+        "false_fail": 1,
+        "false_pass": 0,
+        "hedged": 0,
+        "unanswered": 0,
+        "unanswered_by_kind": {
+          "declined_to_judge": 0,
+          "read_failure": 0,
+          "provider_failure": 0
+        },
+        "accuracy": 0.5,
+        "response_rate": 1.0
+      },
+      "direction": {
+        "calls": 1,
+        "answered": 1,
+        "correct": 0,
+        "false_fail": 1,
+        "false_pass": 0,
+        "hedged": 0,
+        "unanswered": 0,
+        "unanswered_by_kind": {
+          "declined_to_judge": 0,
+          "read_failure": 0,
+          "provider_failure": 0
+        },
+        "accuracy": 0.0,
+        "response_rate": 1.0
+      },
+      "ordinal": {
+        "calls": 1,
+        "answered": 1,
+        "correct": 1,
+        "false_fail": 0,
+        "false_pass": 0,
+        "hedged": 0,
+        "unanswered": 0,
+        "unanswered_by_kind": {
+          "declined_to_judge": 0,
+          "read_failure": 0,
+          "provider_failure": 0
+        },
+        "accuracy": 1.0,
+        "response_rate": 1.0
+      },
+      "polarity": {
+        "calls": 1,
+        "answered": 1,
+        "correct": 0,
+        "false_fail": 1,
+        "false_pass": 0,
+        "hedged": 0,
+        "unanswered": 0,
+        "unanswered_by_kind": {
+          "declined_to_judge": 0,
+          "read_failure": 0,
+          "provider_failure": 0
+        },
+        "accuracy": 0.0,
+        "response_rate": 1.0
+      }
+    },
+    "by_claim": {
+      "crate_seventeen": {
+        "holds": true,
+        "family": "confusable_number",
+        "pair_id": "crate_number",
+        "verdicts": [
+          "fail"
+        ],
+        "majority": "fail",
+        "repeats": 1,
+        "answered_repeats": 1,
+        "stable": null,
+        "majority_outcome": "false_fail"
+      },
+      "shelf_fifty": {
+        "holds": false,
+        "family": "confusable_number",
+        "pair_id": "shelf_number",
+        "verdicts": [
+          "fail"
+        ],
+        "majority": "fail",
+        "repeats": 1,
+        "answered_repeats": 1,
+        "stable": null,
+        "majority_outcome": "correct"
+      },
+      "dial_left": {
+        "holds": true,
+        "family": "direction",
+        "pair_id": "dial_direction",
+        "verdicts": [
+          "fail"
+        ],
+        "majority": "fail",
+        "repeats": 1,
+        "answered_repeats": 1,
+        "stable": null,
+        "majority_outcome": "false_fail"
+      },
+      "column_third": {
+        "holds": false,
+        "family": "ordinal",
+        "pair_id": "column_ordinal",
+        "verdicts": [
+          "fail"
+        ],
+        "majority": "fail",
+        "repeats": 1,
+        "answered_repeats": 1,
+        "stable": null,
+        "majority_outcome": "correct"
+      },
+      "lamp_off": {
+        "holds": true,
+        "family": "polarity",
+        "pair_id": "lamp_polarity",
+        "verdicts": [
+          "fail"
+        ],
+        "majority": "fail",
+        "repeats": 1,
+        "answered_repeats": 1,
+        "stable": null,
+        "majority_outcome": "false_fail"
+      }
+    },
+    "discrimination_j": {
+      "per_call": 0.0,
+      "per_claim_majority": 0.0,
+      "meaning": "P(pass|true) - P(pass|false). 0 means the verdict does not depend on the audio; accuracy alone cannot show that."
+    },
+    "pre_registered_binomial": {
+      "test": "exact one-sided binomial, p = 0.5",
+      "unit": "one majority verdict per claim",
+      "claims_with_a_majority": 5,
+      "hedged_majorities_excluded": 0,
+      "n": 5,
+      "correct": 2,
+      "p_one_sided": 0.8125,
+      "smallest_attainable_p": 0.03125,
+      "meaning": "P(at least this many correct | the judge is guessing). The repeats are collapsed to one verdict per claim first; treating them as independent trials would triple the denominator and invent significance the design cannot support."
+    },
+    "permutation": {
+      "scheme": "within_pair",
+      "pairs": 5,
+      "assignments": 32,
+      "observed_j": 0.0,
+      "at_least_observed": 30,
+      "p_one_sided": 0.9375,
+      "smallest_attainable_p": 0.03125
+    },
+    "pair_consistency": {
+      "unit": "one true/false pair, on majority verdicts",
+      "pairs": 5,
+      "answered_differently": 0,
+      "answered_identically": 0,
+      "identical_by_verdict": {},
+      "incomplete": 5,
+      "meaning": "A pair answered identically was not told apart. Both sides 'pass' on every pair is what a judge that never heard the clip produces, and on this balanced corpus it still scores 50%. 'incomplete' pairs had no majority on one side and are neither."
+    },
+    "mean_confidence": {
+      "correct": 0.855,
+      "false_fail": 0.8033333333333333,
+      "false_pass": null
+    },
+    "stability": {
+      "claims": 5,
+      "claims_with_two_or_more_answers": 0,
+      "identical_across_repeats": 0,
+      "differed_across_repeats": 0,
+      "claims_without_two_answers": 5,
+      "identical_share_of_comparable": null,
+      "no_majority": 0,
+      "repeat_flips": {
+        "unit": "one pair of repeats for one claim",
+        "comparable_pairs": 0,
+        "pairs_dropped_for_a_missing_answer": 0,
+        "flips": 0,
+        "flip_rate_pct": null,
+        "claims_that_ever_flipped": 0,
+        "claims_compared": 0,
+        "claims_with_no_comparable_pair": 5,
+        "prior_audio_cohort_pct": 19.3548,
+        "meaning": "Share of repeat pairs that answered differently, the same denominator as the 19.35% measured on the graded audio cohort. 'claims_that_ever_flipped' is the other denominator, is out of 'claims_compared' rather than out of the corpus, and is not comparable with that figure. Claims with fewer than two answered repeats are in neither count."
+      },
+      "meaning": "'identical_across_repeats' counts claims whose *answered* repeats all agreed, out of 'claims_with_two_or_more_answers' and not out of 'claims'. Before 336 it counted a claim whose repeats were every one of them unanswered as identical, which is how 334's observation arm published 13 of 20 while the number of consistently answered claims was 0. Runs published before 336 carry the older count and are not comparable with this field."
+    }
+  },
+  "cost": {
+    "model_calls": 10,
+    "billable_calls": 10,
+    "models": [
+      "gpt-audio-1.5"
+    ],
+    "pricing_complete": false,
+    "unpriced_models": [
+      "gpt-audio-1.5"
+    ],
+    "estimated_cost_usd": null,
+    "note": "gpt-audio-1.5 is absent from the price table, so the cost of this run is unknown rather than zero. null, not $0."
+  },
+  "delivery": {
+    "measured": true,
+    "calls_inspected": 10,
+    "calls_carrying_audio": 10,
+    "calls_without_audio": [],
+    "sent_formats": [
+      "wav"
+    ],
+    "sent_sample_rates_hz": [
+      16000
+    ],
+    "sent_channels": [
+      1
+    ],
+    "digests_per_clip": {
+      "column": [
+        "6c25533396667dbfc6c64a1287bcab71de7cea6ddb8a55b32f715d93eefc0793"
+      ],
+      "crate": [
+        "7e59f9a516ff6bf39a8462a4718c29124d6de87d4239fdb6eecebb8b6f4d0741"
+      ],
+      "dial": [
+        "b58bb4f1c471050524a1cc7951c53891c5d8c6c1d318d8ff98d902641e46d352"
+      ],
+      "lamp": [
+        "00b8b8643b56290f83409d6bd60719835abf040b054fce1c5987f0d641aa63df"
+      ],
+      "shelf": [
+        "2737aed8fa5d09a7ed5e363a9567a22240821ca186617fa40bf507862ed16fc5"
+      ]
+    },
+    "clips_with_more_than_one_digest": [],
+    "clips_whose_sent_duration_differs": [],
+    "response_models": [
+      "gpt-audio-1.5"
+    ],
+    "audio_tokens_reported": 10,
+    "requests_total": 10,
+    "audio_tokens_total": 320,
+    "prompt_token_vs_clip_seconds": {
+      "n": 10,
+      "pearson_r": 0.01977211903441411,
+      "meaning": "Prompt tokens against clip duration. Near 1 means the count scales with the audio, which a request that did not carry it cannot do. Near 0 with audio parts present would mean the part was accepted and not charged for -- a different and worse failure than never sending it."
+    },
+    "not_covered": "This shows the bytes left this process correctly and were billed as audio. It cannot show what the model did with them."
+  },
+  "speech_set": {
+    "manifest": "330-speech-verification-manifest.json",
+    "provenance": {
+      "tool": "espeak-ng",
+      "version_string": "eSpeak NG text-to-speech: 1.51  Data at: /usr/lib/x86_64-linux-gnu/espeak-ng-data",
+      "binary_path": "/usr/bin/espeak-ng",
+      "binary_sha256": "34191438b1e0f8f5aac5d4fdc5df574762b6fbb3c7a219a8c6f14feceb1bd076",
+      "package": {
+        "manager": "dpkg",
+        "name": "espeak-ng",
+        "version": "1.51+dfsg-12build1",
+        "source": "https://github.com/espeak-ng/espeak-ng"
+      },
+      "license": "GPL-3.0-or-later",
+      "homepage": "https://github.com/espeak-ng/espeak-ng",
+      "redistributed_here": false,
+      "license_note": "eSpeak NG is GPL-3.0-or-later. This repository redistributes none of it -- no source, no binary, no dictionary, and no generated clip. The synthesiser is installed in CI, the clips are uploaded as build artifacts, and only digests are committed.",
+      "voice": "en-us",
+      "words_per_minute": 150,
+      "pitch": 50,
+      "amplitude": 100
+    },
+    "encoder": {
+      "library": "PyAV",
+      "version": "17.1.0",
+      "ffmpeg_libraries": {
+        "libavcodec": "62.28.101",
+        "libavdevice": "62.3.101",
+        "libavfilter": "11.14.101",
+        "libavformat": "62.12.101",
+        "libavutil": "60.26.101",
+        "libswresample": "6.3.101",
+        "libswscale": "9.5.101"
+      },
+      "function": "core.perception.audio._trim_audio_bytes",
+      "target": "16000 Hz mono s16",
+      "note": "The `sent` bytes are what this function returns for the `source` file at the default window, which is the call a real grading run makes. A `sent` digest that differs while `source` matches means this encoder moved, not the synthesiser."
+    },
+    "limits": {
+      "voice": "synthetic formant synthesis, not a human speaker",
+      "reading": "A pass confirms the judge can hear speech. A failure does NOT show it cannot hear people -- only that it cannot hear eSpeak, which is harder to understand than a human voice. This set can confirm the capability; it cannot refute it.",
+      "language": "en-us only",
+      "not_measured": [
+        "human speech",
+        "accented speech",
+        "overlapping speakers",
+        "background noise",
+        "languages other than English"
+      ],
+      "delivery_is_not_understanding": "Audio token usage shows the sound was delivered and billed. It is not evidence that anything was understood; that is what the paired claims are for."
+    },
+    "total_seconds": 16.2969,
+    "audio_seconds_per_pass": 16.2969,
+    "audio_seconds_sent": 32.5938,
+    "expected_audio_tokens": 326,
+    "expected_audio_tokens_basis": "10.00 tokens/s x 16.2969 s per pass x 2 passes (repeats x arms) = 32.5938 s, from run 34008840627. The corpus is 16.2969 s long, but a pass sends more than that: every call carries the clip its criterion is about, and 5 criteria share 5 clips. A measured total outside +/-10% of this is itself a finding: the audio was delivered differently, or billing changed."
+  },
+  "arms": {
+    "production": {
+      "overall": {
+        "calls": 5,
+        "answered": 5,
+        "correct": 2,
+        "false_fail": 3,
+        "false_pass": 0,
+        "hedged": 0,
+        "unanswered": 0,
+        "unanswered_by_kind": {
+          "declined_to_judge": 0,
+          "read_failure": 0,
+          "provider_failure": 0
+        },
+        "accuracy": 0.4,
+        "response_rate": 1.0
+      },
+      "on_true_claims": {
+        "calls": 3,
+        "answered": 3,
+        "correct": 0,
+        "false_fail": 3,
+        "false_pass": 0,
+        "hedged": 0,
+        "unanswered": 0,
+        "unanswered_by_kind": {
+          "declined_to_judge": 0,
+          "read_failure": 0,
+          "provider_failure": 0
+        },
+        "accuracy": 0.0,
+        "response_rate": 1.0,
+        "false_fail_rate": 1.0
+      },
+      "on_false_claims": {
+        "calls": 2,
+        "answered": 2,
+        "correct": 2,
+        "false_fail": 0,
+        "false_pass": 0,
+        "hedged": 0,
+        "unanswered": 0,
+        "unanswered_by_kind": {
+          "declined_to_judge": 0,
+          "read_failure": 0,
+          "provider_failure": 0
+        },
+        "accuracy": 1.0,
+        "response_rate": 1.0,
+        "false_pass_rate": 0.0
+      },
+      "by_family": {
+        "confusable_number": {
+          "calls": 2,
+          "answered": 2,
+          "correct": 1,
+          "false_fail": 1,
+          "false_pass": 0,
+          "hedged": 0,
+          "unanswered": 0,
+          "unanswered_by_kind": {
+            "declined_to_judge": 0,
+            "read_failure": 0,
+            "provider_failure": 0
+          },
+          "accuracy": 0.5,
+          "response_rate": 1.0
+        },
+        "direction": {
+          "calls": 1,
+          "answered": 1,
+          "correct": 0,
+          "false_fail": 1,
+          "false_pass": 0,
+          "hedged": 0,
+          "unanswered": 0,
+          "unanswered_by_kind": {
+            "declined_to_judge": 0,
+            "read_failure": 0,
+            "provider_failure": 0
+          },
+          "accuracy": 0.0,
+          "response_rate": 1.0
+        },
+        "ordinal": {
+          "calls": 1,
+          "answered": 1,
+          "correct": 1,
+          "false_fail": 0,
+          "false_pass": 0,
+          "hedged": 0,
+          "unanswered": 0,
+          "unanswered_by_kind": {
+            "declined_to_judge": 0,
+            "read_failure": 0,
+            "provider_failure": 0
+          },
+          "accuracy": 1.0,
+          "response_rate": 1.0
+        },
+        "polarity": {
+          "calls": 1,
+          "answered": 1,
+          "correct": 0,
+          "false_fail": 1,
+          "false_pass": 0,
+          "hedged": 0,
+          "unanswered": 0,
+          "unanswered_by_kind": {
+            "declined_to_judge": 0,
+            "read_failure": 0,
+            "provider_failure": 0
+          },
+          "accuracy": 0.0,
+          "response_rate": 1.0
+        }
+      },
+      "by_claim": {
+        "crate_seventeen": {
+          "holds": true,
+          "family": "confusable_number",
+          "pair_id": "crate_number",
+          "verdicts": [
+            "fail"
+          ],
+          "majority": "fail",
+          "repeats": 1,
+          "answered_repeats": 1,
+          "stable": null,
+          "majority_outcome": "false_fail"
+        },
+        "shelf_fifty": {
+          "holds": false,
+          "family": "confusable_number",
+          "pair_id": "shelf_number",
+          "verdicts": [
+            "fail"
+          ],
+          "majority": "fail",
+          "repeats": 1,
+          "answered_repeats": 1,
+          "stable": null,
+          "majority_outcome": "correct"
+        },
+        "dial_left": {
+          "holds": true,
+          "family": "direction",
+          "pair_id": "dial_direction",
+          "verdicts": [
+            "fail"
+          ],
+          "majority": "fail",
+          "repeats": 1,
+          "answered_repeats": 1,
+          "stable": null,
+          "majority_outcome": "false_fail"
+        },
+        "column_third": {
+          "holds": false,
+          "family": "ordinal",
+          "pair_id": "column_ordinal",
+          "verdicts": [
+            "fail"
+          ],
+          "majority": "fail",
+          "repeats": 1,
+          "answered_repeats": 1,
+          "stable": null,
+          "majority_outcome": "correct"
+        },
+        "lamp_off": {
+          "holds": true,
+          "family": "polarity",
+          "pair_id": "lamp_polarity",
+          "verdicts": [
+            "fail"
+          ],
+          "majority": "fail",
+          "repeats": 1,
+          "answered_repeats": 1,
+          "stable": null,
+          "majority_outcome": "false_fail"
+        }
+      },
+      "discrimination_j": {
+        "per_call": 0.0,
+        "per_claim_majority": 0.0,
+        "meaning": "P(pass|true) - P(pass|false). 0 means the verdict does not depend on the audio; accuracy alone cannot show that."
+      },
+      "pre_registered_binomial": {
+        "test": "exact one-sided binomial, p = 0.5",
+        "unit": "one majority verdict per claim",
+        "claims_with_a_majority": 5,
+        "hedged_majorities_excluded": 0,
+        "n": 5,
+        "correct": 2,
+        "p_one_sided": 0.8125,
+        "smallest_attainable_p": 0.03125,
+        "meaning": "P(at least this many correct | the judge is guessing). The repeats are collapsed to one verdict per claim first; treating them as independent trials would triple the denominator and invent significance the design cannot support."
+      },
+      "permutation": {
+        "scheme": "within_pair",
+        "pairs": 5,
+        "assignments": 32,
+        "observed_j": 0.0,
+        "at_least_observed": 30,
+        "p_one_sided": 0.9375,
+        "smallest_attainable_p": 0.03125
+      },
+      "pair_consistency": {
+        "unit": "one true/false pair, on majority verdicts",
+        "pairs": 5,
+        "answered_differently": 0,
+        "answered_identically": 0,
+        "identical_by_verdict": {},
+        "incomplete": 5,
+        "meaning": "A pair answered identically was not told apart. Both sides 'pass' on every pair is what a judge that never heard the clip produces, and on this balanced corpus it still scores 50%. 'incomplete' pairs had no majority on one side and are neither."
+      },
+      "mean_confidence": {
+        "correct": 0.855,
+        "false_fail": 0.8033333333333333,
+        "false_pass": null
+      },
+      "stability": {
+        "claims": 5,
+        "claims_with_two_or_more_answers": 0,
+        "identical_across_repeats": 0,
+        "differed_across_repeats": 0,
+        "claims_without_two_answers": 5,
+        "identical_share_of_comparable": null,
+        "no_majority": 0,
+        "repeat_flips": {
+          "unit": "one pair of repeats for one claim",
+          "comparable_pairs": 0,
+          "pairs_dropped_for_a_missing_answer": 0,
+          "flips": 0,
+          "flip_rate_pct": null,
+          "claims_that_ever_flipped": 0,
+          "claims_compared": 0,
+          "claims_with_no_comparable_pair": 5,
+          "prior_audio_cohort_pct": 19.3548,
+          "meaning": "Share of repeat pairs that answered differently, the same denominator as the 19.35% measured on the graded audio cohort. 'claims_that_ever_flipped' is the other denominator, is out of 'claims_compared' rather than out of the corpus, and is not comparable with that figure. Claims with fewer than two answered repeats are in neither count."
+        },
+        "meaning": "'identical_across_repeats' counts claims whose *answered* repeats all agreed, out of 'claims_with_two_or_more_answers' and not out of 'claims'. Before 336 it counted a claim whose repeats were every one of them unanswered as identical, which is how 334's observation arm published 13 of 20 while the number of consistently answered claims was 0. Runs published before 336 carry the older count and are not comparable with this field."
+      }
+    },
+    "observation": {
+      "overall": {
+        "calls": 5,
+        "answered": 0,
+        "correct": 0,
+        "false_fail": 0,
+        "false_pass": 0,
+        "hedged": 0,
+        "unanswered": 5,
+        "unanswered_by_kind": {
+          "declined_to_judge": 1,
+          "read_failure": 4,
+          "provider_failure": 0
+        },
+        "accuracy": null,
+        "response_rate": 0.0
+      },
+      "on_true_claims": {
+        "calls": 3,
+        "answered": 0,
+        "correct": 0,
+        "false_fail": 0,
+        "false_pass": 0,
+        "hedged": 0,
+        "unanswered": 3,
+        "unanswered_by_kind": {
+          "declined_to_judge": 0,
+          "read_failure": 3,
+          "provider_failure": 0
+        },
+        "accuracy": null,
+        "response_rate": 0.0,
+        "false_fail_rate": null
+      },
+      "on_false_claims": {
+        "calls": 2,
+        "answered": 0,
+        "correct": 0,
+        "false_fail": 0,
+        "false_pass": 0,
+        "hedged": 0,
+        "unanswered": 2,
+        "unanswered_by_kind": {
+          "declined_to_judge": 1,
+          "read_failure": 1,
+          "provider_failure": 0
+        },
+        "accuracy": null,
+        "response_rate": 0.0,
+        "false_pass_rate": null
+      },
+      "by_family": {
+        "confusable_number": {
+          "calls": 2,
+          "answered": 0,
+          "correct": 0,
+          "false_fail": 0,
+          "false_pass": 0,
+          "hedged": 0,
+          "unanswered": 2,
+          "unanswered_by_kind": {
+            "declined_to_judge": 0,
+            "read_failure": 2,
+            "provider_failure": 0
+          },
+          "accuracy": null,
+          "response_rate": 0.0
+        },
+        "direction": {
+          "calls": 1,
+          "answered": 0,
+          "correct": 0,
+          "false_fail": 0,
+          "false_pass": 0,
+          "hedged": 0,
+          "unanswered": 1,
+          "unanswered_by_kind": {
+            "declined_to_judge": 0,
+            "read_failure": 1,
+            "provider_failure": 0
+          },
+          "accuracy": null,
+          "response_rate": 0.0
+        },
+        "ordinal": {
+          "calls": 1,
+          "answered": 0,
+          "correct": 0,
+          "false_fail": 0,
+          "false_pass": 0,
+          "hedged": 0,
+          "unanswered": 1,
+          "unanswered_by_kind": {
+            "declined_to_judge": 1,
+            "read_failure": 0,
+            "provider_failure": 0
+          },
+          "accuracy": null,
+          "response_rate": 0.0
+        },
+        "polarity": {
+          "calls": 1,
+          "answered": 0,
+          "correct": 0,
+          "false_fail": 0,
+          "false_pass": 0,
+          "hedged": 0,
+          "unanswered": 1,
+          "unanswered_by_kind": {
+            "declined_to_judge": 0,
+            "read_failure": 1,
+            "provider_failure": 0
+          },
+          "accuracy": null,
+          "response_rate": 0.0
+        }
+      },
+      "by_claim": {
+        "crate_seventeen": {
+          "holds": true,
+          "family": "confusable_number",
+          "pair_id": "crate_number",
+          "verdicts": [
+            "judge_error"
+          ],
+          "majority": null,
+          "repeats": 1,
+          "answered_repeats": 0,
+          "stable": null,
+          "majority_outcome": null
+        },
+        "shelf_fifty": {
+          "holds": false,
+          "family": "confusable_number",
+          "pair_id": "shelf_number",
+          "verdicts": [
+            "judge_error"
+          ],
+          "majority": null,
+          "repeats": 1,
+          "answered_repeats": 0,
+          "stable": null,
+          "majority_outcome": null
+        },
+        "dial_left": {
+          "holds": true,
+          "family": "direction",
+          "pair_id": "dial_direction",
+          "verdicts": [
+            "judge_error"
+          ],
+          "majority": null,
+          "repeats": 1,
+          "answered_repeats": 0,
+          "stable": null,
+          "majority_outcome": null
+        },
+        "column_third": {
+          "holds": false,
+          "family": "ordinal",
+          "pair_id": "column_ordinal",
+          "verdicts": [
+            "judge_error"
+          ],
+          "majority": null,
+          "repeats": 1,
+          "answered_repeats": 0,
+          "stable": null,
+          "majority_outcome": null
+        },
+        "lamp_off": {
+          "holds": true,
+          "family": "polarity",
+          "pair_id": "lamp_polarity",
+          "verdicts": [
+            "judge_error"
+          ],
+          "majority": null,
+          "repeats": 1,
+          "answered_repeats": 0,
+          "stable": null,
+          "majority_outcome": null
+        }
+      },
+      "discrimination_j": {
+        "per_call": null,
+        "per_claim_majority": null,
+        "meaning": "P(pass|true) - P(pass|false). 0 means the verdict does not depend on the audio; accuracy alone cannot show that."
+      },
+      "pre_registered_binomial": {
+        "test": "exact one-sided binomial, p = 0.5",
+        "unit": "one majority verdict per claim",
+        "claims_with_a_majority": 0,
+        "hedged_majorities_excluded": 0,
+        "n": 0,
+        "correct": 0,
+        "p_one_sided": null,
+        "smallest_attainable_p": null,
+        "meaning": "P(at least this many correct | the judge is guessing). The repeats are collapsed to one verdict per claim first; treating them as independent trials would triple the denominator and invent significance the design cannot support."
+      },
+      "permutation": {
+        "scheme": "within_pair",
+        "pairs": 5,
+        "assignments": 0,
+        "observed_j": null,
+        "at_least_observed": null,
+        "p_one_sided": null,
+        "smallest_attainable_p": null
+      },
+      "pair_consistency": {
+        "unit": "one true/false pair, on majority verdicts",
+        "pairs": 5,
+        "answered_differently": 0,
+        "answered_identically": 0,
+        "identical_by_verdict": {},
+        "incomplete": 5,
+        "meaning": "A pair answered identically was not told apart. Both sides 'pass' on every pair is what a judge that never heard the clip produces, and on this balanced corpus it still scores 50%. 'incomplete' pairs had no majority on one side and are neither."
+      },
+      "mean_confidence": {
+        "correct": null,
+        "false_fail": null,
+        "false_pass": null
+      },
+      "stability": {
+        "claims": 5,
+        "claims_with_two_or_more_answers": 0,
+        "identical_across_repeats": 0,
+        "differed_across_repeats": 0,
+        "claims_without_two_answers": 5,
+        "identical_share_of_comparable": null,
+        "no_majority": 5,
+        "repeat_flips": {
+          "unit": "one pair of repeats for one claim",
+          "comparable_pairs": 0,
+          "pairs_dropped_for_a_missing_answer": 0,
+          "flips": 0,
+          "flip_rate_pct": null,
+          "claims_that_ever_flipped": 0,
+          "claims_compared": 0,
+          "claims_with_no_comparable_pair": 5,
+          "prior_audio_cohort_pct": 19.3548,
+          "meaning": "Share of repeat pairs that answered differently, the same denominator as the 19.35% measured on the graded audio cohort. 'claims_that_ever_flipped' is the other denominator, is out of 'claims_compared' rather than out of the corpus, and is not comparable with that figure. Claims with fewer than two answered repeats are in neither count."
+        },
+        "meaning": "'identical_across_repeats' counts claims whose *answered* repeats all agreed, out of 'claims_with_two_or_more_answers' and not out of 'claims'. Before 336 it counted a claim whose repeats were every one of them unanswered as identical, which is how 334's observation arm published 13 of 20 while the number of consistently answered claims was 0. Runs published before 336 carry the older count and are not comparable with this field."
+      }
+    }
+  },
+  "arm_comparison": {
+    "pairs": 5,
+    "control": "production",
+    "treatment": "observation",
+    "production": {
+      "correct": 2,
+      "answered": 5,
+      "attempts": 5,
+      "accuracy_of_answered": 0.4,
+      "response_rate": 1.0,
+      "unanswered_by_kind": {
+        "declined_to_judge": 0,
+        "read_failure": 0,
+        "provider_failure": 0
+      },
+      "discrimination_j": 0.0
+    },
+    "observation": {
+      "correct": 0,
+      "answered": 0,
+      "attempts": 5,
+      "accuracy_of_answered": null,
+      "response_rate": 0.0,
+      "unanswered_by_kind": {
+        "declined_to_judge": 1,
+        "read_failure": 4,
+        "provider_failure": 0
+      },
+      "discrimination_j": null
+    },
+    "discordant": {
+      "control_only_correct": 2,
+      "treatment_only_correct": 0,
+      "both_correct": 0,
+      "neither_correct": 3
+    },
+    "mcnemar_exact_p": 0.5,
+    "unit": "call",
+    "reading": "Exact two-sided McNemar on the discordant calls. A large p means this corpus did not detect a difference between the prompts; it does NOT mean the prompts are equivalent. With 2 discordant calls out of 5, only a large effect could have shown up at all, and the interval on the difference is correspondingly wide.",
+    "per_claim_majority": {
+      "unit": "claim",
+      "pairs": 5,
+      "control": "production",
+      "treatment": "observation",
+      "production": {
+        "claims": 5,
+        "settled": 5,
+        "correct": 2,
+        "accuracy_of_settled": 0.4,
+        "settled_rate": 1.0,
+        "unsettled": {
+          "no_answer_at_all": 0,
+          "answered_without_a_majority": 0
+        },
+        "discrimination_j": 0.0
+      },
+      "observation": {
+        "claims": 5,
+        "settled": 0,
+        "correct": 0,
+        "accuracy_of_settled": null,
+        "settled_rate": 0.0,
+        "unsettled": {
+          "no_answer_at_all": 5,
+          "answered_without_a_majority": 0
+        },
+        "discrimination_j": null
+      },
+      "discordant": {
+        "control_only_correct": 2,
+        "treatment_only_correct": 0,
+        "both_correct": 0,
+        "neither_correct": 3
+      },
+      "mcnemar_exact_p": 0.5,
+      "constant_fail_baseline": {
+        "correct": 2,
+        "of": 5,
+        "accuracy": 0.4,
+        "discrimination_j": 0.0
+      },
+      "reading": "Exact two-sided McNemar with the repeats collapsed to one verdict per criterion, so 5 pairs and not 5 x repeats. A large p means this corpus did not detect a difference between the prompts; it does NOT mean the prompts are equivalent. Compare each accuracy against constant_fail_baseline before reading it as skill."
+    }
+  }
+}
