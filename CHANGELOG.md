@@ -76,10 +76,12 @@ entries land under a fresh dated heading the day they merge to `main`.
   `rehearsal_ok`** on the offline run; it was not turned into 9/9. The grader
   fingerprint moved with the shared fix, `50f6f8bb…` → `ee1ca0b0…`,
   recomputed here rather than taken on report; the price table did not move
-  (`b01b384c…`), which is the point of pinning the two separately. **Both
-  remain provisional** — they were computed on a checkout carrying an
-  unmerged commit, not on `main` — so `342` §0's two fingerprint rows stay
-  unticked and the paid run stays unstarted. `gpt-audio-1.5` was not called,
+  (`b01b384c…`), which is the point of pinning the two separately. Both were
+  then **re-measured on merged `main` (`9159465`) with this branch applied**
+  and came out unchanged, so `342` §0's two fingerprint rows are now ticked
+  against a named SHA — and they re-open on the next merge that touches
+  `core/`, which is why `343` §5.1 is run again immediately before any paid
+  dispatch. The paid run stays unstarted: `gpt-audio-1.5` was not called,
   no ledger row was bought, and `337`'s artifacts and pre-registration are
   untouched.
 - **The metering path `340` found missing now runs end to end, with no model
