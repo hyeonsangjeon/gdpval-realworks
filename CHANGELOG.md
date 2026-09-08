@@ -77,13 +77,13 @@ entries land under a fresh dated heading the day they merge to `main`.
   fingerprint moved with the shared fix, `50f6f8bb…` → `ee1ca0b0…`,
   recomputed here rather than taken on report; the price table did not move
   (`b01b384c…`), which is the point of pinning the two separately. Both were
-  then **re-measured on merged `main` (`9159465`) with this branch applied**
-  and came out unchanged, so `342` §0's two fingerprint rows are now ticked
-  against a named SHA — and they re-open on the next merge that touches
-  `core/`, which is why `343` §5.1 is run again immediately before any paid
-  dispatch. The paid run stays unstarted: `gpt-audio-1.5` was not called,
-  no ledger row was bought, and `337`'s artifacts and pre-registration are
-  untouched.
+  then **re-measured on `38038a1`, the merge of this work** — the code a paid
+  run would actually execute — and came out unchanged, so `342` §0's two
+  fingerprint rows are ticked against a named SHA. They re-open on the next
+  merge that touches `core/`, which is why `343` §5.1 is run again
+  immediately before any dispatch. The paid run stays unstarted:
+  `gpt-audio-1.5` was not called, no ledger row was bought, and `337`'s
+  artifacts and pre-registration are untouched.
 - **The metering path `340` found missing now runs end to end, with no model
   called and nothing bought.** `measure_audio_grading_accuracy.py` opens the
   production `cost_recorder`, meters the client **inside** `WireClient` rather
