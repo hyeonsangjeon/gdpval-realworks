@@ -1,0 +1,78 @@
+{
+  "measured": true,
+  "pins": {
+    "config": "gold_audio_repeat_v2_sol_max.yaml",
+    "audio_model": "gpt-audio-1.5",
+    "audio_deployment": "gpt-audio-1.5",
+    "audio_clip_seconds": 30,
+    "audio_call_cap_per_task": 32,
+    "provider": "azure_openai",
+    "grader_source_sha256": "6970a67c9bf5e83c434116b2638eaafe8270ec0acd896b978b51646cd8b85b36",
+    "observation_header_sha256": "93239fe70dd470ab9a516a7c386c3d95c74bf4abcf87bd9a715c7edd96c17781",
+    "observation_header_name": "SPEECH_OBSERVATION_HEADER_V2",
+    "clip_sample_rate_hz": 16000,
+    "grader_resample_rate_hz": 16000,
+    "repeats": 1,
+    "claims": 5,
+    "clips": 5,
+    "true_claims": 3,
+    "false_claims": 2,
+    "prompt_arms": [
+      "production",
+      "observation"
+    ]
+  },
+  "clip_sha256": {
+    "crate": "7e59f9a516ff6bf39a8462a4718c29124d6de87d4239fdb6eecebb8b6f4d0741",
+    "shelf": "2737aed8fa5d09a7ed5e363a9567a22240821ca186617fa40bf507862ed16fc5",
+    "dial": "b58bb4f1c471050524a1cc7951c53891c5d8c6c1d318d8ff98d902641e46d352",
+    "column": "6c25533396667dbfc6c64a1287bcab71de7cea6ddb8a55b32f715d93eefc0793",
+    "lamp": "00b8b8643b56290f83409d6bd60719835abf040b054fce1c5987f0d641aa63df"
+  },
+  "delivery": {
+    "measured": true,
+    "calls_inspected": 10,
+    "calls_carrying_audio": 10,
+    "calls_without_audio": [],
+    "sent_formats": [
+      "wav"
+    ],
+    "sent_sample_rates_hz": [
+      16000
+    ],
+    "sent_channels": [
+      1
+    ],
+    "digests_per_clip": {
+      "column": [
+        "6c25533396667dbfc6c64a1287bcab71de7cea6ddb8a55b32f715d93eefc0793"
+      ],
+      "crate": [
+        "7e59f9a516ff6bf39a8462a4718c29124d6de87d4239fdb6eecebb8b6f4d0741"
+      ],
+      "dial": [
+        "b58bb4f1c471050524a1cc7951c53891c5d8c6c1d318d8ff98d902641e46d352"
+      ],
+      "lamp": [
+        "00b8b8643b56290f83409d6bd60719835abf040b054fce1c5987f0d641aa63df"
+      ],
+      "shelf": [
+        "2737aed8fa5d09a7ed5e363a9567a22240821ca186617fa40bf507862ed16fc5"
+      ]
+    },
+    "clips_with_more_than_one_digest": [],
+    "clips_whose_sent_duration_differs": [],
+    "response_models": [
+      "gpt-audio-1.5"
+    ],
+    "audio_tokens_reported": 10,
+    "requests_total": 10,
+    "audio_tokens_total": 320,
+    "prompt_token_vs_clip_seconds": {
+      "n": 10,
+      "pearson_r": 0.01977211903441411,
+      "meaning": "Prompt tokens against clip duration. Near 1 means the count scales with the audio, which a request that did not carry it cannot do. Near 0 with audio parts present would mean the part was accepted and not charged for -- a different and worse failure than never sending it."
+    },
+    "not_covered": "This shows the bytes left this process correctly and were billed as audio. It cannot show what the model did with them."
+  }
+}
