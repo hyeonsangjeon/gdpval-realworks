@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
@@ -47,12 +48,19 @@ from core.cost_receipts import (
 
 __all__ = [
     "Attribution",
+    "CallFailure",
     "CostRecorder",
+    "FAILURE_ANSWERED",
+    "FAILURE_REFUSED",
+    "FAILURE_TIMEOUT",
+    "FAILURE_UNKNOWN",
     "MeteredClient",
     "ROUTE_IDENTITY_ATTRIBUTE",
     "ReportedUsage",
     "RouteCallIdentity",
+    "UNBILLED_STATUSES",
     "api_version_of",
+    "classify_call_failure",
     "deployment_of",
     "extract_usage",
     "open_cost_recorder",
@@ -61,6 +69,120 @@ __all__ = [
     "resolved_model_of",
     "route_identity_of",
 ]
+
+
+#: Provider rejections that are answers rather than silences: the request
+#: reached the API and came back refused before any model ran.
+#:
+#: ``core/perception/audio.py`` keeps the same eight for a different decision —
+#: whether a failed read costs the task one of its allowed attempts. This copy
+#: exists because the ledger has to tell a refusal apart from a call whose fate
+#: is genuinely unknown, and ``test_a_refusal_is_not_an_unreached_call.py``
+#: asserts the two lists are identical so the pair cannot drift in silence.
+#:
+#: Membership is not a claim that the account was untouched. It is the narrower
+#: claim that the provider answered, which is what makes
+#: ``call_reachability_unknown`` the wrong thing to write down.
+UNBILLED_STATUSES = frozenset({400, 401, 403, 404, 413, 415, 422, 429})
+
+#: The provider answered and the answer was one of :data:`UNBILLED_STATUSES`.
+FAILURE_REFUSED = "refused"
+#: The provider answered with some other status. A ``5xx`` may come from a
+#: gateway that never reached the model, or from a model that ran and then
+#: failed to deliver, and this layer cannot tell which.
+FAILURE_ANSWERED = "answered"
+#: Nothing came back in time. The request may well have been served and billed.
+FAILURE_TIMEOUT = "timeout"
+#: Something else broke — a dropped socket, a client-side error, an interrupt.
+FAILURE_UNKNOWN = "unknown"
+
+
+@dataclass(frozen=True)
+class CallFailure:
+    """What a failed call is known to have been, and nothing more.
+
+    ``note`` is built only from the failure's *shape* — a status number, a
+    fixed word, an exception class name. Never from the provider's message,
+    which routinely quotes the request URL and can quote a header. The ledger
+    is committed to disk and shipped between shards; a diagnostic string is not
+    worth turning it into a place secrets end up.
+    """
+
+    kind: str
+    status: int | None
+    note: str
+
+    @property
+    def billing_is_known_absent(self) -> bool:
+        """Whether the provider's own answer says no model ran.
+
+        Even here that is not the same as *"nothing was billed"* — see
+        :meth:`CostReceiptLedger.refuse`, which records the distinction rather
+        than resolving it.
+        """
+        return self.kind == FAILURE_REFUSED
+
+
+def _status_on(error: BaseException) -> int | None:
+    """The HTTP status an exception carries, or ``None`` if it carries none.
+
+    Read defensively in two places because the SDKs disagree: some raise an
+    error object with ``status_code`` on it, others hang it off a ``response``.
+    """
+    status = getattr(error, "status_code", None)
+    if status is None:
+        status = getattr(getattr(error, "response", None), "status_code", None)
+    if isinstance(status, bool):
+        return None
+    try:
+        return int(status)
+    except (TypeError, ValueError):
+        return None
+
+
+def _is_a_timeout(error: BaseException) -> bool:
+    if isinstance(error, TimeoutError):
+        return True
+    return any(
+        "timeout" in cls.__name__.lower() for cls in type(error).__mro__
+    )
+
+
+def classify_call_failure(error: BaseException) -> CallFailure:
+    """Sort one failed call into what the ledger is entitled to say about it.
+
+    The four kinds are not a taxonomy of provider errors; they are a taxonomy
+    of *what is known*. A refusal is the only one where the outcome is settled
+    from this side of the wire, and it is the only one that changes what the
+    receipt says.
+    """
+    status = _status_on(error)
+    if status is not None and status in UNBILLED_STATUSES:
+        return CallFailure(
+            kind=FAILURE_REFUSED,
+            status=status,
+            note=f"provider_refused_{status}",
+        )
+    if status is not None:
+        return CallFailure(
+            kind=FAILURE_ANSWERED,
+            status=status,
+            note=f"provider_status_{status}",
+        )
+    if _is_a_timeout(error):
+        return CallFailure(
+            kind=FAILURE_TIMEOUT, status=None, note="provider_timeout"
+        )
+    # The class name, reduced to a slug and capped. An exception class is
+    # almost always a fixed name from a library, but "almost always" is not a
+    # property to write to disk on, and a type built at runtime could be named
+    # anything at all.
+    name = re.sub(r"[^A-Za-z0-9_]", "", type(error).__name__)[:64] or "Exception"
+    return CallFailure(
+        kind=FAILURE_UNKNOWN,
+        status=None,
+        note=f"provider_error_{name}",
+    )
 
 
 @dataclass(frozen=True)
@@ -677,9 +799,17 @@ class MeteredClient:
     When a call raises, the reservation is deliberately *left standing* rather
     than cleaned up. A request that timed out may well have been served and
     billed, and the honest record of that is an unsettled reservation, which
-    turns the task's receipt ``partial`` with ``call_reachability_unknown``. A
-    caller that knows the failure happened before anything left the process can
-    say so with :meth:`CostRecorder.abandon_call`.
+    turns the task's receipt ``partial`` with ``call_reachability_unknown``.
+    The note on the row says which kind of silence it was, so a timeout and a
+    dropped connection are told apart without either being resolved.
+
+    One failure is not a silence. A status in :data:`UNBILLED_STATUSES` is the
+    provider *answering*, so that row is recorded as ``refused`` and carries
+    ``call_refused_unpriced``: still counted, still claiming no amount, still
+    holding the receipt at ``partial``, but no longer filed under a doubt about
+    whether the request ever arrived. A caller that knows the failure happened
+    before anything left the process can say so with
+    :meth:`CostRecorder.abandon_call`.
     """
 
     #: Lets code that must know a client's real provider type look through the
@@ -803,13 +933,43 @@ class MeteredClient:
             request_sha256=request_digest_of(kwargs),
         )
         object.__setattr__(self, "last_call_id", call_id)
-        response = call(**kwargs)
+        try:
+            response = call(**kwargs)
+        except BaseException as error:
+            _record_failed_call(recorder.ledger, call_id, error)
+            raise
         recorder.ledger.settle(
             call_id,
             usage=extract_usage(response),
             resolved_model=resolved_model_of(response, requested),
         )
         return response
+
+
+def _record_failed_call(
+    ledger: CostReceiptLedger, call_id: str, error: BaseException
+) -> CallFailure:
+    """File a reservation whose call raised, without swallowing the raise.
+
+    A refusal is resolved here, because the provider answered it. Everything
+    else keeps its reservation — the state that says *"a request went out and
+    we never learned what became of it"*, which for a timeout or a ``5xx`` is
+    the honest reading — and gains a note saying which kind of silence it was.
+
+    Bookkeeping never displaces the provider's own error. If the ledger cannot
+    be written the failure is dropped and the reservation simply stands, which
+    is the conservative reading anyway; raising from here would replace the
+    exception the caller has to see with one about a database.
+    """
+    failure = classify_call_failure(error)
+    try:
+        if failure.kind == FAILURE_REFUSED and failure.status is not None:
+            ledger.refuse(call_id, status=failure.status)
+        else:
+            ledger.leave_unresolved(call_id, note=failure.note)
+    except Exception:
+        pass
+    return failure
 
 
 # ── Opening a recorder for a run ─────────────────────────────────────────

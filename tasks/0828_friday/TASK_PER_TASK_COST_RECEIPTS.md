@@ -168,6 +168,7 @@ grade schema를 수정하지 않는다. 계약 변경이 필요하면 Project �
 | `usage_partial` | 사용량 일부 필드가 없다 |
 | `price_missing` | `(provider, model)`이 가격표에 없다 |
 | `call_reachability_unknown` | 요청이 사업자에 도달했는지 불명 (타임아웃 등) |
+| `call_refused_unpriced` | 사업자가 **답장으로** 거절했다. 모델이 안 돌아 사용량이 없다 |
 | `runtime_cost_unattributable` | 공유 실행 환경이라 작업 귀속 불가 |
 | `runtime_cost_unpriced` | 실행 환경 사용료 단가가 없다 |
 | `ledger_absent` | 이 실행에 원장이 없다 |
@@ -349,6 +350,17 @@ grade schema를 수정하지 않는다. 계약 변경이 필요하면 Project �
 닫아 둔 목록이고, 위 상황은 전부 기존 `price_missing`·`usage_partial`로 정확히
 읽힌다. 아홉 번째 값을 더하면 이미 게시된 채점 산출물이 스키마 검증에 걸린다.
 
+> **2026-09-08 정정 (341).** 위 문단의 마지막 문장은 **틀렸다.** 이 절이 다룬
+> 소리 가격 상황에 새 값이 필요 없었다는 판단은 그대로 옳지만, 근거로 든
+> "아홉 번째 값을 더하면 게시본이 깨진다"는 일반화는 성립하지 않는다. `enum`에
+> 값을 **더하는** 것은 넓히는 변경이고, 이미 게시된 산출물은 옛 8개만 담고
+> 있으므로 전부 그대로 통과한다. 실제로 재어 봤다 — 게시된 채점 기록
+> **95개 전부**가 아홉 번째 값이 들어간 스키마에 통과했고, 그중 실제로 쓰인
+> 값은 `price_missing`과 `call_reachability_unknown` 둘뿐이었다. 깨지는 것은
+> 값을 **빼거나 이름을 바꿀 때**다. 341이 아홉 번째 값
+> `call_refused_unpriced`를 추가한 근거이며, 자세한 내용은
+> `TASK_REFUSAL_IS_NOT_AN_UNREACHED_CALL.md`에 있다.
+
 ### 5.4 연결 지점
 
 | 경로 | 파일 | 단계 |
@@ -453,6 +465,9 @@ settle(call_id, usage=…, resolved_model=…)
   → 응답 후 사용량을 채우고 가격을 적용한다. 상태 settled.
 abandon(call_id, reason=…)
   → 호출이 나가지 않았음이 확실할 때. 상태 abandoned, 비용 0.
+refuse(call_id, status=…)
+  → 나갔고, 답장이 왔고, 그 답장이 거절일 때. 상태 refused.
+    호출로 세지만 금액은 주장하지 않는다. (341에서 추가)
 ```
 
 예약을 먼저 하는 이유: **호출은 나갔는데 응답을 못 받은 경우**를 잃지 않기 위해서다.
@@ -460,6 +475,12 @@ abandon(call_id, reason=…)
 영수증을 `partial`로 만든다. 이것이 "API 도달 여부 불명확"의 처리다.
 
 "호출 전 실패"(요청을 만들다 실패)는 `abandon`이며 비용에 영향이 없다.
+
+**사업자가 답장으로 거절한 경우**(`400`·`429` 등)는 위 둘 중 어느 것도 아니다.
+요청이 나갔으니 `abandon`이 아니고, 답장이 왔으니 도달 여부가 불명한 것도 아니다.
+`refuse`가 그 자리이며 `call_refused_unpriced`를 남긴다. 영수증은 여전히
+`partial`이다 — 모델이 안 돌았다는 것은 계정에 아무것도 안 물렸다는 사업자의
+진술이 아니기 때문이다(P1). 341 참조.
 
 ### 6.3 중복 정산 방지
 

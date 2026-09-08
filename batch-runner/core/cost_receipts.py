@@ -138,12 +138,21 @@ REASON_RUNTIME_UNATTRIBUTABLE = "runtime_cost_unattributable"
 REASON_RUNTIME_UNPRICED = "runtime_cost_unpriced"
 REASON_LEDGER_ABSENT = "ledger_absent"
 REASON_STAGE_UNSUPPORTED = "stage_unsupported"
+#: The provider answered, and the answer was a refusal issued before any model
+#: ran: no usage was reported, so there is nothing to price. Distinct from
+#: :data:`REASON_CALL_REACHABILITY_UNKNOWN`, which says the opposite thing — a
+#: refusal is the one case where reachability is precisely what is *not* in
+#: doubt. Both hold a receipt at ``partial``, because neither is evidence that
+#: nothing was billed; the difference is whether a reader has anything to go
+#: and investigate.
+REASON_CALL_REFUSED_UNPRICED = "call_refused_unpriced"
 
 MISSING_REASONS = (
     REASON_USAGE_ABSENT,
     REASON_USAGE_PARTIAL,
     REASON_PRICE_MISSING,
     REASON_CALL_REACHABILITY_UNKNOWN,
+    REASON_CALL_REFUSED_UNPRICED,
     REASON_RUNTIME_UNATTRIBUTABLE,
     REASON_RUNTIME_UNPRICED,
     REASON_LEDGER_ABSENT,
@@ -153,6 +162,12 @@ MISSING_REASONS = (
 STATE_RESERVED = "reserved"
 STATE_SETTLED = "settled"
 STATE_ABANDONED = "abandoned"
+#: Sent, answered, refused. The request reached the provider and came back
+#: rejected before any model ran, so this is neither a call whose fate is
+#: unknown (:data:`STATE_RESERVED`) nor one that never left
+#: (:data:`STATE_ABANDONED`). It is counted as a call, because one was made,
+#: and it claims no amount, because the provider reported none.
+STATE_REFUSED = "refused"
 
 ATTRIBUTION_PER_TASK = "per_task"
 ATTRIBUTION_SHARED = "shared"
@@ -1306,6 +1321,11 @@ class CostReceiptLedger:
                 f"call {call_id} was recorded as never sent, and cannot now "
                 "report usage"
             )
+        if row["state"] == STATE_REFUSED:
+            raise LedgerIntegrityError(
+                f"call {call_id} was recorded as refused before any model ran, "
+                "and cannot now report usage"
+            )
 
         model = str(resolved_model or row["requested_model"] or "")
         price = None
@@ -1356,7 +1376,8 @@ class CostReceiptLedger:
         Only correct where the failure is known to precede the request: a
         prompt that could not be assembled, a client that could not be built.
         A timeout is *not* this; a timeout leaves the reservation standing,
-        because the request may well have been served and billed.
+        because the request may well have been served and billed. Neither is a
+        provider refusal, which left and came back — that is :meth:`refuse`.
         """
         row = self._row(call_id)
         if row is None:
@@ -1368,10 +1389,101 @@ class CostReceiptLedger:
                 f"call {call_id} already reported usage and cannot now be "
                 "recorded as never sent"
             )
+        if row["state"] == STATE_REFUSED:
+            raise LedgerIntegrityError(
+                f"call {call_id} was answered by the provider and cannot now "
+                "be recorded as never sent"
+            )
         self._connection.execute(
             "UPDATE cost_calls SET state = ?, note = COALESCE(?, note) "
             "WHERE call_id = ?",
             (STATE_ABANDONED, note, call_id),
+        )
+        self._connection.commit()
+
+    def refuse(self, call_id: str, *, status: int) -> None:
+        """Record that the provider answered, and the answer was a refusal.
+
+        A status code is a reply. Receiving one is the proof that the request
+        arrived, so a refused call is the one kind of failure where reachability
+        is not what is in doubt — which is why it must not be left standing as a
+        reservation, whose whole meaning is *"we never found out"*.
+
+        It is equally not :meth:`abandon`. Abandoned rows are dropped from the
+        receipt entirely, and dropping this one would say a call was never made
+        when one was, and would quietly take the task's ``model_calls`` down
+        with it.
+
+        So the row is counted and claims nothing. The provider reported no
+        usage, and a refusal is not a billing statement; the status tells us
+        the model did not run, not that the account was not touched. The row
+        therefore carries :data:`REASON_CALL_REFUSED_UNPRICED` and holds the
+        receipt at ``partial``, exactly as an unpriceable settled call does.
+        The change from a reservation is in what the reader is told, not in
+        what the ledger claims to know.
+
+        Only for statuses a refusal can carry. A timeout, a dropped socket and
+        a ``5xx`` are all silences from this layer's point of view and must keep
+        leaving the reservation standing, because the request may well have been
+        served and billed out of sight.
+        """
+        row = self._row(call_id)
+        if row is None:
+            raise LedgerIntegrityError(
+                f"call {call_id} was refused without ever being reserved"
+            )
+        if row["state"] == STATE_SETTLED:
+            raise LedgerIntegrityError(
+                f"call {call_id} already reported usage and cannot now be "
+                "recorded as refused"
+            )
+        if row["state"] == STATE_ABANDONED:
+            raise LedgerIntegrityError(
+                f"call {call_id} was recorded as never sent, and cannot now "
+                "have been answered"
+            )
+        note = f"provider_refused_{int(status)}"
+        if row["state"] == STATE_REFUSED and row["note"] != note:
+            raise LedgerIntegrityError(
+                f"call {call_id} was already refused with {row['note']!r} and "
+                f"cannot now be refused with {note!r}"
+            )
+        reasons = sorted(
+            {*_decode_reasons(row["missing_reasons"]), REASON_CALL_REFUSED_UNPRICED}
+        )
+        self._connection.execute(
+            "UPDATE cost_calls SET state = ?, missing_reasons = ?, note = ? "
+            "WHERE call_id = ?",
+            (STATE_REFUSED, json.dumps(reasons), note, call_id),
+        )
+        self._connection.commit()
+
+    def leave_unresolved(self, call_id: str, *, note: str) -> None:
+        """Say why a reservation is standing, without pretending to resolve it.
+
+        A timeout and a connection that died mid-flight are different events
+        with the same consequence: the request may have been served and billed,
+        and this process will never know. Both keep :data:`STATE_RESERVED` and
+        :data:`REASON_CALL_REACHABILITY_UNKNOWN`, which are the true reading.
+
+        What was missing is *which* of them happened. The note carries that and
+        nothing else — a fixed word built from the failure's shape, never from
+        the provider's message, which can quote a URL, a header or a key.
+        """
+        _require(bool(note), "an unresolved call must say what happened to it")
+        row = self._row(call_id)
+        if row is None:
+            raise LedgerIntegrityError(
+                f"call {call_id} failed without ever being reserved"
+            )
+        if row["state"] != STATE_RESERVED:
+            raise LedgerIntegrityError(
+                f"call {call_id} is {row['state']}, so it is not an open "
+                "question and must not be annotated as one"
+            )
+        self._connection.execute(
+            "UPDATE cost_calls SET note = COALESCE(note, ?) WHERE call_id = ?",
+            (note, call_id),
         )
         self._connection.commit()
 
@@ -1583,13 +1695,18 @@ class CostReceiptLedger:
             _require_agreement(existing, record)
             if existing["state"] == STATE_RESERVED and str(
                 record.get("state") or ""
-            ) in (STATE_SETTLED, STATE_ABANDONED):
+            ) in (STATE_SETTLED, STATE_ABANDONED, STATE_REFUSED):
                 # We only knew the request had gone out; the arriving export
                 # knows how it ended. Taking the outcome resolves a doubt
                 # rather than overwriting a figure, and it is the difference
                 # between a receipt that stays partial forever and one that
                 # closes. The reverse direction is not allowed: a settled row
                 # is never demoted back to an open question.
+                #
+                # A refusal is one of the outcomes worth taking. Left out, a
+                # merged shard would put back the very sentence this promotion
+                # exists to retire — a call the provider answered, filed under
+                # "we never found out whether it arrived".
                 self._connection.execute(
                     "UPDATE cost_calls SET {assignments} WHERE call_id = ?".format(
                         assignments=", ".join(
@@ -1699,6 +1816,12 @@ def build_receipt(
     Abandoned calls contribute nothing and cost nothing — they never went out.
     Reserved-but-unsettled calls contribute nothing but *do* cost the receipt
     its ``complete`` status, because whether they were billed is unknown.
+    Refused calls sit between the two: they went out, so they are counted, and
+    they carry ``call_refused_unpriced`` rather than the reservation's
+    ``call_reachability_unknown``, because a status code is an answer and
+    reachability is the one thing a refusal settles. The receipt is still held
+    at ``partial`` — knowing the model did not run is not the same as holding
+    the provider's word that nothing was billed.
 
     Lines are grouped by stage, retry kind *and* call identity. Grouping on the
     stage alone was what turned a ``perception`` line into an unpriceable lump
@@ -2075,6 +2198,18 @@ def _require_agreement(
         # The local row knows less than the arriving one. Fill it in rather
         # than treat the arrival as a contradiction.
         return
+    if existing["state"] == STATE_REFUSED and str(
+        record.get("state") or ""
+    ) == STATE_SETTLED:
+        # Both rows watched the same call end and came back with incompatible
+        # stories: one says the provider refused before any model ran, the
+        # other says a model ran and reported usage. The token comparison
+        # below cannot see this, because a refused row holds no counts to
+        # disagree with — so the absence would read as agreement.
+        raise LedgerIntegrityError(
+            f"imported call {existing['call_id']} reports usage for a call "
+            "this ledger recorded as refused before any model ran"
+        )
     for column in ("input_tokens", "output_tokens", "model_cost_usd"):
         incoming = record.get(column)
         recorded = existing[column]
