@@ -836,6 +836,10 @@ def _run_redaction_check(tmp_path, plan, endpoint=None):
         capture_output=True,
         text=True,
         env=environment,
+        # The step runs from the repository root, and the check reads a file
+        # out of the checkout. Running it from anywhere else would test a
+        # different program.
+        cwd=Path("..").resolve(),
     )
 
 
@@ -906,3 +910,142 @@ def test_a_run_with_no_record_is_not_reported_as_clean(tmp_path):
     assert result.returncode == 0
     assert "record=clean" not in result.stdout
     assert "no record exists" in result.stdout
+
+
+# ── The check against the record that actually gets written ─────────────────
+#
+# Everything above feeds the check hand-made dictionaries. That is how a real
+# plan came to be rejected by it: the plan carries the Entra token scope, which
+# is a URL, and the rule was "any URL at all". Nothing had leaked — the scope
+# is a tenant-independent constant already sitting in this public repository's
+# source — but the run failed, and the upload step ran anyway, which is the
+# defect that actually mattered.
+
+
+def _real_record(**setting_overrides):
+    """The record the script builds, not a stand-in shaped like one."""
+    return _record(
+        verdict=VERDICT_NOT_SENT,
+        description=describe_settings(_settings(**setting_overrides)),
+        observed=_empty_observation(),
+        note="planned only; no request was sent",
+    )
+
+
+def test_the_check_passes_the_record_the_script_actually_writes(tmp_path):
+    """The regression. A hand-made record is not the thing being published."""
+    result = _run_redaction_check(tmp_path, _real_record())
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "record=clean" in result.stdout
+
+
+def test_the_one_url_allowed_through_is_the_repositorys_own_constant():
+    """Not a string in the workflow file — the constant, read from source.
+
+    Written into the workflow instead, the exception would keep passing after
+    somebody pointed the scope at a resource-specific audience, which is
+    exactly the case a URL rule exists to catch.
+    """
+    from core.azure_ai_clients import DIRECT_TOKEN_SCOPE
+
+    check = _redaction_check()
+    assert "DIRECT_TOKEN_SCOPE" in check
+    assert "batch-runner/core/azure_ai_clients.py" in check
+    assert DIRECT_TOKEN_SCOPE not in check, (
+        "the allowed URL is written into the workflow, so changing the "
+        "constant no longer changes what the check allows"
+    )
+
+
+def test_a_scope_pointing_somewhere_else_is_still_caught(tmp_path):
+    record = _real_record()
+    record["settings"]["auth"]["scope"] = "https://elsewhere.example/.default"
+    result = _run_redaction_check(tmp_path, record)
+    assert result.returncode == 1, result.stdout
+
+
+def test_a_second_url_beside_the_allowed_one_is_caught(tmp_path):
+    """The allowance is for one string, not for the presence of that string."""
+    record = _real_record()
+    record["note"] = "POST https://elsewhere.example/responses failed"
+    result = _run_redaction_check(tmp_path, record)
+    assert result.returncode == 1, result.stdout
+
+
+def test_a_scope_that_names_the_resource_is_caught_by_the_other_rule(tmp_path):
+    """Two independent rules, so neither has to be the whole answer.
+
+    If the constant itself became resource-specific, the URL rule would allow
+    it — it allows whatever the constant says. The needle search does not.
+    """
+    record = _real_record()
+    record["settings"]["auth"]["scope"] = f"https://{ACCOUNT}.example/.default"
+    result = _run_redaction_check(tmp_path, record)
+    assert result.returncode == 1, result.stdout
+
+
+def test_an_unreadable_source_refuses_rather_than_allowing_every_url(tmp_path):
+    """Fail closed. The check cannot establish what is allowed, so nothing is."""
+    script = tmp_path / "check.py"
+    plan_path = tmp_path / "plan.json"
+    plan_path.write_text(json.dumps(_real_record()), encoding="utf-8")
+    body = _redaction_check().replace(
+        '"/tmp/codex-foundry-plan.json"', json.dumps(str(plan_path))
+    ).replace(
+        '"/tmp/codex-foundry-connection.json"',
+        json.dumps(str(tmp_path / "absent.json")),
+    )
+    script.write_text(body, encoding="utf-8")
+    environment = dict(os.environ)
+    environment["FOUNDRY_PROJECT_ENDPOINT"] = ENDPOINT
+    result = subprocess.run(
+        [sys.executable, str(script)],
+        capture_output=True,
+        text=True,
+        env=environment,
+        cwd=tmp_path,  # no checkout here, so the source file is not readable
+    )
+    assert result.returncode == 1
+    assert "FATAL" in result.stdout
+
+
+# ── A rejected record does not get published ────────────────────────────────
+
+
+def test_a_record_the_check_rejected_is_not_uploaded():
+    """The defect the first real dispatch found.
+
+    The check failed, and ``Keep the record`` uploaded the record anyway,
+    because it was ``if: always()``. On a public repository an artifact is
+    world-readable the moment it exists, and deleting it afterwards is a
+    different fact from never having uploaded it. Nothing had leaked that
+    time. The step ordering was the reason it did not matter, and step
+    ordering is not a control.
+    """
+    steps = _steps()
+    guard = steps["Confirm the record names no resource and carries no token"]
+    assert guard.get("id"), "the guard has no id, so nothing can depend on it"
+    upload = steps["Keep the record"]
+    condition = upload["if"]
+    assert guard["id"] in condition, condition
+    assert "!= 'failure'" in condition, condition
+
+
+def test_the_upload_still_happens_when_something_else_failed():
+    """A record of a run that broke is the point of the run.
+
+    The gate is on the redaction check's own verdict, not on the job's.
+    """
+    upload = _steps()["Keep the record"]
+    assert upload["if"].startswith("always()"), upload["if"]
+
+
+def test_withholding_the_record_is_said_out_loud():
+    """A missing artifact reads as "the run did not get that far"."""
+    steps = _steps()
+    guard = steps["Confirm the record names no resource and carries no token"]
+    withheld = steps["Say that the record was withheld"]
+    assert guard["id"] in withheld["if"]
+    assert "== 'failure'" in withheld["if"]
+    assert "GITHUB_STEP_SUMMARY" in withheld["run"]
+

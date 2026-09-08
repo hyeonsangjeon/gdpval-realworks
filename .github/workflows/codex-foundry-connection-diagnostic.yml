@@ -231,6 +231,7 @@ jobs:
       # endpoint is read from the secret here purely to search for it — it is
       # never echoed, only counted.
       - name: Confirm the record names no resource and carries no token
+        id: leak_check
         if: always()
         env:
           FOUNDRY_PROJECT_ENDPOINT: ${{ secrets.FOUNDRY_PROJECT_ENDPOINT }}
@@ -254,6 +255,33 @@ jobs:
                   needles.append(parts[-1])
           needles = [n for n in needles if len(n) >= 4]
 
+          # Exactly one URL belongs in a clean record: the Entra scope the
+          # token is asked for. It is the same string for every tenant, carries
+          # no account, project, region or subscription, and is already in this
+          # public repository's source. Read it out of that source rather than
+          # writing it here, so that a future edit pointing the scope at
+          # something resource-specific makes this check fail instead of
+          # teaching it a new exception. Any other URL is still fatal.
+          #
+          # The rule this replaces was "any URL at all", which fired on that
+          # constant and stopped a run that had leaked nothing. A guard that
+          # cries wolf is a guard someone reaches past.
+          scope_source = "batch-runner/core/azure_ai_clients.py"
+          try:
+              scope_text = open(scope_source, encoding="utf-8").read()
+          except OSError as exc:
+              print(f"FATAL: cannot read {scope_source}: {exc}")
+              print("       refusing to decide what a URL means without it")
+              sys.exit(1)
+          found_scope = re.search(
+              r'^DIRECT_TOKEN_SCOPE\s*=\s*"([^"]+)"', scope_text, re.M
+          )
+          if found_scope is None:
+              print(f"FATAL: no DIRECT_TOKEN_SCOPE in {scope_source}")
+              print("       the allowed URL cannot be established, so none is allowed")
+              sys.exit(1)
+          allowed_url = found_scope.group(1)
+
           for path in (
               "/tmp/codex-foundry-plan.json",
               "/tmp/codex-foundry-connection.json",
@@ -268,8 +296,11 @@ jobs:
                       leaked.append(f"{path}: names the resource")
               if re.search(r"\bey[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}", text):
                   leaked.append(f"{path}: contains something token-shaped")
-              if re.search(r"https?://", text):
-                  leaked.append(f"{path}: contains a URL")
+              for found in set(re.findall(r"""https?://[^\s"'\\]+""", text)):
+                  if found != allowed_url:
+                      leaked.append(
+                          f"{path}: contains a URL that is not the public token scope"
+                      )
               record = json.loads(text)
               if record["observed"]["tool_execution_observed"] is not False:
                   leaked.append(f"{path}: claims tool execution, which this probe cannot observe")
@@ -287,8 +318,14 @@ jobs:
               print(f"record=clean ({checked} checked)")
           PY
 
+      # Not `always()`. A record this job's own check rejected is the one
+      # record that must not be published: this repository is public, so an
+      # artifact is world-readable from the moment it exists, and deleting it
+      # afterwards is a different fact from never having uploaded it. The step
+      # still runs for every other failure, because a record of a run that
+      # broke is the point of the run.
       - name: Keep the record
-        if: always()
+        if: always() && steps.leak_check.conclusion != 'failure'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: codex-foundry-connection
@@ -297,6 +334,19 @@ jobs:
             /tmp/codex-foundry-connection.json
           if-no-files-found: warn
           retention-days: 90
+
+      - name: Say that the record was withheld
+        if: always() && steps.leak_check.conclusion == 'failure'
+        run: |
+          set -euo pipefail
+          {
+            echo "### The record was not published"
+            echo ""
+            echo "The redaction check rejected it, so \`Keep the record\` was"
+            echo "skipped. The record exists only on the runner and goes away"
+            echo "with it. Read the check's output above for what it found —"
+            echo "it names the kind of thing, never the thing."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Summary
         if: always()
