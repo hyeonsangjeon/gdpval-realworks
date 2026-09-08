@@ -102,6 +102,30 @@ def test_the_scripts_are_executable():
     assert BOOTSTRAP.stat().st_mode & 0o111, "bootstrap.sh is not executable"
 
 
+def test_the_executable_bit_is_the_one_a_clone_gets():
+    """The filesystem is not the fact that travels.
+
+    ``core.fileMode=false`` is set on at least one machine this repository is
+    developed on, and under it git records 100644 for a file that is `+x` on
+    disk. The assertion above then passes locally for a reason a fresh clone
+    does not inherit, and the first machine to notice is CI -- which is how
+    this test came to exist rather than a hypothetical it guards against.
+    """
+    listing = subprocess.run(
+        ["git", "ls-files", "-s", "--", "infra/dev-host"],
+        cwd=REPO_ROOT, capture_output=True, text=True, check=True,
+    ).stdout
+    modes = {
+        line.split("\t", 1)[1]: line.split(" ", 1)[0]
+        for line in listing.splitlines() if line
+    }
+    for path in ("infra/dev-host/deploy.sh", "infra/dev-host/bootstrap.sh"):
+        assert modes.get(path) == "100755", (
+            f"git has {path} at mode {modes.get(path)}; a clone would get a file "
+            "it cannot run. `git update-index --chmod=+x` records the bit."
+        )
+
+
 def test_the_shell_scripts_parse():
     """A script that does not parse fails at the worst moment: half way in."""
     for script in (DEPLOY, BOOTSTRAP):
