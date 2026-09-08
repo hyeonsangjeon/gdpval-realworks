@@ -64,6 +64,12 @@ from scripts.diagnose_codex_foundry_connection import (
 ACCOUNT = "some-account-name"
 PROJECT = "some-project-name"
 ENDPOINT = f"https://{ACCOUNT}.services.ai.azure.com/openai/v1/"
+# The other shape the same secret takes. It is the one the workflow hands the
+# redaction check, and the only one that carries the project name — so a
+# redactor built from `ENDPOINT` above has never been told what the project is
+# called and will leave it standing. Tests that redact and then check must use
+# this one for both halves, or they are grading two different secrets.
+PROJECT_ENDPOINT = f"https://{ACCOUNT}.services.ai.azure.com/api/projects/{PROJECT}"
 DEPLOYMENT = "gpt-5.4"
 
 
@@ -828,9 +834,7 @@ def _run_redaction_check(tmp_path, plan, endpoint=None):
     )
     script.write_text(body, encoding="utf-8")
     environment = dict(os.environ)
-    environment["FOUNDRY_PROJECT_ENDPOINT"] = endpoint or (
-        f"https://{ACCOUNT}.services.ai.azure.com/api/projects/{PROJECT}"
-    )
+    environment["FOUNDRY_PROJECT_ENDPOINT"] = endpoint or PROJECT_ENDPOINT
     return subprocess.run(
         [sys.executable, str(script)],
         capture_output=True,
@@ -1028,16 +1032,100 @@ def test_a_record_the_check_rejected_is_not_uploaded():
     upload = steps["Keep the record"]
     condition = upload["if"]
     assert guard["id"] in condition, condition
-    assert "!= 'failure'" in condition, condition
+
+
+def test_a_check_that_never_ran_does_not_read_as_one_that_passed():
+    """`== 'success'`, not `!= 'failure'`.
+
+    A skipped step's conclusion is neither, and under the looser test an
+    unrun check would let the upload through — which is the failure mode
+    this whole gate exists to remove, arriving by a different door.
+    """
+    upload = _steps()["Keep the record"]
+    assert "== 'success'" in upload["if"], upload["if"]
+    assert "!=" not in upload["if"], upload["if"]
 
 
 def test_the_upload_still_happens_when_something_else_failed():
     """A record of a run that broke is the point of the run.
 
-    The gate is on the redaction check's own verdict, not on the job's.
+    The gate is on the redaction check's own verdict, not on the job's, and
+    the check runs under `always()` — so a job that died at the request step
+    still publishes the record saying so, provided that record is clean.
     """
+    guard = _steps()["Confirm the record names no resource and carries no token"]
+    assert guard["if"] == "always()", guard["if"]
     upload = _steps()["Keep the record"]
     assert upload["if"].startswith("always()"), upload["if"]
+
+
+def test_a_redacted_failure_record_is_the_kind_that_gets_published(tmp_path):
+    """The other half of the gate, as behaviour rather than as a condition.
+
+    Refusing to publish a rejected record is only safe if an *honest* failure
+    record still passes. A run that was refused by the provider writes its
+    reason through the redactor, and that record is the entire product of the
+    run — a gate that swallowed it would trade one silent failure for
+    another.
+    """
+    redact = build_redactor({"FOUNDRY_PROJECT_ENDPOINT": PROJECT_ENDPOINT})
+    record = _record(
+        verdict=VERDICT_AUTHENTICATION_REJECTED,
+        description=describe_settings(_settings()),
+        observed={
+            **_empty_observation(),
+            "thread_started": True,
+            "turn_sent": True,
+            "turn_status": "failed",
+            "error": {
+                "name": "unauthorized",
+                "http_status": 401,
+                "message": redact(
+                    f"401 from {PROJECT_ENDPOINT} for project {PROJECT}"
+                ),
+            },
+        },
+        note="the deployment refused the token",
+    )
+    result = _run_redaction_check(tmp_path, record)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "record=clean" in result.stdout
+
+
+def test_an_unredacted_failure_record_is_the_kind_that_does_not(tmp_path):
+    """The same record with the redactor left out. This is what must not ship."""
+    record = _record(
+        verdict=VERDICT_AUTHENTICATION_REJECTED,
+        description=describe_settings(_settings()),
+        observed={
+            **_empty_observation(),
+            "turn_sent": True,
+            "error": {"message": f"401 from {ENDPOINT} for project {PROJECT}"},
+        },
+        note=None,
+    )
+    result = _run_redaction_check(tmp_path, record)
+    assert result.returncode == 1, result.stdout
+
+
+def test_the_endpoint_itself_is_caught_if_it_ever_replaces_the_fingerprint(
+    tmp_path,
+):
+    """The field designed to carry a hash, carrying the thing it stands for."""
+    record = _real_record()
+    record["settings"]["endpoint_host_fingerprint"] = ENDPOINT
+    result = _run_redaction_check(tmp_path, record)
+    assert result.returncode == 1, result.stdout
+
+
+def test_a_token_inside_the_real_record_is_caught(tmp_path):
+    """A JWT reaching the record is the failure the fingerprint cannot help with."""
+    record = _real_record()
+    record["observed"]["error"] = {
+        "message": "eyJhbGciOiJSUzI1NiJ9.eyJhdWQiOiJodHRwcyJ9.c2ln"
+    }
+    result = _run_redaction_check(tmp_path, record)
+    assert result.returncode == 1, result.stdout
 
 
 def test_withholding_the_record_is_said_out_loud():
@@ -1046,6 +1134,16 @@ def test_withholding_the_record_is_said_out_loud():
     guard = steps["Confirm the record names no resource and carries no token"]
     withheld = steps["Say that the record was withheld"]
     assert guard["id"] in withheld["if"]
-    assert "== 'failure'" in withheld["if"]
     assert "GITHUB_STEP_SUMMARY" in withheld["run"]
+
+
+def test_the_two_gates_cover_every_case_between_them():
+    """One publishes, one explains, and no conclusion falls through both."""
+    steps = _steps()
+    upload = steps["Keep the record"]["if"]
+    withheld = steps["Say that the record was withheld"]["if"]
+    assert upload.replace("==", "!=") == withheld, (
+        f"the two conditions are not complements:\n  {upload}\n  {withheld}"
+    )
+
 

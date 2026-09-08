@@ -321,11 +321,15 @@ jobs:
       # Not `always()`. A record this job's own check rejected is the one
       # record that must not be published: this repository is public, so an
       # artifact is world-readable from the moment it exists, and deleting it
-      # afterwards is a different fact from never having uploaded it. The step
-      # still runs for every other failure, because a record of a run that
-      # broke is the point of the run.
+      # afterwards is a different fact from never having uploaded it.
+      #
+      # `== 'success'` rather than `!= 'failure'`, so that a check which never
+      # ran does not read as a check that passed. The check is itself
+      # `always()`, so it succeeds whenever it found a clean record — including
+      # when an earlier step failed, which is when the record is most worth
+      # keeping.
       - name: Keep the record
-        if: always() && steps.leak_check.conclusion != 'failure'
+        if: always() && steps.leak_check.conclusion == 'success'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: codex-foundry-connection
@@ -336,16 +340,16 @@ jobs:
           retention-days: 90
 
       - name: Say that the record was withheld
-        if: always() && steps.leak_check.conclusion == 'failure'
+        if: always() && steps.leak_check.conclusion != 'success'
         run: |
           set -euo pipefail
           {
             echo "### The record was not published"
             echo ""
-            echo "The redaction check rejected it, so \`Keep the record\` was"
-            echo "skipped. The record exists only on the runner and goes away"
-            echo "with it. Read the check's output above for what it found —"
-            echo "it names the kind of thing, never the thing."
+            echo "The redaction check did not pass it, so \`Keep the record\`"
+            echo "was skipped. The record exists only on the runner and goes"
+            echo "away with it. Read the check's output above for what it"
+            echo "found — it names the kind of thing, never the thing."
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Summary
