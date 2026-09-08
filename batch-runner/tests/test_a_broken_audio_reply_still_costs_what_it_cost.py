@@ -55,6 +55,7 @@ from core.cost_receipts import (
     BUCKET_GRADING,
     BUCKET_PROBLEM_SOLVING,
     REASON_CALL_REACHABILITY_UNKNOWN,
+    REASON_CALL_REFUSED_UNPRICED,
     REASON_PRICE_MISSING,
     REASON_USAGE_ABSENT,
     REASON_USAGE_PARTIAL,
@@ -450,42 +451,60 @@ def test_criteria_refused_by_name_after_a_refusal_file_no_calls(
 # ── the provider refused, or broke ───────────────────────────────────────
 
 
-@pytest.mark.parametrize("status", [400, 500], ids=["refused", "broke"])
+@pytest.mark.parametrize(
+    "status,expected_state,expected_reason",
+    [
+        (400, "refused", REASON_CALL_REFUSED_UNPRICED),
+        (500, "reserved", REASON_CALL_REACHABILITY_UNKNOWN),
+    ],
+    ids=["refused", "broke"],
+)
 def test_a_refused_request_is_recorded_as_unknown_not_as_free(
-    tmp_path, document, audio_deployment, wav_file, status
+    tmp_path,
+    document,
+    audio_deployment,
+    wav_file,
+    status,
+    expected_state,
+    expected_reason,
 ):
-    """A call that raised leaves a reservation nobody closed.
+    """A call that raised is on the ledger, and *why* it raised decides how.
 
-    Recording what is true today, and it is deliberately the same for both
-    statuses: the metered wrapper reserves before the request and settles
-    after it, so an exception in between leaves the row ``reserved`` and the
-    receipt goes ``partial`` with ``call_reachability_unknown``.
+    The two statuses used to land in the same place and that was the defect
+    this test was written to pin. The metered wrapper reserves before the
+    request and settles after it, so an exception in between left the row
+    ``reserved`` and the receipt ``partial`` with
+    ``call_reachability_unknown`` — for both.
 
-    For the ``500`` that is the right answer. The request went out, no usable
-    answer came back, and whether the provider billed it is exactly what
-    nobody knows.
+    For the ``500`` that is still the right answer. The request went out, no
+    usable answer came back, and whether the provider billed it is exactly
+    what nobody knows.
 
-    For the ``400`` the amount is right and the *reason* is wrong. §6.2 of
+    For the ``400`` the amount was right and the *reason* was wrong. §6.2 of
     ``TASK_PER_TASK_COST_RECEIPTS.md`` defines that reason as「API 도달 여부
     불명확」— whether the call reached the API is unclear. A ``400`` is a
     status, and a status is an answer: the request demonstrably reached the
     provider and the provider demonstrably declined it before running any
-    model. Reachability is the one thing that is *not* unknown here. The
-    adapter already acts on that knowledge — ``_UNBILLED_STATUS`` hands the
-    criterion's turn back because nothing was spent — while the ledger is
-    never told, so the receipt publishes doubt about a fact the process next
-    to it is certain of.
+    model. Reachability is the one thing that is *not* unknown there. The
+    adapter already acted on that knowledge — ``_UNBILLED_STATUS`` hands the
+    criterion's turn back because nothing was spent — while the ledger was
+    never told, so the receipt published doubt about a fact the process next
+    to it was certain of.
 
-    Nor is ``abandon`` the existing answer: §6.2 reserves it for a call that
-    「나가지 않았음이 확실할 때」, and this one went out. The gap is that no
-    state means *reached, answered, definitively unbilled*.
+    ``abandon`` was not the answer either: §6.2 reserves it for a call that
+    「나가지 않았음이 확실할 때」, and this one went out. An abandoned row is
+    dropped from the receipt, which would have turned a refusal into a
+    *complete* receipt of $0 — the one reading worse than doubt.
 
-    Not fixed here — the fix is in shared metering code
-    (``core/cost_metering.py``'s ``MeteredClient._around``), so the argument,
-    a failing test and a proposed change live in
-    ``tasks/rebuilding_grading_task/341-what-a-refused-call-costs.md``. This
-    test pins today's behaviour so a change to it has to be deliberate, and so
-    that nobody reads the ``400`` row as a settled ``$0``.
+    The argument and the proposed change were written up in
+    ``tasks/rebuilding_grading_task/341-what-a-refused-call-costs.md`` and
+    implemented in shared metering code, so a definitive refusal is now its
+    own state. Both endings are asserted here by name rather than by "either
+    of the two", because a test that accepted both would pass again on the
+    day the distinction is lost.
+
+    What has not changed, and is asserted for both: the row exists, it claims
+    no amount, and the receipt refuses to call the task complete.
     """
     prices = _price_file(tmp_path, audio_deployment)
     client = _Client([_ProviderRefused(status)])
@@ -500,13 +519,22 @@ def test_a_refused_request_is_recorded_as_unknown_not_as_free(
     assert str(verdicts[0].judge_error).startswith("provider_error")
 
     assert len(rows) == 1
-    assert rows[0]["state"] == "reserved"
+    assert rows[0]["state"] == expected_state
     assert rows[0]["model_cost_usd"] is None
 
     assert receipt.status == STATUS_PARTIAL
-    assert REASON_CALL_REACHABILITY_UNKNOWN in receipt.missing_reasons
-    # Unknown is not zero: the receipt claims no amount for this call at all.
+    assert expected_reason in receipt.missing_reasons
+    # The states are told apart, so the reasons must be too: a refusal that
+    # still published doubt about reachability would be the old behaviour
+    # wearing a new name.
+    assert set(receipt.missing_reasons) & {
+        REASON_CALL_REFUSED_UNPRICED,
+        REASON_CALL_REACHABILITY_UNKNOWN,
+    } == {expected_reason}
+    # Unknown is not zero, and neither is unbilled: the receipt claims no
+    # amount for this call at all, and it is still counted as a call.
     assert receipt.known_cost_usd == Decimal("0")
+    assert receipt.model_calls == 1
 
 
 def test_one_unknown_call_does_not_erase_the_known_ones_beside_it(

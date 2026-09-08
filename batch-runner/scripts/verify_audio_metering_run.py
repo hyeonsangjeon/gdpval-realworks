@@ -38,10 +38,18 @@ have been made.
 **It will not judge the grading.** Whether the sub-judge heard the clip is
 337/338's question and is not this one. A run in which every verdict was
 unreadable can pass all nine conditions here -- that is condition 7, and it is
-the point.
+the point. Condition 7 does separate an unreadable *reply*, which was billed
+and must settle, from a request that *raised*, which must be a refused or an
+unresolved row and never a settled one.
 
 Exit codes: ``0`` every answerable condition passed, ``1`` at least one
-failed, ``2`` the files could not be read or do not describe each other.
+failed, ``2`` the files could not be read or do not describe each other. Note
+what ``0`` does *not* say: a paid run in which nothing failed and something
+was unanswerable also exits 0, under the verdict ``inconclusive``. The exit
+code answers "is this cost record sound", and the verdict word answers "was
+the question the run was funded to settle actually settled". Reading the
+first as the second is the mistake this tool exists to prevent, so a caller
+that cares about the second must read ``verdict``, not the status.
 """
 
 from __future__ import annotations
@@ -61,12 +69,14 @@ if str(REPO_ROOT / "batch-runner") not in sys.path:
 from core.cost_receipts import (  # noqa: E402
     BUCKET_GRADING,
     BUCKET_PROBLEM_SOLVING,
+    REASON_CALL_REFUSED_UNPRICED,
     REASON_PRICE_MISSING,
     REASON_USAGE_ABSENT,
     REASON_USAGE_PARTIAL,
     STAGE_BUCKET,
     STAGE_PERCEPTION,
     STATE_ABANDONED,
+    STATE_REFUSED,
     STATE_RESERVED,
     STATE_SETTLED,
     STATUS_COMPLETE,
@@ -94,9 +104,24 @@ RESULT_UNANSWERABLE = "unanswerable"
 #: different next actions and both otherwise print as a blank.
 UNANSWERABLE_REHEARSAL = "rehearsal"
 UNANSWERABLE_NOT_METERED = "not_metered"
+#: The provider refused every request, so no model ran and no reply carried
+#: usage. Distinct from the two above: the path was exercised and the rows are
+#: on the ledger, but the evidence condition 2 asks for was never produced by
+#: anyone. Failing on it would blame the ledger for the provider's answer.
+UNANSWERABLE_NO_MODEL_RAN = "no_model_ran"
 
 VERDICT_MEASURED_OK = "measured_ok"
 VERDICT_REHEARSAL_OK = "rehearsal_ok"
+#: A paid run that failed nothing and answered less than everything.
+#:
+#: It exists because the alternative was worse in both directions. Reporting
+#: such a run as ``rehearsal_ok`` puts the word *rehearsal* on an artifact that
+#: cost money -- the exact confusion this whole tool is built to prevent --
+#: and reporting it as ``measured_ok`` claims a measurement that was not made.
+#: The live case is a paid run every one of whose calls came back refused: the
+#: cost record is correct and complete, and nothing at all was learned about
+#: whether audio token counts survive the trip.
+VERDICT_INCONCLUSIVE = "inconclusive"
 VERDICT_FAILED = "failed"
 
 #: Reasons that describe a *price* that does not exist, as against usage that
@@ -346,14 +371,25 @@ def condition_2(
     and there is no provider in a rehearsal to state it. A rehearsal that
     reported audio tokens would be reporting a number this repository wrote,
     which is worth less than nothing.
+
+    Unanswerable a second way, and this one can happen on a paid run: if the
+    provider refused every request there is no reply for a token count to have
+    come back on. That is the provider's answer, not the ledger dropping
+    something, and it is the reason the run's verdict is ``inconclusive``
+    rather than either ``measured_ok`` or a failure.
     """
     title = "소리를 실은 행마다 audio_input_tokens > 0"
     settled = [row for row in perception_rows if row.get("state") == STATE_SETTLED]
+    refused = [row for row in perception_rows if row.get("state") == STATE_REFUSED]
     counts = {
         str(row.get("call_id")): _int_or_none(row.get("audio_input_tokens"))
         for row in settled
     }
-    data = {"settled_rows": len(settled), "audio_input_tokens": counts}
+    data = {
+        "settled_rows": len(settled),
+        "refused_rows": len(refused),
+        "audio_input_tokens": counts,
+    }
     if not measured:
         return _unanswerable(
             2,
@@ -362,6 +398,23 @@ def condition_2(
             "count, so the absence of one here is the stub being honest and "
             "not the ledger losing anything. Only a paid run answers this.",
             UNANSWERABLE_REHEARSAL,
+            data,
+        )
+    if not settled and refused:
+        # Not a pass: nothing here shows an audio token count surviving the
+        # trip, which is the whole of what this condition asks. Not a fail
+        # either: a refusal is the provider declining before any model ran, so
+        # there was never a reply carrying the count that could have been
+        # lost. The rows are on the ledger, counted and claiming nothing --
+        # that is conditions 1, 4 and 5, and they answer for themselves.
+        return _unanswerable(
+            2,
+            title,
+            f"all {len(refused)} perception row(s) were refused by the "
+            f"provider, so no model ran and no reply carried an audio token "
+            f"count. The cost of those calls is recorded; whether audio "
+            f"usage survives metering is untested by this run.",
+            UNANSWERABLE_NO_MODEL_RAN,
             data,
         )
     if not settled:
@@ -417,13 +470,43 @@ def condition_3(
         for row in perception_rows
         if row.get("state") == STATE_RESERVED
     ]
+    refused = [
+        str(row.get("call_id"))
+        for row in perception_rows
+        if row.get("state") == STATE_REFUSED
+    ]
+    # A refused row holds no counts to compare, which is why it is listed
+    # rather than left to show up as a silent zero on the ledger side. The
+    # adapter's own figure for that call is zero too -- nothing came back to
+    # count -- so the totals still agree, and a reader seeing 0 in / 0 out
+    # needs to be able to tell "the provider refused" from "the usage was
+    # dropped between the reply and the row".
+    carrying_tokens = [
+        str(row.get("call_id"))
+        for row in perception_rows
+        if row.get("state") == STATE_REFUSED
+        and (
+            _int_or_none(row.get("input_tokens"))
+            or _int_or_none(row.get("output_tokens"))
+        )
+    ]
     data = {
         "adapter_input_tokens": adapter_input,
         "adapter_output_tokens": adapter_output,
         "ledger_input_tokens": ledger_input,
         "ledger_output_tokens": ledger_output,
         "rows_left_reserved": unsettled,
+        "rows_refused": refused,
     }
+    if carrying_tokens:
+        return _failed(
+            3,
+            title,
+            f"{len(carrying_tokens)} row(s) recorded as refused before any "
+            f"model ran still carry token counts. A refusal reports no usage, "
+            f"so a count on one came from somewhere other than the reply.",
+            data,
+        )
     if adapter_input != ledger_input or adapter_output != ledger_output:
         return _failed(
             3,
@@ -437,7 +520,8 @@ def condition_3(
     return _passed(
         3,
         title,
-        f"{ledger_input} in / {ledger_output} out on both sides",
+        f"{ledger_input} in / {ledger_output} out on both sides"
+        + (f", with {len(refused)} refused row(s) carrying none" if refused else ""),
         data,
     )
 
@@ -477,6 +561,28 @@ def condition_4(
             table_moved,
         )
     settled = [row for row in perception_rows if row.get("state") == STATE_SETTLED]
+    refused_rows = [row for row in perception_rows if row.get("state") == STATE_REFUSED]
+    # A refusal is the second way a call ends up with no rate on it, and it is
+    # the one that most easily turns into a clean bill of $0: the provider said
+    # no model ran, and "no model ran" reads a great deal like "nothing was
+    # charged". It is not the same statement. The row has to say so by name and
+    # claim nothing, exactly as an unpriced settled row does.
+    refusal_defects = [
+        {
+            "call_id": str(row.get("call_id")),
+            "state": row.get("state"),
+            "reasons": list(_reasons(row)),
+            "model_cost_usd": row.get("model_cost_usd"),
+            "why": (
+                "amount_on_a_refusal"
+                if row.get("model_cost_usd") not in (None, "")
+                else "refusal_not_named"
+            ),
+        }
+        for row in refused_rows
+        if row.get("model_cost_usd") not in (None, "")
+        or REASON_CALL_REFUSED_UNPRICED not in _reasons(row)
+    ]
     unpriced: list[dict[str, Any]] = []
     for row in settled:
         provider = str(row.get("provider") or "")
@@ -501,6 +607,8 @@ def condition_4(
         )
     data = {
         "unpriced_rows": unpriced,
+        "refused_rows": len(refused_rows),
+        "refusal_defects": refusal_defects,
         "receipt_status": receipt.status,
         "estimated_cost_usd": (
             None
@@ -509,12 +617,31 @@ def condition_4(
         ),
         "receipt_reasons": list(receipt.missing_reasons),
     }
+    if refusal_defects:
+        named = ", ".join(sorted({entry["why"] for entry in refusal_defects}))
+        return _failed(
+            4,
+            title,
+            f"{len({entry['call_id'] for entry in refusal_defects})} refused "
+            f"row(s) do not record the refusal the way the receipt reads it "
+            f"({named}). A refusal that carries an amount was priced from "
+            f"something, and one that does not carry "
+            f"{REASON_CALL_REFUSED_UNPRICED} drops out of the receipt's "
+            f"reasons and leaves it looking settled.",
+            data,
+        )
     if not unpriced:
         return _passed(
             4,
             title,
             "every settled row names a model this table prices, so there is "
-            "no absent price for the receipt to have to admit to",
+            "no absent price for the receipt to have to admit to"
+            + (
+                f"; the {len(refused_rows)} refused row(s) claim no amount and "
+                f"say {REASON_CALL_REFUSED_UNPRICED}"
+                if refused_rows
+                else ""
+            ),
             data,
         )
     unrecorded = [
@@ -673,6 +800,14 @@ def condition_7(
     *expected* to contain unreadable verdicts and they are expected to have
     cost exactly as much as readable ones.
 
+    A verdict can also be missing for a reason that is not a parse failure at
+    all: the request raised. Those two have to land in different ledger states
+    and the difference is not cosmetic -- a reply that came back was billed
+    and must settle, while a request the provider refused ran no model and
+    must be a ``refused`` row claiming nothing. Treating them alike in either
+    direction is a way to lose a charge, so they are counted apart here, from
+    the wire record rather than from the error text.
+
     A run in which every verdict parsed is not a failure of this condition --
     it just has nothing to say about it.
     """
@@ -680,10 +815,22 @@ def condition_7(
     calls = report.get("calls") or []
     broken = [call for call in calls if call.get("judge_error")]
     settled = [row for row in perception_rows if row.get("state") == STATE_SETTLED]
+    refused = [row for row in perception_rows if row.get("state") == STATE_REFUSED]
+    reserved = [row for row in perception_rows if row.get("state") == STATE_RESERVED]
+    abandoned = [row for row in perception_rows if row.get("state") == STATE_ABANDONED]
+    wired = [call for call in calls if isinstance(call.get("wire"), dict)]
+    raised_per_call = [
+        _int_or_none((call.get("wire") or {}).get("requests_that_raised"))
+        for call in wired
+    ]
+    raised_known = wired and all(count is not None for count in raised_per_call)
     data = {
         "calls": len(calls),
         "calls_with_judge_error": len(broken),
         "settled_rows": len(settled),
+        "refused_rows": len(refused),
+        "reserved_rows": len(reserved),
+        "abandoned_rows": len(abandoned),
         "broken_kinds": sorted({str(call.get("judge_error")) for call in broken}),
     }
     if not broken:
@@ -694,33 +841,87 @@ def condition_7(
             "protection this condition names",
             data,
         )
-    tokens_on_broken = sum(
-        int(call.get("input_tokens") or 0) for call in broken
-    )
-    data["adapter_input_tokens_on_broken_calls"] = tokens_on_broken
-    if len(settled) < len(broken):
-        return _failed(
+    if not raised_known:
+        # An older wire record does not say which requests raised, so the two
+        # shapes of broken verdict cannot be told apart here. Say so rather
+        # than pick one: the weaker comparison below is what this condition
+        # could check before the field existed, and reporting it as though it
+        # were the stronger one would overstate what was verified.
+        data["wire_records_say_which_requests_raised"] = False
+        if len(settled) < len(broken):
+            return _failed(
+                7,
+                title,
+                f"{len(broken)} verdict(s) were unreadable and only "
+                f"{len(settled)} row(s) settled. A reply that could not be "
+                f"parsed was still a reply, and it was still billed.",
+                data,
+            )
+        return _passed(
             7,
             title,
-            f"{len(broken)} verdict(s) were unreadable and only "
-            f"{len(settled)} row(s) settled. A reply that could not be parsed "
-            f"was still a reply, and it was still billed.",
+            f"{len(broken)} unreadable verdict(s) against {len(settled)} "
+            f"settled row(s). This run's wire records do not say which "
+            f"requests raised, so a refusal and an unreadable reply are not "
+            f"told apart here.",
             data,
         )
-    if measured and not tokens_on_broken:
+
+    raised = sum(count or 0 for count in raised_per_call)
+    replies = sum(_int_or_none((c.get("wire") or {}).get("requests")) or 0 for c in wired)
+    replies -= raised
+    data["requests_that_raised"] = raised
+    data["replies_that_came_back"] = replies
+    if len(settled) != replies:
         return _failed(
             7,
             title,
-            f"{len(broken)} unreadable verdict(s) report no input tokens at "
-            f"all, so the usage was lost on exactly the calls this condition "
-            f"exists to protect",
+            f"{replies} request(s) came back with a reply and {len(settled)} "
+            f"row(s) settled. A reply that could not be parsed was still a "
+            f"reply, and it was still billed.",
+            data,
+        )
+    if len(refused) + len(reserved) != raised:
+        return _failed(
+            7,
+            title,
+            f"{raised} request(s) raised and the ledger holds "
+            f"{len(refused)} refused plus {len(reserved)} reserved row(s) for "
+            f"them"
+            + (
+                f", with {len(abandoned)} filed as never sent. A request that "
+                f"raised on the way back had already gone out, and an "
+                f"abandoned row is dropped from the receipt entirely."
+                if abandoned
+                else ". A request that raised is either one the provider "
+                "answered or one whose fate is unknown, and both are rows."
+            ),
+            data,
+        )
+    answered = [
+        call
+        for call in broken
+        if (_int_or_none((call.get("wire") or {}).get("requests")) or 0)
+        > (_int_or_none((call.get("wire") or {}).get("requests_that_raised")) or 0)
+    ]
+    tokens_on_answered = sum(int(call.get("input_tokens") or 0) for call in answered)
+    data["broken_verdicts_that_got_a_reply"] = len(answered)
+    data["adapter_input_tokens_on_broken_calls"] = tokens_on_answered
+    if measured and answered and not tokens_on_answered:
+        return _failed(
+            7,
+            title,
+            f"{len(answered)} unreadable verdict(s) got a reply and report no "
+            f"input tokens at all, so the usage was lost on exactly the calls "
+            f"this condition exists to protect",
             data,
         )
     return _passed(
         7,
         title,
-        f"{len(broken)} unreadable verdict(s), all of them settled and "
-        f"carrying usage",
+        f"{len(broken)} verdict(s) without a judgement: {len(answered)} got a "
+        f"reply and settled carrying usage, {raised} raised and are on the "
+        f"ledger as {len(refused)} refused / {len(reserved)} unresolved",
         data,
     )
 
@@ -889,8 +1090,9 @@ def verdict_of(conditions: Sequence[Condition], *, measured: bool) -> str:
         return VERDICT_REHEARSAL_OK
     if any(condition.result == RESULT_UNANSWERABLE for condition in conditions):
         # A paid run that still could not answer something is not a clean
-        # measurement, and calling it one would put the gap out of sight.
-        return VERDICT_REHEARSAL_OK
+        # measurement. It is not a rehearsal either -- that word belongs to
+        # runs that spent nothing, and a paid run wearing it reads as free.
+        return VERDICT_INCONCLUSIVE
     return VERDICT_MEASURED_OK
 
 
@@ -1038,6 +1240,18 @@ def render(outcome: dict[str, Any]) -> str:
         lines.append(
             "  VERDICT rehearsal_ok — nothing failed, and this is NOT evidence "
             "that a paid audio call was metered."
+        )
+    elif verdict == VERDICT_INCONCLUSIVE:
+        unanswered = [
+            entry for entry in outcome["conditions"]
+            if entry["result"] == RESULT_UNANSWERABLE
+        ]
+        lines.append(
+            "  VERDICT inconclusive — this run spent money and still could "
+            "not answer "
+            + ", ".join(f"condition {entry['condition']}" for entry in unanswered)
+            + ". What it did spend is recorded; the question it was run to "
+            "settle is not settled."
         )
     else:
         lines.append("  VERDICT failed")

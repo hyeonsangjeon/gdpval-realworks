@@ -12,6 +12,76 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Added
+- **A refusal now reaches the audio checker as a refusal, and a paid run whose
+  every call was declined is `inconclusive` rather than `rehearsal_ok`.** The
+  shared fix `341` proposed landed in the common metering code (not this
+  branch's work, and not edited here): a verifiable HTTP refusal settles as
+  **`refused` / `call_refused_unpriced`** instead of leaving a standing
+  reservation. `340`'s pinned expectation moved with it — `[refused]` is now
+  `refused` and `[broke]` (5xx) stays `reserved` / `call_reachability_unknown`
+  — and both branches are pinned **by state and by reason**, separately,
+  because a test written to accept either would still pass on the day the
+  distinction is lost. A refused row is **counted as a call, claims no amount,
+  and holds the receipt at `partial`**; routing it to `abandoned` instead
+  would drop it out of `model_calls` and close an all-refused run as a
+  **complete receipt for `$0`**, which says the run spent nothing rather than
+  that its cost is unclaimed.
+- **Condition 7 tells a reply apart from a request that never got one.** It
+  used to require a settled row for every broken verdict, which on an
+  all-refused run produced the sentence *"a reply that could not be parsed was
+  still a reply, and it was still billed"* about calls that were never
+  answered — a false statement, found by running the integration rather than
+  by reading it. It now reads `requests_that_raised` off the wire records and
+  asks two things separately: replies must have settled rows, raises must have
+  refused-or-reserved ones. **The loose form was rejected on purpose** —
+  "settled or refused, either is fine" is one line shorter and passes on the
+  day a reply's row goes missing, so a deliberate test deletes a settled row
+  and requires condition 7 to fail. A report that does not carry the raised
+  count **says it cannot tell them apart** instead of pretending to, and that
+  fallback has its own test.
+- **`inconclusive` — a fourth verdict, for a paid run that failed nothing and
+  answered nothing.** Condition 2 becomes `unanswerable` by two different
+  routes now, carried in `unanswerable_because`: `rehearsal`, where there was
+  no provider to answer, and `no_model_ran`, where the calls were all refused.
+  The second is not a rehearsal — that word belongs to runs that spent
+  nothing, and a paid artifact wearing it reads as free — and it is not
+  `measured_ok` either, which would claim a measurement nobody made. The exit
+  status stays **0**, because what the status answers is *does this cost
+  record hold together*; whether the run learned what it wanted is the
+  **verdict word**, and callers that need the second must read `verdict`
+  rather than the status. `342` §1 and `343` §5.4 now state the two exit-code
+  scales side by side: the measurement's `2` means the **accuracy** question
+  went unanswered, the checker's `0` means the **cost** question was answered,
+  and a run can honestly be both at once.
+- **All eight ways a metered audio call can end are walked end to end** in
+  `tests/test_every_way_an_audio_call_can_end_is_metered.py` (13 tests), from
+  the production adapter through the receipt to all nine checker conditions. A
+  verifiable refusal is a counted call with no amount; a request stopped by
+  the ceiling leaves **no row and no wire record at all**, because the cap
+  raises inside `WireClient` above the metered client, which is what keeps
+  condition 1 an equality rather than an inequality; a timeout stays
+  `reserved`, since a request that may have been served is not the same as one
+  that provably was not; a reply with no usage block settles as `usage_absent`
+  because the reply itself is the evidence it was billed; an unpriced model
+  reports `null`, never `$0`; an unreadable reply settles carrying its usage;
+  re-reading the export reproduces a refusal unchanged; a recorded cost is not
+  overwritten by a second, differing settlement; and `refused` is terminal —
+  settling or abandoning one raises. One asymmetry is worth knowing before
+  reading the rows: a **refusal writes its reason onto the row**, while a
+  reserved row's `missing_reasons` is empty and `call_reachability_unknown` is
+  **derived by the receipt** from the row still being open, so that ending is
+  asserted on the receipt and not on the row.
+- **None of this changed what the rehearsal reports, and nothing was bought.**
+  The checker still returns **8 passed, 0 failed, 1 unanswerable —
+  `rehearsal_ok`** on the offline run; it was not turned into 9/9. The grader
+  fingerprint moved with the shared fix, `50f6f8bb…` → `ee1ca0b0…`,
+  recomputed here rather than taken on report; the price table did not move
+  (`b01b384c…`), which is the point of pinning the two separately. **Both
+  remain provisional** — they were computed on a checkout carrying an
+  unmerged commit, not on `main` — so `342` §0's two fingerprint rows stay
+  unticked and the paid run stays unstarted. `gpt-audio-1.5` was not called,
+  no ledger row was bought, and `337`'s artifacts and pre-registration are
+  untouched.
 - **The metering path `340` found missing now runs end to end, with no model
   called and nothing bought.** `measure_audio_grading_accuracy.py` opens the
   production `cost_recorder`, meters the client **inside** `WireClient` rather
@@ -38,7 +108,8 @@ entries land under a fresh dated heading the day they merge to `main`.
   identity once the document names the manifest's own digest. Judgement is
   `scripts/verify_audio_metering_run.py`, which reads the report and the
   ledger export and nothing else — no model, no credentials, no network — and
-  reports `measured_ok` / `rehearsal_ok` / `failed`. A rehearsal cannot reach
+  reports `measured_ok` / `rehearsal_ok` / `inconclusive` / `failed`. A
+  rehearsal cannot reach
   `measured_ok`: the stub has no audio tokens, so condition 2 is recorded as
   **`unanswerable`, a third state that is neither pass nor fail**, and the
   verdict stops one short of the paid one.
@@ -69,9 +140,12 @@ entries land under a fresh dated heading the day they merge to `main`.
   the other. A run stopped by its request ceiling exits 3 and **still exports
   the request that already went out**, because export happens in `finally` —
   exporting only on success would delete the record of exactly the spend
-  nobody planned. Thirty-eight tests across
-  `tests/test_the_metering_run_goes_end_to_end.py` (19) and
-  `tests/test_the_metering_check_can_fail.py` (19); the second feeds the
+  nobody planned. Sixty-six tests across four files —
+  `tests/test_the_metering_run_goes_end_to_end.py` (19),
+  `tests/test_the_metering_check_can_fail.py` (20),
+  `tests/test_a_broken_audio_reply_still_costs_what_it_cost.py` (14) and
+  `tests/test_every_way_an_audio_call_can_end_is_metered.py` (13); the second
+  feeds the
   checker wrong task attribution, duplicate rows, an unsettled call, an
   inflated `pricing_complete` and an amount on a row with no rate, and
   requires **the condition that claims to catch each one** to be the one that

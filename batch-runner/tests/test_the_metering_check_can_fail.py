@@ -139,12 +139,21 @@ def _write_pair(
     task_ids=None,
     settle=(True, True),
     judge_errors=(None, None),
+    wire_says_which_raised=True,
 ):
     """A report and the ledger beside it, as a passing run would leave them."""
     export, digest, receipt, table = _build_ledger(
         tmp_path, task_ids=task_ids, settle=settle
     )
     unpriced = [DEPLOYMENT] if table.lookup("azure", DEPLOYMENT) is None else []
+    wire = {"requests": 1, "requests_with_audio": 1}
+    if wire_says_which_raised:
+        # Every request here came back, so this is 0 rather than absent. The
+        # field distinguishes a reply that could not be read from a request
+        # that raised, and condition 7 needs it to tell condition 7's two
+        # halves apart. ``wire_says_which_raised=False`` builds a report from
+        # before the field existed, which one test below uses on purpose.
+        wire["requests_that_raised"] = 0
     report = {
         "measured": measured,
         "calls": [
@@ -153,7 +162,7 @@ def _write_pair(
                 "input_tokens": usage["input_tokens"],
                 "output_tokens": usage["output_tokens"],
                 "judge_error": judge_errors[index],
-                "wire": {"requests": 1, "requests_with_audio": 1},
+                "wire": dict(wire),
             }
             for index, usage in enumerate(CALL_USAGE)
         ],
@@ -268,6 +277,31 @@ def test_a_run_whose_verdicts_all_broke_still_passes(tmp_path):
     assert seventh["result"] == "pass"
     assert seventh["data"]["calls_with_judge_error"] == 2
     assert outcome["verdict"] == checker.VERDICT_MEASURED_OK
+
+
+def test_a_report_that_cannot_say_which_requests_raised_says_so(tmp_path):
+    """An older wire record makes condition 7 weaker, and it has to admit it.
+
+    ``requests_that_raised`` is what lets condition 7 separate a reply that
+    came back unreadable — billed, and therefore settled — from a request the
+    provider refused. A report written before that field existed cannot make
+    the distinction, and the two available wrong answers are to fail it (for
+    the crime of being old) or to pass it under the stronger sentence it did
+    not earn. It does neither: it runs the weaker comparison and prints which
+    one it ran.
+    """
+    report_path, _ = _write_pair(
+        tmp_path,
+        judge_errors=("format_error:unparseable_json", "sub_judge_declined"),
+        wire_says_which_raised=False,
+    )
+    seventh = _condition(checker.check(report_path), 7)
+
+    assert seventh["result"] == "pass"
+    assert seventh["data"]["wire_records_say_which_requests_raised"] is False
+    assert "not say which requests raised" in seventh["detail"]
+    # The stronger reading is not quietly claimed alongside the weaker one.
+    assert "requests_that_raised" not in seventh["data"]
 
 
 # ── the four deliberate defects ──────────────────────────────────────────

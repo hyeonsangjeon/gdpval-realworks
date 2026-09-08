@@ -2686,6 +2686,22 @@ def summarise_wire(records: Sequence[dict[str, Any]]) -> dict[str, Any]:
     return {
         "requests": len(records),
         "requests_with_audio": len(sent),
+        # How many of those requests came back as an exception rather than a
+        # reply. Recorded because it is the one fact that tells a verdict
+        # broken by an unreadable *answer* apart from a verdict missing
+        # because the request was refused or never came back at all, and the
+        # two have to end up in different ledger states. The checker compares
+        # this count against those states; without it, a refusal reads as a
+        # reply whose usage went missing.
+        #
+        # A count and not the error, deliberately. ``str(exc)`` from a provider
+        # SDK routinely quotes the request URL and can quote a header, this
+        # report is committed, and the ledger's own ``note`` already carries
+        # the shape of the failure -- built there from a status number rather
+        # than from a message.
+        "requests_that_raised": sum(
+            1 for r in records if r.get("transport_error") is not None
+        ),
         "audio_sha256": sent[-1]["audio_sha256"] if sent else None,
         "audio_bytes": wav.get("bytes"),
         "audio_sample_rate_hz": wav.get("sample_rate_hz"),
