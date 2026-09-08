@@ -1,0 +1,833 @@
+"""Hand one GDPVal task to the real Codex runtime and collect what it made.
+
+This is the execution half of the Codex run place; ``core/codex_runtime_config``
+holds the settings half. The runtime here is not a stand-in: the pinned
+``openai-codex`` SDK starts the Codex binary as ``codex app-server`` and speaks
+JSON-RPC to it, so a turn run through this module is the agent harness doing
+its own planning, its own tool calls and its own file edits. We give it a
+directory and a prompt; what it does in between is its own.
+
+That is also why the shape of this module differs from the other run places.
+``core/subprocess_runner.py`` asks a model for a program and then runs the
+program itself, so it knows exactly how many requests happened and exactly what
+executed. Here we know neither. What we can control is the boundary — one fresh
+session per task, one directory per task, a wall-clock limit, and a sweep for
+anything still running afterwards — and that boundary is what this module is
+mostly made of.
+
+Refusal instead of substitution
+-------------------------------
+
+Every failure path returns a result saying what went wrong. None of them falls
+back to another runner. A comparison of run places is only worth reading if the
+Codex column contains Codex results or an explicit reason it has none; a
+silently substituted subprocess run would make the column a duplicate of a
+neighbouring one while still being labelled Codex.
+"""
+
+from __future__ import annotations
+
+import os
+import re
+import shutil
+import tempfile
+import threading
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Optional, Sequence
+
+from core.codex_cost import (
+    CodexTokenTotals,
+    read_thread_totals,
+    settle_codex_turn,
+    turn_usage_delta,
+)
+from core.codex_runtime_config import (
+    CodexProviderConfigurationError,
+    CodexProviderLike,
+    CodexRuntimeUnavailable,
+    FORBIDDEN_STATIC_AZURE_CREDENTIAL_ENV,
+    NEUTRALISED_ENV_NAMES,
+    build_isolated_environment,
+    require_pinned_runtime,
+)
+from core.cost_receipts import STAGE_GENERATION, RETRY_NONE, make_call_id
+from core.execution_envelope_observed import (
+    API_FAMILY_RESPONSES,
+    RecordsItsFirstRequest,
+)
+from core.execution_environment_readiness import (
+    ENVIRONMENT_CODEX_COMMAND_LINE_TOOL_FOUNDRY,
+)
+from core.reference_integrity import ReferenceIntegrityError, copy_verified_reference
+
+#: Wall-clock limit for one task's turn. Longer than the subprocess mode's
+#: limit because an agent's turn covers planning, several model requests and
+#: however many commands it decides to run, where the subprocess mode's covers
+#: only the execution of a program already written.
+CODEX_TURN_TIMEOUT = int(os.getenv("CODEX_TURN_TIMEOUT", "900"))
+
+#: How long to wait for a turn to stop after we ask it to. Codex is told to
+#: interrupt first; only when that produces nothing is the process torn down.
+CODEX_INTERRUPT_GRACE_SECONDS = float(os.getenv("CODEX_INTERRUPT_GRACE", "20"))
+
+#: Files the runtime keeps for its own purposes, which are not deliverables.
+_NOT_A_DELIVERABLE = (
+    ".codex",
+    ".git",
+    "__pycache__",
+    ".pytest_cache",
+    ".venv",
+    "node_modules",
+)
+
+_NTFS_FORBIDDEN = re.compile(r'[:"<>|*?\r\n]')
+
+
+class CodexRunError(RuntimeError):
+    """A Codex run could not start or could not be trusted to have run."""
+
+
+# ── Orphan sweep ────────────────────────────────────────────────────────────
+#
+# ``CodexClient.close`` signals the app-server it started and nothing else. The
+# agent, though, spawns commands of its own, and those are grandchildren of
+# this process. If the app-server goes away without reaping them they keep
+# running — holding the task's directory open, and in a batch run accumulating
+# across tasks.
+#
+# So the boundary is drawn here instead: take the set of this process's
+# descendants before the runtime starts, take it again after the runtime is
+# closed, and stop whatever is new. Working from a before-and-after difference
+# rather than from "everything under us" keeps a batch runner's other children
+# out of range.
+
+
+def _descendant_pids(root_pid: int) -> set[int]:
+    """Every live descendant of ``root_pid``, read from ``/proc``.
+
+    Returns an empty set where ``/proc`` is not available, which makes the
+    sweep a no-op rather than an error on platforms that do not have it. A
+    sweep that cannot see is reported as having found nothing, and
+    :class:`CodexWorkspace` records that difference rather than claiming a
+    clean result it did not observe.
+    """
+    proc = Path("/proc")
+    if not proc.is_dir():
+        return set()
+    children: dict[int, list[int]] = {}
+    for entry in proc.iterdir():
+        if not entry.name.isdigit():
+            continue
+        try:
+            status = (entry / "status").read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        parent = None
+        for line in status.splitlines():
+            if line.startswith("PPid:"):
+                try:
+                    parent = int(line.split(":", 1)[1].strip())
+                except ValueError:
+                    parent = None
+                break
+        if parent is None:
+            continue
+        children.setdefault(parent, []).append(int(entry.name))
+
+    found: set[int] = set()
+    frontier = [root_pid]
+    while frontier:
+        current = frontier.pop()
+        for child in children.get(current, ()):
+            if child in found:
+                continue
+            found.add(child)
+            frontier.append(child)
+    return found
+
+
+def sweep_orphans(before: set[int], root_pid: int | None = None) -> tuple[int, ...]:
+    """Stop descendants that appeared since ``before``; return what was stopped.
+
+    ``SIGTERM`` first, then ``SIGKILL`` for anything still alive, because a
+    command holding a half-written file should get its chance to finish the
+    write. Processes that disappear between the two are the normal case and are
+    not an error.
+    """
+    import signal
+    import time
+
+    root = os.getpid() if root_pid is None else root_pid
+    survivors = sorted(_descendant_pids(root) - before)
+    if not survivors:
+        return ()
+
+    for pid in survivors:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except (ProcessLookupError, PermissionError):
+            continue
+    deadline = time.monotonic() + 5.0
+    while time.monotonic() < deadline:
+        still = [pid for pid in survivors if pid in _descendant_pids(root)]
+        if not still:
+            return tuple(survivors)
+        time.sleep(0.1)
+    for pid in survivors:
+        if pid not in _descendant_pids(root):
+            continue
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            continue
+    return tuple(survivors)
+
+
+# ── Per-task workspace ──────────────────────────────────────────────────────
+
+
+@dataclass
+class CodexWorkspace:
+    """One task's directories: where it works, and where its runtime lives.
+
+    Four separate roots, because they answer to different owners:
+
+    ``workspace``  what Codex may write in, and where deliverables are looked
+                   for afterwards.
+    ``codex_home`` ``CODEX_HOME`` — the runtime's config, sign-in state and
+                   session files. Inside the task, so a run cannot read or
+                   write the operator's own.
+    ``home``       ``HOME`` and the XDG roots, so a tool that writes "to the
+                   home directory" writes here.
+    ``root``       the temporary parent that holds all three and is removed
+                   with the task.
+    """
+
+    root: Path
+    workspace: Path
+    codex_home: Path
+    home: Path
+    staged_reference_names: tuple[str, ...] = ()
+
+    @classmethod
+    def create(cls, *, task_id: str) -> "CodexWorkspace":
+        safe = re.sub(r"[^A-Za-z0-9._-]", "_", task_id)[:48] or "task"
+        root = Path(tempfile.mkdtemp(prefix=f"gdpval-codex-{safe}-"))
+        workspace = root / "workspace"
+        codex_home = root / "codex_home"
+        home = root / "home"
+        for directory in (workspace, codex_home, home):
+            directory.mkdir(parents=True, exist_ok=False)
+        return cls(
+            root=root, workspace=workspace, codex_home=codex_home, home=home
+        )
+
+    def stage_references(self, reference_files: Sequence[str] | None) -> None:
+        """Copy the task's reference files in, verified, read-only.
+
+        Uses the repository's own ``copy_verified_reference``, so the copy is
+        checked against the source's digest and left at mode 0o400 exactly as
+        it is for every other run place. Two tasks never share a directory, so
+        one task's references cannot appear in another's — the isolation is the
+        directory, not a filter.
+        """
+        if not reference_files:
+            return
+        names: list[str] = []
+        for source in reference_files:
+            copied = copy_verified_reference(source, self.workspace)
+            names.append(Path(str(copied)).name)
+        self.staged_reference_names = tuple(names)
+
+    def collect_deliverables(self) -> list[dict[str, Any]]:
+        """Everything in the workspace that is not an input or runtime litter.
+
+        Walks subdirectories, because an agent given a directory frequently
+        makes one. The staged references are excluded by name: they came from
+        the task, and returning them as output would credit the run with
+        producing its own inputs.
+        """
+        skip = set(self.staged_reference_names)
+        collected: list[dict[str, Any]] = []
+        for path in sorted(self.workspace.rglob("*")):
+            if path.is_dir():
+                continue
+            try:
+                relative = path.relative_to(self.workspace)
+            except ValueError:  # pragma: no cover - rglob stays inside
+                continue
+            if any(part in _NOT_A_DELIVERABLE for part in relative.parts):
+                continue
+            if relative.as_posix() in skip or relative.name in skip:
+                continue
+            if path.suffix == ".pyc":
+                continue
+            if path.is_symlink():
+                # A link can point outside the task. The bytes it names were
+                # not produced here, so it is not collected as a deliverable.
+                continue
+            try:
+                content = path.read_bytes()
+            except OSError:
+                continue
+            collected.append(
+                {
+                    "filename": _NTFS_FORBIDDEN.sub("_", relative.as_posix()),
+                    "content": content,
+                }
+            )
+        return collected
+
+    def cleanup(self) -> None:
+        """Remove the task's directories, including the read-only copies."""
+
+        def _force(func, path, _exc):  # pragma: no cover - platform dependent
+            try:
+                os.chmod(path, 0o700)
+            except OSError:
+                return
+            func(path)
+
+        shutil.rmtree(self.root, onerror=_force)
+
+
+# ── The runner ──────────────────────────────────────────────────────────────
+
+
+@dataclass
+class CodexRunOutcome:
+    """What one turn produced, before it is flattened to the runner's dict."""
+
+    success: bool
+    text: str
+    files: list[dict[str, Any]] = field(default_factory=list)
+    error: str | None = None
+    error_category: str | None = None
+    usage_delta: CodexTokenTotals = field(default_factory=CodexTokenTotals)
+    thread_id: str | None = None
+    turn_id: str | None = None
+    swept_pids: tuple[int, ...] = ()
+
+
+class CodexAgentRunner(RecordsItsFirstRequest):
+    """Runs one GDPVal task per Codex session against a Foundry deployment."""
+
+    #: Codex opens its own requests inside a turn and does not report how many.
+    #: ``True`` describes the boundary we do control — a new session, and one
+    #: turn, per task — and the count inside it is exactly what the cost
+    #: adapter marks ``call_reachability_unknown``.
+    SENDS_A_FRESH_REQUEST_PER_TURN = True
+
+    #: What we put in front of the agent about its reference files: the
+    #: directory listing and the names. Not previews — the agent reads the
+    #: files itself with its own tools, which is the reason to use it at all.
+    #: Claiming a preview section we do not build would misreport the
+    #: comparison's one-first-request check.
+    REFERENCE_FILE_PROMPT_SECTIONS = ("file_structure", "available_files")
+
+    FIRST_REQUEST_EXTRA_SECTIONS: tuple[str, ...] = ()
+
+    OBSERVED_RUN_PLACE = ENVIRONMENT_CODEX_COMMAND_LINE_TOOL_FOUNDRY
+
+    #: Codex speaks the Responses contract to its provider — that is what
+    #: ``wire_api = "responses"`` in the provider table selects, and the only
+    #: family ``core.codex_runtime_config.SUPPORTED_WIRE_API`` allows. Recorded
+    #: rather than left at the inherited chat-completions default, because the
+    #: comparison tells the two families apart and a wrong label here would
+    #: hide a run place having changed products.
+    OBSERVED_API_FAMILY = API_FAMILY_RESPONSES
+
+    def __init__(
+        self,
+        provider: CodexProviderLike,
+        *,
+        timeout: int | None = None,
+        cost_ledger: Any | None = None,
+        run_id: str | None = None,
+        condition_name: str | None = None,
+        codex_bin: str | None = None,
+        verify_runtime: bool = True,
+    ) -> None:
+        """
+        Args:
+            provider: which deployment to call and how to describe it. Either
+                a :class:`~core.codex_runtime_config.CodexProviderSettings`
+                naming a real Foundry deployment, or a
+                :class:`~core.codex_runtime_config.LoopbackCodexProvider`,
+                which can only name a server on this machine and is how the
+                end-to-end check runs the real runtime without paying for it.
+            timeout: wall-clock seconds for one turn.
+            cost_ledger: a ``CostReceiptLedger``. Optional, because a
+                structure check has no ledger; when absent no cost is recorded
+                and nothing is invented to stand in for it.
+            codex_bin: path to the Codex binary. Left ``None``, the SDK finds
+                the one the pinned distribution installed, which is what any
+                real run uses.
+            verify_runtime: check the pinned versions on construction.
+        """
+        if not isinstance(provider, CodexProviderLike):
+            raise CodexProviderConfigurationError(
+                "the Codex run place needs a provider description; refusing "
+                "to guess an endpoint or a deployment"
+            )
+        self.provider = provider
+        self.timeout = int(timeout) if timeout else CODEX_TURN_TIMEOUT
+        self.cost_ledger = cost_ledger
+        self.run_id = run_id
+        self.condition_name = condition_name
+        self.codex_bin = codex_bin
+        self.shared_first_request = False
+        self.last_run_diagnostics: dict[str, Any] | None = None
+        self._turns_per_task: dict[str, int] = {}
+
+        if verify_runtime:
+            # Raised, not swallowed. A missing runtime must stop the run place,
+            # not quietly downgrade it to something else that does work.
+            require_pinned_runtime()
+
+    # -- SDK access ---------------------------------------------------------
+
+    def _build_environment(self, workspace: CodexWorkspace) -> dict[str, str]:
+        """The isolated environment, plus whatever the provider needs in it.
+
+        The provider's additions are checked against the names the isolation
+        blanks and the names the repository forbids outright, so this cannot
+        become a route back in for a static Azure credential — which is the
+        one thing the auth-command design exists to prevent.
+        """
+        environment = build_isolated_environment(
+            codex_home=workspace.codex_home, task_home=workspace.home
+        )
+        extra = dict(self.provider.extra_environment())
+        if extra:
+            blanked = set(NEUTRALISED_ENV_NAMES) | set(
+                FORBIDDEN_STATIC_AZURE_CREDENTIAL_ENV
+            )
+            offending = sorted(set(extra) & blanked)
+            if offending:
+                raise CodexProviderConfigurationError(
+                    "a provider asked to set "
+                    + ", ".join(offending)
+                    + " in the Codex environment; those names are blanked or "
+                    "forbidden here"
+                )
+            environment.update(extra)
+        return environment
+
+    def _build_codex(self, workspace: CodexWorkspace) -> Any:
+        environment = self._build_environment(workspace)
+        overrides = self.provider.config_overrides()
+        try:
+            from openai_codex import Codex
+            from openai_codex.client import CodexConfig
+        except ImportError as exc:
+            raise CodexRuntimeUnavailable(
+                f"the pinned Codex SDK could not be imported ({exc})"
+            ) from None
+        config = CodexConfig(
+            codex_bin=self.codex_bin,
+            config_overrides=tuple(overrides),
+            env=environment,
+            cwd=str(workspace.workspace),
+        )
+        return Codex(config)
+
+    def _sandbox_preset(self) -> Any:
+        """The filesystem policy for the agent: write inside its workspace.
+
+        Read-only would stop it producing a deliverable at all; full access
+        would let it out of the task directory, which is the isolation this run
+        place is built on. There is no argument that turns this off, including
+        for the mock check — a check that ran the agent unsandboxed would be
+        checking a configuration nothing else uses.
+        """
+        from openai_codex import Sandbox
+
+        return Sandbox.workspace_write
+
+    def _approval_mode(self) -> Any:
+        """Never stop to ask. A batch run has nobody to answer."""
+        from openai_codex import ApprovalMode
+
+        return ApprovalMode.deny_all
+
+    # -- prompt -------------------------------------------------------------
+
+    def build_task_text(
+        self,
+        task_prompt: str,
+        workspace: CodexWorkspace,
+        *,
+        occupation: str = "professional",
+        perception_text: str | None = None,
+    ) -> str:
+        """The one message the agent gets, plus what is on disk beside it."""
+        parts = [
+            f"You are working as a {occupation}.",
+            "",
+            task_prompt.strip(),
+        ]
+        if perception_text:
+            parts.extend(["", perception_text.strip()])
+        parts.extend(
+            [
+                "",
+                "Working directory: this is your workspace. Write every "
+                "deliverable here as a real file. Anything you leave outside "
+                "it will not be collected.",
+            ]
+        )
+        if workspace.staged_reference_names:
+            listing = "\n".join(
+                f"- {name}" for name in workspace.staged_reference_names
+            )
+            parts.extend(
+                [
+                    "",
+                    "Reference files already in the working directory "
+                    "(read-only):",
+                    listing,
+                ]
+            )
+        else:
+            parts.extend(["", "This task has no reference files."])
+        return "\n".join(parts)
+
+    # -- run ----------------------------------------------------------------
+
+    def run(
+        self,
+        task_prompt: str,
+        model: str | None = None,
+        reference_files: Optional[list] = None,
+        occupation: str = "professional",
+        experiment_prompt: Optional[dict] = None,
+        perception_text: Optional[str] = None,
+        run_id: Optional[str] = None,
+        condition_name: Optional[str] = None,
+        task_id: Optional[str] = None,
+    ) -> dict:
+        """Run one task in a fresh Codex session and return the standard dict.
+
+        ``model`` is accepted for signature compatibility with the other run
+        places, but it must match the deployment the provider was configured
+        with. Letting a caller name a different deployment here would let an
+        experiment's recorded model and the model actually called drift apart
+        without anything noticing.
+        """
+        requested = (model or self.provider.model).strip()
+        if requested != self.provider.model:
+            return self._failure(
+                f"this Codex run place is configured for deployment "
+                f"{self.provider.model!r} and was asked for {requested!r}; "
+                "refusing rather than calling a different model than the one "
+                "the run will be recorded against",
+                category="model_mismatch",
+            )
+
+        workspace: CodexWorkspace | None = None
+        try:
+            workspace = CodexWorkspace.create(task_id=task_id or "task")
+        except OSError as exc:
+            return self._failure(
+                f"could not create the task workspace: {exc}",
+                category="workspace_error",
+            )
+
+        try:
+            try:
+                workspace.stage_references(reference_files)
+            except (ReferenceIntegrityError, OSError) as exc:
+                return self._failure(
+                    f"could not stage the task's reference files: {exc}",
+                    category="reference_error",
+                )
+
+            outcome = self._run_one_turn(
+                workspace=workspace,
+                task_text=self.build_task_text(
+                    task_prompt,
+                    workspace,
+                    occupation=occupation,
+                    perception_text=perception_text,
+                ),
+                experiment_prompt=experiment_prompt,
+                task_id=task_id,
+            )
+        finally:
+            if workspace is not None:
+                try:
+                    workspace.cleanup()
+                except OSError:
+                    pass
+
+        self.last_run_diagnostics = {
+            "thread_id": outcome.thread_id,
+            "turn_id": outcome.turn_id,
+            "swept_orphan_pids": list(outcome.swept_pids),
+            "usage_delta": {
+                "input_tokens": outcome.usage_delta.input_tokens,
+                "cached_input_tokens": outcome.usage_delta.cached_input_tokens,
+                "cache_write_input_tokens": (
+                    outcome.usage_delta.cache_write_input_tokens
+                ),
+                "output_tokens": outcome.usage_delta.output_tokens,
+                "reasoning_output_tokens": (
+                    outcome.usage_delta.reasoning_output_tokens
+                ),
+            },
+        }
+        result: dict[str, Any] = {
+            "success": outcome.success,
+            "text": outcome.text,
+            "files": outcome.files,
+        }
+        if outcome.error:
+            result["error"] = outcome.error
+        if outcome.error_category:
+            result["error_category"] = outcome.error_category
+        return result
+
+    def _run_one_turn(
+        self,
+        *,
+        workspace: CodexWorkspace,
+        task_text: str,
+        experiment_prompt: Optional[dict],
+        task_id: Optional[str],
+    ) -> CodexRunOutcome:
+        before_pids = _descendant_pids(os.getpid())
+        call_id: str | None = None
+        codex: Any = None
+        try:
+            try:
+                codex = self._build_codex(workspace)
+            except (CodexRuntimeUnavailable, CodexProviderConfigurationError) as exc:
+                return CodexRunOutcome(
+                    success=False,
+                    text="",
+                    error=str(exc),
+                    error_category="runtime_unavailable",
+                )
+            except Exception as exc:  # noqa: BLE001
+                return CodexRunOutcome(
+                    success=False,
+                    text="",
+                    error=f"the Codex runtime would not start: {exc}",
+                    error_category="runtime_start_failed",
+                )
+
+            developer_instructions = None
+            if isinstance(experiment_prompt, dict):
+                system = experiment_prompt.get("system")
+                if isinstance(system, str) and system.strip():
+                    developer_instructions = system.strip()
+
+            try:
+                thread = codex.thread_start(
+                    model=self.provider.model,
+                    model_provider=self.provider.provider_id,
+                    cwd=str(workspace.workspace),
+                    sandbox=self._sandbox_preset(),
+                    approval_mode=self._approval_mode(),
+                    developer_instructions=developer_instructions,
+                )
+            except Exception as exc:  # noqa: BLE001
+                return CodexRunOutcome(
+                    success=False,
+                    text="",
+                    error=f"the Codex session would not open: {exc}",
+                    error_category="session_start_failed",
+                )
+
+            before_totals = CodexTokenTotals.zero()
+            call_id = self._reserve_call(task_id)
+
+            try:
+                turn_handle = thread.turn(task_text)
+            except Exception as exc:  # noqa: BLE001
+                # The turn never started, so nothing was sent and nothing was
+                # billed. This is one of the few places `abandon` is right.
+                self._abandon_call(call_id, "the turn never started")
+                call_id = None
+                return CodexRunOutcome(
+                    success=False,
+                    text="",
+                    error=f"the Codex turn would not start: {exc}",
+                    error_category="turn_start_failed",
+                    thread_id=getattr(thread, "id", None),
+                )
+
+            result, timed_out, failure = self._await_turn(turn_handle)
+
+            if timed_out:
+                # Deliberately **not** abandoned. The turn was sent; the model
+                # may well have answered and been billed. The reservation stays
+                # open, which is the ledger's way of saying "a cost may exist
+                # here that we cannot measure".
+                files = workspace.collect_deliverables()
+                return CodexRunOutcome(
+                    success=False,
+                    text="",
+                    files=files,
+                    error=(
+                        f"the Codex turn exceeded {self.timeout} seconds and "
+                        "was interrupted"
+                    ),
+                    error_category="timeout",
+                    thread_id=getattr(thread, "id", None),
+                    turn_id=getattr(turn_handle, "id", None),
+                )
+
+            if failure is not None:
+                files = workspace.collect_deliverables()
+                return CodexRunOutcome(
+                    success=False,
+                    text="",
+                    files=files,
+                    error=f"the Codex turn failed: {failure}",
+                    error_category="turn_failed",
+                    thread_id=getattr(thread, "id", None),
+                    turn_id=getattr(turn_handle, "id", None),
+                )
+
+            after_totals = read_thread_totals(getattr(result, "usage", None))
+            delta = turn_usage_delta(before_totals, after_totals)
+            self._settle_call(call_id, delta)
+            call_id = None
+
+            files = workspace.collect_deliverables()
+            text = getattr(result, "final_response", None) or ""
+            return CodexRunOutcome(
+                success=True,
+                text=text,
+                files=files,
+                usage_delta=delta,
+                thread_id=getattr(thread, "id", None),
+                turn_id=getattr(result, "id", None),
+            )
+        finally:
+            if codex is not None:
+                try:
+                    codex.close()
+                except Exception:  # noqa: BLE001 - closing must not mask a result
+                    pass
+            swept = sweep_orphans(before_pids)
+            if swept:
+                self.last_swept_pids = swept
+
+    def _await_turn(self, turn_handle: Any) -> tuple[Any, bool, str | None]:
+        """Consume a turn under a wall clock; interrupt it if it overruns.
+
+        The SDK exposes no timeout of its own — ``Thread.run`` blocks until the
+        turn completes — so the limit is enforced here, by consuming the turn on
+        a worker thread and asking Codex to interrupt when the clock runs out.
+        Interrupting first, rather than killing the process, gives the agent the
+        chance to finish writing whatever file it had open.
+        """
+        box: dict[str, Any] = {}
+
+        def _consume() -> None:
+            try:
+                box["result"] = turn_handle.run()
+            except BaseException as exc:  # noqa: BLE001
+                box["error"] = exc
+
+        worker = threading.Thread(
+            target=_consume, name="codex-turn", daemon=True
+        )
+        worker.start()
+        worker.join(self.timeout)
+
+        if worker.is_alive():
+            try:
+                turn_handle.interrupt()
+            except Exception:  # noqa: BLE001
+                pass
+            worker.join(CODEX_INTERRUPT_GRACE_SECONDS)
+            return None, True, None
+
+        error = box.get("error")
+        if error is not None:
+            return None, False, str(error)
+        return box.get("result"), False, None
+
+    # -- cost ---------------------------------------------------------------
+
+    def _reserve_call(self, task_id: str | None) -> str | None:
+        """Open a receipt for the turn we are about to send.
+
+        One receipt per turn, not per model request. Codex opens however many
+        requests it needs inside a turn and reports only a running thread
+        total, so a per-request receipt would be a row we invented. What the
+        ledger gets instead is one row for the boundary we do control, carrying
+        ``call_reachability_unknown`` — the repository's existing word for
+        "this covers calls we could not enumerate".
+
+        The identifier is built the same way ``core.cost_metering`` builds its
+        own, so a Codex row merges with the rest of a run's rows instead of
+        sitting under a naming scheme of its own. ``attempt_index`` counts this
+        runner's turns per task: re-running a task must open a second receipt,
+        not settle a second result onto the first one's row.
+        """
+        if self.cost_ledger is None:
+            return None
+        task = task_id or "unknown-task"
+        attempt = self._turns_per_task.get(task, 0)
+        self._turns_per_task[task] = attempt + 1
+        call_id = make_call_id(
+            run_id=self.run_id or getattr(self.cost_ledger, "run_id", "codex"),
+            task_id=task,
+            stage=STAGE_GENERATION,
+            retry_kind=RETRY_NONE,
+            attempt_index=attempt,
+            sequence=0,
+        )
+        self.cost_ledger.reserve(
+            call_id=call_id,
+            task_id=task,
+            stage=STAGE_GENERATION,
+            retry_kind=RETRY_NONE,
+            provider="azure",
+            requested_model=self.provider.model,
+            deployment=self.provider.model,
+            api_version="v1",
+            note="one Codex turn; the model requests inside it are not "
+            "individually reported",
+        )
+        return call_id
+
+    def _settle_call(self, call_id: str | None, delta: CodexTokenTotals) -> None:
+        if self.cost_ledger is None or call_id is None:
+            return
+        settle_codex_turn(
+            self.cost_ledger,
+            call_id,
+            totals=delta,
+            resolved_model=self.provider.model,
+        )
+
+    def _abandon_call(self, call_id: str | None, note: str) -> None:
+        if self.cost_ledger is None or call_id is None:
+            return
+        try:
+            self.cost_ledger.abandon(call_id, note=note)
+        except Exception:  # noqa: BLE001 - a ledger fault must not hide the run's
+            pass
+
+    # -- helpers ------------------------------------------------------------
+
+    @staticmethod
+    def _failure(message: str, *, category: str) -> dict:
+        return {
+            "success": False,
+            "text": "",
+            "files": [],
+            "error": message,
+            "error_category": category,
+        }
+
+    def close(self) -> None:
+        """Nothing outlives a task here; each run closes its own runtime."""
+        return None

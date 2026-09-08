@@ -5,9 +5,12 @@ deployment in the same Microsoft Foundry resource every other place asks, so
 what changes is the program and nothing else. The third asks a model GitHub
 picks, which is not a difference in run place at all.
 
-None of these three can run a task in this repository today. These tests exist
-so that the reasons stay written down, stay checkable against the code they
-cite, and cannot be quietly turned into "it works" by a plan that says so.
+Two of the three still have no code behind them at all. The Codex place now
+does — see ``core.codex_runner`` and ``tests/test_codex_runtime_end_to_end.py``
+— but having code is not the same as having reached the deployment, and these
+tests keep that distinction from collapsing. For all three, the reasons stay
+written down, stay checkable against the code they cite, and cannot be quietly
+turned into "it works" by a plan that says so.
 
 Nothing here calls a model, contacts a provider, or spends money.
 """
@@ -43,7 +46,9 @@ from core.execution_environment_readiness import (
     SERVING_PATH_FIXED_BY_ENVIRONMENT,
     SERVING_PATH_GITHUB_SERVED_COPILOT,
     SERVING_PATH_MICROSOFT_FOUNDRY_DEPLOYMENT,
+    STATUS_CAN_RUN_REAL_EXPERIMENT,
     STATUS_NOT_IMPLEMENTED_HERE,
+    STATUS_STRUCTURE_CHECK_ONLY,
     ModelRunConditions,
     build_readiness_report,
     check_comparisons_are_scored_apart,
@@ -54,6 +59,15 @@ from core.execution_environment_readiness import (
 
 THE_THREE = (
     ENVIRONMENT_CODEX_COMMAND_LINE_TOOL_FOUNDRY,
+    ENVIRONMENT_COPILOT_COMMAND_LINE_TOOL_FOUNDRY,
+    ENVIRONMENT_COPILOT_COMMAND_LINE_TOOL_GITHUB_SERVED,
+)
+
+#: The two of the three that still have no code behind them. Kept as its own
+#: list rather than expressed as "the three minus Codex", so that implementing
+#: one of the Copilot places is a deliberate edit here and not a test that
+#: silently stops covering it.
+STILL_UNIMPLEMENTED = (
     ENVIRONMENT_COPILOT_COMMAND_LINE_TOOL_FOUNDRY,
     ENVIRONMENT_COPILOT_COMMAND_LINE_TOOL_GITHUB_SERVED,
 )
@@ -107,12 +121,56 @@ def test_the_new_place_is_part_of_the_comparison(environment):
     assert len(describe_environment(environment).split()) >= 8
 
 
-@pytest.mark.parametrize("environment", THE_THREE)
+@pytest.mark.parametrize("environment", STILL_UNIMPLEMENTED)
 def test_the_new_place_has_no_way_to_run_a_task_here(environment):
     """Graded from the absence of code, not from an opinion written down."""
     assert EXECUTION_MODE_BY_ENVIRONMENT[environment] is None
     assert RUNNER_CLASS_BY_ENVIRONMENT[environment] is None
     assert _entry(environment).status == STATUS_NOT_IMPLEMENTED_HERE
+
+
+def test_the_codex_place_has_code_but_is_still_not_a_place_that_can_run():
+    """Registration is not reachability, and the grade must say so.
+
+    The adapter exists, is named by the mode table, and is exercised against a
+    stand-in runtime. None of that is a request a Foundry deployment answered,
+    so the grade is the one meaning "structure only" — moving it up would put a
+    run place in the comparison on the strength of its own code reading.
+    """
+    environment = ENVIRONMENT_CODEX_COMMAND_LINE_TOOL_FOUNDRY
+    assert EXECUTION_MODE_BY_ENVIRONMENT[environment] == "codex_foundry"
+    assert RUNNER_CLASS_BY_ENVIRONMENT[environment] == (
+        "core.codex_runner",
+        "CodexAgentRunner",
+    )
+
+    entry = _entry(environment)
+    assert entry.status == STATUS_STRUCTURE_CHECK_ONLY
+    assert entry.status != STATUS_CAN_RUN_REAL_EXPERIMENT
+    # The evidence names the code it is claiming about, so a reader can check
+    # the claim instead of taking it.
+    assert any("core.codex_runner" in line for line in entry.evidence)
+    assert any(
+        "tests/test_codex_runtime_end_to_end.py" in line
+        for line in entry.evidence
+    )
+    # And the reasons it still cannot run are all still reported.
+    for reason in DOCUMENTED_BLOCKERS_BY_ENVIRONMENT[environment]:
+        assert reason in entry.blockers
+
+
+def test_a_batch_run_still_refuses_to_start_the_codex_mode():
+    """The grade above is advice; this is the block that actually stops a run.
+
+    Run rather than read: the guard is called, and it raises. The gate is an
+    explicit setting so that opening it is somebody deciding the connection is
+    confirmed, rather than this repository concluding it from its own code.
+    """
+    import step2_run_inference
+
+    with pytest.raises(ValueError) as refused:
+        step2_run_inference._require_runnable_execution_mode("codex_foundry")
+    assert "CODEX_FOUNDRY_CONNECTION_CONFIRMED" in str(refused.value)
 
 
 @pytest.mark.parametrize("environment", THE_THREE)
@@ -402,7 +460,7 @@ def test_the_whole_product_board_may_list_that_same_place():
 # ── A plan cannot name a place this repository cannot run ──────────────────
 
 
-@pytest.mark.parametrize("environment", THE_THREE)
+@pytest.mark.parametrize("environment", STILL_UNIMPLEMENTED)
 def test_a_plan_naming_a_place_with_no_code_behind_it_is_refused(environment):
     """Otherwise a place that does exist would stand in for one that does not,
     and the score would be filed under the name of the place that never ran."""
@@ -427,7 +485,7 @@ def test_a_plan_naming_a_place_with_no_code_behind_it_is_refused(environment):
     )
 
 
-@pytest.mark.parametrize("environment", THE_THREE)
+@pytest.mark.parametrize("environment", STILL_UNIMPLEMENTED)
 def test_the_refusal_repeats_what_is_missing_rather_than_just_saying_no(
     environment,
 ):
@@ -452,3 +510,35 @@ def test_the_refusal_repeats_what_is_missing_rather_than_just_saying_no(
     )
     for reason in DOCUMENTED_BLOCKERS_BY_ENVIRONMENT[environment]:
         assert reason in refusal
+
+
+def test_a_plan_naming_the_codex_place_does_not_make_it_ready():
+    """The refusal above is about missing code, which Codex no longer has.
+
+    What must not change is the answer to "may this run": the report still
+    grades the place structure-only and still carries every reason it cannot
+    reach its deployment, so a plan naming it cannot be read as a green light.
+    """
+    environment = ENVIRONMENT_CODEX_COMMAND_LINE_TOOL_FOUNDRY
+    report = build_readiness_report(
+        environ={},
+        conditions_by_environment={
+            ENVIRONMENT_HOST_PYTHON_PROCESS: _conditions(),
+            environment: _conditions(
+                model_serving_path=SERVING_PATH_FIXED_BY_ENVIRONMENT[environment]
+            ),
+        },
+        comparison=COMPARISON_NATIVE_PRODUCT_BUNDLE,
+        docker_daemon_available=True,
+        docker_image_available=True,
+        docker_run_setting="always",
+        azure_route_profile="project-ci",
+    )
+    graded = next(
+        entry
+        for entry in report.environments
+        if entry.environment == environment
+    )
+    assert graded.status == STATUS_STRUCTURE_CHECK_ONLY
+    for reason in DOCUMENTED_BLOCKERS_BY_ENVIRONMENT[environment]:
+        assert reason in graded.blockers

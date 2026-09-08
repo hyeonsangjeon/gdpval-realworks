@@ -36,7 +36,7 @@ from core.shared_first_request import SHARED_PROMPT_NAME
 # Execution modes
 ExecutionMode = Literal[
     "code_interpreter", "subprocess", "sandbox", "agentic_sandbox",
-    "agentic_sandbox_v2", "json_renderer",
+    "agentic_sandbox_v2", "codex_foundry", "json_renderer",
 ]
 
 #: The modes ``shared_first_request`` is really wired for.
@@ -115,6 +115,8 @@ class TaskExecutor:
         agentic_v2_backend_factory=None,
         agentic_v2_fixture_root: Optional[str | Path] = None,
         agentic_v2_scripted_calls=None,
+        codex_options: Optional[dict] = None,
+        codex_cost_ledger=None,
         non_paid_test_mode: bool = False,
         code_interpreter_client=None,
         redact_provider_errors: bool = False,
@@ -668,6 +670,60 @@ class TaskExecutor:
                 profile=agentic_v2_options or {},
             )
 
+        elif mode == "codex_foundry":
+            # The Codex program drives the task itself, so this mode takes no
+            # llm_client: there is no request here for one to make. What it
+            # needs instead is the deployment to point Codex at, and that is
+            # built and validated before the runner exists, so a bad endpoint
+            # fails here rather than inside a turn that has already been paid
+            # for.
+            from core.codex_runner import CodexAgentRunner
+            from core.codex_runtime_config import (
+                DEFAULT_PROVIDER_ID,
+                CodexProviderConfigurationError,
+                CodexProviderSettings,
+            )
+
+            opts = dict(codex_options or {})
+            if llm_client is not None or api_key is not None:
+                raise ValueError(
+                    "codex_foundry takes no llm_client and no api_key; Codex "
+                    "signs in through its own provider auth command"
+                )
+            settings = opts.get("provider_settings")
+            if settings is None:
+                endpoint_value = opts.get("endpoint") or endpoint
+                if not endpoint_value:
+                    raise CodexProviderConfigurationError(
+                        "codex_foundry requires execution.codex.endpoint"
+                    )
+                settings = CodexProviderSettings(
+                    endpoint=endpoint_value,
+                    model=opts.get("model") or model_name or "",
+                    provider_id=opts.get("provider_id") or DEFAULT_PROVIDER_ID,
+                    query_params=tuple(
+                        sorted((opts.get("query_params") or {}).items())
+                    ),
+                )
+            if not isinstance(settings, CodexProviderSettings):
+                # The runner also accepts a loopback provider, which exists so
+                # the end-to-end check can drive the real runtime against a
+                # server on this machine. That is a test instrument. An
+                # experiment reaching this branch is asking for a real run, and
+                # a real run that quietly went to localhost would produce a
+                # results file indistinguishable from one that cost money.
+                raise CodexProviderConfigurationError(
+                    "codex_foundry needs a CodexProviderSettings naming a "
+                    f"Microsoft endpoint; got {type(settings).__name__}"
+                )
+            self.runner = CodexAgentRunner(
+                settings,
+                timeout=timeout,
+                cost_ledger=codex_cost_ledger,
+                run_id=run_id,
+                condition_name=condition_name,
+            )
+
         elif mode == "json_renderer":
             if llm_client is None:
                 raise ValueError("json_renderer mode requires llm_client")
@@ -788,6 +844,24 @@ class TaskExecutor:
                     experiment_prompt=experiment_prompt,
                     perception_text=perception_text,
                     **extra,
+                ), task_id)
+
+            elif self.mode == "codex_foundry":
+                # Passed straight through, including task_id: the Codex runner
+                # names its per-task directory after it, and every failure it
+                # returns is its own reason. This branch adds no fallback — a
+                # Codex task that cannot run comes back as a failed Codex task,
+                # not as a task quietly run somewhere else.
+                return self._note_which_task(self.runner.run(
+                    task_prompt=task_prompt,
+                    model=model,
+                    reference_files=reference_files,
+                    occupation=occupation,
+                    experiment_prompt=experiment_prompt,
+                    perception_text=perception_text,
+                    run_id=run_id,
+                    condition_name=condition_name,
+                    task_id=task_id,
                 ), task_id)
 
             elif self.mode == "json_renderer":

@@ -446,6 +446,21 @@ def test_subprocess_environment_does_not_inherit_cloud_credentials(monkeypatch):
     assert "HF_TOKEN" not in env
 
 
+def _distribution_name(line: str) -> str:
+    """The name a requirements line pins, up to its first specifier.
+
+    Needed because a distribution name can be a prefix of another one. This
+    file pins ``openai``; ``requirements.txt`` also pins ``openai-codex`` and
+    ``openai-codex-cli-bin`` for the Codex run place, and a ``startswith``
+    match read all three as pins of ``openai`` -- so a correctly pinned file
+    failed the check that it was pinned exactly once.
+    """
+    name = line.strip()
+    for separator in ("==", ">=", "<=", "~=", "!=", ">", "<", "[", ";", " "):
+        name = name.partition(separator)[0]
+    return name.strip()
+
+
 @pytest.mark.parametrize(
     "requirement",
     [
@@ -460,7 +475,7 @@ def test_sdk_requirement_is_exactly_pinned_once(requirement):
     matching = [
         line.strip()
         for line in REQUIREMENTS.read_text(encoding="utf-8").splitlines()
-        if line.strip().startswith(package)
+        if _distribution_name(line) == package
     ]
 
     assert matching == [requirement]

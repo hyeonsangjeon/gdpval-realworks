@@ -795,8 +795,24 @@ def test_the_registered_document_is_one_this_diagnostic_will_accept():
     A typo in either machine-read row of the pins table would surface as a
     dispatch that dies after checkout -- free, but only because it never got
     to the calls. Better here.
+
+    The grader pin is only this checkout's business while 335 is unbought.
+    ``compute_grader_source_hash`` hashes every ``core/**`` module by content,
+    so any commit that adds a module moves it, and holding a *spent* document
+    to a fingerprint the run can no longer produce would force a rewrite of
+    what was actually bought. Once §11 records a completed run the pin is
+    history: it is read as a record, not re-derived. 333's equivalent test
+    already gates this way; this one did not, and the first ``core/`` addition
+    after 335 ran is what surfaced the gap.
+
+    The gate reads §11 rather than the header, because 335 deliberately leaves
+    its header at "사전등록. 아직 안 샀다" so that nothing above the results
+    section is edited after the fact.
     """
+    text = PREREG.read_text(encoding="utf-8")
     assert probe.diagnostic_kind_stated_in(PREREG) == diag.DIAGNOSTIC_KIND
+    if "**상태: 실행 완료." in text:
+        pytest.skip("335 has run; its pin records what was bought, not this tree")
     assert probe.grader_pin_stated_in(PREREG) == probe.grader_source_hash(
         probe.PINNED_CONFIG
     )

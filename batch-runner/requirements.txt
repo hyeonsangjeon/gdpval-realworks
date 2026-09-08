@@ -16,6 +16,16 @@ cryptography>=42.0.0
 ijson>=3.3.0
 packaging==26.2
 
+# Codex run place. Pinned exactly, both halves: the SDK does not reimplement
+# the agent, it starts the `codex` binary as an app-server and speaks JSON-RPC
+# to it, so the pair is one runtime and a floating version would silently
+# change what a run place *is*. openai-codex pins the binary wheel to the same
+# number itself; it is repeated here so the version a run used is readable from
+# this file alone. core.codex_runtime_config checks both at run time and
+# refuses the mode rather than letting another runner take the task.
+openai-codex==0.147.0
+openai-codex-cli-bin==0.147.0
+
 # Reference file readers
 pdfplumber>=0.10.0
 python-docx>=1.0.0

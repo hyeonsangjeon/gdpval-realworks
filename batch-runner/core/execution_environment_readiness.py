@@ -134,7 +134,7 @@ EXECUTION_MODE_BY_ENVIRONMENT: Mapping[str, str | None] = {
     ENVIRONMENT_AZURE_CODE_INTERPRETER: "code_interpreter",
     ENVIRONMENT_AGENTIC_SANDBOX_V2: "agentic_sandbox_v2",
     ENVIRONMENT_CODEX_BUILT_IN_AGENT: None,
-    ENVIRONMENT_CODEX_COMMAND_LINE_TOOL_FOUNDRY: None,
+    ENVIRONMENT_CODEX_COMMAND_LINE_TOOL_FOUNDRY: "codex_foundry",
     ENVIRONMENT_COPILOT_COMMAND_LINE_TOOL_FOUNDRY: None,
     ENVIRONMENT_COPILOT_COMMAND_LINE_TOOL_GITHUB_SERVED: None,
 }
@@ -153,7 +153,10 @@ RUNNER_CLASS_BY_ENVIRONMENT: Mapping[str, tuple[str, str] | None] = {
         "AgenticV2IsolatedFixtureRunner",
     ),
     ENVIRONMENT_CODEX_BUILT_IN_AGENT: None,
-    ENVIRONMENT_CODEX_COMMAND_LINE_TOOL_FOUNDRY: None,
+    ENVIRONMENT_CODEX_COMMAND_LINE_TOOL_FOUNDRY: (
+        "core.codex_runner",
+        "CodexAgentRunner",
+    ),
     ENVIRONMENT_COPILOT_COMMAND_LINE_TOOL_FOUNDRY: None,
     ENVIRONMENT_COPILOT_COMMAND_LINE_TOOL_GITHUB_SERVED: None,
 }
@@ -165,21 +168,38 @@ RUNNER_CLASS_BY_ENVIRONMENT: Mapping[str, tuple[str, str] | None] = {
 # clearing one of them does not clear the others.
 
 DOCUMENTED_BLOCKERS_BY_ENVIRONMENT: Mapping[str, tuple[str, ...]] = {
+    # Rewritten once the adapter was built. The three reasons that stood here
+    # before were read out of an older copy of the Codex configuration
+    # reference, and two of them have since stopped being true of the product:
+    # that reference now carries an Azure provider example and a query_params
+    # setting, so "no Azure example" and "no way to pass an api-version" are no
+    # longer statements about Codex. Keeping them would have been the easiest
+    # way to make a solved problem look unsolvable.
+    #
+    # What replaces them is narrower and, unlike the old text, is about this
+    # deployment rather than about the documentation. Each one names something
+    # that has not been *observed*, and no amount of reading will clear any of
+    # them — only a request that is answered will.
     ENVIRONMENT_CODEX_COMMAND_LINE_TOOL_FOUNDRY: (
-        "the Codex command-line configuration reference gives a provider its "
-        "key through env_key, an environment variable holding a static API "
-        "key, or through an auth command that prints a bearer token; this "
-        "repository forbids every static Azure credential variable in "
-        "core.azure_ai_clients.FORBIDDEN_STATIC_AZURE_CREDENTIAL_ENV and "
-        "raises in _reject_static_azure_credential_env when one is set, so the "
-        "two cannot both hold",
-        "that same reference documents no Microsoft Entra sign-in for a "
-        "provider and shows no Azure example, so there is no published route "
-        "from Codex to a Foundry deployment under this repository's sign-in "
-        "rule; absence of a documented route is not evidence that one works",
-        "the reference gives no api-version setting for a provider, while a "
-        "Foundry deployment is pinned by API version in this comparison's "
-        "fixed conditions, so the version actually used could not be shown",
+        "the sign-in has been built but never accepted: this repository "
+        "forbids every static Azure credential variable in "
+        "core.azure_ai_clients.FORBIDDEN_STATIC_AZURE_CREDENTIAL_ENV, so the "
+        "provider is authenticated by an auth command "
+        "(core.codex_azure_token) that mints an Entra token instead; no token "
+        "from it has yet been presented to a Foundry deployment and accepted, "
+        "and a route that has not answered is not a route that works",
+        "which API contract the deployment serves Codex on has not been "
+        "observed: core.codex_runtime_config refuses a dated api-version on "
+        "the undated /openai/v1/ route and lets query_params carry one on the "
+        "legacy route, but which of the two this resource answers Codex's "
+        "Responses payload on is unmeasured, and the two are not "
+        "interchangeable",
+        "the pinned Codex version has not been shown to be compatible with "
+        "this deployment in this region: core.codex_runtime_config pins "
+        "openai-codex and its bundled binary to one version, and whether that "
+        "version's Responses request is accepted by this resource's model "
+        "version and content filters is a separate question from whether the "
+        "sign-in works",
     ),
     ENVIRONMENT_COPILOT_COMMAND_LINE_TOOL_FOUNDRY: (
         "the GitHub Copilot command-line own-key documentation supplies the "
@@ -900,6 +920,48 @@ def inspect_environment_support(
                 "with a stand-in instead of describing what it would do"
             )
             blockers.extend(_agentic_sandbox_v2_blockers())
+            results.append(
+                EnvironmentReadiness(
+                    environment=environment,
+                    status=STATUS_STRUCTURE_CHECK_ONLY,
+                    evidence=evidence,
+                    blockers=blockers,
+                )
+            )
+            continue
+
+        if environment == ENVIRONMENT_CODEX_COMMAND_LINE_TOOL_FOUNDRY:
+            # Registered, so the two "there is no code path" grades above no
+            # longer apply — but registration is not reachability. The adapter
+            # starts the real Codex runtime and the settings are validated
+            # before a turn begins; what has never happened is a request this
+            # deployment answered. That gap is exactly what
+            # STATUS_STRUCTURE_CHECK_ONLY is for, and moving this to
+            # STATUS_CAN_RUN_REAL_EXPERIMENT before it closes would put a run
+            # place in the comparison on the strength of its own code reading.
+            evidence.append(
+                "the runtime is the product's own: core.codex_runner builds "
+                "openai_codex.Codex, whose client starts the pinned Codex "
+                "binary as an app-server and speaks to it, so a turn is the "
+                "Codex agent rather than a loop written here"
+            )
+            evidence.append(
+                "the version is pinned and checked at run time rather than "
+                "assumed: core.codex_runtime_config.require_pinned_runtime "
+                "reads the installed distribution and raises "
+                "CodexRuntimeUnavailable instead of letting another runner "
+                "take the task"
+            )
+            evidence.append(
+                "the end-to-end path was exercised against a stand-in "
+                "app-server rather than described: see "
+                "tests/test_codex_runtime_end_to_end.py, which starts a "
+                "runtime, has it call a tool, read a staged reference file, "
+                "write a deliverable, and settle a cost receipt"
+            )
+            blockers.extend(
+                DOCUMENTED_BLOCKERS_BY_ENVIRONMENT.get(environment, ())
+            )
             results.append(
                 EnvironmentReadiness(
                     environment=environment,
