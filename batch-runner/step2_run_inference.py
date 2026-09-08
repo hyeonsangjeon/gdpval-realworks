@@ -39,6 +39,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, List
 
+# Deliberately not in ``core/``: ``step8_grade.compute_grader_source_hash``
+# hashes every ``core/**/*.py``, so a module there would move the grader's
+# source fingerprint -- and invalidate the smoke run a paid grading run is gated
+# on -- for a file grading never calls. See its docstring.
+import dev_host_boundary
+
 from core.config import (
     BATCH_OUTPUT_DIR,
     WORKSPACE_DIR,
@@ -172,6 +178,31 @@ def _require_runnable_execution_mode(execution_mode: str) -> None:
 
 def _codex_connection_confirmed() -> bool:
     return os.getenv("CODEX_FOUNDRY_CONNECTION_CONFIRMED", "").strip() == "1"
+
+
+def _require_host_may_carry_a_benchmark_run(execution_mode: str):
+    """Refuse a run on the machine that exists to develop the benchmark.
+
+    The Xenology card allows an Azure VM for development and test and then
+    forbids quietly re-pointing a pre-registered execution arm at it. This is
+    that clause as a refusal rather than as a paragraph: the development host's
+    bootstrap writes ``/etc/gdpval-dev-host`` in its first section, and a run
+    started on a machine carrying that marker stops here.
+
+    On every machine that never went through that bootstrap there is no marker
+    and nothing happens, which is why this can sit in the ordinary path. What it
+    is *not* is a check on the run's own settings -- the arms differ in where
+    they run, and where they run is exactly what nothing else in this file can
+    see.
+    """
+    marker = dev_host_boundary.check_benchmark_allowed(
+        what=f"benchmark inference run ({execution_mode})"
+    )
+    if marker is not None:
+        # Registered arm. Say which one, so the run record and the console agree
+        # on the machine rather than leaving it to be inferred later.
+        print(f"🏷️  {dev_host_boundary.describe(marker)}")
+    return marker
 
 
 def _resolve_runnable_execution_mode(
@@ -2850,6 +2881,14 @@ def _run_inference_impl(
         )
         _require_code_interpreter_route_profile(execution_mode)
     except ValueError as exc:
+        print(f"❌ {exc}")
+        sys.exit(1)
+    try:
+        _require_host_may_carry_a_benchmark_run(execution_mode)
+    except dev_host_boundary.DevHostBoundaryError as exc:
+        # Printed whole. The message names the missing pins and the file they go
+        # in, and truncating it to a headline would leave the reader with a
+        # refusal and no way to answer it.
         print(f"❌ {exc}")
         sys.exit(1)
     if max_retries is None:

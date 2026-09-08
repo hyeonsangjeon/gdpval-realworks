@@ -110,6 +110,13 @@ batch-runner/scripts/*
 # tests/test_codex_foundry_connection_probe.py.
 !batch-runner/scripts/diagnose_codex_foundry_connection.py
 
+# Reads infra/dev-host/ and holds it to the Xenology card's deployment
+# contract -- region, image, size, key-only access, an identity with no role,
+# automatic shutdown. It runs offline and in a pull request, which is the whole
+# point of it, so it cannot be a file the checkout does not have. Held by
+# tests/test_dev_host_definition.py.
+!batch-runner/scripts/check_dev_host_definition.py
+
 
 # Experiment report HTML (skews GitHub language stats)
 batch-runner/results/*/report/report.html
