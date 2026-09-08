@@ -191,9 +191,31 @@ from typing import (
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from core.cost_metering import resolved_model_of  # noqa: E402
+# The production metering path, used rather than reimplemented. 337 spent ten
+# paid calls and left no ledger row behind them, because this script wrote its
+# own cost block out of constants instead of reaching for the code every graded
+# run already uses. Nothing below is a second implementation of that code: the
+# recorder reserves and settles, the price table prices, the receipt totals,
+# and this file only decides which task the calls belong to and where the
+# ledger lives. See 340 for what the absence of these imports cost.
+from core.cost_metering import open_cost_recorder, resolved_model_of  # noqa: E402
+from core.cost_receipts import (  # noqa: E402
+    BUCKET_GRADING,
+    PRICE_TABLE_PATH,
+    REASON_PRICE_MISSING,
+    REASON_USAGE_ABSENT,
+    REASON_USAGE_PARTIAL,
+    STAGE_GRADING,
+    STAGE_PERCEPTION,
+    CostReceipt,
+    CostReceiptLedger,
+    ReceiptPriceTable,
+    ledger_reference,
+    load_receipt_price_table,
+)
 from core.perception.audio import (  # noqa: E402
     AUDIO_CALL_CAP,
+    AUDIO_FAILURE_BUDGET,
     AUDIO_RESPONSE_CONTRACT,
     AUDIO_SAMPLE_RATE_HZ,
     AUDIO_TRIM_SECONDS,
@@ -222,6 +244,40 @@ PINNED_CONFIG = (
 #: exists.
 REPEAT_FLIP_RATE_PCT = 19.35
 REPEAT_TEXT_FLIP_RATE_PCT = 2.12
+
+#: The task every call this script makes is filed under, in the ledger and in
+#: the receipt.
+#:
+#: Not a GDPval task id, and deliberately not shaped like one. These calls
+#: grade nothing: they put synthesised clips to the audio sub-judge to find out
+#: whether it hears them. Borrowing a real task's identifier would put this
+#: diagnostic's spend inside that task's receipt, which is the exact defect
+#: 340 section 6.2 condition 5 exists to catch -- and it would be caught in a
+#: run nobody is looking at, months later, as an unexplained few cents on a
+#: task that was graded in March.
+#:
+#: One constant rather than a flag. Two runs filing under two names would put
+#: one diagnostic's spend in two receipts that each look complete.
+COST_TASK_ID = "audio_accuracy_diagnostic"
+
+#: The run identity every call id is derived from, with the kind of run
+#: appended. Stable rather than stamped with a clock, because the ledger is
+#: appended to and ``continue_rounds`` numbers each new round off the rows
+#: already in the file -- so two dispatches into one ledger cannot collide even
+#: with the same run id, and a run id that changed every time would make the
+#: rows of one diagnostic unrecognisable as belonging together.
+COST_RUN_ID_PREFIX = "audio-accuracy-diagnostic"
+
+#: What the stub answers when asked which model replied. Hoisted out of
+#: ``_StubResponse`` because the ledger guard below compares against it: a
+#: rehearsal's rows carry this string in ``resolved_model``, and that is what
+#: keeps a free run's ledger from being appended to a paid one's.
+STUB_MODEL = "stub-not-a-model"
+
+#: The provider recorded against a rehearsal's rows. ``azure`` would be a
+#: false statement about where the request went, in the one column a reader
+#: summing a month's Azure spend would filter on.
+STUB_PROVIDER = "stub"
 
 #: Audio tokens the provider billed per second of clip in run 34008840627 --
 #: exactly 10.00, across every call. Kept as a constant so that a speech run's
@@ -1801,6 +1857,79 @@ def grader_pin_stated_in(doc_path: Path) -> str:
     return found.pop()
 
 
+#: The row a pre-registration writes the price table's fingerprint into.
+#:
+#: The grader fingerprint does not cover it. ``compute_grader_source_hash``
+#: digests ``core/**``, the grading entry point, the schema, the requirements
+#: closure, the prompt template and the config -- the things that decide what
+#: the model is asked. The price table decides what the answer is said to have
+#: cost, and it can be edited without moving the grader pin by one bit.
+#:
+#: For a run whose whole question is "was the spend recorded", an unpinned
+#: price table is the gap: add a rate for ``gpt-audio-1.5`` between the
+#: pre-registration and the dispatch and the run reports a number, complete
+#: and unremarkable, that no reviewer agreed to. Pinned here, that edit stops
+#: the run instead.
+_PRICE_TABLE_PIN_ROW = re.compile(
+    r"^\|\s*가격표 지문\s*\|\s*`([0-9a-f]{64})`\s*\|", re.MULTILINE
+)
+
+
+def price_table_pin_stated_in(doc_path: Path) -> str:
+    """The price-table fingerprint a pre-registration pins."""
+    found = set(_PRICE_TABLE_PIN_ROW.findall(doc_path.read_text(encoding="utf-8")))
+    if not found:
+        raise ValueError(
+            f"{doc_path} states no price table fingerprint. A run that asks "
+            f"whether cost was recorded has to say which rates it was going "
+            f"to be recorded against; without that row, a table edited "
+            f"between registration and dispatch is invisible."
+        )
+    if len(found) > 1:
+        raise ValueError(
+            f"{doc_path} states {len(found)} different price table "
+            f"fingerprints; which one this run is supposed to use is not "
+            f"decidable"
+        )
+    return found.pop()
+
+
+#: The row a pre-registration writes the speech manifest's fingerprint into.
+#:
+#: :func:`load_speech_corpus` already checks every clip against the digest
+#: beside it in the manifest -- but the manifest is the thing making the
+#: claim, so on its own that check is a file attesting to itself. Any
+#: self-consistent manifest passes it, including one written this morning
+#: naming clips rendered by a newer eSpeak.
+#:
+#: This row is what makes it identity rather than internal consistency: the
+#: document names the manifest it agreed to, the run hashes the file it was
+#: handed, and a substitution stops the run instead of producing a number
+#: that looks exactly like the pinned corpus's.
+_MANIFEST_PIN_ROW = re.compile(
+    r"^\|\s*매니페스트 지문\s*\|\s*`([0-9a-f]{64})`\s*\|", re.MULTILINE
+)
+
+
+def manifest_pin_stated_in(doc_path: Path) -> str:
+    """The speech-manifest fingerprint a pre-registration pins."""
+    found = set(_MANIFEST_PIN_ROW.findall(doc_path.read_text(encoding="utf-8")))
+    if not found:
+        raise ValueError(
+            f"{doc_path} states no speech manifest fingerprint. Checking the "
+            f"clips against the manifest that ships with them only shows the "
+            f"manifest agrees with itself; this row is what says the manifest "
+            f"is the one this document agreed to."
+        )
+    if len(found) > 1:
+        raise ValueError(
+            f"{doc_path} states {len(found)} different speech manifest "
+            f"fingerprints; which corpus this run is supposed to send is not "
+            f"decidable"
+        )
+    return found.pop()
+
+
 #: The row a pre-registration writes to say *which* diagnostic it registers.
 #: Same shape and same reason as :data:`_GRADER_PIN_ROW`: a visible table row
 #: the operator reads before dispatching, parsed rather than restated. A file
@@ -1823,6 +1952,66 @@ SPEECH_FORMAT_PILOT_KIND = "speech-format-pilot"
 #: :data:`SPEECH_PROMPT_AB_KIND` -- 20 claims, 3 repeats, 2 arms, 120 calls --
 #: and a different document, because the header it sends is different.
 SPEECH_PROMPT_AB_V2_KIND = "speech-prompt-ab-v2"
+
+#: The metering trial 341 asks for: does a paid audio call reach the ledger.
+#:
+#: A separate kind, and deliberately not a flag on the accuracy diagnostics.
+#: What it measures is the bookkeeping path, not the sub-judge -- a run in
+#: which every verdict is unreadable passes it, and a run whose verdicts are
+#: perfect fails it if the rows are missing. Filing that question under
+#: ``speech-format-pilot`` would put an answer about the ledger in a document
+#: that registered an answer about prompts.
+#:
+#: It is not in :data:`SPEECH_TWO_ARM_REGISTRATIONS`. One arm, production,
+#: because there is nothing here to compare: two headers would double the
+#: spend to answer the same question twice.
+#:
+#: 337 and 338 are untouched by this. Their kinds, ceilings, repeats and
+#: failure criteria are exactly what they were.
+AUDIO_COST_METERING_KIND = "audio-cost-metering"
+
+#: How many criteria that kind is registered to put to the model.
+#:
+#: Two, and checked rather than assumed. The pair is what makes a ledger
+#: worth reading: one row proves a row can be written, and two prove the
+#: second was not the first counted twice -- which is the duplicate defect
+#: ``verify_audio_metering_run.py`` condition 1 exists to catch and could not
+#: catch in a one-row run.
+AUDIO_COST_METERING_CLAIMS = 2
+
+#: The wall clock this kind stops at, in seconds.
+#:
+#: Ten minutes against the speech corpus's twenty. Two calls do not need
+#: twenty minutes, and the shorter clock is what makes a hung request end the
+#: run instead of holding the operator there: the thing being tested is the
+#: record a finished run leaves, and there is nothing to read while it hangs.
+AUDIO_COST_METERING_WALL_CLOCK_SECONDS = 10 * 60
+
+#: The failure budget this kind runs with. **One, and one is the "no retries"
+#: setting** -- zero is not.
+#:
+#: :data:`~core.perception.audio.AUDIO_FAILURE_BUDGET` is compared with
+#: ``>=`` before a request goes out, so ``failure_budget=0`` refuses the
+#: first call and every call after it: the run would send nothing and report
+#: two refusals. One lets the first request go and blocks the task the moment
+#: an unbilled rejection comes back, which is the behaviour "재시도 0" is
+#: asking for -- one attempt per criterion, no second bite.
+AUDIO_COST_METERING_FAILURE_BUDGET = 1
+
+#: SDK-level retries for this kind. Zero, and this is the one that matters.
+#:
+#: Everywhere else in this script ``max_retries`` is left unset, so the
+#: openai default of two applies and a 408/409/429/5xx is retried *inside* a
+#: single ``chat.completions.create``. The meter wraps ``create``, so those
+#: retries share one ledger row: up to three HTTP requests, one row, and a
+#: run that under-reports what it sent by two thirds while every count in it
+#: agrees with every other.
+#:
+#: That is survivable for an accuracy diagnostic and fatal for this one,
+#: whose entire claim is that the rows match the requests. Off, so one row is
+#: one request. The cost is that a single 429 loses a criterion instead of
+#: retrying it, which is the right trade for a two-call run.
+AUDIO_COST_METERING_SDK_RETRIES = 0
 
 #: The row a pre-registration writes to fix *which* claims a narrowed run
 #: puts to the model. Only the pilot uses it; the full comparisons take the
@@ -1923,7 +2112,7 @@ class _StubResponse:
         #: The stub answers as itself. A dry run's report then names
         #: ``stub-not-a-model`` where a paid one names the deployment, so a
         #: free artifact cannot be read as describing ``gpt-audio-1.5``.
-        self.model = "stub-not-a-model"
+        self.model = STUB_MODEL
 
 
 class TruthfulStub:
@@ -2200,7 +2389,10 @@ SPEECH_TWO_ARM_REGISTRATIONS: dict[str, tuple[str, str]] = {
 #: different number is refused rather than quietly corrected, so the number
 #: in the run log is the number a person typed and the number the document
 #: pinned at the same time.
-SPEECH_NARROWED_KINDS: dict[str, int] = {SPEECH_FORMAT_PILOT_KIND: 1}
+SPEECH_NARROWED_KINDS: dict[str, int] = {
+    SPEECH_FORMAT_PILOT_KIND: 1,
+    AUDIO_COST_METERING_KIND: 1,
+}
 
 #: The hard ceiling on model requests, per kind.
 #:
@@ -2232,6 +2424,14 @@ SPEECH_REQUEST_CAPS: dict[str, int] = {
     #: six -- enough that a run is not lost to a couple of stray requests,
     #: nowhere near enough to fit a fourth repeat (which would need 160).
     SPEECH_PROMPT_AB_V2_KIND: 126,
+    #: 341: two criteria, one repeat, one arm -- two calls planned against a
+    #: ceiling of six. Threefold headroom on a two-call run is not generosity,
+    #: it is the number that makes the ceiling readable: if six requests go
+    #: out for two criteria then something retried, and the run stops and says
+    #: so rather than quietly buying a fourth and fifth attempt. With
+    #: :data:`AUDIO_COST_METERING_SDK_RETRIES` at zero the only way past two
+    #: is a defect, so this ceiling is expected never to fire.
+    AUDIO_COST_METERING_KIND: 6,
 }
 
 
@@ -2817,6 +3017,47 @@ SPEECH_STOP_RULES = StopRules(
     response_rate_min_observations=10,
     response_rate_alpha=0.05,
 )
+
+#: The same rules on a shorter clock, for :data:`AUDIO_COST_METERING_KIND`.
+#:
+#: Derived from :data:`SPEECH_STOP_RULES` with ``replace`` rather than
+#: restated, so a rule added to the speech run arrives here too and cannot be
+#: forgotten in one of two lists.
+#:
+#: The other rules are left exactly as they are even though a two-call run
+#: can never reach most of them -- ``zero_response_after=10`` needs ten calls
+#: and this run makes two. They stay because a rule that cannot fire costs
+#: nothing and a rule quietly dropped from a derived config is how the
+#: derived config stops being the one that was reviewed.
+#:
+#: ``stop_on_undelivered_audio`` is the one that can fire here, and it should:
+#: a run that recorded two ledger rows for two requests that carried no sound
+#: has metered something, but not the thing this is about.
+AUDIO_COST_METERING_STOP_RULES = dataclass_replace(
+    SPEECH_STOP_RULES,
+    wall_clock_seconds=AUDIO_COST_METERING_WALL_CLOCK_SECONDS,
+)
+
+
+def stop_rules_for(
+    *, metering: bool, speech: Optional[SpeechCorpus]
+) -> Optional[StopRules]:
+    """Which stop rules a run gets, as a function rather than an expression.
+
+    Three inputs, three answers, and the one that matters is the last: the
+    **tone corpus gets none**. Its numbers are published, and switching rules
+    on for that path now would change the design a reported result was
+    produced under, after the fact.
+
+    This is a function so the guard on that property can *run* it instead of
+    grepping for the line that used to hold it. The grep version broke the
+    moment the metering branch was added -- while the property it was
+    defending was still true -- which is the failure mode of a test that
+    reads source instead of calling it.
+    """
+    if metering:
+        return AUDIO_COST_METERING_STOP_RULES
+    return SPEECH_STOP_RULES if speech else None
 
 
 def _audio_was_delivered(call: dict[str, Any]) -> Optional[bool]:
@@ -3532,6 +3773,414 @@ def unanswered_claims(calls: Sequence[dict[str, Any]]) -> list[str]:
     return sorted(claim_id for claim_id, ok in seen.items() if not ok)
 
 
+# --------------------------------------------------------------------------
+# What it cost
+# --------------------------------------------------------------------------
+#
+# Until 340 this section was four hand-written constants. ``pricing_complete``
+# was ``not billable`` -- the run's own answer to "did anyone pay for this",
+# dressed up as an answer to "does every model on this bill have a rate". A
+# free run therefore announced that its pricing was complete, for a model that
+# has no price at all, and a paid run announced the opposite for exactly the
+# same reason. Neither sentence had been anywhere near the price table.
+#
+# So none of it is written here any more. The models come off the ledger rows,
+# the rates come off the shared price table, the total comes off the receipt
+# the shared code builds from those rows, and this file's remaining job is to
+# say which task the calls belong to and where the ledger is. The four
+# constants are gone rather than corrected, because a constant that happens to
+# be right is still not a measurement.
+
+
+#: Reasons a receipt can be partial, split by which half of the question they
+#: fall in. The two are not interchangeable and the report says which is which:
+#: a missing *price* is a gap in the table and costs nothing to fix later,
+#: because the tokens are recorded and can be multiplied by a rate whenever one
+#: is published. A missing *usage* is a reply nobody kept, and no later table
+#: brings it back. Reporting them as one "incomplete" hides the difference
+#: between a run that can be priced tomorrow and one that never can.
+PRICE_REASONS = (REASON_PRICE_MISSING,)
+USAGE_REASONS = (REASON_USAGE_ABSENT, REASON_USAGE_PARTIAL)
+
+
+def split_missing_reasons(reasons: Iterable[str]) -> dict[str, list[str]]:
+    """Partition a receipt's reasons into price, usage and everything else."""
+    listed = [str(reason) for reason in reasons]
+    return {
+        "price": sorted({r for r in listed if r in PRICE_REASONS}),
+        "usage": sorted({r for r in listed if r in USAGE_REASONS}),
+        "other": sorted(
+            {r for r in listed if r not in PRICE_REASONS and r not in USAGE_REASONS}
+        ),
+    }
+
+
+def ledger_models(rows: Sequence[Mapping[str, Any]]) -> list[tuple[str, str]]:
+    """The ``(provider, model)`` pairs a set of ledger rows actually reached.
+
+    ``resolved_model`` and not ``requested_model``: the reply says which model
+    answered, the request says which alias was asked for, and the price table
+    is keyed on the first. A row that has not been settled has no resolved
+    model yet and falls back to what it asked for, flagged as such by being
+    unsettled rather than by being dropped -- a row left out here is spend left
+    out of the models list.
+    """
+    pairs: set[tuple[str, str]] = set()
+    for row in rows:
+        model = row.get("resolved_model") or row.get("requested_model")
+        if not model:
+            continue
+        pairs.add((str(row.get("provider") or ""), str(model)))
+    return sorted(pairs)
+
+
+def unpriced_models(
+    pairs: Sequence[tuple[str, str]], price_table: Optional[ReceiptPriceTable]
+) -> list[str]:
+    """Which of these models the table publishes no rate for.
+
+    With no table at all every model is unpriced, which is the honest reading:
+    a lookup that could not be performed did not succeed. The alternative --
+    an empty list, meaning "nothing was found to be unpriced" -- reads as
+    completeness and is how a missing file becomes a clean bill.
+    """
+    if price_table is None:
+        return sorted({model for _, model in pairs})
+    return sorted(
+        {model for provider, model in pairs if price_table.lookup(provider, model) is None}
+    )
+
+
+def _price_table_or_none(
+    path: Optional[Path] = None,
+) -> tuple[Optional[ReceiptPriceTable], Optional[str]]:
+    """Load the shared price table, or say why not -- but never raise.
+
+    A price table that will not load is a reason to report an unknown cost, not
+    a reason to lose the run. The rows are already bought by the time anything
+    here is priced, and a crash at this point would throw away the record of
+    what they were while leaving the charge exactly where it was.
+
+    The failure is returned as a sentence rather than swallowed, because the
+    caller puts it in the report: ``unpriced_models`` will list every model in
+    the run, and without this note a reader has no way to tell "no published
+    rate for gpt-audio-1.5" from "the file that holds the rates was
+    unreadable". Those two lead to different next actions.
+    """
+    target = path or PRICE_TABLE_PATH
+    try:
+        return load_receipt_price_table(target), None
+    except Exception as exc:  # noqa: BLE001 - any failure here means "no rates"
+        return None, (
+            f"The price table at {target} could not be read ({exc}), so no "
+            f"model in this run could be priced. Every model is listed as "
+            f"unpriced for that reason and not because it has no rate."
+        )
+
+
+def record_kind_of(row: Mapping[str, Any]) -> str:
+    """Whether a ledger row was bought or rehearsed.
+
+    Read off ``provider``, which the stub sets to something no billing system
+    has ever heard of. Putting ``azure`` on a row nothing was charged for
+    would be a false statement in the one column a monthly-spend query filters
+    on, and the row would be indistinguishable from a real one the moment it
+    left this script.
+    """
+    return "rehearsal" if str(row.get("provider")) == STUB_PROVIDER else "measured"
+
+
+def ledger_record_kinds(ledger: CostReceiptLedger) -> set[str]:
+    """Which kinds of run have already written rows into this ledger."""
+    kinds: set[str] = set()
+    for task_id in ledger.task_ids():
+        for row in ledger.calls_for(task_id):
+            kinds.add(record_kind_of(row))
+    return kinds
+
+
+def close_cost_record(
+    recorder: Optional[Any],
+    *,
+    identity: Mapping[str, Any],
+    measured: bool,
+    model_calls: int,
+    export_to: Optional[Path] = None,
+    price_table_path: Optional[Path] = None,
+    notes: Sequence[str] = (),
+) -> dict[str, Any]:
+    """Close the books on a run and return its cost block.
+
+    Called from a ``finally``, so it runs on the paths that end badly as well
+    as the one that ends well. A run that hit its request ceiling, or whose
+    replies would not parse, has still bought every request it sent; the
+    sidecar is how those rows leave this process, and skipping the export on
+    the unhappy path would delete the record of exactly the spend nobody
+    planned for.
+
+    The price table is taken off the ledger rather than re-read, because the
+    rows were priced by *that* table and a second read could pick up a
+    different file.
+    """
+    if recorder is None:
+        table, table_note = _price_table_or_none(price_table_path)
+        return cost_section(
+            identity=identity,
+            measured=measured,
+            model_calls=model_calls,
+            price_table=table,
+            price_table_path=price_table_path,
+            notes=[*notes, *([table_note] if table_note else [])],
+        )
+
+    ledger = recorder.ledger
+    extra = list(notes)
+    reference: Optional[dict[str, Any]] = None
+    receipt: Optional[CostReceipt] = None
+    rows: Sequence[Mapping[str, Any]] = ()
+    try:
+        rows = ledger.calls_for(COST_TASK_ID, bucket=BUCKET_GRADING)
+        receipt = recorder.receipt_for(COST_TASK_ID, BUCKET_GRADING)
+        if export_to is not None:
+            digest = ledger.export_jsonl(export_to)
+            reference = {
+                **ledger_reference(export_to, digest),
+                "rows": len(
+                    [
+                        line
+                        for line in export_to.read_text(
+                            encoding="utf-8"
+                        ).splitlines()
+                        if line.strip()
+                    ]
+                ),
+            }
+    except Exception as exc:  # noqa: BLE001 - reported, never swallowed
+        # The rows are in the database whatever happened here; what is lost is
+        # the published copy of them. Saying so is the difference between a
+        # reader going to look for the sidecar and a reader assuming the run
+        # made none.
+        extra.append(
+            f"The ledger at {getattr(ledger, 'path', '?')} was written, but "
+            f"reading it back failed ({type(exc).__name__}: {exc}). The rows "
+            f"are still in the database; the published sidecar and the "
+            f"receipt below may be incomplete or absent."
+        )
+    finally:
+        table = ledger.price_table
+        ledger.close()
+
+    return cost_section(
+        identity=identity,
+        measured=measured,
+        model_calls=model_calls,
+        receipt=receipt,
+        rows=rows,
+        ledger=reference,
+        price_table=table,
+        price_table_path=price_table_path,
+        notes=extra,
+    )
+
+
+def cost_section(
+    *,
+    identity: Mapping[str, Any],
+    measured: bool,
+    model_calls: int,
+    receipt: Optional[CostReceipt] = None,
+    rows: Sequence[Mapping[str, Any]] = (),
+    ledger: Optional[Mapping[str, Any]] = None,
+    price_table: Optional[ReceiptPriceTable] = None,
+    price_table_path: Optional[Path] = None,
+    notes: Sequence[str] = (),
+) -> dict[str, Any]:
+    """The cost block, computed rather than declared.
+
+    Every field here is derived from something outside this file: the rows the
+    metering wrapper wrote, the table the pipeline prices everything else with,
+    and the receipt the shared code builds from the two. Called with no ledger
+    -- which is what happens when a ledger could not be opened, and what the
+    older tests do -- it still prices through the same table, and says plainly
+    that it has no receipt rather than filling the gap with a constant.
+    """
+    billable = model_calls if measured else 0
+    pairs = ledger_models(rows)
+    if not pairs and billable:
+        # No ledger to read the models off, but requests certainly went out.
+        # The configured deployment is the best available statement of where,
+        # and it is marked as coming from the configuration by the absence of
+        # a receipt beside it.
+        pairs = [("azure", str(identity["audio_deployment"]))]
+    unpriced = unpriced_models(pairs, price_table)
+
+    if not pairs:
+        # Nothing was called, so there is no bill and no claim to make about
+        # whether it is fully priced. ``true`` here is the sentence 340
+        # section 2.2 caught: vacuously right, and read by everyone as "this
+        # run's costs are fully accounted for".
+        pricing_complete: Optional[bool] = None
+    else:
+        pricing_complete = not unpriced
+
+    reasons = split_missing_reasons(
+        receipt.missing_reasons if receipt is not None else ()
+    )
+    total = None if receipt is None else receipt.estimated_cost_usd
+
+    sentences = list(notes)
+    if not measured:
+        # First, so it is the first thing read. Every other sentence in this
+        # block describes the shape of a bill, and the shape of a bill is very
+        # easy to mistake for one.
+        sentences.append(
+            "Rehearsal, not a bill. Every call above went to a local stub, so "
+            "nothing here was charged and no figure below is money. The rows "
+            "exist to show the metering path runs end to end; provider says "
+            f"'{STUB_PROVIDER}' on every one of them."
+        )
+    if unpriced and measured:
+        sentences.append(
+            f"{', '.join(unpriced)} {'is' if len(unpriced) == 1 else 'are'} "
+            f"absent from the price table, so the cost of this run is unknown "
+            f"rather than zero. null, not $0."
+        )
+    elif unpriced:
+        sentences.append(
+            f"{', '.join(unpriced)} has no published rate, which is correct: "
+            f"it is not a model and nothing was bought from it."
+        )
+    if not pairs:
+        sentences.append("No model was called; this run cost nothing.")
+    if receipt is None:
+        sentences.append(
+            "No ledger was opened for this run, so there is no receipt and no "
+            "audit trail -- the figures above are counts of calls, not a "
+            "record of spend."
+        )
+    if reasons["usage"]:
+        sentences.append(
+            "Usage is missing on at least one call "
+            f"({', '.join(reasons['usage'])}), which no later price table can "
+            "repair: a reply nobody kept cannot be re-counted."
+        )
+
+    block: dict[str, Any] = {
+        # Which kind of record this is, inside the cost block rather than
+        # beside it, so a block copied into a summary cannot arrive without
+        # it. A rehearsal's numbers are the shape of a bill and not a bill.
+        "record_kind": "measured" if measured else "rehearsal",
+        "task_id": COST_TASK_ID if receipt is not None else None,
+        # Two numbers, because a dry run makes 60 calls and is billed for
+        # none of them. Collapsing them would put a "billable_calls: 60"
+        # into a free run's report, and that is exactly the figure someone
+        # copies into a cost record.
+        "model_calls": model_calls,
+        "billable_calls": billable,
+        "models": [model for _, model in pairs],
+        "price_table": (
+            None
+            if price_table is None
+            else {
+                "path": str(price_table_path or PRICE_TABLE_PATH),
+                "sha256": price_table.sha256,
+            }
+        ),
+        "pricing_complete": pricing_complete,
+        "unpriced_models": unpriced,
+        # Whether the *usage* landed, kept apart from whether a price exists.
+        # ``None`` where there is no receipt to ask.
+        "usage_complete": None if receipt is None else not reasons["usage"],
+        "missing_reasons": reasons,
+        "estimated_cost_usd": None if total is None else float(total),
+        "receipt": None if receipt is None else receipt.as_dict(),
+        "ledger": None if ledger is None else dict(ledger),
+        "note": " ".join(sentences),
+    }
+    return block
+
+
+def _digest_of(path: Optional[Path]) -> Optional[str]:
+    """sha256 of a file, or ``None`` if it cannot be read.
+
+    Never raises. This is called while assembling a report, and a report that
+    cannot be written because one of its provenance fields was unreadable
+    loses the whole run to describe a missing digest.
+    """
+    if path is None:
+        return None
+    try:
+        return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+    except OSError:
+        return None
+
+
+def metering_section(
+    *,
+    document: Optional[Path],
+    config_path: Path,
+    speech_manifest: Optional[Path],
+    claims: int,
+    repeats: int,
+    arms: int,
+    request_cap: Optional[int],
+) -> dict[str, Any]:
+    """What the metering trial was registered as, and against what.
+
+    Deliberately does **not** repeat the fingerprints that already have a
+    home. The clip digests are ``report["clip_sha256"]``, the model and
+    deployment and grader hash are ``report["pins"]``, and the price table is
+    ``report["cost"]["price_table"]``. Copying them here would give a reader
+    two fields to compare and, eventually, two fields that disagree -- and the
+    one that is wrong would be indistinguishable from the one that is right.
+
+    What it does carry is everything else the run was held to: which document
+    opened the door, which config the identity was read out of, which
+    manifest the audio came from, and the four settings that make this run
+    different from an accuracy run. Those settings are recorded rather than
+    left to the reader to infer from the constants in this file, because the
+    constants can change and the run cannot.
+    """
+    return {
+        "diagnostic_kind": AUDIO_COST_METERING_KIND,
+        "preregistration": (
+            None
+            if document is None
+            else {"file": Path(document).name, "sha256": _digest_of(document)}
+        ),
+        "grading_config": {
+            "path": str(config_path),
+            "sha256": _digest_of(config_path),
+        },
+        "speech_manifest": (
+            None
+            if speech_manifest is None
+            else {
+                "file": Path(speech_manifest).name,
+                "sha256": _digest_of(speech_manifest),
+            }
+        ),
+        "registered": {
+            "claims": claims,
+            "repeats": repeats,
+            "arms": arms,
+            "planned_calls": claims * repeats * arms,
+            "request_cap": request_cap,
+            "wall_clock_seconds": AUDIO_COST_METERING_WALL_CLOCK_SECONDS,
+            # Both retry knobs, named apart, because "재시도 0" means a
+            # different number at each layer and a single field would have to
+            # pick one and mislead about the other.
+            "sdk_max_retries": AUDIO_COST_METERING_SDK_RETRIES,
+            "failure_budget": AUDIO_COST_METERING_FAILURE_BUDGET,
+        },
+        "what_this_is_not": (
+            "This block says what the run was registered to do. Whether it "
+            "did it is the ledger's answer, not this one -- read it with "
+            "scripts/verify_audio_metering_run.py."
+        ),
+    }
+
+
 def build_report(
     *,
     identity: dict[str, Any],
@@ -3539,10 +4188,26 @@ def build_report(
     repeats: int,
     result: dict[str, Any],
     speech: Optional[SpeechCorpus] = None,
+    cost: Optional[Mapping[str, Any]] = None,
+    metering: Optional[Mapping[str, Any]] = None,
 ) -> dict[str, Any]:
     calls = result["calls"]
     model_calls = sum(int(call["api_call_count"]) for call in calls)
-    billable = model_calls if measured else 0
+    # Built here only when the caller has nothing better -- an unmetered run,
+    # or a test calling this function directly. ``main`` builds it from the
+    # ledger and passes it in, because a receipt is a fact about rows this
+    # function cannot see.
+    if cost is not None:
+        cost_block = dict(cost)
+    else:
+        table, table_note = _price_table_or_none()
+        cost_block = cost_section(
+            identity=identity,
+            measured=measured,
+            model_calls=model_calls,
+            price_table=table,
+            notes=[table_note] if table_note else (),
+        )
     # Execution order, not alphabetical: which arm went first is a fact about
     # the run, and "observation, production" would misdescribe an interleave
     # that always puts the control first.
@@ -3607,26 +4272,7 @@ def build_report(
         # alternative prompt's figures live under "arms" and are never folded
         # in, because averaging the two would describe a prompt nothing runs.
         "accuracy": summarise(control_calls, claims=report_claims),
-        "cost": {
-            # Two numbers, because a dry run makes 60 calls and is billed for
-            # none of them. Collapsing them would put a "billable_calls: 60"
-            # into a free run's report, and that is exactly the figure someone
-            # copies into a cost record.
-            "model_calls": model_calls,
-            "billable_calls": billable,
-            "models": [identity["audio_deployment"]] if billable else [],
-            "pricing_complete": not billable,
-            "unpriced_models": (
-                [identity["audio_deployment"]] if billable else []
-            ),
-            "estimated_cost_usd": None,
-            "note": (
-                "gpt-audio-1.5 is absent from the price table, so the cost of "
-                "this run is unknown rather than zero. null, not $0."
-                if billable
-                else "No model was called; this run cost nothing."
-            ),
-        },
+        "cost": cost_block,
     }
 
     delivery = delivery_section(
@@ -3634,6 +4280,11 @@ def build_report(
     )
     if delivery is not None:
         report["delivery"] = delivery
+
+    # Only on the metering trial. An accuracy run has no registered ceiling,
+    # no pinned price table and no reason to carry an empty block saying so.
+    if metering is not None:
+        report["metering"] = dict(metering)
 
     if speech is not None:
         # What was heard, and what it would and would not mean. Carried in the
@@ -3786,6 +4437,59 @@ def main(argv: Optional[list[str]] = None) -> int:
         ),
     )
     parser.add_argument(
+        "--metering-run",
+        type=Path,
+        default=None,
+        help=(
+            "Run the cost-metering trial under the pre-registration at this "
+            "path. The document must declare the 'audio-cost-metering' "
+            "diagnostic kind, fix exactly two claims, and pin both the "
+            "grader fingerprint and the price-table fingerprint; a dispatch "
+            "that disagrees with any of them is refused rather than "
+            "corrected. One production arm, one repeat, SDK retries off so "
+            "one ledger row is one HTTP request, and --cost-ledger is "
+            "required: the run exists to produce a cost record, and one that "
+            "cannot write it has nothing to report. Mutually exclusive with "
+            "--speech-prompt-ab, which asks a different question."
+        ),
+    )
+    parser.add_argument(
+        "--cost-ledger",
+        type=Path,
+        default=None,
+        help=(
+            "Meter this run into the sqlite cost ledger at this path, through "
+            "the same recorder every graded run uses. Without it the calls go "
+            "out unmetered and the report says so -- which is what 337 did, "
+            "and why nobody could say afterwards what its ten calls cost. The "
+            "file is appended to, not replaced: an existing ledger's rows are "
+            "kept and this run is numbered after them."
+        ),
+    )
+    parser.add_argument(
+        "--cost-ledger-out",
+        type=Path,
+        default=None,
+        help=(
+            "Export the ledger as JSONL here. This is the publishable half -- "
+            "the sqlite file is a local working copy and is gitignored -- and "
+            "its sha256 goes in the report so the two can be checked against "
+            "each other. Defaults to the --cost-ledger path with a .jsonl "
+            "suffix."
+        ),
+    )
+    parser.add_argument(
+        "--price-table",
+        type=Path,
+        default=None,
+        help=(
+            "Price the ledger rows with this table instead of the committed "
+            "one. The digest of whichever file is used is recorded in the "
+            "report. A model the table has no rate for stays unpriced: the "
+            "cost comes out null, never zero."
+        ),
+    )
+    parser.add_argument(
         "--delivery-out",
         type=Path,
         default=None,
@@ -3802,11 +4506,43 @@ def main(argv: Optional[list[str]] = None) -> int:
     arms = PROMPT_ARMS if args.prompt_arm == "both" else (args.prompt_arm,)
     if (args.speech_set is None) != (args.speech_clips is None):
         parser.error("--speech-set and --speech-clips go together")
+    if args.cost_ledger_out is not None and args.cost_ledger is None:
+        parser.error(
+            "--cost-ledger-out names where to export a ledger this run would "
+            "not have; add --cost-ledger, or drop both and accept an "
+            "unmetered run"
+        )
     if args.speech_prompt_ab is not None and args.speech_set is None:
         parser.error(
             "--speech-prompt-ab compares two prompts on the pinned speech "
             "set; without --speech-set there is no speech to compare them on"
         )
+    if args.metering_run is not None:
+        if args.speech_prompt_ab is not None:
+            parser.error(
+                "--metering-run and --speech-prompt-ab are two different "
+                "diagnostics with two different documents. Running them "
+                "together would file one set of calls against both, and "
+                "neither result would be the one its document registered"
+            )
+        if args.speech_set is None:
+            parser.error(
+                "--metering-run sends the pinned speech clips, so it needs "
+                "--speech-set and --speech-clips; there is no synthetic "
+                "audio to meter without them"
+            )
+        if args.cost_ledger is None:
+            # The one place a missing ledger is fatal rather than a warning.
+            # Elsewhere an unmetered run still answers its question and says
+            # in its report that it was not metered. Here the ledger *is* the
+            # question, and a run without one would spend money to produce a
+            # report whose only finding is that nobody was writing anything
+            # down -- which is 337, again, at 337's price.
+            parser.error(
+                "--metering-run needs --cost-ledger. The whole result of "
+                "this run is the ledger it writes; without one it buys "
+                "audio calls to answer a question it then cannot answer"
+            )
 
     # The document the grader fingerprint is checked against. Two flags can
     # name it, so it is resolved to one variable before the check rather than
@@ -3819,6 +4555,13 @@ def main(argv: Optional[list[str]] = None) -> int:
     header_name = "SPEECH_OBSERVATION_HEADER"
     speech_observation_header = SPEECH_OBSERVATION_HEADER
     request_cap: Optional[int] = None
+
+    #: Set by --metering-run, read where the client and the perception object
+    #: are built. Kept as one flag rather than three settings threaded
+    #: separately, so "this is the metering trial" is decided once, at the
+    #: document, and everything downstream is that decision applied.
+    metering = False
+    price_table_pin: Optional[str] = None
 
     speech: Optional[SpeechCorpus] = None
     if args.speech_set is not None:
@@ -3921,6 +4664,128 @@ def main(argv: Optional[list[str]] = None) -> int:
                 )
                 return 3
 
+        if args.metering_run is not None:
+            # A third door, with its own document and its own question. It
+            # reuses every check the block above uses -- kind, claim list,
+            # repeat count, grader pin -- because the checks are what make a
+            # dispatch match its plan, and a new diagnostic that re-implements
+            # them loosely is a new diagnostic nobody has to agree with.
+            #
+            # What it adds is the price-table pin. Nothing above needs one:
+            # a prompt comparison is unaffected by what the rates say. This
+            # run's entire output is a cost record, so the table those costs
+            # would be looked up in is part of what it is being held to.
+            try:
+                kind = diagnostic_kind_stated_in(args.metering_run)
+            except (OSError, ValueError) as exc:
+                print(f"::error::{exc}", file=sys.stderr)
+                return 3
+            if kind != AUDIO_COST_METERING_KIND:
+                print(
+                    f"::error::{args.metering_run.name} registers '{kind}', "
+                    f"not '{AUDIO_COST_METERING_KIND}'. A document that "
+                    f"registered some other diagnostic has not agreed to this "
+                    f"one, and this run would be filed under its name.",
+                    file=sys.stderr,
+                )
+                return 3
+            if pin_doc is None:
+                pin_doc = args.metering_run
+            elif pin_doc != args.metering_run:
+                parser.error(
+                    "--expect-grader-pin and --metering-run name different "
+                    "documents; the run would be held to one document's "
+                    "fingerprint while filed under another's"
+                )
+
+            registered_repeats = SPEECH_NARROWED_KINDS[AUDIO_COST_METERING_KIND]
+            if args.repeats != registered_repeats:
+                print(
+                    f"::error::{args.metering_run.name} registers "
+                    f"{registered_repeats} repeat(s); this dispatch asks for "
+                    f"{args.repeats}. Dispatch it as registered.",
+                    file=sys.stderr,
+                )
+                return 3
+            try:
+                claim_ids = pilot_claims_stated_in(args.metering_run)
+                price_table_pin = price_table_pin_stated_in(args.metering_run)
+                manifest_pin = manifest_pin_stated_in(args.metering_run)
+            except (OSError, ValueError) as exc:
+                print(f"::error::{exc}", file=sys.stderr)
+                return 3
+            local_manifest = _digest_of(args.speech_set)
+            if local_manifest != manifest_pin:
+                print(
+                    f"::error::this is not the speech manifest "
+                    f"{args.metering_run.name} pins. It names {manifest_pin}, "
+                    f"{args.speech_set} hashes to {local_manifest}. The clips "
+                    f"would still check out -- against this manifest's own "
+                    f"digests, which is the check a substituted corpus "
+                    f"passes. Point --speech-set at the pinned manifest, or "
+                    f"re-pin the document and say what changed.",
+                    file=sys.stderr,
+                )
+                return 3
+            if len(claim_ids) != AUDIO_COST_METERING_CLAIMS:
+                # Two, exactly. Not "at most": one row cannot show that the
+                # second was not the first counted twice, and three would buy
+                # a call to learn nothing the second did not already show.
+                print(
+                    f"::error::{args.metering_run.name} fixes "
+                    f"{len(claim_ids)} claim(s); this diagnostic is "
+                    f"registered for exactly {AUDIO_COST_METERING_CLAIMS}. "
+                    f"One row cannot tell a second request from the first "
+                    f"one counted twice, and a third buys a call that shows "
+                    f"nothing the second did not.",
+                    file=sys.stderr,
+                )
+                return 3
+            try:
+                speech = narrow_speech_corpus(speech, claim_ids)
+            except (OSError, ValueError, KeyError) as exc:
+                print(f"::error::{exc}", file=sys.stderr)
+                return 3
+
+            # Checked here, before the client, for the same reason the grader
+            # pin is: after the run the table can be put back and nothing in
+            # the report would say it had moved.
+            try:
+                local_table = load_receipt_price_table(args.price_table)
+            except (OSError, ValueError, KeyError) as exc:
+                print(
+                    f"::error::{args.metering_run.name} pins a price table "
+                    f"fingerprint and this checkout cannot read the table to "
+                    f"compare it ({type(exc).__name__}: {exc}).",
+                    file=sys.stderr,
+                )
+                return 3
+            if local_table.sha256 != price_table_pin:
+                print(
+                    f"::error::this is not the price table "
+                    f"{args.metering_run.name} pins. It names "
+                    f"{price_table_pin}, this checkout computes "
+                    f"{local_table.sha256}. A rate was added, removed or "
+                    f"edited since the document was written -- which changes "
+                    f"what this run would report as its cost. Re-pin the "
+                    f"document to the computed value and say what moved, or "
+                    f"run against the table it names.",
+                    file=sys.stderr,
+                )
+                return 3
+
+            metering = True
+            request_cap = SPEECH_REQUEST_CAPS[AUDIO_COST_METERING_KIND]
+            planned = len(speech.claims) * args.repeats * len(arms)
+            if planned > request_cap:
+                print(
+                    f"::error::{args.metering_run.name} plans {planned} "
+                    f"call(s) against a ceiling of {request_cap} request(s). "
+                    f"The plan does not fit the ceiling it registered.",
+                    file=sys.stderr,
+                )
+                return 3
+
     # Before the identity, before the client, before anything is bought: is
     # the grader this checkout would use the one the pre-registration names?
     # The fingerprint is what makes "we measured the grader in §2" a checkable
@@ -4002,6 +4867,71 @@ def main(argv: Optional[list[str]] = None) -> int:
             file=sys.stderr,
         )
 
+    # ── the meter ───────────────────────────────────────────────────────
+    #
+    # Opened before the client, so the thing that records a call is already in
+    # place when the first one goes out. 337 put ten paid calls on the wire
+    # with nothing between them and the network, and the cost block in its
+    # report was four constants this file wrote afterwards. None of them had
+    # been near a ledger, which is why that run can be described but not
+    # audited -- and why the fix is to reach for the recorder every graded run
+    # already uses rather than to write a better constant.
+    #
+    # A ledger that will not open is a warning and not an exit. A diagnostic
+    # that refuses to run because its bookkeeping file is unwritable has
+    # turned a bookkeeping problem into a lost run. What it must never do is
+    # go quiet: the failure is printed here and written into the report, where
+    # `receipt: null` and a sentence saying why take the place of a total.
+    run_kind = "rehearsal" if args.dry_run else "measured"
+    recorder: Optional[Any] = None
+    cost_notes: list[str] = []
+    ledger_out: Optional[Path] = args.cost_ledger_out
+    if args.cost_ledger is not None:
+        recorder, ledger_note = open_cost_recorder(
+            args.cost_ledger,
+            run_id=f"{COST_RUN_ID_PREFIX}-{run_kind}",
+            continue_rounds=True,
+            price_table_path=args.price_table,
+        )
+        if ledger_note:
+            print(f"::warning::cost ledger: {ledger_note}", file=sys.stderr)
+            cost_notes.append(ledger_note)
+        if recorder is None:
+            cost_notes.append(
+                f"The cost ledger at {args.cost_ledger} could not be opened, "
+                f"so these calls went out unmetered and there is no receipt "
+                f"for them."
+            )
+        else:
+            # One ledger, one kind of run. A rehearsal row and a paid row
+            # differ in nothing a reader sees except `provider`, and a file
+            # holding both has a total that is an invoice plus a dress
+            # rehearsal. Refused rather than partitioned, because a reader who
+            # has to remember to filter is a reader who will one day not.
+            foreign = ledger_record_kinds(recorder.ledger) - {run_kind}
+            if foreign:
+                recorder.ledger.close()
+                print(
+                    f"::error::{args.cost_ledger} already holds "
+                    f"{', '.join(sorted(foreign))} rows and this is a "
+                    f"{run_kind} run. Mixing the two gives that file a total "
+                    f"that is part invoice and part dress rehearsal. Point "
+                    f"--cost-ledger at a separate file for this run; the "
+                    f"existing rows are left exactly as they are.",
+                    file=sys.stderr,
+                )
+                return 3
+        if ledger_out is None:
+            ledger_out = args.cost_ledger.with_suffix(".jsonl")
+    elif not args.dry_run:
+        unmetered = (
+            "This run was dispatched without --cost-ledger, so its calls were "
+            "not metered and no receipt exists for them. The call counts "
+            "below are counts; they are not a record of spend."
+        )
+        print(f"::warning::{unmetered}", file=sys.stderr)
+        cost_notes.append(unmetered)
+
     managed = None
     if args.dry_run:
         client: Any = TruthfulStub(speech.claims if speech else CLAIMS)
@@ -4010,9 +4940,37 @@ def main(argv: Optional[list[str]] = None) -> int:
         from core.llm_client import create_typed_azure_client  # noqa: E402
 
         managed = create_typed_azure_client(
-            AzureAIWorkload.GRADER, identity["audio_deployment"]
+            AzureAIWorkload.GRADER,
+            identity["audio_deployment"],
+            # Left unset on every other path, which means the openai default
+            # of two applies and one ``create`` can be three HTTP requests.
+            # The meter wraps ``create``, so those three would share one
+            # ledger row. For the run whose finding is "the rows match the
+            # requests" that is not a rounding error, it is the finding being
+            # wrong. See :data:`AUDIO_COST_METERING_SDK_RETRIES`.
+            max_retries=AUDIO_COST_METERING_SDK_RETRIES if metering else None,
         )
         client = managed.client
+
+    if recorder is not None:
+        # Inside WireClient, not outside it. WireClient rewrites the request
+        # before sending it -- that is how the observation arm gets its header
+        # -- and only then calls ``self._inner.chat.completions.create``. A
+        # meter wrapped around the outside would digest a payload that was
+        # never sent, and ``request_sha256`` would be a fingerprint of
+        # something no provider ever saw. The order of these two lines is the
+        # difference between a ledger row that can be matched to a request and
+        # one that only looks like it can.
+        client = recorder.meter(
+            client,
+            provider=STUB_PROVIDER if args.dry_run else "azure",
+            model=identity["audio_deployment"],
+            # Pinned, so these land in the perception component of the receipt
+            # regardless of the scope they run inside. They are perception
+            # reads: the sub-judge listening to a clip.
+            stage=STAGE_PERCEPTION,
+            deployment=identity["audio_deployment"],
+        )
 
     # Always wrapped, even for a single production arm: the delivery evidence
     # is the reason this run exists, and making it conditional would mean the
@@ -4024,47 +4982,104 @@ def main(argv: Optional[list[str]] = None) -> int:
         request_cap=request_cap,
     )
 
+    # Set on the way out of the block below, read after it. The cap is not an
+    # error to return from inside a ``try`` whose ``finally`` still has to
+    # close the books.
+    result: Optional[dict[str, Any]] = None
+    cap_failure: Optional[str] = None
+    cost: Optional[dict[str, Any]] = None
     try:
         perception = AudioPerception(
             client=wire,
             deployment=identity["audio_deployment"],
             call_cap=identity["audio_call_cap_per_task"],
             trim_seconds=identity["audio_clip_seconds"],
+            # One attempt per criterion on the metering trial. Note that the
+            # "no retries" setting is 1 and not 0: the budget is compared
+            # with ``>=`` before the first request, so zero would refuse
+            # every call and the run would send nothing.
+            failure_budget=(
+                AUDIO_COST_METERING_FAILURE_BUDGET
+                if metering
+                else AUDIO_FAILURE_BUDGET
+            ),
+        )
+        # One task, one stage, for everything inside. Without a scope in
+        # place the metered client passes calls straight through unrecorded
+        # -- deliberately, so that out-of-band work cannot be filed under
+        # somebody's task -- which means forgetting this line does not fail
+        # loudly. It produces an empty ledger and a report that says so.
+        attribution = (
+            recorder.attributed(task_id=COST_TASK_ID, stage=STAGE_GRADING)
+            if recorder is not None
+            else contextlib.nullcontext()
         )
         with tempfile.TemporaryDirectory(prefix="audio-accuracy-") as tmp:
-            result = run_measurement(
-                perception=perception,
-                clip_dir=Path(tmp),
-                repeats=args.repeats,
-                claims=speech.claims if speech else CLAIMS,
-                on_call=progress,
-                arms=arms,
-                wire=wire,
-                prerendered=speech,
-                # Only the speech corpus. The tone results are published and
-                # turning these on for that path would change a methodology
-                # after its numbers were reported.
-                stop_rules=SPEECH_STOP_RULES if speech else None,
-            )
+            with attribution:
+                result = run_measurement(
+                    perception=perception,
+                    clip_dir=Path(tmp),
+                    repeats=args.repeats,
+                    claims=speech.claims if speech else CLAIMS,
+                    on_call=progress,
+                    arms=arms,
+                    wire=wire,
+                    prerendered=speech,
+                    # Only the speech corpus. The tone results are published
+                    # and turning these on for that path would change a
+                    # methodology after its numbers were reported.
+                    stop_rules=stop_rules_for(metering=metering, speech=speech),
+                )
     except RequestCapReached as exc:
         # A backstop, not the normal path. ``run_measurement`` catches this
         # around the call it wraps and records it as a stop, so a ceiling hit
         # during the measurement keeps the requests already paid for. Reaching
         # here means the ceiling fired somewhere outside that loop, where
-        # there is no partial record to keep -- so there is nothing to write,
-        # and the count goes on this line instead.
-        print(
-            f"::error::{exc}. Sent {wire.requests - 1} request(s) before "
-            f"stopping; the ceiling was {request_cap}. This fired outside the "
-            f"measurement loop, so no report was written. Record the cause "
-            f"and re-plan -- raising the ceiling to fit the run it just "
-            f"refused is the one repair that is not available.",
-            file=sys.stderr,
-        )
-        return 3
+        # there is no partial record to keep -- so no report is written, and
+        # the count goes on the error line below instead. The ledger is a
+        # separate question and is still exported: those requests went out.
+        cap_failure = str(exc)
     finally:
         if managed is not None:
             managed.close()
+        # In the ``finally``, so it runs on the paths that end badly too. A
+        # run stopped by its ceiling, or one whose replies would not parse,
+        # has still bought every request it sent. Exporting only on success
+        # would delete the record of exactly the spend nobody planned for --
+        # which is the same mistake as not recording it in the first place,
+        # arrived at from the other end.
+        cost = close_cost_record(
+            recorder,
+            identity=identity,
+            measured=not args.dry_run,
+            model_calls=(
+                sum(int(call["api_call_count"]) for call in result["calls"])
+                if result is not None
+                # No result to count judge calls from. Requests are the next
+                # best thing and are not the same number -- one judge call can
+                # retry -- so this is an approximation on a path that has
+                # already gone wrong, and the ledger rows beside it are exact.
+                else max(0, wire.requests - (1 if cap_failure else 0))
+            ),
+            export_to=ledger_out,
+            price_table_path=args.price_table,
+            notes=cost_notes,
+        )
+
+    if cap_failure is not None:
+        where = (cost or {}).get("ledger") or {}
+        print(
+            f"::error::{cap_failure}. Sent {wire.requests - 1} request(s) "
+            f"before stopping; the ceiling was {request_cap}. This fired "
+            f"outside the measurement loop, so no report was written. The "
+            f"requests that did go out are recorded"
+            + (f" in {where['path']}" if where.get("path") else " nowhere")
+            + ". Record the cause and re-plan -- raising the ceiling to fit "
+            "the run it just refused is the one repair that is not available.",
+            file=sys.stderr,
+        )
+        return 3
+    assert result is not None  # the only other way out of the block is a raise
 
     report = build_report(
         identity=identity,
@@ -4072,6 +5087,20 @@ def main(argv: Optional[list[str]] = None) -> int:
         repeats=args.repeats,
         result=result,
         speech=speech,
+        cost=cost,
+        metering=(
+            metering_section(
+                document=args.metering_run,
+                config_path=args.config,
+                speech_manifest=args.speech_set,
+                claims=len(speech.claims) if speech else 0,
+                repeats=args.repeats,
+                arms=len(arms),
+                request_cap=request_cap,
+            )
+            if metering
+            else None
+        ),
     )
     text = json.dumps(report, indent=2, ensure_ascii=False)
     print(text)
