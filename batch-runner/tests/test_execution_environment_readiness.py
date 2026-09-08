@@ -146,9 +146,23 @@ def test_codex_is_reported_as_absent_from_this_repository():
     entry = _entry(inspect_environment_support(), ENVIRONMENT_CODEX_BUILT_IN_AGENT)
     assert entry.status == STATUS_NOT_IMPLEMENTED_HERE
     assert entry.blockers
-    assert all(
-        "codex" not in mode for mode in registered_execution_modes()
-    ), "a Codex run mode appeared; the recorded state must be refreshed"
+    # This used to read "no registered mode has codex in its name". It fired
+    # when `codex_foundry` was added, which is exactly what it was for. It is
+    # refreshed rather than deleted, because what is worth catching has not
+    # changed: this place -- where Codex answers with whatever model it
+    # chooses -- must not pick up the mode built for the place where Codex is
+    # pointed at *our* deployment. The two share a product name and are
+    # different questions, and only the second one can be in the comparison.
+    assert (
+        readiness.EXECUTION_MODE_BY_ENVIRONMENT[ENVIRONMENT_CODEX_BUILT_IN_AGENT]
+        is None
+    )
+    assert [
+        mode for mode in registered_execution_modes() if "codex" in mode
+    ] == ["codex_foundry"], (
+        "a second Codex run mode appeared; which of the two Codex places it "
+        "belongs to has to be recorded here before it can be read as either"
+    )
 
 
 def test_agentic_sandbox_v2_is_structure_check_only():

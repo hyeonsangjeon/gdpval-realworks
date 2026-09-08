@@ -155,6 +155,23 @@ def _require_runnable_execution_mode(execution_mode: str) -> None:
             "agentic_sandbox_v2 foundation is model-free and must run through "
             "the scripted fixture harness"
         )
+    if execution_mode == "codex_foundry" and not _codex_connection_confirmed():
+        # The adapter is finished and exercised against a stand-in runtime, but
+        # no request has yet been answered by the Foundry deployment. Until one
+        # has, a batch run started here would be the first attempt at the
+        # connection and a spend at the same time. The gate is an explicit
+        # setting rather than a code reading, so that turning it on is somebody
+        # deciding the connection is confirmed, not this file assuming it.
+        raise ValueError(
+            "codex_foundry has not been shown to reach its Foundry "
+            "deployment; run the connection check first and set "
+            "CODEX_FOUNDRY_CONNECTION_CONFIRMED=1 once a request has been "
+            "answered. Until then this mode runs only through its own tests"
+        )
+
+
+def _codex_connection_confirmed() -> bool:
+    return os.getenv("CODEX_FOUNDRY_CONNECTION_CONFIRMED", "").strip() == "1"
 
 
 def _resolve_runnable_execution_mode(

@@ -104,7 +104,7 @@ class ExecutionConfig:
     """Execution mode configuration (Phase 5-3)"""
     mode: Literal[
         "code_interpreter", "subprocess", "json_renderer", "sandbox",
-        "agentic_sandbox", "agentic_sandbox_v2",
+        "agentic_sandbox", "agentic_sandbox_v2", "codex_foundry",
     ] = "subprocess"
     score_type: Literal["tool_assisted", "portable"] = "tool_assisted"
     max_retries: int = 3           # Infrastructure retries within task execution
@@ -115,6 +115,7 @@ class ExecutionConfig:
     sandbox: Optional[Dict[str, Any]] = None  # sandbox-mode settings (execution.sandbox block)
     agentic: Optional[Dict[str, Any]] = None  # agentic-mode settings (execution.agentic block)
     agentic_v2: Optional[Dict[str, Any]] = None  # v2 contract/profile identity
+    codex: Optional[Dict[str, Any]] = None  # Codex run place (execution.codex block)
     metrics: Optional[Dict[str, Any]] = None  # opt-in job metrics (execution.metrics block)
     # One first request for every run place, instead of each run place's own.
     #
@@ -320,6 +321,11 @@ class ExperimentConfig:
                 if isinstance(execution_data.get("agentic_v2"), dict)
                 else None
             ),
+            codex=(
+                dict(execution_data["codex"])
+                if isinstance(execution_data.get("codex"), dict)
+                else None
+            ),
             metrics=(
                 {"enabled": True}
                 if isinstance(execution_data.get("metrics"), dict)
@@ -441,6 +447,7 @@ class ExperimentConfig:
                 ),
                 **({"agentic": self.execution.agentic} if self.execution.agentic is not None else {}),
                 **({"agentic_v2": self.execution.agentic_v2} if self.execution.agentic_v2 is not None else {}),
+                **({"codex": self.execution.codex} if self.execution.codex is not None else {}),
                 **({"metrics": self.execution.metrics} if self.execution.metrics is not None else {}),
             },
         }
@@ -581,6 +588,45 @@ class ExperimentConfig:
         elif self.execution.agentic_v2 is not None:
             errors.append(
                 "execution.agentic_v2 is only valid for agentic_sandbox_v2 mode"
+            )
+
+        if self.execution.mode == "codex_foundry":
+            # Validated by building the settings, so a wrong endpoint shape or
+            # a dated api-version on the undated route is caught while reading
+            # the file rather than at the start of a paid run.
+            from core.codex_runtime_config import (
+                DEFAULT_PROVIDER_ID,
+                CodexProviderSettings,
+            )
+
+            settings_data = self.execution.codex
+            if not isinstance(settings_data, dict):
+                errors.append(
+                    "codex_foundry mode requires an execution.codex block "
+                    "naming the endpoint and the deployment"
+                )
+            else:
+                try:
+                    CodexProviderSettings(
+                        endpoint=str(settings_data.get("endpoint", "")),
+                        model=str(settings_data.get("model", "")),
+                        provider_id=str(
+                            settings_data.get("provider_id") or DEFAULT_PROVIDER_ID
+                        ),
+                        query_params=tuple(
+                            sorted((settings_data.get("query_params") or {}).items())
+                        ),
+                    )
+                except (ValueError, TypeError, AttributeError) as exc:
+                    errors.append(f"execution.codex is not usable: {exc}")
+            if self.condition_a.model.provider != "azure":
+                errors.append(
+                    "codex_foundry mode asks a Microsoft Foundry deployment, "
+                    "so condition_a must name the azure provider"
+                )
+        elif self.execution.codex is not None:
+            errors.append(
+                "execution.codex is only valid for codex_foundry mode"
             )
 
         hardened = (
