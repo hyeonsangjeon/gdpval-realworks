@@ -93,6 +93,15 @@ batch-runner/scripts/*
 # level up. Held by tests/test_verify_published_grades.py.
 !batch-runner/scripts/verify_published_grades.py
 
+# The two halves of the Codex sandbox host question. The diagnostic names which
+# wall a machine hits when bubblewrap will not start; the checker holds each
+# host to what docs/codex_sandbox_hosts.json says about it. Both are invoked by
+# codex-sandbox-host-survey.yml on GitHub-hosted runners, so the directory rule
+# hiding them would leave that workflow calling files the checkout does not
+# have. Held by tests/test_codex_sandbox_host_diagnosis.py.
+!batch-runner/scripts/diagnose_codex_sandbox_host.py
+!batch-runner/scripts/check_recorded_sandbox_verdicts.py
+
 
 # Experiment report HTML (skews GitHub language stats)
 batch-runner/results/*/report/report.html

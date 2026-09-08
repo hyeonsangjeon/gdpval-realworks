@@ -1,0 +1,31 @@
+{
+  "_comment": [
+    "What each machine actually does when Codex tries to sandbox a command.",
+    "",
+    "Every entry here was measured by scripts/diagnose_codex_sandbox_host.py on",
+    "the machine it names, and nothing is written here from expectation. A host",
+    "with no entry is a host nobody has looked at: the checker treats that as a",
+    "failure to be resolved by measuring, never as a pass.",
+    "",
+    "The workflow .github/workflows/codex-sandbox-host-survey.yml re-measures the",
+    "GitHub-hosted entries on every relevant change, and fails when a host stops",
+    "matching its record. That is the point of the file. Hosted runner images are",
+    "rebuilt continuously, so the day one of them starts running a command under",
+    "bubblewrap is the day this project gains an execution host for free -- and",
+    "without something watching, nobody would find out.",
+    "",
+    "'ready' is the only value that means a command actually ran inside the",
+    "sandbox. Every other value is a named wall; see the docstring of the",
+    "diagnostic for what each one means and which of them a person can move."
+  ],
+  "hosts": {
+    "xenology-nas": {
+      "readiness": "kernel_lacks_user_namespaces",
+      "measured_on": "2026-09-08",
+      "kernel": "3.10.102",
+      "os": "Ubuntu 22.04.5 LTS userspace on a Synology DSM kernel",
+      "note": "No /proc/sys/user at all -- user namespaces became a sysctl in 4.9, and this kernel is 3.10. Nothing installable or configurable on this box changes the answer, which is why the execution host has to come from somewhere else.",
+      "measured_by": "scripts/diagnose_codex_sandbox_host.py, run directly on the box"
+    }
+  }
+}

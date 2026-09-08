@@ -1,0 +1,222 @@
+name: Codex Sandbox Host Survey
+
+# Where can a Codex agent actually execute a command?
+#
+# Two assertions in tests/test_codex_runtime_end_to_end.py need the agent to
+# run something inside its sandbox, and they skip wherever the sandbox will not
+# start. So far that skip has fired on every machine this project has, which
+# means the execution leg of the Codex path has never been observed working
+# anywhere -- while the notes said the chain was verified end to end. This
+# workflow exists to replace that guess with measurements.
+#
+# It answers one question per host: does bubblewrap run a command here, and if
+# not, which wall did it hit? The tool it runs
+# (batch-runner/scripts/diagnose_codex_sandbox_host.py) separates walls that
+# all print a `bwrap:` line and are not the same problem -- a kernel with no
+# CONFIG_USER_NS, a sysctl switched off, a security policy that grants the
+# namespace and then strips it, a container that denies the capability.
+#
+# The matrix is a controlled experiment, not a survey of convenience:
+#
+#   ubuntu-24.04   ships kernel.apparmor_restrict_unprivileged_userns=1
+#   ubuntu-22.04   has no such restriction
+#
+# and on the 24.04 leg, one further probe from inside an ordinary container.
+# If 22.04 runs a command and 24.04 does not, the AppArmor policy is the cause
+# and we know it rather than suspecting it. If neither runs one, the hosted
+# runners are out and the execution host has to come from somewhere else, which
+# is a decision the Xenology card is waiting on. Either answer is worth having;
+# only "we never checked" is not.
+#
+# What this workflow does NOT do, deliberately:
+#
+#   * It changes no host setting. Nothing here writes a sysctl, loads or
+#     unloads an AppArmor profile, or installs a policy. Turning
+#     apparmor_restrict_unprivileged_userns off would make the tests pass by
+#     removing that protection from every process on the machine, which is not
+#     a fix, it is the absence of one.
+#   * It runs no privileged container and adds no capabilities. The container
+#     probe below is a plain `docker run` with no --privileged, no --cap-add
+#     and no --security-opt, spelled out in full so that the absence of those
+#     flags is visible rather than promised. The point is to learn what an
+#     ordinary container does; a container handed extra powers would answer a
+#     question nobody asked.
+#   * It opens no network path and disables no sandbox.
+#   * It spends nothing. No model is called, no cloud account is signed in to,
+#     and no secret is referenced below.
+#
+# A red run here is not a broken pull request. Read it: the job fails when a
+# host's measured verdict disagrees with what the repository has written down
+# about that host, in either direction. A machine that quietly became capable
+# is as important to notice as one that quietly stopped being.
+
+on:
+  pull_request:
+    paths:
+      - "batch-runner/scripts/diagnose_codex_sandbox_host.py"
+      - "batch-runner/scripts/check_recorded_sandbox_verdicts.py"
+      - "batch-runner/docs/codex_sandbox_hosts.json"
+      - "batch-runner/tests/test_codex_sandbox_host_diagnosis.py"
+      - "batch-runner/tests/test_codex_runtime_end_to_end.py"
+      - "batch-runner/core/codex_runner.py"
+      - ".github/workflows/codex-sandbox-host-survey.yml"
+  push:
+    branches: [main]
+    paths:
+      - "batch-runner/scripts/diagnose_codex_sandbox_host.py"
+      - "batch-runner/docs/codex_sandbox_hosts.json"
+      - ".github/workflows/codex-sandbox-host-survey.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codex-sandbox-host-survey-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  survey:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # The host `ubuntu-latest` resolves to today. This is the machine
+          # that produced `bwrap: loopback: Failed RTM_NEWADDR: Operation not
+          # permitted` on PR #454.
+          - label: ubuntu-24.04 runner host
+            runner: ubuntu-24.04
+            host_key: ubuntu-24.04-host
+            probe_container: "yes"
+
+          # The control. Same hosted-runner infrastructure, same container
+          # runtime, older security policy: 22.04 predates
+          # kernel.apparmor_restrict_unprivileged_userns. A difference between
+          # this leg and the one above is attributable to the policy and to
+          # very little else.
+          - label: ubuntu-22.04 runner host
+            runner: ubuntu-22.04
+            host_key: ubuntu-22.04-host
+            probe_container: "no"
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Make sure bubblewrap is present
+        run: |
+          if ! command -v bwrap > /dev/null; then
+            sudo apt-get update -qq
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq bubblewrap
+          fi
+          echo "bwrap: $(command -v bwrap)  $(bwrap --version 2>&1 | head -1)"
+
+      # Recorded for the report, and because "which policy was in force" is the
+      # single most useful line when somebody re-reads this run in a month.
+      # Every command here reads; none of them writes.
+      - name: Record the host's security posture
+        run: |
+          echo "kernel: $(uname -r)"
+          echo "os: $(grep PRETTY_NAME /etc/os-release | cut -d= -f2- | tr -d '\"')"
+          for knob in \
+            /proc/sys/user/max_user_namespaces \
+            /proc/sys/kernel/unprivileged_userns_clone \
+            /proc/sys/kernel/apparmor_restrict_unprivileged_userns
+          do
+            if [ -r "$knob" ]; then
+              echo "$knob = $(cat "$knob")"
+            else
+              echo "$knob = (absent)"
+            fi
+          done
+          echo "lsm: $(cat /sys/kernel/security/lsm 2>/dev/null || echo '(unreadable)')"
+          echo "apparmor profiles mentioning bwrap:"
+          (sudo aa-status 2>/dev/null | grep -i bwrap) || echo "  (none, or aa-status unavailable)"
+
+      - name: Diagnose the runner host
+        id: diagnose
+        continue-on-error: true
+        working-directory: batch-runner
+        run: |
+          set +e
+          python3 scripts/diagnose_codex_sandbox_host.py \
+            --out "/tmp/${{ matrix.host_key }}.json"
+          status=$?
+          set -e
+          echo "exit_status=${status}" >> "$GITHUB_OUTPUT"
+          verdict=$(python3 -c "import json;print(json.load(open('/tmp/${{ matrix.host_key }}.json'))['readiness'])")
+          echo "verdict=${verdict}" >> "$GITHUB_OUTPUT"
+
+      # The container axis, at default settings. Written out as an explicit
+      # docker run so that what is *not* passed is auditable: no --privileged,
+      # no --cap-add, no --security-opt seccomp=unconfined, no --userns=host.
+      # Adding any of those would be weakening the isolation to buy a pass,
+      # which is the one thing this whole line of work is not allowed to do.
+      - name: Diagnose from inside a plain container
+        id: container
+        if: matrix.probe_container == 'yes'
+        continue-on-error: true
+        run: |
+          set +e
+          docker run --rm \
+            -v "${GITHUB_WORKSPACE}/batch-runner:/w:ro" \
+            -w /w \
+            ubuntu:24.04 \
+            bash -c '
+              set -e
+              apt-get update -qq > /dev/null 2>&1
+              DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+                python3 bubblewrap util-linux > /dev/null 2>&1
+              python3 scripts/diagnose_codex_sandbox_host.py --json
+            ' > /tmp/container-probe.json 2>/tmp/container-probe.err
+          status=$?
+          set -e
+          echo "container probe exit: ${status}"
+          echo "--- stderr ---"; cat /tmp/container-probe.err || true
+          echo "--- report ---"; cat /tmp/container-probe.json || true
+          verdict=$(python3 -c "import json;print(json.load(open('/tmp/container-probe.json'))['readiness'])" 2>/dev/null || echo "probe_did_not_report")
+          echo "verdict=${verdict}" >> "$GITHUB_OUTPUT"
+
+      # The gate. It does not ask "is this host ready" -- most of them are not,
+      # that is a stable fact, and a job that is red for a fact nobody disputes
+      # teaches people to ignore it. It asks whether the host still behaves the
+      # way the repository says it does, so that a hosted image quietly gaining
+      # or losing the ability to sandbox shows up as a change rather than as
+      # nothing at all.
+      - name: Compare against what the repository has recorded
+        working-directory: batch-runner
+        run: |
+          python3 scripts/check_recorded_sandbox_verdicts.py \
+            --host-key "${{ matrix.host_key }}" \
+            --observed "/tmp/${{ matrix.host_key }}.json"
+
+      - name: Keep the measurements
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sandbox-host-${{ matrix.host_key }}
+          path: |
+            /tmp/${{ matrix.host_key }}.json
+            /tmp/container-probe.json
+            /tmp/container-probe.err
+          if-no-files-found: warn
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### ${{ matrix.label }}"
+            echo ""
+            echo "- runner host verdict: \`${{ steps.diagnose.outputs.verdict }}\`"
+            echo "- diagnostic exit status: \`${{ steps.diagnose.outputs.exit_status }}\` (0 only when a command ran inside the sandbox)"
+            if [ "${{ matrix.probe_container }}" = "yes" ]; then
+              echo "- plain-container verdict: \`${{ steps.container.outputs.verdict }}\`"
+            fi
+            echo ""
+            echo "이 줄이 뜻하는 것: 이 기계에서 Codex가 격리 안에서 명령을 실제로"
+            echo "실행할 수 있는지 재보고, 안 되면 어느 벽에 막혔는지 이름을 붙인"
+            echo "결과입니다. \`ready\`가 아니면 이 기계는 실행 호스트가 될 수 없습니다."
+          } >> "$GITHUB_STEP_SUMMARY"
