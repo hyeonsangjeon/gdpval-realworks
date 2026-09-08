@@ -755,10 +755,10 @@ def test_the_workflow_states_the_corpus_it_actually_has() -> None:
     """The paid entry point restates these counts, so they have to be checked.
 
     ``audio-accuracy-probe.yml`` is the only way this measurement gets bought,
-    and four places in it say how big the corpus is: the header comment, the
-    ``repeats`` input description a dispatcher reads, and two lines of the
-    approval record. None of them can read ``CLAIMS`` -- the gate job has no
-    checkout, and a comment cannot compute -- so all four are restatements.
+    and several places in it say how big the corpus is: the header comment, the
+    ``repeats`` input description a dispatcher reads, and the approval record.
+    None of them can read ``CLAIMS`` -- the gate job has no checkout, and a
+    comment cannot compute -- so all of them are restatements.
 
     They rotted once already. The corpus went from twelve criteria to twenty
     and the workflow kept saying twelve, which put ``calls = 36`` on the
@@ -806,16 +806,28 @@ def test_the_workflow_states_the_corpus_it_actually_has() -> None:
     assert formula, "the repeats input no longer states the call formula"
     assert int(formula.group(1)) == claims
 
-    # The approval record, both lines of it.
-    record = re.search(r"criteria\s+= (\d+) \((\d+) true / (\d+) false\)", text)
-    assert record, "the approval record no longer states the criteria count"
-    assert int(record.group(1)) == claims
-    assert int(record.group(2)) == true_claims
-    assert int(record.group(3)) == false_claims
+    # The approval record. Both of its numbers come out of a shell `case` now,
+    # because 337 narrows the manifest to five criteria and one literal cannot
+    # be right for both sizes. What is pinned here is the branch that covers
+    # this corpus -- the fallback -- plus the fact that the call count is
+    # computed from the criteria count rather than restated beside it. The
+    # narrowed branch is pinned against 337's own document, further down.
+    fallback = re.search(
+        r"\*\)\n\s*CRITERIA=(\d+); TRUE_CRITERIA=(\d+); FALSE_CRITERIA=(\d+)",
+        text,
+    )
+    assert fallback, "the approval record no longer states the criteria count"
+    assert int(fallback.group(1)) == claims
+    assert int(fallback.group(2)) == true_claims
+    assert int(fallback.group(3)) == false_claims
 
-    calls = re.search(r"calls\s+= \$\(\((\d+) \* PROBE_REPEATS\)\)", text)
-    assert calls, "the approval record no longer computes the call count"
-    assert int(calls.group(1)) == claims
+    assert re.search(r"calls\s+= \$\(\(CRITERIA \* PROBE_REPEATS\)\)", text), (
+        "the call count no longer follows the criteria count"
+    )
+    # A literal put back alongside the variable would survive review, because
+    # the line still reads correctly on a default dispatch -- and would be
+    # wrong only on the one corpus that is a different size.
+    assert not re.search(r"calls\s+= \$\(\(\d+ \* PROBE_REPEATS\)\)", text)
 
     # The permutation figures in the paid summary are *derived* from the
     # report rather than restated, which is why they are not checked above.
@@ -2097,10 +2109,22 @@ def test_both_jobs_hold_a_speech_run_to_the_document_it_belongs_to() -> None:
             )
         # And never both at once: two documents pinning one run is the state
         # the measurer exits 2 on, and discovering that from a dispatch is
-        # discovering it later than here.
-        assert "else" in block[
-            block.index("--speech-prompt-ab"):block.index("--expect-grader-pin")
-        ]
+        # discovering it later than here. This was an if/else and is a `case`
+        # now that there are three two-arm documents to route, so what is
+        # checked is that the single-arm pin is the fallback arm and appears
+        # once -- a second one anywhere would be reachable alongside a
+        # document flag. Comments are dropped first; they name both flags.
+        code = "\n".join(
+            line for line in block.splitlines()
+            if not line.lstrip().startswith("#")
+        )
+        assert code.count("--expect-grader-pin") == 1
+        fallback = code.index("--expect-grader-pin")
+        arm = code.rindex("*)", 0, fallback)
+        assert ";;" in code[code.rindex("--speech-prompt-ab", 0, arm):arm], (
+            "the document arms do not close before the fallback, so a run "
+            "could be handed two documents"
+        )
 
 
 # --------------------------------------------------------------------------
@@ -3240,10 +3264,17 @@ def test_the_prompt_ab_door_only_opens_for_a_document_that_registered_it(
     assert probe.main([*args, "--speech-prompt-ab", str(silent)]) == 3
     assert "declares no diagnostic kind" in capsys.readouterr().err
 
-    # A document that registered some other diagnostic.
+    # A document that registered some other diagnostic. The refusal names
+    # what the document said and lists what would have been accepted -- there
+    # is more than one registered two-arm kind now, so naming a single
+    # expected string would tell a reader the wrong thing.
     other = _prompt_ab_doc(tmp_path, kind="tone-sweep", name="other.md")
     assert probe.main([*args, "--speech-prompt-ab", str(other)]) == 3
-    assert "not 'speech-prompt-ab'" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert "registers 'tone-sweep'" in err
+    assert "not a two-arm speech comparison" in err
+    for kind in probe.SPEECH_TWO_ARM_REGISTRATIONS:
+        assert kind in err
 
     # Declaring itself is not enough: it still has to pin the grader, and the
     # pin is checked by the same code --expect-grader-pin uses.
@@ -3278,7 +3309,7 @@ def test_the_prompt_ab_door_only_opens_for_a_document_that_registered_it(
 
 
 def _requests_from_an_ab_dry_run(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, doc: Path | None = None
 ) -> tuple[list[dict], dict]:
     """Run the door end to end against a stub API and keep what went out.
 
@@ -3287,6 +3318,11 @@ def _requests_from_an_ab_dry_run(
     instance ``main`` built. Nothing about the request path is faked: core
     assembles the prompt, ``WireClient`` swaps the arm, and what lands in
     ``requests`` is the payload a paid run would post.
+
+    ``doc`` picks which registration opens the door, so the same end-to-end
+    path can be measured for a second registered header without a second
+    copy of this function -- and without either measurement being taken from
+    a hand-built request that no ``main`` ever sent.
     """
     manifest_path, clip_dir = _speech_fixture(tmp_path, clips=3)
     out = tmp_path / "out.json"
@@ -3300,7 +3336,7 @@ def _requests_from_an_ab_dry_run(
     monkeypatch.setattr(probe, "TruthfulStub", _Handle)
     assert probe.main([
         *_speech_ab_args(tmp_path, manifest_path, clip_dir, out),
-        "--speech-prompt-ab", str(_prompt_ab_doc(tmp_path)),
+        "--speech-prompt-ab", str(doc or _prompt_ab_doc(tmp_path)),
     ]) == 0
     assert len(made) == 1
     return made[0].requests, json.loads(out.read_text(encoding="utf-8"))
@@ -3404,11 +3440,16 @@ def test_the_workflow_can_ask_for_either_corpus() -> None:
     ``speech`` installs a synthesiser and rebuilds ten clips before it calls
     anything, so it is a deliberate selection rather than something inherited
     from a default nobody looked at.
+
+    The full option list is not restated here. Three of the entries are
+    two-arm diagnostics that each need their own document, and holding the
+    list and the routing apart let them drift; both are asserted together in
+    ``test_every_two_arm_corpus_is_offered_and_routed_to_its_own_document``.
     """
     inputs = _workflow()[True]["workflow_dispatch"]["inputs"]
     corpus = inputs["corpus"]
     assert corpus["type"] == "choice"
-    assert sorted(corpus["options"]) == ["speech", "speech-prompt-ab", "tones"]
+    assert {"tones", "speech"} <= set(corpus["options"])
     assert corpus["default"] == "tones"
 
 
@@ -5124,3 +5165,941 @@ def test_the_334_report_does_not_overwrite_what_331_bought() -> None:
     assert "0.610" in text
     # And the document says out loud what 333 section 7 required of it.
     assert "역사적 참고치" in text
+
+
+# ── 337: the format-safe candidate, and the doors only it opens ──
+#
+# 334's observation arm returned no readable JSON on 51 of 60 calls; 335
+# bought three of those bodies and found no braces at all, a parser that
+# stopped on character zero and ``finish_reason: stop``. The model did not
+# break the envelope -- it never wrote one, because the header's first
+# instruction told it to write down what it heard and named nowhere to write
+# it. These tests hold the candidate that names a destination, and the doors
+# that only a document can open.
+
+
+_PILOT_DOC = (
+    probe.REPO_ROOT / "tasks" / "rebuilding_grading_task"
+    / "337-format-safe-observation-pilot.md"
+)
+
+
+def _doc_sha256(text: str, constant: str) -> str:
+    """The digest a pre-registration pins for ``constant``."""
+    match = re.search(
+        rf"`{re.escape(constant)}`,\s*sha256\s*`([0-9a-f]{{64}})`", text
+    )
+    assert match, f"the document pins no sha256 for {constant}"
+    return match.group(1)
+
+
+def test_the_candidate_is_the_bought_header_plus_exactly_one_sentence() -> None:
+    """"One sentence" is a claim, so it is checked rather than asserted in prose.
+
+    The candidate is reconstructed *backwards*: delete the added sentence
+    from V2 and what is left has to be V1 byte for byte. Comparing forwards
+    -- building V1 + sentence and checking it equals V2 -- would pass even if
+    V2 had been edited somewhere else, because both sides would carry the
+    edit. This direction cannot.
+
+    V1 is pinned to the digest 333 registered and 334 paid for. If that moves,
+    the candidate is no longer "the bought header plus a sentence" and the
+    comparison in 338 would be measuring two changes at once.
+    """
+    v1 = probe.SPEECH_OBSERVATION_HEADER
+    v2 = probe.SPEECH_OBSERVATION_HEADER_V2
+    sentence = probe.SPEECH_OBSERVATION_DESTINATION_SENTENCE
+
+    assert hashlib.sha256(v1.encode("utf-8")).hexdigest() == (
+        "b9bfaaa2e5f68d43ceb1116fe86eafc052716232d018eda3efaa1aa6412d066c"
+    ), "the header 334 bought has changed; 337 is no longer a one-sentence delta"
+
+    assert v2.count(sentence) == 1
+    assert v2.replace(" " + sentence, "", 1) == v1
+    assert len(v2) - len(v1) == len(sentence) + 1
+
+    # And the document pins what this checkout builds, so a header edited
+    # after the pre-registration was written cannot be dispatched under it.
+    text = _PILOT_DOC.read_text(encoding="utf-8")
+    assert _doc_sha256(text, "SPEECH_OBSERVATION_HEADER_V2") == (
+        hashlib.sha256(v2.encode("utf-8")).hexdigest()
+    )
+
+
+def test_the_candidate_names_a_destination_and_does_not_weaken_the_contract(
+) -> None:
+    """What 335 diagnosed, and the narrowest thing that answers it.
+
+    The failure was an instruction with no destination sitting in front of a
+    contract that forbids prose. The fix has to add a destination *without*
+    softening the contract, because a candidate that also relaxed "no prose"
+    would pass the pilot for a reason nobody registered.
+    """
+    v1 = probe.SPEECH_OBSERVATION_HEADER
+    v2 = probe.SPEECH_OBSERVATION_HEADER_V2
+    sentence = probe.SPEECH_OBSERVATION_DESTINATION_SENTENCE
+
+    # The unbound imperative 335 found is still there -- the candidate does
+    # not stop asking for the transcript, it says where to put it.
+    assert "write down what it actually contains" in _intervention(v1)
+    assert "write down what it actually contains" in _intervention(v2)
+    assert '"reasoning"' in sentence
+    assert "nowhere else" in sentence
+
+    # core's contract is the last word in both arms, byte for byte and once.
+    for header in (v1, v2):
+        assert header.endswith(AUDIO_RESPONSE_CONTRACT)
+        assert header.count(AUDIO_RESPONSE_CONTRACT) == 1
+
+    # And the destination is stated where the instruction that needs it is --
+    # at the end of the FIRST paragraph, which is the one that asks for the
+    # transcript. Stated after the contract instead, it would be a second
+    # instruction about the reply arriving after the reply has been described.
+    paragraphs = v2.split("\n\n")
+    assert paragraphs[1].startswith("FIRST,")
+    assert paragraphs[1].endswith(sentence)
+    assert paragraphs[-1] == AUDIO_RESPONSE_CONTRACT
+
+    # The added sentence lands in the intervention, not inside core's string.
+    assert sentence not in AUDIO_RESPONSE_CONTRACT
+
+
+def test_the_candidate_leaks_no_answer_either() -> None:
+    """The same guard 333 wrote, run against the new header.
+
+    A guard that only covers the header it was written for stops being a
+    guard the moment a second one exists.
+    """
+    discriminating = _pair_discriminating_tokens()
+    assert len(discriminating) >= 18
+
+    tokens = set(
+        re.findall(
+            r"[a-z]+", _intervention(probe.SPEECH_OBSERVATION_HEADER_V2).lower()
+        )
+    )
+    leaked = sorted(tokens & discriminating)
+    assert not leaked, f"the candidate header hands over: {leaked}"
+
+    # The added sentence on its own, so a future edit to the rest of the
+    # header cannot mask a leak introduced here.
+    added = set(
+        re.findall(
+            r"[a-z]+", probe.SPEECH_OBSERVATION_DESTINATION_SENTENCE.lower()
+        )
+    )
+    assert not added & discriminating
+
+    # The gap 333 recorded is still the gap: the word-order pair contributes
+    # nothing, so this guard cannot speak for it. Pinned so that it stays a
+    # known hole rather than becoming an unnoticed one.
+    manifest = json.loads(
+        (
+            probe.REPO_ROOT / "tasks" / "rebuilding_grading_task"
+            / "330-speech-verification-manifest.json"
+        ).read_text(encoding="utf-8")
+    )
+    by_pair: dict[str, list[str]] = {}
+    for claim in manifest["claims"]:
+        by_pair.setdefault(claim["pair_id"], []).append(claim["criterion"])
+    empty = sorted(
+        pair for pair, criteria in by_pair.items()
+        if not set(re.findall(r"[a-z]+", criteria[0].lower()))
+        ^ set(re.findall(r"[a-z]+", criteria[1].lower()))
+    )
+    assert empty == ["powder_order"], (
+        "the set of pairs this guard cannot cover changed; 337 section 3 "
+        "names powder_order and only powder_order"
+    )
+
+
+def test_the_candidate_needs_no_change_to_the_parser(tmp_path: Path) -> None:
+    """The reason ``reasoning`` was chosen, checked against core's parser.
+
+    337 section 3 requires that routing the transcript needs no edit to
+    ``core/perception/audio.py`` -- the instruction not to make the parser
+    lenient in order to make the candidate pass. So the claim is tested
+    against the real parser: a verdict whose ``reasoning`` is far longer than
+    any transcript still comes back as a verdict, with no ``judge_error``.
+
+    ``evidence`` is the field this rules out: core slices it to 200
+    characters, so a transcript sent there would be fighting a length limit
+    that has nothing to do with the question.
+    """
+    _, clip_dir = _speech_fixture(tmp_path, clips=1)
+    audio = next(clip_dir.glob("*.sent.wav"))
+
+    transcript = "the speaker said seventeen crates " * 200
+
+    class _LongReasoning:
+        def __init__(self) -> None:
+            self.chat = type("_Chat", (), {"completions": self})()
+
+        def create(self, **kwargs: object) -> object:
+            return probe._StubResponse(
+                json.dumps({
+                    "verdict": "pass",
+                    "partial_score": 1.0,
+                    "evidence": "heard it",
+                    "confidence": 0.9,
+                    "reasoning": transcript,
+                }),
+                b64_chars=0,
+            )
+
+    perception = AudioPerception(
+        client=_LongReasoning(),
+        deployment="gpt-audio-1.5",
+        call_cap=AUDIO_CALL_CAP,
+        trim_seconds=AUDIO_TRIM_SECONDS,
+    )
+    verdict = perception.judge(criterion="anything", audio_path=str(audio))
+    assert verdict.verdict == "pass"
+    assert verdict.judge_error is None
+    assert verdict.api_call_count == 1
+
+    # And the parser is not being asked to accept anything new: the same
+    # response with a *bad* verdict word is still refused.
+    class _BadVerdict(_LongReasoning):
+        def create(self, **kwargs: object) -> object:
+            return probe._StubResponse(
+                json.dumps({
+                    "verdict": "probably",
+                    "partial_score": 1.0,
+                    "evidence": "heard it",
+                    "confidence": 0.9,
+                    "reasoning": transcript,
+                }),
+                b64_chars=0,
+            )
+
+    strict = AudioPerception(
+        client=_BadVerdict(),
+        deployment="gpt-audio-1.5",
+        call_cap=AUDIO_CALL_CAP,
+        trim_seconds=AUDIO_TRIM_SECONDS,
+    )
+    refused = strict.judge(criterion="anything", audio_path=str(audio))
+    assert refused.judge_error is not None
+
+
+def test_the_pilot_sample_is_what_the_rule_selects() -> None:
+    """337 section 4 states a rule and then applies it. This applies it again.
+
+    The rule is positional on purpose -- clips in published order, first
+    claim from odd-numbered clips and second from even -- so that no result
+    from 334 can reach the sample. Re-deriving it here is what makes that
+    checkable: a table typed into a document is a claim about a rule, not the
+    rule.
+    """
+    manifest = json.loads(
+        (
+            probe.REPO_ROOT / "tasks" / "rebuilding_grading_task"
+            / "330-speech-verification-manifest.json"
+        ).read_text(encoding="utf-8")
+    )
+    by_clip: dict[str, list[dict]] = {}
+    for claim in manifest["claims"]:
+        by_clip.setdefault(claim["clip_id"], []).append(claim)
+
+    selected = []
+    for position, clip in enumerate(manifest["clips"][:5], start=1):
+        pair = by_clip[clip["clip_id"]]
+        assert len(pair) == 2, "the corpus stopped being paired"
+        selected.append(pair[0 if position % 2 else 1])
+
+    assert [c["claim_id"] for c in selected] == list(
+        probe.pilot_claims_stated_in(_PILOT_DOC)
+    )
+
+    # The balance the document reports, recomputed rather than quoted.
+    assert sum(1 for c in selected if c["holds"]) == 3
+    assert sum(1 for c in selected if not c["holds"]) == 2
+    assert len({c["family"] for c in selected}) == 4
+    assert len({c["clip_id"] for c in selected}) == 5
+
+
+def test_the_pilot_document_pins_what_this_checkout_would_dispatch() -> None:
+    """Plan, ceiling and repeat count, read out of the document.
+
+    Each of these is a number the run reads from somewhere else at dispatch
+    time. Where the document and the code disagree, the run is not the
+    registered run, and the disagreement is only visible if something
+    compares them.
+    """
+    text = _PILOT_DOC.read_text(encoding="utf-8")
+
+    assert probe.diagnostic_kind_stated_in(_PILOT_DOC) == (
+        probe.SPEECH_FORMAT_PILOT_KIND
+    )
+    assert probe.SPEECH_NARROWED_KINDS[probe.SPEECH_FORMAT_PILOT_KIND] == 1
+    assert "| 반복 | **1** |" in text
+
+    claims = probe.pilot_claims_stated_in(_PILOT_DOC)
+    planned = len(claims) * 1 * len(probe.PROMPT_ARMS)
+    assert planned == 10
+    assert f"**{len(claims)} × 1 × {len(probe.PROMPT_ARMS)} = {planned}**" in text
+
+    cap = probe.SPEECH_REQUEST_CAPS[probe.SPEECH_FORMAT_PILOT_KIND]
+    assert cap == 12
+    assert f"| **요청 상한** | **{cap}**" in text
+    assert planned <= cap
+
+    # The header the registry hands this kind is the one the document pins.
+    name, header = probe.SPEECH_TWO_ARM_REGISTRATIONS[
+        probe.SPEECH_FORMAT_PILOT_KIND
+    ]
+    assert name == "SPEECH_OBSERVATION_HEADER_V2"
+    assert header is probe.SPEECH_OBSERVATION_HEADER_V2
+
+    # And the grader fingerprint, which moves without anyone here touching it.
+    assert probe.grader_source_hash() in text
+
+
+def _pilot_doc(
+    tmp_path: Path,
+    *,
+    kind: str = probe.SPEECH_FORMAT_PILOT_KIND,
+    claims: Sequence[str] | None = ("clip0_yes", "clip1_no"),
+    name: str = "pilot.md",
+    pin: str | None = None,
+) -> Path:
+    doc = tmp_path / name
+    lines = [f"| 진단 종류 | `{kind}` |"]
+    lines.append(f"| 채점기 지문 | `{pin or probe.grader_source_hash()}` |")
+    if claims is not None:
+        row = ", ".join(f"`{c}`" for c in claims)
+        lines.append(f"| 시험 문항 | {row} |")
+    doc.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return doc
+
+
+def test_the_pilot_door_refuses_every_way_of_running_something_else(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A narrowed registration fixes a sample and a repeat count.
+
+    Each refusal here is a way the narrowed run could otherwise have become a
+    different run wearing this document's name -- and after the fact, a run
+    that measured five claims under a document that fixed a different five is
+    indistinguishable from one that did as it said.
+    """
+    manifest_path, clip_dir = _speech_fixture(tmp_path, clips=3)
+    out = tmp_path / "out.json"
+    args = _speech_ab_args(tmp_path, manifest_path, clip_dir, out)
+
+    # A kind nobody registered.
+    unknown = _pilot_doc(tmp_path, kind="speech-format-pilot-v9", name="u.md")
+    assert probe.main([*args, "--speech-prompt-ab", str(unknown)]) == 3
+    assert "not a two-arm speech comparison" in capsys.readouterr().err
+
+    # A whole-manifest registration carrying a claim row: the document names
+    # a subset the run would ignore.
+    whole = _pilot_doc(tmp_path, kind="speech-prompt-ab", name="w.md")
+    assert probe.main([*args, "--speech-prompt-ab", str(whole)]) == 3
+    assert "carries a claim row" in capsys.readouterr().err
+
+    # The repeat count is the document's, and a mismatch is reported rather
+    # than corrected -- correcting it is how a dispatch stops matching a plan
+    # without anybody noticing.
+    good = _pilot_doc(tmp_path)
+    assert probe.main([
+        *_speech_ab_args(tmp_path, manifest_path, clip_dir, out)[:2],
+        "--repeats", "3",
+        "--speech-set", str(manifest_path), "--speech-clips", str(clip_dir),
+        "--out", str(out), "--speech-prompt-ab", str(good),
+    ]) == 3
+    assert "registers 1 repeat(s)" in capsys.readouterr().err
+
+    # A claim the manifest cannot supply.
+    absent = _pilot_doc(tmp_path, claims=("clip0_yes", "no_such_claim"),
+                        name="a.md")
+    assert probe.main([*args, "--speech-prompt-ab", str(absent)]) == 3
+    assert "no claim named no_such_claim" in capsys.readouterr().err
+
+    # A claim listed twice is a repeat count written in the wrong place.
+    twice = _pilot_doc(tmp_path, claims=("clip0_yes", "clip0_yes"), name="t.md")
+    assert probe.main([*args, "--speech-prompt-ab", str(twice)]) == 3
+    assert "twice" in capsys.readouterr().err
+
+    # A narrowed kind with no claim row fixes no sample at all.
+    empty = _pilot_doc(tmp_path, claims=None, name="e.md")
+    assert probe.main([*args, "--speech-prompt-ab", str(empty)]) == 3
+    assert "fixes no claims" in capsys.readouterr().err
+
+    assert not out.exists(), "a refused run wrote a report"
+
+    # And the plan is counted against the ceiling before a client exists, so
+    # a document whose plan does not fit is refused without spending.
+    assert probe.main([*args, "--speech-prompt-ab", str(good)]) == 0
+    out.unlink()
+
+
+def test_a_plan_that_does_not_fit_its_ceiling_is_refused_before_the_client(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The arithmetic runs before anything is built, let alone sent.
+
+    The ceiling is registered next to the kind, so this cannot be tripped by
+    a bad dispatch -- only by a document whose own plan is bigger than the
+    number it registered. Checking it early is the difference between finding
+    that out for free and finding it out four calls in.
+    """
+    manifest_path, clip_dir = _speech_fixture(tmp_path, clips=3)
+    out = tmp_path / "out.json"
+    monkeypatch.setitem(
+        probe.SPEECH_REQUEST_CAPS, probe.SPEECH_FORMAT_PILOT_KIND, 3
+    )
+    built: list[object] = []
+    monkeypatch.setattr(
+        probe, "TruthfulStub",
+        lambda claims: built.append(claims) or pytest.fail("a client was built"),
+    )
+    doc = _pilot_doc(tmp_path)
+    assert probe.main([
+        *_speech_ab_args(tmp_path, manifest_path, clip_dir, out),
+        "--speech-prompt-ab", str(doc),
+    ]) == 3
+    err = capsys.readouterr().err
+    assert "plans 4 call(s) against a ceiling of 3" in err
+    assert not built and not out.exists()
+
+
+def test_the_two_arms_of_the_candidate_differ_by_the_candidate_and_nothing_else(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Measured off the wire, not off the constants.
+
+    333 checked this for V1 and it is not inherited: the arm swap happens in
+    ``apply_arm``, which is shared, but *which* header it swaps in comes from
+    the registry, and a registry entry pointing at the wrong string would
+    produce a run labelled ``observation`` that sent something else.
+    """
+    doc = _pilot_doc(
+        tmp_path, claims=("clip0_yes", "clip0_no", "clip1_yes"), name="wire.md"
+    )
+    requests, report = _requests_from_an_ab_dry_run(tmp_path, monkeypatch, doc)
+
+    assert report["pins"]["observation_header_name"] == (
+        "SPEECH_OBSERVATION_HEADER_V2"
+    )
+    assert report["pins"]["observation_header_sha256"] == hashlib.sha256(
+        probe.SPEECH_OBSERVATION_HEADER_V2.encode("utf-8")
+    ).hexdigest()
+
+    def _parts(request: dict) -> tuple[str, str]:
+        text = audio = ""
+        for part in request["messages"][0]["content"]:
+            if part.get("type") == "text":
+                text = part["text"]
+            elif part.get("type") == "input_audio":
+                audio = (part.get("input_audio") or {}).get("data") or ""
+        return text, audio
+
+    assert len(requests) == 6
+    pairs = [(requests[i], requests[i + 1]) for i in range(0, 6, 2)]
+    deltas = set()
+    for production, observation in pairs:
+        p_text, p_audio = _parts(production)
+        o_text, o_audio = _parts(observation)
+        # Same clip, byte for byte. An A/B whose audio moved is not an A/B.
+        assert p_audio == o_audio and p_audio
+        assert production["model"] == observation["model"]
+        assert production.get("modalities") == observation.get("modalities")
+        # And no structured-output parameter crept in on either side: 335
+        # bought the 400s that say this deployment refuses it.
+        assert "response_format" not in production
+        assert "response_format" not in observation
+        deltas.add(len(o_text) - len(p_text))
+        # The contract is not the last thing on the wire -- core appends the
+        # criterion after it -- so this checks it is present verbatim and once
+        # on both sides. An arm that reworded the contract would still pass a
+        # length check.
+        for text in (p_text, o_text):
+            assert text.count(AUDIO_RESPONSE_CONTRACT) == 1
+        assert probe.SPEECH_OBSERVATION_DESTINATION_SENTENCE in o_text
+        assert probe.SPEECH_OBSERVATION_DESTINATION_SENTENCE not in p_text
+
+        # The criterion sentence itself is byte-identical, and the *label* in
+        # front of it is not: ``apply_arm`` writes "Statement:" where core
+        # wrote "Criterion:". That is deliberate -- the observation header
+        # calls it "the statement below" -- and it has been in both 333 and
+        # 334. It is pinned here because it is invisible to every check those
+        # runs made: both words are ten characters, so the "exactly 739
+        # characters differ" measurement in 334 section 1 could not have seen
+        # it, and no document names it. It is a second difference between the
+        # arms, and 337 section 3 now says so.
+        _, _, p_tail = p_text.partition(probe.PRODUCTION_CRITERION_MARKER)
+        _, _, o_tail = o_text.partition("\n\nStatement:\n")
+        assert p_tail and o_tail
+        assert p_tail == o_tail, "the criterion itself moved between the arms"
+        assert probe.PRODUCTION_CRITERION_MARKER not in o_text
+        assert "\n\nStatement:\n" not in p_text
+        assert len(probe.PRODUCTION_CRITERION_MARKER) == len("\n\nStatement:\n")
+
+    # One number for every claim: the delta is the header, not the criterion.
+    assert len(deltas) == 1
+    # 334 measured 739 characters for V1; the candidate adds its one sentence
+    # to that and nothing else reaches the wire.
+    assert deltas.pop() == 739 + len(
+        probe.SPEECH_OBSERVATION_DESTINATION_SENTENCE
+    ) + 1
+
+
+# ── The request ceiling: what it counts, and what a stop keeps ──
+
+
+def test_a_request_is_counted_before_it_leaves_and_even_if_it_raises() -> None:
+    """A request that vanished may well have run.
+
+    Counting on the way back would miss exactly the requests most likely to
+    have been billed without an answer, so the counter moves first and a
+    failing inner call does not give the slot back.
+    """
+    class _Angry:
+        def __init__(self) -> None:
+            self.chat = type("_Chat", (), {"completions": self})()
+            self.seen = 0
+
+        def create(self, **kwargs: object) -> object:
+            self.seen += 1
+            raise RuntimeError("connection reset")
+
+    inner = _Angry()
+    wire = probe.WireClient(inner, request_cap=2)
+    for _ in range(2):
+        with pytest.raises(RuntimeError):
+            wire.chat.completions.create(messages=[], model="m")
+    assert wire.requests == 2 and inner.seen == 2
+
+    # The third is refused before the inner client is touched at all.
+    with pytest.raises(probe.RequestCapReached):
+        wire.chat.completions.create(messages=[], model="m")
+    assert inner.seen == 2, "a refused request still went out"
+    assert wire.requests == 3, (
+        "the refused request is counted; the count is 'asked for', and "
+        "wire.requests - 1 is 'sent'"
+    )
+
+
+def test_the_ceiling_is_not_swallowed_by_the_judge(tmp_path: Path) -> None:
+    """``RequestCapReached`` is a ``BaseException`` for a reason.
+
+    ``AudioPerception.judge`` turns any ``Exception`` into a ``judge_error``
+    and the caller moves on to the next claim. A ceiling caught that way
+    would become a quiet stream of failures that each still cost a request --
+    the opposite of a ceiling.
+    """
+    _, clip_dir = _speech_fixture(tmp_path, clips=1)
+    audio = next(clip_dir.glob("*.sent.wav"))
+
+    class _Never:
+        def __init__(self) -> None:
+            self.chat = type("_Chat", (), {"completions": self})()
+
+        def create(self, **kwargs: object) -> object:  # pragma: no cover
+            raise AssertionError("the ceiling let a request through")
+
+    wire = probe.WireClient(_Never(), request_cap=0)
+    perception = AudioPerception(
+        client=wire,
+        deployment="gpt-audio-1.5",
+        call_cap=AUDIO_CALL_CAP,
+        trim_seconds=AUDIO_TRIM_SECONDS,
+    )
+    with pytest.raises(probe.RequestCapReached):
+        perception.judge(criterion="anything", audio_path=str(audio))
+
+    assert not issubclass(probe.RequestCapReached, Exception)
+
+
+def test_a_run_stopped_by_the_ceiling_keeps_what_it_bought(
+    tmp_path: Path,
+) -> None:
+    """Stopping is not discarding -- the same rule 333 section 6 wrote.
+
+    ``calls`` is a local inside ``run_measurement``. Letting the ceiling
+    raise past the loop would drop every call already paid for in order to
+    report a ceiling the exit code reports anyway, and on a 120-call
+    comparison that is the whole run.
+
+    In this script one call is one counted request, so a plan that fits its
+    ceiling should never reach here. That is the point: this is what happens
+    if it does.
+    """
+    manifest_path, clip_dir = _speech_fixture(tmp_path, clips=3)
+    corpus = probe.load_speech_corpus(manifest_path, clip_dir)
+    wire = probe.WireClient(
+        probe.TruthfulStub(corpus.claims),
+        observation_header=probe.SPEECH_OBSERVATION_HEADER_V2,
+        request_cap=2,
+    )
+    perception = AudioPerception(
+        client=wire,
+        deployment="gpt-audio-1.5",
+        call_cap=AUDIO_CALL_CAP,
+        trim_seconds=AUDIO_TRIM_SECONDS,
+    )
+    result = probe.run_measurement(
+        perception=perception,
+        clip_dir=tmp_path / "unused",
+        repeats=1,
+        claims=corpus.claims,
+        prerendered=corpus,
+        wire=wire,
+        arms=probe.PROMPT_ARMS,
+    )
+
+    stopped = result["stopped"]
+    assert stopped["rule"] == "request_cap"
+    assert stopped["limit"] == 2
+    assert stopped["observed"] == 2, "'observed' is what was sent, not asked"
+    assert stopped["after_calls"] == 2
+    assert "partial" in stopped["reading"]
+
+    # The paid calls survived, and the plan they fell short of is recorded.
+    assert len(result["calls"]) == 2
+    assert result["planned_calls"] == len(corpus.claims) * 2
+
+    # Same census every other stop rule gets: what is left unpaired is stated
+    # rather than quietly evened up.
+    assert "left_behind" in stopped
+
+    report = probe.build_report(
+        identity=_stamped_identity(),
+        measured=True,
+        repeats=1,
+        result=result,
+        speech=corpus,
+    )
+    assert report["stopped"]["rule"] == "request_cap"
+    json.dumps(report)
+
+
+def test_a_ceiling_stop_reports_the_ceiling_and_not_the_symptom(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Exit 3 with the report on disk.
+
+    The file is worth keeping -- the requests in it were paid for -- but it
+    is a partial run under a filename a whole one also uses, and a zero exit
+    is how the two stop being told apart. The unanswered-claims exit would
+    also fire here and would name the symptom; the cause is the ceiling.
+    """
+    real = probe.run_measurement
+
+    def _stopped_at_the_ceiling(**kwargs: object) -> dict:
+        result = real(**kwargs)
+        result["stopped"] = {
+            "rule": "request_cap",
+            "limit": 12,
+            "observed": 12,
+            "after_calls": len(result["calls"]),
+            "reading": "partial",
+        }
+        result["calls"] = result["calls"][:1]
+        return result
+
+    monkeypatch.setattr(probe, "run_measurement", _stopped_at_the_ceiling)
+    out = tmp_path / "report.json"
+    assert probe.main(
+        ["--dry-run", "--quiet", "--repeats", "1", "--out", str(out)]
+    ) == 3
+    err = capsys.readouterr().err
+    assert "request ceiling of 12" in err
+    assert "no verdict was reached" not in err, (
+        "the run reported the symptom instead of the cause"
+    )
+    assert out.exists(), "the paid calls were thrown away"
+    assert json.loads(out.read_text(encoding="utf-8"))["stopped"]["rule"] == (
+        "request_cap"
+    )
+
+
+_MAIN_DOC = (
+    probe.REPO_ROOT / "tasks" / "rebuilding_grading_task"
+    / "338-format-safe-observation-ab.md"
+)
+
+
+def test_the_main_comparison_document_pins_what_this_checkout_would_dispatch(
+) -> None:
+    """338 registers the size 333 registered and 334 bought -- and no more.
+
+    The instruction for this comparison is that it does not grow past 120
+    calls. A ceiling is how that survives contact with a dispatch form: the
+    plan is counted before a client exists and refused if it is bigger. So
+    the number in the document and the number in the registry have to be the
+    same number, and this is the thing that says so.
+    """
+    text = _MAIN_DOC.read_text(encoding="utf-8")
+
+    assert probe.diagnostic_kind_stated_in(_MAIN_DOC) == (
+        probe.SPEECH_PROMPT_AB_V2_KIND
+    )
+    assert probe.grader_pin_stated_in(_MAIN_DOC) == probe.grader_source_hash()
+
+    # Whole-manifest: it must NOT narrow, and it must not fix repeats. Both
+    # are checked through the registries the door actually reads, not through
+    # the prose.
+    assert probe.SPEECH_PROMPT_AB_V2_KIND not in probe.SPEECH_NARROWED_KINDS
+    with pytest.raises(ValueError):
+        probe.pilot_claims_stated_in(_MAIN_DOC)
+
+    manifest = json.loads(
+        (
+            probe.REPO_ROOT / "tasks" / "rebuilding_grading_task"
+            / "330-speech-verification-manifest.json"
+        ).read_text(encoding="utf-8")
+    )
+    planned = len(manifest["claims"]) * 3 * len(probe.PROMPT_ARMS)
+    assert planned == 120, "the corpus changed size; 338 registers 120"
+    assert f"**{len(manifest['claims'])} × 3 × {len(probe.PROMPT_ARMS)} = " \
+           f"{planned}**" in text
+
+    cap = probe.SPEECH_REQUEST_CAPS[probe.SPEECH_PROMPT_AB_V2_KIND]
+    assert cap == 126
+    assert f"| **요청 상한** | **{cap}**" in text
+    assert planned <= cap
+
+    # The headroom is deliberately too small for another repeat. If someone
+    # raises this later, that sentence in the document stops being true, and
+    # the run it would allow is the one the instruction forbids.
+    assert len(manifest["claims"]) * 4 * len(probe.PROMPT_ARMS) > cap
+
+    name, header = probe.SPEECH_TWO_ARM_REGISTRATIONS[
+        probe.SPEECH_PROMPT_AB_V2_KIND
+    ]
+    assert header is probe.SPEECH_OBSERVATION_HEADER_V2
+    assert _doc_sha256(text, "SPEECH_OBSERVATION_HEADER_V2") == hashlib.sha256(
+        header.encode("utf-8")
+    ).hexdigest()
+    # Both pre-registrations run the same candidate, so a pilot that passes
+    # is a pilot of the thing 338 will buy.
+    assert _doc_sha256(_PILOT_DOC.read_text(encoding="utf-8"),
+                       "SPEECH_OBSERVATION_HEADER_V2") == _doc_sha256(
+        text, "SPEECH_OBSERVATION_HEADER_V2")
+
+
+def test_the_whole_manifest_kind_refuses_a_document_that_fixes_claims(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """338's door is narrower than 337's, in the one way that matters.
+
+    A claim row here would name a subset the run ignores -- it walks the whole
+    manifest -- and afterwards a document that listed five claims is
+    indistinguishable from one that agreed to twenty.
+    """
+    manifest_path, clip_dir = _speech_fixture(tmp_path, clips=3)
+    out = tmp_path / "out.json"
+    args = _speech_ab_args(tmp_path, manifest_path, clip_dir, out)
+
+    fixed = _pilot_doc(
+        tmp_path, kind=probe.SPEECH_PROMPT_AB_V2_KIND, name="v2fixed.md"
+    )
+    assert probe.main([*args, "--speech-prompt-ab", str(fixed)]) == 3
+    assert "carries a claim row" in capsys.readouterr().err
+    assert not out.exists()
+
+    # Without the row it opens, walks everything, and sends the candidate.
+    whole = _pilot_doc(
+        tmp_path, kind=probe.SPEECH_PROMPT_AB_V2_KIND, claims=None,
+        name="v2whole.md",
+    )
+    assert probe.main([*args, "--speech-prompt-ab", str(whole)]) == 0
+    report = json.loads(out.read_text(encoding="utf-8"))
+    assert report["pins"]["observation_header_name"] == (
+        "SPEECH_OBSERVATION_HEADER_V2"
+    )
+    corpus = probe.load_speech_corpus(manifest_path, clip_dir)
+    assert len(report["calls"]) == len(corpus.claims) * len(probe.PROMPT_ARMS)
+
+
+# ---------------------------------------------------------------------------
+# The dispatch form is where a document gets chosen, and it is the one place
+# the measurer's own checks cannot help. It refuses a file that does not name
+# a diagnostic; it cannot refuse the *wrong* file, because a file that says
+# `speech-prompt-ab` is a perfectly valid answer to a dispatch that asked for
+# 337. That mapping is workflow YAML, so these tests read the YAML.
+# ---------------------------------------------------------------------------
+
+
+_CORPUS_DOCUMENTS = {
+    probe.SPEECH_PROMPT_AB_KIND: (
+        "SPEECH_AB_PREREG", "333-speech-prompt-ab-prereg.md",
+    ),
+    probe.SPEECH_FORMAT_PILOT_KIND: (
+        "SPEECH_PILOT_PREREG", _PILOT_DOC.name,
+    ),
+    probe.SPEECH_PROMPT_AB_V2_KIND: (
+        "SPEECH_AB_V2_PREREG", _MAIN_DOC.name,
+    ),
+}
+
+
+def test_every_two_arm_corpus_is_offered_and_routed_to_its_own_document(
+) -> None:
+    """A dropdown entry and a document, held together in both jobs.
+
+    Three things can drift apart here and none of them is visible at dispatch
+    time. A corpus the script knows and the form does not offer cannot be run
+    at all. A corpus the form offers and neither job routes falls through to
+    ``--expect-grader-pin``, which runs one arm under 330 -- a dispatch that
+    asked for a comparison would quietly buy half of it and report an accuracy
+    for the control arm. And a corpus routed to the *wrong* document runs a
+    size nobody registered: 337's five criteria under 333, or 338's twenty
+    under 337's ceiling of twelve.
+
+    The measurer cannot catch any of these. It checks that the document names
+    a diagnostic it knows, not that the diagnostic is the one the dispatcher
+    picked -- so the check has to live where the pick is made.
+
+    The free job is checked with the same list as the paid one. It is the run
+    that is supposed to discover a broken mapping before the money.
+    """
+    inputs = _workflow()[True]["workflow_dispatch"]["inputs"]
+    options = inputs["corpus"]["options"]
+
+    # Every registered two-arm diagnostic is dispatchable, and the option is
+    # spelled exactly as the document spells the kind.
+    for kind in probe.SPEECH_TWO_ARM_REGISTRATIONS:
+        assert kind in options, f"{kind} cannot be dispatched"
+        assert kind in _CORPUS_DOCUMENTS, f"{kind} has no document in this test"
+
+    # The single-arm settings stay, and nothing else has appeared. A new
+    # option not in this list is one nobody has decided the routing for.
+    assert set(options) == {"tones", "speech", *_CORPUS_DOCUMENTS}
+    assert inputs["corpus"]["default"] == "tones", (
+        "the default dispatch must be the one that spends least"
+    )
+
+    env = _workflow()["env"]
+    for job, step_name in (("dry-run", "Dry run"), ("measure", "Measure")):
+        run = _step(job, step_name)["run"]
+        for kind, (var, filename) in _CORPUS_DOCUMENTS.items():
+            # `case` arm, then the flag it adds, then the variable it names.
+            branch = re.search(
+                rf"^\s*{re.escape(kind)}\)\n"
+                rf"\s*ARGS\+=\(--speech-prompt-ab \"\$(\w+)\"\) ;;",
+                run,
+                re.MULTILINE,
+            )
+            assert branch, f"{job} does not route {kind}"
+            assert branch.group(1) == var, (
+                f"{job} routes {kind} to ${branch.group(1)}, not ${var}"
+            )
+            assert env[var].endswith(f"/{filename}"), (
+                f"{var} does not point at {filename}"
+            )
+
+        # The fallback is the single-arm path, and it is still reached by
+        # `speech` -- which is what makes the routing above load-bearing.
+        assert '--expect-grader-pin "$SPEECH_PREREG"' in run
+
+    # Distinct documents. One file reused across two kinds would pass every
+    # assertion above and still describe one experiment as another.
+    named = [env[var] for var, _ in _CORPUS_DOCUMENTS.values()]
+    assert len(set(named)) == len(named)
+    for path in named:
+        on_disk = probe.REPO_ROOT / path.split("workspace }}/", 1)[1]
+        assert on_disk.is_file(), f"{path} is not in the checkout"
+
+
+def test_the_approval_record_counts_the_pilot_as_five_and_not_as_twenty(
+) -> None:
+    """The gate cannot read 337, so it restates 337 -- and this checks it.
+
+    Every other corpus asks twenty criteria; this one asks the five its own
+    document names. The old record said twenty unconditionally, which on a
+    337 dispatch would have authorised 40 calls for a run that makes 10.
+
+    That error is in the direction that costs nothing, and it is still the
+    error this workflow has already made once in the other direction. An
+    approval record is a claim about what was bought; a claim that is four
+    times the truth is not made safe by being an overestimate.
+
+    The five and the split are not written down here either. They are
+    re-derived from the document the run will actually be handed.
+    """
+    text = (
+        probe.REPO_ROOT / ".github" / "workflows" / "audio-accuracy-probe.yml"
+    ).read_text(encoding="utf-8")
+
+    stated = probe.pilot_claims_stated_in(_PILOT_DOC)
+    manifest = json.loads(
+        (
+            probe.REPO_ROOT / "tasks" / "rebuilding_grading_task"
+            / "330-speech-verification-manifest.json"
+        ).read_text(encoding="utf-8")
+    )
+    by_id = {claim["claim_id"]: claim for claim in manifest["claims"]}
+    claims = [by_id[claim_id] for claim_id in stated]
+    true_claims = sum(1 for claim in claims if claim["holds"])
+
+    branch = re.search(
+        rf"{re.escape(probe.SPEECH_FORMAT_PILOT_KIND)}\)\n"
+        r"\s*CRITERIA=(\d+); TRUE_CRITERIA=(\d+); FALSE_CRITERIA=(\d+)",
+        text,
+    )
+    assert branch, "the approval record does not size the pilot separately"
+    assert int(branch.group(1)) == len(claims)
+    assert int(branch.group(2)) == true_claims
+    assert int(branch.group(3)) == len(claims) - true_claims
+
+    # And it says so in words, because a reader of the record has no way to
+    # tell a five-criterion run from a twenty-criterion one that went wrong.
+    assert "narrowed   = yes, to the 5 criteria named in 337" in text
+    assert "narrowed   = no. Every criterion in the corpus" in text
+
+
+def test_the_approval_record_doubles_for_every_corpus_that_runs_two_arms(
+) -> None:
+    """``prompt_arm`` is not how these get their second arm, so it is not the test.
+
+    334 is the reason this is a list rather than a comparison against one
+    name. The record read ``prompt_arm`` alone, the A/B corpus opened its
+    second arm from its document, and the approval line said 60 calls for a
+    run that made 120. Two more corpora do the same thing now.
+
+    The shell is executed rather than pattern-matched: the arithmetic is what
+    is being checked, and a regex over a ``case`` statement would agree with a
+    branch that never runs.
+    """
+    record = _step("approve-paid", "Record approved request")["run"]
+
+    def approved(corpus: str, arm: str, repeats: str) -> str:
+        return subprocess.run(
+            ["bash", "-c", record],
+            env={
+                **os.environ,
+                "PROBE_CORPUS": corpus,
+                "PROBE_ARM": arm,
+                "PROBE_REPEATS": repeats,
+            },
+            capture_output=True, text=True, check=True,
+        ).stdout
+
+    # Two arms with the flag left alone, for each corpus that carries its own
+    # second arm -- and the totals they authorise.
+    for kind, criteria, repeats, total in (
+        (probe.SPEECH_PROMPT_AB_KIND, 20, "3", 120),
+        (probe.SPEECH_FORMAT_PILOT_KIND, 5, "1", 10),
+        (probe.SPEECH_PROMPT_AB_V2_KIND, 20, "3", 120),
+    ):
+        out = approved(kind, "production", repeats)
+        assert "(2 arm(s))" in out, kind
+        assert f"criteria   = {criteria} " in out, kind
+        assert f"{criteria * int(repeats)} per arm, {total} in total" in out
+
+    # The single-arm settings did not become two-arm on the way past.
+    for kind in ("tones", "speech"):
+        assert "(1 arm(s))" in approved(kind, "production", "3")
+        assert "60 per arm, 60 in total" in approved(kind, "production", "3")
+
+    # `both` still doubles a corpus that has no second arm of its own.
+    both = approved("speech", "both", "3")
+    assert "(2 arm(s))" in both
+    assert "60 per arm, 120 in total" in both
+

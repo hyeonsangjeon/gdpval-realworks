@@ -12,6 +12,63 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Added
+- **`337` and `338` — the two pre-registrations that take `334` §10's fourth
+  item, written before anything was bought.** `334` asked whether the
+  observation arm changes the judge's verdict and could not answer: the arm
+  came back unreadable on 51 of 60 calls, so `p = 0.0654` measured a delivery
+  failure. `335` bought the reason — `SPEECH_OBSERVATION_HEADER` opens with an
+  imperative ("write down what it actually contains") that names no
+  destination, while the response contract in the same prompt says no prose
+  before or after the JSON, and the model obeyed the first one. The candidate,
+  `SPEECH_OBSERVATION_HEADER_V2`, is that header with one 158-character
+  sentence added as the last sentence of its first paragraph, naming
+  `reasoning` as where the transcript goes: 1,774 → 1,933 characters (the
+  sentence plus the space that joins it), `b9bfaaa2…` → `93239fe7…`, and a
+  test deletes the sentence again and reconstructs V1 byte-for-byte. **The parser is not touched and
+  `response_format` is not enabled** — the deployment returns `400` for both
+  `json_object` and `json_schema` (`335` §11), and the parser type-checks only
+  `verdict`, `partial_score` and `confidence`, so a transcript in `reasoning`
+  needs no loosening to be accepted. `337` buys ten calls (five claims × one
+  repeat × two arms) and passes only at candidate 5/5 with production ≥ 4/5;
+  `338` buys the original comparison once, at the 120 calls `333` registered
+  and `334` spent, and only if `337` passed. The two are not pooled, neither
+  is re-run to move a p-value, and `334`'s published figures are unchanged.
+  Zero model calls were made for any of this.
+- **A per-kind ceiling on model requests, and a stop that keeps what it
+  bought.** `SPEECH_REQUEST_CAPS` gives `337` twelve requests and `338` a
+  hundred and twenty-six, against plans of ten and a hundred and twenty. The
+  headroom for `338` is deliberately six: enough that a couple of stray
+  requests do not lose the run, and far too little for a fourth repeat, which
+  would need 160 — the "does not grow past 120" instruction as arithmetic
+  rather than as a sentence. A plan larger than its ceiling stops before the
+  first call. `RequestCapReached` is a `BaseException` on purpose, because
+  `AudioPerception.judge` converts any `Exception` into a `judge_error` and
+  continues to the next claim, which would turn a ceiling into a quiet stream
+  of failures that each still cost a request; reaching it stops the run at that
+  point, writes the partial record with `stopped` set, and exits 3. The
+  historical `speech-prompt-ab` kind stays uncapped: an unregistered kind gets
+  `None` and the check is skipped, so this adds no ceiling to a run that has
+  already happened. **The count is of `chat.completions.create` invocations,
+  not of HTTP requests** — `max_retries` is unset all the way down, so the SDK
+  default of two applies and up to three HTTP requests can sit under one tick;
+  a request that timed out may have been billed without being counted.
+- **The probe workflow can dispatch the two new diagnostics, and routes each
+  one to its own document.** `corpus` gains `speech-format-pilot` and
+  `speech-prompt-ab-v2`, and both the free and the paid job select the
+  pre-registration by corpus rather than by a single `if`. This is the one
+  place the measurer cannot protect itself: it refuses a document that does not
+  name a diagnostic kind, but a file that says `speech-prompt-ab` is a valid
+  answer to a dispatch that asked for `337`, so a mis-wired path would have run
+  40 calls under a document registering 120 with nothing to notice it. A test
+  walks every kind in `SPEECH_TWO_ARM_REGISTRATIONS` through both jobs' argument
+  blocks and checks each lands on its own file. The paid gate's approval record
+  is corrected in the same place: it now derives the arm count from the list of
+  corpora that open a second arm themselves — `prompt_arm` stays `production`
+  for all three — and the criteria count per corpus, so `337` is recorded as 5
+  criteria and 10 calls rather than the 20 and 40 the old literal would have
+  printed, with a `narrowed` line so a five-claim run cannot be mistaken for a
+  twenty-claim run that went wrong. Two tests execute that shell rather than
+  reading it.
 - **A response-rate stop rule, pre-registered before it was pointed at any
   run.** `330`'s `zero_response_after` stops an arm that never answers; it
   cannot reach an arm that answers *sometimes*, which is why `334`'s
@@ -168,6 +225,17 @@ entries land under a fresh dated heading the day they merge to `main`.
   repository checked a result document against its own raw file.
 
 ### Fixed
+- **The record of what `333` and `334` actually varied: the observation arm
+  changes the label in front of the criterion as well as the header above it.**
+  `apply_arm` writes `Statement:` where production writes `Criterion:`. Both
+  labels are ten characters, which is why `334` §1's "정확히 739자만 달랐다"
+  could not see it — the difference is in the bytes, not in the count. **The
+  code is not changed**: making the arms differ by one thing instead of two
+  would mean `338` no longer runs the arm `334` ran, and the comparison would
+  stop being a repeat of the registered experiment. It is pinned by a test,
+  recorded in `337` §3 and `338` §3 as a limit, and the conclusion sentence has
+  to read "관찰 갈래가" and not "머리말이". No published number changes; what
+  changes is that the intervention is now described completely.
 - **A claim nobody answered was being counted as a claim the repeats agreed
   on — and, in the other direction, one missing repeat beside two matching
   answers was counted as a disagreement.** `summarise` asked whether the three

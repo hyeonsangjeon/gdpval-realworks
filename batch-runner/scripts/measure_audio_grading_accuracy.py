@@ -183,7 +183,7 @@ import sys
 import tempfile
 import time
 import wave
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace as dataclass_replace
 from pathlib import Path
 from typing import (
     Any, Callable, Iterable, Iterator, Mapping, Optional, Sequence,
@@ -988,6 +988,36 @@ class SpeechCorpus:
         )
 
 
+def narrow_speech_corpus(
+    corpus: SpeechCorpus, claim_ids: Sequence[str]
+) -> SpeechCorpus:
+    """The same verified corpus, cut down to ``claim_ids``.
+
+    The digests were checked on load, for all ten clips, before anything was
+    narrowed: this cuts the sample, not the verification. What it does drop
+    is the clips no claim in the sample names, so the report's
+    ``clip_sha256`` lists what was sent rather than what was available. A
+    run that says it sent ten clips and sent five is a run whose audio
+    cannot be identified afterwards, which is the failure
+    :func:`load_speech_corpus` exists to prevent.
+    """
+    by_claim = {claim.claim_id: claim for claim in corpus.claims}
+    missing = [c for c in claim_ids if c not in by_claim]
+    if missing:
+        raise KeyError(
+            f"{corpus.manifest_path.name} has no claim named "
+            f"{', '.join(missing)}; the document fixes a sample this "
+            f"manifest cannot supply"
+        )
+    claims = tuple(by_claim[c] for c in claim_ids)
+    wanted = {claim.clip_id for claim in claims}
+    return dataclass_replace(
+        corpus,
+        claims=claims,
+        clips=tuple(clip for clip in corpus.clips if clip.clip_id in wanted),
+    )
+
+
 def load_speech_corpus(manifest_path: Path, clip_dir: Path) -> SpeechCorpus:
     """Load the pinned speech set, refusing anything that is not what it says.
 
@@ -1783,6 +1813,29 @@ _DIAGNOSTIC_KIND_ROW = re.compile(
 #: What a speech prompt-A/B pre-registration has to call itself.
 SPEECH_PROMPT_AB_KIND = "speech-prompt-ab"
 
+#: The small format pre-trial that has to clear before the full comparison is
+#: bought again. A separate kind and not a flag on the existing one: 333's
+#: document registered 120 calls under the V1 header and is finished, and a
+#: run that reuses its name would be filed against a plan it does not follow.
+SPEECH_FORMAT_PILOT_KIND = "speech-format-pilot"
+
+#: The full comparison under the format-safe header. Same shape as
+#: :data:`SPEECH_PROMPT_AB_KIND` -- 20 claims, 3 repeats, 2 arms, 120 calls --
+#: and a different document, because the header it sends is different.
+SPEECH_PROMPT_AB_V2_KIND = "speech-prompt-ab-v2"
+
+#: The row a pre-registration writes to fix *which* claims a narrowed run
+#: puts to the model. Only the pilot uses it; the full comparisons take the
+#: whole manifest and must not carry this row at all.
+#:
+#: Parsed out of the document for the same reason the fingerprint and the
+#: kind are: a subset chosen on the command line is a subset nobody agreed
+#: to, and after the fact there is no way to tell it from one that was.
+_PILOT_CLAIMS_ROW = re.compile(r"^\|\s*시험 문항\s*\|([^|]*)\|", re.MULTILINE)
+
+#: Claim ids inside that row, one per pair of backticks.
+_BACKTICKED_CLAIM_ID = re.compile(r"`([a-z0-9_]{1,40})`")
+
 
 def diagnostic_kind_stated_in(doc_path: Path) -> str:
     """Which diagnostic a pre-registration declares itself to be."""
@@ -1799,6 +1852,41 @@ def diagnostic_kind_stated_in(doc_path: Path) -> str:
             f"which run it registers is not decidable"
         )
     return found.pop()
+
+
+def pilot_claims_stated_in(doc_path: Path) -> tuple[str, ...]:
+    """The claim ids a narrowed pre-registration fixes, in document order.
+
+    Order is kept rather than sorted: the document lists them in the order it
+    means them to run, and re-sorting here would make the run's order a
+    property of this function instead of of the plan.
+    """
+    text = doc_path.read_text(encoding="utf-8")
+    rows = _PILOT_CLAIMS_ROW.findall(text)
+    if not rows:
+        raise ValueError(
+            f"{doc_path} fixes no claims, so there is no narrowed sample to "
+            f"run. A pre-registration for a subset has to say which subset."
+        )
+    if len(rows) > 1:
+        raise ValueError(
+            f"{doc_path} states {len(rows)} different claim rows; which one "
+            f"the run is supposed to use is not decidable"
+        )
+    claim_ids = tuple(_BACKTICKED_CLAIM_ID.findall(rows[0]))
+    if not claim_ids:
+        raise ValueError(
+            f"{doc_path} has a claim row with no backticked claim id in it"
+        )
+    seen: set[str] = set()
+    for claim_id in claim_ids:
+        if claim_id in seen:
+            raise ValueError(
+                f"{doc_path} lists {claim_id} twice; a repeated claim is a "
+                f"repeat count written in the wrong place"
+            )
+        seen.add(claim_id)
+    return claim_ids
 
 
 # --------------------------------------------------------------------------
@@ -2008,9 +2096,153 @@ SPEECH_OBSERVATION_HEADER = (
     "statement is supported.\n\n"
 ) + AUDIO_RESPONSE_CONTRACT
 
+#: The one sentence that separates :data:`SPEECH_OBSERVATION_HEADER_V2` from
+#: :data:`SPEECH_OBSERVATION_HEADER`.
+#:
+#: 334 bought the V1 header and got 9 readable replies out of 60. 335 bought
+#: three of the failures and found no JSON at all in them: zero braces, the
+#: parser stopping on the first character, ``finish_reason: stop``. The model
+#: had not broken the envelope, it had not written one.
+#:
+#: Reading the two strings side by side says why. V1's most emphatic
+#: instruction -- "FIRST ... write down what it actually contains" -- is an
+#: order to produce text with **no destination named**, and the response
+#: contract that follows says "no prose before or after". A model that obeys
+#: the first instruction literally has nowhere to put the result except the
+#: reply, and then the reply is not the object.
+#:
+#: So the sentence names a destination. It does not weaken the contract, it
+#: does not soften the transcript request, and it changes nothing else: it
+#: says where the thing V1 already asked for is supposed to go.
+#:
+#: ``"reasoning"`` is chosen because it is one of the five keys the contract
+#: already requires and one of the two the parser does not type-check, so
+#: routing a transcript there needs no change to
+#: ``core.perception.audio``'s parsing and no ``response_format`` -- which
+#: this deployment rejects with a 400 either way (335 §11).
+SPEECH_OBSERVATION_DESTINATION_SENTENCE = (
+    "Write that transcript into the \"reasoning\" field of the single JSON "
+    "object described below, and write it nowhere else: that object is the "
+    "whole of your reply."
+)
+
+#: The format-safe candidate. Byte-for-byte :data:`SPEECH_OBSERVATION_HEADER`
+#: plus :data:`SPEECH_OBSERVATION_DESTINATION_SENTENCE`, inserted at the end
+#: of the FIRST paragraph.
+#:
+#: Written out in full rather than derived with ``.replace`` so that a
+#: reviewer reads the prompt that ships, not a recipe for it.
+#: ``test_the_v2_header_is_v1_plus_exactly_one_sentence`` reconstructs V1 by
+#: deleting the sentence and compares byte-for-byte, so "one sentence" is
+#: checked rather than claimed.
+#:
+#: **What it cannot do.** Naming a destination is a format fix. If the arm
+#: still loses, this string is not evidence about whether observation-first
+#: attention helps; and if it wins on format, that is a fact about envelopes
+#: and not about hearing. The two rates are reported separately for that
+#: reason.
+SPEECH_OBSERVATION_HEADER_V2 = (
+    "You are an audio analyst. A short audio clip has been supplied to you as "
+    "audio input. Work only from that audio. Nothing you have been told about "
+    "the clip is a substitute for listening to it.\n\n"
+    "FIRST, before treating the statement below as anything but words, listen "
+    "to the clip and write down what it actually contains: whether any speech "
+    "is present at all; the words you hear, in the sequence you hear them, as "
+    "close to verbatim as you can manage; and, where a word is easy to "
+    "mishear, what you believe was actually said rather than what would make "
+    "the most sense. "
+    "Write that transcript into the \"reasoning\" field of the single JSON "
+    "object described below, and write it nowhere else: that object is the "
+    "whole of your reply.\n\n"
+    "THEN judge the statement against that transcript. The statement may be "
+    "true or it may be false. Do not assume it is true, and do not let its "
+    "wording tell you what you heard: whatever it names is the claim under "
+    "test, not a fact about the clip. If the audio does not let you decide, "
+    "return verdict \"judge_error\" rather than guessing.\n\n"
+    "In \"evidence\", quote the words you heard before you state whether the "
+    "statement is supported.\n\n"
+) + AUDIO_RESPONSE_CONTRACT
+
 #: Arm identifiers. ``production`` forwards the request untouched, so the
 #: control arm is the real grading prompt and not a re-implementation of it.
 PROMPT_ARMS = ("production", "observation")
+
+#: Which two-arm pre-registrations exist, and what each one sends opposite
+#: production: ``kind -> (constant name, the string itself)``.
+#:
+#: The name travels with the string so the report can say *which* header a
+#: ``prompt_sha256`` is, rather than leaving a reader to hash candidates
+#: until one matches.
+#:
+#: Adding a row here is the only way to open the second arm, and a document
+#: still has to name its own kind to reach it. ``--prompt-arm`` reaches none
+#: of them; that door stayed shut when 333 opened this one and it stays shut
+#: now.
+SPEECH_TWO_ARM_REGISTRATIONS: dict[str, tuple[str, str]] = {
+    SPEECH_PROMPT_AB_KIND: (
+        "SPEECH_OBSERVATION_HEADER",
+        SPEECH_OBSERVATION_HEADER,
+    ),
+    SPEECH_FORMAT_PILOT_KIND: (
+        "SPEECH_OBSERVATION_HEADER_V2",
+        SPEECH_OBSERVATION_HEADER_V2,
+    ),
+    SPEECH_PROMPT_AB_V2_KIND: (
+        "SPEECH_OBSERVATION_HEADER_V2",
+        SPEECH_OBSERVATION_HEADER_V2,
+    ),
+}
+
+#: Which kinds narrow the corpus to a document-fixed claim list, and how many
+#: repeats each one is registered for.
+#:
+#: The repeat count is checked, never applied: a dispatch that asks for a
+#: different number is refused rather than quietly corrected, so the number
+#: in the run log is the number a person typed and the number the document
+#: pinned at the same time.
+SPEECH_NARROWED_KINDS: dict[str, int] = {SPEECH_FORMAT_PILOT_KIND: 1}
+
+#: The hard ceiling on model requests, per kind.
+#:
+#: What it counts, exactly: invocations of ``chat.completions.create`` made
+#: through this wrapper. ``AudioPerception.judge`` makes exactly one of those
+#: per call and reports ``api_call_count=1`` on every branch it can return
+#: from, so for this script one call is one counted request.
+#:
+#: What it does not count, and cannot: the SDK's own retries. ``max_retries``
+#: is left unset all the way down (``create_typed_azure_client`` ->
+#: ``AzureAIClientFactory.create`` only forwards it when it is not ``None``),
+#: so the openai default of two applies, and a 408/409/429/5xx or a connection
+#: error is retried *inside* a single ``create`` invocation. Up to three HTTP
+#: requests can therefore sit under one tick of this counter. Those retries
+#: mostly follow answers that were never billed -- but a request that timed
+#: out may have run and been billed, and this ceiling would not have seen it.
+#:
+#: Counted before the request leaves, and a request that raises still counts,
+#: because a request that vanished may well have run.
+#:
+#: This is a scope bound, not a budget: the number of requests the plan needs
+#: plus headroom. Reaching it means the plan was wrong, and the run stops
+#: rather than growing to fit.
+SPEECH_REQUEST_CAPS: dict[str, int] = {
+    SPEECH_FORMAT_PILOT_KIND: 12,
+    #: 338: the whole manifest, 20 claims x 3 repeats x 2 arms = 120, which is
+    #: the size 333 registered and 334 bought. The instruction for this
+    #: comparison is that it does not grow past that, so the headroom here is
+    #: six -- enough that a run is not lost to a couple of stray requests,
+    #: nowhere near enough to fit a fourth repeat (which would need 160).
+    SPEECH_PROMPT_AB_V2_KIND: 126,
+}
+
+
+class RequestCapReached(BaseException):
+    """The pre-registered request ceiling was hit; nothing further goes out.
+
+    Deliberately a ``BaseException``. ``AudioPerception.judge`` turns any
+    ``Exception`` into a ``judge_error`` and carries on to the next claim,
+    which would turn a ceiling into a quiet stream of failures that each
+    still cost a request. This one has to reach ``main``.
+    """
 
 
 def _wav_facts(data: bytes) -> dict[str, Any]:
@@ -2152,14 +2384,26 @@ class WireClient:
         *,
         arm: str = "production",
         observation_header: str = OBSERVATION_HEADER,
+        request_cap: Optional[int] = None,
     ) -> None:
         self._inner = inner
         self.arm = arm
         self.observation_header = observation_header
+        self.request_cap = request_cap
+        self.requests = 0
         self.records: list[dict[str, Any]] = []
         self.chat = type("_Chat", (), {"completions": self})()
 
     def create(self, **kwargs: Any) -> Any:
+        # Counted here, before anything leaves. Counting on the way back
+        # would not count the requests that never came back, and those are
+        # the ones most likely to have run anyway.
+        self.requests += 1
+        if self.request_cap is not None and self.requests > self.request_cap:
+            raise RequestCapReached(
+                f"request {self.requests} would exceed the pre-registered "
+                f"ceiling of {self.request_cap}; stopping before it goes out"
+            )
         record: dict[str, Any] = {"arm": self.arm}
         record.update(self._inspect(kwargs))
         sent = apply_arm(
@@ -2862,10 +3106,35 @@ def run_measurement(
                     wire.arm = arm
                     first_record = len(wire.records)
                 perception.reset()
-                verdict = perception.judge(
-                    criterion=claim.criterion,
-                    audio_path=str(paths[claim.clip_id]),
-                )
+                try:
+                    verdict = perception.judge(
+                        criterion=claim.criterion,
+                        audio_path=str(paths[claim.clip_id]),
+                    )
+                except RequestCapReached as exc:
+                    # Recorded in the same shape as the other stop rules, and
+                    # for the same reason: the run stops here, and what it
+                    # already bought stays in the record. Letting this raise
+                    # past the loop would drop ``calls`` -- a local -- and
+                    # throw away paid measurements in order to report a
+                    # ceiling that the exit code reports anyway.
+                    #
+                    # ``requests`` was incremented before the check, so one of
+                    # them is the request that was refused and never left.
+                    sent = (wire.requests - 1) if wire is not None else None
+                    stopped = {
+                        "rule": "request_cap",
+                        "limit": wire.request_cap if wire is not None else None,
+                        "observed": sent,
+                        "after_calls": len(calls),
+                        "reading": (
+                            "The pre-registered request ceiling was reached "
+                            "and the next request was not sent. What is below "
+                            "is a partial run and its counts are not the "
+                            f"design's. ({exc})"
+                        ),
+                    }
+                    break
                 if on_call is not None:
                     on_call(repeat, len(calls) + 1, claim, verdict)
                 call = {
@@ -3503,13 +3772,17 @@ def main(argv: Optional[list[str]] = None) -> int:
         default=None,
         help=(
             "Run the speech set as a two-arm prompt comparison, under the "
-            "pre-registration at this path. The document must declare itself "
-            "with a `speech-prompt-ab` diagnostic-kind row and must pin the "
-            "grader fingerprint, which is then checked exactly as "
-            "--expect-grader-pin checks it. This does not relax the "
-            "single-arm rule the published speech run was registered under: "
-            "it is a different, separately registered run, and --prompt-arm "
-            "still cannot reach it."
+            "pre-registration at this path. The document must declare a "
+            "diagnostic-kind row naming one of the registered two-arm "
+            "comparisons -- which is also what decides which alternative "
+            "header goes out -- and must pin the grader fingerprint, which "
+            "is then checked exactly as --expect-grader-pin checks it. A "
+            "narrowed registration additionally fixes its own claim list and "
+            "repeat count in the document, and a dispatch that disagrees "
+            "with either is refused rather than corrected. This does not "
+            "relax the single-arm rule the published speech run was "
+            "registered under: these are different, separately registered "
+            "runs, and --prompt-arm still cannot reach any of them."
         ),
     )
     parser.add_argument(
@@ -3540,6 +3813,13 @@ def main(argv: Optional[list[str]] = None) -> int:
     # the check being written twice.
     pin_doc: Optional[Path] = args.expect_grader_pin
 
+    # Which alternative header the speech arm would send, and what it is
+    # called. Defaulted here and overwritten only by a registration, so the
+    # single-arm speech path keeps the header 330 shipped with.
+    header_name = "SPEECH_OBSERVATION_HEADER"
+    speech_observation_header = SPEECH_OBSERVATION_HEADER
+    request_cap: Optional[int] = None
+
     speech: Optional[SpeechCorpus] = None
     if args.speech_set is not None:
         try:
@@ -3569,15 +3849,19 @@ def main(argv: Optional[list[str]] = None) -> int:
             except (OSError, ValueError) as exc:
                 print(f"::error::{exc}", file=sys.stderr)
                 return 3
-            if kind != SPEECH_PROMPT_AB_KIND:
+            if kind not in SPEECH_TWO_ARM_REGISTRATIONS:
+                known = ", ".join(sorted(SPEECH_TWO_ARM_REGISTRATIONS))
                 print(
                     f"::error::{args.speech_prompt_ab.name} registers "
-                    f"'{kind}', not '{SPEECH_PROMPT_AB_KIND}'. A document "
-                    f"that registered some other diagnostic has not agreed "
-                    f"to this one.",
+                    f"'{kind}', which is not a two-arm speech comparison. A "
+                    f"document that registered some other diagnostic has not "
+                    f"agreed to this one. Known: {known}.",
                     file=sys.stderr,
                 )
                 return 3
+            header_name, speech_observation_header = (
+                SPEECH_TWO_ARM_REGISTRATIONS[kind]
+            )
             arms = PROMPT_ARMS
             if pin_doc is None:
                 pin_doc = args.speech_prompt_ab
@@ -3587,6 +3871,55 @@ def main(argv: Optional[list[str]] = None) -> int:
                     "different documents; the run would be held to one "
                     "document's fingerprint while filed under another's"
                 )
+
+            # A narrowed registration fixes its own sample and its own repeat
+            # count. Both are read out of the document and neither is
+            # silently applied over what was dispatched: a mismatch is a
+            # dispatch that does not match its plan, and correcting it here
+            # would hide that.
+            registered_repeats = SPEECH_NARROWED_KINDS.get(kind)
+            if registered_repeats is None:
+                if _PILOT_CLAIMS_ROW.search(
+                    args.speech_prompt_ab.read_text(encoding="utf-8")
+                ):
+                    print(
+                        f"::error::{args.speech_prompt_ab.name} registers "
+                        f"'{kind}', which runs the whole manifest, but it "
+                        f"carries a claim row. A document that names a "
+                        f"subset and a run that ignores it disagree about "
+                        f"what was measured.",
+                        file=sys.stderr,
+                    )
+                    return 3
+            else:
+                if args.repeats != registered_repeats:
+                    print(
+                        f"::error::{args.speech_prompt_ab.name} registers "
+                        f"{registered_repeats} repeat(s); this dispatch asks "
+                        f"for {args.repeats}. Dispatch it as registered.",
+                        file=sys.stderr,
+                    )
+                    return 3
+                try:
+                    claim_ids = pilot_claims_stated_in(args.speech_prompt_ab)
+                    speech = narrow_speech_corpus(speech, claim_ids)
+                except (OSError, ValueError, KeyError) as exc:
+                    print(f"::error::{exc}", file=sys.stderr)
+                    return 3
+
+            # Arithmetic, before the client exists. The ceiling bounds
+            # requests and the plan is counted in calls, so this cannot prove
+            # the run fits -- it can only catch a plan that already does not.
+            request_cap = SPEECH_REQUEST_CAPS.get(kind)
+            planned = len(speech.claims) * args.repeats * len(arms)
+            if request_cap is not None and planned > request_cap:
+                print(
+                    f"::error::{args.speech_prompt_ab.name} plans {planned} "
+                    f"call(s) against a ceiling of {request_cap} request(s). "
+                    f"The plan does not fit the ceiling it registered.",
+                    file=sys.stderr,
+                )
+                return 3
 
     # Before the identity, before the client, before anything is bought: is
     # the grader this checkout would use the one the pre-registration names?
@@ -3637,12 +3970,18 @@ def main(argv: Optional[list[str]] = None) -> int:
     # a fingerprint for a prompt nothing sent is a fact about this file, not
     # about the run.
     observation_header = (
-        SPEECH_OBSERVATION_HEADER if speech else OBSERVATION_HEADER
+        speech_observation_header if speech else OBSERVATION_HEADER
     )
     if len(arms) > 1:
         identity["observation_header_sha256"] = hashlib.sha256(
             observation_header.encode("utf-8")
         ).hexdigest()
+        # The name next to the hash. Without it a reader has to guess which
+        # of two headers a digest belongs to, and the whole point of two
+        # candidates is that they are easy to confuse.
+        identity["observation_header_name"] = (
+            header_name if speech else "OBSERVATION_HEADER"
+        )
     if identity["audio_clip_seconds"] != AUDIO_TRIM_SECONDS:
         # Not fatal to the arithmetic, but it means the clips the model hears
         # here are cut to a different length than the ones it heard in the
@@ -3679,7 +4018,10 @@ def main(argv: Optional[list[str]] = None) -> int:
     # is the reason this run exists, and making it conditional would mean the
     # cheap runs are the ones that cannot say whether the audio arrived.
     wire = WireClient(
-        client, arm=arms[0], observation_header=observation_header
+        client,
+        arm=arms[0],
+        observation_header=observation_header,
+        request_cap=request_cap,
     )
 
     try:
@@ -3704,6 +4046,22 @@ def main(argv: Optional[list[str]] = None) -> int:
                 # after its numbers were reported.
                 stop_rules=SPEECH_STOP_RULES if speech else None,
             )
+    except RequestCapReached as exc:
+        # A backstop, not the normal path. ``run_measurement`` catches this
+        # around the call it wraps and records it as a stop, so a ceiling hit
+        # during the measurement keeps the requests already paid for. Reaching
+        # here means the ceiling fired somewhere outside that loop, where
+        # there is no partial record to keep -- so there is nothing to write,
+        # and the count goes on this line instead.
+        print(
+            f"::error::{exc}. Sent {wire.requests - 1} request(s) before "
+            f"stopping; the ceiling was {request_cap}. This fired outside the "
+            f"measurement loop, so no report was written. Record the cause "
+            f"and re-plan -- raising the ceiling to fit the run it just "
+            f"refused is the one repair that is not available.",
+            file=sys.stderr,
+        )
+        return 3
     finally:
         if managed is not None:
             managed.close()
@@ -3736,6 +4094,28 @@ def main(argv: Optional[list[str]] = None) -> int:
             + "\n",
             encoding="utf-8",
         )
+
+    stopped = result.get("stopped")
+    if stopped is not None and stopped.get("rule") == "request_cap":
+        # Checked before the unanswered-claims exit below, which would also
+        # fire here and would name the wrong thing: claims are missing
+        # *because* the ceiling stopped the run, and a run that reports the
+        # symptom leaves the reader to guess the cause.
+        #
+        # Non-zero even though the report was written. The file is worth
+        # keeping -- the requests in it were paid for -- but it is a partial
+        # run under a filename that a whole one also uses, and a green exit
+        # is how the two stop being told apart.
+        print(
+            f"::error::the pre-registered request ceiling of "
+            f"{stopped.get('limit')} was reached after "
+            f"{stopped.get('after_calls')} call(s); the report above is a "
+            f"partial run. Record the cause and re-plan -- raising the "
+            f"ceiling to fit the run it just refused is the one repair that "
+            f"is not available.",
+            file=sys.stderr,
+        )
+        return 3
 
     missing = unanswered_claims(result["calls"])
     if missing:

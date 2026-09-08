@@ -71,6 +71,17 @@ name: Audio Accuracy Probe
 #     intended behaviour: the pre-registration in 330 names those digests, and
 #     a run whose audio it does not describe is not the run that was approved.
 #
+# Three of the `corpus` settings run two arms against the same audio, and each
+# one belongs to a different document. `speech-prompt-ab` is 333, which 334
+# bought and which came back without an answer: the observation arm returned
+# something unreadable 51 times out of 60, so the p-value measured a delivery
+# failure rather than a difference in judgement. 337 pilots a candidate header
+# that names where the transcript goes, on five criteria and one repeat; 338
+# buys the comparison again, but only if that pilot passes. The measurer will
+# not open a second arm because a path was typed here -- it opens it when the
+# document handed to it says which diagnostic it is, which is why each of these
+# settings points at a different file below rather than at a shared one.
+#
 # It still spends money, so the paid half sits behind the same `grading`
 # environment gate every other paid path in this repository uses. A gate that
 # is reused rather than duplicated is one fewer approval surface to audit.
@@ -89,7 +100,7 @@ on:
         type: boolean
         default: false
       repeats:
-        description: 'How many times each criterion is put to the model. 3 matches the repeat runs, so stability here is comparable with the 19.35%. Total calls = 20 criteria x repeats x arms (arms is 2 when prompt_arm is both).'
+        description: 'How many times each criterion is put to the model. 3 matches the repeat runs, so stability here is comparable with the 19.35%. Total calls = 20 criteria x repeats x arms, where arms is 2 when prompt_arm is both AND when the corpus runs a second arm of its own. speech-format-pilot is the exception to both halves of that: its document narrows the corpus to five criteria and fixes repeats at 1, and it refuses any other value here rather than quietly correcting it.'
         required: false
         type: number
         default: 3
@@ -103,7 +114,7 @@ on:
           - observation
           - both
       corpus:
-        description: 'Which sounds. tones = clicks, beeps and sine waves; answers whether the verdict depends on the audio at all. speech = ten synthesised sentences with a known transcript; answers whether it hears words. speech-prompt-ab = the same ten sentences under two prompts, which DOUBLES the call count; it is the only speech setting that runs a second arm, and it runs it because 333 registers it, not because prompt_arm was changed. Both speech settings rebuild their clips and refuse to run if they do not match the committed digests.'
+        description: 'Which sounds, and under which document. tones = clicks, beeps and sine waves; answers whether the verdict depends on the audio at all. speech = ten synthesised sentences with a known transcript; answers whether it hears words. The remaining three run the same ten sentences under two prompts, which DOUBLES the call count, and each one is opened by its own pre-registration rather than by prompt_arm: speech-prompt-ab is 333 (20 criteria, already bought by 334, kept so that run stays reproducible), speech-format-pilot is 337 (5 criteria, repeats must be 1, a format check and not a result), speech-prompt-ab-v2 is 338 (20 criteria, the comparison 334 could not deliver — and it is not to be dispatched unless 337 passed). Every speech setting rebuilds its clips and refuses to run if they do not match the committed digests.'
         required: false
         type: choice
         default: tones
@@ -111,6 +122,8 @@ on:
           - tones
           - speech
           - speech-prompt-ab
+          - speech-format-pilot
+          - speech-prompt-ab-v2
 
 # Read-only by default. The paid job adds id-token for OIDC and nothing else:
 # there is no commit, no release, and no dispatch to make.
@@ -136,6 +149,15 @@ env:
   # diagnostic it is, so the opt-in lives in the document rather than in a path
   # somebody typed on a command line.
   SPEECH_AB_PREREG: ${{ github.workspace }}/tasks/rebuilding_grading_task/333-speech-prompt-ab-prereg.md
+  # 337 and 338, for the same reason 333 got its own line: a document names the
+  # sample, the repeat count and the request ceiling of one experiment, and a
+  # run held to the wrong document is a run nobody registered. 337 is the
+  # five-criterion format pilot; 338 is the full comparison, which is bought
+  # only if that pilot passes. They are separate files because they are
+  # separate decisions, and the measurer reads which is which out of the file
+  # rather than off the name.
+  SPEECH_PILOT_PREREG: ${{ github.workspace }}/tasks/rebuilding_grading_task/337-format-safe-observation-pilot.md
+  SPEECH_AB_V2_PREREG: ${{ github.workspace }}/tasks/rebuilding_grading_task/338-format-safe-observation-ab.md
 
 # One at a time. Two concurrent probes would interleave their calls against the
 # same deployment's TPM budget and each would measure the other's throttling.
@@ -217,13 +239,26 @@ jobs:
           if [ "${{ inputs.corpus }}" != "tones" ]; then
             ARGS+=(--speech-set "$SPEECH_MANIFEST" --speech-clips "$SPEECH_CLIPS")
             # Which document this run belongs to, and therefore how many arms
-            # it has. --speech-prompt-ab carries its own fingerprint check, so
-            # the two flags are alternatives and never both.
-            if [ "${{ inputs.corpus }}" = "speech-prompt-ab" ]; then
-              ARGS+=(--speech-prompt-ab "$SPEECH_AB_PREREG")
-            else
-              ARGS+=(--expect-grader-pin "$SPEECH_PREREG")
-            fi
+            # it has, how many criteria it asks and how many requests it may
+            # make. --speech-prompt-ab carries its own fingerprint check, so it
+            # and --expect-grader-pin are alternatives and never both.
+            #
+            # Each two-arm corpus points at its own file. Handing 333 to a
+            # dispatch that asked for 337 would run 40 calls under a document
+            # that registered 120, and the measurer could not tell: it checks
+            # that the file it was given names a diagnostic, not that the file
+            # matches the word someone chose in the dropdown. That check is
+            # here, in the mapping, and a test walks it.
+            case "${{ inputs.corpus }}" in
+              speech-prompt-ab)
+                ARGS+=(--speech-prompt-ab "$SPEECH_AB_PREREG") ;;
+              speech-format-pilot)
+                ARGS+=(--speech-prompt-ab "$SPEECH_PILOT_PREREG") ;;
+              speech-prompt-ab-v2)
+                ARGS+=(--speech-prompt-ab "$SPEECH_AB_V2_PREREG") ;;
+              *)
+                ARGS+=(--expect-grader-pin "$SPEECH_PREREG") ;;
+            esac
           fi
           python scripts/measure_audio_grading_accuracy.py "${ARGS[@]}"
 
@@ -319,11 +354,12 @@ jobs:
           # run would spend, it was off by a factor and nobody noticed until
           # afterwards.
           # Defaulted because this job has no checkout and is executed
-          # directly by a test that sets only the two variables above. The
-          # two corpora have the same criteria count and differ only in clips
-          # -- and that sentence is now checked rather than trusted: the
-          # criteria count sets the call count below, and it was pinned
-          # against the tone corpus alone, which is not the one this buys.
+          # directly by a test that sets only the three variables above. The
+          # tone and speech corpora hold the same twenty criteria and differ
+          # only in clips; 337 is the one that does not, because its document
+          # narrows the manifest to five. Neither sentence is trusted here --
+          # the criteria count sets the call count below, and a test derives
+          # both branches from the corpus and from that document.
           CORPUS="${PROBE_CORPUS:-tones}"
           # The arm count is not read off prompt_arm alone any more. The speech
           # A/B runs two arms with prompt_arm left at `production`, because the
@@ -331,20 +367,45 @@ jobs:
           # record that read only the flag would authorise 60 calls for a run
           # that makes 120 -- the `calls = 36` failure again, on the dispatch
           # that spends the money.
-          if [ "$PROBE_ARM" = "both" ] || [ "$CORPUS" = "speech-prompt-ab" ]; then
+          #
+          # There are three such corpora now (333, 337, 338), so this is a list
+          # rather than a comparison against one name. A fourth added to the
+          # dropdown and not added here would be recorded as half its size.
+          case "$CORPUS" in
+            speech-prompt-ab|speech-format-pilot|speech-prompt-ab-v2)
+              CORPUS_ARMS=2 ;;
+            *)
+              CORPUS_ARMS=1 ;;
+          esac
+          if [ "$PROBE_ARM" = "both" ] || [ "$CORPUS_ARMS" = 2 ]; then
             PROBE_ARMS=2
           else
             PROBE_ARMS=1
           fi
+          # And the criteria count is no longer 20 everywhere. 337 narrows the
+          # manifest to the five claims its own document names, so the run is a
+          # quarter of the size the old literal here would have recorded --
+          # wrong in the safe direction this time, but wrong is the problem.
+          # The narrowing is done by the measurer reading that document; this
+          # is the restatement of it, and a test holds the two together.
+          case "$CORPUS" in
+            speech-format-pilot)
+              CRITERIA=5; TRUE_CRITERIA=3; FALSE_CRITERIA=2
+              NARROWED="  narrowed   = yes, to the 5 criteria named in 337 (of 20 in the manifest)" ;;
+            *)
+              CRITERIA=20; TRUE_CRITERIA=10; FALSE_CRITERIA=10
+              NARROWED="  narrowed   = no. Every criterion in the corpus" ;;
+          esac
           case "$CORPUS" in speech*) CLIPS=10 ;; *) CLIPS=9 ;; esac
           printf '%s\n' \
             "Approved paid audio accuracy probe:" \
             "  model      = gpt-audio-1.5 (read from gold_audio_repeat_v2_sol_max.yaml)" \
             "  corpus     = $CORPUS ($CLIPS clips)" \
-            "  criteria   = 20 (10 true / 10 false)" \
+            "  criteria   = $CRITERIA ($TRUE_CRITERIA true / $FALSE_CRITERIA false)" \
+            "$NARROWED" \
             "  repeats    = $PROBE_REPEATS" \
             "  prompt_arm = $PROBE_ARM ($PROBE_ARMS arm(s))" \
-            "  calls      = $((20 * PROBE_REPEATS)) per arm, $((20 * PROBE_REPEATS * PROBE_ARMS)) in total" \
+            "  calls      = $((CRITERIA * PROBE_REPEATS)) per arm, $((CRITERIA * PROBE_REPEATS * PROBE_ARMS)) in total" \
             "  grades     = none. This does not write a grade or touch a corpus."
 
   # ---------------------------------------------------------------------------
@@ -444,13 +505,26 @@ jobs:
           if [ "${{ inputs.corpus }}" != "tones" ]; then
             ARGS+=(--speech-set "$SPEECH_MANIFEST" --speech-clips "$SPEECH_CLIPS")
             # Which document this run belongs to, and therefore how many arms
-            # it has. --speech-prompt-ab carries its own fingerprint check, so
-            # the two flags are alternatives and never both.
-            if [ "${{ inputs.corpus }}" = "speech-prompt-ab" ]; then
-              ARGS+=(--speech-prompt-ab "$SPEECH_AB_PREREG")
-            else
-              ARGS+=(--expect-grader-pin "$SPEECH_PREREG")
-            fi
+            # it has, how many criteria it asks and how many requests it may
+            # make. --speech-prompt-ab carries its own fingerprint check, so it
+            # and --expect-grader-pin are alternatives and never both.
+            #
+            # Each two-arm corpus points at its own file. Handing 333 to a
+            # dispatch that asked for 337 would run 40 calls under a document
+            # that registered 120, and the measurer could not tell: it checks
+            # that the file it was given names a diagnostic, not that the file
+            # matches the word someone chose in the dropdown. That check is
+            # here, in the mapping, and a test walks it.
+            case "${{ inputs.corpus }}" in
+              speech-prompt-ab)
+                ARGS+=(--speech-prompt-ab "$SPEECH_AB_PREREG") ;;
+              speech-format-pilot)
+                ARGS+=(--speech-prompt-ab "$SPEECH_PILOT_PREREG") ;;
+              speech-prompt-ab-v2)
+                ARGS+=(--speech-prompt-ab "$SPEECH_AB_V2_PREREG") ;;
+              *)
+                ARGS+=(--expect-grader-pin "$SPEECH_PREREG") ;;
+            esac
           fi
           python scripts/measure_audio_grading_accuracy.py "${ARGS[@]}"
 
