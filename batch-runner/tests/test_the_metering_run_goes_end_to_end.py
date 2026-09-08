@@ -242,6 +242,13 @@ def test_the_registered_run_reaches_rehearsal_ok(tmp_path, corpus):
     # unanswerable rather than passed. A rehearsal that scored nine of nine
     # would be the artifact most easily mistaken for the paid run.
     assert _condition(outcome, 2)["result"] == checker.RESULT_UNANSWERABLE
+    # 343 §2.2 quotes this line, and 343 §3.5 says the eight endings did not
+    # move it. Both claims are only as good as an exact count: "nothing
+    # failed" plus "condition 2 is unanswerable" would still hold if a second
+    # condition quietly stopped answering, and the document would go on
+    # reporting 8/0/1.
+    assert outcome["counts"] == {"passed": 8, "failed": 0, "unanswerable": 1}
+    assert "8 passed, 0 failed, 1 unanswerable" in checker.render(outcome)
     assert checker.main([str(report_path)]) == 0
 
 
