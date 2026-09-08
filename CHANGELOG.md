@@ -180,18 +180,18 @@ entries land under a fresh dated heading the day they merge to `main`.
   13 → 2 without losing eleven claims: the published thirteen and the corrected
   two are disjoint sets. All thirteen left the comparison entirely and none
   became a disagreement, while both survivors are claims the old rule had
-  called *not* identical. The key counts different claims now, not fewer of the
-  same ones. `stable` is now
-  three-valued — `None` means there was nothing to compare, and it is not
-  `False` — and the published block carries `claims_with_two_or_more_answers`,
-  `differed_across_repeats`, `claims_without_two_answers` and an
-  `identical_share_of_comparable` that is `null` rather than `0.0` or `1.0`
-  when no claim was comparable. The same omission in `repeat_flip_rate` is
-  fixed the same way: a claim with no comparable pair no longer counts toward
-  `claims_that_ever_flipped`, which now prints out of the new `claims_compared`
-  rather than out of the corpus — the field that let `334`'s observation arm
-  render "0 of 20" off two comparable pairs. `330` §4 had already written this
-  rule for the *pair* denominator ("안 온 답은 일치도 불일치도 아니다"); this is
+  called *not* identical — the key counts different claims now, not fewer of
+  the same ones. `stable` is now three-valued — `None` means there was nothing
+  to compare, and it is not `False` — and the published block carries
+  `claims_with_two_or_more_answers`, `differed_across_repeats`,
+  `claims_without_two_answers` and an `identical_share_of_comparable` that is
+  `null` rather than `0.0` or `1.0` when no claim was comparable. The same
+  omission in `repeat_flip_rate` is fixed the same way: a claim with no
+  comparable pair no longer counts toward `claims_that_ever_flipped`, which now
+  prints out of the new `claims_compared` rather than out of the corpus — the
+  field that let `334`'s observation arm render "0 of 20" off two comparable
+  pairs. `330` §4 had already written this rule for the *pair* denominator
+  ("안 온 답은 일치도 불일치도 아니다"); this is
   the same sentence where the *claim* denominator was missing it. No key was
   removed and no run was re-executed. `334`'s primary metric is the per-claim
   majority McNemar `p = 0.0654`, which does not read the stability block, so no
