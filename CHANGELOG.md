@@ -176,7 +176,12 @@ entries land under a fresh dated heading the day they merge to `main`.
   fall. `334`'s observation arm published `identical_across_repeats: 13` when
   all thirteen of those claims had never produced a verdict; its production arm
   published `15` when `column_second` (`judge_error`, `fail`, `fail`) had
-  answered twice and answered the same way both times. `stable` is now
+  answered twice and answered the same way both times. The observation arm went
+  13 → 2 without losing eleven claims: the published thirteen and the corrected
+  two are disjoint sets. All thirteen left the comparison entirely and none
+  became a disagreement, while both survivors are claims the old rule had
+  called *not* identical. The key counts different claims now, not fewer of the
+  same ones. `stable` is now
   three-valued — `None` means there was nothing to compare, and it is not
   `False` — and the published block carries `claims_with_two_or_more_answers`,
   `differed_across_repeats`, `claims_without_two_answers` and an

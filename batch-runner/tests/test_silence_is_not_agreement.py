@@ -867,6 +867,41 @@ def test_the_reanalysis_is_a_separate_file_with_its_own_fingerprint() -> None:
     assert data["primary_metric_changed"] is False
 
 
+def test_the_corrected_count_holds_none_of_the_claims_the_old_one_held() -> None:
+    """13 did not become 2 by losing eleven claims.
+
+    Counted straight off 334's recorded call log, not off either summary, so
+    a bug shared by both readings cannot hide here. Every one of the thirteen
+    the old rule called identical was a claim that answered nothing three
+    times; both of the two the new rule calls identical are claims the old
+    rule called *not* identical. The two sets are disjoint, which is why 336
+    changes the meaning of the key rather than the value of a number -- and
+    why a reader comparing the two runs on this field is comparing different
+    claims, not a claim count that moved.
+    """
+    data = json.loads(
+        (TASKS / "334-audio-accuracy-measured.json").read_text(encoding="utf-8")
+    )
+    verdicts: dict[str, list[str]] = {}
+    for call in data["calls"]:
+        if call["arm"] == "observation":
+            verdicts.setdefault(call["claim_id"], []).append(call["verdict"])
+
+    old_identical = {c for c, v in verdicts.items() if len(set(v)) == 1}
+    answered = {c: [v for v in vs if v != "judge_error"] for c, vs in verdicts.items()}
+    new_identical = {
+        c for c, v in answered.items() if len(v) >= 2 and len(set(v)) == 1
+    }
+
+    assert len(old_identical) == 13
+    assert len(new_identical) == 2
+    assert not (old_identical & new_identical)
+    assert all(set(verdicts[c]) == {"judge_error"} for c in old_identical)
+    assert new_identical == {"meeting_to_tuesday", "valve_wait"}
+    # None of the thirteen moved to "differed"; they all left the comparison.
+    assert not any(len(answered[c]) >= 2 for c in old_identical)
+
+
 def test_the_counterfactual_is_labelled_as_computed_after_the_pinning() -> None:
     """Order of operations, stated where the number is.
 
