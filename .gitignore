@@ -140,6 +140,7 @@ tasks/0822_saturday/*
 tasks/0828_friday/*
 !tasks/0828_friday/TASK_PER_TASK_COST_RECEIPTS.md
 !tasks/0828_friday/AUDIO_PRICE_REPRODUCTION_2026-09-07.md
+!tasks/0828_friday/TASK_REFUSAL_IS_NOT_AN_UNREACHED_CALL.md
 # The grading-rebuild specs and reports here predate the `tasks/**` rule, so
 # they stay tracked without an entry. A *new* file among them does not -- git
 # will not un-ignore a path inside an ignored directory, which is why the

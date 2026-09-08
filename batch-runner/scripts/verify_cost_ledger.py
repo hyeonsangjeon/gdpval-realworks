@@ -247,8 +247,26 @@ def check_all_calls_settled(calls: list[dict[str, Any]]) -> Finding:
     bookkeeping noise: it is a request the provider may well have billed,
     whose reply was never recorded. It cannot appear in the totals, which is
     exactly why it has to be surfaced rather than subtracted.
+
+    Only 'reserved' means that. A row is 'abandoned' when the call is known
+    never to have left, and 'refused' when the provider answered and the answer
+    was a rejection issued before any model ran. Neither is a reply that went
+    missing, and reporting them here would bury the rows that are — which is
+    the same mistake, one layer up, that ``call_refused_unpriced`` exists to
+    stop the ledger making. They are counted in the evidence instead.
     """
-    unsettled = [row for row in calls if row.get("state") != STATE_SETTLED]
+    unsettled = [row for row in calls if row.get("state") == STATE_RESERVED]
+    resolved_without_a_reply = sorted(
+        {
+            str(row.get("state") or "")
+            for row in calls
+            if row.get("state") not in (STATE_SETTLED, STATE_RESERVED)
+        }
+    )
+    counts = {
+        state: sum(1 for row in calls if row.get("state") == state)
+        for state in resolved_without_a_reply
+    }
     if unsettled:
         return Finding(
             "all_calls_settled",
@@ -262,14 +280,24 @@ def check_all_calls_settled(calls: list[dict[str, Any]]) -> Finding:
                         "task_id": row.get("task_id"),
                         "stage": row.get("stage"),
                         "state": row.get("state"),
+                        "note": row.get("note"),
                     }
                     for row in unsettled[:20]
                 ],
                 "unsettled_count": len(unsettled),
+                "other_states": counts,
             },
         )
+    settled = sum(1 for row in calls if row.get("state") == STATE_SETTLED)
+    detail = f"every one of the {len(calls)} calls recorded a reply"
+    if counts:
+        named = ", ".join(f"{count} {state}" for state, count in counts.items())
+        detail = (
+            f"{settled} of {len(calls)} calls recorded a reply and none is "
+            f"still waiting for one ({named})"
+        )
     return Finding(
-        "all_calls_settled", True, f"every one of the {len(calls)} calls recorded a reply"
+        "all_calls_settled", True, detail, {"other_states": counts} if counts else None
     )
 
 

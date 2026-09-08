@@ -18,6 +18,7 @@
         "usage_partial",
         "price_missing",
         "call_reachability_unknown",
+        "call_refused_unpriced",
         "runtime_cost_unattributable",
         "runtime_cost_unpriced",
         "ledger_absent",
