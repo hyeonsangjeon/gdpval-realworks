@@ -50,6 +50,7 @@ from core.codex_runtime_config import (
     NEUTRALISED_ENV_NAMES,
     build_isolated_environment,
     require_pinned_runtime,
+    resolve_run_root_base,
 )
 from core.cost_receipts import STAGE_GENERATION, RETRY_NONE, make_call_id
 from core.execution_envelope_observed import (
@@ -200,8 +201,15 @@ class CodexWorkspace:
                    write the operator's own.
     ``home``       ``HOME`` and the XDG roots, so a tool that writes "to the
                    home directory" writes here.
-    ``root``       the temporary parent that holds all three and is removed
-                   with the task.
+    ``root``       the private parent that holds all three and is removed with
+                   the task.
+
+    ``root`` is deliberately **not** under ``/tmp``. Codex will not create its
+    ``codex-linux-sandbox`` helper when ``CODEX_HOME`` is inside the temporary
+    directory, and an agent that cannot reach that helper cannot execute
+    anything — see the long note in ``core/codex_runtime_config.py``. It is
+    still one directory per task, made with the same 0o700 permissions and
+    removed by :meth:`cleanup`; only the parent moved.
     """
 
     root: Path
@@ -213,7 +221,9 @@ class CodexWorkspace:
     @classmethod
     def create(cls, *, task_id: str) -> "CodexWorkspace":
         safe = re.sub(r"[^A-Za-z0-9._-]", "_", task_id)[:48] or "task"
-        root = Path(tempfile.mkdtemp(prefix=f"gdpval-codex-{safe}-"))
+        base = resolve_run_root_base()
+        base.mkdir(mode=0o700, parents=True, exist_ok=True)
+        root = Path(tempfile.mkdtemp(prefix=f"gdpval-codex-{safe}-", dir=base))
         workspace = root / "workspace"
         codex_home = root / "codex_home"
         home = root / "home"

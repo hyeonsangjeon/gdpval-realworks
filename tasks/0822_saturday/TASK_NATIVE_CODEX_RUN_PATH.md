@@ -5,11 +5,13 @@
   open question is now answered. See section 3a.
 - Updated: 2026-09-08 — the documentation now covers the Azure provider, and the
   run place was built against the pinned runtime and checked without a paid
-  deployment. See section 3b.
-- Status: **built, not connected.** The code exists and the whole chain is
-  checked against the real Codex binary; no request has yet reached the Foundry
-  deployment, so the run place is graded `structure_check_only` and a batch run
-  in this mode is refused.
+  deployment. Running it on a host that can sandbox then found a defect in the
+  run place itself. See section 3b.
+- Status: **built, not connected, and the execution leg is unproven.** The code
+  exists and most of the chain is checked against the real Codex binary; the
+  agent has never been observed executing a command anywhere, and no request has
+  yet reached the Foundry deployment, so the run place is graded
+  `structure_check_only` and a batch run in this mode is refused.
 - Related GitHub Project: hyeonsangjeon/projects/5 — cards
   "같은 GPT 모델의 실행 환경별 성능 비교" and
   "Codex SDK와 Foundry GPT를 연결해 220문제 실험 실행"
@@ -221,20 +223,68 @@ comes back, the turn ends, usage is collected off `ThreadTokenUsage`, the call
 is settled into the receipt with its missing-information reasons, and the
 process exits without leaking a session.
 
-**Driven, but on exactly one machine:** the sandboxed command executing, the
-file it writes appearing on disk, and the tool result carrying that command's
-real output back to the model. Those are the two assertions that used to skip
-everywhere. They now run on GitHub's `ubuntu-22.04` runner, under
-`CODEX_SANDBOX_MUST_RUN=1`, where a skip is a failure. Nowhere else. On every
-other host this project has, they still skip, and that skip is still the
-correct answer for those hosts.
+**Not driven anywhere yet:** the sandboxed command executing, the file it writes
+appearing on disk, and the tool result carrying that command's real output back
+to the model. Those are the two assertions that used to skip everywhere. They
+now *run* on GitHub's `ubuntu-22.04` runner, under `CODEX_SANDBOX_MUST_RUN=1`,
+where a skip is a failure — and the first time they ran, they failed. What they
+found is below. Until that job is green, no document here may say this leg
+works, on one machine or on any.
 
 Finding that machine is what `scripts/diagnose_codex_sandbox_host.py` was for.
 The rule it replaced — *until one machine reports `ready`, no document here may
-call the chain end-to-end verified* — has been met, and met by measurement
-rather than by argument. What may now be said is narrower than "verified": the
-chain has been driven end to end **once, on one runner image, against a
-scripted provider**. What still may not be said is that it works against a paid
+call the chain end-to-end verified* — is half met. One machine reports `ready`,
+by measurement rather than by argument. The other half is not met at all: the
+sentence that stood here before, "the chain has been driven end to end once, on
+one runner image", was written from the expectation that the job would pass,
+before it had run. It had not, and it did not.
+
+**What the red run found.** Both assertions failed the same way, and not on the
+sandbox:
+
+    bwrap: execvp codex-linux-sandbox: No such file or directory
+
+The sandbox started. It then could not find the helper it was told to exec.
+There is no `codex-linux-sandbox` file anywhere in the wheel: at start-up Codex
+creates `$CODEX_HOME/tmp/arg0/codex-arg0XXXXXX/` and fills it with symlinks back
+to the single `codex` binary, named `codex-linux-sandbox`,
+`codex-execve-wrapper`, `apply_patch` and `applypatch`, then puts that directory
+on its children's `PATH`. The binary dispatches on `argv[0]`. And it refuses to
+build those symlinks when `CODEX_HOME` is inside the temporary directory — which
+it says on stderr, and then carries on regardless:
+
+    WARNING: proceeding, even though we could not create PATH aliases:
+    Refusing to create helper binaries under temporary dir "/tmp"
+
+Every task directory in this repository was made with `tempfile.mkdtemp()`, so
+`CODEX_HOME` was always under `/tmp`, so the helper was never built, on any
+host. The execution leg could not have worked anywhere — including in the paid
+runs section 12 pins, where it would have failed at the agent's first command,
+after the money was spent.
+
+Two repairs, both in this branch:
+
+* `core.codex_runtime_config.resolve_run_root_base` picks a run root outside the
+  temporary directory — `$GDPVAL_CODEX_RUN_ROOT` used verbatim, else
+  `$XDG_CACHE_HOME/gdpval-codex-runs`, else `~/.cache/gdpval-codex-runs` — and
+  raises rather than falling back when all three are missing or land inside the
+  temporary directory, the explicit override included. `CodexWorkspace.create`
+  builds the task directory there instead. `tests/test_codex_run_root.py` pins
+  the rule, and needs neither a sandbox nor the binary to do it.
+* The end-to-end file no longer reads that message as "this machine has no
+  sandbox". It had been caught by the `^bwrap: ` prefix that means exactly
+  that — which is why a defect present on every host produced a green skip on
+  every host, and why turning skips into failures on one host was worth doing.
+  A missing helper now fails, naming the helper, before the prefix is consulted.
+
+The shortcut was refused, and the refusal is written into the code: pointing the
+*child's* `TMPDIR` at the task directory would satisfy Codex's check without
+moving anything, and would also move the sandbox's writable carve-out — Codex's
+permission model names `tmpdir` and `slash_tmp` separately — in a way nothing
+here has measured.
+
+What may be said today is only that the defect is understood and a fix is under
+test. What still may not be said is that the chain runs against a paid
 deployment, which is §3's other open leg and is not a sandbox question at all.
 
 The host survey is worth writing down in full, because the first attempt to
@@ -474,12 +524,12 @@ paid run must be preceded by a fresh smoke at the new fingerprint.
 - [x] A run place exists, with the settings in code rather than in prose.
 - [x] The chain from runtime start to cost collection is checked without a paid
       deployment.
-- [x] Codex executes a command inside its sandbox on a host with working
-      unprivileged user namespaces — GitHub's `ubuntu-22.04` runner, measured
-      `ready` and then held there by `CODEX_SANDBOX_MUST_RUN=1`. One host, one
-      runner image, against a scripted provider. See section 3b for what that
-      does and does not license anyone to say, including that the image is being
-      retired.
+- [ ] Codex executes a command inside its sandbox. A host that can is now
+      known — GitHub's `ubuntu-22.04` runner, measured `ready` and then held
+      there by `CODEX_SANDBOX_MUST_RUN=1` — and running there is what showed
+      that the run place itself was building `CODEX_HOME` somewhere Codex will
+      not create its sandbox helper. Fix under test; see section 3b. This stays
+      unticked until that job is green, and the image is being retired anyway.
 - [ ] One request reaches the real deployment and is accepted.
 - [ ] A test proves the deployment it addresses is the same one the other
       columns address.
@@ -494,16 +544,18 @@ paid run must be preceded by a fresh smoke at the new fingerprint.
   and must not be reused as a current blocker.
 - **Blocked on a live request.** Version, authentication and per-region
   compatibility against our own deployment are separate facts from the
-  documentation, and only a request settles them. This is now the *only* open
-  leg of this task.
-- **The exec leg is no longer blocked, and was never a finding about the run
-  place.** It was a host limit, and it was closed by finding a host rather than
-  by removing isolation: no sandbox was disabled, no network was opened, no
-  container was privileged, and no host's security policy was changed. The
-  development box (Linux 3.10, no user namespaces) and `ubuntu-latest`
-  (namespace granted, capability stripped) still cannot run it and still skip.
-  The execution-host card stays open, because one retiring runner image is a
-  reprieve rather than an answer.
+  documentation, and only a request settles them.
+- **The exec leg is open again, and for a different reason than before.** The
+  host limit was real and was closed by finding a host rather than by removing
+  isolation: no sandbox was disabled, no network was opened, no container was
+  privileged, and no host's security policy was changed. But the first run on
+  that host was red, and what it found was ours: `CODEX_HOME` under `/tmp`, so
+  Codex never builds `codex-linux-sandbox`, so the agent's first command dies
+  whatever the host allows (§3b). The fix is in this branch and unconfirmed
+  until `prove-execution` passes. The development box (Linux 3.10, no user
+  namespaces) and `ubuntu-latest` (namespace granted, capability stripped) still
+  cannot run it and still skip. The execution-host card stays open, because one
+  retiring runner image is a reprieve rather than an answer.
 - The next decision is whoever can run one paid request against the pinned
   deployment. Until it succeeds, the column stays empty and is reported as
   unconfirmed. It is not filled with a substitute.

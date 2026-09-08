@@ -93,6 +93,7 @@ from core.codex_runtime_config import (
     CodexRuntimeUnavailable,
     LoopbackCodexProvider,
     require_pinned_runtime,
+    resolve_run_root_base,
 )
 from core.cost_receipts import (
     REASON_USAGE_ABSENT,
@@ -382,6 +383,25 @@ _SANDBOX_CANNOT_START = re.compile(
     re.MULTILINE,
 )
 
+#: bwrap started, took the namespace, and then could not find the program it was
+#: told to run.
+#:
+#: This is not a machine that will not sandbox. It is a machine that sandboxed
+#: correctly and was handed a broken command, and it is *never* a reason to
+#: skip: the helper is part of what this repository sets up, so its absence is a
+#: defect here that would reappear on every host. It looked like a host problem
+#: for exactly as long as nobody had a host that could sandbox — the message
+#: begins ``bwrap: `` and so matched the prefix above, and the test skipped.
+#:
+#: The cause was ``CODEX_HOME`` under ``/tmp``; the fix is in
+#: ``core.codex_runtime_config.resolve_run_root_base``. This pattern stays
+#: because the next thing that goes missing from the sandbox's PATH should also
+#: be told apart from a machine that cannot sandbox at all.
+_SANDBOX_HELPER_MISSING = re.compile(
+    r"^bwrap: execvp (?P<program>\S+): No such file or directory",
+    re.MULTILINE,
+)
+
 
 def sandbox_refused(server: ScriptedResponses) -> str | None:
     """The reason the sandbox could not run a command, if that is what happened.
@@ -390,12 +410,29 @@ def sandbox_refused(server: ScriptedResponses) -> str | None:
     that ran and failed is a test failure; a sandbox that could not start is a
     property of the machine, and the tests that need one say so and skip.
 
+    One shape never reaches that decision: a sandbox that started and could not
+    find the program it was given fails here and now, on every host. See
+    :data:`_SANDBOX_HELPER_MISSING` for why that distinction is the difference
+    between a green suite and a run place that could never have worked.
+
     Never widen this to a substring search. ``bwrap:`` at the start of a line is
     bwrap's own abort; the same text in the middle of a line could be output
     from a command that ran, and swallowing that would turn a real regression
     into a green skip.
     """
     text = server.tool_output_text()
+    missing = _SANDBOX_HELPER_MISSING.search(text)
+    if missing:
+        pytest.fail(
+            "the sandbox started and then could not find "
+            f"`{missing.group('program')}` on the PATH it gives the agent. "
+            "This is not a property of the machine and must not be skipped on "
+            "any host. Codex builds that program as a symlink under "
+            "$CODEX_HOME/tmp/arg0/ at start-up, and refuses to build it when "
+            "CODEX_HOME is inside the temporary directory — see "
+            "core.codex_runtime_config.resolve_run_root_base. Full output:\n"
+            f"{text.strip()}"
+        )
     if _SANDBOX_CANNOT_START.search(text):
         return text.strip().splitlines()[-1]
     return None
@@ -657,17 +694,37 @@ def test_the_agent_cannot_see_the_other_tasks_files(tmp_path: Path):
 
 
 def test_the_task_directory_is_removed_when_the_task_ends(reference_file: str):
-    """Nothing is left on disk afterwards, including the read-only copies."""
-    parent = Path(tempfile.gettempdir())
-    before = {entry.name for entry in parent.glob("gdpval-codex-*")}
+    """Nothing is left on disk afterwards, including the read-only copies.
+
+    Watches the directory task roots are actually made in. It used to watch
+    ``tempfile.gettempdir()``, which was right until the roots moved out of it —
+    at which point the test would have gone on passing while watching a
+    directory nothing was ever created in. So it proves the watch is aimed
+    correctly before it concludes anything from an empty result.
+    """
+    parent = resolve_run_root_base()
+
+    def listing() -> set[str]:
+        if not parent.is_dir():
+            return set()
+        return {entry.name for entry in parent.glob("gdpval-codex-*")}
+
+    before = listing()
+
+    sentinel = CodexWorkspace.create(task_id="task-cleanup-watch")
+    try:
+        assert sentinel.root.parent.resolve() == parent.resolve()
+        assert sentinel.root.name in listing()
+    finally:
+        sentinel.cleanup()
+
     with ScriptedResponses([says("done")]) as server:
         runner_for(server).run(
             "Do nothing.",
             reference_files=[reference_file],
             task_id="task-cleanup",
         )
-    after = {entry.name for entry in parent.glob("gdpval-codex-*")}
-    assert after - before == set()
+    assert listing() - before == set()
 
 
 def test_the_runtime_gets_none_of_the_operators_codex_state():
@@ -712,6 +769,98 @@ def test_the_runtime_gets_none_of_the_operators_codex_state():
         )
     finally:
         shutil.rmtree(workspace.root, ignore_errors=True)
+
+
+# ── The helper the sandbox needs on its PATH ────────────────────────────────
+#
+# These two run the real binary and read its stderr. They are a pair on
+# purpose: the first says our task directories are acceptable to it, and the
+# second says the rule that makes them acceptable is still there. Either alone
+# could pass while meaning nothing — a warning that changed wording would make
+# the first vacuous, and the second is what would notice.
+
+
+#: What Codex prints when it will not build the argv[0] symlinks — among them
+#: ``codex-linux-sandbox``, which is the sandbox helper — because ``CODEX_HOME``
+#: is inside the temporary directory. Matched loosely on the two halves that
+#: carry the meaning, since the path in the middle varies.
+_ALIASES_REFUSED = re.compile(
+    r"could not create PATH aliases.*"
+    r"Refusing to create helper binaries under temporary dir",
+    re.DOTALL,
+)
+
+
+def runtime_startup_warnings(codex_home: Path) -> str:
+    """Start the pinned binary with this ``CODEX_HOME`` and return its stderr.
+
+    ``app-server --listen stdio://`` is the entry point the SDK spawns, so this
+    exercises the same start-up path a task does. Closed stdin ends it at once;
+    it neither signs in nor calls a model, so this costs nothing.
+    """
+    import subprocess
+
+    from codex_cli_bin import bundled_codex_path
+
+    environment = dict(os.environ)
+    environment["CODEX_HOME"] = str(codex_home)
+    finished = subprocess.run(
+        [str(bundled_codex_path()), "app-server", "--listen", "stdio://"],
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        env=environment,
+    )
+    return finished.stderr
+
+
+def test_a_task_directory_is_somewhere_codex_will_build_its_sandbox_helper():
+    """The runtime accepts a real task's ``CODEX_HOME`` without complaint.
+
+    This is the assertion that would have caught the defect. Every task
+    directory used to be made by ``tempfile.mkdtemp()`` with no ``dir``, so
+    ``CODEX_HOME`` was inside ``/tmp``, so Codex silently declined to build
+    ``codex-linux-sandbox`` — and the first command the agent tried to run died
+    with ``bwrap: execvp codex-linux-sandbox: No such file or directory``, which
+    every machine without a working sandbox was already skipping on.
+
+    It needs no sandbox of its own, so it holds on hosts that cannot run one.
+    """
+    workspace = CodexWorkspace.create(task_id="task-aliases")
+    try:
+        warnings = runtime_startup_warnings(workspace.codex_home)
+        assert not _ALIASES_REFUSED.search(warnings), (
+            "Codex refused to build its argv[0] helpers for a task directory, "
+            "so the agent would be unable to execute anything:\n"
+            f"{warnings.strip()}"
+        )
+    finally:
+        workspace.cleanup()
+
+
+def test_the_runtime_still_refuses_a_codex_home_inside_the_temporary_directory():
+    """The rule the layout is built around is the runtime's, and still holds.
+
+    Without this, the test above is a claim about nothing: if a later Codex
+    dropped the restriction, or reworded the warning, it would keep passing
+    while the reason for the layout had quietly evaporated. Here that shows up
+    as this test failing, which is the correct place to have the conversation.
+    """
+    inside_the_temporary_directory = Path(
+        tempfile.mkdtemp(prefix="gdpval-codex-alias-rule-")
+    )
+    try:
+        warnings = runtime_startup_warnings(inside_the_temporary_directory)
+        assert _ALIASES_REFUSED.search(warnings), (
+            "Codex no longer refuses to build its helpers under the temporary "
+            "directory, or says so differently. Read this before changing it: "
+            "core.codex_runtime_config.resolve_run_root_base exists only "
+            "because of that refusal.\n"
+            f"stderr was:\n{warnings.strip()}"
+        )
+    finally:
+        shutil.rmtree(inside_the_temporary_directory, ignore_errors=True)
 
 
 # ── Failure, refusal, and the absence of a fallback ─────────────────────────
