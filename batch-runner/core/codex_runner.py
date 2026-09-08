@@ -425,7 +425,23 @@ class CodexAgentRunner(RecordsItsFirstRequest):
             environment.update(extra)
         return environment
 
-    def _build_codex(self, workspace: CodexWorkspace) -> Any:
+    def open_runtime(self, workspace: CodexWorkspace) -> Any:
+        """Start the Codex client a run uses, against this provider.
+
+        Public, and paired with :meth:`start_thread`, because the connection
+        diagnostic drives the runtime for a different purpose — it consumes the
+        turn stream itself, to keep the structured error the SDK's own
+        collector discards — and a second construction that merely *resembled*
+        this one would let the two drift. The one that would then be wrong is
+        the diagnostic, whose entire value is being about the configuration a
+        real run uses.
+
+        The two steps stay separate rather than becoming one ``open_session``
+        because their failures are different findings: a runtime that will not
+        start and a session that will not open are reported under different
+        categories, and merging them would lose that distinction at the only
+        moment it matters.
+        """
         environment = self._build_environment(workspace)
         overrides = self.provider.config_overrides()
         try:
@@ -442,6 +458,28 @@ class CodexAgentRunner(RecordsItsFirstRequest):
             cwd=str(workspace.workspace),
         )
         return Codex(config)
+
+    def start_thread(
+        self,
+        codex: Any,
+        workspace: CodexWorkspace,
+        *,
+        developer_instructions: str | None = None,
+    ) -> Any:
+        """Open one thread on ``codex``, with the settings a run opens it with.
+
+        The sandbox preset and the approval mode are read from this object's
+        own methods rather than passed in, so there is no argument by which a
+        caller can ask for a weaker isolation than a run gets.
+        """
+        return codex.thread_start(
+            model=self.provider.model,
+            model_provider=self.provider.provider_id,
+            cwd=str(workspace.workspace),
+            sandbox=self._sandbox_preset(),
+            approval_mode=self._approval_mode(),
+            developer_instructions=developer_instructions,
+        )
 
     def _sandbox_preset(self) -> Any:
         """The filesystem policy for the agent: write inside its workspace.
@@ -612,7 +650,7 @@ class CodexAgentRunner(RecordsItsFirstRequest):
         codex: Any = None
         try:
             try:
-                codex = self._build_codex(workspace)
+                codex = self.open_runtime(workspace)
             except (CodexRuntimeUnavailable, CodexProviderConfigurationError) as exc:
                 return CodexRunOutcome(
                     success=False,
@@ -635,12 +673,9 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                     developer_instructions = system.strip()
 
             try:
-                thread = codex.thread_start(
-                    model=self.provider.model,
-                    model_provider=self.provider.provider_id,
-                    cwd=str(workspace.workspace),
-                    sandbox=self._sandbox_preset(),
-                    approval_mode=self._approval_mode(),
+                thread = self.start_thread(
+                    codex,
+                    workspace,
                     developer_instructions=developer_instructions,
                 )
             except Exception as exc:  # noqa: BLE001

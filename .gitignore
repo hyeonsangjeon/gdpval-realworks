@@ -102,6 +102,14 @@ batch-runner/scripts/*
 !batch-runner/scripts/diagnose_codex_sandbox_host.py
 !batch-runner/scripts/check_recorded_sandbox_verdicts.py
 
+# The other half of the same question, and a different half entirely: whether
+# the deployment answers Codex at all. Run by
+# codex-foundry-connection-diagnostic.yml on a hosted runner under the
+# repository's existing OIDC sign-in, so it has to survive the directory rule
+# for the same reason the two above do. Held by
+# tests/test_codex_foundry_connection_probe.py.
+!batch-runner/scripts/diagnose_codex_foundry_connection.py
+
 
 # Experiment report HTML (skews GitHub language stats)
 batch-runner/results/*/report/report.html
