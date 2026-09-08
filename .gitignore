@@ -222,6 +222,15 @@ tasks/rebuilding_grading_task/*
 # tests/test_audio_accuracy_probe_knows_its_own_answers.py.
 !tasks/rebuilding_grading_task/337-format-safe-observation-pilot.md
 !tasks/rebuilding_grading_task/338-format-safe-observation-ab.md
+# What the pilot bought. Ten paid calls, and the artifact is the only place
+# the per-call record exists -- the CI artifact expires, and the pilot is not
+# run again, so a number that is not committed here is a number nobody can
+# ever check. The delivery file is separate because it answers a separate
+# question: whether the audio left this process, which a failing arm makes it
+# tempting to assume away. Held by tests/test_the_sentence_that_changed_nothing.py.
+!tasks/rebuilding_grading_task/337-audio-accuracy-measured.json
+!tasks/rebuilding_grading_task/337-audio-accuracy-measured-delivery.json
+!tasks/rebuilding_grading_task/339-the-sentence-that-changed-nothing.md
 
 # The grading run writes a sqlite mirror of the cost ledger beside every grade
 # file. The published record is the .jsonl next to it; the database is a local

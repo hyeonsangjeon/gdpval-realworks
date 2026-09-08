@@ -12,6 +12,51 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Added
+- **`339` — the pilot ran, the candidate missed its bar, and `338` is not
+  bought.** Ten paid calls at commit `e7a820e2`, run `34211419777`, ten
+  requests counted against a registered ceiling of twelve, each call one
+  `create` with no 429/5xx/timeout in the log — the report says "no trace
+  suggesting a retry" rather than "no retry", because SDK-internal retries sit
+  below that counter. `337` §5 asked for readable JSON on 5/5 candidate calls
+  with the production control at 4/5 or better; the control returned **5/5**
+  and the candidate returned **1/5**, so the run is valid and what failed is
+  the candidate. Four replies were
+  `format_error:unparseable_json` and the fifth parsed and declined, which is
+  why the report carries two numbers rather than one: 1/5 envelopes is what §5
+  judges, 0/5 usable verdicts is what the run learned about verdicts. The
+  candidate sentence was delivered — every observation prompt is exactly 898
+  characters longer than its production twin against `334`'s 739, and 898 −
+  739 is the 159 the sentence adds — and the audio was delivered too: 10/10
+  requests carried it, one digest per clip across both arms, no clip's sent
+  duration off its pin. The four unreadable replies are 22–29 output tokens
+  against the 18–68 (median 32) of `334`'s 51, which places them in the same
+  neighbourhood and no further: no response bodies were stored, so the report
+  states the length match and declines the mechanism claim `335` paid to
+  establish. Content accuracy is recorded and used for nothing, as §6 fixed
+  before the run — the control answered `fail` five times for 2/5 with
+  `discrimination_j` 0.0, and the pre-registered one-sided exact binomial
+  gives p = 0.8125 where the smallest p this size can reach is 0.03125, so no
+  result of five calls could have been significant. Cost is
+  `estimated_cost_usd: null` with `pricing_complete: false` and
+  `unpriced_models: ["gpt-audio-1.5"]`; usage is complete on all ten calls, so
+  the figure is unknown rather than zero. **`338` is closed rather than
+  re-pinned**: §0's first row stays unticked, its thresholds are unchanged,
+  the pilot's ten calls are not pooled into its 120, and a next candidate
+  needs a new number. `331`/`334`/`335`/`336`'s published figures are
+  untouched, no production prompt or grading configuration was modified, and
+  the parser and `response_format` were left exactly as `337` §2 pinned them.
+- **The grader fingerprint moved two minutes after the paid job, so the two
+  pin assertions now ask the question that outlived the run.** `#455` merged
+  at 09:50:53Z and this checkout computes `50f6f8bb…` where the run used
+  `6970a67c…`. Neither document is re-pinned. `337`'s assertion now holds its
+  §2 value against `pins.grader_source_sha256` in the paid artifact — after a
+  run, the useful question is whether the document tells the truth about what
+  dispatched, not whether it matches today's checkout. `338`'s branches on its
+  status line: while it reads "안 샀다. 그리고 안 산다." the pin is held against
+  `337`'s, and re-opening the document restores the freshness demand on its
+  own. Dispatch-time enforcement is untouched — `measure_audio_grading_accuracy.py`
+  still recomputes the fingerprint and refuses (exit 3) before calling the
+  model, and the test covering that refusal is unchanged.
 - **`337` and `338` — the two pre-registrations that take `334` §10's fourth
   item, written before anything was bought.** `334` asked whether the
   observation arm changes the judge's verdict and could not answer: the arm
