@@ -695,6 +695,57 @@ paid run must be preceded by a fresh smoke at the new fingerprint.
   provider's auth command once after an authentication failure and retries with
   the fresh token, which no documented key switches off. Two requests, two
   tokens minted. It is recorded as a bound rather than rounded down to one.
+- **Four candidate explanations for the 401 were checked offline and all four
+  match a path that demonstrably works — so the fault is not located.** This
+  is a negative result and is recorded as one:
+
+  | leg | Codex | grading, which works | verdict |
+  | --- | --- | --- | --- |
+  | URL | `{account}.services.ai.azure.com/openai/v1/responses` | same host, same `/openai/v1/` route | same |
+  | scope | `DIRECT_TOKEN_SCOPE` | `DIRECT_TOKEN_SCOPE` | same |
+  | header | `authorization: Bearer …`, measured on a local socket | `Authorization: Bearer` via the openai SDK | same |
+  | identity | `secrets.FOUNDRY_PROJECT_ENDPOINT`, same OIDC login, `direct-v1` | identical | same |
+
+  Grading has produced tens of thousands of rows over that path. A comment in
+  `core/azure_ai_clients.py` claiming the direct route rewrites the host to
+  `openai.azure.com` is wrong for this endpoint shape — the host is unchanged —
+  and it is named here because reading it is how one would wrongly conclude the
+  URLs differ.
+
+  **What is left unmeasured, and is therefore where to look:** (1) Codex mints
+  its token in a **child process** (`auth.command`) while the grading and
+  inference paths mint theirs **in process** via `get_bearer_token_provider` —
+  two credential chains in the same job can resolve differently; (2) the turn
+  carries a 45 KB body, `accept: text/event-stream`, and seven `x-codex-*` /
+  `originator` headers the Python paths never send; (3) whether the requested
+  deployment name exists on the resource at all is **unverified** — the pinned
+  check compares a host fingerprint, not a deployment.
+
+  The 401's own text is a gateway subscription-key message
+  (*"invalid subscription key or wrong API endpoint"*), not an AAD audience
+  error. That is a hint about which layer refused, and it is not a conclusion.
+- **The free half of the question now runs on every dispatch: `--read-only-probe`.**
+  It mints the token the child-process way — closing gap (1) above — and issues
+  `GET {base_url}/models`. No prompt, no completion. Three outcomes, and each
+  one moves the question:
+
+  | it answers | what that settles |
+  | --- | --- |
+  | `200`, deployment listed | the token is accepted by this resource; the refusal is narrower than the identity |
+  | `200`, deployment **not** listed | the name asked for is not on the resource — the cheapest explanation there is |
+  | `401` | the refusal reproduces **having spent nothing**, and the question is the token itself |
+
+  What a `200` still does **not** buy is carried inside the record as
+  `not_established`, because it is precisely the result that gets over-read: a
+  listing is not a completion and a resource may list to an identity it will
+  not let infer; `deployment_listed` says a name appears, not that this
+  identity may call it; and no inference was requested, so the call is
+  **unpriced, which is not the same as proven free**.
+
+  Record schema `codex_foundry_readonly_probe/1`, `inference_requested: false`.
+  Model names are counted, never written down. A failing auth command has its
+  **stdout withheld** while stderr is quoted, because stdout is where a token
+  would be.
 - **The exec leg is closed, on one host, and it took a repair to close it.** The
   host limit was real and was closed by finding a host rather than by removing
   isolation: no sandbox was disabled, no network was opened, no container was

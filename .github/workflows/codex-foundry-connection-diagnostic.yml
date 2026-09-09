@@ -237,6 +237,52 @@ jobs:
           # does not buy itself a request.
           echo "confirmed=yes" >> "${GITHUB_OUTPUT}"
 
+      # Free, and it runs on every dispatch including the dry ones. A listing
+      # is not a turn: no prompt, no completion, nothing to generate.
+      #
+      # It exists because run 34319880025's 401 survived every offline check.
+      # The URL, the token scope, the header name and format and the OIDC
+      # identity all matched the direct-v1 path grading uses successfully, so
+      # none of them explains the refusal. The one difference left unmeasured
+      # was where the token comes from: the Python paths mint it in process,
+      # the Codex runtime runs `auth.command` as a child and reads stdout.
+      #
+      # This step mints it the child way and asks the host to list its models.
+      # 200 moves the question to something narrower than the identity, and
+      # tells us whether the deployment name is even on the resource. 401
+      # reproduces the refusal having spent nothing. Either way it is a finding
+      # and neither is a reason to fail the job, hence `|| true` — the script
+      # exits non-zero for every listing that is not a 200.
+      #
+      # `test -s` is deliberately not covered by that. A refusal is a finding;
+      # no record at all is a bug in this repository, and the step fails, which
+      # also stops the paid turn below. Failing closed here costs a dispatch;
+      # the other way round costs a request nobody could account for.
+      - name: Ask the host what it will admit to, without sending a turn
+        id: readonly
+        working-directory: batch-runner
+        env:
+          AZURE_AI_ROUTE_PROFILE: direct-v1
+          FOUNDRY_PROJECT_ENDPOINT: ${{ secrets.FOUNDRY_PROJECT_ENDPOINT }}
+          DEPLOYMENT: ${{ inputs.deployment }}
+        run: |
+          set -euo pipefail
+          python3 scripts/diagnose_codex_foundry_connection.py \
+            --deployment "${DEPLOYMENT}" \
+            --read-only-probe \
+            --out /tmp/codex-foundry-readonly.json || true
+          test -s /tmp/codex-foundry-readonly.json
+          python3 - <<'PY'
+          import json
+          record = json.load(open("/tmp/codex-foundry-readonly.json"))
+          listing = record.get("listing") or {}
+          print("token minted by the child process:", record["token"]["minted"])
+          print("listing status:", listing.get("status"))
+          print("models listed:", listing.get("models_listed"))
+          print("the asked-for deployment is in the listing:",
+                listing.get("deployment_listed"))
+          PY
+
       # The one request. Skipped entirely unless it was asked for, so the
       # difference between a free run and a paid one is a deliberate input and
       # not a forgotten flag.
@@ -322,6 +368,7 @@ jobs:
 
           for path in (
               "/tmp/codex-foundry-plan.json",
+              "/tmp/codex-foundry-readonly.json",
               "/tmp/codex-foundry-connection.json",
           ):
               if not os.path.exists(path):
@@ -340,8 +387,18 @@ jobs:
                           f"{path}: contains a URL that is not the public token scope"
                       )
               record = json.loads(text)
-              if record["observed"]["tool_execution_observed"] is not False:
-                  leaked.append(f"{path}: claims tool execution, which this probe cannot observe")
+              # Two record shapes now land here and only one of them observes a
+              # turn. Branch on the record's own schema rather than on whether
+              # the key happens to be present: `.get("observed", {})` would turn
+              # a renamed field in the connection record into a silent pass, and
+              # this check exists precisely to catch a claim nobody measured.
+              schema = str(record.get("schema", ""))
+              if schema.startswith("codex_foundry_readonly_probe/"):
+                  if record["inference_requested"] is not False:
+                      leaked.append(f"{path}: a read-only record claims a request was made")
+              else:
+                  if record["observed"]["tool_execution_observed"] is not False:
+                      leaked.append(f"{path}: claims tool execution, which this probe cannot observe")
 
           if leaked:
               print("FATAL:")
@@ -373,6 +430,7 @@ jobs:
           name: codex-foundry-connection
           path: |
             /tmp/codex-foundry-plan.json
+            /tmp/codex-foundry-readonly.json
             /tmp/codex-foundry-connection.json
           if-no-files-found: warn
           retention-days: 90
@@ -398,6 +456,10 @@ jobs:
           [ -s "$RECORD" ] || RECORD=/tmp/codex-foundry-plan.json
           VERDICT="$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['verdict'])" "$RECORD" 2>/dev/null || echo 'not measured')"
           ANSWERED="$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['provider_answered'])" "$RECORD" 2>/dev/null || echo 'unknown')"
+          RO=/tmp/codex-foundry-readonly.json
+          RO_STATUS="$(python3 -c "import json,sys;print((json.load(open(sys.argv[1])).get('listing') or {}).get('status'))" "$RO" 2>/dev/null || echo 'not measured')"
+          RO_MINTED="$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['token']['minted'])" "$RO" 2>/dev/null || echo 'unknown')"
+          RO_LISTED="$(python3 -c "import json,sys;print((json.load(open(sys.argv[1])).get('listing') or {}).get('deployment_listed'))" "$RO" 2>/dev/null || echo 'unknown')"
           {
             echo "### Codex → Foundry, one turn"
             echo ""
@@ -405,6 +467,21 @@ jobs:
             echo "- did the provider answer at all: \`${ANSWERED}\`"
             echo "- request sent: \`${{ inputs.send_request }}\`"
             echo "- tool execution observed: \`false\` — this prompt forbids tools, by design"
+            echo ""
+            echo "### 무과금 읽기 전용 확인 (턴 없음)"
+            echo ""
+            echo "- 자식 프로세스가 토큰을 만들었는가: \`${RO_MINTED}\`"
+            echo "- 목록 조회 응답: \`${RO_STATUS}\`"
+            echo "- 물어본 배포가 목록에 있는가: \`${RO_LISTED}\`"
+            echo ""
+            echo "이 세 줄이 뜻하는 것: 프롬프트도 생성도 없이, Codex가 쓰는 것과"
+            echo "**같은 방법으로 토큰을 만들어** 같은 주소에 모델 목록만"
+            echo "물어본 결과입니다. \`200\`이면 이 자원이 이 신원의 토큰을"
+            echo "받아준다는 뜻이므로, 턴이 거절됐다면 원인은 신원보다 더 좁은"
+            echo "곳에 있습니다. \`401\`이면 **돈 한 푼 안 쓰고** 같은 거절을"
+            echo "재현한 것이고, 문제는 토큰 자체입니다. 배포가 목록에"
+            echo "\`False\`로 없으면 그 이름이 이 자원에 없다는 뜻입니다."
+            echo "다만 목록이 열린다고 해서 **호출이 허용된다는 뜻은 아닙니다.**"
             echo ""
             echo "이 줄이 뜻하는 것: Codex 런타임이 만든 요청 한 번을 실제 배포에"
             echo "보내고, 그쪽이 무엇이라고 답했는지를 이름 붙여 기록한 것입니다."
