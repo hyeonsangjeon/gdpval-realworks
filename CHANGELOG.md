@@ -165,14 +165,44 @@ entries land under a fresh dated heading the day they merge to `main`.
   while `344` was being written. Neither PR could have caught it: #467 was
   green before `344`'s test existed and #468 was green before #467 merged
   (08:42 and 09:00 against 08:53). Both were right about the tree they ran on
-  and wrong about the tree they made. Nothing runs the suite on a push to
-  `main`, so nothing said so for the seventy minutes in between. #469 moved
-  the row; independently re-measured here, the **other three** pins — price
-  `b01b384c…`, manifest `97755288…`, candidate header `dd0380fa…` — had not
-  moved, so the one line that changed is the one `core/` reaches.
-  **`main` having no test run of its own is not fixed here**, and it is the
-  part that will happen again; fixing it belongs with whoever owns
-  `.github/workflows/` next.
+  and wrong about the tree they made. #469 moved the row; independently
+  re-measured here, the **other three** pins — price `b01b384c…`, manifest
+  `97755288…`, candidate header `dd0380fa…` — had not moved, so the one line
+  that changed is the one `core/` reaches.
+- **Correction to the entry above, which said nothing runs the suite on a
+  push to `main`.** That is wrong, and the run that disproves it is the one
+  the entry is about. `backend-tests.yml` has had `push: branches: [main]` all
+  along; commit `446acfd` started run `34332874303` at 09:06 and it finished
+  `failure` at 09:28 with `assert 'ee1ca0b0…' == '7e745a18…'` — 1 failed, 9195
+  passed. CI named the wrong line, in the right file, within twenty-two
+  minutes. Nobody read it.
+
+  Two mechanisms are real, and neither is the one first written down. The
+  `push` trigger is **paths-filtered** to `batch-runner/**`, `scripts/**` and
+  two named workflow files, so #469 — which edited one `tasks/**` document and
+  nothing else — started no run at all: the change that returned `main` to
+  green was never itself run on `main`. Green came back at 10:32 on `ce164ad5`,
+  a later merge that happened to touch a filtered path. Separately,
+  `concurrency: cancel-in-progress` keyed on `github.ref` means consecutive
+  merges cancel each other's `main` runs: `7a8c94de` (#467) and `cb043afa`
+  (#472) both carry `cancelled`, so two commits sit on `main` with no verdict
+  either way — and a cancelled run is not visually distinct from a passing one
+  in a branch listing.
+
+  This matters to `344` beyond bookkeeping. §0's last precondition re-pins §2's
+  four fingerprints in a `tasks/**` document, which is precisely the change
+  shape that starts no run — the pins would land unverified unless something
+  else touches a filtered path in the same commit. §0 now carries the remedy:
+  `backend-tests.yml` accepts `workflow_dispatch` with a required
+  `expected_sha`, so a doc-only commit can be given a real verdict without a
+  decorative edit to a filtered path. This entry's own PR had no checks at all
+  for exactly the reason it describes, and was dispatched that way.
+
+  **Still not fixed here.** Both mechanisms live in `.github/workflows/`
+  trigger blocks, which is A's lane this week; changing them while A's Codex
+  work is mid-flight is how the collision above happened in the first place.
+  Recorded with the run IDs so the next person owns a measurement rather than
+  a hunch.
 - **`verify_format_pilot_run.py` is named in `.gitignore`, which is not a
   formality.** `batch-runner/scripts/*` is ignored and files are re-admitted
   one `!` line at a time, so the checker was written, tested green and absent
