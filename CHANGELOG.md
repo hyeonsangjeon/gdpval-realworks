@@ -11,6 +11,47 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Added
+- **A free two-armed probe that separates "the bearer was refused" from "the
+  bearer got through and something later refused".**
+  `diagnose_codex_foundry_connection.py --auth-discriminator` posts a body the
+  Responses route cannot serve — no `model`, no `input` — to the same route the
+  turn uses, twice: once with the bearer the Codex runtime mints and once with
+  a fixed string that is plainly not a token.
+
+  The second arm is the design, not a nicety. Run `34346945494` got `200` from
+  `GET /models` and run `34347516170` got `401` from one turn, same host, same
+  bearer, minutes apart, so the question is where in the request the refusal
+  happens. A `400` from the minted bearer answers that **only if this host
+  checks authorization before it validates the body**, and nothing measured in
+  this repository establishes that ordering. A host that reads the body first
+  answers `400` to everybody, including to a non-token — and that `400` would
+  have been read as good news. The control arm makes the host demonstrate
+  which check it runs first; it is a constant, never varied and never derived
+  from anything real, so it is not credential guessing and cannot become it.
+
+  Three verdicts, not two: `bearer_clears_the_auth_gate`,
+  `bearer_refused_at_the_auth_gate`, and `check_order_not_established` for the
+  host that cannot be read this way. Reordering the checks so the minted arm
+  is read first — the version that always returns an answer — turns three
+  tests red, including the end-to-end one asserting that a run which could not
+  discriminate does not exit zero. A `200` to a body naming no model is
+  refused a clean verdict too, and withdraws the free claim with it: the
+  argument that nothing can be generated is that no deployment can be
+  selected, and a `200` is the host disagreeing.
+
+  The record states what it cannot settle: this is `urllib` on the route
+  rather than the Codex runtime; a clear verdict narrows where to look and is
+  **not a reason to grant a role**; and "no usage came back from a refusal" is
+  an argument for the call being free, not a measurement of it. The workflow
+  step is ungated and sends no prompt, so it runs on the dry dispatches — the
+  ones that are all that is left, since the single authorised turn was used.
+
+  The leak check now branches on schema across both free record shapes rather
+  than one, with the turn shape as the `else`, so a future free record added
+  without touching that list fails closed instead of skipping. Its path list
+  and the artifact upload carry the new record.
+
 ### Fixed
 - **The backend gate now starts a run for the tree it asserts about.**
   `backend-tests.yml` filtered on `batch-runner/**`, `scripts/**` and two

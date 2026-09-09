@@ -854,13 +854,62 @@ paid run must be preceded by a fresh smoke at the new fingerprint.
     be a role problem, and granting a role to see if a 401 goes away is a
     guess with a blast radius. The next step that would justify a grant is a
     free one: a deliberately malformed `POST` to the same route with the same
-    bearer. A `400` would prove the bearer is accepted there and move the fault
-    off authorization entirely; a `401` would keep it on. Neither generates
-    tokens. **It was not run here** — the authorisation was for one turn and
-    one turn was used;
+    bearer. **The sentence that stood here was wrong, and the bullet below
+    corrects it**: it said a `400` would prove the bearer is accepted. It
+    would not, on its own. Neither generates tokens. **It was not run here** —
+    the authorisation was for one turn and one turn was used;
   * **risk if a grant is made anyway**: `Foundry User` and `Foundry Agent
     Consumer` are project-scoped roles for a route this run did not use, so
     granting them would widen access without a measurement saying it helps.
+
+- **The free discriminator, built with two arms because one is unreadable.**
+  Written and tested on `diag/does-the-bearer-get-past-the-gate`;
+  `--auth-discriminator` in
+  `batch-runner/scripts/diagnose_codex_foundry_connection.py`, an ungated step
+  in the diagnostic workflow, 27 tests in
+  `batch-runner/tests/test_codex_auth_discriminator.py`.
+
+  The bullet above promised a one-armed version and the promise did not
+  survive being written down. A `400` from the minted bearer means "it got
+  past authorization" **only if this host checks authorization before it
+  validates the body**, and nothing measured here has ever established that
+  ordering. A host that reads the body first answers `400` to everybody,
+  including to a string that is obviously not a token — and that `400` would
+  have been read as good news.
+
+  So the same unservable body goes twice: once with the bearer the Codex
+  runtime mints, once with a fixed sentence that is plainly not a token. The
+  control arm is not credential guessing and cannot become it — the string is
+  a constant, never varied, never derived from anything real. Its only job is
+  to make the host demonstrate which check it runs first.
+
+  | control arm | minted arm | verdict |
+  |---|---|---|
+  | `401`/`403` | `400`/`422` | `bearer_clears_the_auth_gate` — the fault is past authorization |
+  | `401`/`403` | `401`/`403` | `bearer_refused_at_the_auth_gate` — the fault is the token or this identity's rights on this operation |
+  | anything else | anything | `check_order_not_established` — **this host cannot be read this way, and the question stays open** |
+
+  The third row is the reason this is three verdicts and not two, and it is
+  what the tests spend the most effort on: reordering the checks so the minted
+  arm is read first — the version somebody wanting good news would write —
+  turns three tests red, including the end-to-end one that asserts a run which
+  could not discriminate does not exit zero. A `200` to a body naming no model
+  is also refused a clean verdict, and withdraws the free claim with it: the
+  argument that nothing can be generated is that no deployment can be
+  selected, and a `200` is the host disagreeing.
+
+  What it still will not settle, in the record itself: this is `urllib` on the
+  route, not the Codex runtime (the header name and format are the ones the
+  pinned binary was measured sending, and nothing else about the runtime's
+  request is reproduced); a clear verdict narrows where to look and **is not a
+  reason to grant a role**; and "no usage record came back from a refusal" is
+  an argument for the call being free, not a measurement of it.
+
+  **Not yet run against the real host.** The `diagnose` job only runs from
+  `refs/heads/main`, so the dispatch comes after this merges. It sends no
+  prompt and asks for no completion, so it needs no spend authorisation — the
+  one turn that was authorised was used by `34347516170` and is not being
+  re-requested.
 - **The exec leg is closed, on one host, and it took a repair to close it.** The
   host limit was real and was closed by finding a host rather than by removing
   isolation: no sandbox was disabled, no network was opened, no container was
