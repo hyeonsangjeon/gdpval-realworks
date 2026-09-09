@@ -418,6 +418,11 @@ def test_the_same_settings_fingerprint_the_same_way():
         {"model": "gpt-5.3"},
         {"endpoint": ENDPOINT.replace(ACCOUNT, "another-account")},
         {"provider_id": "another-provider"},
+        # Thirty requests and one request are different experiments, so a
+        # verdict measured with the counters pinned must not fingerprint the
+        # same as one measured without them.
+        {"request_max_retries": 4},
+        {"stream_max_retries": 5},
     ],
 )
 def test_changing_what_was_measured_changes_the_fingerprint(overrides):
@@ -441,12 +446,56 @@ def test_the_request_is_fixed_before_it_is_sent():
     makes the cost of this diagnostic a known quantity rather than a discovered
     one.
     """
-    plan = request_plan()
+    plan = request_plan(describe_settings(_settings()))
     assert plan["turns_sent"] == 1
-    assert plan["retries_configured"] == 0
+    assert plan["retries_configured"] == {
+        "request_max_retries": 0,
+        "stream_max_retries": 0,
+    }
     assert plan["tools_requested"] is False
     assert plan["prompt_characters"] == len(PROMPT)
     assert len(plan["prompt_sha256"]) == 64
+
+
+def test_the_plan_reports_the_retries_the_provider_table_will_carry():
+    """Not a literal zero written in the plan.
+
+    The number that decides how many requests leave this machine is the one in
+    the provider table. A plan that hard-coded its own zero would keep saying
+    zero after somebody set the counters to four, and the record would be
+    wrong in the direction that costs money.
+    """
+    loud = _settings(request_max_retries=4, stream_max_retries=5)
+    plan = request_plan(describe_settings(loud))
+    assert plan["retries_configured"] == {
+        "request_max_retries": 4,
+        "stream_max_retries": 5,
+    }
+
+
+def test_a_plan_without_settings_records_no_retry_number_rather_than_zero():
+    """A run that could not be configured did not configure zero retries.
+
+    Reading an absent setting as 0 is the reading that lets a record claim a
+    bound nothing established.
+    """
+    assert request_plan()["retries_configured"] is None
+    assert request_plan(None)["retries_configured"] is None
+
+
+def test_the_plan_states_the_retry_pinning_does_not_remove():
+    """Measured, and stated next to the pin rather than smoothed into it.
+
+    With both counters at 0 a 401 still costs two requests, because the
+    runtime re-runs the auth command once and retries with the fresh token.
+    ``test_codex_retry_pins_are_enforced.py`` measures it against the real
+    binary; this asserts the record admits it.
+    """
+    residue = request_plan(describe_settings(_settings()))[
+        "retries_not_removed_by_pinning"
+    ]
+    assert residue["on_authentication_failure_requests"] == 2
+    assert "auth" in residue["reason"]
 
 
 def test_the_prompt_forbids_the_tools_it_is_not_testing():

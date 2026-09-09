@@ -99,6 +99,7 @@ from core.azure_ai_clients import (  # noqa: E402
     classify_endpoint,
 )
 from core.codex_runtime_config import (  # noqa: E402
+    AUTH_RETRY_REQUESTS_NOT_REMOVED_BY_PINNING,
     PINNED_CODEX_CLI_DISTRIBUTION,
     PINNED_CODEX_CLI_VERSION,
     PINNED_CODEX_SDK_DISTRIBUTION,
@@ -113,7 +114,13 @@ from core.codex_runtime_config import (  # noqa: E402
 
 #: The record format. Bumped if a field changes meaning, so a reader can tell
 #: an old record from a new one rather than mis-reading it.
-SCHEMA = "codex_foundry_connection/1"
+#:
+#: /2 changed ``request.retries_configured`` from the scalar ``0`` -- a claim
+#: the plan made about itself and the runtime never saw -- to the two counters
+#: actually written into the provider table, and added
+#: ``request.retries_not_removed_by_pinning``. A ``/1`` record says nothing
+#: about how many requests its turn made.
+SCHEMA = "codex_foundry_connection/2"
 
 # ── The verdict vocabulary ──────────────────────────────────────────────────
 #
@@ -418,14 +425,47 @@ TURNS_SENT = 1
 DEFAULT_TIMEOUT_SECONDS = 120
 
 
-def request_plan() -> dict[str, Any]:
+def request_plan(description: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    """What this run intends to send, read off the settings it will send with.
+
+    ``retries_configured`` is taken from ``description`` -- the same mapping
+    the fingerprint is computed over -- rather than written here as a literal.
+    A plan that asserts its own zero proves nothing: the number that decides
+    how many requests leave this machine is the one in the provider table, and
+    if the two ever disagree the plan is the one that is wrong.
+
+    ``None`` when there is no description, because a run whose settings could
+    not be built did not configure zero retries; it configured nothing, and
+    that is not the same record.
+    """
+    retries: dict[str, Any] | None = None
+    if description is not None:
+        configured = description.get("retries")
+        if isinstance(configured, Mapping):
+            retries = dict(configured)
     return {
         "prompt_id": PROMPT_ID,
         "prompt_sha256": hashlib.sha256(PROMPT.encode("utf-8")).hexdigest(),
         "prompt_characters": len(PROMPT),
         "expected_reply": EXPECTED_REPLY,
         "turns_sent": TURNS_SENT,
-        "retries_configured": 0,
+        "retries_configured": retries,
+        # What pinning does not buy, stated next to what it does. Measured
+        # against the pinned binary in tests/test_codex_retry_pins_are_enforced
+        # .py: with both counters at 0, a 401 still costs two requests and two
+        # auth-command runs, because Codex re-mints the token once and retries.
+        # No supported key removes that, so a record that claimed one request
+        # per turn would be claiming something the runtime does not do.
+        "retries_not_removed_by_pinning": {
+            "on_authentication_failure_requests": (
+                AUTH_RETRY_REQUESTS_NOT_REMOVED_BY_PINNING
+            ),
+            "reason": (
+                "the runtime re-runs the provider auth command once after an "
+                "authentication failure and retries with the fresh token; "
+                "neither retry counter binds it"
+            ),
+        },
         "tools_requested": False,
     }
 
@@ -456,6 +496,15 @@ def describe_settings(settings: CodexProviderSettings) -> dict[str, Any]:
             "scope": settings.auth_scope,
             "refresh_interval_ms": settings.auth_refresh_interval_ms,
             "timeout_ms": settings.auth_timeout_ms,
+        },
+        # In the fingerprint on purpose. These two numbers decide how many
+        # requests one turn sends -- up to thirty when they are left unset --
+        # so a verdict measured with them pinned is not evidence for a run
+        # without them, and the fingerprint has to be able to tell the two
+        # apart.
+        "retries": {
+            "request_max_retries": settings.request_max_retries,
+            "stream_max_retries": settings.stream_max_retries,
         },
         "sandbox": "workspace-write",
         "approval_mode": "deny-all",
@@ -572,7 +621,7 @@ def _record(
         "settings_fingerprint": (
             settings_fingerprint(description) if description is not None else None
         ),
-        "request": request_plan(),
+        "request": request_plan(description),
         "observed": dict(observed),
         "not_established": list(NOT_ESTABLISHED_BY_A_TEXT_TURN),
     }

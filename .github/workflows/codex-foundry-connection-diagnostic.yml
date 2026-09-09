@@ -41,7 +41,14 @@
 #     instead, and every runtime message passes through a redactor first. The
 #     step below re-checks that after the fact rather than trusting it.
 #
-# Cost. One turn, one prompt of about 135 characters, no retries, no tools.
+# Cost. One turn, one prompt of about 135 characters, no tools, and retries
+# pinned off in the provider table the runtime actually reads — not merely
+# asserted in the plan. That distinction was real: until the pins existed, the
+# plan said `retries_configured: 0` while the runtime used its own defaults,
+# and one turn against a 500 sent thirty requests. Measured against the pinned
+# binary in `batch-runner/tests/test_codex_retry_pins_are_enforced.py`, which
+# also records the one case pinning does not reduce to a single request — a
+# 401 costs two, because the runtime re-mints the token once and retries.
 # `send_request: false` is the default, and with it nothing is sent at all —
 # the job prints the plan, fingerprinted, and stops. The plan and the result
 # share a schema, so what was fixed beforehand and what happened can be
@@ -173,8 +180,9 @@ jobs:
 
       # Always, including on the runs that go on to send. The plan is what
       # fixes the request before it costs anything, and comparing it against
-      # the result afterwards is how "one turn, no retries" stops being a
-      # promise.
+      # the result afterwards is how "one turn, retries pinned" stops being a
+      # promise. The plan reads its retry numbers off the same settings the
+      # provider table is built from, so the two cannot disagree.
       #
       # No AZURE_AI_EXPECTED_* variable is passed to this step or the next one.
       # They would be printed. The script pulls the names it must redact out of

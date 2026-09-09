@@ -12,6 +12,64 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Added
+- **The Codex diagnostic's "no retries" is now a setting the runtime reads,
+  not a line it wrote about itself — and one turn against a 500 stopped being
+  thirty requests.** `request_plan()` reported `retries_configured: 0` while
+  the provider table set neither retry key, so the pinned runtime used its own
+  documented defaults (`request_max_retries` 4, `stream_max_retries` 5). Both
+  are now fields on `CodexProviderSettings`, defaulted to 0, **emitted into
+  the provider table**, carried in `describe_provider()`, and included in the
+  diagnostic's settings fingerprint — so a verdict measured with retries
+  pinned cannot be read as evidence for a run without them. The plan reads its
+  numbers off the same settings object the table is built from, and reports
+  `null` rather than `0` when no settings could be built, because a run that
+  could not be configured did not configure zero retries.
+- **Measured against the real binary, not asserted.**
+  `tests/test_codex_retry_pins_are_enforced.py` starts the pinned `codex`
+  binary against a local server that refuses four different ways and counts
+  the requests that arrive. The token is a fixed fake string and only two keys
+  of the production provider table are rewritten — `base_url` and
+  `auth.args` — which a test asserts, so the `Authorization: Bearer` header
+  observed on `POST /v1/responses` is produced by the same `auth.*` block
+  production emits.
+
+  | server answers | counters unset | pinned to 0 |
+  | --- | --- | --- |
+  | HTTP 500 | 30 requests | 1 request |
+  | mid-stream disconnect | 6 requests | 1 request |
+  | HTTP 429 | 1 request | 1 request |
+  | HTTP 401 | 12 requests | **2 requests** |
+
+  The 401 row is recorded as a bound the pins do **not** remove: the runtime
+  re-runs the provider's auth command once after an authentication failure and
+  retries with the fresh token — two requests, two tokens minted — and no
+  documented key switches that off. It is in the record as
+  `retries_not_removed_by_pinning` rather than rounded down to one, and the
+  test asserts it at exactly 2 so that a runtime which later drops the retry
+  turns the claim red instead of leaving it standing.
+- **The record format is `codex_foundry_connection/2`.**
+  `request.retries_configured` changed from the scalar `0` to the two counters
+  actually written into the table, so a `/1` record — including the one from
+  run `34319880025` — cannot be misread as saying how many requests its turn
+  made. It made an unknown number.
+- **The grader source fingerprint moves with this: `ee1ca0b0…` →
+  `7e745a18…`.** `core/codex_runtime_config.py` is inside
+  `compute_grader_source_hash`'s walk of `core/*.py`, so a one-line change
+  there moves it. Both values were measured rather than reported —
+  `ee1ca0b0…` re-measured at `3d51e7cc`, where it still matched `342` §2, and
+  `7e745a18…` on this branch. Nothing in `337`/`342`/`343` is rewritten: those
+  record what was true for runs that are finished. What this does mean is that
+  `342` §0's fingerprint rows re-open for **any future paid dispatch**, exactly
+  as `343` §5.1 says they do on the next `core/` merge — re-measure before
+  buying, do not carry `ee1ca0b0…` forward. No grade run was in flight when
+  this merged.
+
+### Changed
+- **`CodexProviderSettings` refuses a retry count that is not a whole
+  non-negative number, including `True`.** `bool` is an `int` and
+  `_toml_literal` would render it as `true`, which the runtime reports as a
+  type error about a config file no operator wrote.
+
 - **A refusal now reaches the audio checker as a refusal, and a paid run whose
   every call was declined is `inconclusive` rather than `rehearsal_ok`.** The
   shared fix `341` proposed landed in the common metering code (not this
