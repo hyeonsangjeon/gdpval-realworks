@@ -36,13 +36,51 @@ on:
       # could add the flag that makes the job claim access it was never given
       # and nothing would fire.
       - ".github/workflows/execution-envelope-preflight.yml"
+      # The line above was right about the principle and too narrow by four
+      # directories. The suite reads the repository outside batch-runner/ far
+      # more widely than the two workflow files named above, measured by
+      # resolving every repo-root-relative path literal in batch-runner/tests/
+      # against the tree:
+      #
+      #   .github/  30 literals across 25 test files  (grade-run.yml alone: 17)
+      #   data/     35 literals across 26 test files
+      #   tasks/    36 literals across 25 test files
+      #   infra/     6 literals across  2 test files
+      #   src/       1 literal  across  1 test file
+      #
+      # None of those four started a run. That is not hypothetical either: #468
+      # edited a pinned hash in tasks/rebuilding_grading_task/ and merged with
+      # no run of this suite, and main went red -- which is the same failure
+      # #179 caused and which the header above says this workflow exists to
+      # close. Enumerating single files is what let the gap open twice, so
+      # these are directory globs: a new assertion about a new workflow or a
+      # new task document is covered the day it is written, without anybody
+      # remembering to come back here.
+      #
+      # data/** was the one worth checking rather than assuming, since it
+      # carries grading results. Measured over the last 60 commits on main it
+      # appears in 3 of them, against 165 for batch-runner/ -- and most commits
+      # that touch data/ touch batch-runner/ too, so they already started a
+      # run. The bot-authored result PRs cannot start a `pull_request` run at
+      # all (see above), so this reaches human PRs only. Tests do assert about
+      # what is in data/grades: row counts, the file cap, ledger pointers. A
+      # grades commit that breaks one of those should be caught by the gate
+      # rather than by somebody running pytest locally.
+      - ".github/workflows/**"
+      - "data/**"
+      - "tasks/**"
+      - "infra/**"
+      - "src/**"
   push:
     branches: [main]
     paths:
       - "batch-runner/**"
       - "scripts/**"
-      - ".github/workflows/backend-tests.yml"
-      - ".github/workflows/execution-envelope-preflight.yml"
+      - ".github/workflows/**"
+      - "data/**"
+      - "tasks/**"
+      - "infra/**"
+      - "src/**"
   workflow_dispatch:
     inputs:
       expected_sha:
@@ -64,7 +102,15 @@ concurrency:
 jobs:
   pytest:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # 45, not 30, because 30 was inside the noise. Run 34341659511 was
+    # cancelled by the old ceiling at 86% and its re-run of the identical tree
+    # passed in 22:10; twelve runs before it took 18-22 minutes. A cancelled
+    # run is reported as a failure, so a ceiling that close to the mean turns
+    # a slow runner into a red gate and trains people to re-run rather than
+    # read. This is headroom for runner variance, not for a slower suite: if
+    # the suite itself starts taking 40 minutes, that is a finding and this
+    # number should not be raised again to hide it.
+    timeout-minutes: 45
     steps:
       # A dispatch names a branch, and a branch is a moving pointer. Between the
       # caller measuring the PR head and this run starting, the branch can be
