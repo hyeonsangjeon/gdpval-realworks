@@ -101,18 +101,20 @@ entries land under a fresh dated heading the day they merge to `main`.
   and a paid run reporting `$0`.
 
 ### Fixed
-- **`344` §2's grader row, re-pinned at the merged SHA — and with it a test
-  that was red on `main`.** The row carried `ee1ca0b0…` because that is what
-  `342` pinned; the entry above moved the fingerprint to `7e745a18…` while
-  `344` was being written. Neither PR could have caught it: #467 was green
-  before `344`'s test existed and #468 was green before #467 merged (08:42 and
-  09:00 against 08:53), and nothing runs the suite on a push to `main`, so
-  `446acfd` sat red and unreported. Re-pinning is what `344` §0 pre-registered
-  for exactly this case — `344` has never been dispatched, so there is no
-  paid result to overwrite — and the finished documents' old fingerprints are
-  left alone as history. The other three pins were re-measured and had not
-  moved. **`main` having no test run of its own is not fixed here**; it is
-  worth fixing separately.
+- **How `446acfd` came to sit red, since #469 fixed it without the two dates
+  that explain it.** `344` §2's grader row carried `ee1ca0b0…` because that is
+  what `342` pinned; the entry above moved the fingerprint to `7e745a18…`
+  while `344` was being written. Neither PR could have caught it: #467 was
+  green before `344`'s test existed and #468 was green before #467 merged
+  (08:42 and 09:00 against 08:53). Both were right about the tree they ran on
+  and wrong about the tree they made. Nothing runs the suite on a push to
+  `main`, so nothing said so for the seventy minutes in between. #469 moved
+  the row; independently re-measured here, the **other three** pins — price
+  `b01b384c…`, manifest `97755288…`, candidate header `dd0380fa…` — had not
+  moved, so the one line that changed is the one `core/` reaches.
+  **`main` having no test run of its own is not fixed here**, and it is the
+  part that will happen again; fixing it belongs with whoever owns
+  `.github/workflows/` next.
 - **`verify_format_pilot_run.py` is named in `.gitignore`, which is not a
   formality.** `batch-runner/scripts/*` is ignored and files are re-admitted
   one `!` line at a time, so the checker was written, tested green and absent
