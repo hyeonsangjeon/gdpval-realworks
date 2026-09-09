@@ -34,10 +34,11 @@
 | 준비 PR이 **green으로 병합** | ✅ `#461` → `38038a1` |
 | §2의 **채점기 지문**을 병합된 SHA에서 **다시 계산해 이 표에 다시 못 박음** | ✅ `38038a1`에서 `ee1ca0b0…` |
 | §2의 **가격표 지문**을 병합된 SHA에서 **다시 계산해 이 표에 다시 못 박음** | ✅ 같은 자리에서 `b01b384c…` (안 움직임) |
-| 무료 예행이 §2의 2문항·§5의 계획 2회를 그대로 뽑아냄 | ⬜ |
-| 그 예행이 `verify_audio_metering_run.py`에서 `rehearsal_ok` | ⬜ |
-| A가 `core/` 소스 지문을 움직이는 중이 아님이 확인됨 | ⬜ |
-| 유료 승인이 별도로 확인됨 | ⬜ |
+| **이 실행을 보낼 경로가 존재**함 (워크플로가 `--metering-run`을 넘길 수 있음) | ✅ `#464` → `03a4aa5` |
+| 무료 예행이 §2의 2문항·§5의 계획 2회를 그대로 뽑아냄 | ✅ 실행 `34322427388` |
+| 그 예행이 `verify_audio_metering_run.py`에서 `rehearsal_ok` | ✅ 8통과 / 0실패 / 1미답 |
+| A가 `core/` 소스 지문을 움직이는 중이 아님이 확인됨 | ✅ `#463`은 `core/`를 안 건드림 |
+| 유료 승인이 별도로 확인됨 | ⬜ 발주 시 `grading` 환경 게이트에서 |
 
 **⬜ 가 하나라도 남아 있으면 이 문서는 사전등록이 아니라 계획서다.**
 
@@ -65,6 +66,52 @@ in this diff`).
 `333`·`334`·`335`가 못 박은 값이 한꺼번에 틀린 값이 됐다. 유료 실행 직전에
 §5.1의 두 줄을 **한 번 더** 돌려서 지금 적힌 값과 같은지 보는 게 마지막
 확인이다.
+
+**그 마지막 확인을 했다.** 발주 경로가 병합된 `03a4aa5`에서 세 지문을 다시
+쟀고 셋 다 위 표와 같았다: 채점기 `ee1ca0b0…`, 가격표 `b01b384c…`,
+매니페스트 `97755288…`. `#463`(A의 가지)은 `codex-foundry-connection-
+diagnostic.yml`과 그 시험 파일 **둘만** 바꿨다 — `core/`도, 스키마도,
+채점 프롬프트도, 가격표도 아니다. 그래서 "A가 지문을 움직이는 중이 아님"은
+A의 커밋 메시지가 그렇게 말해서가 아니라 **바뀐 파일 목록과 다시 잰 값**이
+그렇게 말한다.
+
+**무료 예행은 병합된 SHA에서 돌렸다.** 실행 `34322427388`, `dry_run: true`,
+`corpus: audio-cost-metering`, `repeats: 1`. 보고서가 스스로 말하는 값:
+
+| 보고서 항목 | 값 | §2·§5가 요구한 값 |
+|---|---|---|
+| `calls_planned` | 2 | 2 |
+| `claims` | `crate_seventeen`, `shelf_fifty` | 그 둘 |
+| `clips` | `crate`, `shelf` | 그 둘 |
+| `measured` | `false` | 예행이므로 `false` |
+| `stopped` | `null` | 중단·거절 없음 |
+| `cost.record_kind` | `rehearsal` | `rehearsal` |
+| `cost.billable_calls` | 0 | 0 |
+| `cost.models` | `stub-not-a-model` | 진짜 배포가 아님 |
+| `cost.pricing_complete` | `false` | 단가 미등록이므로 `false` |
+
+**검사기 판정은 `rehearsal_ok`다** (종료 코드 0, 8통과 / 0실패 / 1미답).
+미답 한 칸은 조건 2 — 소리를 실은 행의 `audio_input_tokens > 0` — 이고,
+**유료 실행만 답할 수 있는 칸이다.** 검사기가 스스로 그렇게 적는다:
+"this is NOT evidence that a paid audio call was metered."
+
+조건 4와 8이 특히 이번 설계를 확인해 준다: 단가 없는 행 2개가 각각
+`price_missing`을 달고, 영수증은 `partial`, 보고서의 금액은 `None`이다.
+**`$0`도 아니고 `complete`도 아니다** — 그게 맞는 모양이다.
+
+예행 산출물을 손으로 다시 검사할 때 쓴 명령 (경로 두 개를 덮어써야 한다.
+CI 산출물은 실행기의 절대 경로를 그대로 안고 나오기 때문이다):
+
+```bash
+python scripts/verify_audio_metering_run.py \
+  audio-accuracy-dry-run.json \
+  --ledger audio-cost-metering-rehearsal.jsonl \
+  --price-table experiments/execution_envelope/model_price_table.json
+```
+
+`--ledger`는 `.sqlite3`가 아니라 **`.jsonl` 곁 파일**을 받는다. `--price-table`
+덮어쓰기는 느슨하게 만들지 않는다 — 지문이 보고서와 다르면 조건 4가
+**실패**하지 조용히 다시 매기지 않는다.
 
 ---
 
