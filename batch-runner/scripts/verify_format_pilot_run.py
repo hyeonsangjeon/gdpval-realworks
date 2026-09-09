@@ -6,8 +6,11 @@ readable JSON where 337's did not. The answer is a count, and a count is easy
 to read the way you were hoping. So the reading is written down here, before
 the run, and done by a program afterwards.
 
-It reads the run's JSON report and the ledger export beside it, and nothing
-else. No model call, no credential, no network::
+It reads two files and nothing else: the run's JSON report, and the
+pre-registration whose pins the run is held to. Not the ledger database --
+the ledger *reference* is inside the report's own cost block, which is what
+condition 7 reads, so a report can be checked long after the ``.sqlite3``
+beside it has gone. No model call, no credential, no network::
 
     cd batch-runner
     python scripts/verify_format_pilot_run.py path/to/report.json

@@ -7040,3 +7040,117 @@ def test_recording_the_reply_does_not_change_the_request(tmp_path: Path) -> None
     on = _sent_requests(probe.SHAPE_EXCERPT_CHARS)
     assert off and len(off) == len(on)
     assert off == on, "the shape record changed what went on the wire"
+
+
+# ---------------------------------------------------------------------------
+# Part D -- the verdict has to run where the run runs.
+#
+# 344 §0 ticks two boxes on checks that happen in CI: the rehearsal, and the
+# paid pilot's §6 reading. A checker that exists in the repository but is
+# called by nothing is a precondition satisfied on paper. These hold the
+# workflow to calling it, on the right file, and to carrying what it found.
+# ---------------------------------------------------------------------------
+
+
+def test_the_rehearsal_is_judged_by_the_same_checker_the_paid_run_uses(
+) -> None:
+    """§0 ticks a box on the free run, so the free run has to be read.
+
+    The rehearsal exists to clear a paid dispatch. If nothing reads its
+    report, "ten requests were planned and ten went out" is a claim somebody
+    eyeballs on a summary page -- which is the family of mistake that let
+    `337` buy ten calls without a ledger and notice three documents later.
+    """
+    check = _step("dry-run", "Check the rehearsal against 344 §6")
+    assert "always()" in check["if"], (
+        "a rehearsal that stopped early still has a shape worth reading"
+    )
+    assert "speech-format-pilot-v3" in check["if"]
+    body = check["run"]
+    assert "verify_format_pilot_run.py" in body
+    # The dry-run job writes `audio-accuracy-dry-run.json`; the paid job
+    # writes `audio-accuracy-measured.json`. Pointing this step at the paid
+    # name would make it skip on every rehearsal -- and skip *silently*,
+    # because the step's own missing-file branch exits 0 on purpose.
+    assert "audio-accuracy-dry-run.json" in body
+    assert "audio-accuracy-measured.json" not in body
+    # `set -e` would abandon the step at the checker's non-zero exit, before
+    # the summary that explains what its verdict word means.
+    assert "set -uo pipefail" in body
+    assert 'exit "$rc"' in body
+    assert body.index("GITHUB_STEP_SUMMARY") < body.index('exit "$rc"')
+
+
+def test_the_paid_run_is_judged_on_the_envelope_and_the_page_says_so() -> None:
+    """Two checkers on one job, two questions, and neither answers the other.
+
+    `verify_audio_metering_run.py` asks whether the spend reached a ledger;
+    this one asks 344 §6's question. A reader who takes `measured_ok` for an
+    answer about the header, or `format_held` for an answer about whether the
+    grading was *right*, has read a verdict that does not cover it. So each
+    step states on the page what its own word leaves open.
+    """
+    check = _step("measure", "Check the pilot against 344 §6")
+    assert "always()" in check["if"]
+    assert "speech-format-pilot-v3" in check["if"]
+    body = check["run"]
+    assert "verify_format_pilot_run.py" in body
+    assert "audio-accuracy-measured.json" in body
+    assert "set -uo pipefail" in body
+    assert 'exit "$rc"' in body
+    assert body.index("GITHUB_STEP_SUMMARY") < body.index('exit "$rc"')
+    # The gate is the envelope. The usable-verdict count sits beside it and
+    # is not the gate -- it is the number a reader most wants to promote into
+    # a result, so the page has to say which one it is.
+    assert "reported, not gated" in body
+    # And that a loss is a loss. §6 forbids re-ordering on a failure, and the
+    # page is where somebody decides what to do next.
+    assert "not grounds for re-ordering" in body
+
+
+def test_both_verdicts_are_uploaded_beside_the_rows_that_back_them() -> None:
+    """A verdict in a step log expires with the run. The rows do too.
+
+    `337` is why this is a test and not a habit: its per-call record existed
+    only in a CI artifact, the artifact expired, and `340` had to be written
+    to say the numbers could no longer be produced. The verdict travels with
+    the ledger it was computed from, so a claim and its evidence cannot end
+    up on two different pages with different lifetimes.
+    """
+    for job, ledger_file, verdicts in (
+        ("dry-run", "format-pilot-v3-rehearsal.sqlite3",
+         ("format-pilot-v3-rehearsal-verdict.json",
+          "format-pilot-v3-rehearsal-verdict.txt")),
+        ("measure", "format-pilot-v3-measured.sqlite3",
+         ("format-pilot-v3-verdict.json", "format-pilot-v3-verdict.txt")),
+    ):
+        uploads = [
+            step for step in _workflow()["jobs"][job]["steps"]
+            if str(step.get("uses", "")).startswith("actions/upload-artifact")
+            and ledger_file in step["with"]["path"]
+        ]
+        assert uploads, f"{job} does not upload {ledger_file}"
+        step = uploads[0]
+        assert "always()" in step["if"], (
+            f"{job}: a stopped run's rows are the ones nobody planned for"
+        )
+        for name in verdicts:
+            assert name in step["with"]["path"], f"{job}: {name} is not uploaded"
+
+
+def test_the_two_jobs_write_verdict_files_under_different_names() -> None:
+    """A rehearsal's verdict must not be readable as the pilot's.
+
+    Both jobs run the same checker and both upload what it wrote. If the two
+    used one filename, the free artifact and the paid one would differ only
+    by which run produced them -- and `rehearsal_ok` sitting in a file called
+    `format-pilot-v3-verdict.json` is precisely the confusion `343` was
+    written to stop for the metering ledgers.
+    """
+    dry = _step("dry-run", "Check the rehearsal against 344 §6")["run"]
+    paid = _step("measure", "Check the pilot against 344 §6")["run"]
+    assert "format-pilot-v3-rehearsal-verdict.json" in dry
+    assert "format-pilot-v3-verdict.json" in paid
+    # Not a substring of each other's name, either: `--out` writing
+    # `...-rehearsal-verdict.json` contains no path the paid step also writes.
+    assert "format-pilot-v3-rehearsal-verdict" not in paid
