@@ -657,9 +657,44 @@ paid run must be preceded by a fresh smoke at the new fingerprint.
   deployment are separate facts from the documentation, and only a request
   settles them. As of 2026-09-08 the instrument that asks exists (§3c) and
   separates a refused sign-in, a rejected request shape and an absent deployment
-  from one another out of a single turn. It has not been fired. Firing it is a
-  `workflow_dispatch` from `main` with `send_request: true`, and it costs one
-  turn of roughly 135 characters with no tools and no retries.
+  from one another out of a single turn.
+
+  **It has since been fired, and it came back 401.** Run `34319880025`,
+  `send_request: true`, `usage: null`. A workflow that concludes `success` is
+  reporting that the job ran, not that the provider answered; the record inside
+  it says `unauthorized`. The turn cost is unestablished rather than zero —
+  there was no usage to price, and an unpriced turn is not a free one.
+
+  The 401 is an authentication result, not an authorization one. The read-only
+  RBAC diagnostic (run `34325382584`) shows the CI identity holding
+  `Cognitive Services OpenAI User` at the **account** scope, which is the scope
+  governing the `/openai/v1/` route Codex posts to. So the missing Foundry
+  *project* role assignments belong to a different route and are not the
+  demonstrated cause here. What the 401 does *not* establish, and must not be
+  written up as if it did: which of deployment name, region, API contract or
+  credential is wrong. One status code does not locate the fault.
+
+  Firing it is a `workflow_dispatch` from `main` with `send_request: true`. It
+  costs one turn of roughly 135 characters with no tools, and — since the
+  retry pins landed — **one HTTP request**, or two if the answer is another
+  401. Before the pins, "no retries" was a line in the plan dictionary and
+  nothing else: the provider table set neither counter, so the runtime used its
+  own defaults and one turn against a 500 sent **thirty** requests. Measured,
+  not estimated: `batch-runner/tests/test_codex_retry_pins_are_enforced.py`
+  drives the pinned binary against a local server that refuses four different
+  ways and counts what arrives.
+
+  | server answers | counters unset | pinned to 0 |
+  | --- | --- | --- |
+  | HTTP 500 | 30 requests | 1 request |
+  | mid-stream disconnect | 6 requests | 1 request |
+  | HTTP 429 | 1 request | 1 request |
+  | HTTP 401 | 12 requests | **2 requests** |
+
+  The 401 row is the residue pinning does not remove: the runtime re-runs the
+  provider's auth command once after an authentication failure and retries with
+  the fresh token, which no documented key switches off. Two requests, two
+  tokens minted. It is recorded as a bound rather than rounded down to one.
 - **The exec leg is closed, on one host, and it took a repair to close it.** The
   host limit was real and was closed by finding a host rather than by removing
   isolation: no sandbox was disabled, no network was opened, no container was

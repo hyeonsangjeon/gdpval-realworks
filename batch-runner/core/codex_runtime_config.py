@@ -494,6 +494,44 @@ DEFAULT_AUTH_REFRESH_MS = 1_800_000
 #: How long the auth command may take before Codex gives up on it.
 DEFAULT_AUTH_TIMEOUT_MS = 30_000
 
+#: Retries, pinned off. Both keys are per-provider settings of the pinned
+#: 0.147.0 runtime -- they appear in its ``ModelProviderInfo`` field list and in
+#: the published config reference, whose defaults are ``request_max_retries``
+#: 4 and ``stream_max_retries`` 5.
+#:
+#: Leaving them unset is not "one request per turn". Measured against the
+#: pinned binary and a local server that answers from a script, one turn sends:
+#:
+#:   ===================  =================  ============
+#:   server answers       shipped defaults   pinned to 0
+#:   ===================  =================  ============
+#:   HTTP 500                 30 requests      1 request
+#:   mid-stream disconnect     6 requests      1 request
+#:   HTTP 429                  1 request       1 request
+#:   HTTP 401                 12 requests     2 requests
+#:   ===================  =================  ============
+#:
+#: 30 is the product the reference implies: 5 request attempts x 6 stream
+#: attempts. It is the number that turns "one diagnostic turn" into thirty
+#: billable calls against a real deployment, which is why these are pinned here
+#: rather than described in a plan dictionary.
+#:
+#: The 401 row is the honest residue. Pinning takes it from 12 requests to 2,
+#: not to 1: Codex re-runs the auth command once on an authentication failure
+#: and retries with the fresh token, and neither counter binds that. The
+#: reference says as much under ``auth.refresh_interval_ms`` -- "set to 0 to
+#: refresh only after an authentication retry" -- so the retry exists by
+#: design. There is no supported key that removes it. ``tests/
+#: test_codex_retry_pins_are_enforced.py`` measures all four rows against the
+#: real binary so the table cannot quietly stop being true.
+DEFAULT_REQUEST_MAX_RETRIES = 0
+DEFAULT_STREAM_MAX_RETRIES = 0
+
+#: What one 401 costs even with both counters at 0, measured rather than
+#: reasoned about. Exported so the diagnostic can state the bound instead of
+#: claiming a zero it does not have.
+AUTH_RETRY_REQUESTS_NOT_REMOVED_BY_PINNING = 2
+
 
 class CodexProviderConfigurationError(ValueError):
     """A provider setting is missing, malformed, or forbidden here."""
@@ -559,6 +597,19 @@ class CodexProviderSettings(CodexProviderLike):
     auth_scope: str = DIRECT_TOKEN_SCOPE
     auth_refresh_interval_ms: int = DEFAULT_AUTH_REFRESH_MS
     auth_timeout_ms: int = DEFAULT_AUTH_TIMEOUT_MS
+    #: Retries on a refused or dropped request. Both default to 0; see the
+    #: measured table beside :data:`DEFAULT_REQUEST_MAX_RETRIES` for what the
+    #: runtime does when they are left unset.
+    #:
+    #: 0 is the right default for a diagnostic, where the cost of one turn has
+    #: to be a known quantity. It is not obviously right for a 220-task batch,
+    #: where a transient 500 would now fail a task instead of being retried.
+    #: That is a decision for whoever turns the batch leg on, and this default
+    #: is set so the decision has to be made rather than inherited: a caller
+    #: that wants retries passes a number, and the number is in the settings
+    #: fingerprint, so the record says which run had them.
+    request_max_retries: int = DEFAULT_REQUEST_MAX_RETRIES
+    stream_max_retries: int = DEFAULT_STREAM_MAX_RETRIES
     python_executable: str | None = None
 
     def __post_init__(self) -> None:
@@ -609,6 +660,21 @@ class CodexProviderSettings(CodexProviderLike):
             raise CodexProviderConfigurationError(
                 "Codex provider auth timings must be positive milliseconds"
             )
+        for name in ("request_max_retries", "stream_max_retries"):
+            value = getattr(self, name)
+            # ``bool`` is an ``int``, and ``_toml_literal`` renders it as
+            # ``true``. A provider table carrying ``request_max_retries=true``
+            # is a type error the runtime reports about a config file the
+            # operator never wrote, so it is refused here where it is legible.
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise CodexProviderConfigurationError(
+                    f"Codex provider {name} must be a whole number of retries; "
+                    f"got {value!r}"
+                )
+            if value < 0:
+                raise CodexProviderConfigurationError(
+                    f"Codex provider {name} cannot be negative; got {value!r}"
+                )
 
     @property
     def base_url(self) -> str:
@@ -761,6 +827,13 @@ def provider_config_overrides(
         f"{prefix}.auth.timeout_ms={_toml_literal(settings.auth_timeout_ms)}",
         f"{prefix}.auth.refresh_interval_ms="
         f"{_toml_literal(settings.auth_refresh_interval_ms)}",
+        # Emitted always, including at the default 0. An unset key is not a
+        # zero here: the runtime falls back to 4 and 5, which is up to thirty
+        # requests for one turn.
+        f"{prefix}.request_max_retries="
+        f"{_toml_literal(settings.request_max_retries)}",
+        f"{prefix}.stream_max_retries="
+        f"{_toml_literal(settings.stream_max_retries)}",
     ]
     for key, value in sorted(dict(settings.query_params).items()):
         overrides.append(
@@ -783,5 +856,7 @@ def describe_provider(settings: CodexProviderSettings) -> dict[str, object]:
         "query_params": dict(settings.query_params),
         "auth_command": settings.auth_command(),
         "auth_scope": settings.auth_scope,
+        "request_max_retries": settings.request_max_retries,
+        "stream_max_retries": settings.stream_max_retries,
         "endpoint_kind": classify_endpoint(settings.endpoint).kind.value,
     }
