@@ -1930,7 +1930,37 @@ def manifest_pin_stated_in(doc_path: Path) -> str:
     return found.pop()
 
 
-#: The row a pre-registration writes to say *which* diagnostic it registers.
+#: The row a two-arm pre-registration writes its candidate header's digest
+#: into.
+#:
+#: Optional, and read as ``None`` when absent, because 333, 337 and 338 were
+#: dispatched before this row existed and re-pinning a finished document to
+#: satisfy a check written later would be editing history to pass a test.
+#: A document that does carry the row is held to it.
+#:
+#: The gap it closes: 337 stated ``SPEECH_OBSERVATION_HEADER_V2, sha256
+#: 93239fe7...`` in its own table and nothing compared that string to the
+#: string the run would send. Which header a kind sends is decided by
+#: :data:`SPEECH_TWO_ARM_REGISTRATIONS`, one table away, and the two could
+#: have disagreed without anything saying so.
+_CANDIDATE_PIN_ROW = re.compile(
+    r"^\|\s*후보 머리말 지문\s*\|\s*`([0-9a-f]{64})`\s*\|", re.MULTILINE
+)
+
+
+def candidate_pin_stated_in(doc_path: Path) -> Optional[str]:
+    """The candidate header's digest a pre-registration pins, if it pins one."""
+    found = set(_CANDIDATE_PIN_ROW.findall(doc_path.read_text(encoding="utf-8")))
+    if not found:
+        return None
+    if len(found) > 1:
+        raise ValueError(
+            f"{doc_path} states {len(found)} different candidate header "
+            f"fingerprints; which prompt this run is supposed to send is not "
+            f"decidable"
+        )
+    return found.pop()
+
 #: Same shape and same reason as :data:`_GRADER_PIN_ROW`: a visible table row
 #: the operator reads before dispatching, parsed rather than restated. A file
 #: path on a command line says nothing about what the file agreed to; this
@@ -1952,6 +1982,23 @@ SPEECH_FORMAT_PILOT_KIND = "speech-format-pilot"
 #: :data:`SPEECH_PROMPT_AB_KIND` -- 20 claims, 3 repeats, 2 arms, 120 calls --
 #: and a different document, because the header it sends is different.
 SPEECH_PROMPT_AB_V2_KIND = "speech-prompt-ab-v2"
+
+#: 344's re-run of the format pre-trial under a third header.
+#:
+#: A third kind rather than a second dispatch of ``speech-format-pilot``.
+#: 337's document pins a different candidate, a different ceiling and a
+#: different set of pass criteria, and it is finished: it registered
+#: :data:`SPEECH_OBSERVATION_HEADER_V2`, bought ten calls, and 339 recorded
+#: the result. Re-using its name would file a run against a plan it does not
+#: follow and would put a second, different answer under a document that
+#: already has one.
+#:
+#: The five claims and their order are 337's, unchanged and deliberately so.
+#: The one thing this run varies is the header; holding the sample fixed is
+#: what keeps "the candidate changed" from being confounded with "the
+#: questions changed", and re-picking items after seeing 339's results is the
+#: exact move a pre-registration exists to prevent.
+SPEECH_FORMAT_PILOT_V3_KIND = "speech-format-pilot-v3"
 
 #: The metering trial 341 asks for: does a paid audio call reach the ledger.
 #:
@@ -2352,6 +2399,67 @@ SPEECH_OBSERVATION_HEADER_V2 = (
     "statement is supported.\n\n"
 ) + AUDIO_RESPONSE_CONTRACT
 
+#: The two words that separate :data:`SPEECH_OBSERVATION_HEADER_V3` from
+#: :data:`SPEECH_OBSERVATION_HEADER_V2`, and what they are for.
+#:
+#: Read V2's docstring above and then read what it shipped. The diagnosis it
+#: states is that V1's first imperative "is an order to produce text with no
+#: destination named". The fix it shipped **names a destination and leaves the
+#: order standing**: V2's first paragraph now contains two output orders, an
+#: unaddressed "write down what it actually contains" followed by an addressed
+#: "Write that transcript into the \"reasoning\" field". A model that executes
+#: them in the order given writes the transcript first, and 335 saw exactly
+#: that shape -- one sentence of prose, no braces, ``finish_reason: stop``.
+#:
+#: So V3 does to the first order what V2 did not: it takes the emission out.
+#: "write down" becomes "work out", which asks for the same determination and
+#: does not ask for a second piece of writing. Everything the observation
+#: asks the model to attend to -- speech present at all, the words in
+#: sequence, verbatim where it can manage, the mishearing caveat -- is
+#: untouched, and so is the destination sentence, which is now the paragraph's
+#: only output order.
+#:
+#: **This candidate is the last one this theory gets.** V1 and V2 both failed;
+#: if a header with no unaddressed emission order fails too, then "the model
+#: is obeying an order to write prose" is not what is happening, and the next
+#: step is whatever 344's recorded response facts say instead -- not a fourth
+#: rewording of the same paragraph.
+SPEECH_OBSERVATION_EMISSION_VERB = ("write down", "work out")
+
+#: The candidate 344 registers: V2 with its unaddressed emission order removed.
+#:
+#: Written out in full rather than derived with ``.replace`` for the same
+#: reason V2 is -- a reviewer should read the prompt that ships, not a recipe
+#: for it. ``test_the_v3_header_is_v2_with_the_emission_order_removed``
+#: reconstructs V2 by putting the two words back and compares byte-for-byte,
+#: so "one substitution, nothing else" is checked rather than claimed.
+#:
+#: **What it cannot do.** This is a format candidate. If it holds the envelope
+#: that is a fact about envelopes, not about hearing; five items cannot say
+#: anything about accuracy and 344 does not ask them to. If it loses, it is
+#: not evidence about whether observation-first attention helps either.
+SPEECH_OBSERVATION_HEADER_V3 = (
+    "You are an audio analyst. A short audio clip has been supplied to you as "
+    "audio input. Work only from that audio. Nothing you have been told about "
+    "the clip is a substitute for listening to it.\n\n"
+    "FIRST, before treating the statement below as anything but words, listen "
+    "to the clip and work out what it actually contains: whether any speech "
+    "is present at all; the words you hear, in the sequence you hear them, as "
+    "close to verbatim as you can manage; and, where a word is easy to "
+    "mishear, what you believe was actually said rather than what would make "
+    "the most sense. "
+    "Write that transcript into the \"reasoning\" field of the single JSON "
+    "object described below, and write it nowhere else: that object is the "
+    "whole of your reply.\n\n"
+    "THEN judge the statement against that transcript. The statement may be "
+    "true or it may be false. Do not assume it is true, and do not let its "
+    "wording tell you what you heard: whatever it names is the claim under "
+    "test, not a fact about the clip. If the audio does not let you decide, "
+    "return verdict \"judge_error\" rather than guessing.\n\n"
+    "In \"evidence\", quote the words you heard before you state whether the "
+    "statement is supported.\n\n"
+) + AUDIO_RESPONSE_CONTRACT
+
 #: Arm identifiers. ``production`` forwards the request untouched, so the
 #: control arm is the real grading prompt and not a re-implementation of it.
 PROMPT_ARMS = ("production", "observation")
@@ -2380,6 +2488,10 @@ SPEECH_TWO_ARM_REGISTRATIONS: dict[str, tuple[str, str]] = {
         "SPEECH_OBSERVATION_HEADER_V2",
         SPEECH_OBSERVATION_HEADER_V2,
     ),
+    SPEECH_FORMAT_PILOT_V3_KIND: (
+        "SPEECH_OBSERVATION_HEADER_V3",
+        SPEECH_OBSERVATION_HEADER_V3,
+    ),
 }
 
 #: Which kinds narrow the corpus to a document-fixed claim list, and how many
@@ -2391,6 +2503,7 @@ SPEECH_TWO_ARM_REGISTRATIONS: dict[str, tuple[str, str]] = {
 #: pinned at the same time.
 SPEECH_NARROWED_KINDS: dict[str, int] = {
     SPEECH_FORMAT_PILOT_KIND: 1,
+    SPEECH_FORMAT_PILOT_V3_KIND: 1,
     AUDIO_COST_METERING_KIND: 1,
 }
 
@@ -2418,6 +2531,15 @@ SPEECH_NARROWED_KINDS: dict[str, int] = {
 #: rather than growing to fit.
 SPEECH_REQUEST_CAPS: dict[str, int] = {
     SPEECH_FORMAT_PILOT_KIND: 12,
+    #: 344: five claims x one repeat x two arms = ten calls, against a ceiling
+    #: of **ten**. No headroom at all, and that is the point: the approval
+    #: this run has is for at most ten calls, so a ceiling of twelve would be
+    #: a ceiling nobody agreed to. 337 could afford two spare because its SDK
+    #: retries were the openai default and a stray retry was invisible to the
+    #: counter anyway; here :data:`SPEECH_LEDGERED_KINDS` pins them to zero,
+    #: so one create is one HTTP request and the plan and the ceiling can be
+    #: the same number honestly.
+    SPEECH_FORMAT_PILOT_V3_KIND: 10,
     #: 338: the whole manifest, 20 claims x 3 repeats x 2 arms = 120, which is
     #: the size 333 registered and 334 bought. The instruction for this
     #: comparison is that it does not grow past that, so the headroom here is
@@ -2433,6 +2555,28 @@ SPEECH_REQUEST_CAPS: dict[str, int] = {
     #: is a defect, so this ceiling is expected never to fire.
     AUDIO_COST_METERING_KIND: 6,
 }
+
+#: Accuracy kinds that run under the metering trial's request discipline.
+#:
+#: Three things travel together here, and they are one decision rather than
+#: three: the openai SDK's ``max_retries`` pinned to
+#: :data:`AUDIO_COST_METERING_SDK_RETRIES`, a failure budget of one, and a
+#: cost ledger the run refuses to start without.
+#:
+#: Why an accuracy run wants them. 337 bought ten calls and reported ten, but
+#: it ran on the SDK default of two retries, so "ten calls" bounded
+#: ``create`` invocations and not HTTP requests -- a 429 inside any of them
+#: would have sent a second and a third under one tick of the counter, and
+#: 340 later found that none of the ten reached the shared ledger at all. A
+#: run whose approval is written as a request count has to be able to say
+#: what the request count was, and 337 could not.
+#:
+#: :data:`AUDIO_COST_METERING_KIND` is not listed. It does not need to be --
+#: ``--metering-run`` already sets all three for its own reasons, and adding
+#: it here would give one behaviour two switches.
+SPEECH_LEDGERED_KINDS: frozenset[str] = frozenset({
+    SPEECH_FORMAT_PILOT_V3_KIND,
+})
 
 
 class RequestCapReached(BaseException):
@@ -4579,6 +4723,14 @@ def main(argv: Optional[list[str]] = None) -> int:
     metering = False
     price_table_pin: Optional[str] = None
 
+    #: Set by a document whose kind is in :data:`SPEECH_LEDGERED_KINDS`, and
+    #: read at the same two places ``metering`` is. Separate from ``metering``
+    #: because the questions are different -- this run is an accuracy pilot
+    #: and writes no metering section -- but the request discipline is the
+    #: same, and giving it its own flag is what stops "no hidden retries"
+    #: from being a claim the report makes about a setting it did not apply.
+    ledgered = False
+
     speech: Optional[SpeechCorpus] = None
     if args.speech_set is not None:
         try:
@@ -4679,6 +4831,49 @@ def main(argv: Optional[list[str]] = None) -> int:
                     file=sys.stderr,
                 )
                 return 3
+
+            # The candidate this document says it is sending, checked against
+            # the string that is actually registered for its kind. 337 wrote
+            # its candidate's digest into a table and nothing read it, so the
+            # row was a claim; here a document that names the wrong header
+            # stops the run instead of buying calls under a prompt its
+            # reviewers did not read.
+            try:
+                candidate_pin = candidate_pin_stated_in(args.speech_prompt_ab)
+            except (OSError, ValueError) as exc:
+                print(f"::error::{exc}", file=sys.stderr)
+                return 3
+            if candidate_pin is not None:
+                actual = hashlib.sha256(
+                    speech_observation_header.encode("utf-8")
+                ).hexdigest()
+                if candidate_pin != actual:
+                    print(
+                        f"::error::{args.speech_prompt_ab.name} pins candidate "
+                        f"header {candidate_pin[:16]}..., but '{kind}' is "
+                        f"registered to send {header_name}, which is "
+                        f"{actual[:16]}.... The document and the code disagree "
+                        f"about which prompt this run sends.",
+                        file=sys.stderr,
+                    )
+                    return 3
+
+            # Kinds whose approval is written as a request count run under the
+            # metering trial's discipline: no SDK retries, no second attempt,
+            # and a ledger. See :data:`SPEECH_LEDGERED_KINDS`.
+            if kind in SPEECH_LEDGERED_KINDS:
+                if args.cost_ledger is None:
+                    print(
+                        f"::error::{args.speech_prompt_ab.name} registers "
+                        f"'{kind}', which runs with SDK retries pinned to "
+                        f"zero so that one request is one ledger row. Without "
+                        f"--cost-ledger there is no row, and the run cannot "
+                        f"say afterwards how many requests it sent -- which "
+                        f"is the accounting 337 could not produce.",
+                        file=sys.stderr,
+                    )
+                    return 3
+                ledgered = True
 
         if args.metering_run is not None:
             # A third door, with its own document and its own question. It
@@ -4964,7 +5159,11 @@ def main(argv: Optional[list[str]] = None) -> int:
             # ledger row. For the run whose finding is "the rows match the
             # requests" that is not a rounding error, it is the finding being
             # wrong. See :data:`AUDIO_COST_METERING_SDK_RETRIES`.
-            max_retries=AUDIO_COST_METERING_SDK_RETRIES if metering else None,
+            max_retries=(
+                AUDIO_COST_METERING_SDK_RETRIES
+                if (metering or ledgered)
+                else None
+            ),
         )
         client = managed.client
 
@@ -5016,7 +5215,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             # every call and the run would send nothing.
             failure_budget=(
                 AUDIO_COST_METERING_FAILURE_BUDGET
-                if metering
+                if (metering or ledgered)
                 else AUDIO_FAILURE_BUDGET
             ),
         )

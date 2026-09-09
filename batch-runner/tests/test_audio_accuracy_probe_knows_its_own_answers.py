@@ -5939,6 +5939,10 @@ _MAIN_DOC = (
     probe.REPO_ROOT / "tasks" / "rebuilding_grading_task"
     / "338-format-safe-observation-ab.md"
 )
+_PILOT_V3_DOC = (
+    probe.REPO_ROOT / "tasks" / "rebuilding_grading_task"
+    / "344-the-order-with-no-destination.md"
+)
 
 
 def test_the_main_comparison_document_pins_what_this_checkout_would_dispatch(
@@ -6072,6 +6076,9 @@ _CORPUS_DOCUMENTS = {
     probe.SPEECH_PROMPT_AB_V2_KIND: (
         "SPEECH_AB_V2_PREREG", _MAIN_DOC.name,
     ),
+    probe.SPEECH_FORMAT_PILOT_V3_KIND: (
+        "FORMAT_PILOT_V3_PREREG", _PILOT_V3_DOC.name,
+    ),
 }
 
 
@@ -6127,13 +6134,18 @@ def test_every_two_arm_corpus_is_offered_and_routed_to_its_own_document(
     )
 
     env = _workflow()["env"]
-    for job, step_name in (("dry-run", "Dry run"), ("measure", "Measure")):
+    for job, step_name, suffix in (
+        ("dry-run", "Dry run", "DRY"),
+        ("measure", "Measure", "PAID"),
+    ):
         run = _step(job, step_name)["run"]
         for kind, (var, filename) in _CORPUS_DOCUMENTS.items():
             # `case` arm, then the flag it adds, then the variable it names.
+            # A ledgered kind adds one more line and nothing else may.
             branch = re.search(
                 rf"^\s*{re.escape(kind)}\)\n"
-                rf"\s*ARGS\+=\(--speech-prompt-ab \"\$(\w+)\"\) ;;",
+                rf"\s*ARGS\+=\(--speech-prompt-ab \"\$(\w+)\""
+                rf"(?:\n\s*--cost-ledger \"\$(\w+)\")?\) ;;",
                 run,
                 re.MULTILINE,
             )
@@ -6144,6 +6156,27 @@ def test_every_two_arm_corpus_is_offered_and_routed_to_its_own_document(
             assert env[var].endswith(f"/{filename}"), (
                 f"{var} does not point at {filename}"
             )
+
+            # The ledger is not optional for the kinds the measurer refuses
+            # without one, and it is not offered to the kinds that predate it.
+            # Both directions matter: 337 spent ten calls and left no row, and
+            # back-filling a ledger onto 333 or 338 now would put rows under a
+            # document that never registered them.
+            ledger = branch.group(2)
+            if kind in probe.SPEECH_LEDGERED_KINDS:
+                assert ledger, f"{job} runs {kind} without a cost ledger"
+                assert ledger.endswith(f"_{suffix}"), (
+                    f"{job} meters {kind} into ${ledger}"
+                )
+                # Separate files per job. They do not overlap in time, so one
+                # name looks harmless; what it produces is a paid run refused
+                # at the door for holding the rehearsal's `stub` rows.
+                other = "PAID" if suffix == "DRY" else "DRY"
+                assert env[ledger] != env[f"{ledger[:-len(suffix)]}{other}"]
+            else:
+                assert ledger is None, (
+                    f"{job} gives {kind} a ledger it never registered"
+                )
 
         # The fallback is the single-arm path, and it is still reached by
         # `speech` -- which is what makes the routing above load-bearing.
@@ -6404,3 +6437,250 @@ def test_the_approval_record_doubles_for_every_corpus_that_runs_two_arms(
     assert "(2 arm(s))" in both
     assert "60 per arm, 120 in total" in both
 
+
+
+# ---------------------------------------------------------------------------
+# 344 -- the candidate that removes the order instead of addressing it
+# ---------------------------------------------------------------------------
+
+#: The five claims 337 registered, in 337's order. Written out here so that a
+#: later edit to either document has to disagree with a literal rather than
+#: with the other document, which could be edited in the same commit.
+_PILOT_CLAIMS = (
+    "crate_seventeen", "shelf_fifty", "dial_left", "column_third", "lamp_off",
+)
+
+
+def test_the_v3_header_is_v2_with_the_emission_order_removed() -> None:
+    """One substitution, and nothing else -- checked backwards.
+
+    Reconstructing V2 *from* V3 is the direction that can fail. Building
+    "V2 with the words swapped" and comparing it to V3 would pass even if V3
+    had also been edited somewhere else, because both sides would carry the
+    edit.
+    """
+    v2 = probe.SPEECH_OBSERVATION_HEADER_V2
+    v3 = probe.SPEECH_OBSERVATION_HEADER_V3
+    old, new = probe.SPEECH_OBSERVATION_EMISSION_VERB
+
+    assert hashlib.sha256(v2.encode("utf-8")).hexdigest() == (
+        "93239fe70dd470ab9a516a7c386c3d95c74bf4abcf87bd9a715c7edd96c17781"
+    ), "the header 337 bought has changed; 344 is no longer a two-word delta"
+
+    assert v3.count(new) == 1
+    assert v3.replace(new, old, 1) == v2
+    assert len(v2) - len(v3) == len(old) - len(new)
+
+
+def test_the_v3_header_carries_no_output_order_without_a_destination() -> None:
+    """The axis 344 varies, stated as a property rather than as a diff.
+
+    335 found the failing arm writing prose. The reading 337 shipped is that
+    V1's first imperative orders text and names nowhere to put it; the fix
+    337 shipped added a destination and left that imperative standing, so V2
+    carried two output orders. This checks that V3 carries one, and that the
+    one it carries is the addressed one.
+    """
+    v2 = probe.SPEECH_OBSERVATION_HEADER_V2
+    v3 = probe.SPEECH_OBSERVATION_HEADER_V3
+    sentence = probe.SPEECH_OBSERVATION_DESTINATION_SENTENCE
+
+    # The unaddressed order is gone from V3 and was present in V1 and V2.
+    for older in (probe.SPEECH_OBSERVATION_HEADER, v2):
+        assert "write down what it actually contains" in _intervention(older)
+    assert "write down" not in _intervention(v3)
+
+    # What replaced it asks for the same determination, not for writing.
+    assert "work out what it actually contains" in _intervention(v3)
+
+    # Everything the observation asks the model to attend to is untouched.
+    for clause in (
+        "whether any speech is present at all",
+        "the words you hear, in the sequence you hear them",
+        "as close to verbatim as you can manage",
+        "what you believe was actually said rather than what would make "
+        "the most sense",
+    ):
+        assert clause in _intervention(v3)
+
+    # The destination sentence survives and is now the paragraph's only
+    # output order, sitting where the instruction that needs it is.
+    paragraphs = v3.split("\n\n")
+    assert paragraphs[1].startswith("FIRST,")
+    assert paragraphs[1].endswith(sentence)
+    assert v3.count(sentence) == 1
+
+    # And core's contract is still the last word, byte for byte and once.
+    assert v3.endswith(AUDIO_RESPONSE_CONTRACT)
+    assert v3.count(AUDIO_RESPONSE_CONTRACT) == 1
+    # Nothing in the candidate weakens it.
+    assert "no prose before or after" in v3
+
+
+def test_the_v3_candidate_leaks_no_answer_either() -> None:
+    """333's guard, run against the third header.
+
+    A guard that only covers the headers it was written for stops being a
+    guard the moment a new one is registered.
+    """
+    discriminating = _pair_discriminating_tokens()
+    assert len(discriminating) >= 18
+
+    tokens = set(
+        re.findall(
+            r"[a-z]+", _intervention(probe.SPEECH_OBSERVATION_HEADER_V3).lower()
+        )
+    )
+    leaked = sorted(tokens & discriminating)
+    assert not leaked, f"the V3 header hands over: {leaked}"
+
+
+def test_the_v3_kind_is_registered_in_every_table_that_gates_it() -> None:
+    """Four tables have to agree before a dispatch can reach the second arm.
+
+    Any one of them missing is a different failure -- an unregistered kind, a
+    corpus that is not narrowed, a repeat count nobody fixed, an unbounded
+    run -- and each would be found at a different moment, one of them after
+    the money was spent.
+    """
+    kind = probe.SPEECH_FORMAT_PILOT_V3_KIND
+    assert kind == "speech-format-pilot-v3"
+
+    name, header = probe.SPEECH_TWO_ARM_REGISTRATIONS[kind]
+    assert name == "SPEECH_OBSERVATION_HEADER_V3"
+    assert header is probe.SPEECH_OBSERVATION_HEADER_V3
+
+    assert probe.SPEECH_NARROWED_KINDS[kind] == 1
+    assert kind in probe.SPEECH_LEDGERED_KINDS
+
+    # The ceiling is the plan, not the plan plus room to grow: five claims,
+    # one repeat, two arms.
+    planned = len(_PILOT_CLAIMS) * 1 * len(probe.PROMPT_ARMS)
+    assert planned == 10
+    assert probe.SPEECH_REQUEST_CAPS[kind] == planned
+
+    # 337's registration is untouched by all of this.
+    assert probe.SPEECH_REQUEST_CAPS[probe.SPEECH_FORMAT_PILOT_KIND] == 12
+    assert probe.SPEECH_TWO_ARM_REGISTRATIONS[
+        probe.SPEECH_FORMAT_PILOT_KIND
+    ][0] == "SPEECH_OBSERVATION_HEADER_V2"
+
+
+def test_344_pins_the_header_that_will_actually_be_sent() -> None:
+    """The row 337 wrote and nothing read, now read.
+
+    Which header a kind sends is decided by SPEECH_TWO_ARM_REGISTRATIONS.
+    Which header a document says it registered is a line of markdown. 337 had
+    both and no check between them.
+    """
+    text = _PILOT_V3_DOC.read_text(encoding="utf-8")
+    assert "`speech-format-pilot-v3`" in text
+
+    pinned = probe.candidate_pin_stated_in(_PILOT_V3_DOC)
+    assert pinned == hashlib.sha256(
+        probe.SPEECH_OBSERVATION_HEADER_V3.encode("utf-8")
+    ).hexdigest()
+
+    # The document is held to this checkout's grader, price table and corpus
+    # as well, and names 337's five claims in 337's order.
+    assert probe.grader_pin_stated_in(_PILOT_V3_DOC) == probe.grader_source_hash()
+    assert probe.pilot_claims_stated_in(_PILOT_V3_DOC) == _PILOT_CLAIMS
+    assert probe.manifest_pin_stated_in(_PILOT_V3_DOC) == hashlib.sha256(
+        (
+            probe.REPO_ROOT / "tasks" / "rebuilding_grading_task"
+            / "330-speech-verification-manifest.json"
+        ).read_bytes()
+    ).hexdigest()
+
+
+def test_344_keeps_337s_sample_rather_than_choosing_a_new_one() -> None:
+    """Re-picking items after seeing 339 is the move a prereg exists to stop.
+
+    So the two documents are compared to each other, in order. If a later
+    edit changes either list this fails, and the failure is the question
+    "which results were you looking at when you changed it".
+    """
+    assert probe.pilot_claims_stated_in(_PILOT_DOC) == _PILOT_CLAIMS
+    assert probe.pilot_claims_stated_in(_PILOT_V3_DOC) == _PILOT_CLAIMS
+
+
+def test_a_document_with_no_candidate_row_is_left_alone(tmp_path: Path) -> None:
+    """333, 337 and 338 were dispatched before this row existed.
+
+    Re-pinning a finished document so a later check passes would be editing
+    history to satisfy a test, so an absent row reads as "not pinned" and a
+    present one is enforced. A document carrying two is undecidable and says so.
+    """
+    assert probe.candidate_pin_stated_in(_PILOT_DOC) is None
+
+    two = tmp_path / "two.md"
+    two.write_text(
+        f"| 후보 머리말 지문 | `{'a' * 64}` |\n"
+        f"| 후보 머리말 지문 | `{'b' * 64}` |\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="different candidate header"):
+        probe.candidate_pin_stated_in(two)
+
+
+def test_a_ledgered_kind_refuses_to_run_without_a_ledger(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """337 reported ten calls it could not account for; this is the refusal.
+
+    Without --cost-ledger the run has no row per request, so afterwards it
+    cannot say how many requests it sent -- and its whole approval is written
+    as a request count.
+    """
+    manifest_path, clip_dir = _speech_fixture(tmp_path, clips=2)
+    out = tmp_path / "out.json"
+    args = _speech_ab_args(tmp_path, manifest_path, clip_dir, out)
+
+    doc = tmp_path / "v3.md"
+    doc.write_text(
+        f"| 진단 종류 | `{probe.SPEECH_FORMAT_PILOT_V3_KIND}` |\n"
+        f"| 채점기 지문 | `{probe.grader_source_hash()}` |\n"
+        "| 시험 문항 | `clip0_yes`, `clip0_no` |\n",
+        encoding="utf-8",
+    )
+    assert probe.main([*args, "--speech-prompt-ab", str(doc)]) == 3
+    assert "--cost-ledger" in capsys.readouterr().err
+
+    # With one, the same dispatch runs.
+    assert probe.main([
+        *args, "--speech-prompt-ab", str(doc),
+        "--cost-ledger", str(tmp_path / "ledger.sqlite3"),
+    ]) == 0
+    report = json.loads(out.read_text(encoding="utf-8"))
+    assert report["pins"]["grader_source_sha256"] == probe.grader_source_hash()
+
+
+def test_a_document_that_pins_the_wrong_candidate_stops_before_the_model(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The check has to be able to say no, so it is made to.
+
+    A document naming a header the code does not send would otherwise buy
+    calls under a prompt its reviewers never read.
+    """
+    manifest_path, clip_dir = _speech_fixture(tmp_path, clips=2)
+    out = tmp_path / "out.json"
+    args = _speech_ab_args(tmp_path, manifest_path, clip_dir, out)
+
+    doc = tmp_path / "wrong.md"
+    doc.write_text(
+        f"| 진단 종류 | `{probe.SPEECH_FORMAT_PILOT_V3_KIND}` |\n"
+        f"| 채점기 지문 | `{probe.grader_source_hash()}` |\n"
+        "| 시험 문항 | `clip0_yes`, `clip0_no` |\n"
+        # V2's digest, under the kind registered to send V3.
+        "| 후보 머리말 지문 | "
+        "`93239fe70dd470ab9a516a7c386c3d95c74bf4abcf87bd9a715c7edd96c17781` |\n",
+        encoding="utf-8",
+    )
+    assert probe.main([
+        *args, "--speech-prompt-ab", str(doc),
+        "--cost-ledger", str(tmp_path / "ledger.sqlite3"),
+    ]) == 3
+    err = capsys.readouterr().err
+    assert "pins candidate header" in err
+    assert "SPEECH_OBSERVATION_HEADER_V3" in err
