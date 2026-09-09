@@ -12,6 +12,54 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Added
+- **The Codex 401 is now surrounded by measurements, and four of its five
+  candidate causes are closed.** Three runs on 2026-09-09 from `main` at
+  `cb043af`: the free read-only probe (`34346945494`), the free ARM role
+  inventory (`34347345143`), and the one authorised paid turn
+  (`34347516170`).
+
+  The free read minted the token **the way Codex mints it** — the provider's
+  `auth.command` as a child process — and `GET /models` answered **200** with
+  **428** models, `gpt-5.4` among them. The role inventory found the CI
+  identity holding exactly one assignment, `Cognitive Services OpenAI User`
+  (`5e0bd9bd-…`) at **foundry-account** scope, with
+  `principal_can_assign_roles: false` and `read_failures: []`. The paid turn
+  then returned **401** with `usage: null`.
+
+  Set beside the wire-format and retry measurements already taken against the
+  pinned `0.147.0` binary and a local mock server, that closes the address
+  (fingerprint `sha256:69057d59166a82e3`, identical to the first 401), the
+  identity (token minted), the deployment (present in the listing) and the
+  header (`authorization: Bearer` on `POST …/responses`, not `api-key`).
+
+  The one new fact is the refusal's text: `Access denied due to invalid
+  subscription key or wrong API endpoint…`, the Cognitive Services
+  subscription-key string, returned by the host that had accepted the same
+  identity's bearer for a read minutes earlier in the same job. It is recorded
+  because it is what came back — that gateway message covers more than one kind
+  of refusal, and nothing measured distinguishes them.
+
+  What is **not** established: which data action is refused (a listing and a
+  completion are not the same one); that the RBAC verdict explains this —
+  `azure_rbac_diagnostic` runs only against a Foundry **project** endpoint
+  while Codex uses the **account** `direct-v1` route, so its
+  `role_missing_and_an_owner_must_grant_it` answers the Code Interpreter arm's
+  403 on a different surface; and the cost, which is **unpriced and not zero**
+  (`usage: null`, and the record's own note says the turn may still have been
+  billed).
+
+  No role was granted, no policy relaxed, no credential or VM created. The
+  next step that would justify a grant is itself free and was deliberately not
+  run here, because the authorisation was for one turn and one turn was used:
+  a malformed `POST` to the same route with the same bearer, where a `400`
+  moves the fault off authorization and a `401` keeps it there. Neither
+  generates tokens.
+
+  One live improvement is measurable: the same refusal that produced **6**
+  error notifications in run `34319880025` produced **1** with the retry pins
+  in force. The two HTTP requests an authentication failure still costs are
+  unchanged and documented. Error notifications are not requests.
+
 - **The connection question now has a free half: the token is minted the way
   Codex mints it, and the host is asked to list its models.**
   `--read-only-probe` runs the provider's `auth.command` **as a child process
