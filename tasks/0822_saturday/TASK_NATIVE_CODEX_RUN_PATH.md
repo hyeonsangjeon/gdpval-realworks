@@ -8,6 +8,10 @@
   deployment. Running it on a host that can sandbox then found a defect in the
   run place itself. See section 3b. The instrument that will ask the deployment
   is built and has not been fired; see section 3c.
+- Updated: 2026-09-09 — the instrument was repaired and fired. A free read, a
+  free role inventory and the one authorised paid turn have closed four of the
+  five candidate causes of the 401 and left the refusal itself unexplained. See
+  section 3c.
 - Status: **built, executing on one host, and not connected.** The code exists
   and most of the chain is checked against the real Codex binary. As of
   2026-09-08 the agent has been observed executing a command inside its sandbox
@@ -784,6 +788,79 @@ paid run must be preceded by a fresh smoke at the new fingerprint.
      host is not a finding, and a green step there is exactly how this run
      looked like it had measured something. Failing there also blocks the paid
      turn — a job that cannot mint a token has no business buying one.
+- **Fired again, and this time it measured.** Three runs on 2026-09-09, in this
+  order, all from `main` at `cb043af`:
+
+  | run | what it cost | what came back |
+  |---|---|---|
+  | `34346945494` | nothing — no inference requested | token **minted** by the child-process `auth.command`; `GET /models` → **200**; **428** models listed; `gpt-5.4` **is in the listing** |
+  | `34347345143` | nothing — ARM control-plane reads only | the CI identity holds exactly **one** role assignment: `Cognitive Services OpenAI User` (`5e0bd9bd-…`) at **foundry-account** scope. `principal_can_assign_roles: false`. `read_failures: []` |
+  | `34347516170` | the one authorised paid turn | **401**, `usage: null`, `verdict: unclassified_failure` |
+
+  With the earlier local measurements, every leg that can be checked without
+  the host's cooperation now has a number against it:
+
+  | leg | how it was measured | result |
+  |---|---|---|
+  | address | `endpoint_host_fingerprint` compared across runs | `sha256:69057d59166a82e3` — byte-identical to the run that first got the 401 |
+  | identity | live OIDC → the provider's `auth.command` as a child process | token minted |
+  | deployment exists | `GET /models` on that host | present, among 428 |
+  | wire format | pinned `0.147.0` binary vs a local mock server, fake token | `authorization: Bearer <token>` on `POST …/responses` — not `api-key`, not absent |
+  | retries | same harness, and the settings object of a real job | `0`/`0`, live |
+
+  So the refusal is **not** a wrong host, **not** a missing deployment, **not**
+  a token that failed to mint, and **not** a credential put in the wrong header.
+  Those four were the open candidates and they are closed.
+
+  **The one new fact is the text of the refusal.** The runtime reported
+  `unexpected status 401 Unauthorized: Access denied due to invalid
+  subscription key or wrong API endpoint. Make sure to provide a valid key for
+  an active subscription and use a correct regional API endpoint for your
+  resource.` That is the Cognitive Services *subscription-key* string, returned
+  by the same host that had accepted the same identity's bearer token for a
+  read minutes earlier in the same job. It is written down here because it is
+  what came back, **not** because it proves the resource wants a key: this
+  message is emitted by the gateway on more than one kind of refusal, and
+  nothing measured here distinguishes them.
+
+  What is still **not** established, and must not be written as though it were:
+
+  * **which action is being refused.** A listing and a completion are different
+    data actions. `Cognitive Services OpenAI User` is what permits the 200; it
+    is unmeasured whether it reaches `POST /openai/v1/responses`;
+  * **that the RBAC verdict explains this.** `azure_rbac_diagnostic` refuses to
+    run against anything but a Foundry **project** endpoint, and Codex uses the
+    **account** `direct-v1` route. Its verdict —
+    `role_missing_and_an_owner_must_grant_it`, wanting `Foundry Agent Consumer`
+    (`eed3b665-…`) or `Foundry User` (`53ca6127-…`) — is the answer to the Code
+    Interpreter arm's 403, on a different surface. It is quoted below as the
+    role inventory it is, not as this 401's cause;
+  * **the cost.** `usage: null`, and the record's own note says the turn "may
+    still have been billed". Unpriced. **Not zero.**
+
+  One measurable improvement did land on the live host: the same refusal that
+  produced **6** error notifications in run `34319880025` produced **1** here,
+  with the retry pins in force. The two HTTP requests an authentication failure
+  still costs are unchanged and documented — the runtime re-runs the auth
+  command once and retries with the fresh token, and no pin binds that. Error
+  notifications are not requests and are not counted as such.
+
+- **What an owner would have to change, reported and not applied.** No role was
+  granted, no policy relaxed, no credential or VM created. For whoever decides:
+
+  * **target**: the CI service principal (`AZURE_CLIENT_ID`), at the Foundry
+    **account** scope that already carries its one assignment;
+  * **change**: nothing yet — the account-route refusal has not been shown to
+    be a role problem, and granting a role to see if a 401 goes away is a
+    guess with a blast radius. The next step that would justify a grant is a
+    free one: a deliberately malformed `POST` to the same route with the same
+    bearer. A `400` would prove the bearer is accepted there and move the fault
+    off authorization entirely; a `401` would keep it on. Neither generates
+    tokens. **It was not run here** — the authorisation was for one turn and
+    one turn was used;
+  * **risk if a grant is made anyway**: `Foundry User` and `Foundry Agent
+    Consumer` are project-scoped roles for a route this run did not use, so
+    granting them would widen access without a measurement saying it helps.
 - **The exec leg is closed, on one host, and it took a repair to close it.** The
   host limit was real and was closed by finding a host rather than by removing
   isolation: no sandbox was disabled, no network was opened, no container was
