@@ -3633,20 +3633,63 @@ def test_the_gate_counts_the_second_arm_the_document_opens() -> None:
 
 
 def test_the_gate_states_the_clip_counts_the_corpora_actually_have() -> None:
-    """The gate has no checkout, so those two numbers are restatements.
+    """The gate has no checkout, so those numbers are restatements.
 
     Same failure mode as ``calls = 36``: a record that says what was
     authorised, disagreeing with what exists.
+
+    Read by running the record rather than by matching its ``case``. The
+    branches were one line and are now several, and a regex that spelled the
+    old layout would go red on a reformat that changed nothing -- while
+    staying green for a corpus with no branch at all, which is the failure
+    this test is for.
     """
-    run = _step("approve-paid", "Record approved request")["run"]
-    tone_clips = re.search(r"case \"\$CORPUS\" in speech\*\) CLIPS=\d+ ;; \*\) CLIPS=(\d+)", run)
-    speech_clips = re.search(r"case \"\$CORPUS\" in speech\*\) CLIPS=(\d+)", run)
-    assert tone_clips and speech_clips
-    assert int(tone_clips.group(1)) == len(probe.CLIPS)
+    bash = shutil.which("bash")
+    if bash is None:  # pragma: no cover - CI and dev boxes both have bash
+        pytest.skip("no bash to run the gate's own script with")
+    record = _step("approve-paid", "Record approved request")["run"]
+
+    def clips_stated_for(corpus: str) -> int:
+        out = subprocess.run(
+            [bash, "-c", record],
+            env={
+                **os.environ,
+                "PROBE_REPEATS": "1",
+                "PROBE_ARM": "production",
+                "PROBE_CORPUS": corpus,
+            },
+            capture_output=True, text=True, check=True,
+        ).stdout
+        found = re.search(rf"corpus\s+= {re.escape(corpus)} \((\d+) clips\)",
+                          out)
+        assert found, f"the record does not state a clip count for {corpus}"
+        return int(found.group(1))
+
     published = json.loads(
         (probe.REPO_ROOT / SPEECH_MANIFEST_REPO_PATH).read_text(encoding="utf-8")
     )
-    assert int(speech_clips.group(1)) == len(published["clips"])
+    assert clips_stated_for("tones") == len(probe.CLIPS)
+    assert clips_stated_for("speech") == len(published["clips"])
+
+    # And every corpus that is offered has a number that came from somewhere.
+    # A new option falls through to the tone count today, which reads as a
+    # nine-clip run of whatever it actually is.
+    by_id = {claim["claim_id"]: claim for claim in published["claims"]}
+    offered = _workflow()[True]["workflow_dispatch"]["inputs"]["corpus"][
+        "options"]
+    for corpus in offered:
+        if corpus in ("tones", "speech"):
+            continue
+        document = probe.REPO_ROOT / _document_for(corpus).split(
+            "workspace }}/", 1)[1]
+        try:
+            claim_ids = probe.pilot_claims_stated_in(document)
+        except ValueError:
+            # A document that narrows nothing runs the whole published set.
+            expected = len(published["clips"])
+        else:
+            expected = len({by_id[cid]["clip_id"] for cid in claim_ids})
+        assert clips_stated_for(corpus) == expected, corpus
 
 
 def test_the_paid_summary_refuses_to_pool_the_two_corpora() -> None:
@@ -6032,6 +6075,19 @@ _CORPUS_DOCUMENTS = {
 }
 
 
+def _document_for(corpus: str) -> str:
+    """The workspace path the workflow hands the measurer for this corpus.
+
+    Two flags reach the same place: the two-arm corpora arrive on
+    ``--speech-prompt-ab`` and 342 arrives on ``--metering-run``. What a
+    caller wants is the document, not the door it came through.
+    """
+    env = _workflow()["env"]
+    if corpus == probe.AUDIO_COST_METERING_KIND:
+        return env["METERING_PREREG"]
+    return env[_CORPUS_DOCUMENTS[corpus][0]]
+
+
 def test_every_two_arm_corpus_is_offered_and_routed_to_its_own_document(
 ) -> None:
     """A dropdown entry and a document, held together in both jobs.
@@ -6063,7 +6119,9 @@ def test_every_two_arm_corpus_is_offered_and_routed_to_its_own_document(
 
     # The single-arm settings stay, and nothing else has appeared. A new
     # option not in this list is one nobody has decided the routing for.
-    assert set(options) == {"tones", "speech", *_CORPUS_DOCUMENTS}
+    assert set(options) == {
+        "tones", "speech", probe.AUDIO_COST_METERING_KIND, *_CORPUS_DOCUMENTS,
+    }
     assert inputs["corpus"]["default"] == "tones", (
         "the default dispatch must be the one that spends least"
     )
@@ -6098,6 +6156,156 @@ def test_every_two_arm_corpus_is_offered_and_routed_to_its_own_document(
     for path in named:
         on_disk = probe.REPO_ROOT / path.split("workspace }}/", 1)[1]
         assert on_disk.is_file(), f"{path} is not in the checkout"
+
+
+def test_the_metering_run_is_dispatchable_and_carries_its_own_ledger(
+) -> None:
+    """342 needs two flags the dropdown had no way to add, so this walks them.
+
+    Every other corpus here is opened by ``--speech-prompt-ab`` or falls
+    through to ``--expect-grader-pin``. 342 is opened by ``--metering-run``,
+    and the measurer refuses that flag without ``--cost-ledger`` -- the run's
+    whole output is the ledger, so a dispatch that forgot it would buy the
+    calls and record nothing about them, which is the exact failure 340 found.
+
+    The two jobs must also name *different* ledger files. They do not overlap
+    in time, so a shared name looks harmless; what it produces is a paid run
+    refused at the door because the file already holds the free run's
+    ``rehearsal`` rows. That refusal happens after approval and before any
+    call, so it costs a gate rather than money -- but it costs the run.
+    """
+    kind = probe.AUDIO_COST_METERING_KIND
+    text = (
+        probe.REPO_ROOT / ".github" / "workflows" / "audio-accuracy-probe.yml"
+    ).read_text(encoding="utf-8")
+    env = _workflow()["env"]
+
+    document = probe.REPO_ROOT / env["METERING_PREREG"].split(
+        "workspace }}/", 1)[1]
+    assert document.is_file(), "the metering document is not in the checkout"
+    # Routed to a document that registers *this* diagnostic. The measurer
+    # checks the file names a diagnostic it knows; only the mapping can check
+    # it is the one the dropdown said.
+    assert probe.diagnostic_kind_stated_in(document) == kind
+
+    ledgers = []
+    for job, step_name, var in (
+        ("dry-run", "Dry run", "METERING_LEDGER_DRY"),
+        ("measure", "Measure", "METERING_LEDGER_PAID"),
+    ):
+        run = _step(job, step_name)["run"]
+        branch = re.search(
+            rf"^\s*{re.escape(kind)}\)\n"
+            r"\s*ARGS\+=\(--metering-run \"\$(\w+)\"\n"
+            r"\s*--cost-ledger \"\$(\w+)\"\) ;;",
+            run,
+            re.MULTILINE,
+        )
+        assert branch, f"{job} does not route {kind} with a ledger"
+        assert branch.group(1) == "METERING_PREREG", branch.group(1)
+        assert branch.group(2) == var, (
+            f"{job} meters into ${branch.group(2)}, not ${var}"
+        )
+        ledgers.append(env[var])
+
+    assert len(set(ledgers)) == 2, (
+        "both jobs write the same ledger file; the paid run would be refused "
+        "for holding the rehearsal's rows"
+    )
+
+    # Sized off the document rather than off this test. Two claims is not an
+    # opinion here: the measurer refuses any other count, so a record saying
+    # something else is a record describing a run that cannot happen.
+    claim_ids = probe.pilot_claims_stated_in(document)
+    manifest = json.loads(
+        (
+            probe.REPO_ROOT / "tasks" / "rebuilding_grading_task"
+            / "330-speech-verification-manifest.json"
+        ).read_text(encoding="utf-8")
+    )
+    by_id = {claim["claim_id"]: claim for claim in manifest["claims"]}
+    claims = [by_id[claim_id] for claim_id in claim_ids]
+    true_claims = sum(1 for claim in claims if claim["holds"])
+    clips = {claim["clip_id"] for claim in claims}
+
+    branch = re.search(
+        rf"{re.escape(kind)}\)\n"
+        r"\s*CRITERIA=(\d+); TRUE_CRITERIA=(\d+); FALSE_CRITERIA=(\d+)",
+        text,
+    )
+    assert branch, "the approval record does not size the metering run"
+    assert int(branch.group(1)) == len(claims)
+    assert int(branch.group(2)) == true_claims
+    assert int(branch.group(3)) == len(claims) - true_claims
+
+    # And the shell agrees, run as the gate would run it. The clip `case` is a
+    # separate statement from the one above, with a `speech*` glob next to it
+    # that this corpus does not match by name but easily could have: the
+    # record would then say nine clips for a two-clip run.
+    record = _step("approve-paid", "Record approved request")["run"]
+    out = subprocess.run(
+        ["bash", "-c", record],
+        env={
+            **os.environ,
+            "PROBE_CORPUS": kind,
+            "PROBE_ARM": "production",
+            "PROBE_REPEATS": "1",
+        },
+        capture_output=True, text=True, check=True,
+    ).stdout
+    assert f"corpus     = {kind} ({len(clips)} clips)" in out, out
+    assert f"criteria   = {len(claims)} " in out, out
+    assert "(1 arm(s))" in out, out
+    assert f"{len(claims)} per arm, {len(claims)} in total" in out, out
+    # The registered repeat count is 1 and the measurer refuses anything else,
+    # so the number the gate authorises is the number of calls the run makes.
+    assert len(claims) <= probe.SPEECH_REQUEST_CAPS[kind]
+    assert probe.SPEECH_NARROWED_KINDS[kind] == 1
+
+
+def test_the_metering_ledger_is_uploaded_even_when_the_run_stops_early(
+) -> None:
+    """A run that hit its ceiling still spent what it spent before it.
+
+    The ledger is exported in a ``finally``, so a stopped run leaves rows and
+    no verdict. Uploading the ledger only on success would discard exactly the
+    records of spend nobody planned for -- which is the one kind of row a cost
+    diagnostic exists to keep.
+    """
+    steps = _workflow()["jobs"]["measure"]["steps"]
+    uploads = [
+        step for step in steps
+        if str(step.get("uses", "")).startswith("actions/upload-artifact")
+    ]
+    ledger = [
+        step for step in uploads
+        if "audio-cost-metering-measured.sqlite3" in step["with"]["path"]
+    ]
+    assert ledger, "the paid job does not upload the metering ledger"
+    step = ledger[0]
+    assert "always()" in step["if"], (
+        "the ledger upload is conditional on the run succeeding"
+    )
+    for name in (
+        "audio-cost-metering-measured.jsonl",
+        "audio-cost-metering-verdict.json",
+    ):
+        assert name in step["with"]["path"], name
+
+    # And the check that reads it runs on the same terms, for the same reason.
+    check = _step("measure", "Check the cost record")
+    assert "always()" in check["if"]
+    assert "verify_audio_metering_run.py" in check["run"]
+    # `set -e` here would make a `failed` verdict skip the summary that
+    # explains what `failed` means.
+    assert "set -uo pipefail" in check["run"]
+    # The verdict is carried out of the step rather than swallowed -- a
+    # `failed` cost record under a green tick is the finding going missing --
+    # and it is carried after the summary is written, so the reason is on the
+    # page even when the step is red.
+    body = check["run"]
+    assert 'exit "$rc"' in body
+    assert body.index("GITHUB_STEP_SUMMARY") < body.index('exit "$rc"')
 
 
 def test_the_approval_record_counts_the_pilot_as_five_and_not_as_twenty(
