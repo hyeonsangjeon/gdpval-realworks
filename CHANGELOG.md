@@ -195,6 +195,62 @@ entries land under a fresh dated heading the day they merge to `main`.
   exactly what it looks at — and it means a report stays checkable after the
   `.sqlite3` beside it is gone.
 
+- **344's rehearsal ran, and its §0 now carries six ticks instead of none.**
+  Run `34351518357` on `6e867a66`, dispatched free: `dry_run: true`,
+  `paid_approval: false`, `repeats: 1`, `prompt_arm: production`,
+  `corpus: speech-format-pilot-v3`. All three paid jobs report `skipped` —
+  `approve-paid` is gated on `dry_run == false && paid_approval == true`, and
+  a skipped dependency skips `measure`, so no path to a billed call existed.
+
+  The verdict file is `rehearsal_ok`, and the interesting part is which
+  conditions it refuses to answer. Conditions 1–4 and 7 pass: the candidate
+  header is `dd0380fa…` in both the report and the pre-registration, the
+  grader is `7e745a18…` in both, ten planned requests produced ten calls with
+  no retry and no early stop, both arms asked §4's same five criteria in
+  §4's order, and the ledger holds ten rows with receipt `partial` and amount
+  `null` (`price_missing` — `gpt-audio-1.5` is unpriced, which is not `$0`).
+  Conditions 5 and 6 — the two readability gates the whole experiment is
+  about — come back **unanswerable**, because a rehearsal's replies are the
+  stub's and say nothing about what the deployment does with the candidate
+  header. A rehearsal that passed those two would be reading canned text as
+  evidence, and would remove the reason to buy anything.
+
+  So this fills §0's fifth and sixth boxes and no others. Three remain, and
+  the order is fixed: re-measure §2's four fingerprints **at the dispatch
+  SHA**, confirm A is not mid-`core/`-change, then pin that SHA behind an
+  immutable tag. Nothing has been bought.
+
+  The rehearsal is also the first look at §9's response-shape record on a
+  real artifact, under `wire.response_shapes` in the report. It carries what
+  §9 promised and in the shape §9 promised: `finish_reason`, open and close
+  brace counts with a balance flag and the offset of the first one, the JSON
+  error type with its **character position and characters remaining**, the
+  five contract keys as present/missing with their types, character count,
+  first and last non-whitespace character, and a masked excerpt (162 chars
+  here, under the 240 ceiling). Reasoning is a **boolean** — `reasoning_present`
+  — and there is no credential, no request id and no reply body beyond the
+  excerpt. This is precisely what 337 spent ten calls without recording, and
+  what left 339 unable to say more than "it failed in the same place as 334".
+
+  §0's earlier boxes are attributed to the PRs that actually filled them
+  rather than left blank: the header and corpus registration to #468
+  (`446acfd`), the response-shape record to #470 (`82db5fc`), the verifier
+  and its ten broken-report cases to #470 with the four broken-workflow cases
+  to #473 (`ce847ff`). The §0 paragraph on dispatching a paths-filtered
+  commit is rewritten twice over: #475 (`0aae1c3`) put `tasks/**` into both
+  triggers, so the box-7 re-pin commit now starts a run on its own and that
+  paragraph becomes a record of how it used to be. The explicit dispatch
+  stays anyway, because §12's concern is holding a run to one commit rather
+  than to a branch that moves.
+
+  It also cited the wrong run, in a way worth keeping visible: the dispatch
+  meant to give `main`'s merged commit a verdict, `34351414118`, came back
+  **cancelled** — `concurrency: backend-tests-${{ github.ref }}` with
+  `cancel-in-progress`, and #475's own push run took the group. So the check
+  before a paid dispatch is not "a run was started" but **"that run finished
+  `success`"**. #475 did not touch the concurrency block, and a cancelled run
+  still reads much like a passing one in a run list.
+
 ### Fixed
 - **How `446acfd` came to sit red, since #469 fixed it without the two dates
   that explain it.** `344` §2's grader row carried `ee1ca0b0…` because that is
