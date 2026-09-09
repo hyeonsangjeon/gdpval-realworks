@@ -97,9 +97,16 @@ jobs:
       # it is a sha256, it changes if the endpoint secret is ever repointed,
       # and it is safe to write down.
       #
-      # Empty until the first run records one. While empty the check below says
-      # so out loud instead of passing quietly.
-      EXPECTED_HOST_FINGERPRINT: ""
+      # Recorded by run 34317316416 (`send_request: false`, nothing sent) and
+      # kept only because it was *corroborated* rather than observed: the same
+      # value falls out of sha256 over the account name this repository already
+      # pins in a variable, on the `.services.ai.azure.com` suffix. That
+      # derivation needs no network and no request. A measured host that had
+      # not matched it would not belong here whatever the run printed.
+      #
+      # The variable is deliberately not named here, let alone read: naming it
+      # is one edit away from requesting it, and requesting it prints it.
+      EXPECTED_HOST_FINGERPRINT: "sha256:69057d59166a82e3"
 
     steps:
       - name: Check out
@@ -185,14 +192,27 @@ jobs:
             --out /tmp/codex-foundry-plan.json
 
       - name: Confirm the plan is about the resource this job is pinned to
+        id: pinned
+        env:
+          SEND_REQUEST: ${{ inputs.send_request }}
         run: |
           set -euo pipefail
           MEASURED="$(python3 -c "import json;print(json.load(open('/tmp/codex-foundry-plan.json'))['settings']['endpoint_host_fingerprint'])")"
           echo "measured host fingerprint: ${MEASURED}"
           if [ -z "${EXPECTED_HOST_FINGERPRINT}" ]; then
+            if [ "${SEND_REQUEST}" = "true" ]; then
+              echo "FATAL: EXPECTED_HOST_FINGERPRINT is empty and this run was"
+              echo "       asked to send. Nothing would have been compared, so"
+              echo "       the request would go to whatever the endpoint secret"
+              echo "       currently points at, and be paid for there."
+              echo "       Refusing. Pin the value printed above first."
+              exit 1
+            fi
             echo "NOTE: EXPECTED_HOST_FINGERPRINT is empty in this workflow, so"
-            echo "      nothing was checked. Pin the value printed above and"
-            echo "      this becomes a real gate."
+            echo "      nothing was checked. Tolerated here only because nothing"
+            echo "      is being sent — a dry run is how the value is discovered"
+            echo "      in the first place. The same state with send_request on"
+            echo "      is the FATAL above."
             exit 0
           fi
           if [ "${MEASURED}" != "${EXPECTED_HOST_FINGERPRINT}" ]; then
@@ -203,12 +223,22 @@ jobs:
             exit 1
           fi
           echo "resource=pinned"
+          # Written on this path only. Every other way out of this step leaves
+          # it unset, which is what the send is gated on below — so a future
+          # edit that softens one of the refusals above into an `exit 0` still
+          # does not buy itself a request.
+          echo "confirmed=yes" >> "${GITHUB_OUTPUT}"
 
       # The one request. Skipped entirely unless it was asked for, so the
       # difference between a free run and a paid one is a deliberate input and
       # not a forgotten flag.
+      #
+      # Two conditions, not one. `inputs.send_request` is the person's
+      # intention; `steps.pinned.outputs.confirmed` is the machine's evidence
+      # that the intention is about the right resource. Intention alone used to
+      # be enough, which meant an empty fingerprint bought a paid call.
       - name: Send the one turn
-        if: ${{ inputs.send_request }}
+        if: ${{ inputs.send_request && steps.pinned.outputs.confirmed == 'yes' }}
         working-directory: batch-runner
         env:
           AZURE_AI_ROUTE_PROFILE: direct-v1

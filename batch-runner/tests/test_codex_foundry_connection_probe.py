@@ -694,7 +694,7 @@ def test_sending_is_off_unless_it_is_asked_for():
     triggers = parsed.get("on", parsed.get(True))
     assert triggers["workflow_dispatch"]["inputs"]["send_request"]["default"] is False
     send = _steps()["Send the one turn"]
-    assert send["if"] == "${{ inputs.send_request }}"
+    assert "inputs.send_request" in send["if"]
     assert "--send-request" in send["run"]
 
 
@@ -739,6 +739,151 @@ def test_the_run_is_pinned_to_one_resource_by_a_hash_that_is_safe_to_print():
     check = _steps()["Confirm the plan is about the resource this job is pinned to"]
     assert "endpoint_host_fingerprint" in check["run"]
     assert "exit 1" in check["run"]
+
+
+# ── That the pin is a gate and not a note ───────────────────────────────────
+#
+# The test above passed for as long as the fingerprint was empty, because it
+# asks whether the key exists and whether the word `exit 1` occurs somewhere
+# in the step. Both were true of a step that let an unpinned send straight
+# through: the empty branch printed a NOTE and `exit 0`, and the only thing
+# standing between that and a paid request was an input a person had already
+# said yes to.
+#
+# So these run the step's own script instead of reading it. The four states
+# that matter are (empty, mismatch, match) x (dry, send), and the shell is the
+# only thing that knows which of them stops.
+
+CONFIRM_STEP = "Confirm the plan is about the resource this job is pinned to"
+
+
+def _run_confirm(tmp_path, *, expected: str, measured: str, send_request: str):
+    """Execute the confirm step's shell against a planted plan file.
+
+    The plan path is the one substitution: everything else — the branches, the
+    comparison, the exit codes, the line that writes the go-ahead — is the
+    workflow's own text, so an edit to the workflow is what these assert on.
+    """
+    script = _steps()[CONFIRM_STEP]["run"].replace(
+        "/tmp/codex-foundry-plan.json", str(tmp_path / "plan.json")
+    )
+    (tmp_path / "plan.json").write_text(
+        json.dumps({"settings": {"endpoint_host_fingerprint": measured}}),
+        encoding="utf-8",
+    )
+    github_output = tmp_path / "github_output"
+    github_output.write_text("", encoding="utf-8")
+    proc = subprocess.run(
+        ["bash", "-c", script],
+        env={
+            "PATH": os.environ["PATH"],
+            "EXPECTED_HOST_FINGERPRINT": expected,
+            "SEND_REQUEST": send_request,
+            "GITHUB_OUTPUT": str(github_output),
+        },
+        capture_output=True,
+        text=True,
+    )
+    return proc, github_output.read_text(encoding="utf-8")
+
+
+PINNED = "sha256:69057d59166a82e3"
+
+
+def test_the_fingerprint_is_actually_pinned_and_shaped_like_a_fingerprint():
+    """An empty value is the state this whole section exists to forbid."""
+    _text, parsed = _workflow()
+    pinned = parsed["jobs"]["diagnose"]["env"]["EXPECTED_HOST_FINGERPRINT"]
+    assert pinned, "EXPECTED_HOST_FINGERPRINT must not be empty"
+    assert re.fullmatch(r"sha256:[0-9a-f]{16}", pinned), pinned
+    assert pinned == PINNED
+
+
+def test_an_empty_fingerprint_refuses_a_run_that_was_asked_to_send(tmp_path):
+    """The defect, pinned as a test.
+
+    Nothing is compared when the expected value is empty, so a send would be a
+    paid request to whatever the endpoint secret points at that day. That is
+    the one combination that must not reach the next step.
+    """
+    proc, output = _run_confirm(
+        tmp_path, expected="", measured=PINNED, send_request="true"
+    )
+    assert proc.returncode != 0
+    assert "FATAL" in proc.stdout
+    assert "confirmed" not in output
+
+
+def test_an_empty_fingerprint_still_lets_a_dry_run_discover_it(tmp_path):
+    """Because that is how the value gets found in the first place.
+
+    Refusing here too would make the pin unbootstrappable: the fingerprint is
+    only knowable by running the plan against the real secret. A dry run sends
+    nothing, so tolerating it costs nothing.
+    """
+    proc, output = _run_confirm(
+        tmp_path, expected="", measured=PINNED, send_request="false"
+    )
+    assert proc.returncode == 0
+    assert "NOTE" in proc.stdout
+    assert "confirmed" not in output
+
+
+@pytest.mark.parametrize("send_request", ["true", "false"])
+def test_a_mismatch_refuses_whether_or_not_a_send_was_asked_for(
+    tmp_path, send_request
+):
+    """A repointed secret is a finding even on a free run."""
+    proc, output = _run_confirm(
+        tmp_path,
+        expected=PINNED,
+        measured="sha256:0000000000000000",
+        send_request=send_request,
+    )
+    assert proc.returncode != 0
+    assert "FATAL" in proc.stdout
+    assert "confirmed" not in output
+
+
+def test_only_a_full_match_writes_the_go_ahead(tmp_path):
+    proc, output = _run_confirm(
+        tmp_path, expected=PINNED, measured=PINNED, send_request="true"
+    )
+    assert proc.returncode == 0
+    assert "resource=pinned" in proc.stdout
+    assert "confirmed=yes" in output
+
+
+def test_the_measured_value_is_printed_on_every_path(tmp_path):
+    """Whatever it decides, it says what it saw.
+
+    The pin was recoverable in the first place only because the step printed
+    the measurement before judging it, and the next repointing will need the
+    same.
+    """
+    for expected, measured, send in (
+        ("", PINNED, "false"),
+        (PINNED, "sha256:0000000000000000", "false"),
+        (PINNED, PINNED, "true"),
+    ):
+        proc, _output = _run_confirm(
+            tmp_path, expected=expected, measured=measured, send_request=send
+        )
+        assert f"measured host fingerprint: {measured}" in proc.stdout
+
+
+def test_the_send_needs_the_confirmation_and_not_only_the_input():
+    """Defence in depth against the next edit of the step above.
+
+    `confirmed` is written on the matched path alone. Gating the request on it
+    as well as on the person's input means that softening one of the refusals
+    back into an `exit 0` — which is exactly what used to be there — still does
+    not buy a request.
+    """
+    send = _steps()["Send the one turn"]
+    assert "steps.pinned.outputs.confirmed" in send["if"]
+    assert "inputs.send_request" in send["if"]
+    assert _steps()[CONFIRM_STEP]["id"] == "pinned"
 
 
 def test_the_workflow_runs_on_the_host_where_the_sandbox_starts():
