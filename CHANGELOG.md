@@ -97,6 +97,65 @@ entries land under a fresh dated heading the day they merge to `main`.
   as `343` §5.1 says they do on the next `core/` merge — re-measure before
   buying, do not carry `ee1ca0b0…` forward. No grade run was in flight when
   this merged.
+- **`344`'s run will record what came back, not just how many came back.**
+  `339` §9 ends "we did not store the body, so we never saw what it wrote",
+  and that is why `337` bought ten calls and stopped in the same place `334`
+  stopped. `WireClient` now calls `335`'s own `collect_response_facts` on each
+  reply and files the result under `response_shape`, so a failed envelope
+  leaves a `finish_reason`, a brace count, the character the parser stopped
+  at, the contract keys present and a masked 240-character head. **Opt-in per
+  kind**, and `speech-format-pilot-v3` is the only kind opted in: `333`,
+  `337`, `338` and `342` registered a delivery record of a fixed shape and
+  widening theirs now would change what their own documents describe, so
+  `response_shapes` is *absent* — not empty — from every other kind's digest.
+  Recorded defensively: a collector that raised on the malformed reply it was
+  added to describe would take a paid run down and leave nothing behind, so a
+  failure to read the shape is written into the record as `shape_error`.
+  Internal reasoning is a boolean and nothing else; a test toggles the block
+  and asserts `reasoning_present` is the *only* field that moves.
+- **`scripts/verify_format_pilot_run.py` — `344` §6's verdict, decided by a
+  file written before the run it judges.** Seven conditions over the report
+  and its ledger, no model call and no socket: the header and grader pins
+  match the pre-registration, ten requests went out with no early stop and no
+  retried call, both arms ran the same five claims, the control arm held
+  ≥4/5, the candidate held 5/5, and a paid run does not report its cost as
+  `0`. A rehearsal cannot return `format_held` and a *broken* rehearsal
+  cannot return `rehearsal_ok`, because that word is what `344` §0 ticks a
+  precondition on.
+- **The checker is made to say no.**
+  `tests/test_the_format_check_can_fail.py` starts from `337`'s **real
+  committed report**, relabels its pins as V3, and confirms the checker reads
+  the 1-of-5 that started all of this as `format_lost` with 0 usable
+  verdicts — a fixture written alongside the checker would agree with it by
+  construction. Then it breaks a passing run each way §6 names: 4-of-5 (the
+  number most likely to be argued into a pass), a collapsed control arm
+  (inconclusive, in *both* directions, so a broken control cannot launder a
+  perfect candidate), a short run, an early stop, a retried call, a
+  substituted header, a moved grader, mismatched claims, a missing ledger,
+  and a paid run reporting `$0`.
+
+### Fixed
+- **How `446acfd` came to sit red, since #469 fixed it without the two dates
+  that explain it.** `344` §2's grader row carried `ee1ca0b0…` because that is
+  what `342` pinned; the entry above moved the fingerprint to `7e745a18…`
+  while `344` was being written. Neither PR could have caught it: #467 was
+  green before `344`'s test existed and #468 was green before #467 merged
+  (08:42 and 09:00 against 08:53). Both were right about the tree they ran on
+  and wrong about the tree they made. Nothing runs the suite on a push to
+  `main`, so nothing said so for the seventy minutes in between. #469 moved
+  the row; independently re-measured here, the **other three** pins — price
+  `b01b384c…`, manifest `97755288…`, candidate header `dd0380fa…` — had not
+  moved, so the one line that changed is the one `core/` reaches.
+  **`main` having no test run of its own is not fixed here**, and it is the
+  part that will happen again; fixing it belongs with whoever owns
+  `.github/workflows/` next.
+- **`verify_format_pilot_run.py` is named in `.gitignore`, which is not a
+  formality.** `batch-runner/scripts/*` is ignored and files are re-admitted
+  one `!` line at a time, so the checker was written, tested green and absent
+  from `git status`. `344` §0 ticks a precondition on this file having been
+  merged, so an untracked copy would have held that gate open on a file only
+  one working tree had. A test now asks git what is tracked rather than
+  trusting the allowlist.
 
 ### Fixed
 - **The workflow's leak check would have crashed on the record it was being

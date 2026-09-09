@@ -102,6 +102,15 @@ batch-runner/scripts/*
 # have -- the exact failure this whole path exists to stop, reproduced one
 # level up. Held by tests/test_verify_published_grades.py.
 !batch-runner/scripts/verify_published_grades.py
+# The check for 344 §6's four verdicts, written before the run it judges so
+# the bar is the plan's and not the result's. Same reason it has to be named
+# as the two above: the directory rule hides it, `git add -A` skips it in
+# silence, and this one would fail in the worst possible way -- 344 §0 ticks a
+# precondition on this file having been merged, so an untracked copy would let
+# a paid dispatch clear a gate held open by a file nobody else has. Measured
+# on this branch: it was written, tested green, and absent from `git status`.
+# Held by tests/test_the_format_check_can_fail.py.
+!batch-runner/scripts/verify_format_pilot_run.py
 
 # The two halves of the Codex sandbox host question. The diagnostic names which
 # wall a machine hits when bubblewrap will not start; the checker holds each
