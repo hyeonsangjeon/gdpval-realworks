@@ -299,6 +299,41 @@ entries land under a fresh dated heading the day they merge to `main`.
   `success`"**. #475 did not touch the concurrency block, and a cancelled run
   still reads much like a passing one in a run list.
 
+- **344's four fingerprints re-measured at the dispatch SHA, and the eighth
+  box closed with what was actually checked.** At `cff4d7c1`: grader
+  `7e745a18…`, price table `b01b384c…`, manifest `97755288…`, candidate
+  header `dd0380fa…` (1,931 chars). **All four match what §2 already
+  carries**, so the table needs no new value — what was missing was the
+  measurement, not the numbers.
+
+  It was taken with the repository's own accessors on both sides rather than
+  by hashing files by hand: `grader_pin_stated_in` against
+  `grader_source_hash()`, `price_table_pin_stated_in` against
+  `sha256(PRICE_TABLE_PATH)`, `manifest_pin_stated_in` against the manifest
+  bytes, `candidate_pin_stated_in` against
+  `sha256(SPEECH_OBSERVATION_HEADER_V3)`. Reading the document with the same
+  function the run uses is the point: a hand-rolled comparison would prove
+  the two files agree with *my* arithmetic rather than with the code's.
+
+  The commit carrying this cannot move any of the four — it touches this
+  document and `CHANGELOG.md`, the grader fingerprint covers neither, and the
+  manifest is a file this work never opens. That is stated rather than
+  trusted: the measurer re-checks the grader and header pins against the
+  document at run time and stops before calling the model if either has
+  moved, which is what conditions 1 and 2 of the rehearsal exercised.
+
+  For the `core/`-drift box: **zero open PRs** at that commit, and `main`'s
+  last `core/` change is `7a8c94d` (#467) with ten commits landed since that
+  touch none of it — #477 included, which is documentation only.
+
+  The ninth box is deliberately left unticked, and §12 now says why. The tag
+  goes on the commit that carries this document, so ticking it here would put
+  a document claiming a finished step inside the tag that step creates. Its
+  evidence is `git`, not markdown: `git rev-parse audio-344-dispatch^{commit}`
+  against the dispatched run's `headSha`, both copied into §13. If they
+  differ, nothing is bought — and a failed run does not get the tag moved to
+  a new commit, which would be §7's forbidden re-dispatch under another name.
+
 ### Fixed
 - **How `446acfd` came to sit red, since #469 fixed it without the two dates
   that explain it.** `344` §2's grader row carried `ee1ca0b0…` because that is
