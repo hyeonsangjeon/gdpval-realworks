@@ -308,6 +308,82 @@ jobs:
               sys.exit(1)
           PY
 
+      # Free, and ungated for the same reason the step above is: it sends no
+      # prompt and asks for no completion, and a diagnostic that only runs on
+      # the dispatches that spend money is not available when it is most
+      # needed.
+      #
+      # It exists because the step above came back 200 while the turn below
+      # came back 401, on the same host, with the same bearer, minutes apart.
+      # Four candidate causes died on that pair -- address, identity,
+      # deployment name, header format -- and the refusal was still not
+      # located. The Azure gateway string that came with it ("invalid
+      # subscription key or wrong API endpoint") is shared by more than one
+      # kind of refusal, so it does not locate it either.
+      #
+      # This asks the *turn route* something it cannot answer with a
+      # completion: a POST whose body names no model. Twice -- once with the
+      # bearer the Codex runtime would mint, once with a fixed string that is
+      # plainly not a token.
+      #
+      # Two arms, because one would not be readable. A 400 from the minted
+      # bearer means "it got past authorization" only if this host checks
+      # authorization before it validates the body, and nothing here has ever
+      # established that ordering. The control arm makes the host demonstrate
+      # it. If the non-token is *not* stopped at the gate, the probe reports
+      # that it cannot tell rather than reading the minted arm's number as an
+      # answer -- which is the reading somebody hoping for good news would
+      # take, and this is being run by somebody hoping for good news.
+      #
+      # The control arm is not credential guessing and cannot become it: the
+      # string is a fixed sentence in the script, it is never varied, and it is
+      # never derived from anything real.
+      #
+      # `|| true` for the same reason as above: every verdict except the two
+      # conclusive ones exits non-zero, and "the instrument could not
+      # discriminate" is a finding worth keeping rather than a broken job.
+      # `test -s` is not covered by it -- no record at all is a defect here.
+      - name: Ask which check this host runs first, without sending a turn
+        id: auth_discriminator
+        working-directory: batch-runner
+        env:
+          AZURE_AI_ROUTE_PROFILE: direct-v1
+          FOUNDRY_PROJECT_ENDPOINT: ${{ secrets.FOUNDRY_PROJECT_ENDPOINT }}
+          DEPLOYMENT: ${{ inputs.deployment }}
+        run: |
+          set -euo pipefail
+          python3 scripts/diagnose_codex_foundry_connection.py \
+            --deployment "${DEPLOYMENT}" \
+            --auth-discriminator \
+            --out /tmp/codex-foundry-auth-discriminator.json || true
+          test -s /tmp/codex-foundry-auth-discriminator.json
+          python3 - <<'PY'
+          import json
+          import sys
+
+          record = json.load(open("/tmp/codex-foundry-auth-discriminator.json"))
+          arms = record["arms"]
+          minted = arms["minted_bearer"] or {}
+          control = arms["invalid_bearer_control"] or {}
+          print("token minted by the child process:", record["token"]["minted"])
+          print("minted bearer  ->", minted.get("status"))
+          print("non-token      ->", control.get("status"))
+          print("same refusal text for both:", record["same_message_as_control"])
+          print("verdict:", record["verdict"])
+          print("what that means:", record["verdict_note"])
+
+          # Same rule as the read-only step. A refusal is a finding and an
+          # honest "cannot tell" is a finding. Never reaching the host is not:
+          # it says nothing about the resource, and a green step there is
+          # exactly how run 34340775246 looked like it had measured something.
+          if not record["token"]["minted"]:
+              print("::error::the probe never reached the host: the token could "
+                    "not be minted, so this run measures nothing about the "
+                    "resource. This is an environment or code fault, not a "
+                    "refusal.")
+              sys.exit(1)
+          PY
+
       # The one request. Skipped entirely unless it was asked for, so the
       # difference between a free run and a paid one is a deliberate input and
       # not a forgotten flag.
@@ -394,6 +470,7 @@ jobs:
           for path in (
               "/tmp/codex-foundry-plan.json",
               "/tmp/codex-foundry-readonly.json",
+              "/tmp/codex-foundry-auth-discriminator.json",
               "/tmp/codex-foundry-connection.json",
           ):
               if not os.path.exists(path):
@@ -412,15 +489,21 @@ jobs:
                           f"{path}: contains a URL that is not the public token scope"
                       )
               record = json.loads(text)
-              # Two record shapes now land here and only one of them observes a
-              # turn. Branch on the record's own schema rather than on whether
-              # the key happens to be present: `.get("observed", {})` would turn
-              # a renamed field in the connection record into a silent pass, and
-              # this check exists precisely to catch a claim nobody measured.
+              # Three record shapes now land here and only one of them observes
+              # a turn. Branch on the record's own schema rather than on
+              # whether the key happens to be present: `.get("observed", {})`
+              # would turn a renamed field in the connection record into a
+              # silent pass, and this check exists precisely to catch a claim
+              # nobody measured. The two free shapes are matched by prefix and
+              # the turn shape is the `else`, so a *new* free record added
+              # without touching this list fails closed rather than skipping.
               schema = str(record.get("schema", ""))
-              if schema.startswith("codex_foundry_readonly_probe/"):
+              if schema.startswith((
+                  "codex_foundry_readonly_probe/",
+                  "codex_foundry_auth_discriminator/",
+              )):
                   if record["inference_requested"] is not False:
-                      leaked.append(f"{path}: a read-only record claims a request was made")
+                      leaked.append(f"{path}: a free-probe record claims a request was made")
               else:
                   if record["observed"]["tool_execution_observed"] is not False:
                       leaked.append(f"{path}: claims tool execution, which this probe cannot observe")
@@ -456,6 +539,7 @@ jobs:
           path: |
             /tmp/codex-foundry-plan.json
             /tmp/codex-foundry-readonly.json
+            /tmp/codex-foundry-auth-discriminator.json
             /tmp/codex-foundry-connection.json
           if-no-files-found: warn
           retention-days: 90
@@ -485,6 +569,12 @@ jobs:
           RO_STATUS="$(python3 -c "import json,sys;print((json.load(open(sys.argv[1])).get('listing') or {}).get('status'))" "$RO" 2>/dev/null || echo 'not measured')"
           RO_MINTED="$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['token']['minted'])" "$RO" 2>/dev/null || echo 'unknown')"
           RO_LISTED="$(python3 -c "import json,sys;print((json.load(open(sys.argv[1])).get('listing') or {}).get('deployment_listed'))" "$RO" 2>/dev/null || echo 'unknown')"
+          AD=/tmp/codex-foundry-auth-discriminator.json
+          AD_VERDICT="$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['verdict'])" "$AD" 2>/dev/null || echo 'not measured')"
+          AD_NOTE="$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['verdict_note'])" "$AD" 2>/dev/null || echo 'not measured')"
+          AD_MINTED="$(python3 -c "import json,sys;print((json.load(open(sys.argv[1]))['arms']['minted_bearer'] or {}).get('status'))" "$AD" 2>/dev/null || echo 'unknown')"
+          AD_CONTROL="$(python3 -c "import json,sys;print((json.load(open(sys.argv[1]))['arms']['invalid_bearer_control'] or {}).get('status'))" "$AD" 2>/dev/null || echo 'unknown')"
+          AD_SAME="$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['same_message_as_control'])" "$AD" 2>/dev/null || echo 'unknown')"
           {
             echo "### Codex → Foundry, one turn"
             echo ""
@@ -507,6 +597,38 @@ jobs:
             echo "재현한 것이고, 문제는 토큰 자체입니다. 배포가 목록에"
             echo "\`False\`로 없으면 그 이름이 이 자원에 없다는 뜻입니다."
             echo "다만 목록이 열린다고 해서 **호출이 허용된다는 뜻은 아닙니다.**"
+            echo ""
+            echo "### 무과금 문지기 순서 확인 (턴 없음)"
+            echo ""
+            echo "- 진짜로 만든 토큰으로 보냈을 때: \`${AD_MINTED}\`"
+            echo "- **토큰이 아닌 문장**으로 보냈을 때: \`${AD_CONTROL}\`"
+            echo "- 두 거절 문구가 똑같은가: \`${AD_SAME}\`"
+            echo "- 판정: \`${AD_VERDICT}\`"
+            echo "- 뜻: ${AD_NOTE}"
+            echo ""
+            echo "이게 무엇을 한 것인지: 답을 만들어 낼 수 **없는 본문**(모델"
+            echo "이름이 아예 없는 요청)을 **턴이 가는 그 주소**로 두 번 보냈습니다."
+            echo "한 번은 Codex가 만들 토큰으로, 한 번은 **누가 봐도 토큰이 아닌**"
+            echo "고정 문장으로요. 왜 두 번이냐면, 한 번만 보내면 읽을 수가"
+            echo "없기 때문입니다 — \`400\`이 왔다고 해서 \"토큰은 통과했다\"고"
+            echo "말하려면 **이 호스트가 본문보다 인증을 먼저 본다**는 게 먼저"
+            echo "확인돼야 하는데, 지금까지 그걸 잰 적이 없습니다."
+            echo ""
+            echo "- 토큰 아닌 문장이 \`401\`/\`403\`으로 막혔고 진짜 토큰은"
+            echo "  \`400\`/\`422\`까지 갔다면 → 인증을 먼저 보는 호스트이고,"
+            echo "  진짜 토큰은 그 문을 **통과했습니다.** 턴의 401은 문 **뒤쪽**"
+            echo "  문제입니다."
+            echo "- 둘 다 \`401\`/\`403\`이면 → 진짜 토큰이 **가짜 문장과 같은"
+            echo "  자리에서** 막힌 것이고, 문제는 토큰 또는 이 신원의 권한입니다."
+            echo "- 토큰 아닌 문장이 \`401\`/\`403\`이 **아니면** → 이 호스트는"
+            echo "  본문을 먼저 봅니다. 그러면 진짜 토큰 쪽 숫자는 인증에 대해"
+            echo "  **아무 말도 안 합니다.** 그때 판정은"
+            echo "  \`check_order_not_established\` — **모른다고 적습니다.**"
+            echo ""
+            echo "판정이 깨끗하게 나와도 그것만으로 **역할을 달라고 하지 않습니다.**"
+            echo "이건 어디를 봐야 하는지 좁힌 것이지 무엇을 고칠지 말해 주지"
+            echo "않습니다. 그리고 모델 이름이 없는 본문이라 생성될 게 없다는 건"
+            echo "**논증이지 측정이 아닙니다** — 거절에는 사용량 기록이 없습니다."
             echo ""
             echo "토큰을 만들었는가가 \`False\`면 위 두 줄은 **아무 뜻도 없습니다.**"
             echo "그건 자원이 무엇이라고 답한 게 아니라 **묻지를 못한 것**이고,"
