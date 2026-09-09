@@ -258,6 +258,14 @@ jobs:
       # no record at all is a bug in this repository, and the step fails, which
       # also stops the paid turn below. Failing closed here costs a dispatch;
       # the other way round costs a request nobody could account for.
+      #
+      # A failed *mint* is the same category as a missing record, and run
+      # 34340775246 is why that is written down rather than assumed. It burned
+      # a real OIDC login, reported `success`, and measured nothing: the probe
+      # read `settings.auth_command` without calling it, so the token error was
+      # `'method' object is not iterable` — our defect, filed in the record
+      # beside the host's answers where a reader could take it for one. The
+      # check below now separates "the host refused" from "we never asked".
       - name: Ask the host what it will admit to, without sending a turn
         id: readonly
         working-directory: batch-runner
@@ -274,13 +282,30 @@ jobs:
           test -s /tmp/codex-foundry-readonly.json
           python3 - <<'PY'
           import json
+          import sys
+
           record = json.load(open("/tmp/codex-foundry-readonly.json"))
           listing = record.get("listing") or {}
-          print("token minted by the child process:", record["token"]["minted"])
+          token = record["token"]
+          print("token minted by the child process:", token["minted"])
           print("listing status:", listing.get("status"))
           print("models listed:", listing.get("models_listed"))
           print("the asked-for deployment is in the listing:",
                 listing.get("deployment_listed"))
+
+          # A refusal is a finding and this step keeps going for it: 401 is the
+          # answer we came for as much as 200 is. Never getting as far as the
+          # host is not a finding — it says nothing about the resource, and a
+          # green step there is how run 34340775246 looked like it had measured
+          # something while the argv was wrong. Fail, which also stops the paid
+          # turn below: a job that could not mint a token has no business
+          # buying one.
+          if not token["minted"]:
+              print("::error::the probe never reached the host: the token could "
+                    "not be minted, so this run measures nothing about the "
+                    "resource. This is an environment or code fault, not a "
+                    "refusal.")
+              sys.exit(1)
           PY
 
       # The one request. Skipped entirely unless it was asked for, so the
@@ -482,6 +507,12 @@ jobs:
             echo "재현한 것이고, 문제는 토큰 자체입니다. 배포가 목록에"
             echo "\`False\`로 없으면 그 이름이 이 자원에 없다는 뜻입니다."
             echo "다만 목록이 열린다고 해서 **호출이 허용된다는 뜻은 아닙니다.**"
+            echo ""
+            echo "토큰을 만들었는가가 \`False\`면 위 두 줄은 **아무 뜻도 없습니다.**"
+            echo "그건 자원이 무엇이라고 답한 게 아니라 **묻지를 못한 것**이고,"
+            echo "이 실행은 이 자원에 대해 아무것도 측정하지 않았습니다. 실행"
+            echo "\`34340775246\`이 정확히 그랬습니다 — 초록불이었지만 잰 게"
+            echo "없었습니다. 그래서 지금은 그 경우 단계가 **실패로 끝납니다.**"
             echo ""
             echo "이 줄이 뜻하는 것: Codex 런타임이 만든 요청 한 번을 실제 배포에"
             echo "보내고, 그쪽이 무엇이라고 답했는지를 이름 붙여 기록한 것입니다."

@@ -925,8 +925,26 @@ def mint_token_the_way_codex_does(
     """
     import subprocess
 
+    # `auth_command` is a method on the settings object, not a field. Reading it
+    # without calling it yields a bound method, which `subprocess.run` accepts
+    # and then fails on inside the standard library with "'method' object is not
+    # iterable" -- a message naming neither this file nor the attribute. Run
+    # 34340775246 spent a real OIDC login to produce exactly that, and reported
+    # it as a `token.error` where a reader could mistake it for the host having
+    # refused. Resolve the argv here and check its shape, so a wrong one is
+    # named before any child process starts.
+    argv = settings.auth_command()
+    if not isinstance(argv, (list, tuple)) or not all(
+        isinstance(item, str) for item in argv
+    ):
+        raise RuntimeError(
+            "the provider's auth command did not resolve to a list of strings; "
+            f"got {type(argv).__name__}. This is a defect in this probe or in "
+            "the settings object, not an answer from the host."
+        )
+
     completed = subprocess.run(  # noqa: S603 - argv built by the settings object
-        settings.auth_command,
+        argv,
         capture_output=True,
         text=True,
         timeout=timeout,

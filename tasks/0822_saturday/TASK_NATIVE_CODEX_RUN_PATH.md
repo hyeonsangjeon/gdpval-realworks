@@ -746,6 +746,44 @@ paid run must be preceded by a fresh smoke at the new fingerprint.
   Model names are counted, never written down. A failing auth command has its
   **stdout withheld** while stderr is quoted, because stdout is where a token
   would be.
+- **It was fired, and it measured nothing — the fault was ours.** Run
+  `34340775246` (`send_request: false`, no turn sent, job green). The record
+  says `token.minted: false`, `listing: null`, and the error is
+  `'method' object is not iterable`: `auth_command` is a *method* on
+  `CodexProviderSettings` and the probe read it without calling it, so
+  `subprocess.run` was handed a bound method. **None of the three outcomes in
+  the table above is answered.** The 401 remains unlocated.
+
+  Two things the run *did* settle, because they are read off the record rather
+  than off the network:
+
+  * the host it was pointed at is the host that got the 401 —
+    `endpoint_host_fingerprint: sha256:69057d59166a82e3`, byte-identical to run
+    `34319880025`'s. The probe was aimed correctly;
+  * the retry pins are live in the real settings object, not only in tests:
+    `retries: {request_max_retries: 0, stream_max_retries: 0}` appears in the
+    settings the job actually built.
+
+  The deployment asked for was `gpt-5.4`, the same name run `34319880025` used.
+
+  Three repairs, so the shape of this mistake cannot repeat quietly:
+
+  1. the probe calls `settings.auth_command()` and **checks the argv's shape
+     itself**, raising a message that says whose defect it is rather than
+     letting the standard library raise one that names neither this file nor
+     the attribute;
+  2. the test helper that substituted the command was defining it as a
+     `@property` — modelling a shape production does not have. Every minting
+     test read a value and passed while production got a method. It is a method
+     now, and one test uses the **unmodified** settings object with a stub auth
+     module so the argv production builds is exercised with nothing overridden.
+     Reintroducing the original defect turns 5 of these tests red; before the
+     helper was fixed it turned 0 red;
+  3. the workflow step now **fails** when the token could not be minted. A
+     refusal is a finding and the step keeps going for it; never reaching the
+     host is not a finding, and a green step there is exactly how this run
+     looked like it had measured something. Failing there also blocks the paid
+     turn — a job that cannot mint a token has no business buying one.
 - **The exec leg is closed, on one host, and it took a repair to close it.** The
   host limit was real and was closed by finding a host rather than by removing
   isolation: no sandbox was disabled, no network was opened, no container was
