@@ -679,14 +679,29 @@ paid run must be preceded by a fresh smoke at the new fingerprint.
   credential is wrong. One status code does not locate the fault.
 
   Firing it is a `workflow_dispatch` from `main` with `send_request: true`. It
-  costs one turn of roughly 135 characters with no tools, and — since the
-  retry pins landed — **one HTTP request**, or two if the answer is another
-  401. Before the pins, "no retries" was a line in the plan dictionary and
-  nothing else: the provider table set neither counter, so the runtime used its
-  own defaults and one turn against a 500 sent **thirty** requests. Measured,
-  not estimated: `batch-runner/tests/test_codex_retry_pins_are_enforced.py`
-  drives the pinned binary against a local server that refuses four different
-  ways and counts what arrives.
+  costs one turn and — since the retry pins landed — **one HTTP request**, or
+  two if the answer is another 401. Before the pins, "no retries" was a line in
+  the plan dictionary and nothing else: the provider table set neither counter,
+  so the runtime used its own defaults and one turn against a 500 sent
+  **thirty** requests. Measured, not estimated:
+  `batch-runner/tests/test_codex_retry_pins_are_enforced.py` drives the pinned
+  binary against a local server that refuses four different ways and counts
+  what arrives.
+
+  This paragraph used to add "of roughly 135 characters with no tools", and
+  that was wrong in the same way the pre-pin retry claim was wrong — a property
+  of the plan asserted about the runtime. One turn puts **about 45.9 KB** on
+  the wire: roughly 21 KB of Codex system `instructions`, 18 KB of **ten
+  `tools` definitions** with `tool_choice: auto`, and 5 KB of `input`. No
+  prompt wording and no key in `core/codex_runtime_config.py` removes the
+  tools, so nothing sent through this path can promise that none were offered
+  — only that none *ran*, which the record separately shows. Measured in
+  `batch-runner/tests/test_what_one_codex_turn_actually_sends.py`, which also
+  closes the older harness's blind spot: it recorded `do_POST` only, so any
+  other verb would have been answered `501` and left no trace in the count that
+  said one request was sent. Checking all seven verbs turns "no hidden
+  requests" into a measurement — the answer is two POSTs to `/v1/responses`,
+  no GET, nothing else.
 
   | server answers | counters unset | pinned to 0 |
   | --- | --- | --- |
@@ -905,11 +920,84 @@ paid run must be preceded by a fresh smoke at the new fingerprint.
   reason to grant a role**; and "no usage record came back from a refusal" is
   an argument for the call being free, not a measurement of it.
 
-  **Not yet run against the real host.** The `diagnose` job only runs from
-  `refs/heads/main`, so the dispatch comes after this merges. It sends no
-  prompt and asks for no completion, so it needs no spend authorisation — the
-  one turn that was authorised was used by `34347516170` and is not being
-  re-requested.
+  **It has now been run, and it answered.** Run `34361684546` on `67ac579d`,
+  `send_request: false`, no prompt, no completion. Both arms posted the same
+  unservable body — `body_sha256:
+  a679e5e9896b95bc386aed1754caeeef68665be5a51aae2327f6062db077d5b6` — to the
+  same route, minutes apart:
+
+  | arm | status | message |
+  | --- | --- | --- |
+  | minted bearer | **`400`** | *Missed model deployment* |
+  | control, `this-string-is-not-a-token-and-never-was` | **`401`** | *Access denied due to invalid subscription key or wrong API endpoint…* |
+
+  Verdict `bearer_clears_the_auth_gate`. This host **does** check authorization
+  before it validates the body — the control proves the order rather than
+  assuming it — and the minted bearer got past that check to the part that
+  reads the body. That is why the two-armed design mattered: a lone `400` would
+  have been consistent with a host that validates the body first and never
+  looked at the credential at all.
+
+  **The part that changes the next step.** The control's `401` text is
+  *byte-for-byte* the text the paid turn got back on run `34347516170`:
+  *"Access denied due to invalid subscription key or wrong API endpoint. Make
+  sure to provide a valid key for an active subscription and use a correct
+  regional API endpoint for your resource."* So the Codex runtime is being
+  answered the way a **plainly invalid bearer** is answered, while the *same
+  minted token* on the *same route* clears the gate when `urllib` sends it.
+
+  What that narrows to: the difference is on the **transmission** side — what
+  the runtime puts in the request — not on the identity, the token audience,
+  the role, or the address, each of which is separately closed above. It is
+  **not** yet narrowed to a specific cause, and specifically it does not
+  establish that the header is malformed, that the token is truncated, or that
+  a second credential is being preferred. Those are the candidates, not the
+  finding.
+
+  What it also does **not** establish, and must not be written up as if it did:
+  the turn leg is `urllib` on the same route, not the Codex runtime, so a
+  refusal reproduced here and a refusal produced there are alike in text and
+  not demonstrated to be alike in cause; and no usage record comes back from a
+  refusal, so this call is unpriced rather than proven free.
+
+  **A role grant is not indicated by this evidence and is not being
+  requested.** The earlier `role_missing_and_an_owner_must_grant_it` verdict
+  belongs to the project-scoped Code Interpreter arm and does not transfer to
+  this account route.
+
+  **The transmission side has since been measured, and the cheap explanations
+  are gone.** A **fake** token pushed through the pinned binary into a local
+  mock server — the owner's standing method, no credential and no network —
+  says the credential arrives correctly on both requests: the `authorization`
+  header is present, it is a `Bearer`, its value is **exactly** what the auth
+  command printed (38 characters in, 38 out, no truncation, no wrapping, no
+  trailing newline), and **no second credential header** rides alongside for a
+  gateway to prefer and reject. Measured in
+  `batch-runner/tests/test_what_one_codex_turn_actually_sends.py`.
+
+  So malformed header, truncated token, missing `Bearer ` prefix and a
+  competing `api-key` are all **closed**. That is four of the cheapest
+  candidates gone and the fault not found — which is the useful kind of
+  negative result, because it fixes what is left.
+
+  What is left, and all of it is a difference from the `openai.OpenAI` client
+  that produced 68,610 graded rows against this same resource:
+
+  | difference | sent by Codex | sent by the working path |
+  | --- | --- | --- |
+  | seven runtime headers — `originator`, `session-id`, `thread-id`, `x-client-request-id`, `x-codex-beta-features`, `x-codex-turn-metadata`, `x-codex-window-id` | yes | no |
+  | its own `user-agent` | yes | a different one |
+  | `stream: true` | yes | not on the grading path |
+  | body size | ~45.9 KB, ten tools | a few hundred bytes |
+
+  **The next diagnostic is free and follows from this table.** The
+  discriminator's `urllib` arm is a request already known to clear the gate,
+  and its body names no model so nothing can be generated. Adding the Codex
+  differences to *that* request one group at a time — headers first, then
+  `stream` — and watching for `400` to flip to `401` names the cause without
+  buying a completion. If nothing flips it, the difference is the body, and
+  that is worth knowing too. Neither outcome requires a role, and no role is
+  being requested.
 - **The exec leg is closed, on one host, and it took a repair to close it.** The
   host limit was real and was closed by finding a host rather than by removing
   isolation: no sandbox was disabled, no network was opened, no container was

@@ -440,11 +440,17 @@ def test_changing_what_was_measured_changes_the_fingerprint(overrides):
 
 
 def test_the_request_is_fixed_before_it_is_sent():
-    """One turn, no retries, no tools, and a prompt pinned by its hash.
+    """One turn, no retries, and a prompt pinned by its hash.
 
     Fixing the call count and the prompt before the request exists is what
     makes the cost of this diagnostic a known quantity rather than a discovered
     one.
+
+    It does not make the *body* a known quantity, and this docstring used to
+    say "no tools", which was never true of the request. The runtime attaches
+    ten tool definitions to every turn whatever the prompt says; see
+    ``test_what_one_codex_turn_actually_sends.py``. What is pinned here is the
+    plan, and the plan does not reach into the runtime's own request assembly.
     """
     plan = request_plan(describe_settings(_settings()))
     assert plan["turns_sent"] == 1
