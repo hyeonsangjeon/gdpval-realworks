@@ -1187,26 +1187,38 @@ def post_malformed_turn(
     token: str,
     *,
     timeout: int = READ_ONLY_TIMEOUT_SECONDS,
+    extra_headers: Mapping[str, str] | None = None,
+    body: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """``POST {base_url}/responses`` with a body the route cannot serve.
 
     The refusal *text* is kept, redacted, because two arms returning the same
     sentence is itself evidence: a host that answers a minted bearer exactly
     what it answers a fixed non-token is not distinguishing between them.
+
+    ``extra_headers`` and ``body`` default to nothing and to
+    ``MALFORMED_TURN_BODY``, so the discriminator's two arms are unchanged by
+    their existence. They are here for the sweep below, which varies one
+    request property at a time; a body passed in must still name no model, and
+    the sweep is where that is enforced rather than here.
     """
     import urllib.error
     import urllib.request
 
-    payload = json.dumps(MALFORMED_TURN_BODY).encode("utf-8")
+    payload = json.dumps(MALFORMED_TURN_BODY if body is None else dict(body)).encode(
+        "utf-8"
+    )
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+    headers.update(dict(extra_headers or {}))
     request = urllib.request.Request(  # noqa: S310 - scheme fixed by classify_endpoint
         f"{settings.base_url}/responses",
         method="POST",
         data=payload,
-        headers={
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-        },
+        headers=headers,
     )
     outcome: dict[str, Any] = {
         "requested": "POST /responses",
@@ -1217,18 +1229,18 @@ def post_malformed_turn(
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310
             outcome["status"] = int(response.status)
-            body = response.read().decode("utf-8", "replace")
+            answer = response.read().decode("utf-8", "replace")
     except urllib.error.HTTPError as exc:
         outcome["status"] = int(exc.code)
         try:
-            body = exc.read().decode("utf-8", "replace")
+            answer = exc.read().decode("utf-8", "replace")
         except Exception:  # noqa: BLE001 - a body we cannot read is not a crash
-            body = ""
+            answer = ""
     except Exception as exc:  # noqa: BLE001 - a transport failure is a finding
         outcome["error"] = f"{type(exc).__name__}: {exc}"
         return outcome
 
-    outcome["message"] = _message_in(body)
+    outcome["message"] = _message_in(answer)
     return outcome
 
 
@@ -1404,6 +1416,312 @@ def auth_discriminator_probe(
     return record
 
 
+# ── Which request property closes the gate ──────────────────────────────────
+#
+# Run 34361684546 established the check order on this host: a plainly invalid
+# bearer is stopped at the gate (401), and the minted bearer gets past it to
+# the part that reads the body (400). The Codex runtime, sending *the same
+# minted token to the same URL*, is answered 401 with the control arm's
+# sentence word for word.
+#
+# Four transmission explanations were measured offline against the pinned
+# binary and all four are false: the `authorization` header is present, it
+# carries the `Bearer ` scheme, its value is exactly what the auth command
+# printed, and no second credential header rides alongside. So what is left is
+# everything else the runtime puts on the wire that `urllib` does not.
+#
+# This sweep adds those, one property at a time, to a request already known to
+# clear the gate — and whose body still names no model, so no arm can select a
+# deployment or generate anything. A 400 that turns into a 401 names a property
+# that changes how this host authorizes. Nothing turning names the body, and
+# that is a result too.
+#
+# What a flip does *not* establish is spelled out in the record: this is still
+# urllib, not the runtime, and a property that closes the gate here is a
+# candidate for the turn's refusal, not a demonstrated cause of it.
+
+SWEEP_SCHEMA = "codex_foundry_transmission_sweep/1"
+
+#: Stands in for every identifier the runtime generates per session. The real
+#: ones name this machine's installation; the question is whether the *header*
+#: changes the answer, and a synthetic value of the same shape asks that
+#: without putting an installation identifier on someone else's host.
+SYNTHETIC_ID = "00000000-0000-7000-8000-000000000000"
+
+#: Measured off the wire, not guessed — the guess would have been wrong twice.
+#: The originator is `codex_python_sdk`, not the `codex_cli_rs` the CLI sends,
+#: and the runtime asks for `text/event-stream`, not JSON.
+CODEX_ACCEPT = "text/event-stream"
+CODEX_ORIGINATOR = "codex_python_sdk"
+CODEX_USER_AGENT = "codex_python_sdk/0.147.0 (unknown; x86_64) unknown"
+
+#: The six remaining headers the working `openai.OpenAI` client never sends.
+#: Values are shape-preserving stand-ins; `x-codex-turn-metadata` is real JSON
+#: with real keys because a gateway that parses it would reject a placeholder
+#: for the wrong reason, and none of its values identify anything.
+CODEX_RUNTIME_HEADERS: dict[str, str] = {
+    "session-id": SYNTHETIC_ID,
+    "thread-id": SYNTHETIC_ID,
+    "x-client-request-id": SYNTHETIC_ID,
+    "x-codex-window-id": f"{SYNTHETIC_ID}:0",
+    "x-codex-beta-features": "remote_compaction_v2",
+    "x-codex-turn-metadata": json.dumps(
+        {
+            "installation_id": SYNTHETIC_ID,
+            "session_id": SYNTHETIC_ID,
+            "thread_id": SYNTHETIC_ID,
+            "turn_id": SYNTHETIC_ID,
+            "window_id": f"{SYNTHETIC_ID}:0",
+            "request_kind": "turn",
+            "sandbox": "seccomp",
+            "turn_started_at_unix_ms": 0,
+        },
+        separators=(",", ":"),
+    ),
+}
+
+#: One arm per property, plus a combination. Isolated rather than cumulative:
+#: cumulative arms make the first flip un-attributable to anything narrower
+#: than "this group or an earlier one", and the extra request buys the
+#: difference between "this property is sufficient" and "something before it
+#: was". The combination arm is what catches a property that only closes the
+#: gate in company.
+SWEEP_ARMS: tuple[tuple[str, dict[str, str], dict[str, Any] | None, str], ...] = (
+    (
+        "baseline",
+        {},
+        None,
+        "the discriminator's minted arm, re-sent in this run so the comparison "
+        "is against today's host and not against a result from another day",
+    ),
+    (
+        "accept_event_stream",
+        {"Accept": CODEX_ACCEPT},
+        None,
+        "the runtime asks for a stream; content negotiation can route a "
+        "request to a different backend before anything reads the body",
+    ),
+    (
+        "originator_and_user_agent",
+        {"originator": CODEX_ORIGINATOR, "User-Agent": CODEX_USER_AGENT},
+        None,
+        "the two headers that name the client. A gateway policy keyed on "
+        "either would refuse before it looked at the bearer",
+    ),
+    (
+        "codex_runtime_headers",
+        dict(CODEX_RUNTIME_HEADERS),
+        None,
+        "the six session and turn headers the working client never sends",
+    ),
+    (
+        "stream_true",
+        {},
+        {**MALFORMED_TURN_BODY, "stream": True},
+        "the one body field that can be varied without naming a model. Sent "
+        "with the plain Accept on purpose: the point is to separate the body "
+        "field from the header that usually accompanies it",
+    ),
+    (
+        "everything",
+        {
+            "Accept": CODEX_ACCEPT,
+            "originator": CODEX_ORIGINATOR,
+            "User-Agent": CODEX_USER_AGENT,
+            **CODEX_RUNTIME_HEADERS,
+        },
+        {**MALFORMED_TURN_BODY, "stream": True},
+        "as close to a Codex request as a request that names no model can be",
+    ),
+)
+
+VERDICT_A_REQUEST_PROPERTY_CLOSES_THE_GATE = "a_request_property_closes_the_auth_gate"
+VERDICT_NO_REQUEST_PROPERTY_CLOSES_THE_GATE = "no_request_property_closes_the_auth_gate"
+#: The honest no-answer, and the one this sweep is most likely to need: it is
+#: built on a premise -- that the plain request still clears the gate today --
+#: which it re-tests every run rather than assuming.
+VERDICT_SWEEP_INCONCLUSIVE = "sweep_inconclusive"
+
+#: What the sweep cannot settle whichever way it comes out.
+NOT_ESTABLISHED_BY_THE_SWEEP: tuple[str, ...] = (
+    "the cause: every arm here is urllib. A property that closes the gate for "
+    "urllib is a candidate for what refuses the runtime, not a demonstration "
+    "that it is what refuses the runtime",
+    "the body: no arm names a model, carries instructions, or sends the ten "
+    "tool definitions. The runtime's request is ~45 KB and these are a few "
+    "hundred bytes, so a null result here points at the body and does not "
+    "test it",
+    "the transport: TLS negotiation, HTTP version and connection reuse differ "
+    "between urllib and the runtime's client and are not varied here",
+    "the fix: a named property is somewhere to look next. It is not a change "
+    "to make, and it is not a reason to request a role",
+    "the permission: this reads the order the host checks a request in, not "
+    "what the identity may do. Clearing the gate with an unservable body "
+    "shows authorization is checked before the body is read; it does not "
+    "show that a servable body would be served, because no arm here is one",
+    "the cost: a refusal returns no usage record, so these calls are unpriced "
+    "rather than proven free",
+)
+
+
+def classify_sweep(
+    arms: Mapping[str, Mapping[str, Any]], control: Mapping[str, Any]
+) -> tuple[str, str, list[str]]:
+    """Read the arms, and say what they establish and what they do not.
+
+    The premise is checked before the result, in two steps, because a sweep
+    whose baseline no longer clears the gate is measuring a different host than
+    the one the question is about -- and would otherwise report every arm as a
+    flip.
+    """
+    if control.get("error") or control.get("status") not in AUTH_GATE_STATUSES:
+        return (
+            VERDICT_SWEEP_INCONCLUSIVE,
+            "the control arm did not get stopped at the gate, so this host is "
+            f"not showing the check order the sweep reads against (control: "
+            f"{control.get('status')}). No arm's status can be interpreted",
+            [],
+        )
+    baseline = arms.get("baseline") or {}
+    if baseline.get("status") not in REQUEST_VALIDATION_STATUSES:
+        return (
+            VERDICT_SWEEP_INCONCLUSIVE,
+            f"the plain request got {baseline.get('status')}, not the 400 that "
+            "made this question worth asking. Whatever changed, it is not one "
+            "of the properties this sweep varies",
+            [],
+        )
+
+    closed = [
+        name
+        for name, arm in arms.items()
+        if name != "baseline" and arm.get("status") in AUTH_GATE_STATUSES
+    ]
+    if not closed:
+        return (
+            VERDICT_NO_REQUEST_PROPERTY_CLOSES_THE_GATE,
+            "every property the runtime adds to its headers, and the one body "
+            "field that can be varied without naming a model, left the request "
+            "clearing the gate. What refuses the runtime is therefore in the "
+            "part of the body this sweep cannot send -- the model, the "
+            "instructions, the ten tool definitions -- or in the transport",
+            [],
+        )
+    if closed == ["everything"]:
+        return (
+            VERDICT_A_REQUEST_PROPERTY_CLOSES_THE_GATE,
+            "no single property closed the gate and the combination did, so "
+            "what refuses the request needs more than one of them present. The "
+            "isolated arms name which to combine next",
+            closed,
+        )
+    return (
+        VERDICT_A_REQUEST_PROPERTY_CLOSES_THE_GATE,
+        f"adding {', '.join(sorted(n for n in closed if n != 'everything'))} to "
+        "a request that otherwise clears the gate makes this host refuse it at "
+        "the gate, with the same body. That is where to look, and it is not a "
+        "reason to request a role",
+        closed,
+    )
+
+
+def transmission_sweep(
+    settings: CodexProviderSettings,
+    *,
+    timeout: int = READ_ONLY_TIMEOUT_SECONDS,
+    redact: Callable[[Any], str | None],
+) -> dict[str, Any]:
+    """Vary one request property at a time and see which one closes the gate."""
+    description = describe_settings(settings)
+    record: dict[str, Any] = {
+        "schema": SWEEP_SCHEMA,
+        "inference_requested": False,
+        "settings": description,
+        "settings_fingerprint": settings_fingerprint(description),
+        "endpoint_host_fingerprint": host_fingerprint(settings.base_url),
+        "requests_planned": len(SWEEP_ARMS) + 1,
+        "requests_sent": 0,
+        "arms_described": {name: why for name, _h, _b, why in SWEEP_ARMS},
+        "token": {"minted": False, "mechanism": "auth_command", "error": None},
+        "arms": {},
+        "control": None,
+        "properties_that_closed_the_gate": [],
+        "verdict": VERDICT_SWEEP_INCONCLUSIVE,
+        "verdict_note": "the sweep did not run",
+        "not_established": list(NOT_ESTABLISHED_BY_THE_SWEEP),
+    }
+
+    # Enforced here rather than trusted: an arm that named a model could select
+    # a deployment, and the argument that nothing can be generated would stop
+    # holding for the whole run.
+    for name, _headers, body, _why in SWEEP_ARMS:
+        if body is not None and "model" in body:
+            raise ValueError(
+                f"arm {name!r} names a model, which this sweep must never do"
+            )
+
+    try:
+        token = mint_token_the_way_codex_does(settings, timeout=timeout)
+    except Exception as exc:  # noqa: BLE001 - a mint failure is the finding
+        record["token"]["error"] = redact(exc)
+        record["verdict_note"] = (
+            "no token could be minted, so no arm was sent. This measures "
+            "nothing about the resource"
+        )
+        return record
+    record["token"]["minted"] = True
+
+    raw_arms: dict[str, dict[str, Any]] = {}
+    for name, headers, body, _why in SWEEP_ARMS:
+        outcome = post_malformed_turn(
+            settings, token, timeout=timeout, extra_headers=headers, body=body
+        )
+        outcome["body_sha256"] = hashlib.sha256(
+            json.dumps(
+                MALFORMED_TURN_BODY if body is None else dict(body), sort_keys=True
+            ).encode("utf-8")
+        ).hexdigest()
+        outcome["headers_added"] = sorted(headers)
+        raw_arms[name] = outcome
+        record["requests_sent"] += 1
+
+    control = post_malformed_turn(
+        settings, OBVIOUSLY_INVALID_BEARER, timeout=timeout
+    )
+    record["requests_sent"] += 1
+
+    verdict, note, closed = classify_sweep(raw_arms, control)
+    record["verdict"] = verdict
+    record["verdict_note"] = note
+    record["properties_that_closed_the_gate"] = closed
+
+    # Compared before redaction, for the reason the discriminator gives: the
+    # redactor collapses distinct strings onto one placeholder, so two
+    # different refusals can come out identical on the far side of it.
+    baseline_message = (raw_arms.get("baseline") or {}).get("message")
+    for name, arm in raw_arms.items():
+        arm = dict(arm)
+        arm["same_message_as_baseline"] = (
+            (arm.get("message") == baseline_message)
+            if arm.get("message") and baseline_message
+            else None
+        )
+        arm["same_message_as_control"] = (
+            (arm.get("message") == control.get("message"))
+            if arm.get("message") and control.get("message")
+            else None
+        )
+        arm["message"] = redact(arm.get("message"))
+        arm["error"] = redact(arm.get("error"))
+        record["arms"][name] = arm
+
+    control = dict(control)
+    control["message"] = redact(control.get("message"))
+    control["error"] = redact(control.get("error"))
+    record["control"] = control
+    return record
+
+
 # ── Command line ────────────────────────────────────────────────────────────
 
 
@@ -1474,6 +1792,16 @@ def main(argv: list[str] | None = None) -> int:
         "established one of those, not when it merely ran.",
     )
     parser.add_argument(
+        "--transmission-sweep",
+        action="store_true",
+        help="send the same unservable body once per request property the "
+        "Codex runtime adds and the working client does not, plus a "
+        "combination and an invalid-bearer control. Names which property, if "
+        "any, makes this host refuse at the gate a request it otherwise lets "
+        "through. No arm names a model, so no arm can generate anything. "
+        "Exits 0 only when it establishes an answer, not when it merely ran.",
+    )
+    parser.add_argument(
         "--timeout",
         type=int,
         default=DEFAULT_TIMEOUT_SECONDS,
@@ -1491,6 +1819,7 @@ def main(argv: list[str] | None = None) -> int:
         for name, on in (
             ("--read-only-probe", args.read_only_probe),
             ("--auth-discriminator", args.auth_discriminator),
+            ("--transmission-sweep", args.transmission_sweep),
             ("--send-request", args.send_request),
         )
         if on
@@ -1539,6 +1868,22 @@ def main(argv: list[str] | None = None) -> int:
             in (
                 VERDICT_BEARER_CLEARS_THE_AUTH_GATE,
                 VERDICT_BEARER_REFUSED_AT_THE_AUTH_GATE,
+            )
+            else 1
+        )
+
+    if args.transmission_sweep:
+        record = transmission_sweep(settings, redact=redact)
+        _emit(record, args.out)
+        # As above: 0 for either conclusive verdict. "No property closed the
+        # gate" is an answer -- it moves the question to the body -- and a run
+        # that could not tell must not look like one.
+        return (
+            0
+            if record["verdict"]
+            in (
+                VERDICT_A_REQUEST_PROPERTY_CLOSES_THE_GATE,
+                VERDICT_NO_REQUEST_PROPERTY_CLOSES_THE_GATE,
             )
             else 1
         )

@@ -998,6 +998,57 @@ paid run must be preceded by a fresh smoke at the new fingerprint.
   buying a completion. If nothing flips it, the difference is the body, and
   that is worth knowing too. Neither outcome requires a role, and no role is
   being requested.
+- **That diagnostic is now built, and it changed shape twice while being
+  written.** `--transmission-sweep`, an ungated step in the diagnostic
+  workflow, 29 tests in
+  `batch-runner/tests/test_codex_transmission_sweep.py`.
+
+  **First change: the arms are isolated, not cumulative.** The bullet above
+  says "one group at a time", which reads as *accumulating* — headers, then
+  headers plus `stream`. Written that way, the first arm that flips is
+  attributable to nothing narrower than "this group, or something added before
+  it", which is the same un-narrowing that made the one-armed discriminator
+  unreadable. Each arm here carries **exactly one** property over the baseline,
+  and a sixth arm carries all of them, so a flip means *this property is
+  sufficient* rather than *something at or before this point was*. The extra
+  requests are refusals and buy that distinction.
+
+  **Second change: the values are measured, not written from the table above.**
+  Extending the turn recorder to keep header *values* — it kept only names —
+  says the runtime sends `originator: codex_python_sdk`. The plausible guess is
+  `codex_cli_rs`, and a sweep built on the guess would have replayed a string
+  nobody sends and returned a confident null result. `Accept` is likewise
+  `text/event-stream` and not `application/json`. Both are now bound to the
+  pinned binary by a `needs_runtime` test, so a version bump that changes
+  either reddens a test instead of quietly voiding the sweep.
+
+  Two guarantees are enforced rather than asserted. No arm may name a model:
+  a `ValueError` is raised **before the token is minted**, so an arm that
+  acquired one could not send anything. And the premise is re-tested every run
+  — that the control is still stopped at the gate, and that the baseline still
+  clears it — with `sweep_inconclusive` reported if either has moved, rather
+  than five properties named as causes on a host where none of them is doing
+  anything.
+
+  Building it also found a live defect in the workflow, by failing closed the
+  way the workflow's own comment said it would: the redaction check branches on
+  schema prefix and the sweep's schema was unregistered, so the record fell to
+  the paid-turn branch and crashed on a key free records do not have. In CI
+  that fails the check, skips `Keep the record`, and destroys the record
+  *after* its seven requests are spent. Registering the schema is the fix; the
+  design was right.
+
+  What the sweep will **not** settle, carried in the record on every run: these
+  arms are `urllib`, so a property that closes the gate here is a candidate for
+  what refuses the runtime and not a demonstration that it does; the ~45 KB
+  body and the transport layer are not varied; a named property is somewhere to
+  look and **not a reason to request a role**; the calls are unpriced rather
+  than proven free. And the one a `400` most invites collapsing: this reads
+  **the order in which the host checks a request, not what the identity is
+  permitted to do.** Clearing the gate with an unservable body shows
+  authorization is checked before the body is read. It does not show that a
+  servable body would be served — the only request that could show that is the
+  one this diagnostic never sends. Nothing here moves the 220-task column.
 - **The exec leg is closed, on one host, and it took a repair to close it.** The
   host limit was real and was closed by finding a host rather than by removing
   isolation: no sandbox was disabled, no network was opened, no container was

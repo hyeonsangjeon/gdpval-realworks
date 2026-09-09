@@ -12,6 +12,64 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Added
+- **A free sweep that asks which request property closes a gate the plain
+  request already clears — and states, in the record, that clearing a gate is
+  not permission to do the work.** `--transmission-sweep` in
+  `batch-runner/scripts/diagnose_codex_foundry_connection.py`, wired as an
+  ungated step in the connection-diagnostic workflow.
+
+  Run `34361684546` established the check order this reads against: the same
+  unservable body got `400 Missed model deployment` with a minted bearer and
+  `401 invalid subscription key` with an obviously invalid one. The bearer
+  clears the gate under `urllib`. The Codex runtime, sending *the same token*,
+  gets the `401` — byte-for-byte the invalid-token text. Four transmission
+  hypotheses were closed offline against a fake token and a local mock (header
+  present, `Bearer` scheme, value uncorrupted 38→38, no second credential), so
+  the difference is somewhere else in what the runtime adds.
+
+  The sweep takes the request already known to clear the gate and adds one
+  Codex-specific property per arm — `Accept: text/event-stream`, `originator`
+  and user-agent, the six session/turn headers, `stream: true` — plus a
+  combination arm, and looks for the `400` flipping to `401`. Arms are
+  **isolated, not cumulative**: cumulative makes the first flip attributable
+  to nothing narrower than "this group or an earlier one", and the extra
+  request buys "this property is sufficient" instead.
+
+  The replayed values are **measured, not guessed**. Extending the turn
+  recorder to keep header *values* showed `originator: codex_python_sdk` — not
+  the `codex_cli_rs` a guess would have used — and `Accept: text/event-stream`
+  rather than `application/json`. A `needs_runtime` test binds both to the
+  pinned binary, so a version bump that changed either reddens a test instead
+  of quietly sweeping a string nobody sends.
+
+  No arm names a model, and that is enforced with a `ValueError` raised before
+  the token is minted rather than left to review. Every run re-tests its own
+  premise twice — that the control is still stopped at the gate, and that the
+  baseline still clears it — and reports `sweep_inconclusive` rather than
+  naming five properties as causes on a host where none is doing anything.
+
+  What the record refuses to claim, in every run: these arms are `urllib` and
+  not the runtime, so a property that closes the gate here is **where to look
+  next, not the proven cause**; the ~45 KB body is not tested; the transport
+  layer is not varied; a named property is **not a reason to request a role**;
+  and — the distinction a `400` most invites collapsing — this reads **the
+  order the host checks a request in, not what the identity may do.** Clearing
+  the gate with an unservable body shows authorization is checked before the
+  body is read. It does not show a servable body would be served, because no
+  arm here is one. Nothing about this moves 220 tasks to runnable.
+
+  Refusals carry no usage record, so these requests are **unpriced rather than
+  proven free**; they are not $0.
+
+### Fixed
+- **The redaction check crashed on the record it was meant to protect.** It
+  branches on schema prefix, with the two free shapes matched by prefix and the
+  paid turn shape as the `else` — deliberately, so that an unregistered record
+  fails closed. The sweep record was unregistered, so it took the `else` and
+  died on `record["observed"]`, which a free record does not have. In CI that
+  fails the check, skips `Keep the record`, and loses the record *after* its
+  seven requests are spent. The design worked exactly as its comment promised;
+  registering `codex_foundry_transmission_sweep/` is the other half of it.
 - **A measurement of what one Codex turn actually puts on the wire, replacing
   two claims that were true of narrower things than they were asserted about.**
   `batch-runner/tests/test_what_one_codex_turn_actually_sends.py` drives the
