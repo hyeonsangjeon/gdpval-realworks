@@ -71,16 +71,19 @@ name: Audio Accuracy Probe
 #     intended behaviour: the pre-registration in 330 names those digests, and
 #     a run whose audio it does not describe is not the run that was approved.
 #
-# Three of the `corpus` settings run two arms against the same audio, and each
+# Four of the `corpus` settings run two arms against the same audio, and each
 # one belongs to a different document. `speech-prompt-ab` is 333, which 334
 # bought and which came back without an answer: the observation arm returned
 # something unreadable 51 times out of 60, so the p-value measured a delivery
 # failure rather than a difference in judgement. 337 pilots a candidate header
 # that names where the transcript goes, on five criteria and one repeat; 338
-# buys the comparison again, but only if that pilot passes. The measurer will
-# not open a second arm because a path was typed here -- it opens it when the
-# document handed to it says which diagnostic it is, which is why each of these
-# settings points at a different file below rather than at a shared one.
+# buys the comparison again, but only if that pilot passes. 337 did not pass --
+# one readable reply out of five, and no usable verdict at all -- so 338 is
+# closed and 344 registers the next candidate on 337's same five criteria.
+# The measurer will not open a second arm because a path was typed here -- it
+# opens it when the document handed to it says which diagnostic it is, which is
+# why each of these settings points at a different file below rather than at a
+# shared one.
 #
 # It still spends money, so the paid half sits behind the same `grading`
 # environment gate every other paid path in this repository uses. A gate that
@@ -100,7 +103,7 @@ on:
         type: boolean
         default: false
       repeats:
-        description: 'How many times each criterion is put to the model. 3 matches the repeat runs, so stability here is comparable with the 19.35%. Total calls = 20 criteria x repeats x arms, where arms is 2 when prompt_arm is both AND when the corpus runs a second arm of its own. speech-format-pilot and audio-cost-metering are the exceptions to both halves of that: each of those documents narrows the corpus — to five criteria and to two — and fixes repeats at 1, and each refuses any other value here rather than quietly correcting it.'
+        description: 'How many times each criterion is put to the model. 3 matches the repeat runs, so stability here is comparable with the 19.35%. Total calls = 20 criteria x repeats x arms, where arms is 2 when prompt_arm is both AND when the corpus runs a second arm of its own. speech-format-pilot, speech-format-pilot-v3 and audio-cost-metering are the exceptions to both halves of that: each of those documents narrows the corpus — to five criteria, to five again and to two — and fixes repeats at 1, and each refuses any other value here rather than quietly correcting it.'
         required: false
         type: number
         default: 3
@@ -114,7 +117,7 @@ on:
           - observation
           - both
       corpus:
-        description: 'Which sounds, and under which document. tones = clicks, beeps and sine waves; answers whether the verdict depends on the audio at all. speech = ten synthesised sentences with a known transcript; answers whether it hears words. Three more run the same ten sentences under two prompts, which DOUBLES the call count, and each one is opened by its own pre-registration rather than by prompt_arm: speech-prompt-ab is 333 (20 criteria, already bought by 334, kept so that run stays reproducible), speech-format-pilot is 337 (5 criteria, repeats must be 1, a format check and not a result), speech-prompt-ab-v2 is 338 (20 criteria, the comparison 334 could not deliver — and it is not to be dispatched unless 337 passed). audio-cost-metering is 342 and asks no accuracy question at all: one prompt, 2 criteria on 2 of the same clips, repeats must be 1, and what it measures is whether a paid audio call reaches the cost ledger. Every speech setting rebuilds its clips and refuses to run if they do not match the committed digests.'
+        description: 'Which sounds, and under which document. tones = clicks, beeps and sine waves; answers whether the verdict depends on the audio at all. speech = ten synthesised sentences with a known transcript; answers whether it hears words. Four more run the same ten sentences under two prompts, which DOUBLES the call count, and each one is opened by its own pre-registration rather than by prompt_arm: speech-prompt-ab is 333 (20 criteria, already bought by 334, kept so that run stays reproducible), speech-format-pilot is 337 (5 criteria, repeats must be 1, a format check and not a result), speech-prompt-ab-v2 is 338 (20 criteria, the comparison 334 could not deliver — it is closed, because 337 did not pass), speech-format-pilot-v3 is 344 (337''s same 5 criteria under one changed candidate, repeats must be 1, a cost ledger is mandatory, and it is a format check and not a result). audio-cost-metering is 342 and asks no accuracy question at all: one prompt, 2 criteria on 2 of the same clips, repeats must be 1, and what it measures is whether a paid audio call reaches the cost ledger. Every speech setting rebuilds its clips and refuses to run if they do not match the committed digests.'
         required: false
         type: choice
         default: tones
@@ -125,6 +128,7 @@ on:
           - speech-format-pilot
           - speech-prompt-ab-v2
           - audio-cost-metering
+          - speech-format-pilot-v3
 
 # Read-only by default. The paid job adds id-token for OIDC and nothing else:
 # there is no commit, no release, and no dispatch to make.
@@ -167,6 +171,18 @@ env:
   # request ceiling and both fingerprints out of the document, and a run held
   # to the wrong document is a run nobody registered.
   METERING_PREREG: ${{ github.workspace }}/tasks/rebuilding_grading_task/342-audio-cost-metering-prereg.md
+  # 344, the second format candidate. Its own file for the same reason as the
+  # rest, and one more: 337 and 344 register the *same five criteria* under
+  # different headers, so the two documents are the only thing that tells the
+  # runs apart. A dispatch held to the wrong one would report 344's result
+  # against 337's pinned header digest and nothing would contradict it.
+  #
+  # `--cost-ledger` is mandatory here, unlike the three A/B settings above.
+  # 337 bought ten calls and left no row for any of them; 342 fixed the path
+  # and 344 is the first accuracy-shaped run that uses it.
+  FORMAT_PILOT_V3_PREREG: ${{ github.workspace }}/tasks/rebuilding_grading_task/344-the-order-with-no-destination.md
+  FORMAT_PILOT_V3_LEDGER_DRY: ${{ github.workspace }}/format-pilot-v3-rehearsal.sqlite3
+  FORMAT_PILOT_V3_LEDGER_PAID: ${{ github.workspace }}/format-pilot-v3-measured.sqlite3
   # Separate files per job, and never carried between them. The measurer
   # refuses a ledger that already holds rehearsal rows, which is exactly what
   # reusing one name across the free and paid jobs would produce.
@@ -270,6 +286,9 @@ jobs:
                 ARGS+=(--speech-prompt-ab "$SPEECH_PILOT_PREREG") ;;
               speech-prompt-ab-v2)
                 ARGS+=(--speech-prompt-ab "$SPEECH_AB_V2_PREREG") ;;
+              speech-format-pilot-v3)
+                ARGS+=(--speech-prompt-ab "$FORMAT_PILOT_V3_PREREG"
+                       --cost-ledger "$FORMAT_PILOT_V3_LEDGER_DRY") ;;
               audio-cost-metering)
                 ARGS+=(--metering-run "$METERING_PREREG"
                        --cost-ledger "$METERING_LEDGER_DRY") ;;
@@ -353,6 +372,18 @@ jobs:
             audio-cost-metering-rehearsal.jsonl
           if-no-files-found: warn
 
+      # 344's rehearsal ledger, on the same terms. The rehearsal is where the
+      # §0 precondition "the plan is 10 calls and the run makes 10" is checked
+      # for nothing, and that check reads rows.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: ${{ always() && inputs.corpus == 'speech-format-pilot-v3' }}
+        with:
+          name: format-pilot-v3-rehearsal-ledger
+          path: |
+            format-pilot-v3-rehearsal.sqlite3
+            format-pilot-v3-rehearsal.jsonl
+          if-no-files-found: warn
+
   # ---------------------------------------------------------------------------
   # The gate. Same reusable `grading` environment as every other paid path
   # here, so approving a probe is the same act, in the same place, with the same
@@ -397,11 +428,11 @@ jobs:
           # that makes 120 -- the `calls = 36` failure again, on the dispatch
           # that spends the money.
           #
-          # There are three such corpora now (333, 337, 338), so this is a list
-          # rather than a comparison against one name. A fourth added to the
-          # dropdown and not added here would be recorded as half its size.
+          # There are four such corpora now (333, 337, 338, 344), so this is a
+          # list rather than a comparison against one name. A fifth added to
+          # the dropdown and not added here would be recorded as half its size.
           case "$CORPUS" in
-            speech-prompt-ab|speech-format-pilot|speech-prompt-ab-v2)
+            speech-prompt-ab|speech-format-pilot|speech-prompt-ab-v2|speech-format-pilot-v3)
               CORPUS_ARMS=2 ;;
             *)
               CORPUS_ARMS=1 ;;
@@ -421,6 +452,9 @@ jobs:
             speech-format-pilot)
               CRITERIA=5; TRUE_CRITERIA=3; FALSE_CRITERIA=2
               NARROWED="  narrowed   = yes, to the 5 criteria named in 337 (of 20 in the manifest)" ;;
+            speech-format-pilot-v3)
+              CRITERIA=5; TRUE_CRITERIA=3; FALSE_CRITERIA=2
+              NARROWED="  narrowed   = yes, to the 5 criteria named in 344 — 337's, unchanged (of 20 in the manifest)" ;;
             audio-cost-metering)
               CRITERIA=2; TRUE_CRITERIA=1; FALSE_CRITERIA=1
               NARROWED="  narrowed   = yes, to the 2 criteria named in 342 (of 20 in the manifest)" ;;
@@ -437,7 +471,7 @@ jobs:
           # second did not.
           case "$CORPUS" in
             audio-cost-metering) CLIPS=2 ;;
-            speech-format-pilot) CLIPS=5 ;;
+            speech-format-pilot|speech-format-pilot-v3) CLIPS=5 ;;
             speech*) CLIPS=10 ;;
             *) CLIPS=9 ;;
           esac
@@ -566,6 +600,9 @@ jobs:
                 ARGS+=(--speech-prompt-ab "$SPEECH_PILOT_PREREG") ;;
               speech-prompt-ab-v2)
                 ARGS+=(--speech-prompt-ab "$SPEECH_AB_V2_PREREG") ;;
+              speech-format-pilot-v3)
+                ARGS+=(--speech-prompt-ab "$FORMAT_PILOT_V3_PREREG"
+                       --cost-ledger "$FORMAT_PILOT_V3_LEDGER_PAID") ;;
               audio-cost-metering)
                 ARGS+=(--metering-run "$METERING_PREREG"
                        --cost-ledger "$METERING_LEDGER_PAID") ;;
@@ -1068,4 +1105,17 @@ jobs:
             audio-cost-metering-measured.jsonl
             audio-cost-metering-verdict.json
             audio-cost-metering-verdict.txt
+          if-no-files-found: warn
+
+      # 344's paid ledger, for the reason directly above and one more. Its
+      # approval is written as a request count -- at most ten -- so the rows
+      # are how anyone afterwards can say what was actually sent. 337 has no
+      # such file, and that is why 340 had to be written.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: ${{ always() && inputs.corpus == 'speech-format-pilot-v3' }}
+        with:
+          name: format-pilot-v3-ledger
+          path: |
+            format-pilot-v3-measured.sqlite3
+            format-pilot-v3-measured.jsonl
           if-no-files-found: warn

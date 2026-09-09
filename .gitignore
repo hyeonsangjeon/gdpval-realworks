@@ -246,6 +246,7 @@ tasks/rebuilding_grading_task/*
 !tasks/rebuilding_grading_task/341-what-a-refused-call-costs.md
 !tasks/rebuilding_grading_task/342-audio-cost-metering-prereg.md
 !tasks/rebuilding_grading_task/343-audio-metering-rehearsal.md
+!tasks/rebuilding_grading_task/344-the-order-with-no-destination.md
 
 # The grading run writes a sqlite mirror of the cost ledger beside every grade
 # file. The published record is the .jsonl next to it; the database is a local
