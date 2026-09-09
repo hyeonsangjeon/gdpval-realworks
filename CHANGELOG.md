@@ -133,6 +133,30 @@ entries land under a fresh dated heading the day they merge to `main`.
   perfect candidate), a short run, an early stop, a retried call, a
   substituted header, a moved grader, mismatched claims, a missing ledger,
   and a paid run reporting `$0`.
+- **The `344` verdict is now computed where the run happens, on both the free
+  job and the paid one.** A checker that lives in the repository and is called
+  by nothing is a precondition satisfied on paper, and `344` §0 ticks boxes on
+  two checks that only exist in CI. `audio-accuracy-probe.yml` gains a step in
+  each job: the rehearsal is read from `audio-accuracy-dry-run.json`, the
+  pilot from `audio-accuracy-measured.json`, and each writes a verdict file
+  that is uploaded **with the ledger rows it was computed from** — `337`'s
+  per-call record lived only in an artifact, the artifact expired, and `340`
+  had to be written to say the numbers could no longer be produced.
+
+  Both steps run under `always()` and **carry the checker's exit code**, after
+  the summary is written so the reason is on the page when the step is red. A
+  rehearsal that came back `inconclusive` — wrong pin, short call count, no
+  ledger — under a green tick would clear a paid dispatch using the finding
+  that should have stopped it. Four tests break the workflow four ways (the
+  rehearsal step pointed at the paid filename, which would skip *silently*;
+  a swallowed exit code; the verdict files dropped from the upload; the steps
+  made conditional on success) and each goes red.
+- **What the checker actually opens, in its own docstring.** It said "the
+  report and the ledger export beside it"; it reads the report and the
+  pre-registration, and the ledger *reference* comes from inside the report's
+  cost block. The difference matters for a tool whose case rests on naming
+  exactly what it looks at — and it means a report stays checkable after the
+  `.sqlite3` beside it is gone.
 
 ### Fixed
 - **How `446acfd` came to sit red, since #469 fixed it without the two dates
