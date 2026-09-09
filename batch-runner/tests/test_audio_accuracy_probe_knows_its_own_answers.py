@@ -6684,3 +6684,359 @@ def test_a_document_that_pins_the_wrong_candidate_stops_before_the_model(
     err = capsys.readouterr().err
     assert "pins candidate header" in err
     assert "SPEECH_OBSERVATION_HEADER_V3" in err
+
+
+# --------------------------------------------------------------------------
+# 344 section 9: what came back, not just how many came back
+# --------------------------------------------------------------------------
+#
+# 339 section 9 ends: "we do not know why it failed... we did not store the
+# body, so we never saw what it wrote." 337 bought ten calls and stood in the
+# same place 334 stood, because the measurer recorded nothing at all about a
+# reply -- no finish_reason, no brace count, no character the parser stopped
+# at. These tests hold the record that fixes that to two shapes at once: it
+# has to be there for 344's kind, and it has to be absent everywhere else, or
+# the digests of runs that already happened change under documents that
+# describe them.
+
+
+#: A reply that satisfies the audio contract's five keys. Written out in full
+#: rather than trimmed to the two fields a reader would guess at, because the
+#: shape record runs ``core``'s own validator: a two-key envelope parses as
+#: JSON and is still rejected, which would make "good reply" and "bad reply"
+#: read the same in these tests.
+_GOOD_ENVELOPE = json.dumps(
+    {
+        "verdict": "pass",
+        "partial_score": 1.0,
+        "evidence": "the clip says seventeen crates",
+        "confidence": 1.0,
+        "reasoning": "seventeen crates",
+    }
+)
+
+
+def _shaped_response(text: str, *, reasoning: str | None = None):
+    """A reply in the shape the SDK returns one, with an optional think block.
+
+    Built here rather than with ``probe._StubResponse`` because the fields
+    that matter to this section -- a reasoning block, a body worth masking --
+    are exactly the ones the truthful stub never produces.
+    """
+    message = type("_M", (), {"content": text, "reasoning": reasoning})()
+    choice = type("_C", (), {"message": message, "finish_reason": "stop"})()
+    return type(
+        "_R",
+        (),
+        {
+            "choices": [choice],
+            "usage": probe._StubUsage(0, max(1, len(text) // 4)),
+            "model": probe.STUB_MODEL,
+        },
+    )()
+
+
+def test_the_reply_shape_is_recorded_only_for_the_kind_that_registered_it() -> None:
+    """333, 337 and 338 registered a delivery record of a fixed shape.
+
+    Widening theirs after the fact would change what their own documents
+    describe, and those runs are finished. So the record is opt-in per kind
+    and 344 is the only kind opted in.
+    """
+    assert probe.SPEECH_SHAPE_RECORDED_KINDS == frozenset(
+        {probe.SPEECH_FORMAT_PILOT_V3_KIND}
+    )
+    for finished in (
+        probe.SPEECH_PROMPT_AB_KIND,
+        probe.SPEECH_FORMAT_PILOT_KIND,
+        probe.SPEECH_PROMPT_AB_V2_KIND,
+        probe.AUDIO_COST_METERING_KIND,
+    ):
+        assert finished not in probe.SPEECH_SHAPE_RECORDED_KINDS
+
+    # And the excerpt bound is 335's, not a new one: the diagnostic refuses
+    # anything above its own hard limit, so asking for more would not widen
+    # the record, it would stop the run.
+    from diagnose_audio_format_failure import EXCERPT_HARD_LIMIT
+
+    assert probe.SHAPE_EXCERPT_CHARS == EXCERPT_HARD_LIMIT == 240
+
+
+def test_a_wire_client_records_no_shape_unless_it_was_asked_to() -> None:
+    """Default off, and the digest of a run with it off is unchanged.
+
+    ``response_shapes`` is absent rather than empty on purpose. An empty list
+    is still a new key in every call of every past kind's report, and those
+    reports are what 333 and 334's write-ups quote.
+    """
+    reply = _shaped_response('{"verdict": "pass"}')
+
+    class _Fixed:
+        def __init__(self) -> None:
+            self.chat = type("_Chat", (), {"completions": self})()
+
+        def create(self, **kwargs: object) -> object:
+            return reply
+
+    wire = probe.WireClient(_Fixed())
+    assert wire.record_shape is False
+    wire.chat.completions.create(messages=[], model="m")
+
+    assert "response_shape" not in wire.records[0]
+    assert "response_shapes" not in probe.summarise_wire(wire.records)
+
+
+def test_the_v3_wire_client_records_the_shape_of_every_reply_in_order() -> None:
+    """A list, not a last-reply field.
+
+    A call that retried a malformed envelope has two shapes, and the first is
+    the one worth reading. Keeping only the last would file away the recovery
+    and throw out the failure -- which is the exact record 337 needed.
+    """
+    replies = [
+        _shaped_response("I can hear the words seventeen crates."),  # 335's shape
+        _shaped_response(_GOOD_ENVELOPE),
+    ]
+
+    class _Sequence:
+        def __init__(self) -> None:
+            self.chat = type("_Chat", (), {"completions": self})()
+            self.sent = 0
+
+        def create(self, **kwargs: object) -> object:
+            reply = replies[self.sent]
+            self.sent += 1
+            return reply
+
+    wire = probe.WireClient(
+        _Sequence(), shape_excerpt_chars=probe.SHAPE_EXCERPT_CHARS
+    )
+    assert wire.record_shape is True
+    for _ in replies:
+        wire.chat.completions.create(messages=[], model="m")
+
+    shapes = probe.summarise_wire(wire.records)["response_shapes"]
+    assert len(shapes) == 2
+
+    # The prose reply -- the thing 335 measured and 337 could not see.
+    prose = shapes[0]
+    assert prose["finish_reason"] == "stop"
+    assert prose["core_kind"] == "unparseable_json"
+    assert prose["text_chars"] == len(replies[0].choices[0].message.content)
+
+    # And the good one, so a failure shape is distinguishable from any shape.
+    assert shapes[1]["core_kind"] is None
+
+
+def test_the_shape_says_whether_a_reasoning_block_was_there_not_what_it_said(
+) -> None:
+    """Presence as a boolean. The block is never read, hashed or excerpted.
+
+    The instruction for this work is explicit that internal reasoning is
+    neither requested nor stored, so the test is not that the field is short
+    -- it is that the text does not appear anywhere in the record at all.
+    """
+    secret = "PRIVATE-CHAIN-OF-THOUGHT-8fb2"
+    body = '{"verdict": "fail"}'
+
+    def _shape_of(reasoning: str | None) -> dict:
+        reply = _shaped_response(body, reasoning=reasoning)
+
+        class _Thinking:
+            def __init__(self) -> None:
+                self.chat = type("_Chat", (), {"completions": self})()
+
+            def create(self, **kwargs: object) -> object:
+                return reply
+
+        wire = probe.WireClient(
+            _Thinking(), shape_excerpt_chars=probe.SHAPE_EXCERPT_CHARS
+        )
+        wire.chat.completions.create(messages=[], model="m")
+        return wire.records[0]
+
+    with_block = _shape_of(f"{secret}: first I considered...")
+    without = _shape_of(None)
+
+    assert with_block["response_shape"]["reasoning_present"] is True
+    assert without["response_shape"]["reasoning_present"] is False
+    assert secret not in json.dumps(with_block)
+
+    # Stronger than "the text is absent": the block's *content* contributes
+    # nothing at all. Every other field of the record is identical whether it
+    # was there or not, so there is no field left for it to leak through.
+    differing = {
+        key
+        for key in set(with_block["response_shape"])
+        | set(without["response_shape"])
+        if with_block["response_shape"].get(key)
+        != without["response_shape"].get(key)
+    }
+    assert differing == {"reasoning_present"}
+
+
+def test_the_excerpt_is_masked_before_it_is_cut_and_stays_within_its_bound(
+) -> None:
+    """Cut first and the mask never matches the half it needed.
+
+    335 wrote the rule and this checks the measurer inherited it rather than
+    re-implementing a looser one. The secret is placed so that character 240
+    lands *inside* it: cutting first leaves "sk-li" in the committed file and
+    the pattern that would have covered it never fires, because it needs the
+    tail that was just thrown away.
+    """
+    def _excerpt_of(body: str) -> str:
+        reply = _shaped_response(body)
+
+        class _Leaky:
+            def __init__(self) -> None:
+                self.chat = type("_Chat", (), {"completions": self})()
+
+            def create(self, **kwargs: object) -> object:
+                return reply
+
+        wire = probe.WireClient(
+            _Leaky(), shape_excerpt_chars=probe.SHAPE_EXCERPT_CHARS
+        )
+        wire.chat.completions.create(messages=[], model="m")
+        return wire.records[0]["response_shape"]["text_excerpt_masked"]
+
+    prefix = "word " * 45  # 225 characters, nothing in it to mask
+    assert len(prefix) == 225
+    body = prefix + "sk-livekey0123456789abcdef and more"
+    # Character 240 of the raw body lands inside the key, so a cut-first
+    # implementation would commit this 16-character head of it to the file.
+    assert body[225:240] == "sk-livekey01234"
+    straddling = _excerpt_of(body)
+
+    # Masked first, the whole key is eight characters and sits comfortably
+    # inside the bound.
+    assert "<secret>" in straddling
+    assert "sk-" not in straddling, "the excerpt was cut before it was masked"
+    assert "livekey" not in straddling
+
+    # And the bound itself, on a reply with nothing in it to mask -- masking
+    # shortens the text, so a body full of mask-bait never reaches the cut.
+    long_prose = "the clip contains a number of spoken words. " * 20
+    bounded = _excerpt_of(long_prose)
+    assert bounded.startswith("the clip contains")
+    assert bounded.endswith(f"…(+{len(long_prose) - 240} chars)")
+    assert len(bounded) < len(long_prose)
+
+
+def test_a_shape_collector_that_raises_is_recorded_and_the_run_goes_on(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """This record exists to describe malformed replies.
+
+    A collector that died on the malformed reply it was added to describe
+    would take down a paid run and leave nothing behind -- strictly worse
+    than 337, which at least kept its calls.
+    """
+    def _explode(response: object, excerpt_chars: int) -> dict:
+        raise TypeError("a reply shape this collector cannot read")
+
+    monkeypatch.setattr(probe, "_response_shape_facts", _explode)
+    reply = _shaped_response('{"verdict": "pass"}')
+
+    class _Fixed:
+        def __init__(self) -> None:
+            self.chat = type("_Chat", (), {"completions": self})()
+
+        def create(self, **kwargs: object) -> object:
+            return reply
+
+    wire = probe.WireClient(
+        _Fixed(), shape_excerpt_chars=probe.SHAPE_EXCERPT_CHARS
+    )
+    assert wire.chat.completions.create(messages=[], model="m") is reply
+    assert wire.records[0]["response_shape"] == {"shape_error": "TypeError"}
+
+
+def test_the_shape_record_reaches_the_report_for_344_and_not_for_337s_kind(
+    tmp_path: Path,
+) -> None:
+    """The whole way through: command line, kind registration, report on disk.
+
+    Both halves matter. The first is the thing 344 section 9 buys. The second
+    is the promise that buying it does not retroactively change the artifact
+    shape of a run somebody already wrote up.
+    """
+    manifest_path, clip_dir = _speech_fixture(tmp_path, clips=2)
+    claims = "| 시험 문항 | `clip0_yes`, `clip0_no` |\n"
+
+    v3_out = tmp_path / "v3.json"
+    v3_doc = tmp_path / "v3.md"
+    v3_doc.write_text(
+        f"| 진단 종류 | `{probe.SPEECH_FORMAT_PILOT_V3_KIND}` |\n"
+        f"| 채점기 지문 | `{probe.grader_source_hash()}` |\n" + claims,
+        encoding="utf-8",
+    )
+    assert probe.main([
+        *_speech_ab_args(tmp_path, manifest_path, clip_dir, v3_out),
+        "--speech-prompt-ab", str(v3_doc),
+        "--cost-ledger", str(tmp_path / "ledger.sqlite3"),
+    ]) == 0
+    v3_report = json.loads(v3_out.read_text(encoding="utf-8"))
+    assert v3_report["calls"], "the run recorded no calls"
+    for call in v3_report["calls"]:
+        shapes = call["wire"]["response_shapes"]
+        assert len(shapes) == 1
+        assert shapes[0]["core_kind"] is None
+        assert shapes[0]["excerpts_enabled"] is True
+
+    old_out = tmp_path / "old.json"
+    old_doc = tmp_path / "old.md"
+    old_doc.write_text(
+        f"| 진단 종류 | `{probe.SPEECH_FORMAT_PILOT_KIND}` |\n"
+        f"| 채점기 지문 | `{probe.grader_source_hash()}` |\n" + claims,
+        encoding="utf-8",
+    )
+    assert probe.main([
+        *_speech_ab_args(tmp_path, manifest_path, clip_dir, old_out),
+        "--speech-prompt-ab", str(old_doc),
+    ]) == 0
+    old_report = json.loads(old_out.read_text(encoding="utf-8"))
+    assert old_report["calls"], "the run recorded no calls"
+    for call in old_report["calls"]:
+        assert "response_shapes" not in call["wire"]
+
+
+def test_recording_the_reply_does_not_change_the_request(tmp_path: Path) -> None:
+    """Section 9's claim, checked rather than asserted in prose.
+
+    344 changes one axis and it is the header. If turning the record on also
+    changed a byte of what goes out, the run would be comparing two things at
+    once and neither number would mean what the document says it means.
+    """
+    manifest_path, clip_dir = _speech_fixture(tmp_path, clips=2)
+    corpus = probe.load_speech_corpus(manifest_path, clip_dir)
+
+    def _sent_requests(shape_chars: int) -> list[dict]:
+        stub = probe.TruthfulStub(corpus.claims)
+        wire = probe.WireClient(
+            stub,
+            observation_header=probe.SPEECH_OBSERVATION_HEADER_V3,
+            shape_excerpt_chars=shape_chars,
+        )
+        perception = AudioPerception(
+            client=wire,
+            deployment="gpt-audio-1.5",
+            call_cap=AUDIO_CALL_CAP,
+            trim_seconds=AUDIO_TRIM_SECONDS,
+        )
+        probe.run_measurement(
+            perception=perception,
+            clip_dir=tmp_path / "unused",
+            repeats=1,
+            claims=corpus.claims,
+            prerendered=corpus,
+            wire=wire,
+            arms=probe.PROMPT_ARMS,
+        )
+        return stub.requests
+
+    off = _sent_requests(0)
+    on = _sent_requests(probe.SHAPE_EXCERPT_CHARS)
+    assert off and len(off) == len(on)
+    assert off == on, "the shape record changed what went on the wire"

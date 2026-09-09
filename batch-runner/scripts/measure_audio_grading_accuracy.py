@@ -2578,6 +2578,56 @@ SPEECH_LEDGERED_KINDS: frozenset[str] = frozenset({
     SPEECH_FORMAT_PILOT_V3_KIND,
 })
 
+#: Accuracy kinds whose replies are recorded structurally, not just counted.
+#:
+#: 339 section 9 ends "we do not know why it failed -- only that the failure
+#: is in the same place as 334's. We did not store the body, so we did not
+#: look at what it wrote." That sentence is what this set exists to stop
+#: being writable a third time. The measurer records nothing about a reply
+#: today: not the finish reason, not whether there were braces, not where the
+#: parser stopped. 337 bought ten calls and produced no more evidence about
+#: the defect than 334 had.
+#:
+#: What goes in is :func:`collect_response_facts`, called unchanged from the
+#: 335 diagnostic rather than reimplemented here. Its collection scope has
+#: already been reviewed and its boundaries are the ones that matter: the
+#: reasoning block is recorded as a boolean and is never read, hashed or
+#: excerpted, and the leading excerpt is masked *before* it is truncated.
+#:
+#: This does not change the experiment's axis. Not one byte of the outgoing
+#: request differs; the reply that already came back is simply read further.
+SPEECH_SHAPE_RECORDED_KINDS: frozenset[str] = frozenset({
+    SPEECH_FORMAT_PILOT_V3_KIND,
+})
+
+#: How much of a reply's leading text the shape record may keep, masked.
+#:
+#: 335's own limit, reused rather than re-argued: the input is a test
+#: sentence this repository synthesised with eSpeak from a published string,
+#: so the reply is talk about that sentence -- not a human recording, not a
+#: cloned voice, not personal data, not a real work file. The excerpt lands
+#: in the committed JSON only; it is never printed to stdout or a CI log.
+SHAPE_EXCERPT_CHARS = 240
+
+
+def _response_shape_facts(response: Any, excerpt_chars: int) -> dict[str, Any]:
+    """335's collector, imported at call time to break the import cycle.
+
+    ``diagnose_audio_format_failure`` imports *this* module as ``probe`` at
+    its own import time, so a module-level import here would be a cycle. The
+    ``setdefault`` is what stops the second copy: run as ``__main__`` this
+    module is not registered under its own name, and without the line the
+    diagnostic would import and execute a whole second instance of it.
+    """
+    sys.modules.setdefault(
+        "measure_audio_grading_accuracy", sys.modules[__name__]
+    )
+    from diagnose_audio_format_failure import (  # noqa: PLC0415
+        collect_response_facts,
+    )
+
+    return collect_response_facts(response, excerpt_chars=excerpt_chars)
+
 
 class RequestCapReached(BaseException):
     """The pre-registered request ceiling was hit; nothing further goes out.
@@ -2729,11 +2779,19 @@ class WireClient:
         arm: str = "production",
         observation_header: str = OBSERVATION_HEADER,
         request_cap: Optional[int] = None,
+        shape_excerpt_chars: int = 0,
     ) -> None:
         self._inner = inner
         self.arm = arm
         self.observation_header = observation_header
         self.request_cap = request_cap
+        #: Zero disables the shape record entirely, which is the default: the
+        #: A/B settings that already ran registered a delivery record of a
+        #: fixed shape, and widening theirs after the fact would change what
+        #: their own documents describe. Set from
+        #: :data:`SPEECH_SHAPE_RECORDED_KINDS`.
+        self.shape_excerpt_chars = int(shape_excerpt_chars)
+        self.record_shape = shape_excerpt_chars > 0
         self.requests = 0
         self.records: list[dict[str, Any]] = []
         self.chat = type("_Chat", (), {"completions": self})()
@@ -2774,6 +2832,18 @@ class WireClient:
             response, str(sent.get("model") or "")
         )
         record.update(_audio_usage_facts(response))
+        # The reply's shape, for the kinds that registered it. Recorded last
+        # and defensively: this is evidence about a failure, so a collector
+        # that raised on the malformed reply it was added to describe would
+        # take the run down and leave nothing behind. A failure to read the
+        # shape is itself written into the record.
+        if self.record_shape:
+            try:
+                record["response_shape"] = _response_shape_facts(
+                    response, self.shape_excerpt_chars
+                )
+            except Exception as exc:  # noqa: BLE001 - recorded, not raised
+                record["response_shape"] = {"shape_error": type(exc).__name__}
         self.records.append(record)
         return response
 
@@ -2827,7 +2897,7 @@ def summarise_wire(records: Sequence[dict[str, Any]]) -> dict[str, Any]:
     tokens = [
         r["audio_tokens"] for r in records if r.get("audio_tokens") is not None
     ]
-    return {
+    digest: dict[str, Any] = {
         "requests": len(records),
         "requests_with_audio": len(sent),
         # How many of those requests came back as an exception rather than a
@@ -2868,6 +2938,21 @@ def summarise_wire(records: Sequence[dict[str, Any]]) -> dict[str, Any]:
         # pre-registered delivery band, reported as "0.0% from expected".
         "audio_tokens_billed": sum(tokens) if tokens else None,
     }
+    # One entry per request that recorded a reply shape, in the order the
+    # requests went out. A list and not a last-request field because a call
+    # that retried a malformed envelope has *two* shapes and the first one is
+    # the one worth reading -- collapsing to the last would throw away the
+    # failure and keep the recovery.
+    #
+    # The key is absent, not empty, when no request recorded one. Every kind
+    # except the ones in :data:`SPEECH_SHAPE_RECORDED_KINDS` is in that case,
+    # so their digests stay byte-for-byte what their own documents describe.
+    shapes = [
+        r["response_shape"] for r in records if r.get("response_shape")
+    ]
+    if shapes:
+        digest["response_shapes"] = shapes
+    return digest
 
 
 def delivery_section(
@@ -4731,6 +4816,12 @@ def main(argv: Optional[list[str]] = None) -> int:
     #: from being a claim the report makes about a setting it did not apply.
     ledgered = False
 
+    #: Non-zero for a document whose kind is in
+    #: :data:`SPEECH_SHAPE_RECORDED_KINDS`, and read where the wire client is
+    #: built. Zero means the reply is counted and not read, which is what
+    #: every run before 344 did.
+    shape_excerpt_chars = 0
+
     speech: Optional[SpeechCorpus] = None
     if args.speech_set is not None:
         try:
@@ -4874,6 +4965,14 @@ def main(argv: Optional[list[str]] = None) -> int:
                     )
                     return 3
                 ledgered = True
+
+            # And the reply-shape record, on its own registration. Separate
+            # from the ledger because they answer different questions: the
+            # ledger says how many requests went out, the shape record says
+            # what came back. 337 had neither, which is why its ten calls
+            # settled nothing.
+            if kind in SPEECH_SHAPE_RECORDED_KINDS:
+                shape_excerpt_chars = SHAPE_EXCERPT_CHARS
 
         if args.metering_run is not None:
             # A third door, with its own document and its own question. It
@@ -5195,6 +5294,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         arm=arms[0],
         observation_header=observation_header,
         request_cap=request_cap,
+        shape_excerpt_chars=shape_excerpt_chars,
     )
 
     # Set on the way out of the block below, read after it. The cap is not an
