@@ -40,10 +40,12 @@ writes, and the listing is served by a socket on this machine.
 from __future__ import annotations
 
 import json
+import os
 import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from unittest import mock
 
 import pytest
 
@@ -144,8 +146,18 @@ def _printer(tmp_path: Path, *, token: str = FAKE_TOKEN, code: int = 0) -> Path:
 
 
 def _with_auth_command(settings: CodexProviderSettings, argv: list[str]):
+    """Swap the argv, keeping ``auth_command`` a *method* like the real one.
+
+    This was a ``@property`` once, and that is how run ``34340775246`` reached a
+    real Azure login before failing on ``'method' object is not iterable``:
+    every test here read ``settings.auth_command`` as a value and passed, while
+    production reads it off a class where it is a method and got a bound method
+    object instead of argv. A helper that models the wrong shape does not test
+    the code, it tests the helper. Overriding it as a method means these tests
+    exercise the same call the real settings object requires.
+    """
+
     class _Fixed(type(settings)):  # type: ignore[misc]
-        @property
         def auth_command(self) -> list[str]:
             return argv
 
@@ -223,6 +235,73 @@ def test_the_token_comes_from_the_child_process_stdout(tmp_path: Path):
         _settings(9999), [sys.executable, str(_printer(tmp_path))]
     )
     assert mint_token_the_way_codex_does(settings) == FAKE_TOKEN
+
+
+def test_the_argv_comes_from_the_unmodified_settings_object(tmp_path: Path):
+    """No override anywhere: production's own ``auth_command`` builds the argv.
+
+    Every other test in this section substitutes the command, which is what let
+    a wrong calling convention survive review and reach a real Azure login in
+    run ``34340775246``. Here nothing is substituted. ``CodexProviderSettings``
+    builds ``[python, '-m', auth_module, '--scope', scope]`` itself, and the
+    only thing arranged is that ``auth_module`` names a module on ``sys.path``
+    that prints a fake token. If the probe ever again reads the attribute
+    without calling it, or the settings object changes how the argv is built,
+    this fails before a workflow spends a login finding out.
+    """
+    module = tmp_path / "stub_auth_module.py"
+    module.write_text(
+        "import sys\n"
+        # The real module takes --scope; accepting and ignoring it here keeps
+        # the argv production builds valid rather than merely tolerated.
+        "assert '--scope' in sys.argv, sys.argv\n"
+        f"sys.stdout.write({FAKE_TOKEN!r} + chr(10))\n",
+        encoding="utf-8",
+    )
+
+    class _StubModule(CodexProviderSettings):
+        pass
+
+    settings = _StubModule(
+        endpoint="https://example-account.openai.azure.com/openai/v1/",
+        model="a-deployment",
+        auth_module="stub_auth_module",
+        python_executable=sys.executable,
+    )
+
+    argv = settings.auth_command()
+    assert isinstance(argv, list) and all(isinstance(item, str) for item in argv)
+
+    env = dict(os.environ, PYTHONPATH=str(tmp_path))
+    with mock.patch.dict(os.environ, env, clear=True):
+        assert mint_token_the_way_codex_does(settings) == FAKE_TOKEN
+
+
+def test_an_argv_that_is_not_a_list_is_named_here_not_inside_subprocess(
+    tmp_path: Path,
+):
+    """The failure run 34340775246 hit, reported as our defect rather than a host's answer.
+
+    ``subprocess.run`` given a bound method raises ``'method' object is not
+    iterable`` from inside the standard library — a message naming neither this
+    probe nor the attribute, which the record then filed under ``token.error``
+    where it reads like the resource said something. The probe checks the shape
+    itself so the message says whose fault it is.
+    """
+
+    class _Broken(CodexProviderSettings):
+        def auth_command(self):  # type: ignore[override]
+            return "python -m something"  # a string, not argv
+
+    settings = _Broken(
+        endpoint="https://example-account.openai.azure.com/openai/v1/",
+        model="a-deployment",
+    )
+    with pytest.raises(RuntimeError) as excinfo:
+        mint_token_the_way_codex_does(settings)
+    message = str(excinfo.value)
+    assert "did not resolve to a list of strings" in message
+    assert "not an answer from the host" in message
 
 
 def test_a_failing_auth_command_withholds_its_stdout(tmp_path: Path):

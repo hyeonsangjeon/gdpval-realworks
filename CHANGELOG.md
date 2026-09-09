@@ -99,6 +99,39 @@ entries land under a fresh dated heading the day they merge to `main`.
   this merged.
 
 ### Fixed
+- **The read-only probe never reached the host, and reported it as though the
+  host had answered.** `auth_command` is a *method* on `CodexProviderSettings`;
+  the probe read it without calling it, so `subprocess.run` was handed a bound
+  method and `'method' object is not iterable` landed in the record's
+  `token.error` field beside the host's answers. Run `34340775246` burned a
+  real OIDC login producing that, finished green, and settled none of the three
+  outcomes it exists to separate.
+
+  Three repairs, because the calling convention was the least of it:
+
+  - the probe calls `settings.auth_command()` and **checks the argv's shape
+    before starting a child process**, raising a message that says this is a
+    defect in the probe rather than an answer from the host;
+  - the test helper that substituted the command defined it as a `@property`.
+    That is not the shape production has, so every minting test read a value
+    and passed while production got a method — a helper modelling the wrong
+    shape tests the helper. It is a method now, and one test uses the
+    **unmodified** settings object against a stub auth module so the argv
+    production builds is exercised with nothing overridden. Reintroducing the
+    original defect now turns 5 tests red; before the helper was fixed it
+    turned 0 red;
+  - the workflow step **fails** when the token could not be minted. A refusal
+    is a finding and the step keeps going for it; never reaching the host is
+    not a finding, and a green step there is how the run looked like it had
+    measured something. Failing there also blocks the paid turn, since a job
+    that cannot mint a token has no business buying one.
+
+  What the run *did* settle, read off the record rather than the network: the
+  probe was aimed at the same host that returned the 401
+  (`endpoint_host_fingerprint` byte-identical to run `34319880025`'s), and the
+  retry pins are live in the settings object the job actually built
+  (`request_max_retries: 0`, `stream_max_retries: 0`) rather than only in
+  tests. The 401 itself remains unlocated.
 - **The workflow's leak check would have crashed on the record it was being
   asked to check.** It indexed `record["observed"]` unconditionally, which the
   read-only record has no key for, so publishing one would have raised
