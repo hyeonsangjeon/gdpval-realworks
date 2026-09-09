@@ -192,7 +192,11 @@ entries land under a fresh dated heading the day they merge to `main`.
   This matters to `344` beyond bookkeeping. §0's last precondition re-pins §2's
   four fingerprints in a `tasks/**` document, which is precisely the change
   shape that starts no run — the pins would land unverified unless something
-  else touches a filtered path in the same commit.
+  else touches a filtered path in the same commit. §0 now carries the remedy:
+  `backend-tests.yml` accepts `workflow_dispatch` with a required
+  `expected_sha`, so a doc-only commit can be given a real verdict without a
+  decorative edit to a filtered path. This entry's own PR had no checks at all
+  for exactly the reason it describes, and was dispatched that way.
 
   **Still not fixed here.** Both mechanisms live in `.github/workflows/`
   trigger blocks, which is A's lane this week; changing them while A's Codex
