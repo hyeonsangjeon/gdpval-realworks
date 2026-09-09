@@ -90,6 +90,41 @@ entries land under a fresh dated heading the day they merge to `main`.
   a red gate. This is headroom for that variance, not for a slower suite.
 
 ### Added
+- **344 cannot be dispatched from a tag, and now says so before spending the
+  one authorised dispatch rather than after.** §12 told the run to tag the
+  merge commit and dispatch `--ref audio-344-dispatch`. The paid gate
+  `approve-paid` deploys to the `grading` environment, whose deployment policy
+  lists exactly one allowed ref — the `main` branch (`custom_branch_policies:
+  true`, one entry). Every other ref is rejected.
+
+  This is not inference from settings. Run `34038055900` (2026-09-06) already
+  tried it on this workflow from tag `speech-diagnostic-run-1` at `5418048`:
+  the free `dry-run` job succeeded, `approve-paid` **failed**, `measure` was
+  skipped, and the annotation reads `Tag "speech-diagnostic-run-1" is not
+  allowed to deploy to grading due to environment protection rules`. Following
+  the old §12 would have burned the authorised dispatch on a gate error.
+
+  The environment's allow-list is **not** being widened. Adding the tag there
+  changes what the paid gate accepts, which is a protection-surface change to
+  report with its exact scope, not to make in passing. The exact action, if
+  someone decides to take it: repository settings → Environments → `grading` →
+  deployment branch/tag policy → add `audio-344-dispatch` as a **tag**. This
+  work proceeds without it.
+
+  What replaces it verifies more, not less. The tag is still cut at the merge
+  commit — as an immovable *name* for it, not as a dispatch ref. The dispatch
+  goes out on `--ref main` while `main` still points there; GitHub freezes the
+  run's `head_sha` at creation; that SHA is read back and compared against the
+  tag; and **only if they match is the paid gate approved.** `measure` sits
+  behind `approve-paid`, so nothing is spent before that comparison. The old
+  order assumed the commit from the ref and checked afterwards; this one reads
+  the commit that will actually run and checks before opening the door money
+  goes through.
+
+  The pre-registration was amended because the old step **does not execute**,
+  not because a result came back — nothing has been measured and nothing has
+  been bought.
+
 - **The Codex 401 is now surrounded by measurements, and four of its five
   candidate causes are closed.** Three runs on 2026-09-09 from `main` at
   `cb043af`: the free read-only probe (`34346945494`), the free ARM role
@@ -339,6 +374,41 @@ entries land under a fresh dated heading the day they merge to `main`.
   before a paid dispatch is not "a run was started" but **"that run finished
   `success`"**. #475 did not touch the concurrency block, and a cancelled run
   still reads much like a passing one in a run list.
+
+- **344's four fingerprints re-measured at the dispatch SHA, and the eighth
+  box closed with what was actually checked.** At `cff4d7c1`: grader
+  `7e745a18…`, price table `b01b384c…`, manifest `97755288…`, candidate
+  header `dd0380fa…` (1,931 chars). **All four match what §2 already
+  carries**, so the table needs no new value — what was missing was the
+  measurement, not the numbers.
+
+  It was taken with the repository's own accessors on both sides rather than
+  by hashing files by hand: `grader_pin_stated_in` against
+  `grader_source_hash()`, `price_table_pin_stated_in` against
+  `sha256(PRICE_TABLE_PATH)`, `manifest_pin_stated_in` against the manifest
+  bytes, `candidate_pin_stated_in` against
+  `sha256(SPEECH_OBSERVATION_HEADER_V3)`. Reading the document with the same
+  function the run uses is the point: a hand-rolled comparison would prove
+  the two files agree with *my* arithmetic rather than with the code's.
+
+  The commit carrying this cannot move any of the four — it touches this
+  document and `CHANGELOG.md`, the grader fingerprint covers neither, and the
+  manifest is a file this work never opens. That is stated rather than
+  trusted: the measurer re-checks the grader and header pins against the
+  document at run time and stops before calling the model if either has
+  moved, which is what conditions 1 and 2 of the rehearsal exercised.
+
+  For the `core/`-drift box: **zero open PRs** at that commit, and `main`'s
+  last `core/` change is `7a8c94d` (#467) with ten commits landed since that
+  touch none of it — #477 included, which is documentation only.
+
+  The ninth box is deliberately left unticked, and §12 now says why. The tag
+  goes on the commit that carries this document, so ticking it here would put
+  a document claiming a finished step inside the tag that step creates. Its
+  evidence is `git`, not markdown: `git rev-parse audio-344-dispatch^{commit}`
+  against the dispatched run's `headSha`, both copied into §13. If they
+  differ, nothing is bought — and a failed run does not get the tag moved to
+  a new commit, which would be §7's forbidden re-dispatch under another name.
 
 ### Fixed
 - **How `446acfd` came to sit red, since #469 fixed it without the two dates
