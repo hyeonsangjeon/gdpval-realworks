@@ -37,6 +37,40 @@ import yaml
 
 BATCH_RUNNER_ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY_ROOT = BATCH_RUNNER_ROOT.parent
+
+
+def _covers(patterns: list[str], target: str) -> bool:
+    """Does any GitHub path filter in ``patterns`` start a run for ``target``?
+
+    Written because asserting literal membership scored a *wider* filter as a
+    regression: replacing the two named workflow files with
+    ``.github/workflows/**`` starts a run for strictly more edits, and the old
+    assertion failed on it while continuing to pass for a filter that named one
+    file and missed twenty-nine other workflow references the suite asserts
+    about. What the assertions below actually need is that the file reaches the
+    gate, not that its name appears in a particular form.
+
+    GitHub's globs are not ``fnmatch``'s -- ``*`` stops at a slash and ``**``
+    does not -- so the translation is written out here. Handing these to
+    ``fnmatch`` would call ``.github/*`` a match for a file two directories
+    down and quietly restore the same false confidence.
+    """
+    for pattern in patterns:
+        regex = ""
+        index = 0
+        while index < len(pattern):
+            if pattern.startswith("**", index):
+                regex += ".*"
+                index += 2
+            elif pattern[index] == "*":
+                regex += "[^/]*"
+                index += 1
+            else:
+                regex += re.escape(pattern[index])
+                index += 1
+        if re.fullmatch(regex, target):
+            return True
+    return False
 if str(BATCH_RUNNER_ROOT) not in sys.path:
     sys.path.insert(0, str(BATCH_RUNNER_ROOT))
 
@@ -863,20 +897,31 @@ def test_the_trigger_is_wide_enough_that_the_job_actually_starts(workflow):
     assert "workflow_dispatch" in triggers
     for event in ("pull_request", "push"):
         paths = triggers[event]["paths"]
-        assert "batch-runner/**" in paths, event
-        assert (
-            ".github/workflows/execution-envelope-preflight.yml" in paths
+        assert _covers(paths, "batch-runner/core/config.py"), event
+        assert _covers(
+            paths, ".github/workflows/execution-envelope-preflight.yml"
         ), event
     assert triggers["push"]["branches"] == ["main"]
 
 
 def test_the_tests_holding_this_workflow_are_themselves_reachable():
-    """This file must run when the workflow it asserts about is edited.
+    """Every part of the tree this suite asserts about must start a run.
 
-    These tests are run by backend-tests.yml, whose path filter did not list
-    .github/workflows/. A pull request editing only the workflow -- adding
-    --azure-route-served, say -- would have started no run of this file, and
-    every assertion above would have been decoration.
+    These tests are run by backend-tests.yml, whose path filter listed
+    batch-runner/, scripts/ and two workflow files by name. The suite reads far
+    more than that. Resolving every repo-root-relative path literal in
+    batch-runner/tests/ against the tree found five directories that started no
+    run: .github/ (30 literals, 25 test files), data/ (35, 26), tasks/ (36,
+    25), infra/ (6, 2) and src/ (1, 1).
+
+    That gap was not theoretical. #468 edited a pinned hash under
+    tasks/rebuilding_grading_task/, started no run of this suite, merged, and
+    left main red -- the same failure #179 caused and the one backend-tests.yml
+    was written to prevent.
+
+    Each entry below is a real file some test in this suite reads. A filter
+    that stops starting a run for one of them turns that test into decoration,
+    so this fails rather than letting the next narrowing land quietly.
     """
     backend = yaml.safe_load(
         (REPOSITORY_ROOT / ".github/workflows/backend-tests.yml").read_text(
@@ -885,14 +930,25 @@ def test_the_tests_holding_this_workflow_are_themselves_reachable():
     )
     triggers = backend.get("on", backend.get(True))
 
+    asserted_about = (
+        ".github/workflows/execution-envelope-preflight.yml",
+        ".github/workflows/grade-run.yml",
+        ".github/workflows/batch-run.yml",
+        "batch-runner/core/config.py",
+        "scripts/aggregate-grades.mjs",
+        "tasks/0822_saturday/TASK_NATIVE_CODEX_RUN_PATH.md",
+        "tasks/rebuilding_grading_task/300-gold-ceiling.md",
+        "infra/dev-host/main.bicep",
+    )
+
     for event in ("pull_request", "push"):
-        assert (
-            ".github/workflows/execution-envelope-preflight.yml"
-            in triggers[event]["paths"]
-        ), (
-            f"backend-tests.yml does not run on {event} for the workflow this "
-            "file asserts about, so these assertions gate nothing"
-        )
+        paths = triggers[event]["paths"]
+        for target in asserted_about:
+            assert _covers(paths, target), (
+                f"backend-tests.yml does not run on {event} for {target}, "
+                "which tests in this suite read, so those assertions gate "
+                "nothing"
+            )
 
 
 # ── the fixed conditions the free check cannot see for itself ─────────────

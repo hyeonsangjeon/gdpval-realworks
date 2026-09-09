@@ -352,6 +352,54 @@ jobs:
               print(f"- pairs available for the arm comparison: {comparison['pairs']}")
           PY
 
+      # 344 §6's verdict, on the rehearsal. The same checker the paid job
+      # runs, with the same seven conditions, so "the plan is ten requests and
+      # the run makes ten" gets settled here for nothing rather than
+      # discovered on the dispatch that was bought to answer something else.
+      #
+      # What a rehearsal cannot answer it says it cannot answer. The replies
+      # come from a stub, so the two arm conditions come back `unanswerable`
+      # and the best verdict reachable here is `rehearsal_ok`. A free run
+      # reporting `format_held` would be the experiment replaced by its own
+      # scaffolding, and the checker has no flag that permits it.
+      #
+      # The exit code is carried rather than swallowed. This step ticks a §0
+      # precondition, and a rehearsal that came back `inconclusive` -- wrong
+      # pin, short call count, no ledger -- under a green tick would clear a
+      # paid dispatch using the very finding that should have stopped it. It
+      # is carried *after* the summary is written, so the reason is on the
+      # page even when the step is red.
+      - name: Check the rehearsal against 344 §6
+        if: ${{ always() && inputs.corpus == 'speech-format-pilot-v3' }}
+        run: |
+          set -uo pipefail
+          cd batch-runner
+          if [ ! -f "$GITHUB_WORKSPACE/audio-accuracy-dry-run.json" ]; then
+            echo "::warning::no report, so there is no rehearsal to check"
+            exit 0
+          fi
+          python scripts/verify_format_pilot_run.py \
+            "$GITHUB_WORKSPACE/audio-accuracy-dry-run.json" \
+            --out "$GITHUB_WORKSPACE/format-pilot-v3-rehearsal-verdict.json" \
+            | tee "$GITHUB_WORKSPACE/format-pilot-v3-rehearsal-verdict.txt"
+          rc=${PIPESTATUS[0]}
+          {
+            echo "## 344 §6 — rehearsal"
+            echo
+            echo '```'
+            cat "$GITHUB_WORKSPACE/format-pilot-v3-rehearsal-verdict.txt"
+            echo '```'
+            echo
+            echo "\`rehearsal_ok\` means the run's **shape** held: the pins match"
+            echo "the plan, ten requests went out, one per call, and a ledger"
+            echo "recorded them. It says **nothing** about whether"
+            echo "\`gpt-audio-1.5\` returns readable JSON for the candidate"
+            echo "header — the replies here came from a stub. That question"
+            echo "costs money and is asked once, on the paid dispatch."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "verify exit: $rc"
+          exit "$rc"
+
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: audio-accuracy-dry-run
@@ -372,9 +420,12 @@ jobs:
             audio-cost-metering-rehearsal.jsonl
           if-no-files-found: warn
 
-      # 344's rehearsal ledger, on the same terms. The rehearsal is where the
-      # §0 precondition "the plan is 10 calls and the run makes 10" is checked
-      # for nothing, and that check reads rows.
+      # 344's rehearsal ledger, on the same terms, and the verdict computed
+      # from it. The rehearsal is where the §0 precondition "the plan is 10
+      # calls and the run makes 10" is checked for nothing, and that check
+      # reads rows -- so the rows and the reading of them travel together. A
+      # verdict that lives only in a step log expires with the run, which is
+      # exactly how `337` ended up with a per-call record nobody can produce.
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ always() && inputs.corpus == 'speech-format-pilot-v3' }}
         with:
@@ -382,6 +433,8 @@ jobs:
           path: |
             format-pilot-v3-rehearsal.sqlite3
             format-pilot-v3-rehearsal.jsonl
+            format-pilot-v3-rehearsal-verdict.json
+            format-pilot-v3-rehearsal-verdict.txt
           if-no-files-found: warn
 
   # ---------------------------------------------------------------------------
@@ -652,6 +705,52 @@ jobs:
             echo "question and this run does not ask it. \`inconclusive\` means"
             echo "nothing failed and something went unanswered; read which"
             echo "condition before reading it as a pass."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "verify exit: $rc"
+          exit "$rc"
+
+      # The verdict this run was bought for. The step above asks whether the
+      # spend reached a ledger; this one asks 344 §6's question -- did the
+      # candidate header come back as readable JSON where `337`'s did not --
+      # off the report alone, with no model and no socket.
+      #
+      # Written before the run it judges, which is the whole point of it.
+      # 5-of-5 is the bar, 4-of-5 is `format_lost`, and there is no flag here
+      # that turns one into the other once the number is on the screen.
+      #
+      # `always()` and a carried exit code for the same reasons as the step
+      # above, and one more: `format_lost` closes the candidate, and a closure
+      # that shipped under a green tick is a closure nobody reads.
+      - name: Check the pilot against 344 §6
+        if: ${{ always() && inputs.corpus == 'speech-format-pilot-v3' }}
+        run: |
+          set -uo pipefail
+          cd batch-runner
+          if [ ! -f "$GITHUB_WORKSPACE/audio-accuracy-measured.json" ]; then
+            echo "::warning::no report, so there is no pilot to check"
+            exit 0
+          fi
+          python scripts/verify_format_pilot_run.py \
+            "$GITHUB_WORKSPACE/audio-accuracy-measured.json" \
+            --out "$GITHUB_WORKSPACE/format-pilot-v3-verdict.json" \
+            | tee "$GITHUB_WORKSPACE/format-pilot-v3-verdict.txt"
+          rc=${PIPESTATUS[0]}
+          {
+            echo "## 344 §6 — the pilot"
+            echo
+            echo '```'
+            cat "$GITHUB_WORKSPACE/format-pilot-v3-verdict.txt"
+            echo '```'
+            echo
+            echo "The gate is the **envelope**, not the grading: did a reply"
+            echo "parse. Whether a verdict was *right* is 337/338's question and"
+            echo "this run does not ask it. The usable-verdict count is on the"
+            echo "page beside the gate and is **reported, not gated** — it is the"
+            echo "number most easily promoted into a result it cannot support."
+            echo
+            echo "\`format_lost\` closes the candidate. 344 §6 says a failure is"
+            echo "not grounds for re-ordering, so what follows that word is a"
+            echo "cause to investigate, not another dispatch."
           } >> "$GITHUB_STEP_SUMMARY"
           echo "verify exit: $rc"
           exit "$rc"
@@ -1110,7 +1209,9 @@ jobs:
       # 344's paid ledger, for the reason directly above and one more. Its
       # approval is written as a request count -- at most ten -- so the rows
       # are how anyone afterwards can say what was actually sent. 337 has no
-      # such file, and that is why 340 had to be written.
+      # such file, and that is why 340 had to be written. The §6 verdict rides
+      # with the rows it was computed from, so the two cannot drift apart into
+      # a claim on one page and the evidence on another.
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ always() && inputs.corpus == 'speech-format-pilot-v3' }}
         with:
@@ -1118,4 +1219,6 @@ jobs:
           path: |
             format-pilot-v3-measured.sqlite3
             format-pilot-v3-measured.jsonl
+            format-pilot-v3-verdict.json
+            format-pilot-v3-verdict.txt
           if-no-files-found: warn

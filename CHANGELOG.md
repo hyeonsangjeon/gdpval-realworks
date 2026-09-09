@@ -11,6 +11,43 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Fixed
+- **The backend gate now starts a run for the tree it asserts about.**
+  `backend-tests.yml` filtered on `batch-runner/**`, `scripts/**` and two
+  workflow files by name. Resolving every repo-root-relative path literal in
+  `batch-runner/tests/` against the tree found five directories that started no
+  run at all: `.github/` (30 literals across 25 test files), `data/` (35 across
+  26), `tasks/` (36 across 25), `infra/` (6 across 2) and `src/` (1 across 1).
+
+  That is not a theoretical gap. #468 edited a pinned hash under
+  `tasks/rebuilding_grading_task/`, started no run of this suite, merged, and
+  left `main` red -- the same failure #179 caused and the one this workflow was
+  written to prevent. Enumerating single files is what let the gap open twice,
+  so the filter is directory globs now: a new assertion about a new workflow or
+  a new task document is covered the day it is written.
+
+  `data/**` was checked rather than assumed, since it carries grading results:
+  over the last 60 commits on `main` it appears in 3, against 165 for
+  `batch-runner/`, and most commits touching it touch `batch-runner/` too and
+  already started a run. The bot-authored result PRs cannot start a
+  `pull_request` run at all, so this reaches human PRs only -- and tests do
+  assert about what is in `data/grades`.
+
+  Two assertions in `test_the_free_check_runs_in_ci.py` were checking literal
+  membership in the `paths` list, which scored the *wider* filter as a
+  regression while continuing to pass for one that named a single workflow and
+  missed twenty-nine other workflow references. They check coverage now,
+  through a written-out translation of GitHub's glob rules -- `*` stops at a
+  slash and `**` does not, which `fnmatch` gets wrong in the direction that
+  restores false confidence. Removing `tasks/**` turns the check red with a
+  message naming the file that would go ungated.
+
+  The job timeout goes 30 -> 45 minutes. Run `34341659511` was cancelled by the
+  old ceiling at 86% and its re-run of the identical tree passed in 22:10, with
+  the twelve runs before it taking 18-22 minutes. A cancelled run is reported
+  as a failure, so a ceiling that close to the mean turns runner variance into
+  a red gate. This is headroom for that variance, not for a slower suite.
+
 ### Added
 - **The Codex 401 is now surrounded by measurements, and four of its five
   candidate causes are closed.** Three runs on 2026-09-09 from `main` at
@@ -181,6 +218,30 @@ entries land under a fresh dated heading the day they merge to `main`.
   perfect candidate), a short run, an early stop, a retried call, a
   substituted header, a moved grader, mismatched claims, a missing ledger,
   and a paid run reporting `$0`.
+- **The `344` verdict is now computed where the run happens, on both the free
+  job and the paid one.** A checker that lives in the repository and is called
+  by nothing is a precondition satisfied on paper, and `344` §0 ticks boxes on
+  two checks that only exist in CI. `audio-accuracy-probe.yml` gains a step in
+  each job: the rehearsal is read from `audio-accuracy-dry-run.json`, the
+  pilot from `audio-accuracy-measured.json`, and each writes a verdict file
+  that is uploaded **with the ledger rows it was computed from** — `337`'s
+  per-call record lived only in an artifact, the artifact expired, and `340`
+  had to be written to say the numbers could no longer be produced.
+
+  Both steps run under `always()` and **carry the checker's exit code**, after
+  the summary is written so the reason is on the page when the step is red. A
+  rehearsal that came back `inconclusive` — wrong pin, short call count, no
+  ledger — under a green tick would clear a paid dispatch using the finding
+  that should have stopped it. Four tests break the workflow four ways (the
+  rehearsal step pointed at the paid filename, which would skip *silently*;
+  a swallowed exit code; the verdict files dropped from the upload; the steps
+  made conditional on success) and each goes red.
+- **What the checker actually opens, in its own docstring.** It said "the
+  report and the ledger export beside it"; it reads the report and the
+  pre-registration, and the ledger *reference* comes from inside the report's
+  cost block. The difference matters for a tool whose case rests on naming
+  exactly what it looks at — and it means a report stays checkable after the
+  `.sqlite3` beside it is gone.
 
 ### Fixed
 - **How `446acfd` came to sit red, since #469 fixed it without the two dates
@@ -189,14 +250,44 @@ entries land under a fresh dated heading the day they merge to `main`.
   while `344` was being written. Neither PR could have caught it: #467 was
   green before `344`'s test existed and #468 was green before #467 merged
   (08:42 and 09:00 against 08:53). Both were right about the tree they ran on
-  and wrong about the tree they made. Nothing runs the suite on a push to
-  `main`, so nothing said so for the seventy minutes in between. #469 moved
-  the row; independently re-measured here, the **other three** pins — price
-  `b01b384c…`, manifest `97755288…`, candidate header `dd0380fa…` — had not
-  moved, so the one line that changed is the one `core/` reaches.
-  **`main` having no test run of its own is not fixed here**, and it is the
-  part that will happen again; fixing it belongs with whoever owns
-  `.github/workflows/` next.
+  and wrong about the tree they made. #469 moved the row; independently
+  re-measured here, the **other three** pins — price `b01b384c…`, manifest
+  `97755288…`, candidate header `dd0380fa…` — had not moved, so the one line
+  that changed is the one `core/` reaches.
+- **Correction to the entry above, which said nothing runs the suite on a
+  push to `main`.** That is wrong, and the run that disproves it is the one
+  the entry is about. `backend-tests.yml` has had `push: branches: [main]` all
+  along; commit `446acfd` started run `34332874303` at 09:06 and it finished
+  `failure` at 09:28 with `assert 'ee1ca0b0…' == '7e745a18…'` — 1 failed, 9195
+  passed. CI named the wrong line, in the right file, within twenty-two
+  minutes. Nobody read it.
+
+  Two mechanisms are real, and neither is the one first written down. The
+  `push` trigger is **paths-filtered** to `batch-runner/**`, `scripts/**` and
+  two named workflow files, so #469 — which edited one `tasks/**` document and
+  nothing else — started no run at all: the change that returned `main` to
+  green was never itself run on `main`. Green came back at 10:32 on `ce164ad5`,
+  a later merge that happened to touch a filtered path. Separately,
+  `concurrency: cancel-in-progress` keyed on `github.ref` means consecutive
+  merges cancel each other's `main` runs: `7a8c94de` (#467) and `cb043afa`
+  (#472) both carry `cancelled`, so two commits sit on `main` with no verdict
+  either way — and a cancelled run is not visually distinct from a passing one
+  in a branch listing.
+
+  This matters to `344` beyond bookkeeping. §0's last precondition re-pins §2's
+  four fingerprints in a `tasks/**` document, which is precisely the change
+  shape that starts no run — the pins would land unverified unless something
+  else touches a filtered path in the same commit. §0 now carries the remedy:
+  `backend-tests.yml` accepts `workflow_dispatch` with a required
+  `expected_sha`, so a doc-only commit can be given a real verdict without a
+  decorative edit to a filtered path. This entry's own PR had no checks at all
+  for exactly the reason it describes, and was dispatched that way.
+
+  **Still not fixed here.** Both mechanisms live in `.github/workflows/`
+  trigger blocks, which is A's lane this week; changing them while A's Codex
+  work is mid-flight is how the collision above happened in the first place.
+  Recorded with the run IDs so the next person owns a measurement rather than
+  a hunch.
 - **`verify_format_pilot_run.py` is named in `.gitignore`, which is not a
   formality.** `batch-runner/scripts/*` is ignored and files are re-admitted
   one `!` line at a time, so the checker was written, tested green and absent
