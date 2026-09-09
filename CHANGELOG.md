@@ -11,6 +11,43 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Fixed
+- **The backend gate now starts a run for the tree it asserts about.**
+  `backend-tests.yml` filtered on `batch-runner/**`, `scripts/**` and two
+  workflow files by name. Resolving every repo-root-relative path literal in
+  `batch-runner/tests/` against the tree found five directories that started no
+  run at all: `.github/` (30 literals across 25 test files), `data/` (35 across
+  26), `tasks/` (36 across 25), `infra/` (6 across 2) and `src/` (1 across 1).
+
+  That is not a theoretical gap. #468 edited a pinned hash under
+  `tasks/rebuilding_grading_task/`, started no run of this suite, merged, and
+  left `main` red -- the same failure #179 caused and the one this workflow was
+  written to prevent. Enumerating single files is what let the gap open twice,
+  so the filter is directory globs now: a new assertion about a new workflow or
+  a new task document is covered the day it is written.
+
+  `data/**` was checked rather than assumed, since it carries grading results:
+  over the last 60 commits on `main` it appears in 3, against 165 for
+  `batch-runner/`, and most commits touching it touch `batch-runner/` too and
+  already started a run. The bot-authored result PRs cannot start a
+  `pull_request` run at all, so this reaches human PRs only -- and tests do
+  assert about what is in `data/grades`.
+
+  Two assertions in `test_the_free_check_runs_in_ci.py` were checking literal
+  membership in the `paths` list, which scored the *wider* filter as a
+  regression while continuing to pass for one that named a single workflow and
+  missed twenty-nine other workflow references. They check coverage now,
+  through a written-out translation of GitHub's glob rules -- `*` stops at a
+  slash and `**` does not, which `fnmatch` gets wrong in the direction that
+  restores false confidence. Removing `tasks/**` turns the check red with a
+  message naming the file that would go ungated.
+
+  The job timeout goes 30 -> 45 minutes. Run `34341659511` was cancelled by the
+  old ceiling at 86% and its re-run of the identical tree passed in 22:10, with
+  the twelve runs before it taking 18-22 minutes. A cancelled run is reported
+  as a failure, so a ceiling that close to the mean turns runner variance into
+  a red gate. This is headroom for that variance, not for a slower suite.
+
 ### Added
 - **The connection question now has a free half: the token is minted the way
   Codex mints it, and the host is asked to list its models.**
