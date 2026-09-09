@@ -894,6 +894,174 @@ def _final_text(turn: Any, summary: Mapping[str, Any]) -> str:
     return ""
 
 
+# ── The free half: does the token work on this host at all? ─────────────────
+
+#: The read-only record's own format, kept apart from the connection record
+#: because it answers a different question and a reader must not confuse a
+#: model listing with a turn.
+READ_ONLY_SCHEMA = "codex_foundry_readonly_probe/1"
+
+#: Seconds for the token command and for the listing. Short: both are meant to
+#: be quick, and a hang here would otherwise look like a network verdict.
+READ_ONLY_TIMEOUT_SECONDS = 60
+
+
+def mint_token_the_way_codex_does(
+    settings: CodexProviderSettings, *, timeout: int = READ_ONLY_TIMEOUT_SECONDS
+) -> str:
+    """Run the provider's ``auth.command`` and return what it printed.
+
+    This is the point of the whole read-only probe. The Python paths that grade
+    and infer mint their token *in process*, through
+    ``get_bearer_token_provider``. Codex does not: it runs the argv in
+    ``auth.command`` as a child process and reads stdout. Those two can resolve
+    to different credentials in the same job — a chain that finds an
+    environment credential in one and falls through to the CLI session in the
+    other — and nothing in this repository had ever compared them.
+
+    The token is returned and never logged. The exception raised on failure
+    carries the command's *stderr* only; stdout is where the token would be, so
+    stdout is not quoted even when the command fails.
+    """
+    import subprocess
+
+    completed = subprocess.run(  # noqa: S603 - argv built by the settings object
+        settings.auth_command,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        check=False,
+    )
+    if completed.returncode != 0:
+        raise RuntimeError(
+            f"the auth command exited {completed.returncode}: "
+            f"{(completed.stderr or '').strip()[:MESSAGE_LIMIT]}"
+        )
+    token = (completed.stdout or "").strip()
+    if not token:
+        raise RuntimeError("the auth command succeeded but printed no token")
+    return token
+
+
+def list_models_read_only(
+    settings: CodexProviderSettings,
+    token: str,
+    *,
+    timeout: int = READ_ONLY_TIMEOUT_SECONDS,
+) -> dict[str, Any]:
+    """``GET {base_url}/models`` with the token Codex would have sent.
+
+    A listing, not a turn: no prompt, no completion, nothing to generate. It is
+    the same host, the same ``/openai/v1/`` contract and the same
+    ``Authorization: Bearer`` header the turn uses, which is exactly what makes
+    it able to separate two things a 401 on the turn cannot:
+
+    * ``200`` — the token is accepted by this resource. Whatever refused the
+      turn refused something narrower than "this identity".
+    * ``401`` — the refusal reproduces without spending anything, and the
+      question moves to the token itself.
+
+    Model names are counted, never recorded. The count and one boolean are
+    enough to answer the question, and a deployment list is the sort of thing
+    that names a resource.
+    """
+    import urllib.error
+    import urllib.request
+
+    url = f"{settings.base_url}/models"
+    request = urllib.request.Request(  # noqa: S310 - scheme fixed by classify_endpoint
+        url,
+        method="GET",
+        headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+    )
+    outcome: dict[str, Any] = {
+        "requested": "GET /models",
+        "status": None,
+        "models_listed": None,
+        "deployment_listed": None,
+        "error": None,
+    }
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310
+            outcome["status"] = int(response.status)
+            body = response.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as exc:
+        outcome["status"] = int(exc.code)
+        outcome["error"] = (exc.reason or "").strip()[:MESSAGE_LIMIT] or None
+        return outcome
+    except Exception as exc:  # noqa: BLE001 - a transport failure is a finding
+        outcome["error"] = f"{type(exc).__name__}: {exc}"[:MESSAGE_LIMIT]
+        return outcome
+
+    try:
+        payload = json.loads(body)
+    except ValueError:
+        outcome["error"] = "the listing was not JSON"
+        return outcome
+    entries = payload.get("data") if isinstance(payload, Mapping) else None
+    if not isinstance(entries, list):
+        outcome["error"] = "the listing carried no data array"
+        return outcome
+    identifiers = {
+        entry.get("id") for entry in entries if isinstance(entry, Mapping)
+    }
+    outcome["models_listed"] = len(entries)
+    outcome["deployment_listed"] = settings.model in identifiers
+    return outcome
+
+
+#: What a 200 here still does not buy. Written out because "the token works"
+#: is the exact claim a reader would over-read this record into.
+NOT_ESTABLISHED_BY_A_LISTING: tuple[str, ...] = (
+    "the turn leg: a listing is not a completion. A resource can list its "
+    "models to an identity and still refuse that identity's inference",
+    "the deployment leg: `deployment_listed` says the name appears in the "
+    "listing, not that this identity may call it",
+    "the cost leg: no inference was requested, so no tokens were generated. "
+    "This record does not price the call and an unpriced call is not a proven "
+    "free one",
+)
+
+
+def read_only_probe(
+    settings: CodexProviderSettings,
+    *,
+    timeout: int = READ_ONLY_TIMEOUT_SECONDS,
+    redact: Callable[[Any], str],
+) -> dict[str, Any]:
+    """Mint the token the way Codex does, then ask the host to list models."""
+    description = describe_settings(settings)
+    record: dict[str, Any] = {
+        "schema": READ_ONLY_SCHEMA,
+        "inference_requested": False,
+        "settings": description,
+        "settings_fingerprint": settings_fingerprint(description),
+        "endpoint_host_fingerprint": host_fingerprint(settings.base_url),
+        "token": {
+            "minted": False,
+            "mechanism": "auth_command",
+            "how": (
+                "the provider's auth.command was run as a child process, which "
+                "is how the Codex runtime obtains it -- not the in-process "
+                "provider the grading and inference paths use"
+            ),
+            "error": None,
+        },
+        "listing": None,
+        "not_established": list(NOT_ESTABLISHED_BY_A_LISTING),
+    }
+    try:
+        token = mint_token_the_way_codex_does(settings, timeout=timeout)
+    except Exception as exc:  # noqa: BLE001 - a mint failure is the finding
+        record["token"]["error"] = redact(exc)
+        return record
+    record["token"]["minted"] = True
+    record["listing"] = list_models_read_only(settings, token, timeout=timeout)
+    if record["listing"].get("error"):
+        record["listing"]["error"] = redact(record["listing"]["error"])
+    return record
+
+
 # ── Command line ────────────────────────────────────────────────────────────
 
 
@@ -945,6 +1113,14 @@ def main(argv: list[str] | None = None) -> int:
         "nothing is sent, so the request can be fixed before it is paid for.",
     )
     parser.add_argument(
+        "--read-only-probe",
+        action="store_true",
+        help="mint the token the way the Codex runtime does and ask the host "
+        "to list its models. No prompt, no completion, no turn. Answers "
+        "whether a refusal is about this identity or about something "
+        "narrower, without sending anything that could generate a token.",
+    )
+    parser.add_argument(
         "--timeout",
         type=int,
         default=DEFAULT_TIMEOUT_SECONDS,
@@ -956,6 +1132,12 @@ def main(argv: list[str] | None = None) -> int:
         help="write the record here as well as to standard output.",
     )
     args = parser.parse_args(argv)
+
+    if args.read_only_probe and args.send_request:
+        parser.error(
+            "--read-only-probe and --send-request ask different questions and "
+            "write different records; run them separately"
+        )
 
     redact = build_redactor()
 
@@ -974,6 +1156,14 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     description = describe_settings(settings)
+
+    if args.read_only_probe:
+        record = read_only_probe(settings, redact=redact)
+        _emit(record, args.out)
+        # Non-zero unless the host both minted a token and answered 200: this
+        # is a diagnostic, and "the probe ran" is not the result.
+        listing = record.get("listing") or {}
+        return 0 if listing.get("status") == 200 else 1
 
     if not args.send_request:
         _emit(_plan(description), args.out)

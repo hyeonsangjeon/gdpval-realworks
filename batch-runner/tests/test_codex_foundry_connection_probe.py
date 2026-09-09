@@ -1007,9 +1007,16 @@ def test_the_script_the_workflow_runs_is_in_the_repository():
 
 
 def _redaction_check() -> str:
+    """The leak check's script, selected by the step's id.
+
+    This used to be "the first step containing a heredoc", which was true right
+    up until a second heredoc step was added ahead of it — at which point every
+    test below silently changed subject and started asserting redaction rules
+    about a step that has none. Pin it to the id.
+    """
     for step in _steps().values():
-        run = step.get("run", "")
-        if "<<'PY'" in run:
+        if step.get("id") == "leak_check":
+            run = step.get("run", "")
             return run.split("<<'PY'", 1)[1].split("\nPY", 1)[0]
     raise AssertionError("the workflow has no redaction check")
 
@@ -1025,6 +1032,12 @@ def _run_redaction_check(tmp_path, plan, endpoint=None):
     ).replace(
         '"/tmp/codex-foundry-connection.json"',
         json.dumps(str(tmp_path / "absent.json")),
+    ).replace(
+        # Every path in the checked list has to be pointed somewhere this test
+        # owns. Left alone, this one reads whatever a real dispatch happened to
+        # leave in /tmp on this machine.
+        '"/tmp/codex-foundry-readonly.json"',
+        json.dumps(str(tmp_path / "absent-readonly.json")),
     )
     script.write_text(body, encoding="utf-8")
     environment = dict(os.environ)

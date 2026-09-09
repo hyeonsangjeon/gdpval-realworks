@@ -12,6 +12,40 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Added
+- **The connection question now has a free half: the token is minted the way
+  Codex mints it, and the host is asked to list its models.**
+  `--read-only-probe` runs the provider's `auth.command` **as a child process
+  and reads stdout** — which is how the Codex runtime obtains its token, and
+  not how the grading and inference paths obtain theirs — then issues
+  `GET {base_url}/models`. No prompt, no completion, nothing to generate; it
+  runs on every dispatch including the dry ones.
+
+  It exists because run `34319880025`'s 401 survived every offline check made
+  against it. The URL (`https://<account>.services.ai.azure.com/openai/v1/`),
+  the token scope (`DIRECT_TOKEN_SCOPE`), the header name and format
+  (`authorization: Bearer …`, measured on the wire) and the OIDC identity all
+  match the direct-v1 path grading uses successfully for tens of thousands of
+  rows — so **none of them explains the refusal, and the fault is not
+  located.** Where the token comes from was the one difference nobody had
+  measured. A `200` says this resource accepts that token and moves the
+  question to something narrower than the identity; a `401` reproduces the
+  refusal having spent nothing; `deployment_listed: false` would say the name
+  asked for is not on the resource at all.
+
+  The record is `codex_foundry_readonly_probe/1` and carries
+  `inference_requested: false`. Model names are **counted, never recorded** —
+  a deployment list names a resource. The token is never in the record, and a
+  failing auth command has its **stdout withheld** while its stderr is quoted,
+  because a credential chain can print a token and then exit non-zero on a
+  later step.
+- **What a green listing still does not buy is written into the record
+  itself**, as `not_established`: a listing is not a completion and a resource
+  can list to an identity it will not let infer; `deployment_listed` says a
+  name appears, not that this identity may call it; and no inference was
+  requested, so **the call is unpriced — which is not the same as proven
+  free.** Without this, a 200 here is exactly the result that gets quoted as
+  "the connection works".
+
 - **The Codex diagnostic's "no retries" is now a setting the runtime reads,
   not a line it wrote about itself — and one turn against a 500 stopped being
   thirty requests.** `request_plan()` reported `retries_configured: 0` while
@@ -63,6 +97,28 @@ entries land under a fresh dated heading the day they merge to `main`.
   as `343` §5.1 says they do on the next `core/` merge — re-measure before
   buying, do not carry `ee1ca0b0…` forward. No grade run was in flight when
   this merged.
+
+### Fixed
+- **The workflow's leak check would have crashed on the record it was being
+  asked to check.** It indexed `record["observed"]` unconditionally, which the
+  read-only record has no key for, so publishing one would have raised
+  `KeyError` inside an `always()` step and failed the job *after* the run
+  rather than before it. It now branches on the record's own `schema` and
+  enforces `inference_requested is false` on the new shape — deliberately not
+  `.get("observed", {})`, which would have been shorter and would have turned
+  a renamed field in the connection record into a silent pass.
+
+  The workflow's own script is now executed by
+  `tests/test_codex_readonly_token_probe.py` against both record shapes;
+  reverting the branch turns three of those tests red with the actual
+  `KeyError`. Nothing had run that heredoc before, which is why a one-line
+  indexing bug reached a workflow file.
+- **`_redaction_check()` was selecting "the first step containing a heredoc"**
+  and silently changed subject the moment a second heredoc step was added
+  ahead of it — six tests began asserting redaction rules about a step that
+  has none. It now selects by step id, and the readonly record's path is
+  redirected into the test's own directory like the other two, instead of
+  reading whatever a real dispatch left in `/tmp` on the machine.
 
 ### Changed
 - **`CodexProviderSettings` refuses a retry count that is not a whole
