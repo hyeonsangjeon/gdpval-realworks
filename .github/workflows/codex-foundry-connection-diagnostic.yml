@@ -41,14 +41,27 @@
 #     instead, and every runtime message passes through a redactor first. The
 #     step below re-checks that after the fact rather than trusting it.
 #
-# Cost. One turn, one prompt of about 135 characters, no tools, and retries
-# pinned off in the provider table the runtime actually reads — not merely
-# asserted in the plan. That distinction was real: until the pins existed, the
-# plan said `retries_configured: 0` while the runtime used its own defaults,
-# and one turn against a 500 sent thirty requests. Measured against the pinned
-# binary in `batch-runner/tests/test_codex_retry_pins_are_enforced.py`, which
-# also records the one case pinning does not reduce to a single request — a
-# 401 costs two, because the runtime re-mints the token once and retries.
+# Cost. One turn and retries pinned off in the provider table the runtime
+# actually reads — not merely asserted in the plan. That distinction was real:
+# until the pins existed, the plan said `retries_configured: 0` while the
+# runtime used its own defaults, and one turn against a 500 sent thirty
+# requests. Measured against the pinned binary in
+# `batch-runner/tests/test_codex_retry_pins_are_enforced.py`, which also
+# records the one case pinning does not reduce to a single request — a 401
+# costs two, because the runtime re-mints the token once and retries.
+#
+# What that one turn bills for is *not* the 135-character prompt. This note
+# used to say "one prompt of about 135 characters, no tools", which was the
+# same error it warns about above: a property of the plan asserted about the
+# runtime. The turn puts about 45.9 KB on the wire — roughly 21 KB of Codex
+# system `instructions`, 18 KB of ten `tools` definitions sent with
+# `tool_choice: auto`, and 5 KB of `input` — and no prompt wording or config
+# key removes the tools. Measured in
+# `batch-runner/tests/test_what_one_codex_turn_actually_sends.py`. The turn is
+# still cheap and still one request; the prompt length is simply not what
+# makes it so, and a contrast against the direct Python path cannot be matched
+# on body size.
+#
 # `send_request: false` is the default, and with it nothing is sent at all —
 # the job prints the plan, fingerprinted, and stops. The plan and the result
 # share a schema, so what was fixed beforehand and what happened can be
@@ -581,7 +594,8 @@ jobs:
             echo "- verdict: \`${VERDICT}\`"
             echo "- did the provider answer at all: \`${ANSWERED}\`"
             echo "- request sent: \`${{ inputs.send_request }}\`"
-            echo "- tool execution observed: \`false\` — this prompt forbids tools, by design"
+            echo "- tool *execution* observed: \`false\` — the prompt forbids running any, and none ran"
+            echo "- tool *definitions sent*: \`10\`, with \`tool_choice: auto\` — the runtime attaches these to every turn and no prompt wording or config key removes them; measured offline by \`batch-runner/tests/test_what_one_codex_turn_actually_sends.py\`"
             echo ""
             echo "### 무과금 읽기 전용 확인 (턴 없음)"
             echo ""

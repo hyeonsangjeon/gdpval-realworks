@@ -417,8 +417,20 @@ EXPECTED_REPLY = "CONNECTED"
 
 #: One turn. Codex opens its own requests inside a turn and does not report how
 #: many, which is the ``call_reachability_unknown`` the cost adapter records;
-#: what is fixed here is the boundary this script controls.
+#: what is fixed here is the boundary this script controls. For the refusal
+#: case the count is no longer unknown: a turn answered ``401`` makes exactly
+#: two POSTs to ``/v1/responses`` and no request of any other verb, measured in
+#: ``tests/test_what_one_codex_turn_actually_sends.py``. A turn that is *served*
+#: is still unmeasured, so the unknown stands for the case that matters to cost.
 TURNS_SENT = 1
+
+#: How many tool definitions the runtime attaches to a turn regardless of the
+#: prompt. Not a preference and not something this script sets -- a measured
+#: property of the pinned binary, asserted against the wire in
+#: ``tests/test_what_one_codex_turn_actually_sends.py`` so that this number and
+#: the record cannot drift apart. If that test fails on a version bump, the
+#: runtime changed and this constant is what to update.
+TOOL_DEFINITIONS_THE_RUNTIME_ALWAYS_SENDS = 10
 
 #: Wall clock for that turn. Long enough for a cold provider, short enough that
 #: a hang is a finding rather than a bill.
@@ -467,6 +479,18 @@ def request_plan(description: Mapping[str, Any] | None = None) -> dict[str, Any]
             ),
         },
         "tools_requested": False,
+        "tool_definitions_sent": TOOL_DEFINITIONS_THE_RUNTIME_ALWAYS_SENDS,
+        "tools_note": (
+            "`tools_requested: false` is a property of this plan: the prompt "
+            "asks for none and none ran, which `tool_execution_observed` "
+            "records separately. It is not a property of the request. The "
+            "runtime attaches its own tool definitions to every turn with "
+            "`tool_choice: auto`, and no prompt wording or key in "
+            "core/codex_runtime_config.py removes them, so the body is about "
+            "45.9 KB rather than the 135 characters of the prompt. Measured "
+            "offline against the pinned binary in "
+            "tests/test_what_one_codex_turn_actually_sends.py"
+        ),
     }
 
 

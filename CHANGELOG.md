@@ -12,6 +12,65 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Added
+- **A measurement of what one Codex turn actually puts on the wire, replacing
+  two claims that were true of narrower things than they were asserted about.**
+  `batch-runner/tests/test_what_one_codex_turn_actually_sends.py` drives the
+  pinned `0.147.0` runtime against a loopback server that answers `401` to
+  everything — production's own failure — and records all seven HTTP verbs.
+
+  The existing retry-pin harness implements `do_POST` and nothing else, so
+  `BaseHTTPRequestHandler` answers any other verb with `501` without ever
+  calling the recorder: a `GET` the runtime made would have been refused by the
+  instrument and left no trace in the count that said one request was sent.
+  "One request" and "one request of the only kind we looked for" are different
+  measurements, and only the second had been made. The first now has an answer:
+  **two POSTs to `/v1/responses`, no `GET`, no other verb**, and the token
+  command runs twice — the re-mint that pinning does not remove.
+
+  The turn body is **about 45.9 KB**, not the 135 characters of the prompt:
+  roughly 21 KB of Codex system `instructions`, 18 KB of **ten `tools`
+  definitions** sent with `tool_choice: auto`, and 5 KB of `input`. Nothing in
+  `core/codex_runtime_config.py` removes them.
+
+  A test that asserts an absence passes just as well by not looking, which is
+  the failure being corrected one layer down, so
+  `test_the_recorder_actually_sees_every_verb_it_claims_to` sends one request
+  of each verb by hand and requires all seven back. Reverting the handler
+  installation to POST-only reproduces the original blind spot exactly —
+  `('GET', 501)` — with the other five tests still green.
+
+  Also here, needing no runtime and no credential: both the Codex diagnostic
+  and the working inference path derive their endpoint from
+  `FOUNDRY_PROJECT_ENDPOINT` through `AzureAIRouteSettings.from_env`, and
+  running both derivations against a stand-in account name shows they post to
+  the same URL at the same token scope. That closes "the address is wrong" as a
+  cause of the Codex 401 by measurement rather than by reading the source.
+
+- **The four cheapest explanations for the Codex 401, closed with a fake
+  token.** Run `34361684546` established that the minted bearer *clears* this
+  host's auth gate (`400 Missed model deployment`) while a plainly invalid
+  bearer is stopped at it (`401 Access denied due to invalid subscription
+  key…`) — and that second message is byte for byte what the paid turn
+  `34347516170` received. The token is therefore acceptable and the runtime is
+  answered as though it were not, which puts the difference on the
+  transmission side.
+
+  Pushing a **fake** token through the pinned binary into a local mock server —
+  no credential, nothing off loopback — shows the credential arrives intact on
+  both requests: header present, `Bearer` scheme, value **exactly** what the
+  auth command printed, and no second credential header alongside. Malformed
+  header, truncated token, missing prefix and a competing `api-key` are all
+  ruled out.
+
+  The fault is not found; four places it would have been cheapest to find it
+  are. What remains is fixed in a test so the next diagnostic aims at the right
+  thing: seven runtime headers the working `openai.OpenAI` client does not
+  send, `stream: true`, and a body two orders of magnitude larger. **No role
+  grant is indicated by any of this and none is being requested** — the earlier
+  `role_missing_and_an_owner_must_grant_it` verdict belongs to the
+  project-scoped Code Interpreter arm and does not transfer to this account
+  route.
+
 - **A free two-armed probe that separates "the bearer was refused" from "the
   bearer got through and something later refused".**
   `diagnose_codex_foundry_connection.py --auth-discriminator` posts a body the
@@ -53,6 +112,29 @@ entries land under a fresh dated heading the day they merge to `main`.
   and the artifact upload carry the new record.
 
 ### Fixed
+- **Three cost and capability notes that understated one Codex turn by about
+  340×.** The diagnostic's job summary said `tool execution observed: false —
+  this prompt forbids tools, by design`; its header comment said the turn costs
+  "one prompt of about 135 characters, no tools"; `TASK_NATIVE_CODEX_RUN_PATH.md`
+  and a docstring in `test_codex_foundry_connection_probe.py` said the same.
+
+  All four were true of *execution* and of the *plan*, and false of the
+  request. The runtime attaches ten tool definitions and `tool_choice: auto` to
+  every turn, and no prompt wording or config key removes them, so the billed
+  input is dominated by the ~39 KB of `instructions` and `tools` rather than by
+  the prompt. This is the same error those notes themselves warn about one
+  paragraph earlier — before the retry pins landed, the plan said
+  `retries_configured: 0` while the runtime used its own defaults and one turn
+  against a 500 sent thirty requests. A property of the plan was again being
+  asserted about the runtime.
+
+  Each now separates the two and cites the measurement. The consequence is
+  recorded rather than smoothed over: a body-matched A/B between the Codex path
+  and the direct Python path is not available, because Codex sends 45.9 KB with
+  ten tools whatever the prompt says. A contrast can control for resource,
+  deployment, identity, route and token audience — not for body — and must say
+  so.
+
 - **The backend gate now starts a run for the tree it asserts about.**
   `backend-tests.yml` filtered on `batch-runner/**`, `scripts/**` and two
   workflow files by name. Resolving every repo-root-relative path literal in
