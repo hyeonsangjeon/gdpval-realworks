@@ -68,8 +68,51 @@ entries land under a fresh dated heading the day they merge to `main`.
   beside the one Codex performs through its provider auth command, on a run
   whose premise is that the model reaches the deployment exactly one
   documented way.
+- **A batch dispatch can now open the Codex gate.**
+  `step2_run_inference._require_runnable_execution_mode` refuses
+  `codex_foundry` unless `CODEX_FOUNDRY_CONNECTION_CONFIRMED` is set, and
+  `batch-run.yml` had no way to set it, so the mode ran only through its own
+  tests. It now takes a `codex_foundry_confirmed` dispatch input that defaults
+  to false. The gate itself does not change: what the box says is not that the
+  connection works — run `34465567349` settled that — but the separate thing,
+  that a person looked at this experiment and decided this batch may spend.
+  - The decision is made in `inspect-mode`, the job that holds no credentials
+    and whose checkout does not persist any, beside the agentic check and for
+    the same reason: it decides whether a credentialed job starts at all.
+  - A `codex_foundry` dispatch without the box **fails** rather than skipping,
+    in a `reject-unconfirmed-codex` job shaped like `reject-agentic` — no
+    checkout, nothing with credentials, `exit 1`. A skipped job reads as
+    "nothing to do"; this has to read as "refused". The credentialed job is
+    guarded by its own `if` as well, because the two are siblings and a red
+    sibling does not stop a job that has already started spending.
+  - `CODEX_FOUNDRY_CONNECTION_CONFIRMED` is derived from the box itself and
+    never from the block. `codex_blocked` is false in two unrelated
+    situations — the box was ticked, and the credential-free parser did not
+    read this as a Codex experiment — and only the first means somebody
+    decided. A step inside the job covers the second: if `ExperimentConfig`
+    sees a `codex_foundry` run that the Ruby missed, it stops there, ahead of
+    every credential the job holds.
+  - The input is forwarded on every relay leg. A leg is the same run
+    continuing, and an input that is not forwarded is a run that spends on leg
+    0 and is refused on leg 1. That is now checked for *every* dispatch input
+    rather than for this one, because the next input added has the same bug.
+  - Anything that is not exactly `true` or `false` aborts. The safe reading of
+    a value nobody understands is not "spend".
+
+  The box is inert for every other mode, ticked or not, rather than an error:
+  the relay forwards every input on every leg, and a run must not start
+  failing halfway through for carrying a flag it never used.
 
 ### Changed
+- **The Codex readiness record narrows its gate blocker rather than dropping
+  it.** It said the gate was closed and `batch-run.yml` did not set it; the
+  second half is no longer true. What the reason is actually about — that
+  somebody decides this batch may spend — is unchanged, so the blocker stays
+  and says what it now is: shut by default, opened at dispatch, failing in a
+  job that holds no credentials when it is not. "There is no way to open it"
+  is retired in
+  `test_the_codex_blockers_are_about_the_task_not_about_the_connection` so it
+  cannot come back as a reason after being built. The count stays at two.
 - **The Codex readiness record drops the two blockers this change cleared.**
   It listed three; two of them named code — no experiment file could ask for
   the mode, and the configuration could not reach the runner if one did — and
