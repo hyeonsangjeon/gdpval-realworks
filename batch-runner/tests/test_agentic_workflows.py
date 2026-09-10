@@ -60,8 +60,16 @@ def test_general_batch_blocks_agentic_before_any_credential_step():
         "needs.inspect-mode.outputs.uses_agentic == 'true'"
     )
     assert batch_job["needs"] == "inspect-mode"
+    # The agentic guard is one conjunct of this now rather than the whole of
+    # it: codex_foundry gained a gate of its own, checked in the same
+    # credential-free job and asserted in
+    # test_a_batch_dispatch_can_open_the_codex_gate.py. Kept as an equality so
+    # that a later change to either guard is visible here, and the agentic half
+    # asserted separately so that what this test is *for* survives the wording.
+    assert "needs.inspect-mode.outputs.uses_agentic != 'true'" in batch_job["if"]
     assert batch_job["if"] == (
-        "needs.inspect-mode.outputs.uses_agentic != 'true'"
+        "needs.inspect-mode.outputs.uses_agentic != 'true' && "
+        "needs.inspect-mode.outputs.codex_blocked != 'true'"
     )
     batch_checkout = next(
         step for step in steps if step.get("name") == "Checkout"

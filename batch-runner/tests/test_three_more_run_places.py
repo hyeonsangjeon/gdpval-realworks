@@ -187,6 +187,11 @@ def test_the_codex_blockers_are_about_the_task_not_about_the_connection():
         # so that neither can come back as a reason after being built.
         "no experiment asks for this place",
         "the configuration cannot reach the runner",
+        # Cleared by the change that added the codex_foundry_confirmed
+        # dispatch input. The gate is still shut by default and a person still
+        # opens it, which is why a blocker still describes it -- but "there is
+        # no way to open it" is a different claim and it is no longer true.
+        "batch-run.yml does not set it",
     )
     for reason in reasons:
         for phrase in retired:

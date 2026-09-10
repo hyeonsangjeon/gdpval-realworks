@@ -190,15 +190,24 @@ DOCUMENTED_BLOCKERS_BY_ENVIRONMENT: Mapping[str, tuple[str, ...]] = {
     # Two are left, and neither is about reaching the model or about wiring.
     # One is a decision a person has to make and this repository must not make
     # for them. The other is the only thing that has never happened.
+    #
+    # The first of those has since been narrowed rather than cleared, and the
+    # difference is worth keeping straight. It used to say there was no way to
+    # open the gate at all; there is now, and it is a dispatch input that
+    # defaults to off. That does not clear the reason, because what the reason
+    # is actually about — that somebody decides this batch may spend — is
+    # unchanged. It only stops being an obstacle and starts being a step.
     ENVIRONMENT_CODEX_COMMAND_LINE_TOOL_FOUNDRY: (
-        "the batch gate is closed and only a person may open it: "
+        "the batch gate is shut unless a person opens it at dispatch: "
         "step2_run_inference._require_runnable_execution_mode raises for this "
         "mode unless CODEX_FOUNDRY_CONNECTION_CONFIRMED is set, and "
-        ".github/workflows/batch-run.yml does not set it. The gate is "
-        "deliberately a setting rather than a reading of this repository's own "
-        "code: 'a request was answered' and 'this batch may spend' are "
-        "different claims, and one answered turn cost 28 output tokens while a "
-        "batch leg is a different order of commitment",
+        ".github/workflows/batch-run.yml sets it only for a run dispatched "
+        "with codex_foundry_confirmed true — an input that defaults to false, "
+        "whose absence fails the run in a job that holds no credentials. The "
+        "gate is deliberately a decision rather than a reading of this "
+        "repository's own code: 'a request was answered' and 'this batch may "
+        "spend' are different claims, and one answered turn cost 28 output "
+        "tokens while a batch leg is a different order of commitment",
         "no task has produced a deliverable through this place against the "
         "real deployment: the turn that was answered carried no tools and "
         "wrote no file (the connection record reports "
@@ -1003,6 +1012,18 @@ def inspect_environment_support(
                 "for this mode and passes both the settings and the run's "
                 "cost ledger to the runner — see "
                 "tests/test_an_experiment_can_ask_for_the_codex_run_place.py"
+            )
+            evidence.append(
+                "the batch workflow can now be told to open the gate: "
+                ".github/workflows/batch-run.yml takes a "
+                "codex_foundry_confirmed input that defaults to false, decides "
+                "on it in the credential-free inspect-mode job, refuses a "
+                "codex_foundry dispatch without it before any credentialed job "
+                "starts, and sets CODEX_FOUNDRY_CONNECTION_CONFIRMED for step "
+                "2a only from the input itself — see "
+                "tests/test_a_batch_dispatch_can_open_the_codex_gate.py, whose "
+                "truth table is executed against the real experiment files "
+                "rather than described"
             )
             blockers.extend(
                 DOCUMENTED_BLOCKERS_BY_ENVIRONMENT.get(environment, ())

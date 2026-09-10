@@ -43,6 +43,11 @@ on:
         required: false
         type: string
         default: ''
+      codex_foundry_confirmed:
+        description: 'codex_foundry only: this batch may spend on the Foundry deployment. Ignored by every other mode; a codex_foundry dispatch without it fails before any credentialed job starts.'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write        # to commit yaml results
@@ -62,6 +67,9 @@ jobs:
       contents: read
     outputs:
       uses_agentic: ${{ steps.mode.outputs.uses_agentic }}
+      uses_codex_foundry: ${{ steps.mode.outputs.uses_codex_foundry }}
+      codex_confirmed: ${{ steps.mode.outputs.codex_confirmed }}
+      codex_blocked: ${{ steps.mode.outputs.codex_blocked }}
     steps:
       - name: Verify dispatch contract
         env:
@@ -111,6 +119,14 @@ jobs:
         id: mode
         env:
           EXPERIMENT_YAML: ${{ inputs.experiment_yaml }}
+          # Read through the environment on purpose. A `workflow_dispatch`
+          # boolean is a boolean in `inputs` but arrives as the string "true"
+          # or "false" through an env var, and a job-level `if` that compares a
+          # string to `true` casts the string to a number first and gets NaN.
+          # Rather than depend on which of those two shapes a given dispatch
+          # produces, the decision is made here as text and published as text,
+          # so every consumer below compares strings to strings.
+          CODEX_FOUNDRY_CONFIRMED: ${{ inputs.codex_foundry_confirmed }}
         run: |
           ruby <<'RUBY'
           require 'yaml'
@@ -142,8 +158,28 @@ jobs:
           uses_agentic = ['agentic_sandbox', 'agentic_sandbox_v2'].include?(
             execution['mode']
           ) || sandbox['hardened_substrate'] == true
+          # Read here, in the job that holds no credentials, for the same
+          # reason the agentic check is read here: the answer decides whether a
+          # credentialed job starts at all, so it must be known before one does.
+          uses_codex_foundry = execution['mode'] == 'codex_foundry'
+          # Fail closed. Anything that is not exactly "false" or "true" is a
+          # dispatch this file does not understand, and the safe reading of a
+          # value it does not understand is not "spend".
+          confirmed_raw = ENV.fetch('CODEX_FOUNDRY_CONFIRMED', 'false')
+          confirmed_raw = 'false' if confirmed_raw.empty?
+          unless %w[true false].include?(confirmed_raw)
+            abort("codex_foundry_confirmed must be true or false")
+          end
+          # `codex_foundry` is the only mode this box means anything to. Ticked
+          # on any other experiment it is inert -- not an error, because the
+          # relay forwards every input on every leg and a run must not start
+          # failing halfway through for carrying a flag it never used.
+          codex_blocked = uses_codex_foundry && confirmed_raw != 'true'
           File.open(ENV.fetch('GITHUB_OUTPUT'), 'a') do |output|
             output.puts("uses_agentic=#{uses_agentic}")
+            output.puts("uses_codex_foundry=#{uses_codex_foundry}")
+            output.puts("codex_confirmed=#{confirmed_raw}")
+            output.puts("codex_blocked=#{codex_blocked}")
           end
           RUBY
 
@@ -160,9 +196,35 @@ jobs:
           echo "signed control/compute workflow. No credentialed job was started."
           exit 1
 
+  reject-unconfirmed-codex:
+    needs: inspect-mode
+    if: needs.inspect-mode.outputs.codex_blocked == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Reject codex_foundry dispatched without confirmation
+        run: |
+          echo "FATAL: this experiment runs execution.mode codex_foundry, and"
+          echo "the dispatch did not set codex_foundry_confirmed. No"
+          echo "credentialed job was started and nothing was spent."
+          echo
+          echo "The box is not a formality and it is not about the connection."
+          echo "The connection is answered: run 34465567349 sent one turn to"
+          echo "the Foundry deployment and got a reply that matched the"
+          echo "instruction it was given. What the box says is the separate"
+          echo "thing -- that a person looked at this experiment and decided"
+          echo "this batch may spend. That turn cost 24 output tokens; a batch"
+          echo "leg is a different order of commitment."
+          echo
+          echo "Read the experiment's declared bounds first (tasks, attempts,"
+          echo "turns per attempt, wall clock per turn), then re-dispatch with"
+          echo "codex_foundry_confirmed: true."
+          exit 1
+
   batch-run:
     needs: inspect-mode
-    if: needs.inspect-mode.outputs.uses_agentic != 'true'
+    if: needs.inspect-mode.outputs.uses_agentic != 'true' && needs.inspect-mode.outputs.codex_blocked != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 360    # max 6 hours
     env:
@@ -174,6 +236,7 @@ jobs:
       WALL_TIMEOUT_INPUT: ${{ inputs.wall_timeout }}
       DRY_RUN_INPUT: ${{ inputs.dry_run }}
       SANDBOX_IMAGE_DIGEST_INPUT: ${{ inputs.sandbox_image_digest }}
+      CODEX_FOUNDRY_CONFIRMED_INPUT: ${{ inputs.codex_foundry_confirmed }}
 
     steps:
       - name: Checkout
@@ -411,6 +474,13 @@ jobs:
             "uses_code_interpreter": str(
               mode == "code_interpreter"
             ).lower(),
+            # Parsed a second time, by a second parser, on purpose. The Ruby in
+            # inspect-mode decides whether this job starts; this decides
+            # whether step 2a is told the batch may spend. Both read the same
+            # file, so if they ever disagree the variable is absent and step 2
+            # refuses the mode -- which is the direction a disagreement should
+            # fail in.
+            "uses_codex_foundry": str(mode == "codex_foundry").lower(),
             "condition_a_provider": condition_a_provider,
             "condition_a_deployment": condition_a_deployment,
             "condition_b_provider": condition_b_provider,
@@ -439,6 +509,23 @@ jobs:
           echo "Azure/HF credentials, relay, narrative, and upload permissions."
           echo "Use the dedicated signed compute/control workflow only after the"
           echo "paid gate is merged. No model client or cloud credential was used."
+          exit 1
+
+      # The pair to the reject-unconfirmed-codex job, for the one case that job
+      # cannot cover: the two parsers disagreeing. inspect-mode reads the
+      # experiment with Ruby's YAML and decides whether this job starts at all;
+      # this reads it with ExperimentConfig, the parser the run itself uses. If
+      # the second sees a Codex experiment the first missed, the job is already
+      # running with credentials -- so it stops here, before the first of them
+      # is used, rather than at step 2.
+      - name: 'Block unconfirmed codex_foundry in credentialed general workflow'
+        if: steps.read_config.outputs.uses_codex_foundry == 'true' && needs.inspect-mode.outputs.codex_confirmed != 'true'
+        run: |
+          echo "FATAL: this experiment runs execution.mode codex_foundry and the"
+          echo "dispatch did not set codex_foundry_confirmed. The credential-free"
+          echo "inspect-mode job read this experiment as something else, so the"
+          echo "two parsers disagree and that disagreement is itself the fault to"
+          echo "report. No model client or cloud credential was used."
           exit 1
 
       - name: Validate Azure OIDC identity before remote access
@@ -714,6 +801,18 @@ jobs:
           AZURE_AI_EXPECTED_DIRECT_ACCOUNT: ${{ vars.AZURE_AI_EXPECTED_DIRECT_ACCOUNT }}
           AZURE_AI_EXPECTED_PROJECT_ACCOUNT: ${{ vars.AZURE_AI_EXPECTED_PROJECT_ACCOUNT }}
           AZURE_AI_EXPECTED_PROJECT_NAME: ${{ vars.AZURE_AI_EXPECTED_PROJECT_NAME }}
+          # Set only where both hold: this repository's own config parser says
+          # the experiment is codex_foundry, and the dispatch ticked the box.
+          #
+          # It reads the box rather than inspect-mode's `codex_blocked`, and
+          # the difference matters. `codex_blocked` is false in two unrelated
+          # situations -- the box was ticked, and the Ruby did not think this
+          # was a Codex experiment at all. If the two parsers ever disagreed in
+          # that second direction, keying off `codex_blocked` would set this to
+          # 1 with nobody having ticked anything. Keying off the box itself
+          # cannot: a disagreement then leaves this empty, and empty is what
+          # step2_run_inference._require_runnable_execution_mode refuses on.
+          CODEX_FOUNDRY_CONNECTION_CONFIRMED: ${{ steps.read_config.outputs.uses_codex_foundry == 'true' && needs.inspect-mode.outputs.codex_confirmed == 'true' && '1' || '' }}
         run: |
           set +e
           cd batch-runner
@@ -787,6 +886,12 @@ jobs:
           # the pull step is skipped). Forwarding it keeps every relay leg on the
           # exact same immutable image.
           SANDBOX_IMAGE_DIGEST: ${{ steps.sandbox_pull.outputs.digest }}
+          # codex_foundry_confirmed is forwarded for the same reason every
+          # other input is: a relay leg is the same run continuing, not a new
+          # decision. Dropping it would leave the next leg refused at the gate
+          # after the first leg had already spent, which is the worst of both.
+          # The person authorised this experiment, and its declared bounds
+          # (attempts, turns, wall clock) span the whole run, not one leg.
         run: |
           NEXT_RELAY=$(( RELAY_RUN_INPUT + 1 ))
           MAX_RELAYS="${{ steps.read_config.outputs.relay_max_runs }}"
@@ -813,7 +918,8 @@ jobs:
             -f source_sha="$SOURCE_SHA" \
             -f wall_timeout="$WALL_TIMEOUT_INPUT" \
             -f dry_run="$DRY_RUN_INPUT" \
-            -f sandbox_image_digest="$SANDBOX_IMAGE_DIGEST"
+            -f sandbox_image_digest="$SANDBOX_IMAGE_DIGEST" \
+            -f codex_foundry_confirmed="$CODEX_FOUNDRY_CONFIRMED_INPUT"
 
           echo "Relay run #$NEXT_RELAY triggered. This run will now exit."
           exit 0

@@ -483,6 +483,7 @@ checkout and cloud access.
 | `source_sha` | Initial `main` commit required by every relay leg | *(empty)* | Internal; leave empty on leg 0 |
 | `wall_timeout` | `condition_a` Step 2 checkpoint watchdog, `0..290` minutes; `0` delegates to `execution.wall_timeout` in YAML and disables only when both are `0` | `290` | Keep the default unless debugging relay behavior |
 | `sandbox_image_digest` | Immutable sandbox image forwarded across relay legs | *(empty)* | Internal; the workflow resolves it when needed |
+| `codex_foundry_confirmed` | States that this batch may spend on the Foundry deployment. Only `execution.mode: codex_foundry` reads it; a `codex_foundry` dispatch without it fails in a job that holds no credentials | `false` | Tick it only when you mean to run a Codex batch, and only for that dispatch |
 
 ### Three-task smoke input
 
@@ -495,6 +496,7 @@ relay_lineage_id:      <empty>
 source_sha:            <empty>
 wall_timeout:          290
 sandbox_image_digest:  <empty>
+codex_foundry_confirmed: false
 ```
 
 ### How Relay Runs Work
