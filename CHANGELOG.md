@@ -12,6 +12,78 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Added
+- **The thirty-task stage of the Codex-against-Foundry sequence.**
+  `experiments/exp034_codex_foundry_trial30.yaml`. `exp033` is left exactly as
+  it is: a stage is a separate run with its own record, not an edit to the
+  stage before it.
+
+  The thirty tasks are not chosen here. `select_trial_run_tasks` produces them
+  from the committed score-free catalogue, and the same list is already written
+  into `experiments/execution_envelope/advance_check_plan.yaml` under
+  `run_sizes.trial_run`; the file was checked against both before it was
+  committed and matches element for element. Four of exp033's five carry
+  forward and `2ea2e5b5` does not — which is worth saying out loud, because
+  `2ea2e5b5` is one of the two tasks that succeeded in *both* runs of exp033.
+  A list assembled to protect a score would not drop it. Neither direction was
+  available: the rule predates every run and reads nothing but the catalogue.
+
+  Two settings change from exp033, and only one of them is an experimental
+  variable:
+
+  | | exp033 | exp034 |
+  |---|---|---|
+  | `execution.max_retries` | 2 | **3** |
+  | `execution.relay_max_runs` | (default 3) | **6** |
+
+  `relay_max_runs` decides how many times the workflow may hand an unfinished
+  run to a fresh leg. It cannot add an attempt and cannot change a result.
+
+  `max_retries` is a real change, made in the same run as the scale change, so
+  this file does **not** claim to isolate its effect against exp033 and says so
+  in its header. What the run can answer alone, because every attempt is
+  recorded with its index, is the question actually worth asking: *did a fourth
+  attempt ever convert a task that three attempts had not?* If no task in
+  thirty does, the extra budget bought nothing and the next stage drops it.
+  That answer needs no comparison run. The reason to try is that the fourth
+  attempt is the first to wait 240 s — in both exp033 runs the tasks refused
+  for rate were refused at 60 s and 120 s, so two minutes is the longest pause
+  ever tested against this deployment.
+
+  `resume_max_rounds: 0` is set explicitly, now for two reasons. The first is
+  exp033's: a resume round hands out uneven attempt counts. The second is the
+  finding recorded in the entry above — `_get_failed_task_ids` selects by
+  status and never by reason, so a resume round would re-run a task the
+  provider stopped for content. The default in `core/experiment_config.py` is
+  `3`, so an experiment file that merely omits the key does that quietly.
+
+  The wall clock is written into the header rather than discovered. Worst case
+  is 30 × (4 × 1800 + 420) = 228,600 s, 63.5 hours; seven legs at the 290-minute
+  `wall_timeout` ceiling supply 33.8. The worst case is therefore *not*
+  reachable inside the relay budget, and a run approaching it would stop with
+  tasks pending and need a leg started by hand. That is recorded so a stall
+  reads as this arithmetic rather than as a fault. It is nowhere near what is
+  expected: `34528903950` ran five tasks and nine turns end to end in 19 m 34 s.
+
+  A prediction is registered in the header *before* the run, so that it can be
+  wrong. In exp033 the two tasks that succeeded have the two longest task
+  statements — 2,902 and 3,632 characters against 1,589, 1,548 and 996. At five
+  points that is as likely coincidence as cause. Across the thirty, statements
+  run 801 to 6,029 characters, median 2,241.5, and eleven are shorter than
+  2,000 — so under the null any given failure lands short 11/30 of the time,
+  36.7%. Pile-up means the association is real; proportional scatter means it
+  was five points of noise. The header also states what a real association
+  would *not* mean: a shorter statement is a vaguer task, and a model given a
+  vaguer task wandering into content a filter stops is a benchmark result and
+  stays one.
+
+- **`test_the_silent_ones_are_still_silent` counts twenty, not nineteen.** The
+  number is a census of experiment files whose self-review budget carries no
+  comment, pinned so that adding a comment to all of them is a visible
+  decision. exp034 is a new file rather than a comment removed from an old one
+  — its self-review is off and its budget is zero, so there is nothing for a
+  comment to describe — and moving the number in the change that adds the file
+  is the decision the pin asks to see. Same reasoning as exp033's bump from
+  eighteen.
 - **A run record now says how many retries it made, and for which reason.**
   `REQUIRED_RUN_RECORD_FIELDS` has asked for `retry_counts_by_reason` since it
   was written, and no production code has ever produced it;
