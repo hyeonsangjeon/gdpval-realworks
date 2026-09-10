@@ -234,6 +234,41 @@ entries land under a fresh dated heading the day they merge to `main`.
   file is the decision the pin asks to see.
 
 ### Fixed
+- **A run that solved a task could not be recorded, because Step 3 had never
+  heard of the mode that solved it.** Run `34485072751` is the first
+  `codex_foundry` dispatch to reach a model. It passed the config check, the
+  isolation probe, the pinned-runtime check, OIDC and route validation;
+  Step 2a ran five tasks, solved one end to end, and collected its deliverable
+  into `workspace/upload/deliverable_files/`. Step 3 then died:
+
+      File ".../batch-runner/core/inference_manifest.py", line 285
+          raise ValueError("inference execution mode is invalid")
+
+  `INFERENCE_EXECUTION_MODES` was a hand-typed list, written once in #140 and
+  never revisited, while two modes were added to the platform beside it —
+  `agentic_sandbox_v2` and `codex_foundry`. Nothing caught the drift, because
+  that list is not read until Step 3, which runs *after* the inference it
+  describes has already been paid for. So the work was done and then discarded
+  at the cheapest step in the job, and the first V2 run to reach Step 3 would
+  have died on the same line.
+
+  It is no longer a second list. It is read off `ExecutionConfig.mode` — the
+  remedy `ExperimentConfig.validate` already applies to its own copy of the
+  same names — plus `legacy`, the one inference path in
+  `step2_run_inference.py` that no experiment file can ask for. A test pins
+  the two together and another builds a provenance record for *every* mode an
+  experiment can name, so the next mode cannot be added without this working.
+
+  Nothing was loosened by admitting the mode. A `codex_foundry` record naming
+  a Code Interpreter route is still refused, and `code_interpreter` still
+  needs its one `project-ci` route. `canonical_execution_mode` also stopped
+  leaking `TypeError: unhashable type` past every caller's `except ValueError`
+  when a record's `execution_mode` is a list rather than a string; it now
+  checks `isinstance` first, like every other validator in that module.
+
+  The same function guards publication — `core/hf_publication.py` calls it
+  when it builds the upload identity — so Step 7 was blocked by this too, and
+  Step 3 is only where it was reached first.
 - **Reading an experiment file demanded the run place's credentials, and the
   step that reads it deliberately has none.** The first `codex_foundry`
   dispatch, run `34479664460`, died at step 9 of the batch job:

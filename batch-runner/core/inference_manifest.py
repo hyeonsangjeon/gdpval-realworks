@@ -10,22 +10,42 @@ import re
 import shutil
 import stat
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import Any, get_args, get_type_hints
 from urllib.parse import quote
+
+from core.experiment_config import ExecutionConfig
 
 
 TASK_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 WINDOWS_DRIVE_RE = re.compile(r"^[A-Za-z]:")
 FULL_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 INFERENCE_PROVENANCE_SCHEMA = "azure-ai-inference-provenance-v2"
-INFERENCE_EXECUTION_MODES = frozenset({
-    "legacy",
-    "code_interpreter",
-    "subprocess",
-    "json_renderer",
-    "sandbox",
-    "agentic_sandbox",
-})
+#: The one inference path no experiment file can name.
+#:
+#: ``step2_run_inference.py`` still has a ``legacy`` branch -- it assembles its
+#: own instruction and calls ``complete()`` directly -- and a record written by
+#: that branch has to stay readable. It is not in ``ExecutionConfig.mode``
+#: because no experiment YAML can ask for it, so it cannot come from there.
+LEGACY_INFERENCE_EXECUTION_MODE = "legacy"
+#: Every mode a provenance record may name: the modes an experiment can ask
+#: for, plus the legacy path above.
+#:
+#: Read off ``ExecutionConfig.mode`` rather than typed out again, for the
+#: reason ``ExperimentConfig.validate`` already gives about its own copy: one
+#: list cannot disagree with itself. This one was typed out, in #140, and then
+#: two modes were added to the platform without it -- ``agentic_sandbox_v2``
+#: and ``codex_foundry``. Nothing noticed, because the list is not read until
+#: Step 3, which runs after the inference it describes.
+#:
+#: What that cost: run 34485072751 was the first ``codex_foundry`` run to reach
+#: a model. It solved a task, collected the deliverable, and wrote the results
+#: file. Step 3 then refused to record it -- ``inference execution mode is
+#: invalid`` -- so a run that had already been paid for could not be formatted,
+#: published, or graded. The work was done and then discarded at the cheapest
+#: step in the job.
+INFERENCE_EXECUTION_MODES = frozenset(
+    get_args(get_type_hints(ExecutionConfig)["mode"])
+) | {LEGACY_INFERENCE_EXECUTION_MODE}
 STEP2_PROGRESS_SCHEMA = "step2-progress-v2"
 STEP2_RESULT_STATUSES = frozenset({
     "success", "error", "qa_failed", "pending"
@@ -281,7 +301,11 @@ def canonicalize_azure_ai_routes(value: Any) -> list[dict[str, str]]:
 
 
 def canonical_execution_mode(value: Any) -> str:
-    if value not in INFERENCE_EXECUTION_MODES:
+    # `isinstance` first, like every other validator here, because a record is
+    # arbitrary JSON: `"execution_mode": ["codex_foundry"]` reached the `in`
+    # test and raised `TypeError: unhashable type` past every caller's
+    # `except ValueError`, turning a malformed field into a crash.
+    if not isinstance(value, str) or value not in INFERENCE_EXECUTION_MODES:
         raise ValueError("inference execution mode is invalid")
     return value
 
