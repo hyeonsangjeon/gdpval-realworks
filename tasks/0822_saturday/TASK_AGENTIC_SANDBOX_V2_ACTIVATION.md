@@ -482,8 +482,77 @@ grows a fourth requirement now fails on the day it grows one, rather than on
 the day somebody dispatches. Run against the file as it stood, it names both
 steps and the missing variable.
 
-**Still not done.** The dispatch has not been made and no model has been asked.
-Everything that decides whether it may be is now built, tested and refusable.
+**The dispatch was made.** Twice, on 2026-09-10, both of workflow
+`agentic-v2-stage-a-probe`.
+
+The dry run, `34449960247`, succeeded, and printed in CI exactly what it had
+printed locally, to the character: the same task, the same two tools, the same
+`$0.59 ($0.47 running, $0.00 marking)` against the `$1.00` approved, the same
+deployment and route. Nothing was asked and nothing was spent.
+
+The paid run, `34450289535`, **failed**, and the workflow reported it honestly.
+Every step up to and including `Ask` passed; `Report what happened` re-raised
+the probe's own exit code, which is what it is for. The record the probe wrote:
+
+```
+"reached_a_model": false,   "model_calls": [],   "turns_taken": 0,
+"spent_usd": "0",           "resolved_model": null,
+"stop_reason": "model_stopped_without_finishing",
+"detail": "the model stopped without committing an answer:
+           asking the model failed: BadRequestError"
+```
+
+**Nothing was charged.** A `400` is a refusal of the request; the model is not
+asked, so there are no tokens to bill. `model_calls` is empty because none was
+made, and `spent_usd` is `0` because that is measured from the calls, not
+assumed. This is the outcome the stage was built to be able to record.
+
+**What was wrong.** Every tool was offered with `strict: true`. That flag is
+not a setting for how carefully arguments are checked — it is a declaration
+that the schema fits a narrow subset the service enforces on the model's
+behalf, and the service validates the declaration when the request arrives. Of
+the two tools stage A offers, `workspace_apply` is a `oneOf` at the root — one
+branch per operation, each carrying only its own fields — and `capabilities_query`
+has genuinely optional fields. Both are outside the subset. Neither could ever
+have been sent.
+
+An overclaim does not degrade to a laxer check. It makes the call impossible,
+before inference, which is why no amount of local rehearsal found it: the dry
+run does not build a request, and every unit test read the definitions back
+rather than asking whether a service would take them.
+
+**Nothing was loosened to fix it.** `strict` is now `false`, and what the desk
+will *act* on is unchanged — `validate_tool_arguments` validates against the
+same schemas in full, `oneOf`, `pattern`, length bounds and all, and is still
+the only thing between a tool call and the workspace. The schemas were
+deliberately not narrowed to fit the subset; they are the real contract. What
+was dropped is a promise that could not be kept. The cost is a turn
+occasionally spent on arguments the model must be told were malformed.
+
+**The second defect was that the failure could not be read.** The probe
+recorded `BadRequestError` and no more, so the cause had to be re-derived by
+hand from the payload while the service had already answered in the status and
+error code it sent back. The note now carries both, through the same reduction
+`code_interpreter` already used for provider refusals — status and a
+code-shaped code, nothing else read — which is now shared in
+`core/provider_refusal.py` rather than existing in two copies. An endpoint, an
+account, a project or a deployment cannot pass a code-shaped allow-list, so the
+note that says *what* was refused still cannot say *who* refused it.
+
+**The guard.** `test_tool_definitions_can_honour_what_they_claim` reads the
+definitions the way the service does and fails any that claims `strict` while
+breaking the subset. It covers v1 as well as v2, and it found the same
+overclaim in v1's `run_ffmpeg` — which is **not fixed here**. v1's tool JSON is
+hashed into `V1_TOOLS_SHA256`, freezing v1 as the baseline v2 is measured
+against; changing it is a decision about that baseline and every v1 result
+recorded under it, not a side effect of a v2 fix. It is recorded in
+`KNOWN_OVERCLAIMS` and asserted to *still* be broken, so the day it is fixed
+the test fails and puts the frozen hash in front of whoever fixed it. An
+`agentic_sandbox` run that offers `run_ffmpeg` is refused with `400` today.
+
+**Still not done.** A model has not yet answered. The first paid question was
+asked and refused before it reached one, at a cost of nothing, and the two
+defects that caused it are fixed and guarded.
 
 ### Stage B — not yet run
 ### Stage C — not yet run

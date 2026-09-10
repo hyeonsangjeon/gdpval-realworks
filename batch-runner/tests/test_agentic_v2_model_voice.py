@@ -203,6 +203,34 @@ def test_a_turn_with_no_tools_on_offer_is_not_paid_for():
     assert voice.calls == []
 
 
+def test_every_key_the_voice_sends_is_one_the_sdk_accepts():
+    """A key the SDK does not know goes into the body and is refused there.
+
+    The fakes in this file accept anything, so a misspelled parameter looks
+    identical to a correct one here and shows up for the first time as a
+    ``400`` on a paid dispatch — which is exactly how the first stage A run
+    ended, for a different reason. The real signature is free to check.
+
+    ``timeout`` is deliberately in this list: it is a request option rather
+    than part of the body, and it is only safe to pass because the method
+    genuinely takes it.
+    """
+    import inspect
+
+    from openai.resources.responses import Responses
+
+    voice = a_voice([a_reply()])
+    voice.next_turn(a_request())
+
+    accepted = set(inspect.signature(Responses.create).parameters)
+    unknown = sorted(set(voice.client.responses.calls[0]) - accepted)
+
+    assert not unknown, (
+        f"the voice sends {', '.join(unknown)}, which Responses.create does "
+        f"not take; the service would refuse the request before the model saw it"
+    )
+
+
 def test_one_tool_at_a_time_and_a_ceiling_on_what_a_turn_may_write():
     voice = a_voice([a_reply()])
 
