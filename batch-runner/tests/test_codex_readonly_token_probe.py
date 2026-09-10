@@ -453,7 +453,7 @@ def _readonly_record() -> dict:
 
 def _turn_record() -> dict:
     return {
-        "schema": "codex_foundry_connection/2",
+        "schema": "codex_foundry_connection/3",
         "verdict": "connected",
         "observed": {"tool_execution_observed": False},
     }

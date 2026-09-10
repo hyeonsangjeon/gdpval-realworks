@@ -120,7 +120,15 @@ from core.codex_runtime_config import (  # noqa: E402
 #: actually written into the provider table, and added
 #: ``request.retries_not_removed_by_pinning``. A ``/1`` record says nothing
 #: about how many requests its turn made.
-SCHEMA = "codex_foundry_connection/2"
+#:
+#: /3 fixed where ``observed.final_response_present`` looks, and so changed what
+#: its ``false`` means. Up to /2 it was read off fields the turn model does not
+#: have, so it was ``false`` on every run including ones where the model
+#: answered -- run 34461522053 is the example. From /3 it is read out of the
+#: turn's items and a ``false`` is a claim about the model rather than about us.
+#: The two are not comparable, which is the whole reason this string exists.
+#: ``observed.final_response_source`` is new in /3.
+SCHEMA = "codex_foundry_connection/3"
 
 # ── The verdict vocabulary ──────────────────────────────────────────────────
 #
@@ -630,6 +638,9 @@ def _empty_observation() -> dict[str, Any]:
         # why not. Never the token, and never anything derived from one.
         "auth_command": None,
         "final_response_present": False,
+        # Which of the turn's two accounts of itself the answer was read from:
+        # `turn_items`, `stream_items`, or absent. Never the answer's text.
+        "final_response_source": None,
         "final_response_matched_instruction": False,
         "tool_execution_observed": False,
         "error": None,
@@ -668,11 +679,18 @@ def observe_stream(
 ) -> tuple[dict[str, Any], Any, Any]:
     """Consume a turn's notifications, keeping what the SDK throws away.
 
-    Returns the streaming summary, the completed ``Turn`` (or ``None``) and the
-    ``ThreadTokenUsage`` (or ``None``). Nothing is raised on a failed turn:
-    the failure *is* the result here.
+    Returns the streaming summary, the completed ``Turn`` (or ``None``) and a
+    triple of the ``ThreadTokenUsage``, the thread settings and the agent
+    messages seen going past. Nothing is raised on a failed turn: the failure
+    *is* the result here.
+
+    The agent messages are returned rather than folded into the summary because
+    the summary is published in the artifact and their text is the model's
+    answer. What the record says about the answer is whether it arrived and
+    whether it matched -- never the answer itself.
     """
     from openai_codex.generated.v2_all import (
+        AgentMessageThreadItem,
         ItemCompletedNotification,
         ThreadSettingsUpdatedNotification,
         ThreadTokenUsageUpdatedNotification,
@@ -681,6 +699,7 @@ def observe_stream(
 
     by_method: dict[str, int] = {}
     item_types: list[str] = []
+    agent_messages: list[Any] = []
     usage: Any = None
     usage_updates = 0
     turn: Any = None
@@ -698,6 +717,8 @@ def observe_stream(
                 item = getattr(payload, "item", None)
                 inner = getattr(item, "root", item)
                 item_types.append(type(inner).__name__)
+                if isinstance(inner, AgentMessageThreadItem):
+                    agent_messages.append(inner)
             continue
         if isinstance(payload, ThreadTokenUsageUpdatedNotification):
             if getattr(payload, "turn_id", None) == turn_id:
@@ -720,7 +741,7 @@ def observe_stream(
         "item_types": item_types,
         "thread_settings_seen": thread_settings is not None,
     }
-    return summary, turn, (usage, thread_settings)
+    return summary, turn, (usage, thread_settings, agent_messages)
 
 
 def _usage_record(usage: Any) -> dict[str, Any] | None:
@@ -859,7 +880,7 @@ def probe(
             if close is not None:
                 close()
 
-        usage, thread_settings = extras
+        usage, thread_settings, agent_messages = extras
         observed["streaming"] = summary
         observed["usage"] = _usage_record(usage)
         if thread_settings is not None:
@@ -892,8 +913,9 @@ def probe(
         error = getattr(turn, "error", None)
 
         if status == "completed" and error is None:
-            text = _final_text(turn, summary)
+            text, source = _final_text(turn, agent_messages)
             observed["final_response_present"] = bool(text)
+            observed["final_response_source"] = source
             observed["final_response_matched_instruction"] = (
                 text.strip().strip(".").upper() == EXPECTED_REPLY
                 if text
@@ -934,18 +956,68 @@ def probe(
         workspace.cleanup()
 
 
-def _final_text(turn: Any, summary: Mapping[str, Any]) -> str:
-    """The turn's own final response, if the completion event carried one.
+def _select_final_answer(items: Sequence[Any]) -> str | None:
+    """The SDK's own rule for which message is the answer, reimplemented.
 
-    Falls back to nothing rather than to the last item of any kind: an empty
-    answer and a tool's output are different things and only one of them is an
-    answer.
+    Prefer the last item marked ``final_answer``; otherwise the last one whose
+    phase the provider left unset. ``commentary`` is deliberately never an
+    answer, which is why a turn made only of commentary yields ``None`` rather
+    than its last line.
+
+    This mirrors ``_final_assistant_response_from_items`` in the pinned SDK's
+    ``_run.py``. It is copied rather than imported because that function is
+    private and this file must keep working across an SDK bump, and it is
+    pinned to the original by ``test_our_reading_rule_matches_the_pinned_sdks_own``
+    so a bump that changes the rule fails a test instead of drifting silently.
     """
-    for attribute in ("final_response", "output_text"):
-        value = getattr(turn, attribute, None)
-        if isinstance(value, str) and value.strip():
-            return value
-    return ""
+    from openai_codex.generated.v2_all import AgentMessageThreadItem, MessagePhase
+
+    unset_phase: str | None = None
+    for item in reversed(list(items)):
+        inner = getattr(item, "root", item)
+        if not isinstance(inner, AgentMessageThreadItem):
+            continue
+        if inner.phase == MessagePhase.final_answer:
+            return inner.text
+        if inner.phase is None and unset_phase is None:
+            unset_phase = inner.text
+    return unset_phase
+
+
+def _final_text(turn: Any, streamed: Sequence[Any] = ()) -> tuple[str, str | None]:
+    """The model's answer, read out of the items the model actually sent.
+
+    The pinned SDK's wire model for a turn (``Turn`` in ``generated/v2_all.py``)
+    has no field holding the answer's text. It has ``items``, and the answer is
+    the ``text`` of an ``AgentMessageThreadItem`` among them. This function used
+    to look for ``final_response`` and ``output_text`` *on the turn* -- names
+    that belong to the SDK's ``TurnResult`` dataclass in ``_run.py``, which is
+    what ``core/codex_runner.py`` receives and which is a different object from
+    the one a ``TurnCompletedNotification`` carries.
+
+    Run 34461522053 is what that cost: a turn whose stream demonstrably carried
+    an ``AgentMessageThreadItem`` was recorded ``final_response_present: false``,
+    which reads as the model having stayed silent. It had not. Reading the wrong
+    object is not the same finding as an empty answer, and the record said the
+    second when the truth was the first.
+
+    Both sources are consulted because they can disagree honestly: ``items`` is
+    a required field on ``Turn`` but ``items_view`` may say ``notLoaded`` or
+    ``summary``, in which case the payload is not a claim about what was said.
+    The stream is then the record of what arrived. Returns the text and which
+    source it came from, so a reader need not guess.
+    """
+    sources = (
+        ("turn_items", getattr(turn, "items", None)),
+        ("stream_items", streamed),
+    )
+    for source, items in sources:
+        if not items:
+            continue
+        text = _select_final_answer(items)
+        if text is not None and text.strip():
+            return text, source
+    return "", None
 
 
 # ── The free half: does the token work on this host at all? ─────────────────
