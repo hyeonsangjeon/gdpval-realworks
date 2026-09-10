@@ -77,7 +77,7 @@ import json
 import os
 import re
 import sys
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from enum import Enum
 from typing import Any, Callable, Iterable, Iterator
 
@@ -1856,44 +1856,64 @@ def _usage_in(payload: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def post_valid_request(
-    settings: CodexProviderSettings,
-    token: str,
-    *,
-    timeout: int = VALID_REQUEST_TIMEOUT_SECONDS,
-) -> dict[str, Any]:
-    """``POST {base_url}/responses`` with a body this route can actually serve.
+def servable_body(settings: CodexProviderSettings) -> dict[str, Any]:
+    """The smallest body this route will actually serve.
 
-    Sent once. There is no retry loop here and adding one would change what the
-    ceilings above mean, so the count is asserted by the caller's record rather
-    than left implicit.
+    A separate function because the sweep below has to be able to say that its
+    baseline arm and the single valid request are the *same* request. Built
+    fresh each call so an arm's overrides cannot leak into the next one.
     """
-    import urllib.error
-    import urllib.request
-
-    body = {
+    return {
         "model": settings.model,
         "input": VALID_REQUEST_INPUT,
         "max_output_tokens": VALID_REQUEST_MAX_OUTPUT_TOKENS,
         "stream": False,
         "store": False,
     }
+
+
+def post_valid_request(
+    settings: CodexProviderSettings,
+    token: str,
+    *,
+    timeout: int = VALID_REQUEST_TIMEOUT_SECONDS,
+    extra_headers: Mapping[str, str] | None = None,
+    body: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """``POST {base_url}/responses`` with a body this route can actually serve.
+
+    Sent once. There is no retry loop here and adding one would change what the
+    ceilings above mean, so the count is asserted by the caller's record rather
+    than left implicit.
+
+    ``extra_headers`` and ``body`` default to nothing and to
+    :func:`servable_body`, so the single valid request is unchanged by their
+    existence. They are here for the closing sweep, which varies one property
+    at a time against a request that is known to be *served* rather than
+    merely accepted.
+    """
+    import urllib.error
+    import urllib.request
+
+    body = servable_body(settings) if body is None else dict(body)
     payload = json.dumps(body).encode("utf-8")
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+    headers.update(dict(extra_headers or {}))
     request = urllib.request.Request(  # noqa: S310 - scheme fixed by classify_endpoint
         f"{settings.base_url}/responses",
         method="POST",
         data=payload,
-        headers={
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-        },
+        headers=headers,
     )
     outcome: dict[str, Any] = {
         "requested": "POST /responses",
         "body_sha256": hashlib.sha256(payload).hexdigest(),
         "body_bytes": len(payload),
-        "max_output_tokens": VALID_REQUEST_MAX_OUTPUT_TOKENS,
+        "max_output_tokens": body.get("max_output_tokens"),
         "status": None,
         "message": None,
         "answer": None,
@@ -2054,6 +2074,308 @@ def valid_request_probe(
     return record
 
 
+# ── What closes a gate a served request got through ─────────────────────────
+#
+# Run 34442249527 changed the question. One request that this route can serve
+# -- a named deployment, a real prompt -- came back `200 completed` with model
+# text, on the host fingerprint that answered the Codex runtime `401` and with
+# the token that runtime's own auth command minted. So the resource, the
+# identity, the deployment name and the route are all fine, and what refuses
+# the runtime is something the runtime does.
+#
+# That also weakens the earlier transmission sweep, and the weakening is worth
+# writing down rather than quietly dropping: every arm in it carried a body
+# naming no model, and every arm came back `400 Missed model deployment`. A
+# request that dies in the deployment router never reaches whatever refuses the
+# runtime, so `properties_that_closed_the_gate: []` there is not evidence that
+# no property closes it. It is evidence that the instrument could not see.
+#
+# This sweep is that experiment with a baseline that works. Same arm-per-
+# property shape, isolated rather than cumulative, but the baseline is the
+# request that returned `200` -- so an arm that comes back `401` names a
+# property that changes how this host authorizes, which is the whole question.
+#
+# It is not free. Every arm names a deployment and can generate, which is the
+# point; the ceilings are the valid request's, per arm, and the arm count is
+# fixed in this file rather than passed in.
+
+CLOSING_SWEEP_SCHEMA = "codex_foundry_closing_sweep/1"
+
+#: Roughly the order of magnitude of the runtime's `instructions`, measured at
+#: over 10 KB in ``tests/test_what_one_codex_turn_actually_sends.py``. The text
+#: is this repository's own, not Codex's: what this arm varies is the *size* of
+#: the field, and the record says so. Reproducing the runtime's actual system
+#: prompt would test something narrower and is not what a size limit keys on.
+CLOSING_SWEEP_INSTRUCTIONS = (
+    "You are answering a connectivity check. Reply with the single word ok. "
+    "This sentence is repeated to reach the size the Codex runtime's own "
+    "instructions field reaches, because the size is what this arm varies. "
+) * 90
+
+#: The count the pinned runtime attaches to every turn regardless of prompt,
+#: measured in the same file. The definitions here are shaped like function
+#: tools and named for what they stand in for; their contents are not Codex's.
+CLOSING_SWEEP_TOOLS: tuple[dict[str, Any], ...] = tuple(
+    {
+        "type": "function",
+        "name": f"stand_in_tool_{index}",
+        "description": (
+            "A tool definition of about the shape and size the runtime sends. "
+            "Present so the request carries ten of them, which is what is "
+            "being varied. " * 6
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "command": {"type": "string", "description": "what to run"},
+                "workdir": {"type": "string", "description": "where to run it"},
+                "timeout_ms": {"type": "integer", "description": "how long"},
+            },
+            "required": ["command"],
+            "additionalProperties": False,
+        },
+    }
+    for index in range(TOOL_DEFINITIONS_THE_RUNTIME_ALWAYS_SENDS)
+)
+
+
+def closing_sweep_arms(
+    settings: CodexProviderSettings,
+) -> tuple[tuple[str, dict[str, str], dict[str, Any] | None, str], ...]:
+    """One arm per property the runtime adds that the working path does not.
+
+    Isolated rather than cumulative, for the reason the earlier sweep gives:
+    a cumulative first flip is attributable only to "this group or an earlier
+    one". The combination arm is what catches a property that closes the gate
+    only in company, and it is last because it is the most expensive.
+    """
+    base = servable_body(settings)
+    return (
+        (
+            "baseline",
+            {},
+            None,
+            "the request that run 34442249527 got a completion from, re-sent "
+            "in this run so every comparison is against today's host",
+        ),
+        (
+            "accept_event_stream",
+            {"Accept": CODEX_ACCEPT},
+            None,
+            "the runtime asks for a stream. Sent with a non-streaming body on "
+            "purpose: this separates content negotiation from the body field "
+            "that usually travels with it",
+        ),
+        (
+            "originator_and_user_agent",
+            {"originator": CODEX_ORIGINATOR, "User-Agent": CODEX_USER_AGENT},
+            None,
+            "the two headers that name the client. A gateway policy keyed on "
+            "either would refuse a request it would otherwise serve",
+        ),
+        (
+            "codex_runtime_headers",
+            dict(CODEX_RUNTIME_HEADERS),
+            None,
+            "the six session and turn headers the working client never sends",
+        ),
+        (
+            "stream_true",
+            {"Accept": CODEX_ACCEPT},
+            {**base, "stream": True},
+            "the body field, with the Accept that has to accompany it for the "
+            "pair to be a request anyone would send. The header-only arm "
+            "above is what tells the two apart",
+        ),
+        (
+            "store_true",
+            {},
+            {**base, "store": True},
+            "the valid request set `store: false` to leave nothing behind. "
+            "Storing a response is a separate data action and a resource can "
+            "be permitted one and not the other",
+        ),
+        (
+            "large_instructions",
+            {},
+            {**base, "instructions": CLOSING_SWEEP_INSTRUCTIONS},
+            "a body of about the size the runtime's instructions make it. "
+            "This varies size, not Codex's wording",
+        ),
+        (
+            "ten_tool_definitions",
+            {},
+            {**base, "tools": list(CLOSING_SWEEP_TOOLS)},
+            "ten function tools, the number the runtime attaches to every "
+            "turn. This varies their presence and count, not their contents",
+        ),
+        (
+            "everything",
+            {
+                "Accept": CODEX_ACCEPT,
+                "originator": CODEX_ORIGINATOR,
+                "User-Agent": CODEX_USER_AGENT,
+                **CODEX_RUNTIME_HEADERS,
+            },
+            {
+                **base,
+                "stream": True,
+                "store": True,
+                "instructions": CLOSING_SWEEP_INSTRUCTIONS,
+                "tools": list(CLOSING_SWEEP_TOOLS),
+            },
+            "as close to a Codex turn as urllib can send. A flip here with no "
+            "single arm flipping means the property only closes the gate in "
+            "company",
+        ),
+    )
+
+
+VERDICT_A_PROPERTY_CLOSES_A_SERVED_REQUEST = "a_property_closes_a_served_request"
+VERDICT_NO_PROPERTY_CLOSES_A_SERVED_REQUEST = "no_property_closes_a_served_request"
+#: The honest no-answer. This sweep is built on a premise -- that the plain
+#: servable request is still served today -- which it re-tests every run rather
+#: than assuming, because a baseline that stops working invalidates every arm.
+VERDICT_CLOSING_SWEEP_INCONCLUSIVE = "closing_sweep_inconclusive"
+
+#: What this cannot settle whichever way it comes out.
+NOT_ESTABLISHED_BY_THE_CLOSING_SWEEP: tuple[str, ...] = (
+    "the cause: every arm is urllib. A property that closes the gate here is "
+    "a candidate for what refuses the runtime, not a demonstration that it is "
+    "what refuses the runtime",
+    "the contents: the instructions and tool arms reproduce the runtime's "
+    "size and count, not its text. A gateway keyed on something inside them "
+    "would not be caught by this",
+    "the transport: TLS negotiation, HTTP version and connection reuse differ "
+    "between urllib and the runtime's client and are not varied here. A null "
+    "result points there",
+    "the harness: nothing here runs a tool, writes a file or solves a task, "
+    "and no arm moves any benchmark task to runnable",
+    "the price: usage is recorded per arm as the response reported it. No "
+    "rate for this route is registered in this repository, so the cost is "
+    "`partial` -- unpriced, which is not free",
+)
+
+
+def classify_closing_sweep(
+    arms: Sequence[Mapping[str, Any]],
+) -> tuple[str, str, list[str]]:
+    """Name the properties that turned a served request into a refusal."""
+    by_name = {str(arm["arm"]): arm for arm in arms}
+    baseline = by_name.get("baseline")
+    if baseline is None or baseline.get("error") or baseline.get("status") != 200:
+        return (
+            VERDICT_CLOSING_SWEEP_INCONCLUSIVE,
+            "the baseline request was not served in this run, so no arm has "
+            f"anything to be compared against (baseline: "
+            f"{baseline.get('status') if baseline else 'absent'}). This says "
+            "nothing about any property",
+            [],
+        )
+    closed = [
+        str(arm["arm"])
+        for arm in arms
+        if str(arm["arm"]) != "baseline" and arm.get("status") in AUTH_GATE_STATUSES
+    ]
+    if closed:
+        return (
+            VERDICT_A_PROPERTY_CLOSES_A_SERVED_REQUEST,
+            "a request this host served was refused at the auth gate once "
+            f"{', '.join(closed)} was added. That is the difference between "
+            "the working path and the runtime, narrowed to something nameable",
+            closed,
+        )
+    return (
+        VERDICT_NO_PROPERTY_CLOSES_A_SERVED_REQUEST,
+        "every arm was answered the way the baseline was: no property varied "
+        "here closes a gate a served request got through. What differs "
+        "between urllib and the runtime is then not in these headers or these "
+        "body fields, and the transport is what is left",
+        [],
+    )
+
+
+def closing_sweep_probe(
+    settings: CodexProviderSettings,
+    *,
+    timeout: int = VALID_REQUEST_TIMEOUT_SECONDS,
+    redact: Callable[[Any], str | None],
+) -> dict[str, Any]:
+    """Add each Codex property to a request that is known to be served."""
+    description = describe_settings(settings)
+    arms = closing_sweep_arms(settings)
+    record: dict[str, Any] = {
+        "schema": CLOSING_SWEEP_SCHEMA,
+        # Every arm names a deployment and can generate. This is a paid probe
+        # and the record says so in the field the redaction check reads.
+        "inference_requested": True,
+        "settings": description,
+        "settings_fingerprint": settings_fingerprint(description),
+        "endpoint_host_fingerprint": host_fingerprint(settings.base_url),
+        "limits": {
+            "attempts_per_arm": 1,
+            "arms": len(arms),
+            "max_output_tokens": VALID_REQUEST_MAX_OUTPUT_TOKENS,
+            "timeout_seconds": timeout,
+            "concurrency": 1,
+            "abort_on": (
+                "a baseline that is not served; there is no retry and no "
+                "fallback, and no arm is re-sent"
+            ),
+        },
+        "token": {"minted": False, "mechanism": "auth_command", "error": None},
+        "requests_planned": len(arms),
+        "requests_sent": 0,
+        "arms": [],
+        "properties_that_closed_the_gate": [],
+        "verdict": VERDICT_CLOSING_SWEEP_INCONCLUSIVE,
+        "verdict_note": "the probe did not run",
+        "not_established": list(NOT_ESTABLISHED_BY_THE_CLOSING_SWEEP),
+    }
+    try:
+        token = mint_token_the_way_codex_does(settings, timeout=timeout)
+    except Exception as exc:  # noqa: BLE001 - a mint failure is the finding
+        record["token"]["error"] = redact(exc)
+        record["verdict_note"] = (
+            "no token could be minted, so no arm was sent and nothing about "
+            "the resource was measured"
+        )
+        return record
+    record["token"]["minted"] = True
+
+    for name, extra_headers, body, why in arms:
+        attempt = post_valid_request(
+            settings,
+            token,
+            timeout=timeout,
+            extra_headers=extra_headers or None,
+            body=body,
+        )
+        record["requests_sent"] += 1
+        attempt["arm"] = name
+        attempt["why"] = why
+        attempt["added_headers"] = sorted(extra_headers)
+        attempt["error"] = redact(attempt.get("error"))
+        attempt["message"] = redact(attempt.get("message"))
+        record["arms"].append(attempt)
+        if name == "baseline" and attempt.get("status") != 200:
+            # The premise failed. Every later arm would be measured against
+            # nothing, and they are not free, so they are not sent.
+            record["verdict_note"] = (
+                "the baseline was not served, so the remaining arms were not "
+                "sent: there would have been nothing to compare them against"
+            )
+            record["verdict"] = VERDICT_CLOSING_SWEEP_INCONCLUSIVE
+            return record
+
+    (
+        record["verdict"],
+        record["verdict_note"],
+        record["properties_that_closed_the_gate"],
+    ) = classify_closing_sweep(record["arms"])
+    return record
+
+
 # ── Command line ────────────────────────────────────────────────────────────
 
 
@@ -2137,11 +2459,21 @@ def main(argv: list[str] | None = None) -> int:
         "--valid-request",
         action="store_true",
         help="send one request this route can actually serve: a model, a "
-        "trivial public input and a 16-token ceiling. This is the only "
+        "trivial public input and a 512-token ceiling. This is the first "
         "option here that can produce a completion, and the only one that "
         "can establish whether this identity may infer on this route -- a "
         "listing and an unservable body getting past the gate establish "
         "neither. Exits 0 only on a 200 that carried model output.",
+    )
+    parser.add_argument(
+        "--closing-sweep",
+        action="store_true",
+        help="send the request --valid-request got a completion from, once "
+        "per property the Codex runtime adds and the working client does "
+        "not, plus a combination. Names which property, if any, turns a "
+        "request this host serves into one it refuses at the gate. Every arm "
+        "names a model and can generate, so this is paid. Exits 0 only when "
+        "it establishes an answer, not when it merely ran.",
     )
     parser.add_argument(
         "--timeout",
@@ -2163,6 +2495,7 @@ def main(argv: list[str] | None = None) -> int:
             ("--auth-discriminator", args.auth_discriminator),
             ("--transmission-sweep", args.transmission_sweep),
             ("--valid-request", args.valid_request),
+            ("--closing-sweep", args.closing_sweep),
             ("--send-request", args.send_request),
         )
         if on
@@ -2238,6 +2571,23 @@ def main(argv: list[str] | None = None) -> int:
         # this script has ever produced and it is still not a pass: the exit
         # code answers "did inference work", and nothing else may borrow it.
         return 0 if record["verdict"] == VERDICT_INFERENCE_SUCCEEDED else 1
+
+    if args.closing_sweep:
+        record = closing_sweep_probe(settings, redact=redact)
+        _emit(record, args.out)
+        # 0 for either conclusive verdict. Finding nothing is an answer here --
+        # it moves the question to the transport -- and a run that could not
+        # tell, because the baseline stopped being served, must not look like
+        # one that did.
+        return (
+            0
+            if record["verdict"]
+            in (
+                VERDICT_A_PROPERTY_CLOSES_A_SERVED_REQUEST,
+                VERDICT_NO_PROPERTY_CLOSES_A_SERVED_REQUEST,
+            )
+            else 1
+        )
 
     if not args.send_request:
         _emit(_plan(description), args.out)

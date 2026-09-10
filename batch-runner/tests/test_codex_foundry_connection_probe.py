@@ -25,6 +25,7 @@ import pytest
 import yaml
 
 from scripts.diagnose_codex_foundry_connection import (
+    CLOSING_SWEEP_SCHEMA,
     EXPECTED_REPLY,
     IDENTITY_ENV_NAMES,
     MESSAGE_LIMIT,
@@ -1149,6 +1150,43 @@ def test_a_record_whose_schema_the_check_does_not_know_is_refused(tmp_path):
     assert "no check here" in result.stdout
 
 
+def _sweep_record(**overrides):
+    """The closing sweep's record, in the shape the check reads it."""
+    return {
+        "schema": CLOSING_SWEEP_SCHEMA,
+        "inference_requested": True,
+        "requests_planned": 9,
+        "requests_sent": 9,
+        **overrides,
+    }
+
+
+def test_the_check_knows_the_closing_sweeps_schema(tmp_path):
+    result = _run_redaction_check(tmp_path, _sweep_record())
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "record=clean" in result.stdout
+
+
+def test_the_closing_sweep_may_not_deny_that_it_bought_anything(tmp_path):
+    """It sends nine paid requests, so `false` here is the worst lie available.
+
+    A paid record that claims to be free is one a reader skips, which is how a
+    spend goes unnoticed. Required to be `true`, not merely allowed to be.
+    """
+    result = _run_redaction_check(
+        tmp_path, _sweep_record(inference_requested=False)
+    )
+    assert result.returncode == 1, result.stdout
+    assert "denies sending a request" in result.stdout
+
+
+def test_a_closing_sweep_that_sent_more_than_it_planned_is_caught(tmp_path):
+    """Nine ceilings, and this is the check that they held."""
+    result = _run_redaction_check(tmp_path, _sweep_record(requests_sent=11))
+    assert result.returncode == 1, result.stdout
+    assert "more requests than it planned" in result.stdout
+
+
 def test_a_run_with_no_record_is_not_reported_as_clean(tmp_path):
     """The check runs on failure too, and "clean" about nothing is a lie."""
     result = _run_redaction_check(tmp_path, None)
@@ -1255,6 +1293,58 @@ def test_an_unreadable_source_refuses_rather_than_allowing_every_url(tmp_path):
 
 
 # ── A rejected record does not get published ────────────────────────────────
+
+
+def test_every_record_that_is_checked_is_also_uploaded_and_the_reverse():
+    """The two lists are written separately, so they can drift apart.
+
+    Both directions are failures and they are different ones. A record checked
+    but not uploaded is evidence that was paid for and thrown away. A record
+    uploaded but not checked is the one this job publishes without looking at
+    it -- on a public repository, which is the whole reason the check exists.
+    """
+    steps = _steps()
+    checked = set(
+        re.findall(
+            r"/tmp/codex-foundry-[a-z-]+\.json",
+            steps["Confirm the record names no resource and carries no token"]["run"],
+        )
+    )
+    uploaded = set(
+        re.findall(
+            r"/tmp/codex-foundry-[a-z-]+\.json",
+            steps["Keep the record"]["with"]["path"],
+        )
+    )
+    assert checked, "the check reads no record at all"
+    assert checked == uploaded, (
+        f"only checked: {sorted(checked - uploaded)}; "
+        f"only uploaded: {sorted(uploaded - checked)}"
+    )
+
+
+def test_every_record_a_step_writes_is_one_of_those():
+    """And the list is the records the job can actually produce, not a subset.
+
+    A new probe whose `--out` nobody added to the two lists above writes a file
+    that is neither checked nor kept, and the run still goes green.
+    """
+    steps = _steps()
+    written = set()
+    for name, step in steps.items():
+        if name.startswith(("Confirm the record", "Keep the record")):
+            continue
+        written.update(
+            re.findall(r"--out (/tmp/codex-foundry-[a-z-]+\.json)", step.get("run", ""))
+        )
+    checked = set(
+        re.findall(
+            r"/tmp/codex-foundry-[a-z-]+\.json",
+            steps["Confirm the record names no resource and carries no token"]["run"],
+        )
+    )
+    assert written, "no step writes a record"
+    assert written <= checked, sorted(written - checked)
 
 
 def test_a_record_the_check_rejected_is_not_uploaded():

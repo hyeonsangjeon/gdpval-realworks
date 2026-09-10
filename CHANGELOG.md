@@ -12,6 +12,52 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Added
+- **The identity may infer on this resource — measured, not argued — and the
+  question is now which property of a Codex request stops it.** Run
+  `34442249527` sent `--valid-request` to the pinned deployment and got `200`,
+  `response_status: completed`, model text back, 13 input and 5 output tokens.
+  Same host fingerprint that answers the runtime's `401`; token minted by the
+  runtime's own `auth_command`; same path, same scope, same deployment name.
+
+  That retires five hypotheses at once — wrong resource, missing inference
+  permission, wrong deployment name, bad token minting, wrong route — and it
+  retires the case for asking anyone for a role: this identity demonstrably
+  may infer here. Whatever refuses Codex is Codex-side. `price_usd` is `null`
+  and `pricing` is `partial`, which means unpriced, not free.
+
+- **`--closing-sweep`: the transmission sweep re-run against a baseline that
+  works.** Nine servable requests, gated on its own `send_closing_sweep` input
+  and the resource fingerprint, in
+  `batch-runner/scripts/diagnose_codex_foundry_connection.py`. The first arm is
+  the request run `34442249527` proved servable, unchanged; each of the other
+  eight is that request plus exactly one thing a Codex turn adds, measured off
+  the wire by `test_what_one_codex_turn_actually_sends.py` —
+  `Accept: text/event-stream`; `originator` and the runtime `User-Agent`; the
+  six session and turn headers; `stream: true`; `store: true`; a 19 KB
+  `instructions`; ten tool definitions; and all of it together.
+
+  Isolated rather than cumulative, because a cumulative sweep's first flip is
+  attributable only to "this arm or an earlier one". One request per arm, no
+  retry, the same 512-token ceiling and 90-second wall clock, concurrency 1,
+  ceilings in the script so a dispatch cannot widen them.
+
+  If the baseline is not served on the day, the other eight are not sent: they
+  would be measured against nothing and they are not free. That run records
+  `closing_sweep_inconclusive` rather than "everything closes the gate". A
+  `400` on an arm is not counted as the gate closing — that is the route
+  objecting to the request's shape, and reporting it as a permission fact is
+  how somebody ends up asking for a role over a malformed field. Finding
+  nothing is recorded as finding nothing, which would point at the transport
+  or at a body property this sweep does not vary.
+
+  Same limits as every probe here: `urllib` and not the runtime, so a property
+  that closes the gate is the next place to look and not a proven cause; no
+  tool ran and no file was written, so nothing here is a task solved; usage as
+  reported with `price_usd: null` and `pricing: partial` — across nine
+  requests, which is emphatically not free. Pinned by 31 tests in
+  `batch-runner/tests/test_codex_closing_sweep.py`, every host in them a
+  loopback socket on the test machine.
+
 - **The one request in this diagnostic that the route can actually serve.**
   `--valid-request` in `batch-runner/scripts/diagnose_codex_foundry_connection.py`,
   wired as a step gated on its own `send_valid_request` input *and* the resource
@@ -20,13 +66,16 @@ entries land under a fresh dated heading the day they merge to `main`.
 
   Everything before it deliberately sends something unservable — a listing, a
   body with no `model` in it, a bearer that was never valid — which is what
-  makes those probes free and is also their ceiling. Run `34437632382` finished
-  that line of questioning: all six header arms of the sweep, up to and
-  including every runtime header at once with `stream: true`, still cleared the
-  gate with the same `400`. Nothing the runtime adds to its headers is what
-  refuses it. What has never been sent to this resource, across every probe, is
-  a body it could serve — so *may this identity infer here* has never been
-  asked, and no record on disk answers it.
+  makes those probes free and is also their ceiling. Run `34437632382` looked
+  like it had finished that line of questioning: all six header arms of the
+  sweep, up to and including every runtime header at once with `stream: true`,
+  came back with the same `400`, and the record's
+  `properties_that_closed_the_gate` was empty. That reading was wrong and is
+  corrected below — a body naming no model dies in the deployment router, so
+  none of those arms ever reached whatever refuses the runtime. What has never
+  been sent to this resource, across every probe, is a body it could serve — so
+  *may this identity infer here* has never been asked, and no record on disk
+  answers it.
 
   One request. No retry, no fallback, `max_output_tokens: 512`, `stream: false`,
   `store: false`, a 90-second wall clock and a trivial public prompt carrying no
@@ -64,6 +113,27 @@ entries land under a fresh dated heading the day they merge to `main`.
   `batch-runner/tests/test_codex_valid_request.py`.
 
 ### Fixed
+- **A null result read as a finding when the instrument could not see.** The
+  transmission sweep (run `34437632382`) reported no property closing the gate,
+  and this changelog, the job summary and the task doc all took that to mean
+  the runtime's headers are not what refuses it. They were reading an empty
+  list produced by an experiment that could not have produced a full one: every
+  arm's body named no model, so every arm died in the deployment router with
+  `400 Missed model deployment` before reaching whatever refuses the runtime.
+  Its `properties_that_closed_the_gate: []` means the instrument could not see,
+  not that nothing closes the gate. The three places that said otherwise now
+  say this instead, and `--closing-sweep` is the same experiment with a
+  baseline that clears the gate.
+
+- **The diagnostic could write a record that was neither checked nor kept.**
+  The leak check's path list and the artifact's path list are written
+  separately in the same workflow, and nothing compared them: a probe whose
+  `--out` was added to one and not the other either published a record no
+  check had looked at — on a public repository — or spent money and threw the
+  evidence away, and the run stayed green either way. Two tests now hold the
+  two lists equal to each other and require every `--out` any step writes to
+  appear in them.
+
 - **The diagnostic's redaction check no longer routes an unknown record shape
   into another shape's check.** Its branches were three free-record schema
   prefixes with the turn record as the `else`. That failed closed once, for

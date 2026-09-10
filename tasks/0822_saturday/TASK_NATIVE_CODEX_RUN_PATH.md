@@ -1049,32 +1049,86 @@ paid run must be preceded by a fresh smoke at the new fingerprint.
   authorization is checked before the body is read. It does not show that a
   servable body would be served — the only request that could show that is the
   one this diagnostic never sends. Nothing here moves the 220-task column.
-- **The sweep ran, and it is a clean null: run `34437632382`, seven requests,
-  nothing closed the gate.** Baseline `400`. `Accept: text/event-stream` `400`.
-  `originator` + `User-Agent` `400`. All six session/turn headers `400`.
-  `stream: true` `400`. **Everything at once** — nine headers plus the body
-  flag — `400`, with the same `Missed model deployment` text as the baseline
-  and a text different from the control's every time. The control was `401`, so
-  the instrument was live for all seven. `properties_that_closed_the_gate: []`.
+- **The sweep ran and returned a null, and the null does not mean what this
+  document said it meant.** Run `34437632382`, seven requests. Baseline `400`.
+  `Accept: text/event-stream` `400`. `originator` + `User-Agent` `400`. All six
+  session/turn headers `400`. `stream: true` `400`. **Everything at once** —
+  nine headers plus the body flag — `400`, with the same `Missed model
+  deployment` text as the baseline and a text different from the control's
+  every time. The control was `401`. `properties_that_closed_the_gate: []`.
 
-  So no property the runtime *adds to its headers* is what refuses it, and the
-  remaining suspects are the part of the body the sweep cannot vary and the
-  transport. That list is shorter than it looks, because every free probe here
-  omits exactly one field on purpose: `model`. It is the field that resolves a
-  request to a deployment, and therefore the field a per-deployment
-  authorization check would have to key on. A body with no model in it may
-  simply never reach that check — which would explain, without any of the
-  transmission hypotheses, why the same token clears the gate for `urllib` and
-  is refused for a runtime that names a model.
-- **What has never been sent to this resource is a request it could serve.** Not
-  once, across a listing, four transmission hypotheses, an auth discriminator
-  and a seven-arm sweep. So the question *may this identity infer here* is
-  still open, and no record on disk narrows it. `--valid-request` sends one
-  servable Responses request through plain `urllib`: the deployment named, a
-  trivial public prompt, `max_output_tokens: 512`, `stream: false`,
-  `store: false`, one attempt, no retry, no fallback, 90-second wall clock.
-  Gated on its own `send_valid_request` input *and* the resource fingerprint,
-  so it cannot be reached by a forgotten flag. Pinned by
+  This was written up as "no property the runtime adds to its headers is what
+  refuses it". That is not what was measured. Every arm's body named no
+  `model`, and `Missed model deployment` is the deployment router saying so —
+  the request stopped there, at the front, before reaching whatever refuses the
+  runtime. Seven arms that all die at the same early point cannot distinguish
+  between properties that act later, so an empty list here is **the instrument
+  failing to see, not a finding that nothing closes the gate.** The `401`
+  control shows the socket was live and the host was answering; it does not
+  show the arms travelled far enough to be refused for their own reasons.
+
+  The paragraph that followed it was closer to right for the wrong reason: it
+  noted that `model` is the field a per-deployment authorization check would
+  key on, and guessed a body without one may never reach that check. That is
+  now the measured explanation of this null rather than a remaining suspect.
+- **A servable request was sent, and it was served — so the identity may infer
+  here.** Run `34442249527`: `--valid-request` to the pinned deployment, `200`,
+  `response_status: completed`, model text back, 13 input and 5 output tokens,
+  `price_usd: null` / `pricing: partial`, verdict `inference_succeeded`. Same
+  host fingerprint that answers the runtime's `401`; token minted by the
+  runtime's own `auth_command`; same path, same scope, same deployment name,
+  `settings_fingerprint: sha256:af46cb55…`.
+
+  Five hypotheses die here at once: wrong resource, missing inference
+  permission, wrong deployment name, bad token minting, wrong route. **This
+  also ends the case for asking anyone for a role** — the identity
+  demonstrably may infer on this resource, so a role request would be asking
+  for something it already has. Whatever refuses Codex is Codex-side.
+
+  What it is still not: `urllib` is not the runtime, no tool ran, no file was
+  written, no task was solved, and `partial` means unpriced rather than free.
+- **`--closing-sweep`: the header experiment re-run against a baseline that
+  works.** Nine servable requests. The first is the request above, unchanged —
+  which is the whole point, because an arm only means "the served request plus
+  this" if the baseline is that request byte for byte. The other eight are that
+  request plus exactly one thing a Codex turn adds, taken from the constants
+  `test_what_one_codex_turn_actually_sends.py` measured off the wire:
+  `Accept: text/event-stream`; `originator` and the runtime `User-Agent`; the
+  six session and turn headers; `stream: true`; `store: true`; a 19 KB
+  `instructions`; ten tool definitions; and all of it at once.
+
+  Isolated rather than cumulative. A cumulative sweep's first flip is
+  attributable only to "this arm or an earlier one", and the extra requests buy
+  the difference between *this property is sufficient* and *something before it
+  was*. One request per arm, no retry, the same 512-token ceiling and
+  90-second clock, concurrency 1, ceilings in the script rather than the
+  workflow.
+
+  The baseline is re-tested every run and a failed premise is not bought: if it
+  is not served that day, the other eight are not sent, and the verdict is
+  `closing_sweep_inconclusive` rather than "everything closed the gate". A
+  `400` on an arm is not counted as the gate closing — that is the route
+  objecting to the request's shape, and counting it would send somebody to ask
+  for a role over a malformed field. Finding nothing is recorded as finding
+  nothing, and points at the transport or at a body property this sweep does
+  not vary.
+
+  Same ceiling on what it can conclude as everything else here: a property that
+  closes the gate is **the next place to look, not a proven cause of the turn's
+  401**; all nine arms are `urllib`; nine paid requests are emphatically not
+  free; and nothing here moves the 220-task column. Pinned by 31 tests in
+  `batch-runner/tests/test_codex_closing_sweep.py`, every host in them a
+  loopback socket.
+- **What had never been sent to this resource was a request it could serve.**
+  Not once, across a listing, four transmission hypotheses, an auth
+  discriminator and a seven-arm sweep. So the question *may this identity infer
+  here* was still open and no record on disk narrowed it, until the run above.
+  `--valid-request` sends one servable Responses request through plain
+  `urllib`: the deployment named, a trivial public prompt,
+  `max_output_tokens: 512`, `stream: false`, `store: false`, one attempt, no
+  retry, no fallback, 90-second wall clock. Gated on its own
+  `send_valid_request` input *and* the resource fingerprint, so it cannot be
+  reached by a forgotten flag. Pinned by
   `batch-runner/tests/test_codex_valid_request.py`.
 
   It is worth its cost because its three outcomes point at three different
