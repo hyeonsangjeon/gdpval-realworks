@@ -64,6 +64,7 @@ BATCH_RUNNER_ROOT = Path(__file__).resolve().parents[1]
 if str(BATCH_RUNNER_ROOT) not in sys.path:
     sys.path.insert(0, str(BATCH_RUNNER_ROOT))
 
+from core.agentic_v2_guest_image import sha256_file  # noqa: E402
 from core.agentic_v2_microvm_backend import GuestImage  # noqa: E402
 from core.agentic_v2_one_call_machine import OneCallMachine  # noqa: E402
 from core.agentic_v2_stage_d_probe import (  # noqa: E402
@@ -151,6 +152,63 @@ def read_what_c2_left(path: Path) -> dict[str, Any]:
     return artefact
 
 
+def the_images_are_still_the_ones_c2_booted(
+    artefact: dict[str, Any], *, sha256: Any = None
+) -> dict[str, Any]:
+    """Re-hash the kernel and rootfs, and refuse if they are not C2's.
+
+    C3 already declines to attack a machine whose boot nobody recorded — it
+    stops with ``different_guest`` rather than produce seven verdicts about the
+    wrong thing. Stage D has the same reason and one more: it is the stage that
+    pays. A model call bought against a rebuilt rootfs is charged in full and
+    discarded at the first command.
+
+    The gap this closes is real rather than theoretical. C2 and C3 ran on a host
+    that has since been deallocated, and stage D will run after it is started
+    again. These files are on ``/var/tmp``, which is the OS disk and survives
+    that — which is why this is expected to pass, and expecting a check to pass
+    is not a reason to skip it. A reprovisioned disk, a truncated download and a
+    rootfs somebody rebuilt between stages all look like a healthy host until
+    the first ``exec_run``, and by then the money is gone.
+
+    **The work disk is deliberately not checked**, and its absence here is a
+    decision rather than an omission. Stage C's own record hands stage D the
+    ``workdir: ephemeral`` obligation it could not attack — a guest cannot make
+    its own disk survive, only the code handing out disks can fail to replace
+    one. Every call gets a freshly built work disk, so pinning C2's
+    ``work.ext4`` would assert exactly the thing that must not be true.
+
+    Costs one read of about 8.7 GiB, which is seconds against a paid run.
+    """
+    measure = sha256 or sha256_file
+    images = artefact["images"]
+    checked: dict[str, Any] = {}
+    for which in ("kernel", "rootfs"):
+        recorded = images[which]
+        where = Path(str(recorded["path"]))
+        if not where.is_file():
+            raise StageDRefused(
+                f"C2 booted {which} at {where} and it is not there now. The "
+                "host has been reprovisioned or the file was removed; run "
+                "scripts/run_agentic_c2_first_boot.py again before paying for "
+                "anything on it"
+            )
+        found = measure(where)
+        if found != str(recorded["sha256"]):
+            raise StageDRefused(
+                f"the {which} at {where} hashes {found}, and C2 booted "
+                f"{recorded['sha256']}. These are different bytes, so C2's "
+                "record is not evidence about the machine this run would use"
+            )
+        checked[which] = {"path": where.as_posix(), "sha256": found}
+    checked["matches_the_guest_c2_booted"] = True
+    checked["work_disk"] = (
+        "not checked, deliberately — every call builds its own, which is the "
+        "workdir: ephemeral obligation stage C recorded and left to stage D"
+    )
+    return checked
+
+
 def the_guest_c2_booted(artefact: dict[str, Any]) -> GuestImage:
     """The image, named by what C2 measured rather than by what was intended.
 
@@ -215,12 +273,17 @@ def exit_condition_met(outcome) -> bool:
     )
 
 
-def build_record(*, verdict, said, outcome, fingerprint, workspace, artefact) -> dict:
+def build_record(
+    *, verdict, said, outcome, fingerprint, workspace, artefact, images=None
+) -> dict:
     """What is kept about a paid run, assembled in one place a test can check.
 
     ``image_evidence`` is in here on purpose and is expected to read
     ``not_run``. A record that named an image and stopped would be read as
     though the evidence followed the name.
+
+    ``images_checked`` is the other half of that: the digest says which bytes,
+    and this says they were still those bytes when the run started.
     """
     return {
         "stage": "agentic-v2-stage-d",
@@ -230,6 +293,7 @@ def build_record(*, verdict, said, outcome, fingerprint, workspace, artefact) ->
         "route_fingerprint": fingerprint,
         "workspace": str(workspace),
         "c2_artefact": str(artefact),
+        "images_checked": images,
         "approved_maximum_usd": said["approved_maximum_usd"],
         "most_it_could_cost_usd": said["most_it_could_cost_usd"],
         "exit_condition_met": exit_condition_met(outcome),
@@ -276,6 +340,7 @@ def main(argv: list[str] | None = None) -> int:
     stage_a = _stage_a_runner()
     try:
         artefact = read_what_c2_left(args.c2_artefact)
+        images_checked = the_images_are_still_the_ones_c2_booted(artefact)
         plan, verdict, catalog = stage_a._verdict(args.plan)
         task = catalog.by_task_id()[verdict.task_id]
         prompt = stage_a.read_task_prompt(
@@ -316,6 +381,11 @@ def main(argv: list[str] | None = None) -> int:
         f"{artefact['host'].get('firecracker_version')}"
     )
     print(f"  jailed to      {artefact['jail_account']['name']}")
+    print(
+        f"  images         still the ones C2 booted — kernel "
+        f"{images_checked['kernel']['sha256'][:12]}, rootfs "
+        f"{images_checked['rootfs']['sha256'][:12]}"
+    )
     print()
 
     if args.dry_run:
@@ -389,6 +459,7 @@ def main(argv: list[str] | None = None) -> int:
         fingerprint=fingerprint,
         workspace=workspace,
         artefact=args.c2_artefact,
+        images=images_checked,
     )
     written = json.dumps(record, indent=2, sort_keys=True)
     if args.output is not None:

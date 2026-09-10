@@ -242,6 +242,128 @@ class TestTheImageAndTheMachineComeFromC2:
         assert machine.name_the_machine() == "stage-d-task-0000"
 
 
+# ── the same bytes, not merely the same paths ─────────────────────────────
+#
+# C2 and C3 ran on a host that was then deallocated, and stage D runs after it
+# is started again. These files are on the OS disk and are expected to survive
+# that, which is exactly why the check is worth having: nothing here would
+# notice a reprovisioned disk until the money had been spent.
+
+
+def _images_that_are_really_there(tmp_path: Path) -> Path:
+    """C2's artefact with a kernel and rootfs that exist and hash to what it says."""
+    from core.agentic_v2_guest_image import sha256_file
+
+    kernel = tmp_path / "vmlinux"
+    rootfs = tmp_path / "rootfs.ext4"
+    kernel.write_bytes(b"not really a kernel")
+    rootfs.write_bytes(b"not really a filesystem")
+    written = a_c2_artefact(tmp_path)
+    artefact = json.loads(written.read_text())
+    artefact["images"]["kernel"]["sha256"] = sha256_file(kernel)
+    artefact["images"]["rootfs"]["sha256"] = sha256_file(rootfs)
+    written.write_text(json.dumps(artefact), encoding="utf-8")
+    return written
+
+
+class TestTheImagesAreStillTheOnesC2Booted:
+    def test_files_that_hash_to_what_c2_recorded_pass(self, tmp_path):
+        checked = runner.the_images_are_still_the_ones_c2_booted(
+            json.loads(_images_that_are_really_there(tmp_path).read_text())
+        )
+        assert checked["matches_the_guest_c2_booted"] is True
+        assert checked["kernel"]["sha256"] and checked["rootfs"]["sha256"]
+
+    def test_a_rootfs_that_is_gone_stops_the_run(self, tmp_path):
+        written = _images_that_are_really_there(tmp_path)
+        (tmp_path / "rootfs.ext4").unlink()
+        with pytest.raises(runner.StageDRefused) as refused:
+            runner.the_images_are_still_the_ones_c2_booted(
+                json.loads(written.read_text())
+            )
+        assert "not there now" in str(refused.value)
+        assert "run_agentic_c2_first_boot" in str(refused.value)
+
+    def test_a_rootfs_rebuilt_since_c2_stops_the_run(self, tmp_path):
+        # The case a path check alone would miss, and the expensive one: the
+        # file is present, the host looks healthy, and the model call is
+        # charged in full before the first command finds a different machine.
+        written = _images_that_are_really_there(tmp_path)
+        (tmp_path / "rootfs.ext4").write_bytes(b"a filesystem somebody rebuilt")
+        with pytest.raises(runner.StageDRefused) as refused:
+            runner.the_images_are_still_the_ones_c2_booted(
+                json.loads(written.read_text())
+            )
+        assert "different bytes" in str(refused.value)
+
+    def test_the_work_disk_is_not_pinned_and_says_why(self, tmp_path):
+        # Pinning it would assert the opposite of the workdir: ephemeral
+        # obligation stage C recorded and handed to stage D.
+        checked = runner.the_images_are_still_the_ones_c2_booted(
+            json.loads(_images_that_are_really_there(tmp_path).read_text())
+        )
+        assert isinstance(checked["work_disk"], str), "a note, not a measurement"
+        assert "ephemeral" in checked["work_disk"]
+
+
+# ── against the artefact the host really wrote ────────────────────────────
+
+
+class TestAgainstTheRealC2Record:
+    """The readers are held to C2's committed artefact, not only to fixtures.
+
+    Everything above builds the shape stage D expects and then checks stage D
+    reads it. That is circular in one specific way: it cannot notice the shape
+    being wrong. ``tasks/0822_saturday/c2_first_boot.json`` is what the Azure
+    host actually wrote on 2026-09-10, so these tests fail if the two ever
+    disagree — which is a failure that would otherwise appear on a started host
+    with a paid run waiting behind it.
+    """
+
+    REAL = (
+        Path(__file__).resolve().parents[2]
+        / "tasks"
+        / "0822_saturday"
+        / "c2_first_boot.json"
+    )
+
+    @pytest.fixture
+    def real(self):
+        if not self.REAL.is_file():  # pragma: no cover - it is committed
+            pytest.skip(f"{self.REAL} is not committed here")
+        return json.loads(self.REAL.read_text(encoding="utf-8"))
+
+    def test_the_guest_reads_out_of_the_real_artefact(self, real):
+        image = runner.the_guest_c2_booted(real)
+        assert image.digest == A_DIGEST
+        assert len(image.kernel_sha256) == 64
+        assert len(image.rootfs_sha256) == 64
+
+    def test_the_machine_reads_out_of_the_real_artefact(self, real):
+        machine = runner.the_machine_c2_proved(
+            real, scratch=Path("/tmp/never-used"), session="d", vcpu_count=2
+        )
+        assert machine.cgroup_version == 2, "stage D's policy needs cgroup v2"
+        assert Path(machine.kernel).name and Path(machine.rootfs).name
+        assert machine.uid > 0 and machine.gid > 0, "not root on the host"
+
+    def test_this_box_is_refused_by_the_real_artefact(self, real, tmp_path):
+        # Not a contrived refusal: the artefact says 6.17.0-azure and this
+        # suite runs on a 3.10 Synology kernel, so the gate is doing the exact
+        # job it was written for. On the execution host this test passes by
+        # the other branch.
+        copied = tmp_path / "c2-first-boot.json"
+        copied.write_text(json.dumps(real), encoding="utf-8")
+        recorded = real["host"]["kernel_release"]
+        if recorded == os.uname().release:
+            assert runner.read_what_c2_left(copied)["outcome"] == "booted"
+            return
+        with pytest.raises(runner.StageDRefused) as refused:
+            runner.read_what_c2_left(copied)
+        assert recorded in str(refused.value)
+        assert os.uname().release in str(refused.value)
+
+
 # ── the question stage D asked, which is not the one stage A asked ────────
 
 
