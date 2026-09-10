@@ -1226,7 +1226,9 @@ def test_the_probe_verdict_survives_being_written_down(
         "batch-runner/scripts/check_agentic_stage_one_ceiling.py",
         "batch-runner/core/agentic_v2_stage_one_budget.py",
         "batch-runner/core/agentic_v2_stage_a_probe.py",
+        "batch-runner/scripts/run_agentic_stage_a_probe.py",
         "batch-runner/experiments/execution_envelope/agentic_stage_one_plan.yaml",
+        ".github/workflows/agentic-v2-stage-a-probe.yml",
     ],
 )
 def test_the_new_files_are_in_the_repository(relative):

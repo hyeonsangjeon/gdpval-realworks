@@ -370,6 +370,66 @@ in `tests/test_agentic_v2_stage_a_probe.py`, none of which reach a network.
 **Still not done.** Nothing has asked a real model. What is left is a client
 built through `core/azure_ai_clients.AzureAIClientFactory` on the `project-ci`
 route profile, and the one paid run.
+
+### Stage A — the asking built, 2026-09-10. The one call still not made.
+
+**It cannot be a command someone runs here, and that is a property of the
+code.** `AzureAIClientFactory` calls `_reject_static_azure_credential_env`
+before it builds anything and takes its identity from a federated session, so a
+client cannot be built at all outside a job holding `id-token: write`. On this
+box `AzureAIClientFactory()` raises `AZURE_AI_ROUTE_PROFILE is required` and no
+Azure environment is configured. The paid run is therefore a workflow —
+`.github/workflows/agentic-v2-stage-a-probe.yml` — and not a local invocation.
+
+**`scripts/run_agentic_stage_a_probe.py`.** Runs the free check first and stops
+on its verdict. Reads the task's wording from the pinned dataset at run time and
+hashes it against the catalogue, because the catalogue holds a hash and never
+the benchmark text — a prompt that changed is a different task, and a different
+task is not the one that was priced. Builds the client through the one reviewed
+place. Checks the resolved route against all three things the plan fixes — the
+account, the project and the route profile — *after* the client exists and
+*before* anything is asked, so a misconfigured dispatch costs nothing. Runs in a
+fresh empty `mkdtemp` directory.
+
+**`--dry-run` is the whole path minus the network**, and it is free for a reason
+rather than by intention: with no Azure environment configured, a client cannot
+be built, so a clean exit is a run that never tried. It reports the same figures
+the gate published, character for character, read back from the verdict's own
+report rather than formatted a second time:
+
+```
+  at most        $0.59 ($0.47 running, $0.00 marking) against the $1.00 approved
+  deployment     gpt-5.4 at hjeon-fdpo-foundry-eus2
+  route          project-ci into project gdpval-realworks
+```
+
+**The exit code answers stage A's question, not "did it work".** Zero needs
+three things together: a model reached, at least two turns, and a later call
+that went out holding an earlier tool's answer. Any one alone is true of a run
+that proved nothing — two turns could each have started from an empty history,
+and reaching a model is only a connection. A model that was reached and declined
+to use a tool exits 1 and is uploaded anyway. That is a finding about the model,
+and stage A collects findings; it does not launder them into successes.
+
+**What survives a paid run** is one row per model call — turn, deployment asked
+for, model that answered, token counts, `history_entries_sent`, and either a
+price or an explicit `price_missing`. Not the benchmark wording, not the model's
+words, no credential, and the route only as its endpoint-free fingerprint. Held
+by tests rather than by reading.
+
+**The workflow cannot be made to spend by accident.** `workflow_dispatch` only —
+no push, pull_request or schedule trigger — the mode defaults to `dry-run`, the
+paid job needs both `inputs.mode == 'paid'` and the free job to have passed, and
+only the paid job holds `id-token: write`. A run is never cancelled part-way,
+because a killed conversation has been charged for turns it would leave no
+record of. The deployment is read from the plan at run time rather than restated
+in the workflow, so the route that gets validated cannot drift from the model
+that gets asked. 33 tests in `tests/test_run_agentic_stage_a_probe.py`, nine of
+them on the workflow file itself.
+
+**Still not done.** The dispatch has not been made and no model has been asked.
+Everything that decides whether it may be is now built, tested and refusable.
+
 ### Stage B — not yet run
 ### Stage C — not yet run
 ### Stage D — not yet run
