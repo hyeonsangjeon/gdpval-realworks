@@ -827,9 +827,31 @@ policy holds. The weaken test does not — it is parametrised by hand, so C0 add
 its entry there too, a coverage gap rather than a failure and therefore the kind
 that stays open unless it is written down.
 
+**Six becomes seven, and prose does not follow a dict on its own.** The last
+change of this shape made a docstring false — PR #490 added a finding and left a
+test file still asserting the opposite, caught only by grepping the tree
+afterwards. The same failure is available here, so the places that say *six* are
+listed before the change rather than hunted after it:
+
+| says six | change it |
+|---|---|
+| `core/agentic_v2_substrate.py:143` — "Six things have to be stated" | yes |
+| `core/agentic_v2_substrate.py:222` — "one of the six questions" | yes |
+| `tests/test_agentic_v2_containment_rules.py:3` — "Six questions have to be answered" | yes |
+| `tests/test_agentic_v2_containment_rules.py:71` — section comment | yes |
+| the test named `test_every_one_of_the_six_questions_has_an_answer` | yes, renamed |
+| this document, the inherited-state table and stage C's exit condition | yes |
+| `CHANGELOG.md` and `TASK_AGENTIC_SANDBOX_V2_FOUNDATION.md` | **no** |
+
+The last row is the one worth stating. Those record what was true on
+2026-08-26, when six was the answer. Rewriting them would not fix a stale
+sentence, it would falsify a record of when the rule set changed — and the
+count moving is exactly the thing a history is for.
+
 **Exit condition.** The new rule is stated, the manifest equals the policy again,
-weakening it is refused like the other ten, and `containment_rules_that_disagree`
-still returns nothing.
+weakening it is refused like the other ten, `containment_rules_that_disagree`
+still returns nothing, and nothing in `core/` or `tests/` still says the
+containment answers six questions.
 
 **Failure response.** If the boundary cannot be stated as a rule the launcher
 could apply, C3's attack 7 is recorded as untestable with the reason, rather than
