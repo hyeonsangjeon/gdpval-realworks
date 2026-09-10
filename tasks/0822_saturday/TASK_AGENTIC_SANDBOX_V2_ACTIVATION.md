@@ -1224,6 +1224,211 @@ no describing a weaker boundary as this one.
 immediately after, on the same terms as stage B: measured minutes, price
 `partial` if the rate is not established.
 
+###### C2's inputs, measured and decided before any of it was written
+
+The plan above leaves four things open. Each is settled here, with the reading
+it was settled from, so that none of them arrives as an implicit choice inside
+the code.
+
+**The host, re-read rather than remembered.** Allocated 2026-09-10T19:33Z and
+measured through `az vm run-command` — no inbound port, no session, the same
+control-plane path stage B used. `cgroup2fs`, `cgroup.controllers` present:
+the hierarchy is **v2**, so the memory bound is `memory.max` and
+`--cgroup-version 2` is passed explicitly. That is the exact failure
+:data:`CGROUP_MEMORY_FILE_BY_VERSION` was written against, and it is now a
+reading rather than an assumption. `/dev/kvm` is present, the processor reports
+`svm`, there are 8 processors and 122 GiB free, and `firecracker` and `jailer`
+are both v1.13.1 at `/usr/local/bin` — they survived the deallocation because
+stage B installed them onto the disk, which is kept.
+
+Two readings contradict what was expected. **Docker is not installed**, so the
+rootfs cannot be produced by a daemon pulling an image; the registry is spoken
+to directly instead, which is a better fit for a chain that is about digests.
+And **uid 1000 (`gdpval`) is in the `sudo` group**, so it is not the
+unprivileged account rule `user` asks for. C2 creates a dedicated account with
+no password, no login shell and no group beyond its own, and jails to that.
+Reusing an account that can become root would leave the host-side process one
+`sudo` away from the thing the rule exists to prevent, and the rule would still
+have read as met.
+
+**Which rootfs boots, since no candidate digest exists.** The professional-work
+candidate has never been built, so there is no digest for it anywhere in the
+repository — C2 does not invent one and does not build one as a side quest.
+It boots the **parent**, `ghcr.io/hyeonsangjeon/gdpval-sandbox`, pinned by the
+digest `batch-runner/sandbox/v2/parent.lock.json` already records. That lock
+pins the multi-architecture *index*; the artefact additionally records the
+`linux/amd64` manifest digest that index resolved to, because the index digest
+alone does not say which of its children was unpacked. The image is public: an
+anonymous pull token fetches the manifest, so no credential is issued and none
+is needed. **What boots in C2 is therefore the signed, scanned parent and not
+the candidate D will need**, and the artefact says so in those words.
+
+**The kernel, and exactly how its provenance is weaker.** Pinned to the one key
+`firecracker-ci/v1.13/x86_64/vmlinux-6.1.141` in bucket `spec.ccfc.min`,
+41,865,904 bytes, published 2025-08-12 — one exact key, not the discovery logic
+upstream's getting-started uses, which resolves `sort -V | tail -1` against a
+listing fetched over plain `http` and would let the guest kernel change
+underneath the containment tests without anything saying so. Three disclosures
+travel with it, and they are the content of "weaker than the OCI chain's":
+
+1. **Upstream publishes no checksum and no signature for these artifacts.**
+   Its documented verification step prints filenames. The bucket's ETag is a
+   multipart tag (`…-5`) and is not a content hash of the object. So the hash
+   in the artefact is one **we** computed on download and enforce thereafter.
+   It proves the file did not change between our download and this boot. It
+   does not mean anybody vouched for the file, and the artefact must not be
+   read as if a signature had been checked.
+2. `docs/kernel-policy.md` at the v1.13.1 tag validates exactly two guest
+   kernels, v5.10 and v6.1. **v6.1's minimum end-of-support date is
+   2026-09-02, which is eight days before this run.** 6.1.141 is used anyway,
+   knowingly, and recorded as lapsed rather than pinned in silence. The
+   alternative on that page, v5.10, expired in 2024 and is worse.
+3. The rootfs does **not** come from upstream's path. Upstream builds one from
+   an Ubuntu squashfs with `sudo mkfs.ext4 -d squashfs-root`; C2 builds it from
+   the verified OCI layers instead, which is the whole point of having the
+   chain. Only the kernel comes from the bucket.
+
+**How a command gets in and its result gets out — one channel, not two.**
+`REQUIRED_MICROVM_POLICY` says `network: none`, and
+:data:`DEVICES_THAT_MUST_BE_ABSENT` rules out `vsock` for the same reason — a
+host-to-guest socket is a channel whether or not it is an interface. The first
+draft of this section named the serial console as a second channel and **that
+was wrong**: C1 passes `--daemonize`, which is what points the three standard
+descriptors at `/dev/null`, and its own docstring already says so — "that is
+acceptable only because it is not where results come from". No `logger` section
+is written into the configuration either. So Firecracker's stdout goes nowhere
+and there is no console to read.
+
+That leaves exactly one channel, which is the one the policy already names.
+The **work disk** carries the command in and the results out: `/in/command.sh`
+going in, `/out/stdout`, `/out/stderr` and `/out/exit_status` coming back. It
+is read with `debugfs`, which walks the ext4 image directly — nothing is
+mounted, no loop device is attached, and no privilege is needed to take a file
+out of it. The rootfs is read-only, so the guest is given one added file,
+`/gdpval-init`, whose whole text and hash go into the artefact; everything else
+is the image's own layers unpacked in order.
+
+**One consequence worth naming: a failure to boot is nearly silent.** With no
+console and no network, a guest that panics leaves an empty work disk and
+nothing else, which is the same evidence as a guest that booted and wrote
+nothing. So C2 also does a **separate, deliberately unjailed** Firecracker run
+of the same kernel and rootfs with the console attached, before the jailed one,
+and records it as `unjailed_image_check`. It proves the two images boot and
+nothing more — it is **not** the contained run, it does not count towards the
+exit condition, and it is labelled that way in the artefact so no reader can
+mistake the weaker boundary for this one. If it were allowed to substitute for
+the jailed run, that would be the exact dishonesty this stage forbids.
+
+**Where root is used, stated plainly so it is not mistaken for an escalation.**
+`jailer` must start as root: building the chroot means `mknod` for `/dev/kvm`,
+`chown` to the jailed account, `chroot` and then `setuid`. Dropping privilege
+is the thing it is *for*, and the run-command channel already arrives as root.
+So root starts the jailer and the jailer drops. Nothing else runs as root,
+**no `--privileged`, no added capability, no sysctl changed, no host security
+setting turned off, no guard removed and `exec_run` untouched** — that list is
+stage C's own, and C2 does not spend any of it. In particular
+`kernel.apparmor_restrict_unprivileged_userns` reads `1` on this host and stays
+`1`; it constrains bubblewrap, which is A's Codex path, and Firecracker does
+not depend on it.
+
+**When it stops.** `wall_clock_seconds` has no jailer flag behind it — the
+launcher enforces it by watching for the PID file C1 derives from the binary's
+own name and killing the process when the deadline passes. C2 exercises that,
+because a deadline that has never fired is a deadline nobody has tested.
+
+**What C2 is still not.** Booting a guest and getting one command's output back
+is not `exec_run`, not a model call, and not a task. `foundation_only` and
+`production_activation: disabled` are untouched, and the answer to
+`anything_applies_the_containment_rules` is expected to stay `false` until a
+caller actually runs these arguments in the product path, which is stage D.
+
+###### C2 ran, and this is what came back
+
+Two runs on `gdpval-devhost-vm`, both through `az vm run-command invoke` — no
+public IP, no inbound rule, no SSH, no new access of any kind. The host is
+`6.17.0-1022-azure`, 8 processors, KVM present, **cgroup v2** by the evidence
+`/sys/fs/cgroup/cgroup.controllers` exists, running `Firecracker v1.13.1` and
+`Jailer v1.13.1` at `/usr/local/bin/`. The jail account is `gdpvaljail`,
+uid 999, gid 988, shell `/usr/sbin/nologin`, `groups_beyond_its_own: []`.
+
+**Run 1 refused the real image, and the refusal was the bug.** It stopped at the
+first member of the first layer: `layer sha256:68629629… contains '.', which
+points outside the filesystem it describes`. The check was written with
+`member.name.lstrip("./")`, and `str.lstrip` takes a *set of characters* rather
+than a prefix. So `"."` became `""` and was read as an escape, while `"../x"`
+became `"x"` and `"/etc/shadow"` became `"etc/shadow"` — the two members the
+check existed to stop were the two it let through. Rewritten around
+`os.path.normpath`, with a refusal for members written through a symlinked
+parent and for hardlinks naming something outside the image, both of which the
+first version also missed. Fixing it surfaced a second defect that had nothing
+to do with the first: the boot arguments carried no `init=`, so the guest would
+have fallen through to `/bin/sh` on a console `--daemonize` had already pointed
+at `/dev/null` — a machine that boots, runs nothing, writes nothing, and waits
+out the full 1,200 seconds, which is the failure hardest to tell from a broken
+image.
+
+**Run 2 booted.** `outcome: booted`, `exit_status: 0`, `ran_for_seconds: 1.269`
+against a 1,200 s bound, `jailer` returncode 0 with empty stderr, PID file
+present, and `teardown.all_gone: true`. The whole run took 475.6 s wall clock
+including both image builds, from `2026-09-10T19:57:42Z` to `20:05:37Z`.
+
+Off the work disk — the only channel, since there is no network, `vsock` is
+pinned absent, and the console goes to `/dev/null`:
+
+```
+/out/guest_kernel          6.1.141
+/out/guest_uid             0
+/out/init_reached_the_end  done
+/out/exit_status           0
+/out/stdout                this ran inside the guest
+                           python answered 4
+                           0
+                           /dev/vda on / type ext4 (ro,relatime)
+                           rootfs refused a write, as the rule says it must
+```
+
+**What was booted, fixed by hash.** The kernel is
+`firecracker-ci/v1.13/x86_64/vmlinux-6.1.141`, 41,865,904 bytes, sha256
+`b36a4a1b10f33b9cfdcde3d1a787d9c090556a3edb211cd06d1f3f9a6c7e8724`. That digest
+was **computed here on download**. Upstream publishes neither a checksum nor a
+signature for it, the bucket listing is plain HTTP, and the S3 ETag is a
+multipart tag rather than a content hash — so this figure shows the file did not
+change between download and boot, and nothing more. It is not a provider
+signature and is not recorded as one. Its minimum end-of-support date is
+`2026-09-02`, which has passed; the pin carries `support_window_has_lapsed:
+true` rather than being quiet about it.
+
+The rootfs was built from `ghcr.io/hyeonsangjeon/gdpval-sandbox` pinned at index
+`sha256:ee6ef798631d3c3aeaed28658c640e6f5d021677449852bf2e1f18be5bd24edb`,
+which resolved to manifest
+`sha256:91b524c7dc8f21d653f829d19a283ea269a36cc85e0569ca38c85bfac92d0fe2` for
+`linux/amd64` — the index digest is the reproducible pin, but it cannot say
+which child booted, so both are recorded. Ten layers, each checked against its
+own digest, applied in order: 119,175 entries written, 78 whiteouts honoured,
+12,709 directory modes widened during the unpack and restored afterwards. The
+extraction filter was `tar`, which clears setuid, setgid and sticky bits, so the
+tree is not byte-for-byte the image's own permissions and the artefact says so.
+Result: `rootfs.ext4`, 8,714 MiB, sha256 `489188004ad4eb8a…`; work disk 256 MiB,
+sha256 `111ad3b79c44db73…`; guest init at `/gdpval-init`, sha256
+`191ccbb58fc6b1ed…`. Both images were built with `mke2fs -d` and read back with
+`debugfs` — nothing mounted, no loop device, and the host kernel's ext4 driver
+never touched a filesystem the guest had been writing.
+
+**The deadline fired.** A second machine ran a command that never finishes:
+`stopped_by_the_deadline: true` at 45.042 s, `chroot_destroyed: true`. It used
+45 s rather than 1,200 s, and the artefact carries
+`policy_used_is_not_the_required_one: true` next to that number. The bound was
+not relaxed to get the result — the same builder was handed a different policy
+dictionary, and that builder still refuses a policy with a missing rule, an
+unknown rule, or a rule it cannot reach. What this shows is that the launcher's
+enforcement path works, on a bound short enough to watch.
+
+**Attack 5 answered early, by accident.** `/dev/vda on / type ext4
+(ro,relatime)` and a refused write are the read-only-root rule holding, observed
+in the C2 boot before C3 was written. It is recorded here because it happened
+here, and C3 will still run it as an attack rather than cite this line — one
+observation inside a friendly command is not the same as a probe that was trying.
+
 ##### C3 — the seven attacks
 
 **Builds.** `tests/test_agentic_v2_containment_rules.py` gains the test its own
@@ -1259,6 +1464,117 @@ honest outcome is that commands do not run, and stage C is allowed to return
 that.
 
 **Not yet run.**
+
+###### C3 ran, and all seven were stopped
+
+Two runs on `gdpval-devhost-vm`. The second is the record; the first is why the
+second exists.
+
+**Run 2 — 2026-09-10T20:36:02Z → 20:40:01Z, 239.2 s, `outcome: all_seven_stopped`.**
+Seven of seven, no escapes.
+
+| # | attack | rule | what stopped it |
+|---|---|---|---|
+| 1 | write 512 MiB into the work disk | `workdir_quota_mib: 256` | the write past the quota failed, `rc=1` |
+| 2 | hold 6,144 MiB in a 4,096 MiB machine | `memory_mib: 4096` | guest sees 3,942 MiB; the allocator reached 3,776 MiB and the kernel took it, `rc=137` |
+| 3 | never finish | `wall_clock_seconds` | stopped at 45.042 s against a 45 s bound, chroot gone |
+| 4 | find an interface and use it | `network: none` | only `lo` in `/proc/net/dev`; `connect_probe=refused:OSError` |
+| 5 | write to `/` | `rootfs: read-only` | write refused **and** `/dev/root / ext4 ro,relatime` |
+| 6 | keep root on the host | `user: jailer-unprivileged` | the Firecracker process runs as uid 999, no supplementary groups |
+| 7 | reach a token the orchestrator holds | `credentials: none-inherited` | 0 environment entries, none of the canaries, 28 descriptors reaching nothing of ours, all three standard ones `/dev/null`, guest environment clean |
+
+The images were checked against C2's record before anything booted:
+`matches_the_guest_c2_booted: true`, kernel `b36a4a1b…`, rootfs `489188004ad4eb8a…`.
+These are seven verdicts about the machine whose boot C2 recorded, not about a
+rebuild that happens to be similar. Host unchanged: Firecracker/Jailer v1.13.1,
+`6.17.0-1022-azure`, cgroup v2, KVM present, 8 processors. Jail account
+`gdpvaljail` uid 999 gid 988 `/usr/sbin/nologin`, no groups beyond its own.
+
+Four boots, each with its plan and work disk pinned:
+
+| boot | outcome | ran | plan sha256 | policy is the required one |
+|---|---|---|---|---|
+| `probes` | booted, exit 0 | 9.272 s | `f79f1fe7…` | yes (`wall_clock_seconds: 1200`) |
+| `workdir-quota` | booted, exit 0 | 1.518 s | `d9e43128…` | yes |
+| `memory` | booted, exit 0 | 4.020 s | `6e342ead…` | yes |
+| `wall-clock` | stopped by the deadline | 45.042 s | `d3aef11c…` | **no — 45 s, recorded as such** |
+
+The deadline was tested against a shortened bound so the stop could be watched
+inside a run. That was done by handing `build_launch_plan` a different policy
+dict — an argument it already takes, and one it still refuses if a rule is
+missing, unknown or out of reach — and the artefact carries
+`policy_is_the_required_one: false` for that boot alone. Attack 3 demonstrates
+that the deadline fires and tears the chroot down. **It does not demonstrate
+1,200 seconds**, and nothing here should be read as if it did.
+
+Attacks 6 and 7 were read from `/proc/1979` while the machine was alive, because
+neither is visible from inside it: PID 1 in that guest was uid 0, as it is in
+every guest here including the ones that pass. The probe boot now holds itself
+open for 8 s so the read can land — C2's guest was gone in 1.269 s, which is not
+reliably long enough.
+
+Both artefacts are committed unedited beside this document —
+`c2_first_boot.json` and `c3_attacks.json`. Everything above is a reading of
+them, and a reading nobody can check is worth less than the thing it reads,
+particularly once the host it was written on is deallocated.
+
+###### Seven attacks, eleven rules — what the other four are
+
+`REQUIRED_MICROVM_POLICY` has eleven keys and seven of them were attacked. **7/7
+is not 11/11**, and the difference is not an oversight to be quietly carried:
+
+| key | why there is no attack |
+|---|---|
+| `required: true` | a flag saying the policy applies, not a boundary a guest can push on |
+| `runtime: firecracker` | demonstrated by the boots themselves — Firecracker v1.13.1 is what ran them, recorded per boot with the plan's sha256 |
+| `on_breach: stop-and-report` | this *is* attack 3's outcome: the deadline stopped the machine and the artefact reported it |
+| `workdir: ephemeral-quota` | the `quota` half is attack 1. The **`ephemeral` half is not attacked.** |
+
+The last one is the real gap and it is named here rather than folded into the
+seven. Every boot ended with `teardown.all_gone: true` and every boot was handed
+a freshly built work disk, so nothing observed contradicts it — but that is the
+*runner* being careful, not the machine refusing. A guest cannot make its own
+disk survive; only the code that hands out disks can fail to replace one.
+
+So it is not a microVM property and does not belong among attacks on microVM
+rules. **It becomes stage D's problem the moment one machine per task starts
+reusing this machinery**, because the failure it guards against is one task's
+data reaching the next, and that failure would be silent. Stage D carries it.
+
+###### Run 1 came back six of seven, and the seventh was the attack, not the rule
+
+**2026-09-10T20:0x, `outcome: escaped`, `escapes: ['memory']`.** The verdict was
+*"the allocation probe did not report, so it did not run"* — correct on the
+evidence, and the wrong conclusion about the machine. `/out/stderr` held
+`Killed`; `/out/stdout` stopped after `MemTotal`. The bound had held. The attack
+destroyed the evidence proving it.
+
+Two causes, both in the attack:
+
+- **The allocation went into a tmpfs.** Those pages are shmem and are charged to
+  no process's RSS, so when the machine filled, `oom_badness` had nothing large
+  to weigh and the kernel took a bystander.
+- **The reporter was that bystander.** `rc=$?` inside a command substitution runs
+  in a fork; the fork died holding the exit status.
+
+It is now anonymous memory, written to a page at a time — `bytearray(n)` is
+`calloc`, and `calloc` over a fresh mapping is a promise of zeroes rather than
+pages, so untouched it would have taken address space and never reached the
+bound. The report is made by the top-level shell, which allocates nothing and is
+never a candidate. The allocator prints its high-water mark as it goes, because a
+process the kernel kills does not reach its last line.
+
+That mark is now the primary check: **holding more than `memory_mib` is an escape
+whatever the exit status says**, since a guest with no swap cannot give back
+anonymous memory it has touched. A machine that handed over every requested byte
+and then failed on the way out would have passed on the exit status alone.
+
+**The judge was not loosened to reach seven.** `Killed` in `/out/stderr` is real
+evidence the bound held, and it is still not accepted, because it does not say
+*which* process was killed — and accepting it would be reading a bystander's
+death as containment. The first run's six-of-seven stands in the record as a
+failed run.
+
 ### Stage D — not yet run
 ### Stage E — not yet run
 ### Stage F — not yet run

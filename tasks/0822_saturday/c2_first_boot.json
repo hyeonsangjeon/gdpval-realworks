@@ -1,0 +1,415 @@
+{
+  "boot": {
+    "channel": "the work disk only: no network by policy, vsock pinned absent, and --daemonize sends the console to /dev/null",
+    "command_exit_status": 0,
+    "deadline_seconds": 1200.0,
+    "jailer": {
+      "argv": [
+        "--id",
+        "c2-first-boot",
+        "--exec-file",
+        "/usr/local/bin/firecracker",
+        "--uid",
+        "999",
+        "--gid",
+        "988",
+        "--chroot-base-dir",
+        "/srv/jailer",
+        "--cgroup-version",
+        "2",
+        "--cgroup",
+        "memory.max=4563402752",
+        "--resource-limit",
+        "fsize=268435456",
+        "--new-pid-ns",
+        "--daemonize",
+        "--",
+        "--config-file",
+        "/vmconfig.json",
+        "--no-api"
+      ],
+      "returncode": 0,
+      "stderr": ""
+    },
+    "outcome": "booted",
+    "pid_file": {
+      "appeared": true,
+      "path": "/srv/jailer/firecracker/c2-first-boot/root/firecracker.pid",
+      "pid_recorded": true
+    },
+    "placement": {
+      "chroot_dir": "/srv/jailer/firecracker/c2-first-boot/root",
+      "placed": [
+        {
+          "bytes": 41865904,
+          "in_jail": "/vmlinux",
+          "mode": "0o444",
+          "owned_by_the_jailed_user": false,
+          "sha256": "b36a4a1b10f33b9cfdcde3d1a787d9c090556a3edb211cd06d1f3f9a6c7e8724"
+        },
+        {
+          "bytes": 9137291264,
+          "in_jail": "/rootfs.ext4",
+          "mode": "0o444",
+          "owned_by_the_jailed_user": false,
+          "sha256": "489188004ad4eb8a90191b3b5f58eb9fb246d158535d0bc655001f438a7a32ea"
+        },
+        {
+          "bytes": 268435456,
+          "in_jail": "/work.ext4",
+          "mode": "0o644",
+          "owned_by_the_jailed_user": true,
+          "sha256": "111ad3b79c44db7325e2b8514b0b0315e8c0b7de541b79939355552c9ff9bb7f"
+        },
+        {
+          "bytes": 545,
+          "in_jail": "/vmconfig.json",
+          "mode": "0o444",
+          "owned_by_the_jailed_user": false,
+          "sha256": "de668f79dac7fe51ebe12ba1e0d37936ff8ca6859247cae7324f1c5b4a3cbaf7"
+        }
+      ]
+    },
+    "plan_sha256": "f3269e71ec693ed1c6e6204f72230bb18a6f63fb757b495b5142dc7af34d56cb",
+    "policy_sha256": "6a5e665d3253c80302f001e8fd624b77838c38f92add1af63024277c5215888e",
+    "ran_for_seconds": 1.269,
+    "results": {
+      "/out/exit_status": "0\n",
+      "/out/guest_kernel": "6.1.141\n",
+      "/out/guest_uid": "0\n",
+      "/out/init_reached_the_end": "done\n",
+      "/out/stderr": "",
+      "/out/stdout": "this ran inside the guest\npython answered 4\n0\n/dev/vda on / type ext4 (ro,relatime)\nrootfs refused a write, as the rule says it must\n"
+    },
+    "schema_version": "1.0",
+    "stopped_by_the_deadline": false,
+    "teardown": {
+      "all_gone": true,
+      "removed": {
+        "/srv/jailer/firecracker/c2-first-boot/root": true
+      }
+    },
+    "vm_id": "c2-first-boot"
+  },
+  "deadline_test": {
+    "chroot_destroyed": true,
+    "outcome": "stopped_by_the_deadline",
+    "policy_used_is_not_the_required_one": true,
+    "ran_for_seconds": 45.042,
+    "stopped_by_the_deadline": true,
+    "wall_clock_seconds": 45,
+    "why": "the real bound is 1200s; this run hands the same builder a different policy with 45s so the stop can be watched"
+  },
+  "elapsed_seconds": 475.6,
+  "finished_at": "2026-09-10T20:05:37Z",
+  "host": {
+    "cgroup_evidence": "/sys/fs/cgroup/cgroup.controllers exists",
+    "cgroup_version": 2,
+    "firecracker": "/usr/local/bin/firecracker",
+    "firecracker_version": "Firecracker v1.13.1",
+    "jailer": "/usr/local/bin/jailer",
+    "jailer_version": "Jailer v1.13.1",
+    "kernel_release": "6.17.0-1022-azure",
+    "kvm_present": true,
+    "processors": 8,
+    "read_at": "2026-09-10T19:57:42Z"
+  },
+  "images": {
+    "command": "set -eu\necho 'this ran inside the guest'\npython3 -c \"print('python answered', 2 + 2)\" 2>/dev/null || echo 'no python3 in the image'\nid -u\nmount | grep ' / ' || true\n( echo write-to-root > /root-write-probe.txt && echo 'ROOTFS WAS WRITABLE' ) 2>/dev/null || echo 'rootfs refused a write, as the rule says it must'\n",
+    "guest_init": {
+      "bytes": 967,
+      "path": "/gdpval-init",
+      "sha256": "191ccbb58fc6b1edd4323c76bcd8c1a895496b8cf3c7f1e9f982a0e6adbbe30a",
+      "text": "#!/bin/sh\n# PID 1 in the guest. There is no console: the launcher passes --daemonize,\n# which points Firecracker's standard descriptors at /dev/null, so everything\n# this script has to say it says on the work disk.\nPATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\nexport PATH\nmount -t proc proc /proc 2>/dev/null\nmount -t sysfs sys /sys 2>/dev/null\nmount -t devtmpfs dev /dev 2>/dev/null\nmkdir -p /work\nmount -t ext4 /dev/vdb /work\nmkdir -p /work/out\nuname -r > /work/out/guest_kernel 2>/dev/null\nid -u > /work/out/guest_uid 2>/dev/null\nsh /work/in/command.sh > /work/out/stdout 2> /work/out/stderr\necho $? > /work/out/exit_status\necho done > /work/out/init_reached_the_end\nsync\numount /work 2>/dev/null\nsync\n# Reset through the i8042 controller, which is what boot_args' reboot=k selects\n# and what makes Firecracker exit rather than sit on a halted guest.\nreboot -f 2>/dev/null\necho b > /proc/sysrq-trigger 2>/dev/null\nwhile true; do sleep 1; done\n",
+      "why": "the rootfs is read-only and the image has no init that would run one command and stop, so exactly one file is added and its whole text is recorded here rather than described"
+    },
+    "image": {
+      "credential_used": "none \u2014 anonymous pull token for a public repository",
+      "layer_count": 10,
+      "layers": [
+        {
+          "digest": "sha256:68629629b516c3cd6f5e71ffbe18e32afb1ae5b4926c92d058c0f11ef1fd58a3",
+          "media_type": "application/vnd.oci.image.layer.v1.tar+gzip",
+          "path": "/var/tmp/gdpval-c2/oci/blobs/sha256/68629629b516c3cd6f5e71ffbe18e32afb1ae5b4926c92d058c0f11ef1fd58a3",
+          "size_bytes": 28237639
+        },
+        {
+          "digest": "sha256:9465a3b5326202cdeda1f1439e4aaadfe4f4527dd8f9d020ef76b8a8432e5816",
+          "media_type": "application/vnd.oci.image.layer.v1.tar+gzip",
+          "path": "/var/tmp/gdpval-c2/oci/blobs/sha256/9465a3b5326202cdeda1f1439e4aaadfe4f4527dd8f9d020ef76b8a8432e5816",
+          "size_bytes": 3520822
+        },
+        {
+          "digest": "sha256:3ea3516015d200ef3f1407147986285b706de588d42b96b2cd33c6380e1ff0f1",
+          "media_type": "application/vnd.oci.image.layer.v1.tar+gzip",
+          "path": "/var/tmp/gdpval-c2/oci/blobs/sha256/3ea3516015d200ef3f1407147986285b706de588d42b96b2cd33c6380e1ff0f1",
+          "size_bytes": 15990074
+        },
+        {
+          "digest": "sha256:c3a88133a8c61d848bb024e0392659b2e45433e836462906b04884dd326a01d2",
+          "media_type": "application/vnd.oci.image.layer.v1.tar+gzip",
+          "path": "/var/tmp/gdpval-c2/oci/blobs/sha256/c3a88133a8c61d848bb024e0392659b2e45433e836462906b04884dd326a01d2",
+          "size_bytes": 249
+        },
+        {
+          "digest": "sha256:e6c539ae3e58fd1b55f481bdfc5fa9f18c77e2bdb29c759b0c86f99195eab661",
+          "media_type": "application/vnd.oci.image.layer.v1.tar+gzip",
+          "path": "/var/tmp/gdpval-c2/oci/blobs/sha256/e6c539ae3e58fd1b55f481bdfc5fa9f18c77e2bdb29c759b0c86f99195eab661",
+          "size_bytes": 828406215
+        },
+        {
+          "digest": "sha256:0b5c91a253a39038b53c1fd4d4b21349beacdbd92bc959687e6fb1d15a2f3d1e",
+          "media_type": "application/vnd.oci.image.layer.v1.tar+gzip",
+          "path": "/var/tmp/gdpval-c2/oci/blobs/sha256/0b5c91a253a39038b53c1fd4d4b21349beacdbd92bc959687e6fb1d15a2f3d1e",
+          "size_bytes": 1370
+        },
+        {
+          "digest": "sha256:aa76a4f5622059cff46430efef5311aa99365d1056fe62cde6268e87abdfdf23",
+          "media_type": "application/vnd.oci.image.layer.v1.tar+gzip",
+          "path": "/var/tmp/gdpval-c2/oci/blobs/sha256/aa76a4f5622059cff46430efef5311aa99365d1056fe62cde6268e87abdfdf23",
+          "size_bytes": 1516991400
+        },
+        {
+          "digest": "sha256:1acaebe50d44b5446d5e3d43480c829386b6453558886cb8e97625a65a390782",
+          "media_type": "application/vnd.oci.image.layer.v1.tar+gzip",
+          "path": "/var/tmp/gdpval-c2/oci/blobs/sha256/1acaebe50d44b5446d5e3d43480c829386b6453558886cb8e97625a65a390782",
+          "size_bytes": 14335
+        },
+        {
+          "digest": "sha256:30c4d4e9cb5bf0c30aa016d634edcbe8ec9880077386e85b2ed3faf17d87e2bf",
+          "media_type": "application/vnd.oci.image.layer.v1.tar+gzip",
+          "path": "/var/tmp/gdpval-c2/oci/blobs/sha256/30c4d4e9cb5bf0c30aa016d634edcbe8ec9880077386e85b2ed3faf17d87e2bf",
+          "size_bytes": 94
+        },
+        {
+          "digest": "sha256:4f4fb700ef54461cfa02571ae0db9a0dc1e0cdb5577484a6d75e68dc38e8acc1",
+          "media_type": "application/vnd.oci.image.layer.v1.tar+gzip",
+          "path": "/var/tmp/gdpval-c2/oci/blobs/sha256/4f4fb700ef54461cfa02571ae0db9a0dc1e0cdb5577484a6d75e68dc38e8acc1",
+          "size_bytes": 32
+        }
+      ],
+      "manifest_digest": "sha256:91b524c7dc8f21d653f829d19a283ea269a36cc85e0569ca38c85bfac92d0fe2",
+      "pinned_digest": "sha256:ee6ef798631d3c3aeaed28658c640e6f5d021677449852bf2e1f18be5bd24edb",
+      "pinned_digest_is_an_index": true,
+      "platform": "linux/amd64",
+      "repository": "ghcr.io/hyeonsangjeon/gdpval-sandbox"
+    },
+    "kernel": {
+      "path": "/var/tmp/gdpval-c2/vmlinux",
+      "sha256": "b36a4a1b10f33b9cfdcde3d1a787d9c090556a3edb211cd06d1f3f9a6c7e8724",
+      "size_bytes": 41865904,
+      "source": {
+        "bucket": "spec.ccfc.min",
+        "key": "firecracker-ci/v1.13/x86_64/vmlinux-6.1.141",
+        "minimum_end_of_support": "2026-09-02",
+        "published": "2025-08-12",
+        "size_bytes": 41865904,
+        "support_window_has_lapsed": true,
+        "upstream_publishes_a_checksum": false,
+        "upstream_publishes_a_signature": false,
+        "validated_by": "firecracker docs/kernel-policy.md at tag v1.13.1",
+        "version": "6.1.141"
+      },
+      "url": "https://s3.amazonaws.com/spec.ccfc.min/firecracker-ci/v1.13/x86_64/vmlinux-6.1.141",
+      "vouched_for_by_upstream": false,
+      "what_the_digest_means": "computed here on download, not published by upstream. It shows the file did not change between that download and this boot. It is not a signature and nothing upstream attests to it."
+    },
+    "rootfs": {
+      "argv": [
+        "mke2fs",
+        "-q",
+        "-F",
+        "-t",
+        "ext4",
+        "-b",
+        "4096",
+        "-d",
+        "/var/tmp/gdpval-c2/root",
+        "/var/tmp/gdpval-c2/rootfs.ext4",
+        "2230784"
+      ],
+      "path": "/var/tmp/gdpval-c2/rootfs.ext4",
+      "populated_from": "/var/tmp/gdpval-c2/root",
+      "sha256": "489188004ad4eb8a90191b3b5f58eb9fb246d158535d0bc655001f438a7a32ea",
+      "size_mib": 8714
+    },
+    "unpacked": {
+      "directory_modes_restored": 12709,
+      "entries_written": 119175,
+      "extraction_filter": "tar",
+      "layers_applied_in_order": [
+        "sha256:68629629b516c3cd6f5e71ffbe18e32afb1ae5b4926c92d058c0f11ef1fd58a3",
+        "sha256:9465a3b5326202cdeda1f1439e4aaadfe4f4527dd8f9d020ef76b8a8432e5816",
+        "sha256:3ea3516015d200ef3f1407147986285b706de588d42b96b2cd33c6380e1ff0f1",
+        "sha256:c3a88133a8c61d848bb024e0392659b2e45433e836462906b04884dd326a01d2",
+        "sha256:e6c539ae3e58fd1b55f481bdfc5fa9f18c77e2bdb29c759b0c86f99195eab661",
+        "sha256:0b5c91a253a39038b53c1fd4d4b21349beacdbd92bc959687e6fb1d15a2f3d1e",
+        "sha256:aa76a4f5622059cff46430efef5311aa99365d1056fe62cde6268e87abdfdf23",
+        "sha256:1acaebe50d44b5446d5e3d43480c829386b6453558886cb8e97625a65a390782",
+        "sha256:30c4d4e9cb5bf0c30aa016d634edcbe8ec9880077386e85b2ed3faf17d87e2bf",
+        "sha256:4f4fb700ef54461cfa02571ae0db9a0dc1e0cdb5577484a6d75e68dc38e8acc1"
+      ],
+      "root": "/var/tmp/gdpval-c2/root",
+      "what_the_filter_changed": "the tar filter clears setuid, setgid and sticky bits. Nothing in this guest depends on them: it boots one process as root and has no second user to escalate from. Recorded because it means the unpacked tree is not byte-for-byte the image's own permissions.",
+      "whiteouts_honoured": 78
+    },
+    "work_disk": {
+      "argv": [
+        "mke2fs",
+        "-q",
+        "-F",
+        "-t",
+        "ext4",
+        "-b",
+        "4096",
+        "-d",
+        "/var/tmp/gdpval-c2/work-in",
+        "/var/tmp/gdpval-c2/work.ext4",
+        "65536"
+      ],
+      "path": "/var/tmp/gdpval-c2/work.ext4",
+      "populated_from": "/var/tmp/gdpval-c2/work-in",
+      "sha256": "111ad3b79c44db7325e2b8514b0b0315e8c0b7de541b79939355552c9ff9bb7f",
+      "size_mib": 256
+    }
+  },
+  "jail_account": {
+    "gid": 988,
+    "groups_beyond_its_own": [],
+    "name": "gdpvaljail",
+    "shell": "/usr/sbin/nologin",
+    "uid": 999
+  },
+  "outcome": "booted",
+  "plan": {
+    "devices_pinned": {
+      "balloon": null,
+      "mmds-config": null,
+      "vsock": null
+    },
+    "firecracker": {
+      "config": {
+        "boot-source": {
+          "boot_args": "console=ttyS0 reboot=k panic=1 pci=off root=/dev/vda ro init=/gdpval-init",
+          "kernel_image_path": "/vmlinux"
+        },
+        "drives": [
+          {
+            "drive_id": "rootfs",
+            "is_read_only": true,
+            "is_root_device": true,
+            "path_on_host": "/rootfs.ext4"
+          },
+          {
+            "drive_id": "work",
+            "is_read_only": false,
+            "is_root_device": false,
+            "path_on_host": "/work.ext4"
+          }
+        ],
+        "machine-config": {
+          "mem_size_mib": 4096,
+          "vcpu_count": 1
+        },
+        "network-interfaces": []
+      }
+    },
+    "host_could_run_this": true,
+    "host_reading_sha256": "6a31b3eada654b27a7f6a2c965bc050958b3dc079de743b2a8e2bc8280a8fde7",
+    "host_side": {
+      "chroot_dir": "/srv/jailer/firecracker/c2-first-boot/root",
+      "deadline_seconds": 1200,
+      "destroy_after_the_run": [
+        "/srv/jailer/firecracker/c2-first-boot/root"
+      ],
+      "on_deadline": "stop-and-report",
+      "pid_file": "/srv/jailer/firecracker/c2-first-boot/root/firecracker.pid"
+    },
+    "jailer": {
+      "argv": [
+        "--id",
+        "c2-first-boot",
+        "--exec-file",
+        "/usr/local/bin/firecracker",
+        "--uid",
+        "999",
+        "--gid",
+        "988",
+        "--chroot-base-dir",
+        "/srv/jailer",
+        "--cgroup-version",
+        "2",
+        "--cgroup",
+        "memory.max=4563402752",
+        "--resource-limit",
+        "fsize=268435456",
+        "--new-pid-ns",
+        "--daemonize",
+        "--",
+        "--config-file",
+        "/vmconfig.json",
+        "--no-api"
+      ],
+      "program": "jailer"
+    },
+    "place_in_jail": [
+      {
+        "from_host": "/var/tmp/gdpval-c2/vmlinux",
+        "how": "copy",
+        "in_jail": "/vmlinux",
+        "sha256": "b36a4a1b10f33b9cfdcde3d1a787d9c090556a3edb211cd06d1f3f9a6c7e8724",
+        "writable_by_the_jailed_user": false
+      },
+      {
+        "from_host": "/var/tmp/gdpval-c2/rootfs.ext4",
+        "how": "copy",
+        "in_jail": "/rootfs.ext4",
+        "sha256": "489188004ad4eb8a90191b3b5f58eb9fb246d158535d0bc655001f438a7a32ea",
+        "writable_by_the_jailed_user": false
+      },
+      {
+        "from_host": "/var/tmp/gdpval-c2/work.ext4",
+        "how": "create-empty",
+        "in_jail": "/work.ext4",
+        "size_mib": 256,
+        "writable_by_the_jailed_user": true
+      },
+      {
+        "from_host": null,
+        "how": "write",
+        "in_jail": "/vmconfig.json",
+        "writable_by_the_jailed_user": false
+      }
+    ],
+    "plan_sha256": "f3269e71ec693ed1c6e6204f72230bb18a6f63fb757b495b5142dc7af34d56cb",
+    "policy_sha256": "6a5e665d3253c80302f001e8fd624b77838c38f92add1af63024277c5215888e",
+    "rules_applied": {
+      "credentials": "the jailer clears the environment and closes every descriptor but three, and --daemonize points those three at /dev/null; nothing of the orchestrator's is passed in",
+      "memory_mib": "machine-config.mem_size_mib inside the guest, and --cgroup memory.max= outside it with 256 MiB of headroom for the monitor itself",
+      "network": "no interface is configured and no --netns is passed, so there is no interface to bring up; mmds-config and vsock are absent from the configuration and --no-api stops either being added later",
+      "on_breach": "LaunchRefused carries the rule by name, and host_side.on_deadline says the same for the deadline",
+      "required": "any rule this builder cannot express raises LaunchRefused naming that rule, rather than producing arguments without it",
+      "rootfs": "the root drive's is_read_only, and 'ro' on the kernel command line",
+      "runtime": "--exec-file names the Firecracker binary the jailer execs, and the jailer refuses a name that does not contain 'firecracker'",
+      "user": "--uid and --gid, both refused at 0",
+      "wall_clock_seconds": "host_side.deadline_seconds, enforced against the PID the jailer writes to host_side.pid_file \u2014 a guest cannot be trusted to time itself",
+      "workdir": "a second drive, writable, on an image created for this run and destroyed with the jail",
+      "workdir_quota_mib": "the size of that image, and --resource-limit fsize= in bytes for any single file within it"
+    },
+    "schema_version": "1.0",
+    "starts_nothing": true,
+    "vm_id": "c2-first-boot"
+  },
+  "schema_version": "1.0",
+  "stage": "C2",
+  "started_at": "2026-09-10T19:57:42Z",
+  "unjailed_image_check": {
+    "applied_containment": false,
+    "console_tail": "protocols = UNLABELED CIPSOv4 CALIPSO\n[    0.308213] NetLabel:  unlabeled traffic allowed by default\n[    0.309387] PCI: Using ACPI for IRQ routing\n[    0.311469] PCI: System does not support PCI\n[    0.313443] vgaarb: loaded\n[    0.314959] clocksource: Switched to clocksource kvm-clock\n[    0.317374] VFS: Disk quotas dquot_6.6.0\n[    0.318262] VFS: Dquot-cache hash table entries: 512 (order 0, 4096 bytes)\n[    0.321718] pnp: PnP ACPI init\n[    0.323506] pnp: PnP ACPI: found 5 devices\n[    0.327109] NET: Registered PF_INET protocol family\n[    0.329540] IP idents hash table entries: 16384 (order: 5, 131072 bytes, linear)\n[    0.333554] tcp_listen_portaddr_hash hash table entries: 512 (order: 1, 8192 bytes, linear)\n[    0.337733] Table-perturb hash table entries: 65536 (order: 6, 262144 bytes, linear)\n[    0.341612] TCP established hash table entries: 8192 (order: 4, 65536 bytes, linear)\n[    0.345504] TCP bind hash table entries: 8192 (order: 6, 262144 bytes, linear)\n[    0.349141] TCP: Hash tables configured (established 8192 bind 8192)\n[    0.352379] MPTCP token hash table entries: 1024 (order: 2, 24576 bytes, linear)\n[    0.356099] UDP hash table entries: 512 (order: 2, 16384 bytes, linear)\n[    0.359413] UDP-Lite hash table entries: 512 (order: 2, 16384 bytes, linear)\n[    0.362959] NET: Registered PF_UNIX/PF_LOCAL protocol family\n[    0.366064] RPC: Registered named UNIX socket transport module.\n[    0.369082] RPC: Registered udp transport module.\n[    0.371451] RPC: Registered tcp transport module.\n[    0.373787] RPC: Registered tcp NFSv4.1 backchannel transport module.\n[    0.377049] NET: Registered PF_XDP protocol family\n[    0.379463] PCI: CLS 0 bytes, default 64\n[    0.381605] clocksource: tsc: mask: 0xffffffffffffffff max_cycles: 0x233fdd7d99c, max_idle_ns: 440795312688 ns\n[    0.386653] clocksource: Switched to clocksource tsc\n[    0.389155] platform rtc_cmos: registered platform RTC device (no PNP device found)\n2026-09-10T20:03:28.769623864 [anonymous-instance:fc_vcpu 0] vcpu: IO read @ 0x87:0x1 failed: bus_error: MissingAddressRange\n[    0.393592] Initialise system trusted keyrings\n[    0.395867] Key type blacklist registered\n[    0.398335] workingset: timestamp_bits=36 max_order=18 bucket_order=0\n[    0.403549] zbud: loaded\n[    0.405358] squashfs: version 4.0 (2009/01/31) Phillip Lougher\n[    0.408546] NFS: Registering the id_resolver key type\n[    0.411100] Key type id_resolver registered\n[    0.413186] Key type id_legacy registered\n[    0.415255] nfs4filelayout_init: NFSv4 File Layout Driver Registering...\n[    0.418670] SGI XFS with ACLs, security attributes, quota, no debug enabled\n[    0.438871] Key type asymmetric registered\n[    0.440916] Asymmetric key parser 'x509' registered\n[    0.443417] Block layer SCSI generic (bsg) driver version 0.4 loaded (major 251)\n[    0.447216] io scheduler mq-deadline registered\n[    0.449471] io scheduler kyber registered\n[    0.451547] io scheduler bfq registered\n[    0.454390] Serial: 8250/16550 driver, 1 ports, IRQ sharing disabled\n[    0.457791] 00:00: ttyS0 at I/O 0x3f8 (irq = 27, base_baud = 115200) is a 16550A\n[    0.464826] loop: module loaded\n[    0.466640] virtio_blk virtio0: 1/0/0 default/read/poll queues\n[    0.470352] virtio_blk virtio0: [vda] 17846272 512-byte logical blocks (9.14 GB/8.51 GiB)\n[    0.475082] virtio_blk virtio1: 1/0/0 default/read/poll queues\n[    0.478411] virtio_blk virtio1: [vdb] 524288 512-byte logical blocks (268 MB/256 MiB)\n[    0.482926] Loading iSCSI transport class v2.0-870.\n[    0.485671] iscsi: registered transport (tcp)\n[    0.487932] i8042: PNP: PS/2 Controller [PNP0303:PS2] at 0x60,0x64 irq 29\n[    0.491360] i8042: PNP: PS/2 appears to have AUX port disabled, if this is incorrect please boot with i8042.nopnp\n[    0.496875] serio: i8042 KBD port at 0x60,0x64 irq 29\n[    0.500003] hid: raw HID events driver (C) Jiri Kosina\n[    0.502808] Initializing XFRM netlink socket\n[    0.505077] NET: Registered PF_INET6 protocol family\n[    0.508196] Segment Routing with IPv6\n[    0.510034] In-situ OAM (IOAM) with IPv6\n[    0.512577] bpfilter: Loaded bpfilter_umh pid 161\n[    0.515413] NET: Registered PF_PACKET protocol family\n[    0.517909] Bridge firewalling registered\n[    0.519991] Key type dns_resolver registered\n[    0.522219] NET: Registered PF_VSOCK protocol family\n[    0.524751] IPI shorthand broadcast: enabled\n[    0.526936] sched_clock: Marking stable (324812158, 202079187)->(628943549, -102052204)\n[    0.531132] registered taskstats version 1\n[    0.533333] Loading compiled-in X.509 certificates\n[    0.535876] zswap: loaded using pool lzo/zbud\n[    0.538229] Key type .fscrypt registered\n[    0.540184] Key type fscrypt-provisioning registered\n[    0.542831] Key type encrypted registered\n[    0.546206] clk: Disabling unused clocks\n[    1.006898] input: AT Raw Set 2 keyboard as /devices/platform/i8042/serio0/input/input0\n[    1.010806] EXT4-fs (vda): mounted filesystem with ordered data mode. Quota mode: none.\n[    1.012937] VFS: Mounted root (ext4 filesystem) readonly on device 254:0.\n[    1.014954] devtmpfs: mounted\n[    1.016174] Freeing unused kernel image (initmem) memory: 2664K\n[    1.017737] Write protecting the kernel read-only data: 18432k\n[    1.019754] Freeing unused kernel image (text/rodata gap) memory: 2044K\n[    1.021663] Freeing unused kernel image (rodata/data gap) memory: 1792K\n[    1.023482] Run /gdpval-init as init process\n[    1.043688] EXT4-fs (vdb): mounted filesystem with ordered data mode. Quota mode: none.\n[    1.084521] EXT4-fs (vdb): unmounting filesystem.\n[    1.087197] sysrq: Resetting\n2026-09-10T20:03:29.464756131 [anonymous-instance:main] Vmm is stopping.\n2026-09-10T20:03:29.464797561 [anonymous-instance:fc_vcpu 0] Requested a vCPU run with immediate_exit enabled. The operation was skipped\n2026-09-10T20:03:29.464936779 [anonymous-instance:main] Vmm is stopping.\n2026-09-10T20:03:29.484062834 [anonymous-instance:main] Firecracker exiting successfully. exit_code=0\n",
+    "returncode": 0,
+    "this_is_not_the_contained_run": true,
+    "timed_out": false,
+    "what_it_proves": "only that these two images boot; no rule was applied"
+  },
+  "what_this_is_not": "not exec_run, not a model call, not a task. No flag was changed and nothing here is wired into the product path."
+}
