@@ -463,6 +463,25 @@ project that *nothing* names is refused too, with a different sentence, because
 an unconfirmable project is exactly what a quiet skip would hide. Four more
 tests, all three cases exercised against the real resolution and not a stand-in.
 
+**And the job would not have got as far as that check.** Turning
+`AZURE_AI_REQUIRE_EXPECTED_IDENTITIES` on makes `AzureAIRouteSettings.from_env`
+demand every name its own table lists for the profile, and `project-ci` lists
+three. The job passed two. `from_env` therefore raises
+`required Azure AI endpoint identities are missing: AZURE_AI_EXPECTED_DIRECT_ACCOUNT`
+— after the federated sign-in, before the route check, before the question.
+Measured by handing the step's exact environment to `from_env`, not by reading
+it: two names in, that error; three names in, a client, `settings.project.project`
+of `gdpval-realworks`, and the account-scoped route above.
+
+Every other paid workflow in the repository passes all three. This one is the
+only one that did not, which is what a first workflow is for. The fix is one
+line in each of two steps, but the test that came with it is not about those
+two lines: it reads the required names out of `REQUIRED_IDENTITY_ENV_BY_PROFILE`
+and checks every step that switches the demand on can meet it. A profile that
+grows a fourth requirement now fails on the day it grows one, rather than on
+the day somebody dispatches. Run against the file as it stood, it names both
+steps and the missing variable.
+
 **Still not done.** The dispatch has not been made and no model has been asked.
 Everything that decides whether it may be is now built, tested and refusable.
 

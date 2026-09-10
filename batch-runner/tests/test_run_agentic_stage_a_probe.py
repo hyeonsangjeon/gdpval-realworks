@@ -625,3 +625,47 @@ def test_the_workflow_does_not_restate_the_deployment_the_plan_fixes():
 
     assert "gpt-5.4" not in written
     assert "load_stage_one_plan" in written
+
+
+def test_every_step_that_turns_the_identity_check_on_can_satisfy_it():
+    """A step that demands identities it does not pass in dies before asking.
+
+    ``AzureAIRouteSettings.from_env`` refuses outright when
+    ``AZURE_AI_REQUIRE_EXPECTED_IDENTITIES`` is on and any of the names its own
+    table lists for the profile is absent. It is a good refusal — it is the
+    thing that stops a paid run reaching an account nobody named — but a step
+    that switches it on and then withholds one of the names does not get a
+    careful check, it gets a crash, and it gets it after the federated login
+    and before the question. This job set two of the three ``project-ci``
+    wants.
+
+    The list is read from the code's table rather than written out here, so a
+    profile that grows a fourth requirement fails this test on the day it grows
+    it instead of on the day somebody dispatches.
+    """
+    from core.azure_ai_clients import (
+        REQUIRE_EXPECTED_IDENTITIES_ENV,
+        REQUIRED_IDENTITY_ENV_BY_PROFILE,
+        ROUTE_PROFILE_ENV,
+    )
+
+    demanding = [
+        step
+        for job in workflow()["jobs"].values()
+        for step in job.get("steps", [])
+        if str((step.get("env") or {}).get(REQUIRE_EXPECTED_IDENTITIES_ENV)) == "1"
+    ]
+
+    assert demanding, "no step turns the identity check on"
+    for step in demanding:
+        env = step["env"]
+        profile = str(env[ROUTE_PROFILE_ENV])
+        missing = [
+            name
+            for name in REQUIRED_IDENTITY_ENV_BY_PROFILE[profile]
+            if not env.get(name)
+        ]
+        assert not missing, (
+            f"{step.get('name')!r} asks for the {profile} identity check "
+            f"without passing {', '.join(missing)}"
+        )
