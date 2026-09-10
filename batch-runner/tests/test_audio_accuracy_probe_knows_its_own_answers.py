@@ -2057,6 +2057,70 @@ def test_a_document_that_pins_no_grader_is_not_a_pin(tmp_path: Path) -> None:
     )
 
 
+def test_a_plan_becomes_a_record_only_by_saying_what_it_ran_as(
+    tmp_path: Path,
+) -> None:
+    """The line that decides which rule a document's fingerprints live under.
+
+    It reads as evidence *for* a run having happened, never against one. A
+    document that says nothing is a plan and stays held to this checkout, so
+    re-wording a heading tightens the check rather than switching it off --
+    which is the direction a mistake here should go.
+    """
+    plan = tmp_path / "plan.md"
+    plan.write_text("# 344\n\n⬜ 아직 실행 안 함.\n", encoding="utf-8")
+    assert probe.dispatch_recorded_in(plan) is None
+
+    record = tmp_path / "record.md"
+    record.write_text(
+        "```\n"
+        "git rev-parse audio-344-dispatch^{commit}   " + "c" * 40 + "\n"
+        "실행 34363078893의 head_sha                 " + "c" * 40 + "\n"
+        "```\n"
+        "네 지문도 그 커밋에서 다시 재서 문서와 같았다"
+        "(채점기 `7e745a18…`, 가격표 `b01b384c…`).\n",
+        encoding="utf-8",
+    )
+    assert probe.dispatch_recorded_in(record) == ("34363078893", "c" * 40)
+    assert probe.remeasured_grader_pin_in(record) == "7e745a18"
+
+    # A record that names two runs cannot say which commit its table belongs
+    # to, and a record that never re-measured has nothing to be held to.
+    two = tmp_path / "two.md"
+    two.write_text(
+        "실행 111111111의 head_sha " + "a" * 40 + "\n"
+        "실행 222222222의 head_sha " + "b" * 40 + "\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="2 different dispatched runs"):
+        probe.dispatch_recorded_in(two)
+
+    with pytest.raises(ValueError, match="never says what the"):
+        probe.remeasured_grader_pin_in(plan)
+
+
+def test_344s_table_still_agrees_with_the_commit_it_was_bought_on() -> None:
+    """344 is bought and closed, so its fingerprints are a record now.
+
+    Read straight, without the branch the pin test needs: the run exists, and
+    the abbreviated value §13 re-measured at that commit is the start of the
+    full value §2 pins. Re-pinning §2 to a later tree breaks this, which is
+    the point -- that edit would misstate what was dispatched.
+    """
+    dispatched = probe.dispatch_recorded_in(_PILOT_V3_DOC)
+    assert dispatched is not None, (
+        "344 no longer records the run it was dispatched as; §13 held run "
+        "34363078893 and its head_sha"
+    )
+    run_id, head_sha = dispatched
+    assert run_id == "34363078893"
+
+    remeasured = probe.remeasured_grader_pin_in(_PILOT_V3_DOC)
+    assert probe.grader_pin_stated_in(_PILOT_V3_DOC).startswith(remeasured)
+    assert probe.price_table_pin_stated_in(_PILOT_V3_DOC).startswith("b01b384c")
+    assert head_sha == "c3017714ba65ad1c195d9694bc832867d40acb4d"
+
+
 def test_both_jobs_hold_a_speech_run_to_the_document_it_belongs_to() -> None:
     """The gate is only a gate if the speech run goes through it.
 
@@ -6581,9 +6645,33 @@ def test_344_pins_the_header_that_will_actually_be_sent() -> None:
         probe.SPEECH_OBSERVATION_HEADER_V3.encode("utf-8")
     ).hexdigest()
 
-    # The document is held to this checkout's grader, price table and corpus
-    # as well, and names 337's five claims in 337's order.
-    assert probe.grader_pin_stated_in(_PILOT_V3_DOC) == probe.grader_source_hash()
+    # The document is held to its grader, price table and corpus as well, and
+    # names 337's five claims in 337's order.
+    #
+    # Which grader depends on whether the run has happened. While the document
+    # is a plan, the pin is a promise about a tree that does not exist yet, so
+    # it has to be what this checkout computes -- the dispatch recomputes it
+    # before calling the model, and a stale pin there costs a started job
+    # rather than a red test. Once the run exists the same line is a fact about
+    # a past commit, and holding a fact to today's tree would mean re-pinning
+    # it every time anything under core/ moves, which is to say editing the
+    # record of what was bought so that a later, unrelated change can land.
+    # §2 of the document draws that distinction in its own words.
+    #
+    # So a record is held to itself instead: §2's table and §13's
+    # re-measurement at the dispatch commit have to still agree.
+    dispatched = probe.dispatch_recorded_in(_PILOT_V3_DOC)
+    if dispatched is None:
+        assert probe.grader_pin_stated_in(_PILOT_V3_DOC) == (
+            probe.grader_source_hash()
+        )
+    else:
+        _, head_sha = dispatched
+        assert len(head_sha) == 40
+        assert probe.grader_pin_stated_in(_PILOT_V3_DOC).startswith(
+            probe.remeasured_grader_pin_in(_PILOT_V3_DOC)
+        )
+
     assert probe.pilot_claims_stated_in(_PILOT_V3_DOC) == _PILOT_CLAIMS
     assert probe.manifest_pin_stated_in(_PILOT_V3_DOC) == hashlib.sha256(
         (

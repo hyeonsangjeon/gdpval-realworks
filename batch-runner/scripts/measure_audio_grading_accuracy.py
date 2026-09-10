@@ -1857,6 +1857,61 @@ def grader_pin_stated_in(doc_path: Path) -> str:
     return found.pop()
 
 
+#: The line a document writes once its run exists: which commit the dispatched
+#: run was built from. Nothing writes it in advance, because the ``head_sha``
+#: does not exist until GitHub has resolved the ref and made the run.
+#:
+#: This is the difference between a plan and a record, and it is read as
+#: evidence *for* the record rather than against it: a document with no such
+#: line is still a plan, and stays held to whatever this checkout computes. A
+#: reworded heading therefore makes a document stricter, never looser.
+_DISPATCHED_RUN_LINE = re.compile(
+    r"^\s*실행\s+(\d{6,})의\s+head_sha\s+([0-9a-f]{40})\s*$", re.MULTILINE
+)
+
+
+def dispatch_recorded_in(doc_path: Path) -> tuple[str, str] | None:
+    """The run id and commit a document records having been dispatched as.
+
+    ``None`` while the document is still a plan.
+    """
+    found = set(_DISPATCHED_RUN_LINE.findall(doc_path.read_text(encoding="utf-8")))
+    if not found:
+        return None
+    if len(found) > 1:
+        raise ValueError(
+            f"{doc_path} records {len(found)} different dispatched runs; which "
+            f"one its fingerprints belong to is not decidable"
+        )
+    run_id, head_sha = found.pop()
+    return run_id, head_sha
+
+
+#: The abbreviated fingerprints a record states it re-measured at the commit it
+#: was dispatched from. Abbreviated is how the document writes them, and the
+#: shortening is the reason this is read separately from the table: the two are
+#: written at different times, and a later edit to one of them should be
+#: visible rather than absorbed.
+_REMEASURED_GRADER_PIN = re.compile(r"채점기\s+`([0-9a-f]{6,64})…`")
+
+
+def remeasured_grader_pin_in(doc_path: Path) -> str:
+    """What a finished record says its grader fingerprinted as when it ran."""
+    found = set(_REMEASURED_GRADER_PIN.findall(doc_path.read_text(encoding="utf-8")))
+    if not found:
+        raise ValueError(
+            f"{doc_path} records a dispatched run but never says what the "
+            f"grader fingerprinted as at the commit it ran on, so its table "
+            f"cannot be held to anything"
+        )
+    if len(found) > 1:
+        raise ValueError(
+            f"{doc_path} re-measures {len(found)} different grader "
+            f"fingerprints; which one the run used is not decidable"
+        )
+    return found.pop()
+
+
 #: The row a pre-registration writes the price table's fingerprint into.
 #:
 #: The grader fingerprint does not cover it. ``compute_grader_source_hash``
