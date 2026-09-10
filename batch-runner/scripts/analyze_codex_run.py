@@ -155,6 +155,16 @@ def collect(root: Path) -> dict:
     for result in results:
         tid = str(result.get("task_id", ""))
         observability = result.get("observability") or {}
+        # Where the persisted record actually keeps it. `codex_runner` hands
+        # the turn's numbers up under `codex_diagnostics`, and
+        # `_bounded_codex_diagnostics` re-homes them at
+        # `observability.codex` before anything is written to disk -- so the
+        # top level never carries them, and a reader that looks there reports
+        # "never measured" about the one measurement the run was dispatched
+        # to take. The top level is still consulted second, because a reader
+        # that breaks on a future move of the field is worse than one that
+        # tries both.
+        codex = observability.get("codex") or {}
         cost = result.get("problem_solving_cost") or {}
         rows = rows_by_task.get(tid, [])
         tasks.append(
@@ -170,7 +180,14 @@ def collect(root: Path) -> dict:
                 "missing_reasons": sorted(
                     {m for r in rows for m in (r.get("missing_reasons") or [])}
                 ),
-                "items_seen": result.get("items_seen"),
+                "items_seen": codex.get("items_seen", result.get("items_seen")),
+                # The provider's own answer, kept beside the item count
+                # because the two are read together: a 429 after many items
+                # and a 429 after two are different claims about which limit
+                # was reached.
+                "http_status_code": codex.get(
+                    "http_status_code", result.get("http_status_code")
+                ),
                 "latency_ms": result.get("latency_ms"),
                 "chars": len(statements.get(tid, "")),
                 "sector": sectors.get(tid, ""),

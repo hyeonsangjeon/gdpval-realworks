@@ -55,6 +55,15 @@ def build(root: Path, spec: list[tuple]) -> Path:
     the artifact-is-partly-unreadable case; ``items_seen`` of ``None`` means
     the key is absent rather than zero, which is how every run before the
     producer landed looks.
+
+    ``items_seen`` is written where the pipeline writes it -- under
+    ``observability.codex``, which is where ``_bounded_codex_diagnostics``
+    puts it in ``step2_run_inference.py`` -- and not at the result's top
+    level. A fixture that invents its own layout tests the fixture: this one
+    said ``result["items_seen"]``, the analyzer read the same wrong place,
+    and the pair agreed with each other while both disagreed with every real
+    artifact. The measurement the run was dispatched to take would have been
+    reported as never taken, and this suite would have stayed green.
     """
     workspace = root / "workspace"
     workspace.mkdir(parents=True, exist_ok=True)
@@ -74,7 +83,7 @@ def build(root: Path, spec: list[tuple]) -> Path:
             "latency_ms": 1000,
         }
         if items_seen is not None:
-            result["items_seen"] = items_seen
+            result["observability"]["codex"] = {"items_seen": items_seen}
         results.append(result)
 
         for index in range(attempts):
