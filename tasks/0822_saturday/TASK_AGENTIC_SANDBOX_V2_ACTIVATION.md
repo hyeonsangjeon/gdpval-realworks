@@ -784,8 +784,10 @@ differently and only the first two can be checked without spending anything.**
 
 ##### C0 — the rule that is missing, found before anything was built on top of it
 
-**Builds.** One new entry in `REQUIRED_MICROVM_POLICY`, and the same entry in
-`sandbox/agentic_v2_capabilities.json`.
+**Builds.** One new entry in `REQUIRED_MICROVM_POLICY`, the same entry in
+`sandbox/agentic_v2_capabilities.json`, and its wording in
+`_POLICY_SETTING_AS_A_CLAIM`. Three places, established by trying it rather
+than by reading — see below.
 
 **Why.** The seven attacks in C3 include reading a token, key or environment
 secret the orchestrator holds. Checking the sources rather than assuming: the
@@ -800,14 +802,30 @@ is the same pretend-enforcement this stage exists to end, only pointed the other
 way: instead of a rule nothing applies, a test with no rule behind it. The fix is
 to write the rule down first.
 
-**Scope, measured rather than guessed.** `_SUPPLY_CHAIN_RULE_NAMES` translates
-only four of the ten containment rules into the signed policy's naming, and the
-other six — including every limit with a number — live on the containment side
-alone. A seventh joins them there. It is deliberately **not** added to the
-signed policy in this change: that file carries a signature, and extending it is
-a separate question from writing the rule down. The generic tests come along on
-their own, since `test_a_manifest_that_drops_a_rule_entirely_is_refused` iterates
-whatever the policy holds.
+**Scope, measured rather than guessed — and the guess was short by one.**
+The plan first said two files. Adding `credentials: "none-inherited"` to the
+policy and the manifest on a scratch copy and running every agentic test found
+exactly one failure:
+`test_a_machine_with_everything_still_does_not_have_the_containment`. The report
+builds one sentence per rule from `_POLICY_SETTING_AS_A_CLAIM`, and a key with
+no wording there does not go unnoticed — it produces a line saying the manifest
+"has gained a containment setting this report does not know how to describe or
+check", which is not the "unenforced rather than met" the test requires. **The
+codebase names its own third place**, and reading rather than running would
+have missed it.
+
+What did *not* break is as useful. `containment_rules_that_disagree` and the
+signed-policy validation both passed untouched, which confirms the rest of the
+scope: `_SUPPLY_CHAIN_RULE_NAMES` translates only four of the ten containment
+rules into the signed policy's naming, and the other six — including every limit
+with a number — live on the containment side alone. A seventh joins them there.
+It is deliberately **not** added to the signed policy: that file carries a
+signature, and extending it is a separate question from writing the rule down.
+The drop test and the manifest-equality test came along on their own, since
+`test_a_manifest_that_drops_a_rule_entirely_is_refused` iterates whatever the
+policy holds. The weaken test does not — it is parametrised by hand, so C0 adds
+its entry there too, a coverage gap rather than a failure and therefore the kind
+that stays open unless it is written down.
 
 **Exit condition.** The new rule is stated, the manifest equals the policy again,
 weakening it is refused like the other ten, and `containment_rules_that_disagree`
