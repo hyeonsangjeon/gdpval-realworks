@@ -1342,6 +1342,93 @@ is not `exec_run`, not a model call, and not a task. `foundation_only` and
 `anything_applies_the_containment_rules` is expected to stay `false` until a
 caller actually runs these arguments in the product path, which is stage D.
 
+###### C2 ran, and this is what came back
+
+Two runs on `gdpval-devhost-vm`, both through `az vm run-command invoke` — no
+public IP, no inbound rule, no SSH, no new access of any kind. The host is
+`6.17.0-1022-azure`, 8 processors, KVM present, **cgroup v2** by the evidence
+`/sys/fs/cgroup/cgroup.controllers` exists, running `Firecracker v1.13.1` and
+`Jailer v1.13.1` at `/usr/local/bin/`. The jail account is `gdpvaljail`,
+uid 999, gid 988, shell `/usr/sbin/nologin`, `groups_beyond_its_own: []`.
+
+**Run 1 refused the real image, and the refusal was the bug.** It stopped at the
+first member of the first layer: `layer sha256:68629629… contains '.', which
+points outside the filesystem it describes`. The check was written with
+`member.name.lstrip("./")`, and `str.lstrip` takes a *set of characters* rather
+than a prefix. So `"."` became `""` and was read as an escape, while `"../x"`
+became `"x"` and `"/etc/shadow"` became `"etc/shadow"` — the two members the
+check existed to stop were the two it let through. Rewritten around
+`os.path.normpath`, with a refusal for members written through a symlinked
+parent and for hardlinks naming something outside the image, both of which the
+first version also missed. Fixing it surfaced a second defect that had nothing
+to do with the first: the boot arguments carried no `init=`, so the guest would
+have fallen through to `/bin/sh` on a console `--daemonize` had already pointed
+at `/dev/null` — a machine that boots, runs nothing, writes nothing, and waits
+out the full 1,200 seconds, which is the failure hardest to tell from a broken
+image.
+
+**Run 2 booted.** `outcome: booted`, `exit_status: 0`, `ran_for_seconds: 1.269`
+against a 1,200 s bound, `jailer` returncode 0 with empty stderr, PID file
+present, and `teardown.all_gone: true`. The whole run took 475.6 s wall clock
+including both image builds, from `2026-09-10T19:57:42Z` to `20:05:37Z`.
+
+Off the work disk — the only channel, since there is no network, `vsock` is
+pinned absent, and the console goes to `/dev/null`:
+
+```
+/out/guest_kernel          6.1.141
+/out/guest_uid             0
+/out/init_reached_the_end  done
+/out/exit_status           0
+/out/stdout                this ran inside the guest
+                           python answered 4
+                           0
+                           /dev/vda on / type ext4 (ro,relatime)
+                           rootfs refused a write, as the rule says it must
+```
+
+**What was booted, fixed by hash.** The kernel is
+`firecracker-ci/v1.13/x86_64/vmlinux-6.1.141`, 41,865,904 bytes, sha256
+`b36a4a1b10f33b9cfdcde3d1a787d9c090556a3edb211cd06d1f3f9a6c7e8724`. That digest
+was **computed here on download**. Upstream publishes neither a checksum nor a
+signature for it, the bucket listing is plain HTTP, and the S3 ETag is a
+multipart tag rather than a content hash — so this figure shows the file did not
+change between download and boot, and nothing more. It is not a provider
+signature and is not recorded as one. Its minimum end-of-support date is
+`2026-09-02`, which has passed; the pin carries `support_window_has_lapsed:
+true` rather than being quiet about it.
+
+The rootfs was built from `ghcr.io/hyeonsangjeon/gdpval-sandbox` pinned at index
+`sha256:ee6ef798631d3c3aeaed28658c640e6f5d021677449852bf2e1f18be5bd24edb`,
+which resolved to manifest
+`sha256:91b524c7dc8f21d653f829d19a283ea269a36cc85e0569ca38c85bfac92d0fe2` for
+`linux/amd64` — the index digest is the reproducible pin, but it cannot say
+which child booted, so both are recorded. Ten layers, each checked against its
+own digest, applied in order: 119,175 entries written, 78 whiteouts honoured,
+12,709 directory modes widened during the unpack and restored afterwards. The
+extraction filter was `tar`, which clears setuid, setgid and sticky bits, so the
+tree is not byte-for-byte the image's own permissions and the artefact says so.
+Result: `rootfs.ext4`, 8,714 MiB, sha256 `489188004ad4eb8a…`; work disk 256 MiB,
+sha256 `111ad3b79c44db73…`; guest init at `/gdpval-init`, sha256
+`191ccbb58fc6b1ed…`. Both images were built with `mke2fs -d` and read back with
+`debugfs` — nothing mounted, no loop device, and the host kernel's ext4 driver
+never touched a filesystem the guest had been writing.
+
+**The deadline fired.** A second machine ran a command that never finishes:
+`stopped_by_the_deadline: true` at 45.042 s, `chroot_destroyed: true`. It used
+45 s rather than 1,200 s, and the artefact carries
+`policy_used_is_not_the_required_one: true` next to that number. The bound was
+not relaxed to get the result — the same builder was handed a different policy
+dictionary, and that builder still refuses a policy with a missing rule, an
+unknown rule, or a rule it cannot reach. What this shows is that the launcher's
+enforcement path works, on a bound short enough to watch.
+
+**Attack 5 answered early, by accident.** `/dev/vda on / type ext4
+(ro,relatime)` and a refused write are the read-only-root rule holding, observed
+in the C2 boot before C3 was written. It is recorded here because it happened
+here, and C3 will still run it as an attack rather than cite this line — one
+observation inside a friendly command is not the same as a probe that was trying.
+
 ##### C3 — the seven attacks
 
 **Builds.** `tests/test_agentic_v2_containment_rules.py` gains the test its own

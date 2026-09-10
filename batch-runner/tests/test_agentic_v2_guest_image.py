@@ -51,11 +51,25 @@ def _layer(entries: dict[str, bytes | None], tmp_path: Path, name: str) -> dict:
             info = tarfile.TarInfo(member_name)
             if content is None:
                 info.type = tarfile.DIRTYPE
+                info.mode = 0o755
                 archive.addfile(info)
             else:
                 info.size = len(content)
                 archive.addfile(info, io.BytesIO(content))
     path = tmp_path / name
+    path.write_bytes(buffer.getvalue())
+    return {"digest": _digest(buffer.getvalue()), "path": path.as_posix()}
+
+
+def _special(kind: str, name: str, target: str, tmp_path: Path, file_name: str) -> dict:
+    """A one-member layer holding a symbolic or hard link."""
+    buffer = io.BytesIO()
+    with tarfile.open(fileobj=buffer, mode="w") as archive:
+        info = tarfile.TarInfo(name)
+        info.type = tarfile.SYMTYPE if kind == "symlink" else tarfile.LNKTYPE
+        info.linkname = target
+        archive.addfile(info)
+    path = tmp_path / file_name
     path.write_bytes(buffer.getvalue())
     return {"digest": _digest(buffer.getvalue()), "path": path.as_posix()}
 
@@ -292,13 +306,6 @@ def test_an_opaque_whiteout_empties_the_directory_it_sits_in(tmp_path):
     assert list((tmp_path / "root" / "var" / "cache").iterdir()) == []
 
 
-def test_a_layer_that_climbs_out_of_the_root_is_refused_not_filtered(tmp_path):
-    escaping = _layer({"../outside": b"no\n"}, tmp_path, "l0.tar")
-    with pytest.raises(ImageRefused, match="points outside"):
-        unpack_layers([escaping], tmp_path / "root")
-    assert not (tmp_path / "outside").exists()
-
-
 def test_an_absolute_path_in_a_layer_is_refused(tmp_path):
     absolute = _layer({"/etc/shadow": b"no\n"}, tmp_path, "l0.tar")
     with pytest.raises(ImageRefused, match="absolute path"):
@@ -308,6 +315,100 @@ def test_an_absolute_path_in_a_layer_is_refused(tmp_path):
 # --------------------------------------------------------------------------
 # the one added file, and the image that is built from all of it
 # --------------------------------------------------------------------------
+
+
+def test_the_root_entry_every_layer_starts_with_is_not_an_escape(tmp_path):
+    """``.`` is the first member of a real OCI layer, and it stopped C2's first boot.
+
+    The check was written with ``lstrip("./")``, which takes a set of characters
+    rather than a prefix: ``.`` became the empty string and was refused as an
+    escape. The same call turned ``../x`` into ``x`` and ``/etc/shadow`` into
+    ``etc/shadow``, so the two members it existed to stop were the two it let
+    through. Both directions are held here.
+    """
+    layer = _layer({".": None, "./etc/hostname": b"guest\n"}, tmp_path, "l0.tar")
+
+    report = unpack_layers([layer], tmp_path / "root")
+
+    assert (tmp_path / "root" / "etc" / "hostname").read_bytes() == b"guest\n"
+    assert report["entries_written"] == 1, "the root entry is skipped, not written"
+
+
+@pytest.mark.parametrize(
+    "escape", ["../x", "/etc/shadow", "a/../../b", "./../../y"]
+)
+def test_a_member_that_lands_outside_the_root_is_refused(tmp_path, escape):
+    with pytest.raises(ImageRefused):
+        unpack_layers(
+            [_layer({escape: b"no\n"}, tmp_path, "bad.tar")], tmp_path / "root"
+        )
+    assert not (tmp_path / "x").exists()
+    assert not (tmp_path / "b").exists()
+
+
+def test_a_member_written_through_a_symlinked_parent_is_refused(tmp_path):
+    """Neither member escapes on its own reading, and the pair of them does.
+
+    ``etc`` as a link to ``/`` is a legal thing for a layer to contain. So is a
+    file called ``etc/passwd``. Together they write to the host's own file, and
+    the only moment the pair is visible is the one where the second is about to
+    be extracted and the link already exists.
+    """
+    link = _special("symlink", "etc", "/", tmp_path, "l0.tar")
+    through = _layer({"etc/passwd": b"pwned\n"}, tmp_path, "l1.tar")
+
+    with pytest.raises(ImageRefused, match="symbolic link"):
+        unpack_layers([link, through], tmp_path / "root")
+
+
+def test_a_hardlink_pointing_out_of_the_image_is_refused(tmp_path):
+    """A hardlink is a second name, and tar lets it name something outside.
+
+    It cannot be used to write to the host — but it pulls a host file's contents
+    into the filesystem the guest boots from, which is the same disclosure in
+    the other direction and is not something the manifest describes.
+    """
+    escaping = _special("hardlink", "usr/x", "../../../etc/shadow", tmp_path, "l0.tar")
+    with pytest.raises(ImageRefused, match="points outside"):
+        unpack_layers([escaping], tmp_path / "root")
+
+
+def test_a_narrow_directory_does_not_break_the_layer_it_is_in(tmp_path):
+    """Its own children arrive after it, and its mode is in place by then.
+
+    ``extractall`` defers directory modes to the end for exactly this reason,
+    and cannot be used here because the whiteout and escape checks need each
+    member in hand. So the mode is widened during the unpack and put back
+    afterwards, and this is both halves: the children land, and the image's own
+    mode is what survives.
+    """
+    narrow = io.BytesIO()
+    with tarfile.open(fileobj=narrow, mode="w") as archive:
+        directory = tarfile.TarInfo("var")
+        directory.type = tarfile.DIRTYPE
+        directory.mode = 0o700
+        archive.addfile(directory)
+        child = tarfile.TarInfo("var/log")
+        child.size = 4
+        archive.addfile(child, io.BytesIO(b"log\n"))
+    path = tmp_path / "l0.tar"
+    path.write_bytes(narrow.getvalue())
+    layer = {"digest": _digest(narrow.getvalue()), "path": path.as_posix()}
+
+    report = unpack_layers([layer], tmp_path / "root")
+
+    assert (tmp_path / "root" / "var" / "log").read_bytes() == b"log\n"
+    assert (tmp_path / "root" / "var").stat().st_mode & 0o777 == 0o700
+    assert report["directory_modes_restored"] == 1
+
+
+def test_the_unpack_says_what_the_extraction_filter_changed(tmp_path):
+    """So the artefact does not imply the tree is the image's own permissions."""
+    layer = _layer({"a": b"a\n"}, tmp_path, "l0.tar")
+    report = unpack_layers([layer], tmp_path / "root")
+
+    assert "setuid" in report["what_the_filter_changed"]
+    assert report["extraction_filter"] in {"tar", "none available"}
 
 
 def test_the_added_init_is_recorded_in_full_rather_than_described(tmp_path):
