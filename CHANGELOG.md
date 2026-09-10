@@ -267,6 +267,21 @@ entries land under a fresh dated heading the day they merge to `main`.
   survivor was the builder's own backstop, which no healthy build exercises, and
   it now has a test that stages the drop it exists for.
 
+  One more thing broke on the way out, and it was prose rather than code.
+  Reading the generated report afterwards showed it asserting both halves of a
+  contradiction three lines apart: the new section said every rule now has an
+  argument, while the recorded azure finding above it still ended by saying no
+  code turns the policy into launch arguments. That sentence was true the day it
+  was measured and false the moment this module merged, and **nothing failed**,
+  because a recorded finding is a frozen string and no test compared it against
+  the live answer. The fix is structural rather than editorial: whether anything
+  applies the rules is a property of this repository, it changes without any
+  machine changing, and `describe_containment` already answers it live in its
+  own section — so a finding may no longer name `REQUIRED_MICROVM_POLICY` or the
+  launch module at all, and a test enforces that for every finding rather than
+  for the one that went stale. The same reach appeared in a test module's
+  docstring and is corrected there too.
+
 - **The containment answers a seventh question, and it was found by planning
   the test rather than by reading the rules.** Stage C's attack list has always
   ended with one that is not like the others: the command must not be able to

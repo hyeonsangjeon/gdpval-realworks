@@ -1160,6 +1160,18 @@ visible in the diff:
   anything — the exact failure the readiness module exists to prevent, arriving
   through good news instead of through a deletion.
 
+  Reading the generated report afterwards caught the same fault in the other
+  direction. The recorded azure finding ended by saying
+  no code turns the policy into launch arguments — true when it was measured,
+  false the moment this module merged — so the printed report asserted both
+  halves of a contradiction three lines apart, and **nothing failed**, because a
+  finding is a frozen string and no test compared it against the live answer. A
+  finding may no longer name `REQUIRED_MICROVM_POLICY` or the launch module at
+  all: whether anything applies the rules is a property of this repository, it
+  changes without any machine changing, and there is already a section that
+  answers it live. Enforced for every finding rather than for the one that went
+  stale.
+
 ##### C2 — the first boot, on the machine stage B measured
 
 **Builds.** The thin spawn that C1 deliberately left out, and one command run

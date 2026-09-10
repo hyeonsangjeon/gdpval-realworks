@@ -619,6 +619,36 @@ def test_the_one_machine_that_could_host_it_does_not_claim_to_have_it():
     assert "sha256" in capable[0].established_by
 
 
+def test_no_finding_answers_the_repository_wide_question_for_itself():
+    """A finding records a machine. It must not restate what the code does.
+
+    This one is written from a bug rather than from taste. The azure finding
+    used to end by saying that no code turns the policy into launch arguments,
+    which was true on the day it was measured and false the day
+    core.agentic_v2_microvm_launch was merged — and nothing failed, because a
+    finding is a frozen string that no test compares against the live answer.
+    The printed report then carried both claims, three lines apart.
+
+    So the rule is structural rather than editorial: whether anything applies
+    the rules is a property of this repository, it changes without any machine
+    changing, and describe_containment already answers it live in its own
+    section. A finding that names the policy or the module that translates it
+    is reaching for that answer and will go stale holding it.
+    """
+    answers_that_are_not_about_a_machine = (
+        "REQUIRED_MICROVM_POLICY",
+        "agentic_v2_microvm_launch",
+    )
+
+    for finding in RECORDED_FINDINGS:
+        for answer in answers_that_are_not_about_a_machine:
+            assert answer not in finding.finding, (
+                f"the {finding.machine} finding states {answer}, which is a "
+                "fact about this repository rather than about that machine; "
+                "leave it to the section that answers it live"
+            )
+
+
 def test_the_github_runner_finding_rests_on_githubs_own_documentation():
     github = next(
         finding for finding in RECORDED_FINDINGS if "github-hosted" in finding.machine
@@ -887,13 +917,32 @@ def test_the_printed_report_states_the_requirement_the_verdict_and_the_sources()
     assert "must not run" in printed
 
 
+def _section(lines: list[str], heading: str) -> str:
+    """The lines under one heading, stopping at the blank line that ends it.
+
+    Asserting against the whole report is weak here: the sentence this section
+    has to carry also appears once per rule further down, so a substring test
+    on the full text goes on passing after the section itself is deleted.
+    """
+    start = lines.index(heading)
+    end = lines.index("", start + 1)
+    return "\n".join(lines[start:end])
+
+
 def test_the_printed_report_says_which_rules_nobody_applies():
     report = containment_answer_everywhere(facts=a_machine())
-    printed = "\n".join(describe_containment(report))
+    described = describe_containment(report)
+    printed = "\n".join(described)
+    section = _section(described, "Whether anything applies the rules, on any machine")
 
-    assert "Whether anything applies the rules, on any machine" in printed
-    assert "Nothing does:" in printed
-    assert "a fact about this repository rather than about any machine" in printed
+    # Pinned to the claim the section has to carry, not to a lead-in phrase
+    # that formatting is free to change. An earlier version of this assertion
+    # matched "Nothing does:" and would have gone on passing if the sentence
+    # underneath it had been dropped.
+    assert report["anything_applies_the_containment_rules"] is False
+    assert "starts no process" in section
+    assert "a fact about this repository rather than about any machine" in section
+    assert NOTHING_APPLIES_THESE_RULES_YET in printed
     assert "The required containment is available" not in printed
 
 

@@ -656,10 +656,11 @@ RECORDED_FINDINGS: tuple[RecordedFinding, ...] = (
             "firecracker and jailer programs are not on the image and were "
             "installed during the measurement, so a freshly deployed host "
             "answers no on that fourth point until it is bootstrapped. This "
-            "says the containment could be hosted, and nothing more: no code "
-            "turns REQUIRED_MICROVM_POLICY into arguments for starting a "
-            "virtual machine, so on this machine too the rules are written "
-            "down and unapplied"
+            "says the containment could be hosted, and nothing more. Whether "
+            "anything applies the rules is a fact about this repository and "
+            "not about this machine, so it is left to the section below, "
+            "which answers it live, rather than frozen into a finding that "
+            "would go stale the moment the repository moved"
         ),
         established_by=(
             "az vm run-command on gdpval-devhost-vm in rg-gdpval-devhost-krc, "
@@ -915,7 +916,15 @@ def describe_containment(report: Mapping[str, Any]) -> list[str]:
     if report["anything_applies_the_containment_rules"]:
         lines.append("  Something starts a machine with those arguments.")
     else:
-        lines.append(f"  Nothing does: {NOTHING_APPLIES_THESE_RULES_YET}.")
+        # Not NOTHING_APPLIES_THESE_RULES_YET itself: that sentence is worded
+        # for a single rule's verdict ("this rule"), which has no antecedent
+        # here, and it would restate the line directly above it. It is still
+        # printed once per rule under "The answer".
+        lines.append(
+            "  Nothing runs those arguments: the builder returns a document "
+            "and starts no process, so the rules stay written down and "
+            "unenforced rather than met."
+        )
         lines.append(
             "  This is the same on every machine, because it is a fact about "
             "this repository rather than about any machine."
