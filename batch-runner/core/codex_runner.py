@@ -1026,6 +1026,16 @@ class CodexAgentRunner(RecordsItsFirstRequest):
             "success": outcome.success,
             "text": outcome.text,
             "files": outcome.files,
+            # The same two numbers, on the way out rather than on the runner.
+            # `last_run_diagnostics` is an attribute no caller reads, so until
+            # now how far a turn got and what refused it were measured and then
+            # left behind here. What the turn spent is deliberately not
+            # repeated: the cost ledger already carries it under this task id,
+            # and a second copy is a second thing to disagree with the first.
+            "codex_diagnostics": {
+                "items_seen": outcome.items_seen,
+                "http_status_code": outcome.http_status_code,
+            },
         }
         if outcome.error:
             result["error"] = outcome.error
