@@ -53,6 +53,7 @@ from core.codex_runtime_config import (
     require_pinned_runtime,
     resolve_run_root_base,
 )
+from core.cost_metering import CostRecorder
 from core.cost_receipts import STAGE_GENERATION, RETRY_NONE, make_call_id
 from core.execution_envelope_observed import (
     API_FAMILY_RESPONSES,
@@ -425,7 +426,9 @@ class CodexWorkspace:
 # ── The runner ──────────────────────────────────────────────────────────────
 
 
-def _turn_failure_category(failure: Any) -> str:
+def _turn_failure_category(
+    failure: Any, *, http_status_code: int | None = None
+) -> str:
     """Why a turn failed, when the failure says so.
 
     ``turn_failed`` is true of every failed turn and useful about none of
@@ -438,15 +441,127 @@ def _turn_failure_category(failure: Any) -> str:
     reason -- so the run could not say, from its own record, that it had been
     refused for rate rather than defeated by the task.
 
-    :func:`classify_execution_error` already keeps that vocabulary. Its
-    fallback, ``execution_error``, says less than ``turn_failed`` does, so the
-    fallback is not taken; only an answer more specific than "the turn failed"
-    replaces it.
+    The status code, when the SDK reports one, is asked first. It is the
+    provider's own answer rather than our reading of an English sentence, and
+    it does not depend on the wording surviving a version of the runtime or a
+    change of region. Reading a bare ``429`` out of prose is the mistake
+    :mod:`core.execution_errors` is careful not to make -- a traceback names
+    lines -- but a status code *field* holding 429 means exactly one thing.
+
+    :func:`classify_execution_error` already keeps that vocabulary for the
+    rest. Its fallback, ``execution_error``, says less than ``turn_failed``
+    does, so the fallback is not taken; only an answer more specific than
+    "the turn failed" replaces it.
     """
+    if http_status_code == 429:
+        return "rate_limited"
     category = classify_execution_error(str(failure))
     if not category or category == "execution_error":
         return "turn_failed"
     return category
+
+
+#: Notification methods the turn stream is read for. Matched as strings
+#: because this module does not import the SDK -- see :func:`read_breakdown`.
+_NOTIFY_TOKEN_USAGE = "thread/tokenUsage/updated"
+_NOTIFY_ITEM_COMPLETED = "item/completed"
+_NOTIFY_TURN_COMPLETED = "turn/completed"
+
+#: Fields of a ``CodexErrorInfo`` variant that carry an HTTP status. Named
+#: rather than derived, because this module does not import the SDK at module
+#: scope; ``test_every_status_carrying_variant_is_named`` asks the SDK whether
+#: this list is still complete, so a variant added by a version bump is a
+#: failing test rather than a status silently going unread.
+_ERROR_INFO_WITH_STATUS = (
+    "http_connection_failed",
+    "response_stream_disconnected",
+    "response_stream_connection_failed",
+    "response_too_many_failed_attempts",
+)
+
+
+def _http_status_from_turn_error(error: Any) -> int | None:
+    """The status code a ``TurnError`` reports, if it reports one.
+
+    ``TurnError.codex_error_info`` is a tagged union whose relevant variants
+    each hold a single object with an ``http_status_code``. Reached by
+    attribute, so a variant we have not seen simply yields ``None`` instead of
+    raising.
+    """
+    info = getattr(error, "codex_error_info", None)
+    if info is None:
+        return None
+    root = getattr(info, "root", info)
+    for name in _ERROR_INFO_WITH_STATUS:
+        detail = getattr(root, name, None)
+        if detail is None:
+            continue
+        code = getattr(detail, "http_status_code", None)
+        if isinstance(code, int):
+            return code
+    return None
+
+
+@dataclass
+class TurnObservation:
+    """What the turn's own event stream said, whether or not it completed.
+
+    ``TurnHandle.run`` collects the running token usage, the thread items and
+    the completed turn, and *then* raises if the turn failed -- so everything
+    it had collected leaves with the exception. That is why seven of the nine
+    ledger rows on run ``34500590783`` carry no token count: those turns were
+    refused part-way through, after the stream had been reporting a running
+    total for a minute, and the total went out with the error.
+
+    Reading the same stream on the way past keeps it. A refused turn can then
+    settle for what it is measured to have spent instead of staying an open
+    reservation that says only "a cost may exist here".
+    """
+
+    result: Any = None
+    timed_out: bool = False
+    failure: str | None = None
+    usage: Any = None
+    items_seen: int = 0
+    turn: Any = None
+
+    @property
+    def http_status_code(self) -> int | None:
+        return _http_status_from_turn_error(getattr(self.turn, "error", None))
+
+
+def _recording_stream(events: Any, observed: TurnObservation) -> Any:
+    """Yield ``events`` unchanged, remembering the three that matter."""
+    for event in events:
+        method = getattr(event, "method", "") or ""
+        payload = getattr(event, "payload", None)
+        if method == _NOTIFY_TOKEN_USAGE:
+            usage = getattr(payload, "token_usage", None)
+            if usage is not None:
+                observed.usage = usage
+        elif method == _NOTIFY_ITEM_COMPLETED:
+            observed.items_seen += 1
+        elif method == _NOTIFY_TURN_COMPLETED:
+            observed.turn = getattr(payload, "turn", None)
+        yield event
+
+
+def _load_turn_collector() -> Any:
+    """The SDK's own stream-to-result collector, or ``None``.
+
+    Borrowed rather than reimplemented: it decides which agent message is the
+    final answer, and that answer is the deliverable text step 4 fills into
+    the parquet. A local copy of that rule is a way to lose a deliverable to a
+    detail of message phases. The runtime is pinned to an exact version, so a
+    symbol moving is a pin failure rather than a silent one; ``None`` here
+    falls back to ``TurnHandle.run`` and to observing nothing, which is what
+    this runner did before.
+    """
+    try:  # pragma: no cover - exercised only where the SDK is installed
+        from openai_codex._run import _collect_turn_result
+    except Exception:  # noqa: BLE001
+        return None
+    return _collect_turn_result
 
 
 @dataclass
@@ -459,6 +574,8 @@ class CodexRunOutcome:
     error: str | None = None
     error_category: str | None = None
     usage_delta: CodexTokenTotals = field(default_factory=CodexTokenTotals)
+    items_seen: int = 0
+    http_status_code: int | None = None
     thread_id: str | None = None
     turn_id: str | None = None
     swept_pids: tuple[int, ...] = ()
@@ -886,6 +1003,13 @@ class CodexAgentRunner(RecordsItsFirstRequest):
             "thread_id": outcome.thread_id,
             "turn_id": outcome.turn_id,
             "swept_orphan_pids": list(outcome.swept_pids),
+            # How far into the turn it got, and what the provider answered
+            # with. A turn refused after forty items is a different fact from
+            # one refused after two, and only the first is evidence that the
+            # limit is reached by what one turn spends rather than by how fast
+            # turns arrive.
+            "items_seen": outcome.items_seen,
+            "http_status_code": outcome.http_status_code,
             "usage_delta": {
                 "input_tokens": outcome.usage_delta.input_tokens,
                 "cached_input_tokens": outcome.usage_delta.cached_input_tokens,
@@ -976,13 +1100,42 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                     thread_id=getattr(thread, "id", None),
                 )
 
-            result, timed_out, failure = self._await_turn(turn_handle)
+            observed = self._await_turn(turn_handle)
+            result, timed_out, failure = (
+                observed.result, observed.timed_out, observed.failure
+            )
+
+            def _settle_what_was_measured() -> CodexTokenTotals:
+                """Bill the ended turn for the tokens the stream reported.
+
+                A turn that was refused or interrupted part-way still sent
+                requests and still ran up a total, and the stream had been
+                saying so all along. Settling for that figure is not a claim
+                that it is the whole bill -- the reservation was opened with
+                ``call_reachability_unknown``, so the receipt stays ``partial``
+                either way. It is the difference between a receipt that says
+                "a cost may exist here" and one that says "at least this much
+                was spent, and there may be more".
+
+                When the stream reported nothing, the reservation is left
+                open, which is the older and still-correct answer.
+                """
+                nonlocal call_id
+                measured = turn_usage_delta(
+                    before_totals, read_thread_totals(observed.usage)
+                )
+                if measured.is_empty:
+                    return measured
+                self._settle_call(call_id, measured)
+                call_id = None
+                return measured
 
             if timed_out:
-                # Deliberately **not** abandoned. The turn was sent; the model
-                # may well have answered and been billed. The reservation stays
-                # open, which is the ledger's way of saying "a cost may exist
-                # here that we cannot measure".
+                # The turn was sent and the model may well have answered, so
+                # the reservation is never abandoned. What the stream managed
+                # to report before the interrupt is settled; what it did not
+                # stays an open reservation.
+                measured = _settle_what_was_measured()
                 files = workspace.collect_deliverables()
                 return CodexRunOutcome(
                     success=False,
@@ -993,18 +1146,27 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                         "was interrupted"
                     ),
                     error_category="timeout",
+                    usage_delta=measured,
+                    items_seen=observed.items_seen,
                     thread_id=getattr(thread, "id", None),
                     turn_id=getattr(turn_handle, "id", None),
                 )
 
             if failure is not None:
+                status_code = observed.http_status_code
+                measured = _settle_what_was_measured()
                 files = workspace.collect_deliverables()
                 return CodexRunOutcome(
                     success=False,
                     text="",
                     files=files,
                     error=f"the Codex turn failed: {failure}",
-                    error_category=_turn_failure_category(failure),
+                    error_category=_turn_failure_category(
+                        failure, http_status_code=status_code
+                    ),
+                    usage_delta=measured,
+                    items_seen=observed.items_seen,
+                    http_status_code=status_code,
                     thread_id=getattr(thread, "id", None),
                     turn_id=getattr(turn_handle, "id", None),
                 )
@@ -1021,6 +1183,7 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                 text=text,
                 files=files,
                 usage_delta=delta,
+                items_seen=observed.items_seen,
                 thread_id=getattr(thread, "id", None),
                 turn_id=getattr(result, "id", None),
             )
@@ -1034,22 +1197,40 @@ class CodexAgentRunner(RecordsItsFirstRequest):
             if swept:
                 self.last_swept_pids = swept
 
-    def _await_turn(self, turn_handle: Any) -> tuple[Any, bool, str | None]:
+    def _await_turn(self, turn_handle: Any) -> TurnObservation:
         """Consume a turn under a wall clock; interrupt it if it overruns.
 
-        The SDK exposes no timeout of its own — ``Thread.run`` blocks until the
-        turn completes — so the limit is enforced here, by consuming the turn on
+        The SDK exposes no timeout of its own -- ``Thread.run`` blocks until the
+        turn completes -- so the limit is enforced here, by consuming the turn on
         a worker thread and asking Codex to interrupt when the clock runs out.
         Interrupting first, rather than killing the process, gives the agent the
         chance to finish writing whatever file it had open.
+
+        The stream is read on the way past rather than only at the end, so a
+        turn that is refused or interrupted still reports what it had spent.
+        The observation is written by the worker and read by this thread after
+        it stops; on the timeout path the worker may still be running, and the
+        reading is then a moment stale rather than torn -- every field is a
+        single assignment or a count only that thread increments.
         """
-        box: dict[str, Any] = {}
+        observed = TurnObservation()
+        collector = _load_turn_collector()
 
         def _consume() -> None:
             try:
-                box["result"] = turn_handle.run()
+                if collector is None:
+                    observed.result = turn_handle.run()
+                    return
+                stream = turn_handle.stream()
+                try:
+                    observed.result = collector(
+                        _recording_stream(stream, observed),
+                        turn_id=turn_handle.id,
+                    )
+                finally:
+                    stream.close()
             except BaseException as exc:  # noqa: BLE001
-                box["error"] = exc
+                observed.failure = str(exc)
 
         worker = threading.Thread(
             target=_consume, name="codex-turn", daemon=True
@@ -1063,12 +1244,10 @@ class CodexAgentRunner(RecordsItsFirstRequest):
             except Exception:  # noqa: BLE001
                 pass
             worker.join(CODEX_INTERRUPT_GRACE_SECONDS)
-            return None, True, None
-
-        error = box.get("error")
-        if error is not None:
-            return None, False, str(error)
-        return box.get("result"), False, None
+            observed.result = None
+            observed.failure = None
+            observed.timed_out = True
+        return observed
 
     # -- cost ---------------------------------------------------------------
 
@@ -1087,17 +1266,29 @@ class CodexAgentRunner(RecordsItsFirstRequest):
         sitting under a naming scheme of its own. ``attempt_index`` counts this
         runner's turns per task: re-running a task must open a second receipt,
         not settle a second result onto the first one's row.
+
+        ``retry_kind`` comes from whatever attribution scope the caller has
+        open. It used to be ``RETRY_NONE``, written here as a literal, which
+        meant the infrastructure retries added in #502 reached the ledger
+        labelled as first attempts: all nine rows of run ``34500590783`` say
+        ``none`` although four of them were retries. The scope is entered on
+        this thread, immediately around the call, so reading it here is
+        reading the caller's own answer rather than guessing at one.
         """
         if self.cost_ledger is None:
             return None
         task = task_id or "unknown-task"
         attempt = self._turns_per_task.get(task, 0)
         self._turns_per_task[task] = attempt + 1
+        attribution = CostRecorder.current()
+        retry_kind = (
+            attribution.retry_kind if attribution is not None else RETRY_NONE
+        )
         call_id = make_call_id(
             run_id=self.run_id or getattr(self.cost_ledger, "run_id", "codex"),
             task_id=task,
             stage=STAGE_GENERATION,
-            retry_kind=RETRY_NONE,
+            retry_kind=retry_kind,
             attempt_index=attempt,
             sequence=0,
         )
@@ -1105,7 +1296,7 @@ class CodexAgentRunner(RecordsItsFirstRequest):
             call_id=call_id,
             task_id=task,
             stage=STAGE_GENERATION,
-            retry_kind=RETRY_NONE,
+            retry_kind=retry_kind,
             provider="azure",
             requested_model=self.provider.model,
             deployment=self.provider.model,
