@@ -677,7 +677,7 @@ def test_the_turn_record_still_has_its_own_check(tmp_path: Path):
     from tests.test_codex_auth_discriminator import _run_leak_check
 
     record = {
-        "schema": "codex_foundry_connection/2",
+        "schema": "codex_foundry_connection/3",
         "verdict": "not_sent",
         "observed": {"tool_execution_observed": True},
     }

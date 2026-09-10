@@ -12,6 +12,51 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Fixed
+- **The connection diagnostic asked the turn for a field the turn does not
+  have, and reported the answer as missing.** Run `34461522053` connected: the
+  stream carried `UserMessageThreadItem`, `ReasoningThreadItem` and
+  `AgentMessageThreadItem`, and the provider billed 10,994 input / 28 output
+  tokens for it. The record still said `final_response_present: false`, which
+  reads as the model having stayed silent.
+
+  It had not. `_final_text` looked for `final_response` and then `output_text`
+  **on the `Turn`**. Both names are real, but they belong to `TurnResult`, the
+  SDK's own dataclass in `_run.py`. The `Turn` in `generated/v2_all.py` — which
+  is what a `TurnCompletedNotification` carries — has neither: it has `items`,
+  and the answer is the `text` of an `AgentMessageThreadItem` among them.
+  `getattr` on a Pydantic model with no such field returns the default without
+  complaint, so the miss was silent and total: **every** completed turn this
+  diagnostic ever observed was recorded as answerless.
+
+  `_final_text` now reads the items, using the SDK's own selection rule —
+  prefer the message marked `final_answer`, else the last one whose phase the
+  provider left unset, and never `commentary`. It consults the turn payload
+  first and the stream second, because `Turn.items_view` may say `notLoaded`,
+  and an unloaded payload is not a claim that nothing was said;
+  `observed.final_response_source` records which one answered.
+
+  The rule is copied from the SDK's private
+  `_final_assistant_response_from_items` rather than imported, and
+  `test_our_reading_rule_matches_the_pinned_sdks_own` runs the two over the
+  same eight item lists so an SDK bump that changes the rule fails a test
+  instead of drifting. There was no test over this function at all before, which
+  is how the bug survived; there are now eleven, built on real SDK objects,
+  because a stand-in carrying a `final_response` attribute is exactly the
+  fiction that hid it.
+
+  **The real run path was never affected.** `TurnHandle.run()` is annotated
+  `-> TurnResult` (`api.py:757`), so `core/codex_runner.py`'s
+  `getattr(result, "final_response", None)` reads a field that exists. Only the
+  diagnostic, which drives the stream itself, ever held the wire model.
+
+  The record format is now `codex_foundry_connection/3`. This is a version bump
+  rather than an additive change because `final_response_present: false` means
+  something different on either side of it — a claim about us before, a claim
+  about the model after — and the two must not be compared. The model's text is
+  still not published: the record says whether an answer arrived and whether it
+  matched, and `observe_stream` deliberately returns the agent messages out of
+  band rather than folding them into the summary that lands in the artifact.
+
 - **The Codex `401` was never about the deployment: the auth command could not
   produce a token where Codex runs it.** Three independent faults, each
   sufficient on its own, each producing the same silent symptom.

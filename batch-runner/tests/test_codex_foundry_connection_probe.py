@@ -1661,3 +1661,200 @@ def test_the_two_gates_cover_every_case_between_them():
     )
 
 
+
+# ── Reading the model's answer ──────────────────────────────────────────────
+#
+# There was no test here, and that is exactly how run 34461522053 came back
+# saying `final_response_present: false` about a turn whose own stream had
+# carried an `AgentMessageThreadItem`. The old reader asked the turn for a
+# `final_response` attribute. The turn model has no such field and never did,
+# so the answer was always the empty string and the record always said the
+# model had been silent.
+#
+# These build real SDK objects rather than stand-ins. A stand-in with a
+# `final_response` attribute is precisely the fiction that let the bug live.
+
+
+def _agent_message(text, phase="final_answer", item_id="i1"):
+    from openai_codex.generated.v2_all import AgentMessageThreadItem, MessagePhase
+
+    return AgentMessageThreadItem(
+        id=item_id,
+        text=text,
+        type="agentMessage",
+        phase=None if phase is None else MessagePhase(phase),
+    )
+
+
+def _reasoning_item(item_id="r1"):
+    from openai_codex.generated.v2_all import ReasoningThreadItem
+
+    return ReasoningThreadItem(id=item_id, type="reasoning", summary=[])
+
+
+def _turn(items, status="completed", items_view="full"):
+    from openai_codex.generated.v2_all import ThreadItem, Turn, TurnItemsView, TurnStatus
+
+    return Turn(
+        id="turn-1",
+        items=[ThreadItem(item) for item in items],
+        status=TurnStatus(status),
+        items_view=TurnItemsView[items_view],
+    )
+
+
+def test_the_two_fields_the_old_reader_asked_for_are_not_on_the_turn_model():
+    """The bug in one assertion.
+
+    Both names exist in the SDK -- on ``TurnResult`` in ``_run.py``, which is
+    what ``core/codex_runner.py`` gets back and which is a different object from
+    the ``Turn`` a completion notification carries. Reading one's field names
+    off the other is silent: ``getattr`` returns the default and the record
+    fills in a confident ``false``.
+    """
+    from openai_codex.generated.v2_all import Turn
+
+    fields = set(Turn.model_fields)
+    assert "final_response" not in fields
+    assert "output_text" not in fields
+    assert "items" in fields
+
+
+def test_the_answer_is_read_out_of_the_turns_items():
+    import scripts.diagnose_codex_foundry_connection as module
+
+    turn = _turn([_reasoning_item(), _agent_message("CONNECTED")])
+    assert module._final_text(turn) == ("CONNECTED", "turn_items")
+
+
+def test_the_answer_is_read_from_the_stream_when_the_payload_did_not_carry_it():
+    """``items_view`` may be ``notLoaded``. An unloaded payload is not a claim
+    that nothing was said, and the stream is the record of what arrived."""
+    import scripts.diagnose_codex_foundry_connection as module
+
+    turn = _turn([], items_view="not_loaded")
+    streamed = [_agent_message("CONNECTED")]
+    assert module._final_text(turn, streamed) == ("CONNECTED", "stream_items")
+
+
+def test_a_marked_final_answer_wins_over_an_unmarked_message():
+    import scripts.diagnose_codex_foundry_connection as module
+
+    turn = _turn(
+        [
+            _agent_message("CONNECTED", phase="final_answer", item_id="a"),
+            _agent_message("thinking out loud", phase=None, item_id="b"),
+        ]
+    )
+    assert module._final_text(turn)[0] == "CONNECTED"
+
+
+def test_commentary_on_its_own_is_not_an_answer():
+    """The SDK's rule, and it is the right one: commentary is the model talking
+    about the work, not the work. Treating it as the answer would let a turn
+    that never answered report a match."""
+    import scripts.diagnose_codex_foundry_connection as module
+
+    turn = _turn([_agent_message("let me check that", phase="commentary")])
+    assert module._final_text(turn) == ("", None)
+
+
+def test_a_turn_that_truly_said_nothing_still_reads_as_nothing():
+    """The fix must not turn every completed turn into a present answer."""
+    import scripts.diagnose_codex_foundry_connection as module
+
+    assert module._final_text(_turn([_reasoning_item()]), []) == ("", None)
+
+
+def test_whitespace_is_not_an_answer():
+    import scripts.diagnose_codex_foundry_connection as module
+
+    assert module._final_text(_turn([_agent_message("   \n ")]), []) == ("", None)
+
+
+def test_our_reading_rule_matches_the_pinned_sdks_own():
+    """``_select_final_answer`` is a copy of a private SDK function. This is
+    what keeps the copy honest: if an SDK bump changes which message counts as
+    the answer, this fails rather than the two quietly disagreeing."""
+    import scripts.diagnose_codex_foundry_connection as module
+    from openai_codex._run import _final_assistant_response_from_items
+    from openai_codex.generated.v2_all import ThreadItem
+
+    cases = [
+        [],
+        [_reasoning_item()],
+        [_agent_message("only", phase=None)],
+        [_agent_message("final", phase="final_answer")],
+        [_agent_message("aside", phase="commentary")],
+        [
+            _agent_message("aside", phase="commentary", item_id="a"),
+            _agent_message("final", phase="final_answer", item_id="b"),
+        ],
+        [
+            _agent_message("final", phase="final_answer", item_id="a"),
+            _agent_message("later unmarked", phase=None, item_id="b"),
+        ],
+        [
+            _agent_message("first unmarked", phase=None, item_id="a"),
+            _agent_message("second unmarked", phase=None, item_id="b"),
+        ],
+    ]
+    for items in cases:
+        wrapped = [ThreadItem(item) for item in items]
+        assert module._select_final_answer(wrapped) == (
+            _final_assistant_response_from_items(wrapped)
+        ), f"the rules disagree on {[type(i).__name__ for i in items]}"
+
+
+def _event(payload, method="codex/event"):
+    from types import SimpleNamespace
+
+    return SimpleNamespace(method=method, payload=payload)
+
+
+def _item_completed(item, turn_id="turn-1"):
+    from openai_codex.generated.v2_all import ItemCompletedNotification, ThreadItem
+
+    return ItemCompletedNotification(
+        completed_at_ms=0,
+        item=ThreadItem(item),
+        thread_id="thread-1",
+        turn_id=turn_id,
+    )
+
+
+def test_the_stream_keeps_the_agent_messages_it_used_to_throw_away():
+    import scripts.diagnose_codex_foundry_connection as module
+
+    events = [
+        _event(_item_completed(_reasoning_item())),
+        _event(_item_completed(_agent_message("CONNECTED"))),
+    ]
+    summary, turn, extras = module.observe_stream(events, turn_id="turn-1")
+    usage, thread_settings, agent_messages = extras
+    assert [m.text for m in agent_messages] == ["CONNECTED"]
+    assert summary["item_types"] == ["ReasoningThreadItem", "AgentMessageThreadItem"]
+
+
+def test_an_item_from_another_turn_is_not_collected():
+    """The turn id filter already governed the type list; the messages are held
+    to the same rule, or a stray item would answer for a turn that did not."""
+    import scripts.diagnose_codex_foundry_connection as module
+
+    events = [_event(_item_completed(_agent_message("elsewhere"), turn_id="turn-9"))]
+    _, _, extras = module.observe_stream(events, turn_id="turn-1")
+    assert extras[2] == []
+
+
+def test_the_published_summary_carries_no_answer_text():
+    """The summary is what lands in `observed.streaming` in a world-readable
+    artifact. What the record says about the answer is whether it arrived and
+    whether it matched -- the text itself stays out."""
+    import json
+
+    import scripts.diagnose_codex_foundry_connection as module
+
+    secret = "a-sentence-the-model-said"
+    events = [_event(_item_completed(_agent_message(secret)))]
+    summary, _, _ = module.observe_stream(events, turn_id="turn-1")
+    assert secret not in json.dumps(summary)

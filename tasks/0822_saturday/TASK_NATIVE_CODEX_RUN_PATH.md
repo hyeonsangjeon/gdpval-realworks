@@ -1298,12 +1298,39 @@ paid run must be preceded by a fresh smoke at the new fingerprint.
   The third bit everywhere, because it is what turned both of the others into
   a sentence about a subscription key.
 
-- The next decision is one dispatch of the connection diagnostic from `main`
-  **in plan mode** — `send_request` left off, nothing billed — because the plan
-  now runs the real auth command in the real isolated environment and writes the
-  `auth_command` block. Minting is a call to the identity platform, not to the
-  deployment, so the runner question is answered by a dispatch that spends
-  nothing. It reports rather than gates: a runner that cannot mint still returns
-  `not_sent` and exit `0`, with `ok: false` and the reason. Then a real turn
-  through the fixed path. Until a turn is answered, the column stays empty and
-  is reported as unconfirmed. It is not filled with a substitute.
+- **Both dispatches happened, and both answered.** Plan mode on `main`
+  (`34461076798`) wrote `auth_command: {ran: true, exit_code: 0,
+  produced_a_token: true, azure_config_dir: "/home/runner/.azure", ok: true}`.
+  The sign-in was found where `azure/login` writes it, which is the directory
+  the rewritten `HOME` hides — consistent with the prediction above, though not
+  a proof of it: the measurement was taken with the fix in place, so it shows
+  the fixed path works rather than showing the unfixed one failed. The question
+  the prediction existed to settle is settled by the turn instead.
+
+  The turn (`34461522053`) came back `connected`: `turn_status: completed`,
+  `UserMessageThreadItem` → `ReasoningThreadItem` → `AgentMessageThreadItem`,
+  10 notifications, 10,994 input / 28 output tokens, `model_context_window:
+  258400`, `auth_command.ok: true`. Price unread, so the cost is recorded as
+  `null` — an unpriced record is not a free one.
+
+  What the turn did **not** establish, from the record's own `not_established`:
+  the tool leg (the prompt forbids commands; `tool_execution_observed: false`),
+  the deliverable leg (no file was asked for), the batch leg (one turn says
+  nothing about 5, 30 or 220), and the cost leg.
+
+- That run also exposed a reporting defect of its own: it reported
+  `final_response_present: false` about a turn that had demonstrably produced
+  an agent message, because `_final_text` read field names belonging to the
+  SDK's `TurnResult` off the wire model `Turn`, which has neither. Fixed by
+  reading the turn's items; record format bumped to
+  `codex_foundry_connection/3`. The real run path was never affected —
+  `TurnHandle.run()` returns a `TurnResult`, which is what
+  `core/codex_runner.py` reads.
+
+- The next step is no longer a diagnostic. It is a Codex **experiment**: there
+  is still no YAML anywhere that uses `execution.mode: codex_foundry`, and
+  `experiment_config.py` requires an `execution.codex` block carrying a literal
+  `endpoint` — which cannot be written into a public repository, and for which
+  there is no environment expansion. That gap, then the fixed 5, then 30, then
+  220. Until a task produces a file, the deliverable column stays empty and is
+  reported as unconfirmed. It is not filled with a substitute.
