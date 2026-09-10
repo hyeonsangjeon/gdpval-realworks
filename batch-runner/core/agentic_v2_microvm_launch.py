@@ -76,6 +76,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Mapping
 
+from core.agentic_v2_guest_image import GUEST_INIT_PATH
 from core.agentic_v2_microvm import inspect_microvm_readiness
 from core.agentic_v2_substrate import REQUIRED_MICROVM_POLICY, canonical_sha256
 
@@ -505,9 +506,20 @@ def _firecracker_configuration(
             # kernel. Only one of the two is Firecracker's; a guest told to
             # mount a read-only drive read-write fails at boot in a way that
             # reads as a broken image rather than as an enforced rule.
+            #
+            # ``init=`` is named rather than left to the kernel's search. With
+            # it absent the kernel tries /sbin/init, /etc/init, /bin/init and
+            # then falls back to /bin/sh — and an image built from a language
+            # runtime has no init but does have a shell, so the guest would
+            # come up on an interactive shell attached to a console that
+            # ``--daemonize`` has already sent to /dev/null. That is a machine
+            # that boots, runs nothing, writes nothing and sits there until the
+            # deadline stops it, which is the hardest of all the failures here
+            # to tell apart from a broken image.
             "boot_args": (
                 "console=ttyS0 reboot=k panic=1 pci=off root=/dev/vda"
                 + (" ro" if read_only else "")
+                + f" init={GUEST_INIT_PATH}"
             ),
         },
         "drives": [
