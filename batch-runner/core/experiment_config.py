@@ -599,13 +599,15 @@ class ExperimentConfig:
             )
 
         if self.execution.mode == "codex_foundry":
-            # Validated by building the settings, so a wrong endpoint shape or
-            # a dated api-version on the undated route is caught while reading
-            # the file rather than at the start of a paid run.
+            # Validated by building the settings, so a dated api-version on the
+            # undated route — or, where the file names one, a wrong endpoint
+            # shape — is caught while reading the file rather than at the start
+            # of a paid run.
             from core.codex_runtime_config import (
                 DEFAULT_PROVIDER_ID,
                 CodexProviderSettings,
-                resolve_endpoint_setting,
+                check_block_apart_from_its_address,
+                select_endpoint_source,
             )
 
             settings_data = self.execution.codex
@@ -616,21 +618,35 @@ class ExperimentConfig:
                 )
             else:
                 try:
-                    # Resolved and then thrown away. This is a fail-fast check
-                    # that the address exists, not a hand-off: the value is
-                    # read again where it is used, so a secret endpoint never
-                    # enters a config object that other steps write to disk.
-                    endpoint = resolve_endpoint_setting(settings_data, os.environ)
-                    CodexProviderSettings(
-                        endpoint=endpoint,
-                        model=str(settings_data.get("model", "")),
-                        provider_id=str(
-                            settings_data.get("provider_id") or DEFAULT_PROVIDER_ID
-                        ),
-                        query_params=tuple(
-                            sorted((settings_data.get("query_params") or {}).items())
-                        ),
-                    )
+                    # Which of the two ways the file names its address is a
+                    # question about the file, so it is asked here. Whether
+                    # *this* environment can supply the deferred one is a
+                    # question about the run place, and it is not asked here:
+                    # `batch-run.yml` validates the experiment file in an early
+                    # step that deliberately holds no credentials, and asking
+                    # it there failed a dispatch whose route was present three
+                    # steps later. `step2_run_inference` resolves the real
+                    # address where the route exists and exits before the first
+                    # turn if it cannot, so nothing that spends is unguarded.
+                    endpoint = select_endpoint_source(settings_data)
+                    if endpoint is None:
+                        check_block_apart_from_its_address(settings_data)
+                    else:
+                        # Named literally, so the address is the file's and
+                        # this is the place to be wrong about it. Built and
+                        # then thrown away: a secret endpoint never enters a
+                        # config object that other steps write to disk.
+                        CodexProviderSettings(
+                            endpoint=endpoint,
+                            model=str(settings_data.get("model", "")),
+                            provider_id=str(
+                                settings_data.get("provider_id")
+                                or DEFAULT_PROVIDER_ID
+                            ),
+                            query_params=dict(
+                                settings_data.get("query_params") or {}
+                            ),
+                        )
                 except (ValueError, TypeError, AttributeError) as exc:
                     errors.append(f"execution.codex is not usable: {exc}")
             if self.condition_a.model.provider != "azure":

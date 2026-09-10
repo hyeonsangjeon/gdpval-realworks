@@ -585,6 +585,87 @@ ENDPOINT_FROM_ROUTE_KEY = "endpoint_from_route"
 ENDPOINT_LITERAL_KEY = "endpoint"
 
 
+def select_endpoint_source(block: Mapping[str, Any] | None) -> str | None:
+    """The address this block names, or ``None`` if it defers to the route.
+
+    Everything decided here is a property of the file, so it answers the same
+    on a machine holding this run's Azure route and on one that does not. That
+    separation is the point: :func:`resolve_endpoint_setting` used to make both
+    decisions at once, and callers who only had the file in hand were made to
+    prove they had the run place's credentials as well.
+
+    A block may carry ``endpoint`` *or* ``endpoint_from_route``, and exactly
+    one of them. Not neither, and not both:
+
+    * neither, and there is nothing to call;
+    * both, and the file has two answers to one question, which is worth
+      refusing rather than resolving by precedence — a precedence rule is
+      invisible in review, and the loser would be a plausible-looking address
+      that never gets used.
+    """
+    if not isinstance(block, Mapping):
+        raise CodexProviderConfigurationError(
+            "codex_foundry needs an execution.codex block naming the "
+            "deployment and its address"
+        )
+    literal = str(block.get(ENDPOINT_LITERAL_KEY) or "").strip()
+    from_route = bool(block.get(ENDPOINT_FROM_ROUTE_KEY))
+    if literal and from_route:
+        raise CodexProviderConfigurationError(
+            f"execution.codex sets both {ENDPOINT_LITERAL_KEY} and "
+            f"{ENDPOINT_FROM_ROUTE_KEY}; set exactly one, so the file has one "
+            "answer for which deployment is called"
+        )
+    if not literal and not from_route:
+        raise CodexProviderConfigurationError(
+            f"execution.codex needs {ENDPOINT_LITERAL_KEY} or "
+            f"{ENDPOINT_FROM_ROUTE_KEY}; neither is set, so there is no "
+            "deployment to call"
+        )
+    return literal or None
+
+
+#: A deferred block is contractually an undated ``/openai/v1/`` address:
+#: :func:`resolve_endpoint_setting` returns ``route.direct_v1.url`` or raises,
+#: so no branch of it yields a project or a dated legacy endpoint. This URL
+#: stands in for that certainty while the *rest* of a deferred block is
+#: checked, which is what lets that check still enforce the ``api-version``
+#: rule — the one setting whose legality depends on the endpoint's kind. It
+#: names no resource, is discarded inside the function below, and is never
+#: returned, stored or sent anywhere.
+_THE_SHAPE_A_ROUTE_MUST_PRODUCE = "https://route.services.ai.azure.com/openai/v1/"
+
+
+def check_block_apart_from_its_address(block: Mapping[str, Any]) -> None:
+    """Raise if a route-deferred ``execution.codex`` block is wrong about
+    anything the file itself decides.
+
+    The address is the run place's rather than the file's, so a process that
+    holds only the file cannot check it and should not pretend to. Everything
+    the *file* decides about the provider is still checked here: the deployment
+    name, the provider id, and the query parameters' names, types and the
+    ``api-version`` prohibition.
+
+    This exists because the eager version cost a dispatch. ``batch-run.yml``
+    validates the experiment file in an early step that deliberately holds no
+    credentials — it runs before the gate that decides whether the dispatch may
+    spend at all — and resolving the address there failed with "this
+    environment describes no usable Azure route" on a run whose route was
+    present three steps later. The check was not wrong about the environment it
+    was given; it was asking the wrong process.
+
+    Nothing is skipped as a result. ``step2_run_inference`` resolves the real
+    address where the route exists and exits before the first turn if it
+    cannot, so a run whose address is missing still stops before it spends.
+    """
+    CodexProviderSettings(
+        endpoint=_THE_SHAPE_A_ROUTE_MUST_PRODUCE,
+        model=str(block.get("model", "")),
+        provider_id=str(block.get("provider_id") or DEFAULT_PROVIDER_ID),
+        query_params=dict(block.get("query_params") or {}),
+    )
+
+
 def resolve_endpoint_setting(
     block: Mapping[str, Any] | None,
     environ: Mapping[str, str],
@@ -609,14 +690,11 @@ def resolve_endpoint_setting(
     a run at some other resource without changing any code — which is exactly
     what "the confirmed Foundry resource only" rules out.
 
-    So a block may carry ``endpoint`` *or* ``endpoint_from_route``, and exactly
-    one of them. Not neither, and not both:
-
-    * neither, and there is nothing to call;
-    * both, and the file has two answers to one question, which is worth
-      refusing rather than resolving by precedence — a precedence rule is
-      invisible in review, and the loser would be a plausible-looking address
-      that never gets used.
+    Which of the two ways a block uses is :func:`select_endpoint_source`'s
+    question, and it is a question about the file. This function answers the
+    one that follows and is about the run place: given that the file defers,
+    what address does *this* environment provide? Callers holding only the file
+    should ask the first and not this one.
 
     A route that describes no ``/openai/v1/`` endpoint is an error, not an
     empty string. Falling through to ``""`` would reach
@@ -625,32 +703,13 @@ def resolve_endpoint_setting(
     mistake as the empty bearer token: a silent absence reported as something
     else.
 
-    The value is deliberately *not* stored anywhere by the caller that
-    validates it. ``core.experiment_config`` calls this only to fail early on
-    a run whose address is missing; the address itself is resolved again at the
-    point of use, so it never reaches ``workspace/step1_tasks_prepared.json``
-    or any other file this run writes down.
+    The value is deliberately *not* stored anywhere by its callers. It is
+    resolved at the point of use, so it never reaches
+    ``workspace/step1_tasks_prepared.json`` or any other file this run writes
+    down.
     """
-    if not isinstance(block, Mapping):
-        raise CodexProviderConfigurationError(
-            "codex_foundry needs an execution.codex block naming the "
-            "deployment and its address"
-        )
-    literal = str(block.get(ENDPOINT_LITERAL_KEY) or "").strip()
-    from_route = bool(block.get(ENDPOINT_FROM_ROUTE_KEY))
-    if literal and from_route:
-        raise CodexProviderConfigurationError(
-            f"execution.codex sets both {ENDPOINT_LITERAL_KEY} and "
-            f"{ENDPOINT_FROM_ROUTE_KEY}; set exactly one, so the file has one "
-            "answer for which deployment is called"
-        )
-    if not literal and not from_route:
-        raise CodexProviderConfigurationError(
-            f"execution.codex needs {ENDPOINT_LITERAL_KEY} or "
-            f"{ENDPOINT_FROM_ROUTE_KEY}; neither is set, so there is no "
-            "deployment to call"
-        )
-    if literal:
+    literal = select_endpoint_source(block)
+    if literal is not None:
         return literal
     try:
         route = AzureAIRouteSettings.from_env(environ)
