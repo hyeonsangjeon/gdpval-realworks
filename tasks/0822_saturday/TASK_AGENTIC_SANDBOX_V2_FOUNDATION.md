@@ -691,20 +691,28 @@ exit 1.
       (Three of the questions behind that report are now answered from real
       readings rather than assumed: whether a real model can be reached, whether
       any machine could host the containment, and whether anything applies the
-      containment rules. All three answers are no.)
+      containment rules. Since 2026-09-10 the first answer is **yes** —
+      `core/agentic_v2_model_voice.AzureFoundryVoice` reaches one. The other
+      two are still no.)
 
 ## 11. Known blockers and the next decision
 
-- **Blocked on there being no way to reach a real model.** This is now the
-  smaller blocker. The loop exists at
-  `core/agentic_v2_conversation.run_model_conversation` and is proven against
-  stand-ins that spend nothing, but `real_model_voice` refuses and the loop
-  refuses any model that would be charged for. That refusal is deliberate: it
-  means a paid run cannot start until somebody removes it in a change a
-  reviewer will see, alongside approving the amount.
+- **~~Blocked on there being no way to reach a real model.~~ Closed
+  2026-09-10.** `core/agentic_v2_model_voice.AzureFoundryVoice` asks a Foundry
+  deployment through the Responses API, and `real_model_voice` hands one back
+  when it is given a client and a budget. What used to be a refusal to build
+  anything at all is now a refusal to build it *without an approved amount*,
+  which is the condition the blanket refusal was standing in for. Both halves
+  are exercised by the free check rather than described: the seam is called and
+  must raise, and the loop is run with a paid stand-in and must refuse before
+  asking it anything. A third refusal was added at the same time — a voice that
+  does not declare whether it is paid is refused even on a run that carries a
+  budget, because an approved amount is approval to spend on a known model, not
+  permission to ask an unexamined one.
 - **Blocked on approval to call a model in a loop.** This is now the larger
-  blocker. The ceiling has been worked out (section 7a) and nothing has been
-  approved against it.
+  blocker, and after the line above it is the only one standing between stage
+  one and a real conversation. The ceiling has been worked out (section 7a) and
+  nothing has been approved against it.
   `experiments/execution_envelope/agentic_stage_one_plan.yaml` leaves the amount
   empty on purpose, and the free check refuses while it is empty. The 32.23
   United States dollars approved on 2026-08-25 was for the three-place

@@ -733,28 +733,73 @@ def test_the_desk_running_out_of_its_own_call_budget_ends_the_run():
 
 
 # ---------------------------------------------------------------------------
-# Nothing paid, nothing switched on, nothing swapped out
+# What it takes to reach a model, and what is still refused
 # ---------------------------------------------------------------------------
 
 
-def test_there_is_no_way_to_reach_a_real_model():
+def test_reaching_a_real_model_takes_an_approved_amount():
+    """The seam refuses when it is called with nothing, which is how the free
+    check calls it. A voice that spends money is not something a caller can get
+    by forgetting to pass an argument."""
     with pytest.raises(NoModelVoiceAvailable) as raised:
         real_model_voice()
 
-    assert "no amount has been approved" in str(raised.value)
+    assert "no budget" in str(raised.value)
 
 
-def test_a_model_that_would_be_charged_for_is_refused_before_being_asked():
+def test_a_client_without_an_amount_still_cannot_reach_a_model():
+    """Having somewhere to send the call is not approval to send it."""
+    with pytest.raises(NoModelVoiceAvailable) as raised:
+        real_model_voice(
+            client=object(),
+            deployment="some-deployment",
+            resource="some-resource",
+            instructions="do the task",
+            max_output_tokens_per_turn=2048,
+        )
+
+    assert "no budget" in str(raised.value)
+
+
+def test_an_amount_without_a_client_cannot_reach_a_model_either():
+    """Both halves are required, and neither implies the other."""
+    with pytest.raises(NoModelVoiceAvailable) as raised:
+        real_model_voice(
+            budget=a_budget(),
+            deployment="some-deployment",
+            resource="some-resource",
+            instructions="do the task",
+            max_output_tokens_per_turn=2048,
+        )
+
+    assert "without a client" in str(raised.value)
+
+
+def test_a_model_that_would_be_charged_for_is_refused_with_nothing_to_charge():
     voice = ScriptedVoice(replies=[look_around()], makes_paid_calls=True)
 
-    outcome = a_run(voice, ScriptedToolDesk())
+    outcome = a_run(voice, ScriptedToolDesk(), budget=None)
 
     assert outcome.stop_reason is StopReason.PAID_CALL_REFUSED
     assert voice.requests_seen == []
 
 
+def test_a_model_that_would_be_charged_for_runs_when_an_amount_is_on_record():
+    """The one thing that changed. A paid voice on a run carrying an approved
+    amount is asked — that is what stage one is for — and everything else on
+    this page still refuses."""
+    voice = ScriptedVoice(replies=[look_around()], makes_paid_calls=True)
+
+    outcome = a_run(voice, ScriptedToolDesk())
+
+    assert outcome.stop_reason is not StopReason.PAID_CALL_REFUSED
+    assert voice.requests_seen != []
+    assert voice.requests_seen[0].turn == 1
+
+
 def test_a_model_that_does_not_say_whether_it_is_paid_is_refused():
-    """Fail shut. A voice that forgot to declare itself is treated as paid."""
+    """Fail shut. A voice that forgot to declare itself is treated as paid, and
+    an approved amount does not let it through: silence means nobody looked."""
 
     class SilentVoice:
         def next_turn(self, request):  # pragma: no cover - never reached
