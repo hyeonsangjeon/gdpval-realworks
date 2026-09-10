@@ -1135,6 +1135,9 @@ def _build_execution_observability(
     agentic_metrics = _bounded_agentic_metrics((result or {}).get("agentic_metrics"))
     if agentic_metrics:
         observability["agentic_metrics"] = agentic_metrics
+    codex = _bounded_codex_diagnostics((result or {}).get("codex_diagnostics"))
+    if codex:
+        observability["codex"] = codex
     budget_metrics = _bounded_budget_metrics((result or {}).get("budget_metrics"))
     if budget_metrics:
         observability["budget_metrics"] = budget_metrics
@@ -1190,6 +1193,35 @@ def _build_execution_observability(
             "final_status": manifest.get("final_status"),
         }
     return observability
+
+
+def _bounded_codex_diagnostics(raw: Optional[dict]) -> Optional[dict]:
+    """Allow only the two bounded numbers a Codex turn reports about itself.
+
+    How far the turn got before it ended, and what answered it. A turn refused
+    after forty completed items is a different fact from one refused after two,
+    and only the first is evidence that the rate limit is reached by what a
+    single turn spends rather than by how quickly turns arrive -- so this is
+    the number the narrowing is down to, and it had nowhere to be written.
+
+    What the turn spent is not carried here. The cost ledger already records it
+    against the same task id, and a second copy is a second thing that can
+    disagree with the first.
+
+    A status is only published when it is one a server can send. ``None`` for
+    an out-of-range value says nothing rather than saying something wrong,
+    which is the same choice ``bounded_count`` makes beside it.
+    """
+    if not isinstance(raw, dict):
+        return None
+    output: dict = {}
+    items_seen = bounded_count(raw.get("items_seen"))
+    if items_seen is not None:
+        output["items_seen"] = items_seen
+    status = raw.get("http_status_code")
+    if type(status) is int and 100 <= status <= 599:
+        output["http_status_code"] = status
+    return output or None
 
 
 def _bounded_agentic_metrics(raw: Optional[dict]) -> Optional[dict]:

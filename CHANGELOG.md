@@ -261,6 +261,29 @@ entries land under a fresh dated heading the day they merge to `main`.
   file is the decision the pin asks to see.
 
 ### Fixed
+- **How far a Codex turn got was measured and then left behind.** The
+  preceding entry added `items_seen` and the provider's own
+  `http_status_code`, and wrote both to `CodexAgentRunner.last_run_diagnostics`
+  — an attribute nothing in production reads. `grep -rn last_run_diagnostics
+  --include=*.py` finds the assignment and one test. The two numbers therefore
+  reached no results file, no report and no artifact of any run, and the
+  rate-limit question they were added to answer still could not be answered
+  from a downloaded run.
+
+  They now travel out on the runner's result, and Step 2 puts them in the
+  task's `observability` record under `codex`, beside `error_category` — which
+  was moved there for exactly this reason: every backend produced it, and the
+  backends that kept it kept it inside their own metrics, where a caller that
+  does not know which backend ran cannot find it.
+
+  What the turn spent is deliberately not carried along. The cost ledger
+  already records it against the same task id, and a second copy is a second
+  figure that can disagree with the first. A status outside 100–599 is
+  dropped rather than published, on the same reasoning as `bounded_count`
+  beside it: a published number is read as a measurement, so saying nothing
+  beats saying something wrong. An absent `codex` key means no Codex turn ran,
+  not a turn that completed zero items.
+
 - **A refused turn threw away the measurement of what it had already spent.**
   Run `34500590783` wrote nine ledger rows and settled two. The seven with
   empty token fields are the tasks the provider refused mid-stream, and they

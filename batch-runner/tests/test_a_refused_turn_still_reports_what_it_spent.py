@@ -79,6 +79,8 @@ from core.execution_environment_readiness import (  # noqa: E402
     retry_counts_by_reason,
 )
 
+import step2_run_inference as step2  # noqa: E402
+
 
 # ── Stand-ins for the SDK's notification shapes ─────────────────────────────
 #
@@ -659,3 +661,108 @@ def test_the_counts_satisfy_the_field_the_run_record_requires():
     )
 
     assert check_run_record_fields(record) == []
+
+
+# ── The measurement has to leave the runner to be evidence ──────────────────
+#
+# `last_run_diagnostics` is written by the runner and read by nothing in
+# production: `grep -rn last_run_diagnostics --include=*.py` finds the
+# assignment, and one test. So the two numbers above were measured, and then
+# left on an object that step 2 drops on the floor -- they reached no results
+# file, no report, no artifact of any run. The rate-limit question they were
+# added to answer could still not be answered from a downloaded run.
+#
+# They travel out on the result dict instead, and step 2 puts them in the
+# task's `observability` record, beside `error_category`, which was moved
+# there for this same reason: every backend produced it, and the ones that
+# kept it kept it inside their own metrics, where a caller that does not know
+# which backend ran cannot find it.
+
+
+def test_the_two_numbers_leave_the_runner_on_the_result(
+    ledger: CostReceiptLedger,
+):
+    """Measured is not reported. This is the step between them."""
+    if _load_turn_collector() is None:  # pragma: no cover - SDK absent
+        pytest.skip("the pinned Codex SDK is not installed here")
+
+    handle = _FakeTurnHandle(
+        [_item_event(), _item_event(), _turn_event(_failed_turn())],
+        failure="stream disconnected before completion",
+    )
+    result = _run_the_task(_runner_over(handle, ledger))
+
+    assert result["codex_diagnostics"] == {
+        "items_seen": 2,
+        "http_status_code": 429,
+    }
+
+
+def test_step_two_publishes_how_far_the_turn_got_and_what_refused_it():
+    """The task record a downloaded run is read from."""
+    observability = step2._build_execution_observability(
+        {"codex_diagnostics": {"items_seen": 41, "http_status_code": 429}}, []
+    )
+
+    assert observability["codex"] == {
+        "items_seen": 41,
+        "http_status_code": 429,
+    }
+
+
+def test_what_the_turn_spent_is_not_copied_beside_the_ledger_s_own_figure():
+    """One number, one place.
+
+    The ledger records the tokens against this same task id. A copy here would
+    be a second figure that can disagree with the first, and nothing would say
+    which of the two the run actually spent.
+    """
+    observability = step2._build_execution_observability(
+        {
+            "codex_diagnostics": {
+                "items_seen": 3,
+                "http_status_code": 429,
+                "usage_delta": {"input_tokens": 101, "output_tokens": 7},
+            }
+        },
+        [],
+    )
+
+    assert set(observability["codex"]) == {"items_seen", "http_status_code"}
+
+
+def test_a_status_no_server_could_send_is_not_published():
+    """Saying nothing beats saying something wrong.
+
+    The same choice ``bounded_count`` makes beside it: a value outside the
+    range is dropped rather than passed along, because a published number is
+    read as a measurement.
+    """
+    for impossible in (0, 99, 600, 4_290, -429, True, "429", 429.0, None):
+        observability = step2._build_execution_observability(
+            {"codex_diagnostics": {"items_seen": 3, "http_status_code": impossible}},
+            [],
+        )
+        assert "http_status_code" not in observability["codex"], impossible
+        assert observability["codex"]["items_seen"] == 3
+
+
+def test_a_turn_that_nobody_refused_still_reports_how_far_it_got():
+    """A completed turn has no status, and that is not a missing measurement."""
+    observability = step2._build_execution_observability(
+        {"codex_diagnostics": {"items_seen": 12, "http_status_code": None}}, []
+    )
+
+    assert observability["codex"] == {"items_seen": 12}
+
+
+def test_a_backend_that_is_not_codex_publishes_no_codex_key():
+    """An absent key is the absence of a Codex turn, not a zero-item one."""
+    assert "codex" not in step2._build_execution_observability({}, [])
+    assert "codex" not in step2._build_execution_observability(None, [])
+    assert "codex" not in step2._build_execution_observability(
+        {"codex_diagnostics": "not a mapping"}, []
+    )
+    assert "codex" not in step2._build_execution_observability(
+        {"codex_diagnostics": {"items_seen": None, "http_status_code": None}}, []
+    )
