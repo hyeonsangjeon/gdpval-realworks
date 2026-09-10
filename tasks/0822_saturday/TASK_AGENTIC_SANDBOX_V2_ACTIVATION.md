@@ -1464,6 +1464,89 @@ honest outcome is that commands do not run, and stage C is allowed to return
 that.
 
 **Not yet run.**
+
+###### C3 ran, and all seven were stopped
+
+Two runs on `gdpval-devhost-vm`. The second is the record; the first is why the
+second exists.
+
+**Run 2 — 2026-09-10T20:36:02Z → 20:40:01Z, 239.2 s, `outcome: all_seven_stopped`.**
+Seven of seven, no escapes.
+
+| # | attack | rule | what stopped it |
+|---|---|---|---|
+| 1 | write 512 MiB into the work disk | `workdir_quota_mib: 256` | the write past the quota failed, `rc=1` |
+| 2 | hold 6,144 MiB in a 4,096 MiB machine | `memory_mib: 4096` | guest sees 3,942 MiB; the allocator reached 3,776 MiB and the kernel took it, `rc=137` |
+| 3 | never finish | `wall_clock_seconds` | stopped at 45.042 s against a 45 s bound, chroot gone |
+| 4 | find an interface and use it | `network: none` | only `lo` in `/proc/net/dev`; `connect_probe=refused:OSError` |
+| 5 | write to `/` | `rootfs: read-only` | write refused **and** `/dev/root / ext4 ro,relatime` |
+| 6 | keep root on the host | `user: jailer-unprivileged` | the Firecracker process runs as uid 999, no supplementary groups |
+| 7 | reach a token the orchestrator holds | `credentials: none-inherited` | 0 environment entries, none of the canaries, 28 descriptors reaching nothing of ours, all three standard ones `/dev/null`, guest environment clean |
+
+The images were checked against C2's record before anything booted:
+`matches_the_guest_c2_booted: true`, kernel `b36a4a1b…`, rootfs `489188004ad4eb8a…`.
+These are seven verdicts about the machine whose boot C2 recorded, not about a
+rebuild that happens to be similar. Host unchanged: Firecracker/Jailer v1.13.1,
+`6.17.0-1022-azure`, cgroup v2, KVM present, 8 processors. Jail account
+`gdpvaljail` uid 999 gid 988 `/usr/sbin/nologin`, no groups beyond its own.
+
+Four boots, each with its plan and work disk pinned:
+
+| boot | outcome | ran | plan sha256 | policy is the required one |
+|---|---|---|---|---|
+| `probes` | booted, exit 0 | 9.272 s | `f79f1fe7…` | yes (`wall_clock_seconds: 1200`) |
+| `workdir-quota` | booted, exit 0 | 1.518 s | `d9e43128…` | yes |
+| `memory` | booted, exit 0 | 4.020 s | `6e342ead…` | yes |
+| `wall-clock` | stopped by the deadline | 45.042 s | `d3aef11c…` | **no — 45 s, recorded as such** |
+
+The deadline was tested against a shortened bound so the stop could be watched
+inside a run. That was done by handing `build_launch_plan` a different policy
+dict — an argument it already takes, and one it still refuses if a rule is
+missing, unknown or out of reach — and the artefact carries
+`policy_is_the_required_one: false` for that boot alone. Attack 3 demonstrates
+that the deadline fires and tears the chroot down. **It does not demonstrate
+1,200 seconds**, and nothing here should be read as if it did.
+
+Attacks 6 and 7 were read from `/proc/1979` while the machine was alive, because
+neither is visible from inside it: PID 1 in that guest was uid 0, as it is in
+every guest here including the ones that pass. The probe boot now holds itself
+open for 8 s so the read can land — C2's guest was gone in 1.269 s, which is not
+reliably long enough.
+
+###### Run 1 came back six of seven, and the seventh was the attack, not the rule
+
+**2026-09-10T20:0x, `outcome: escaped`, `escapes: ['memory']`.** The verdict was
+*"the allocation probe did not report, so it did not run"* — correct on the
+evidence, and the wrong conclusion about the machine. `/out/stderr` held
+`Killed`; `/out/stdout` stopped after `MemTotal`. The bound had held. The attack
+destroyed the evidence proving it.
+
+Two causes, both in the attack:
+
+- **The allocation went into a tmpfs.** Those pages are shmem and are charged to
+  no process's RSS, so when the machine filled, `oom_badness` had nothing large
+  to weigh and the kernel took a bystander.
+- **The reporter was that bystander.** `rc=$?` inside a command substitution runs
+  in a fork; the fork died holding the exit status.
+
+It is now anonymous memory, written to a page at a time — `bytearray(n)` is
+`calloc`, and `calloc` over a fresh mapping is a promise of zeroes rather than
+pages, so untouched it would have taken address space and never reached the
+bound. The report is made by the top-level shell, which allocates nothing and is
+never a candidate. The allocator prints its high-water mark as it goes, because a
+process the kernel kills does not reach its last line.
+
+That mark is now the primary check: **holding more than `memory_mib` is an escape
+whatever the exit status says**, since a guest with no swap cannot give back
+anonymous memory it has touched. A machine that handed over every requested byte
+and then failed on the way out would have passed on the exit status alone.
+
+**The judge was not loosened to reach seven.** `Killed` in `/out/stderr` is real
+evidence the bound held, and it is still not accepted, because it does not say
+*which* process was killed — and accepting it would be reading a bystander's
+death as containment. The first run's six-of-seven stands in the record as a
+failed run.
+
 ### Stage D — not yet run
 ### Stage E — not yet run
 ### Stage F — not yet run
