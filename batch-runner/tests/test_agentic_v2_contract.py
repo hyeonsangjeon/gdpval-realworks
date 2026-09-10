@@ -24,11 +24,16 @@ from core.agentic_v2_contract import (
 import core.agentic_v2_contract as contract_module
 
 
-def test_v2_tool_definitions_are_stable_strict_and_valid():
+def test_v2_tool_definitions_are_stable_valid_and_do_not_overclaim():
     definitions = responses_tool_definitions()
 
     assert tuple(item["name"] for item in definitions) == TOOL_NAMES
-    assert all(item["strict"] is True for item in definitions)
+    # Not strict, and see ``responses_tool_definitions`` for why: the schemas
+    # are deliberately more expressive than the subset ``strict`` promises, and
+    # promising it anyway makes the service refuse the whole request before the
+    # model is asked. What the desk will act on is still decided by
+    # ``validate_tool_arguments`` against these same schemas in full.
+    assert all(item["strict"] is False for item in definitions)
     assert all(item["type"] == "function" for item in definitions)
     for schema in TOOL_SCHEMAS.values():
         Draft202012Validator.check_schema(schema)

@@ -49,10 +49,34 @@ from core.agentic_v2_conversation import (
 )
 from core.agentic_v2_stage_one_budget import StageOneBudget
 from core.execution_envelope_cost import ModelPrice
+from core.provider_refusal import classify_provider_refusal
 
 # A stated reason is shown to a person, not parsed, and the loop trims what it
 # keeps. Kept short here so the trimming never has to happen.
 _SHORTEST_USEFUL_NOTE = 200
+
+
+def _why_the_call_failed(error: BaseException) -> str:
+    """The note left behind when the service would not take the request.
+
+    The class name alone is what the first paid stage A dispatch recorded, and
+    it was not enough to act on: ``BadRequestError`` says the request was
+    refused and nothing whatever about which part of it was wrong. Diagnosing
+    that meant reasoning about the payload instead of reading the answer, and
+    the answer had already been given.
+
+    So the status and the provider's own code are carried too, through
+    :func:`classify_provider_refusal`, which takes those two facts and reads
+    nothing else off the exception. The message, the body, the request and the
+    response headers do not appear here — an endpoint, an account, a project
+    or a deployment name cannot get through a code-shaped allow-list, and the
+    same call that names *what* was refused must not name *who* refused it.
+    """
+    classification = classify_provider_refusal(error)
+    detail = type(error).__name__
+    if classification:
+        detail = f"{detail} ({classification})"
+    return f"asking the model failed: {detail}"[:_SHORTEST_USEFUL_NOTE]
 
 
 class ResolvedModelDisagrees(RuntimeError):
@@ -299,9 +323,7 @@ class AzureFoundryVoice:
         try:
             response = self.client.responses.create(**payload)
         except Exception as error:  # the service, the network, or the route
-            return GaveUp(
-                note=f"asking the model failed: {type(error).__name__}"[:_SHORTEST_USEFUL_NOTE]
-            )
+            return GaveUp(note=_why_the_call_failed(error))
 
         usage = _usage_from(response)
         if usage is None:

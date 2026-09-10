@@ -30,6 +30,13 @@ from typing import Optional
 from core.azure_ai_clients import AzureAIWorkload, validate_client_capabilities
 from core.config import DEFAULT_TOKENS
 from core.prompt_loader import load_prompt, render_prompt
+from core.provider_refusal import (
+    PROVIDER_CODE_ATTRIBUTES,
+    PROVIDER_CODE_BODY_KEYS,
+    PROVIDER_CODE_SHAPE,
+    classify_provider_refusal,
+    provider_code_of,
+)
 from core.execution_envelope_observed import (
     API_FAMILY_RESPONSES,
     RecordsItsFirstRequest,
@@ -40,87 +47,17 @@ from core.file_preview import build_file_structure_info
 from core.reference_integrity import open_verified_reference
 
 
-#: What a provider's own error code may be made of before it is allowed
-#: into a redacted message: letters, digits and underscore, nothing else.
-#: Real codes look like ``PermissionDenied``, ``AuthorizationFailed``,
-#: ``DeploymentNotFound`` or ``insufficient_quota``. An endpoint, an account
-#: name, a deployment name, a file path or a sentence of prose all need a
-#: dot, a dash, a slash, a colon or a space, so none of them can get through
-#: this. That is the whole reason the allow-list is a shape and not a
-#: blocklist of things to strip out.
-_PROVIDER_CODE_SHAPE = re.compile(r"\A[A-Za-z0-9_]{1,64}\Z")
-
-#: Where a refusal's own code is looked for, in the order it is preferred.
-#: The first pair is what the OpenAI SDK lifts out of a JSON body onto the
-#: exception itself. The second pair is read back out of the body, because
-#: Azure nests its code one level down under ``error`` and the SDK leaves the
-#: attributes ``None`` in that case. Looking in the body as well is what makes
-#: this useful against a real Azure refusal rather than only a synthetic one.
-_PROVIDER_CODE_ATTRIBUTES = ("code", "type")
-_PROVIDER_CODE_BODY_KEYS = ("code", "type")
-
-
-def _provider_code_of(value: object) -> Optional[str]:
-    """Return ``value`` when it is code-shaped, and otherwise nothing."""
-    if isinstance(value, str) and _PROVIDER_CODE_SHAPE.match(value):
-        return value
-    return None
-
-
-def _provider_error_classification(exc: BaseException) -> str:
-    """Say what a provider refusal was, without saying who refused it.
-
-    Exactly two things are ever taken from the exception:
-
-    * the HTTP status, and only when it is a whole number a status can be;
-    * the provider's own error code, and only when it is code-shaped by
-      ``_PROVIDER_CODE_SHAPE``.
-
-    The message, the request, the response headers and the body itself are
-    never carried into the result. So a redacted message gains the one thing
-    an operator needs to act — *what* was refused — and still cannot name an
-    endpoint, an account, a project or a deployment.
-
-    Every read is guarded, because these are attributes on somebody else's
-    exception and a property is free to raise. A classification that cannot
-    be worked out is simply absent; it never replaces the class name.
-    """
-    parts: list[str] = []
-
-    try:
-        status = getattr(exc, "status_code", None)
-    except Exception:
-        status = None
-    if isinstance(status, int) and 100 <= status <= 599:
-        parts.append(f"http {status}")
-
-    code = None
-    for attribute in _PROVIDER_CODE_ATTRIBUTES:
-        try:
-            code = _provider_code_of(getattr(exc, attribute, None))
-        except Exception:
-            code = None
-        if code is not None:
-            break
-    if code is None:
-        try:
-            body = getattr(exc, "body", None)
-        except Exception:
-            body = None
-        nested = body.get("error") if isinstance(body, dict) else None
-        for holder in (body, nested):
-            if not isinstance(holder, dict):
-                continue
-            for key in _PROVIDER_CODE_BODY_KEYS:
-                code = _provider_code_of(holder.get(key))
-                if code is not None:
-                    break
-            if code is not None:
-                break
-    if code is not None:
-        parts.append(f"code {code}")
-
-    return ", ".join(parts)
+#: The reduction of a provider refusal to the two facts it may state now lives
+#: in ``core.provider_refusal``, because the agentic v2 model voice needs the
+#: same reduction and redaction kept in two copies is redaction that will one
+#: day differ in one of them. The private names are kept as aliases: they are
+#: what this module's callers and tests already ask for, and the behaviour
+#: behind them is unchanged.
+_PROVIDER_CODE_SHAPE = PROVIDER_CODE_SHAPE
+_PROVIDER_CODE_ATTRIBUTES = PROVIDER_CODE_ATTRIBUTES
+_PROVIDER_CODE_BODY_KEYS = PROVIDER_CODE_BODY_KEYS
+_provider_code_of = provider_code_of
+_provider_error_classification = classify_provider_refusal
 
 
 def _redacted_provider_error_message(exc: BaseException) -> str:

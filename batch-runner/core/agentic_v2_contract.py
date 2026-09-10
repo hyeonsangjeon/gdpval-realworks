@@ -430,6 +430,33 @@ class AgenticV2Lifecycle:
 
 
 def responses_tool_definitions() -> list[dict]:
+    """The tools as the Responses API is asked to present them.
+
+    ``strict`` is false, and deliberately. It is not a description of how
+    carefully the arguments are checked — it is a promise that the schema
+    fits the narrow subset the service will enforce for the model, and none
+    of these schemas do. ``workspace_apply``, ``exec_run`` and ``browser_run``
+    are a ``oneOf`` at the root, so each operation carries exactly the fields
+    that operation needs and no others; ``capabilities_query`` has genuinely
+    optional fields. Both shapes are outside the strict subset, which wants a
+    single object with every property required.
+
+    Claiming ``strict`` anyway does not degrade to a laxer check. The service
+    validates the schema against the subset when the request arrives and
+    refuses the whole call with ``400`` before the model is ever asked, which
+    is what happened to the first paid stage A dispatch on 2026-09-10: nothing
+    ran, nothing was charged, and the run recorded a model that never spoke.
+
+    Nothing is loosened by dropping it. ``strict`` only ever constrained what
+    the model was free to emit; what the desk is willing to *act* on is
+    decided by :func:`validate_tool_arguments`, which validates against these
+    same schemas in full — ``oneOf``, ``pattern``, length bounds and all — and
+    raises on anything that does not fit. That check is unchanged and remains
+    the only thing standing between a tool call and the workspace. The cost of
+    the change is a turn occasionally spent on arguments the model has to be
+    told were malformed, and that is the correct thing to pay for a call that
+    otherwise cannot be made at all.
+    """
     descriptions = {
         "capabilities_query": "Discover actual task-environment capabilities and remaining budgets.",
         "workspace_apply": "Perform one bounded operation in the task-local workspace.",
@@ -446,7 +473,7 @@ def responses_tool_definitions() -> list[dict]:
             "name": name,
             "description": descriptions[name],
             "parameters": TOOL_SCHEMAS[name],
-            "strict": True,
+            "strict": False,
         }
         for name in TOOL_NAMES
     ]
