@@ -70,6 +70,19 @@ entries land under a fresh dated heading the day they merge to `main`.
   every record. A sign-in that cannot mint now ends the run before a request
   exists, so this failure costs nothing instead of a paid `401`.
 
+  The **free plan** answers it too. Minting an Entra token is a call to the
+  identity platform, not to the deployment: no model runs and nothing is
+  billed. So a run without `--send-request` now runs the real auth command in
+  the real isolated environment and fills the same `auth_command` block — which
+  turns "does the second fault bite on a runner?" from a paid dispatch into a
+  free one. It reports rather than gates: a sign-in that cannot mint still
+  leaves the plan green and exit `0`, because a red plan reads as "the
+  diagnostic broke" and the finding here is the opposite. A host that cannot
+  run the preflight at all leaves the field `null` — *not asked*, which is not
+  the same as *asked, and no*. `reason` goes through the record's redactor like
+  every other runtime message; `azure_config_dir` does not, because which home
+  the sign-in was found in is the one thing the record is for.
+
 - **Corrected the first `codex_foundry` readiness blocker.** Its old text said
   no token from the auth command had ever been accepted by a Foundry
   deployment; run `34442249527` had already disproved that. The replacement

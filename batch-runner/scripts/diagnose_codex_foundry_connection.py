@@ -2409,16 +2409,70 @@ def closing_sweep_probe(
 # ── Command line ────────────────────────────────────────────────────────────
 
 
-def _plan(description: Mapping[str, Any]) -> dict[str, Any]:
+def _plan(
+    description: Mapping[str, Any],
+    settings: CodexProviderSettings | None = None,
+) -> dict[str, Any]:
+    observed = _empty_observation()
+    note = (
+        "--send-request was not passed. This is the plan, fixed and "
+        "fingerprinted; no request exists and no cost was incurred"
+    )
+    if settings is not None:
+        auth_probe = _plan_auth_command(settings)
+        if auth_probe is not None:
+            observed["auth_command"] = auth_probe
+            note += (
+                "; the auth command was run once against this host's own "
+                "sign-in, which costs nothing and is not a request to the "
+                "deployment — see auth_command for whether a token can be "
+                "minted from inside the isolated environment"
+            )
     return _record(
         verdict=VERDICT_NOT_SENT,
         description=description,
-        observed=_empty_observation(),
-        note=(
-            "--send-request was not passed. This is the plan, fixed and "
-            "fingerprinted; no request exists and no cost was incurred"
-        ),
+        observed=observed,
+        note=note,
     )
+
+
+def _plan_auth_command(
+    settings: CodexProviderSettings,
+) -> dict[str, Any] | None:
+    """Ask the sign-in, in the free plan, because asking is free.
+
+    Minting an Entra token is a call to the identity platform, not to the
+    deployment: no model runs, no tokens are billed and nothing appears on an
+    invoice. Doing it here means the question "can this host mint from inside
+    the isolation?" is answered by a dispatch that spends nothing, rather than
+    by a paid dispatch that happens to stop early.
+
+    ``verify_runtime=False`` because the preflight needs the provider settings
+    and a workspace and not the Codex binary. A host without the pinned runtime
+    still gets a real answer, and a plan that used to run everywhere keeps
+    running everywhere — returning ``None`` on any failure, so an unexpected
+    one leaves the free step green and the field ``null`` rather than turning
+    a plan into a red run.
+
+    ``reason`` is a runtime message and goes through the redactor like every
+    other one in this file. ``azure_config_dir`` does not: it is a path this
+    repository discovered rather than something a subprocess said, and which
+    home the sign-in was found in is the one thing this record is for.
+    """
+    from core.codex_runner import CodexAgentRunner, CodexWorkspace
+
+    workspace = None
+    try:
+        runner = CodexAgentRunner(settings, verify_runtime=False)
+        workspace = CodexWorkspace.create(task_id="foundry-auth-preflight")
+        record = runner.preflight_auth_command(workspace).as_record()
+    except Exception:  # noqa: BLE001 - a free step must not fail the run
+        return None
+    finally:
+        if workspace is not None:
+            workspace.cleanup()
+    record["reason"] = build_redactor()(record.get("reason"))
+    return record
 
 
 def _emit(record: Mapping[str, Any], out: str | None) -> None:
@@ -2620,7 +2674,7 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     if not args.send_request:
-        _emit(_plan(description), args.out)
+        _emit(_plan(description, settings), args.out)
         return 0
     record = probe(settings, timeout=args.timeout, redact=redact)
     _emit(record, args.out)

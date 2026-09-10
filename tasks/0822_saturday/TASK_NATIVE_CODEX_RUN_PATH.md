@@ -1298,8 +1298,12 @@ paid run must be preceded by a fresh smoke at the new fingerprint.
   The third bit everywhere, because it is what turned both of the others into
   a sentence about a subscription key.
 
-- The next decision is one dispatch of the connection diagnostic from `main`,
-  which now records the free `auth_command` block — confirming on the runner
-  whether the second fault bites there too — followed by a real turn through the
-  fixed path. Until a turn is answered, the column stays empty and is reported
-  as unconfirmed. It is not filled with a substitute.
+- The next decision is one dispatch of the connection diagnostic from `main`
+  **in plan mode** — `send_request` left off, nothing billed — because the plan
+  now runs the real auth command in the real isolated environment and writes the
+  `auth_command` block. Minting is a call to the identity platform, not to the
+  deployment, so the runner question is answered by a dispatch that spends
+  nothing. It reports rather than gates: a runner that cannot mint still returns
+  `not_sent` and exit `0`, with `ok: false` and the reason. Then a real turn
+  through the fixed path. Until a turn is answered, the column stays empty and
+  is reported as unconfirmed. It is not filled with a substitute.

@@ -62,10 +62,17 @@
 # makes it so, and a contrast against the direct Python path cannot be matched
 # on body size.
 #
-# `send_request: false` is the default, and with it nothing is sent at all —
-# the job prints the plan, fingerprinted, and stops. The plan and the result
-# share a schema, so what was fixed beforehand and what happened can be
-# compared field by field.
+# `send_request: false` is the default, and with it nothing is sent to the
+# deployment at all — the job prints the plan, fingerprinted, and stops. The
+# plan and the result share a schema, so what was fixed beforehand and what
+# happened can be compared field by field.
+#
+# The plan does run one thing: the provider's auth command, in the isolated
+# environment Codex would run it in. That is a call to the identity platform
+# and not to the deployment — no model runs and nothing is billed — and it is
+# how the record answers "can this runner mint from in there?" without a paid
+# dispatch. A sign-in that cannot mint is reported, not raised: the step stays
+# green and `observed.auth_command.ok` is `false`.
 name: Codex Foundry Connection Diagnostic
 
 on:
