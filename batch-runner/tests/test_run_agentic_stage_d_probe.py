@@ -348,20 +348,36 @@ class TestAgainstTheRealC2Record:
         assert machine.uid > 0 and machine.gid > 0, "not root on the host"
 
     def test_this_box_is_refused_by_the_real_artefact(self, real, tmp_path):
-        # Not a contrived refusal: the artefact says 6.17.0-azure and this
-        # suite runs on a 3.10 Synology kernel, so the gate is doing the exact
-        # job it was written for. On the execution host this test passes by
-        # the other branch.
+        """Wherever this suite runs, it is not the host C2 booted on — and the
+        reason it is refused says which check caught it.
+
+        Written first as a kernel comparison, and CI corrected it. GitHub's
+        hosted runners are Azure virtual machines carrying the same
+        ``6.17.0-…-azure`` kernel build as the development host, so on a runner
+        the kernel matches and the artefact still describes a different
+        machine. The binaries are what separated them. So kernel equality is
+        necessary and not sufficient, both checks are load-bearing, and this
+        asserts the refusal rather than the route it took.
+        """
         copied = tmp_path / "c2-first-boot.json"
         copied.write_text(json.dumps(real), encoding="utf-8")
         recorded = real["host"]["kernel_release"]
-        if recorded == os.uname().release:
+        firecracker = Path(str(real["host"]["firecracker"]))
+
+        if recorded == os.uname().release and firecracker.is_file():
+            # The execution host itself. Nothing is refused here, which is the
+            # whole point of the gate.
             assert runner.read_what_c2_left(copied)["outcome"] == "booted"
             return
+
         with pytest.raises(runner.StageDRefused) as refused:
             runner.read_what_c2_left(copied)
-        assert recorded in str(refused.value)
-        assert os.uname().release in str(refused.value)
+        said = str(refused.value)
+        if recorded != os.uname().release:
+            assert recorded in said and os.uname().release in said
+        else:
+            assert "is not there now" in said
+            assert firecracker.as_posix() in said
 
 
 # ── the question stage D asked, which is not the one stage A asked ────────
