@@ -145,6 +145,13 @@ batch-runner/scripts/*
 # tests/test_run_agentic_stage_a_probe.py.
 !batch-runner/scripts/run_agentic_stage_a_probe.py
 
+# Stage C2's boot. Committed for the same reason as the probe above and one
+# more: it cannot run here at all. This box's kernel is 3.10 and will not boot a
+# Firecracker machine, so the only place this executes is the host stage B
+# measured, which reaches the repository by cloning it. A checkout is how it
+# gets there.
+!batch-runner/scripts/run_agentic_c2_first_boot.py
+
 
 # Experiment report HTML (skews GitHub language stats)
 batch-runner/results/*/report/report.html
@@ -507,3 +514,8 @@ data/gdpval-local/
 .history/
 tasks/*/render_probe/
 batch-runner/data/
+
+# Written afresh by infra/dev-host/deploy.sh on every deploy. The values it
+# carries belong in the dated artefact that cites them, not in a tracked file
+# that changes under the record pointing at it.
+infra/dev-host/last-deployment.json
