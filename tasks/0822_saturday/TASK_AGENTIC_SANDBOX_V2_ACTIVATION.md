@@ -550,11 +550,164 @@ recorded under it, not a side effect of a v2 fix. It is recorded in
 the test fails and puts the frozen hash in front of whoever fixed it. An
 `agentic_sandbox` run that offers `run_ffmpeg` is refused with `400` today.
 
-**Still not done.** A model has not yet answered. The first paid question was
-asked and refused before it reached one, at a cost of nothing, and the two
-defects that caused it are fixed and guarded.
+#### Asked again, and answered — run 34455103245, 2026-09-10
 
-### Stage B — not yet run
+The blast radius of the v1 defect was checked rather than left implied: **no
+experiment YAML selects `execution_mode: agentic_sandbox`**, so the mode is
+live and reachable from `core/executor.py` but nothing committed dispatches it
+today. That is why it can wait for a change that re-cuts `V1_TOOLS_SHA256`
+deliberately.
+
+Before re-dispatching, the payload the paid probe would actually send was
+captured offline — the real `PROBE_TOOLS` and the real voice driven through
+`run_stage_a_probe` with a client that records and stops. Every key is one
+`Responses.create` accepts, both tools carried `strict: false`, and neither the
+tool definitions nor the input items held a key outside the SDK's own
+`FunctionToolParam` and `EasyInputMessageParam`. That ruled out the structural
+causes of a `400` that can be ruled out for free. It did not promise success:
+a service can refuse for reasons only it knows, and what had changed was that
+the record would then say which.
+
+Free dry run on `main` at the merge commit `86152b7`: passed. Then the paid
+run, with conditions and per-outcome responses written down first.
+
+**The exit condition is met.**
+
+```
+reached_a_model: true            resolved_model: "gpt-5.4"
+carried_the_first_result: true   turns_taken: 4
+stop_reason: "turn_limit_reached"
+spent_usd: "0.00635250"          price_missing: false
+```
+
+The four calls, in order, sent `0, 1, 2, 3` history entries and `1026, 1127,
+1211, 1306` input tokens. The conversation genuinely accumulated: turn two went
+out holding turn one's answer, which is the one thing stage A existed to
+establish and the one thing nothing offline could have shown. The deployment
+asked for and the model that answered agree, so this is one model's work.
+
+**Cost.** $0.0064 — about six tenths of a cent, against a worked-out ceiling of
+$0.59 and an approved maximum of $1.00. Roughly 1% of the ceiling, because the
+loop stopped at four turns. Every call priced; `price_missing` false
+throughout, so the total is a real total rather than a partial one.
+
+**What it does not say.** The model asked for `capabilities_query` three times
+out of four and wrote once. It did not finish the task — it ran out of allowed
+turns. Finishing was deliberately not the exit condition, and the run is not
+counted as a failure for it. But it is a finding worth carrying into stage D:
+under a tight ceiling this model spent most of its turns asking what it could
+do rather than doing it, and a stage that offers `exec_run` will have to be
+sized with that in mind rather than assuming turns go to work.
+
+**Still not done.** Stage A is done and answered yes. What remains is every
+stage that makes the answer useful: a host that can actually contain a command
+(B), a launcher that starts one (C), a real backend with `exec_run` open (D),
+the runner, resume, ledger and report (E), and 5, then 30, then 220 tasks (F).
+Nothing here opened `exec_run`, removed a guard or flipped an activation flag.
+
+### Stage B — the execution host, and what will be measured before anything runs on it
+
+Written before anything is provisioned, because the point of stage B is to find
+out whether the containment V2 requires can exist at all, and a plan written
+afterwards is a plan fitted to whatever turned up.
+
+**The question.** `core.agentic_v2_substrate.REQUIRED_MICROVM_POLICY` says a
+command runs inside a Firecracker microVM with no network, a read-only root
+filesystem, an ephemeral working directory capped at 256 MiB, 4096 MiB of
+memory, a 1200-second wall clock, an unprivileged jailer user, and
+stop-and-report on breach. Nothing in the repository turns that into arguments
+for starting a virtual machine, and until stage B there is nowhere it could
+start one.
+
+**What is already known, and how.** `scripts/check_agentic_containment.py` was
+run on this machine on 2026-09-10. Its answer, unedited:
+
+* the processor reports `svm`, so the hardware can virtualise;
+* `/dev/kvm` is not reachable — this is a container and nothing passes it
+  through;
+* the kernel is 3.10.102, below the 5.10 that Firecracker's own kernel policy
+  lists;
+* `firecracker` and `jailer` are not on the path.
+
+The kernel alone settles it: this machine is out, and no configuration change
+here would put it back in. The two machines that cannot be read from here are
+already recorded in `RECORDED_FINDINGS` — GitHub-hosted runners are a *no*
+(GitHub documents nested virtualisation as unsupported, and a boundary offered
+with no guarantee is not a boundary), and the self-hosted `agentic-sandbox`
+label is an *unknown* because no such runner is registered.
+
+So the host has to be the Azure development VM, which is what `infra/dev-host/`
+already specifies and what the card already allows.
+
+**What stage B does not do.** It does not design a new host. `infra/dev-host/`
+has a template, a deploy script with `plan`/`deploy`/`bootstrap`/`status`/
+`deallocate`/`start`/`delete`, a bootstrap that reaches the machine through
+`az vm run-command` rather than an open port, 22 offline checks in CI, and a
+boundary module that refuses to start a benchmark run on it. None of that is
+rewritten. Stage B uses it.
+
+It also does not touch `infra/dev-host/bootstrap.sh`. That file installs and
+measures for the Codex sandbox question, which is A's, and the two questions
+must not be entangled in one file while both are in flight. Stage B's
+measurement goes in its own script under `batch-runner/scripts/`, invoked the
+same way.
+
+**The measurement.** `check_agentic_containment.py` run on the VM, its JSON
+kept as an artefact. Four readings decide it:
+
+| Reading | Pass |
+|---|---|
+| processor virtualisation flag | `vmx` or `svm` present |
+| `/dev/kvm` | present and openable by the invoking user |
+| kernel release | ≥ 5.10 |
+| `firecracker` and `jailer` | both on the path after install |
+
+Ubuntu 24.04 ships 6.8, so the kernel is expected to pass and would be a
+surprise if it did not. The programs are an install, not a property of the
+machine. The reading that actually decides stage B is `/dev/kvm`.
+
+**What happens if `/dev/kvm` is absent.** This is the outcome to plan for, not
+the one to hope against. The template's default size is `Standard_D8as_v5`,
+which is an AMD-based v5 size, and Azure's nested-virtualisation support is not
+uniform across the v5 families. If the device is absent the response is a size
+change and a re-measurement, not a policy change:
+
+* `Standard_D8s_v5` is Intel, is the same 8 vCPU / 32 GiB the card fixes, and
+  is **already in `KNOWN_VM_SIZES`** in `check_dev_host_definition.py`. Checked
+  rather than assumed: a copy of `infra/` with `vmSize` swapped to it was put
+  through `check_dev_host_definition.py`, and all 22 checks passed. So the
+  change needs no card amendment, no new approval and no edit to the checker,
+  and keeps the shape the card fixed.
+* If `TrustedLaunch` is what blocks the device rather than the processor family,
+  that is a finding to record and to raise, because turning it off is a
+  security-posture change to a machine and belongs to a person, not to this
+  stage.
+* If neither works, stage B ends with a recorded *no* for the Azure host and V2
+  stops at stage B. It does not fall back to the V1 Docker runner, and it does
+  not proceed with a weaker boundary described as a strong one.
+
+**What is not allowed to happen at any point in stage B.** No `sudo` for the
+model. No privileged container. No removal of either of the two guards that
+keep V2 out of the paid pipeline. No opening of `exec_run` — that is stage D
+and gets its own change. If the containment cannot be demonstrated, the honest
+outcome is that commands do not run, and that is a result stage B is allowed to
+return.
+
+**Cost.** The VM is charged per hour it is allocated. `deploy.sh` has
+`deallocate` and the template has an automatic shutdown at 2100 KST; stage B
+deallocates as soon as the measurement artefact is in hand rather than leaving
+the machine up between sessions. The figure is recorded in the ledger from the
+measured allocated time; the per-hour price is not committed in this repository,
+so if it is not available at the time of writing the entry it is `partial`, not
+zero.
+
+**Done when.** The readiness JSON from the VM is an artefact of a run, it says
+whether the four readings passed, and the answer — yes or no — is written into
+`RECORDED_FINDINGS` with the date and how it was established, in the same shape
+as the two findings already there. A yes is not the exit condition. A recorded,
+sourced answer is.
+
+**Not yet run.**
 ### Stage C — not yet run
 ### Stage D — not yet run
 ### Stage E — not yet run
