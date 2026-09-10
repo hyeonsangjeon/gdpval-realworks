@@ -168,6 +168,7 @@ signature 근거가 미측정이라 aggregate gate도 계속 `blocked`입니다.
 | `source_sha` | 빈 값 |
 | `wall_timeout` | `290` |
 | `sandbox_image_digest` | 빈 값 |
+| `codex_foundry_confirmed` | 체크하지 않음 |
 
 예상 동작은 다음과 같습니다.
 

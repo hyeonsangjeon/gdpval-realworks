@@ -189,6 +189,7 @@ From **Actions > Run GDPVal Batch Experiment**, use:
 | `source_sha` | leave empty |
 | `wall_timeout` | `290` |
 | `sandbox_image_digest` | leave empty |
+| `codex_foundry_confirmed` | leave unticked |
 
 Expected behavior:
 

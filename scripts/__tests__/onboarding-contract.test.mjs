@@ -257,6 +257,7 @@ test('workflow input tables mirror defaults and watchdog delegation', async () =
     'source_sha',
     'wall_timeout',
     'sandbox_image_digest',
+    'codex_foundry_confirmed',
   ]
   assert.deepEqual(Object.keys(inputs), inputNames)
   assert.deepEqual(
@@ -268,8 +269,17 @@ test('workflow input tables mirror defaults and watchdog delegation', async () =
       source_sha: '',
       wall_timeout: 290,
       sandbox_image_digest: '',
+      codex_foundry_confirmed: false,
     },
   )
+  // Off is the whole point of this one, so the default is asserted above like
+  // every other and the description is asserted here: a reader ticking a box
+  // that may spend has to be able to see, in the dispatch form itself, that
+  // every other mode ignores it and that leaving it alone fails the run rather
+  // than quietly skipping it.
+  assert.match(inputs.codex_foundry_confirmed.description, /^codex_foundry only/)
+  assert.match(inputs.codex_foundry_confirmed.description, /Ignored by every other mode/)
+  assert.match(inputs.codex_foundry_confirmed.description, /fails before any credentialed job starts/)
   assert.match(inputs.wall_timeout.description, /^condition_a Step 2 watchdog minutes/)
   assert.match(inputs.wall_timeout.description, /0\.\.290/)
   assert.match(inputs.wall_timeout.description, /0=use execution\.wall_timeout from YAML/)
