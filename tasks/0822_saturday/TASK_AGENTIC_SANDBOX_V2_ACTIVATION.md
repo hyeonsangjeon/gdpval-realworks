@@ -309,6 +309,67 @@ runs all three refusals rather than reading them.
 `experiments/execution_envelope/agentic_stage_one_plan.yaml`, a client built
 through `core/azure_ai_clients.py`, and a probe that wires the two to the loop
 while reaching neither `finalize` nor the grader.
+
+### Stage A — approved and built, 2026-09-10. Still not passed.
+
+Two of the three things above are done. The third is the paid call itself.
+
+**The amount.** `cost.stage_a_probe.approved_maximum_usd` is $1.00, against a
+priced ceiling of **$0.59** — $0.47 to run, $0.00 to mark, 8 model calls at
+most, at the cheapest candidate row (4 tool calls, 2,048 tokens a turn). The
+figure is not copied from anywhere: `stage_a_probe_ceiling()` reuses the same
+arithmetic the 24-row table above comes from, with exactly two things changed —
+one task instead of five, and `grading_required=False` — so a correction to
+stage one's pricing reaches this figure too. Stage one's own
+`approved_maximum_usd` is untouched and still `null`.
+
+Four calls is a deliberate floor rather than economising. It is the smallest
+setting that leaves a model room to spend a turn orienting and still have a
+later turn that must react to an earlier one's answer, which is the entire
+question. Paying for longer replies would buy nothing stage A is asking about.
+
+**The probe.** `core/agentic_v2_stage_a_probe.py` offers two tools —
+`capabilities_query` and `workspace_apply` — and not the eighth.
+`check_probe_tools()` raises `ProbeToolsAreWrong` **before the first call** if
+`finalize` or `exec_run` ever appears, so the cheapest moment to catch a probe
+that could reach the grader is the one it is caught at. The instructions name
+no tool: a probe that tells a model to call `capabilities_query` and then
+reports that it called `capabilities_query` has established that models follow
+instructions, not that they choose.
+
+**One gate, two verdicts.** `run_stage_one_preflight` collects the safety
+findings once and hands the same list to both verdicts. Stage A decides for
+itself only what is genuinely its own — one task, no marking, its narrower tool
+list, its own amount. Held in place by tests that break a safety block and
+require *both* verdicts to turn red, and that give stage one $10,000 while
+leaving stage A's amount empty and require stage A to refuse anyway.
+`scripts/check_agentic_stage_one_ceiling.py --probe` exits 0; the same command
+without the flag still exits 1 and prints stage one's refusal in the same
+report.
+
+**A double charge was found and removed.** Both `AzureFoundryVoice.next_turn`
+and `run_model_conversation` were calling `budget.record(...)`, so every paid
+call was charged twice and an approved run would have stopped at half the calls
+it paid for — looking, from the outside, like a model that gave up. The loop is
+now the only place that charges, matching what `ScriptedVoice` already did. At
+stage A's settings this was not cosmetic: a two-call budget exhausted after one
+call, and the second turn is the whole question.
+
+**Each call now records what it carried.** `history_entries_sent` goes onto
+every ledger row, so "the second turn saw the first turn's answer" is a fact
+about a request that was paid for rather than something inferred afterwards
+from its token count. Two turns that each started from nothing read as `[0, 0]`
+and fail, which is the failure it exists to catch.
+
+**Proven end to end without paying.** A stand-in client, the real voice, the
+real dispatcher, the real fixture backend: the model asks for
+`workspace_apply`, a file is really written to disk, and the request after it
+goes out carrying that answer — `history_entries_sent` of `[0, 1, 2]`. 19 tests
+in `tests/test_agentic_v2_stage_a_probe.py`, none of which reach a network.
+
+**Still not done.** Nothing has asked a real model. What is left is a client
+built through `core/azure_ai_clients.AzureAIClientFactory` on the `project-ci`
+route profile, and the one paid run.
 ### Stage B — not yet run
 ### Stage C — not yet run
 ### Stage D — not yet run

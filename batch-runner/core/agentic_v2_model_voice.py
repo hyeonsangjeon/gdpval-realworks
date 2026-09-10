@@ -81,6 +81,15 @@ class ModelCallRecord:
     input_tokens: int
     output_tokens: int
     price_usd: Optional[Decimal]
+    history_entries_sent: int = 0
+    """How many earlier tool results this call carried with it.
+
+    Zero on the first call and one more on each call after it, because every
+    turn re-sends what came before. Recorded where the call is made rather
+    than worked out afterwards from token counts, so "the second turn saw the
+    first turn's answer" is a fact about the request that was charged for and
+    not an inference from its size.
+    """
 
     @property
     def price_missing(self) -> bool:
@@ -93,6 +102,7 @@ class ModelCallRecord:
             "resolved_model": self.resolved_model,
             "input_tokens": self.input_tokens,
             "output_tokens": self.output_tokens,
+            "history_entries_sent": self.history_entries_sent,
             "price_usd": (
                 str(self.price_usd) if self.price_usd is not None else None
             ),
@@ -309,10 +319,14 @@ class AzureFoundryVoice:
             resolved_model=answered_as,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
+            history_entries_sent=len(request.history),
         )
-        # Counted before anything is decided about the reply: the money is
-        # already spent by this point whatever the reply turns out to be.
-        self.budget.record(input_tokens=input_tokens, output_tokens=output_tokens)
+        # Not charged to the budget here. The loop charges every reply it gets,
+        # from any voice, immediately after this returns — that is what makes a
+        # voice which forgot to count still countable. Charging in both places
+        # would spend each call's allowance twice, and a run would stop at half
+        # the calls that were approved while looking like a model that gave up.
+        # What is kept here is the ledger row, which the loop does not keep.
 
         if self.resolved_model is None:
             self.resolved_model = answered_as
@@ -357,6 +371,7 @@ class AzureFoundryVoice:
         resolved_model: str,
         input_tokens: int,
         output_tokens: int,
+        history_entries_sent: int = 0,
     ) -> None:
         price = self.prices.get(resolved_model) if resolved_model else None
         self.calls.append(
@@ -366,6 +381,7 @@ class AzureFoundryVoice:
                 resolved_model=resolved_model or "unreported",
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
+                history_entries_sent=history_entries_sent,
                 price_usd=(
                     price.cost_of(
                         input_tokens=input_tokens, output_tokens=output_tokens

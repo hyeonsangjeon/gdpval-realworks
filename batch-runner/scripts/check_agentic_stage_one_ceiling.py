@@ -11,13 +11,19 @@ Usage:
     cd batch-runner
     python scripts/check_agentic_stage_one_ceiling.py
     python scripts/check_agentic_stage_one_ceiling.py --json
+    python scripts/check_agentic_stage_one_ceiling.py --probe
     python scripts/check_agentic_stage_one_ceiling.py --plan other.yaml
 
-The exit code is 0 only when nothing is left to fix, which today it never is:
+The exit code follows the five-task run's verdict, which today is never zero:
 no amount has been approved for stage one, and no settings have been chosen.
 A real model *can* now be reached, so the amount is the thing standing in the
-way rather than missing code. Anything else exits 1, so this is safe to wire
-into an automated check.
+way rather than missing code.
+
+``--probe`` follows stage A's verdict instead — one task, no marking, its own
+amount, and a narrower tool list read from the probe's own code. It is a second
+verdict rather than a second gate: both rest on the same safety checks and are
+refused together by any of them, and stage A passing does nothing to stage one.
+Anything else exits 1, so either form is safe to wire into an automated check.
 """
 
 from __future__ import annotations
@@ -50,6 +56,15 @@ def main() -> int:
         )
     )
     parser.add_argument("--plan", type=Path, default=STAGE_ONE_PLAN_PATH)
+    parser.add_argument(
+        "--probe",
+        action="store_true",
+        help=(
+            "Report on stage A's one-task probe instead of the five-task run. "
+            "The same checks are made either way; what changes is which "
+            "verdict the exit code follows."
+        ),
+    )
     parser.add_argument(
         "--json",
         action="store_true",
@@ -95,7 +110,12 @@ def main() -> int:
         for line in describe_stage_one_preflight(result):
             print(line)
 
+    # One gate, two verdicts. Stage A's green light never makes stage one's
+    # true — they are separate purchases and each is held to its own amount.
+    if args.probe:
+        return 0 if (result.probe and result.probe.may_start) else 1
     return 0 if result.may_start else 1
+
 
 
 if __name__ == "__main__":
