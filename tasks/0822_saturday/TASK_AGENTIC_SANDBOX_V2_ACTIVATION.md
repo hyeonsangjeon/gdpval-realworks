@@ -1513,6 +1513,34 @@ every guest here including the ones that pass. The probe boot now holds itself
 open for 8 s so the read can land — C2's guest was gone in 1.269 s, which is not
 reliably long enough.
 
+Both artefacts are committed unedited beside this document —
+`c2_first_boot.json` and `c3_attacks.json`. Everything above is a reading of
+them, and a reading nobody can check is worth less than the thing it reads,
+particularly once the host it was written on is deallocated.
+
+###### Seven attacks, eleven rules — what the other four are
+
+`REQUIRED_MICROVM_POLICY` has eleven keys and seven of them were attacked. **7/7
+is not 11/11**, and the difference is not an oversight to be quietly carried:
+
+| key | why there is no attack |
+|---|---|
+| `required: true` | a flag saying the policy applies, not a boundary a guest can push on |
+| `runtime: firecracker` | demonstrated by the boots themselves — Firecracker v1.13.1 is what ran them, recorded per boot with the plan's sha256 |
+| `on_breach: stop-and-report` | this *is* attack 3's outcome: the deadline stopped the machine and the artefact reported it |
+| `workdir: ephemeral-quota` | the `quota` half is attack 1. The **`ephemeral` half is not attacked.** |
+
+The last one is the real gap and it is named here rather than folded into the
+seven. Every boot ended with `teardown.all_gone: true` and every boot was handed
+a freshly built work disk, so nothing observed contradicts it — but that is the
+*runner* being careful, not the machine refusing. A guest cannot make its own
+disk survive; only the code that hands out disks can fail to replace one.
+
+So it is not a microVM property and does not belong among attacks on microVM
+rules. **It becomes stage D's problem the moment one machine per task starts
+reusing this machinery**, because the failure it guards against is one task's
+data reaching the next, and that failure would be silent. Stage D carries it.
+
 ###### Run 1 came back six of seven, and the seventh was the attack, not the rule
 
 **2026-09-10T20:0x, `outcome: escaped`, `escapes: ['memory']`.** The verdict was

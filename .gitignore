@@ -183,6 +183,11 @@ tasks/0822_saturday/*
 !tasks/0822_saturday/TASK_AGENTIC_SANDBOX_V2_FOUNDATION.md
 !tasks/0822_saturday/TASK_AGENTIC_SANDBOX_V2_ACTIVATION.md
 !tasks/0822_saturday/TASK_NATIVE_CODEX_RUN_PATH.md
+# The two stage-C artefacts, unedited. They are what the host wrote, and the
+# prose in the task document is a reading of them -- a reading nobody can check
+# if the thing being read is only on a VM that gets deallocated.
+!tasks/0822_saturday/c2_first_boot.json
+!tasks/0822_saturday/c3_attacks.json
 !tasks/0828_friday/
 tasks/0828_friday/*
 !tasks/0828_friday/TASK_PER_TASK_COST_RECEIPTS.md

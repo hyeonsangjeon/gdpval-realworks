@@ -1,0 +1,669 @@
+{
+ "boots": {
+  "memory": {
+   "channel": "the work disk only: no network by policy, vsock pinned absent, and --daemonize sends the console to /dev/null",
+   "command": "\ngrep MemTotal /proc/meminfo\n\n# Two things about the shape of this attack, both learned from a run where the\n# bound held and the attack reported nothing, which reads as a failure.\n#\n# The allocation has to be charged to the process making it. tmpfs pages are\n# shmem and count against no process's RSS, so when the machine filled, the\n# kernel's OOM killer found nothing large to pick and took a bystander. And the\n# reporter cannot be a child: `rc=$?` inside a command substitution runs in a\n# fork, and that fork was the bystander it took. The attack destroyed its own\n# evidence.\n#\n# So: anonymous memory, touched a page at a time, which makes the allocator the\n# largest thing in the machine and the unambiguous target; and the report is\n# made by the top-level shell, which allocates nothing and is never picked.\ncat > /work/gdpval-allocate.py <<'PY'\nimport sys\n\nstep = 64 * 1024 * 1024\ntarget = 6144 * 1024 * 1024\nheld = []\nallocated = 0\nwhile allocated < target:\n    # bytearray(n) is calloc, and calloc over a fresh mapping is a promise of\n    # zeroes rather than pages. Untouched it would allocate address space and\n    # never reach the bound at all.\n    block = bytearray(step)\n    for offset in range(0, step, 4096):\n        block[offset] = 1\n    held.append(block)\n    allocated += step\n    sys.stdout.write(\"allocated_mib=%d\\n\" % (allocated // (1024 * 1024)))\n    sys.stdout.flush()\nsys.stdout.write(\"ALLOCATED_ALL\\n\")\nPY\npython3 /work/gdpval-allocate.py &\nallocator=$!\nwait \"$allocator\"\necho \"rc=$?\"\nrm -f /work/gdpval-allocate.py\n",
+   "command_exit_status": 0,
+   "deadline_seconds": 1200.0,
+   "jailer": {
+    "argv": [
+     "--id",
+     "c3-memory",
+     "--exec-file",
+     "/usr/local/bin/firecracker",
+     "--uid",
+     "999",
+     "--gid",
+     "988",
+     "--chroot-base-dir",
+     "/srv/jailer",
+     "--cgroup-version",
+     "2",
+     "--cgroup",
+     "memory.max=4563402752",
+     "--resource-limit",
+     "fsize=268435456",
+     "--new-pid-ns",
+     "--daemonize",
+     "--",
+     "--config-file",
+     "/vmconfig.json",
+     "--no-api"
+    ],
+    "returncode": 0,
+    "stderr": ""
+   },
+   "outcome": "booted",
+   "pid_file": {
+    "appeared": true,
+    "path": "/srv/jailer/firecracker/c3-memory/root/firecracker.pid",
+    "pid_recorded": true
+   },
+   "placement": {
+    "chroot_dir": "/srv/jailer/firecracker/c3-memory/root",
+    "placed": [
+     {
+      "bytes": 41865904,
+      "in_jail": "/vmlinux",
+      "mode": "0o444",
+      "owned_by_the_jailed_user": false,
+      "sha256": "b36a4a1b10f33b9cfdcde3d1a787d9c090556a3edb211cd06d1f3f9a6c7e8724"
+     },
+     {
+      "bytes": 9137291264,
+      "in_jail": "/rootfs.ext4",
+      "mode": "0o444",
+      "owned_by_the_jailed_user": false,
+      "sha256": "489188004ad4eb8a90191b3b5f58eb9fb246d158535d0bc655001f438a7a32ea"
+     },
+     {
+      "bytes": 268435456,
+      "in_jail": "/work.ext4",
+      "mode": "0o644",
+      "owned_by_the_jailed_user": true,
+      "sha256": "d0f5906b016eb0898837a686f9af1cc179257e08532dc10a7a5c2f017644d4fd"
+     },
+     {
+      "bytes": 545,
+      "in_jail": "/vmconfig.json",
+      "mode": "0o444",
+      "owned_by_the_jailed_user": false,
+      "sha256": "de668f79dac7fe51ebe12ba1e0d37936ff8ca6859247cae7324f1c5b4a3cbaf7"
+     }
+    ]
+   },
+   "plan_sha256": "6e342ead12ecbe962721397998abd8b04057e1b07364deb2fdfb6801fda18804",
+   "policy_is_the_required_one": true,
+   "policy_sha256": "6a5e665d3253c80302f001e8fd624b77838c38f92add1af63024277c5215888e",
+   "policy_used": {
+    "credentials": "none-inherited",
+    "memory_mib": 4096,
+    "network": "none",
+    "on_breach": "stop-and-report",
+    "required": true,
+    "rootfs": "read-only",
+    "runtime": "firecracker",
+    "user": "jailer-unprivileged",
+    "wall_clock_seconds": 1200,
+    "workdir": "ephemeral-quota",
+    "workdir_quota_mib": 256
+   },
+   "ran_for_seconds": 4.02,
+   "results": {
+    "/out/exit_status": "0\n",
+    "/out/guest_kernel": "6.1.141\n",
+    "/out/guest_uid": "0\n",
+    "/out/init_reached_the_end": "done\n",
+    "/out/stderr": "Killed\n",
+    "/out/stdout": "MemTotal:        4036852 kB\nallocated_mib=64\nallocated_mib=128\nallocated_mib=192\nallocated_mib=256\nallocated_mib=320\nallocated_mib=384\nallocated_mib=448\nallocated_mib=512\nallocated_mib=576\nallocated_mib=640\nallocated_mib=704\nallocated_mib=768\nallocated_mib=832\nallocated_mib=896\nallocated_mib=960\nallocated_mib=1024\nallocated_mib=1088\nallocated_mib=1152\nallocated_mib=1216\nallocated_mib=1280\nallocated_mib=1344\nallocated_mib=1408\nallocated_mib=1472\nallocated_mib=1536\nallocated_mib=1600\nallocated_mib=1664\nallocated_mib=1728\nallocated_mib=1792\nallocated_mib=1856\nallocated_mib=1920\nallocated_mib=1984\nallocated_mib=2048\nallocated_mib=2112\nallocated_mib=2176\nallocated_mib=2240\nallocated_mib=2304\nallocated_mib=2368\nallocated_mib=2432\nallocated_mib=2496\nallocated_mib=2560\nallocated_mib=2624\nallocated_mib=2688\nallocated_mib=2752\nallocated_mib=2816\nallocated_mib=2880\nallocated_mib=2944\nallocated_mib=3008\nallocated_mib=3072\nallocated_mib=3136\nallocated_mib=3200\nallocated_mib=3264\nallocated_mib=3328\nallocated_mib=3392\nallocated_mib=3456\nallocated_mib=3520\nallocated_mib=3584\nallocated_mib=3648\nallocated_mib=3712\nallocated_mib=3776\nrc=137\n"
+   },
+   "schema_version": "1.0",
+   "stopped_by_the_deadline": false,
+   "teardown": {
+    "all_gone": true,
+    "removed": {
+     "/srv/jailer/firecracker/c3-memory/root": true
+    }
+   },
+   "vm_id": "c3-memory",
+   "work_disk": {
+    "argv": [
+     "mke2fs",
+     "-q",
+     "-F",
+     "-t",
+     "ext4",
+     "-b",
+     "4096",
+     "-d",
+     "/var/tmp/gdpval-c3/work-in-memory",
+     "/var/tmp/gdpval-c3/work-memory.ext4",
+     "65536"
+    ],
+    "path": "/var/tmp/gdpval-c3/work-memory.ext4",
+    "populated_from": "/var/tmp/gdpval-c3/work-in-memory",
+    "sha256": "d0f5906b016eb0898837a686f9af1cc179257e08532dc10a7a5c2f017644d4fd",
+    "size_mib": 256
+   }
+  },
+  "probes": {
+   "channel": "the work disk only: no network by policy, vsock pinned absent, and --daemonize sends the console to /dev/null",
+   "command": "\necho \"== network ==\"\ncat /proc/net/dev 2>/dev/null | awk 'NR>2 {print $1}' | tr -d ':'\npython3 - <<'PY' 2>&1 || echo \"connect_probe=no-python\"\nimport socket\ntry:\n    socket.create_connection((\"1.1.1.1\", 443), 5).close()\n    print(\"connect_probe=CONNECTED\")\nexcept OSError as failure:\n    print(\"connect_probe=refused:%s\" % failure.__class__.__name__)\nPY\n\necho \"== rootfs ==\"\ngrep ' / ' /proc/mounts\nif echo probe > /gdpval-root-write-probe 2>/dev/null; then\n  echo \"rootfs_write=SUCCEEDED\"\n  rm -f /gdpval-root-write-probe\nelse\n  echo \"rootfs_write=refused\"\nfi\n\necho \"== memory bound ==\"\ngrep MemTotal /proc/meminfo\n\necho \"== credentials ==\"\necho \"env_count=$(env | wc -l)\"\nenv | grep -Ei 'KEY|TOKEN|SECRET|PASSWORD|AZURE|OPENAI|ANTHROPIC|GITHUB' \\\n  && echo \"guest_env=CARRIES SOMETHING\" || echo \"guest_env=clean\"\necho \"self_environ_bytes=$(wc -c < /proc/1/environ 2>/dev/null || echo unknown)\"\n\n# Two of the seven are facts about the host-side process rather than about\n# anything in here, and they can only be read while it is alive. C2's guest\n# was gone 1.269 seconds after the jailer started it, which is not reliably\n# long enough for a watcher to land a /proc read. This holds the machine open\n# and weakens nothing: the deadline still applies, and a guest that hangs past\n# it is attack 3.\necho \"holding_open=8s\"\nsleep 8\n",
+   "command_exit_status": 0,
+   "deadline_seconds": 1200.0,
+   "jailer": {
+    "argv": [
+     "--id",
+     "c3-probes",
+     "--exec-file",
+     "/usr/local/bin/firecracker",
+     "--uid",
+     "999",
+     "--gid",
+     "988",
+     "--chroot-base-dir",
+     "/srv/jailer",
+     "--cgroup-version",
+     "2",
+     "--cgroup",
+     "memory.max=4563402752",
+     "--resource-limit",
+     "fsize=268435456",
+     "--new-pid-ns",
+     "--daemonize",
+     "--",
+     "--config-file",
+     "/vmconfig.json",
+     "--no-api"
+    ],
+    "returncode": 0,
+    "stderr": ""
+   },
+   "outcome": "booted",
+   "pid_file": {
+    "appeared": true,
+    "path": "/srv/jailer/firecracker/c3-probes/root/firecracker.pid",
+    "pid_recorded": true
+   },
+   "placement": {
+    "chroot_dir": "/srv/jailer/firecracker/c3-probes/root",
+    "placed": [
+     {
+      "bytes": 41865904,
+      "in_jail": "/vmlinux",
+      "mode": "0o444",
+      "owned_by_the_jailed_user": false,
+      "sha256": "b36a4a1b10f33b9cfdcde3d1a787d9c090556a3edb211cd06d1f3f9a6c7e8724"
+     },
+     {
+      "bytes": 9137291264,
+      "in_jail": "/rootfs.ext4",
+      "mode": "0o444",
+      "owned_by_the_jailed_user": false,
+      "sha256": "489188004ad4eb8a90191b3b5f58eb9fb246d158535d0bc655001f438a7a32ea"
+     },
+     {
+      "bytes": 268435456,
+      "in_jail": "/work.ext4",
+      "mode": "0o644",
+      "owned_by_the_jailed_user": true,
+      "sha256": "21ac5e388f0ef036a391182fffd95030f57eebfa212790eb524038c4205c2dca"
+     },
+     {
+      "bytes": 545,
+      "in_jail": "/vmconfig.json",
+      "mode": "0o444",
+      "owned_by_the_jailed_user": false,
+      "sha256": "de668f79dac7fe51ebe12ba1e0d37936ff8ca6859247cae7324f1c5b4a3cbaf7"
+     }
+    ]
+   },
+   "plan_sha256": "f79f1fe72aae66d543721713bc49938b90ef429e38020081825d4cbd5fe3b45d",
+   "policy_is_the_required_one": true,
+   "policy_sha256": "6a5e665d3253c80302f001e8fd624b77838c38f92add1af63024277c5215888e",
+   "policy_used": {
+    "credentials": "none-inherited",
+    "memory_mib": 4096,
+    "network": "none",
+    "on_breach": "stop-and-report",
+    "required": true,
+    "rootfs": "read-only",
+    "runtime": "firecracker",
+    "user": "jailer-unprivileged",
+    "wall_clock_seconds": 1200,
+    "workdir": "ephemeral-quota",
+    "workdir_quota_mib": 256
+   },
+   "ran_for_seconds": 9.272,
+   "results": {
+    "/out/exit_status": "0\n",
+    "/out/guest_kernel": "6.1.141\n",
+    "/out/guest_uid": "0\n",
+    "/out/init_reached_the_end": "done\n",
+    "/out/stderr": "/work/in/command.sh: 15: cannot create /gdpval-root-write-probe: Read-only file system\n",
+    "/out/stdout": "== network ==\nlo\nconnect_probe=refused:OSError\n== rootfs ==\n/dev/root / ext4 ro,relatime 0 0\nrootfs_write=refused\n== memory bound ==\nMemTotal:        4036852 kB\n== credentials ==\nenv_count=4\nguest_env=clean\nself_environ_bytes=18\nholding_open=8s\n"
+   },
+   "schema_version": "1.0",
+   "stopped_by_the_deadline": false,
+   "teardown": {
+    "all_gone": true,
+    "removed": {
+     "/srv/jailer/firecracker/c3-probes/root": true
+    }
+   },
+   "vm_id": "c3-probes",
+   "watched": {
+    "canaries_in_environment": [],
+    "descriptors": {
+     "0": "/dev/null",
+     "1": "/dev/null",
+     "10": "/work.ext4",
+     "11": "anon_inode:[timerfd]",
+     "12": "anon_inode:[eventfd]",
+     "13": "anon_inode:[eventfd]",
+     "14": "/dev/kvm",
+     "15": "anon_inode:kvm-vm",
+     "16": "anon_inode:[eventfd]",
+     "17": "anon_inode:[eventfd]",
+     "18": "anon_inode:kvm-vcpu:0",
+     "19": "anon_inode:[eventfd]",
+     "2": "/dev/null",
+     "20": "anon_inode:[eventfd]",
+     "21": "anon_inode:[eventfd]",
+     "22": "anon_inode:[eventfd]",
+     "23": "anon_inode:[eventfd]",
+     "24": "anon_inode:[eventfd]",
+     "25": "anon_inode:[eventfd]",
+     "26": "anon_inode:[eventfd]",
+     "27": "anon_inode:[eventfd]",
+     "28": "anon_inode:[eventfd]",
+     "3": "anon_inode:[eventpoll]",
+     "4": "anon_inode:[timerfd]",
+     "6": "/rootfs.ext4",
+     "7": "anon_inode:[timerfd]",
+     "8": "anon_inode:[eventfd]",
+     "9": "anon_inode:[eventfd]"
+    },
+    "descriptors_reaching_the_orchestrator": [],
+    "environment_names": [],
+    "environment_seen": 0,
+    "expected_uid": 999,
+    "pid": 1979,
+    "read_at": "2026-09-10T20:36:49Z",
+    "real_uid": 999,
+    "standard_descriptors": {
+     "0": "/dev/null",
+     "1": "/dev/null",
+     "2": "/dev/null"
+    },
+    "supplementary_groups": []
+   },
+   "work_disk": {
+    "argv": [
+     "mke2fs",
+     "-q",
+     "-F",
+     "-t",
+     "ext4",
+     "-b",
+     "4096",
+     "-d",
+     "/var/tmp/gdpval-c3/work-in-probes",
+     "/var/tmp/gdpval-c3/work-probes.ext4",
+     "65536"
+    ],
+    "path": "/var/tmp/gdpval-c3/work-probes.ext4",
+    "populated_from": "/var/tmp/gdpval-c3/work-in-probes",
+    "sha256": "21ac5e388f0ef036a391182fffd95030f57eebfa212790eb524038c4205c2dca",
+    "size_mib": 256
+   }
+  },
+  "wall-clock": {
+   "channel": "the work disk only: no network by policy, vsock pinned absent, and --daemonize sends the console to /dev/null",
+   "command": "\necho 'about to hang on purpose'\nwhile true; do sleep 5; done\n",
+   "command_exit_status": null,
+   "deadline_seconds": 45.0,
+   "jailer": {
+    "argv": [
+     "--id",
+     "c3-wall-clock",
+     "--exec-file",
+     "/usr/local/bin/firecracker",
+     "--uid",
+     "999",
+     "--gid",
+     "988",
+     "--chroot-base-dir",
+     "/srv/jailer",
+     "--cgroup-version",
+     "2",
+     "--cgroup",
+     "memory.max=4563402752",
+     "--resource-limit",
+     "fsize=268435456",
+     "--new-pid-ns",
+     "--daemonize",
+     "--",
+     "--config-file",
+     "/vmconfig.json",
+     "--no-api"
+    ],
+    "returncode": 0,
+    "stderr": ""
+   },
+   "outcome": "stopped_by_the_deadline",
+   "pid_file": {
+    "appeared": true,
+    "path": "/srv/jailer/firecracker/c3-wall-clock/root/firecracker.pid",
+    "pid_recorded": true
+   },
+   "placement": {
+    "chroot_dir": "/srv/jailer/firecracker/c3-wall-clock/root",
+    "placed": [
+     {
+      "bytes": 41865904,
+      "in_jail": "/vmlinux",
+      "mode": "0o444",
+      "owned_by_the_jailed_user": false,
+      "sha256": "b36a4a1b10f33b9cfdcde3d1a787d9c090556a3edb211cd06d1f3f9a6c7e8724"
+     },
+     {
+      "bytes": 9137291264,
+      "in_jail": "/rootfs.ext4",
+      "mode": "0o444",
+      "owned_by_the_jailed_user": false,
+      "sha256": "489188004ad4eb8a90191b3b5f58eb9fb246d158535d0bc655001f438a7a32ea"
+     },
+     {
+      "bytes": 268435456,
+      "in_jail": "/work.ext4",
+      "mode": "0o644",
+      "owned_by_the_jailed_user": true,
+      "sha256": "7b71d29c2b4b8f5784c03b4bbab30198d65b1908115b1db2993ef71144346888"
+     },
+     {
+      "bytes": 545,
+      "in_jail": "/vmconfig.json",
+      "mode": "0o444",
+      "owned_by_the_jailed_user": false,
+      "sha256": "de668f79dac7fe51ebe12ba1e0d37936ff8ca6859247cae7324f1c5b4a3cbaf7"
+     }
+    ]
+   },
+   "plan_sha256": "d3aef11ce67a5d16a83b6682c6e7020fb6cc6d5dee4f475dd8e36ba0e9db4c3f",
+   "policy_is_the_required_one": false,
+   "policy_sha256": "10cd2a5130ecdc1e6b29912b1b8ffc192319fb7c7ba44b86ad56bed2c86b5f10",
+   "policy_used": {
+    "credentials": "none-inherited",
+    "memory_mib": 4096,
+    "network": "none",
+    "on_breach": "stop-and-report",
+    "required": true,
+    "rootfs": "read-only",
+    "runtime": "firecracker",
+    "user": "jailer-unprivileged",
+    "wall_clock_seconds": 45,
+    "workdir": "ephemeral-quota",
+    "workdir_quota_mib": 256
+   },
+   "ran_for_seconds": 45.042,
+   "results": {
+    "/out/exit_status": null,
+    "/out/guest_kernel": "6.1.141\n",
+    "/out/guest_uid": "0\n",
+    "/out/init_reached_the_end": null,
+    "/out/stderr": "",
+    "/out/stdout": "about to hang on purpose\n"
+   },
+   "schema_version": "1.0",
+   "stopped_by_the_deadline": true,
+   "teardown": {
+    "all_gone": true,
+    "removed": {
+     "/srv/jailer/firecracker/c3-wall-clock/root": true
+    }
+   },
+   "vm_id": "c3-wall-clock",
+   "work_disk": {
+    "argv": [
+     "mke2fs",
+     "-q",
+     "-F",
+     "-t",
+     "ext4",
+     "-b",
+     "4096",
+     "-d",
+     "/var/tmp/gdpval-c3/work-in-wall-clock",
+     "/var/tmp/gdpval-c3/work-wall-clock.ext4",
+     "65536"
+    ],
+    "path": "/var/tmp/gdpval-c3/work-wall-clock.ext4",
+    "populated_from": "/var/tmp/gdpval-c3/work-in-wall-clock",
+    "sha256": "7b71d29c2b4b8f5784c03b4bbab30198d65b1908115b1db2993ef71144346888",
+    "size_mib": 256
+   }
+  },
+  "workdir-quota": {
+   "channel": "the work disk only: no network by policy, vsock pinned absent, and --daemonize sends the console to /dev/null",
+   "command": "\necho \"quota_mib_configured=256\"\noutcome=$(dd if=/dev/zero of=/work/gdpval-filler bs=1M count=512 2>&1; echo \"rc=$?\")\nrm -f /work/gdpval-filler\nsync\necho \"$outcome\" | tail -3\n",
+   "command_exit_status": 0,
+   "deadline_seconds": 1200.0,
+   "jailer": {
+    "argv": [
+     "--id",
+     "c3-workdir-quota",
+     "--exec-file",
+     "/usr/local/bin/firecracker",
+     "--uid",
+     "999",
+     "--gid",
+     "988",
+     "--chroot-base-dir",
+     "/srv/jailer",
+     "--cgroup-version",
+     "2",
+     "--cgroup",
+     "memory.max=4563402752",
+     "--resource-limit",
+     "fsize=268435456",
+     "--new-pid-ns",
+     "--daemonize",
+     "--",
+     "--config-file",
+     "/vmconfig.json",
+     "--no-api"
+    ],
+    "returncode": 0,
+    "stderr": ""
+   },
+   "outcome": "booted",
+   "pid_file": {
+    "appeared": true,
+    "path": "/srv/jailer/firecracker/c3-workdir-quota/root/firecracker.pid",
+    "pid_recorded": true
+   },
+   "placement": {
+    "chroot_dir": "/srv/jailer/firecracker/c3-workdir-quota/root",
+    "placed": [
+     {
+      "bytes": 41865904,
+      "in_jail": "/vmlinux",
+      "mode": "0o444",
+      "owned_by_the_jailed_user": false,
+      "sha256": "b36a4a1b10f33b9cfdcde3d1a787d9c090556a3edb211cd06d1f3f9a6c7e8724"
+     },
+     {
+      "bytes": 9137291264,
+      "in_jail": "/rootfs.ext4",
+      "mode": "0o444",
+      "owned_by_the_jailed_user": false,
+      "sha256": "489188004ad4eb8a90191b3b5f58eb9fb246d158535d0bc655001f438a7a32ea"
+     },
+     {
+      "bytes": 268435456,
+      "in_jail": "/work.ext4",
+      "mode": "0o644",
+      "owned_by_the_jailed_user": true,
+      "sha256": "a28def4e56a72a65ec975a8740257b509ae2f820b4fc773ffe94d1f85276cca8"
+     },
+     {
+      "bytes": 545,
+      "in_jail": "/vmconfig.json",
+      "mode": "0o444",
+      "owned_by_the_jailed_user": false,
+      "sha256": "de668f79dac7fe51ebe12ba1e0d37936ff8ca6859247cae7324f1c5b4a3cbaf7"
+     }
+    ]
+   },
+   "plan_sha256": "d9e4312842d0a7399fde18f4b7ff859745fcef3b60e3a859d131c758d3bf97ab",
+   "policy_is_the_required_one": true,
+   "policy_sha256": "6a5e665d3253c80302f001e8fd624b77838c38f92add1af63024277c5215888e",
+   "policy_used": {
+    "credentials": "none-inherited",
+    "memory_mib": 4096,
+    "network": "none",
+    "on_breach": "stop-and-report",
+    "required": true,
+    "rootfs": "read-only",
+    "runtime": "firecracker",
+    "user": "jailer-unprivileged",
+    "wall_clock_seconds": 1200,
+    "workdir": "ephemeral-quota",
+    "workdir_quota_mib": 256
+   },
+   "ran_for_seconds": 1.518,
+   "results": {
+    "/out/exit_status": "0\n",
+    "/out/guest_kernel": "6.1.141\n",
+    "/out/guest_uid": "0\n",
+    "/out/init_reached_the_end": "done\n",
+    "/out/stderr": "",
+    "/out/stdout": "quota_mib_configured=256\n218+0 records out\n229175296 bytes (229 MB, 219 MiB) copied, 0.297843 s, 769 MB/s\nrc=1\n"
+   },
+   "schema_version": "1.0",
+   "stopped_by_the_deadline": false,
+   "teardown": {
+    "all_gone": true,
+    "removed": {
+     "/srv/jailer/firecracker/c3-workdir-quota/root": true
+    }
+   },
+   "vm_id": "c3-workdir-quota",
+   "work_disk": {
+    "argv": [
+     "mke2fs",
+     "-q",
+     "-F",
+     "-t",
+     "ext4",
+     "-b",
+     "4096",
+     "-d",
+     "/var/tmp/gdpval-c3/work-in-workdir-quota",
+     "/var/tmp/gdpval-c3/work-workdir-quota.ext4",
+     "65536"
+    ],
+    "path": "/var/tmp/gdpval-c3/work-workdir-quota.ext4",
+    "populated_from": "/var/tmp/gdpval-c3/work-in-workdir-quota",
+    "sha256": "a28def4e56a72a65ec975a8740257b509ae2f820b4fc773ffe94d1f85276cca8",
+    "size_mib": 256
+   }
+  }
+ },
+ "elapsed_seconds": 239.2,
+ "finished_at": "2026-09-10T20:40:01Z",
+ "host": {
+  "cgroup_evidence": "/sys/fs/cgroup/cgroup.controllers exists",
+  "cgroup_version": 2,
+  "firecracker": "/usr/local/bin/firecracker",
+  "firecracker_version": "Firecracker v1.13.1",
+  "jailer": "/usr/local/bin/jailer",
+  "jailer_version": "Jailer v1.13.1",
+  "kernel_release": "6.17.0-1022-azure",
+  "kvm_present": true,
+  "processors": 8,
+  "read_at": "2026-09-10T20:36:02Z"
+ },
+ "images": {
+  "c2_recorded": {
+   "kernel_sha256": "b36a4a1b10f33b9cfdcde3d1a787d9c090556a3edb211cd06d1f3f9a6c7e8724",
+   "rootfs_sha256": "489188004ad4eb8a90191b3b5f58eb9fb246d158535d0bc655001f438a7a32ea"
+  },
+  "kernel_sha256": "b36a4a1b10f33b9cfdcde3d1a787d9c090556a3edb211cd06d1f3f9a6c7e8724",
+  "matches_the_guest_c2_booted": true,
+  "rootfs_sha256": "489188004ad4eb8a90191b3b5f58eb9fb246d158535d0bc655001f438a7a32ea"
+ },
+ "jail_account": {
+  "gid": 988,
+  "groups_beyond_its_own": [],
+  "name": "gdpvaljail",
+  "shell": "/usr/sbin/nologin",
+  "uid": 999
+ },
+ "judgement": {
+  "all_seven_stopped": true,
+  "attempted": 7,
+  "escapes": [],
+  "how_absent_evidence_is_treated": "as a failure of that attack. A probe that did not run and a rule that did not hold leave the same silence, and calling silence a pass would let a guest that never booted sweep all seven.",
+  "schema_version": "1.0",
+  "stopped": 7,
+  "verdicts": [
+   {
+    "evidence": "the write past the quota failed: rc=1",
+    "id": "workdir-quota",
+    "number": 1,
+    "observed": "guest",
+    "rule_it_enforced": "workdir_quota_mib",
+    "rule_value": 256,
+    "stopped": true,
+    "what_it_tried": "write twice the quota into the ephemeral work disk"
+   },
+   {
+    "evidence": "the guest sees 3942 MiB against a 4096 MiB bound and the over-allocation was stopped, having reached 3776 MiB: rc=137",
+    "id": "memory",
+    "number": 2,
+    "observed": "guest",
+    "rule_it_enforced": "memory_mib",
+    "rule_value": 4096,
+    "stopped": true,
+    "what_it_tried": "allocate half again the memory bound inside the guest"
+   },
+   {
+    "evidence": "the guest hung and was stopped after 45.042s against a 45.0s bound, and its chroot is gone",
+    "id": "wall-clock",
+    "number": 3,
+    "observed": "host",
+    "rule_it_enforced": "wall_clock_seconds",
+    "rule_value": 1200,
+    "stopped": true,
+    "what_it_tried": "never finish"
+   },
+   {
+    "evidence": "no interface but loopback in /proc/net/dev and the connection attempt failed: connect_probe=refused:OSError",
+    "id": "network",
+    "number": 4,
+    "observed": "guest",
+    "rule_it_enforced": "network",
+    "rule_value": "none",
+    "stopped": true,
+    "what_it_tried": "find an interface and open a connection through it"
+   },
+   {
+    "evidence": "the write was refused and / is mounted read-only: /dev/root / ext4 ro,relatime 0 0",
+    "id": "read-only-root",
+    "number": 5,
+    "observed": "guest",
+    "rule_it_enforced": "rootfs",
+    "rule_value": "read-only",
+    "stopped": true,
+    "what_it_tried": "write a file into the root filesystem"
+   },
+   {
+    "evidence": "the host-side Firecracker process runs as uid 999 with no supplementary groups",
+    "id": "privileged-user",
+    "number": 6,
+    "observed": "host",
+    "rule_it_enforced": "user",
+    "rule_value": "jailer-unprivileged",
+    "stopped": true,
+    "what_it_tried": "be a host-side process that kept root, which the guest cannot see and so cannot be asked about"
+   },
+   {
+    "evidence": "the host process's environment holds 0 entries with none of the canaries, its 28 descriptors reach nothing of the orchestrator's, all three standard ones are /dev/null, and the guest's environment is clean",
+    "id": "inherited-credentials",
+    "number": 7,
+    "observed": "host and guest",
+    "rule_it_enforced": "credentials",
+    "rule_value": "none-inherited",
+    "stopped": true,
+    "what_it_tried": "reach a token the orchestrator holds, through the environment and through an inherited descriptor"
+   }
+  ]
+ },
+ "outcome": "all_seven_stopped",
+ "schema_version": "1.0",
+ "stage": "C3",
+ "started_at": "2026-09-10T20:36:02Z",
+ "what_this_is_not": "not exec_run, not a model call, not a task. No flag was changed, no rule was relaxed, and nothing here is wired into the product path."
+}
