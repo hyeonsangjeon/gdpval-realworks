@@ -397,6 +397,80 @@ jobs:
               sys.exit(1)
           PY
 
+      # Where the discriminator left the question. The bearer clears this
+      # host's gate under `urllib` and the runtime is refused at it with the
+      # control arm's sentence word for word, so the difference is in what the
+      # runtime puts on the wire and `urllib` does not. Four transmission
+      # explanations were measured offline against the pinned binary and all
+      # four are false: the header is present, it carries `Bearer `, its value
+      # is exactly what the auth command printed, and no second credential
+      # rides alongside.
+      #
+      # So this adds the rest, one property at a time, to a request already
+      # known to clear the gate. A 400 that becomes a 401 names a property
+      # that changes how this host authorizes. Nothing changing names the
+      # body, which is the other place left to look.
+      #
+      # Cost: seven requests, none of which names a model, so none can select
+      # a deployment or generate anything. That is an argument, not a receipt
+      # -- a refusal returns no usage record, so these are unpriced rather
+      # than proven free, and the record says so in `not_established`.
+      #
+      # What it cannot show: these arms are `urllib`, not the runtime. A
+      # property that closes the gate here is where to look next. It is not a
+      # demonstrated cause of the turn's refusal, and it is not a reason to
+      # request a role.
+      #
+      # `|| true` for the reason the steps above give: `sweep_inconclusive`
+      # exits non-zero and is a finding worth keeping, not a broken job.
+      - name: Ask which request property closes a gate the plain request clears
+        id: transmission_sweep
+        working-directory: batch-runner
+        env:
+          AZURE_AI_ROUTE_PROFILE: direct-v1
+          FOUNDRY_PROJECT_ENDPOINT: ${{ secrets.FOUNDRY_PROJECT_ENDPOINT }}
+          DEPLOYMENT: ${{ inputs.deployment }}
+        run: |
+          set -euo pipefail
+          python3 scripts/diagnose_codex_foundry_connection.py \
+            --deployment "${DEPLOYMENT}" \
+            --transmission-sweep \
+            --out /tmp/codex-foundry-transmission-sweep.json || true
+          test -s /tmp/codex-foundry-transmission-sweep.json
+          python3 - <<'PY'
+          import json
+          import sys
+
+          record = json.load(open("/tmp/codex-foundry-transmission-sweep.json"))
+          print("token minted by the child process:", record["token"]["minted"])
+          print("requests planned:", record["requests_planned"],
+                "sent:", record["requests_sent"])
+          for name, arm in (record["arms"] or {}).items():
+              print(f"  {name:28s} -> {arm.get('status')}"
+                    f"  same text as control: {arm.get('same_message_as_control')}")
+          print("  control                      ->",
+                (record["control"] or {}).get("status"))
+          print("closed the gate:", record["properties_that_closed_the_gate"])
+          print("verdict:", record["verdict"])
+          print("what that means:", record["verdict_note"])
+
+          if not record["token"]["minted"]:
+              print("::error::the sweep never reached the host: the token could "
+                    "not be minted, so this run measures nothing about the "
+                    "resource. This is an environment or code fault, not a "
+                    "refusal.")
+              sys.exit(1)
+
+          # The count on the wire, not the constant. A sweep that sent fewer
+          # requests than it planned measured fewer properties than it reports
+          # on, and would read as a null result for arms that never went.
+          if record["requests_sent"] != record["requests_planned"]:
+              print(f"::error::the sweep planned {record['requests_planned']} "
+                    f"requests and sent {record['requests_sent']}. The arms that "
+                    f"did not go are not evidence about anything.")
+              sys.exit(1)
+          PY
+
       # The one request. Skipped entirely unless it was asked for, so the
       # difference between a free run and a paid one is a deliberate input and
       # not a forgotten flag.
@@ -484,6 +558,7 @@ jobs:
               "/tmp/codex-foundry-plan.json",
               "/tmp/codex-foundry-readonly.json",
               "/tmp/codex-foundry-auth-discriminator.json",
+              "/tmp/codex-foundry-transmission-sweep.json",
               "/tmp/codex-foundry-connection.json",
           ):
               if not os.path.exists(path):
@@ -502,18 +577,21 @@ jobs:
                           f"{path}: contains a URL that is not the public token scope"
                       )
               record = json.loads(text)
-              # Three record shapes now land here and only one of them observes
+              # Four record shapes now land here and only one of them observes
               # a turn. Branch on the record's own schema rather than on
               # whether the key happens to be present: `.get("observed", {})`
               # would turn a renamed field in the connection record into a
               # silent pass, and this check exists precisely to catch a claim
-              # nobody measured. The two free shapes are matched by prefix and
-              # the turn shape is the `else`, so a *new* free record added
+              # nobody measured. The three free shapes are matched by prefix
+              # and the turn shape is the `else`, so a *new* free record added
               # without touching this list fails closed rather than skipping.
+              # It has now done that once, for real, on the sweep record --
+              # which is the whole argument for writing it this way.
               schema = str(record.get("schema", ""))
               if schema.startswith((
                   "codex_foundry_readonly_probe/",
                   "codex_foundry_auth_discriminator/",
+                  "codex_foundry_transmission_sweep/",
               )):
                   if record["inference_requested"] is not False:
                       leaked.append(f"{path}: a free-probe record claims a request was made")
@@ -553,6 +631,7 @@ jobs:
             /tmp/codex-foundry-plan.json
             /tmp/codex-foundry-readonly.json
             /tmp/codex-foundry-auth-discriminator.json
+            /tmp/codex-foundry-transmission-sweep.json
             /tmp/codex-foundry-connection.json
           if-no-files-found: warn
           retention-days: 90
@@ -588,6 +667,14 @@ jobs:
           AD_MINTED="$(python3 -c "import json,sys;print((json.load(open(sys.argv[1]))['arms']['minted_bearer'] or {}).get('status'))" "$AD" 2>/dev/null || echo 'unknown')"
           AD_CONTROL="$(python3 -c "import json,sys;print((json.load(open(sys.argv[1]))['arms']['invalid_bearer_control'] or {}).get('status'))" "$AD" 2>/dev/null || echo 'unknown')"
           AD_SAME="$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['same_message_as_control'])" "$AD" 2>/dev/null || echo 'unknown')"
+          TS=/tmp/codex-foundry-transmission-sweep.json
+          TS_VERDICT="$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['verdict'])" "$TS" 2>/dev/null || echo 'not measured')"
+          TS_NOTE="$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['verdict_note'])" "$TS" 2>/dev/null || echo 'not measured')"
+          TS_SENT="$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['requests_sent'])" "$TS" 2>/dev/null || echo 'unknown')"
+          TS_PLANNED="$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['requests_planned'])" "$TS" 2>/dev/null || echo 'unknown')"
+          TS_BASELINE="$(python3 -c "import json,sys;print((json.load(open(sys.argv[1]))['arms'].get('baseline') or {}).get('status'))" "$TS" 2>/dev/null || echo 'unknown')"
+          # An empty list prints as nothing and would read as "not measured".
+          TS_CLOSED="$(python3 -c "import json,sys;v=json.load(open(sys.argv[1]))['properties_that_closed_the_gate'];print(', '.join(v) if v else 'none — nothing closed it')" "$TS" 2>/dev/null || echo 'not measured')"
           {
             echo "### Codex → Foundry, one turn"
             echo ""
@@ -649,6 +736,41 @@ jobs:
             echo "이 실행은 이 자원에 대해 아무것도 측정하지 않았습니다. 실행"
             echo "\`34340775246\`이 정확히 그랬습니다 — 초록불이었지만 잰 게"
             echo "없었습니다. 그래서 지금은 그 경우 단계가 **실패로 끝납니다.**"
+            echo ""
+            echo "### 무과금 전송 차이 좁히기 (턴 없음)"
+            echo ""
+            echo "- 보낸 요청 수: \`${TS_SENT}\` / 계획 \`${TS_PLANNED}\`"
+            echo "- 아무것도 안 붙인 기본 요청: \`${TS_BASELINE}\`"
+            echo "- 문을 닫아 버린 성질: \`${TS_CLOSED}\`"
+            echo "- 판정: \`${TS_VERDICT}\`"
+            echo "- 뜻: ${TS_NOTE}"
+            echo ""
+            echo "이게 무엇을 한 것인지: **똑같은 토큰**이 파이썬으로 보내면"
+            echo "문을 통과하는데 Codex로 보내면 막힙니다. 그래서 Codex만"
+            echo "덧붙이는 것들 — \`Accept: text/event-stream\`, \`originator\`,"
+            echo "세션·턴 헤더 6개, 본문의 \`stream: true\` — 을 **통과가 확인된"
+            echo "요청에 하나씩** 얹어 가며, 어느 것이 문을 닫는지 봤습니다."
+            echo "모든 요청은 여전히 **모델 이름이 없어서** 아무것도 생성될 수"
+            echo "없습니다."
+            echo ""
+            echo "- 어떤 성질에서 \`400\`이 \`401\`로 뒤집혔다면 → **그게 다음에"
+            echo "  볼 곳입니다.**"
+            echo "- 아무것도 안 뒤집혔다면 → 원인은 이 진단이 보낼 수 없는"
+            echo "  **본문 쪽**(모델·지시문·도구 10개)이나 전송 계층입니다."
+            echo "  이것도 답입니다."
+            echo ""
+            echo "**한계를 분명히:** 이 화살들은 전부 \`urllib\`이지 Codex 런타임이"
+            echo "아닙니다. 여기서 문을 닫은 성질은 **다음에 볼 후보**이지 턴의"
+            echo "401의 **증명된 원인이 아닙니다.** 그리고 어느 쪽으로 나오든"
+            echo "**역할을 달라고 할 근거가 아닙니다.** 거절에는 사용량 기록이"
+            echo "없으므로 이 요청들의 비용은 **미확정**이며 0달러가 아닙니다."
+            echo ""
+            echo "**\`400\`을 잘못 읽지 않기:** \`400\`은 *답할 수 없는* 요청이 문을"
+            echo "지나 안에서 걸렸다는 뜻입니다. 이건 **검사 순서**(토큰을 본문보다"
+            echo "먼저 본다)를 말해 줄 뿐, 이 신원이 **추론을 실행해도 되는지**는"
+            echo "말해 주지 않습니다. 그걸 보여 줄 수 있는 유일한 요청은 *답할 수"
+            echo "있는* 요청인데, 그건 이 진단이 절대 보내지 않는 바로 그것입니다."
+            echo "그래서 여기서 무엇이 나오든 **220문제가 돌아간다는 뜻이 아닙니다.**"
             echo ""
             echo "이 줄이 뜻하는 것: Codex 런타임이 만든 요청 한 번을 실제 배포에"
             echo "보내고, 그쪽이 무엇이라고 답했는지를 이름 붙여 기록한 것입니다."

@@ -157,6 +157,19 @@ class RecordsEveryVerb:
                             "header_names": sorted(
                                 name.lower() for name in self.headers.keys()
                             ),
+                            # Values as well as names, because a later
+                            # measurement replays some of them and needs to
+                            # replay what is actually sent rather than what a
+                            # reader would guess. ``authorization`` is the one
+                            # exception and is described in shape only, below.
+                            "header_values": {
+                                name.lower(): (
+                                    f"<{len(value)} chars>"
+                                    if name.lower() == "authorization"
+                                    else value
+                                )
+                                for name, value in self.headers.items()
+                            },
                             "credential": describe_credential(
                                 dict(self.headers.items()), FAKE_TOKEN
                             ),
