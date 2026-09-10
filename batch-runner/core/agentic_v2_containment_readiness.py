@@ -658,9 +658,10 @@ RECORDED_FINDINGS: tuple[RecordedFinding, ...] = (
             "answers no on that fourth point until it is bootstrapped. This "
             "says the containment could be hosted, and nothing more. Whether "
             "anything applies the rules is a fact about this repository and "
-            "not about this machine, so it is left to the section below, "
-            "which answers it live, rather than frozen into a finding that "
-            "would go stale the moment the repository moved"
+            "not about this machine, so it is left to "
+            "anything_applies_the_containment_rules, which is worked out on "
+            "every run, rather than frozen into a finding that would go stale "
+            "the moment the repository moved"
         ),
         established_by=(
             "az vm run-command on gdpval-devhost-vm in rg-gdpval-devhost-krc, "

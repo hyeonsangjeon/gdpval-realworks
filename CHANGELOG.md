@@ -279,8 +279,12 @@ entries land under a fresh dated heading the day they merge to `main`.
   machine changing, and `describe_containment` already answers it live in its
   own section — so a finding may no longer name `REQUIRED_MICROVM_POLICY` or the
   launch module at all, and a test enforces that for every finding rather than
-  for the one that went stale. The same reach appeared in a test module's
-  docstring and is corrected there too.
+  for the one that went stale. What the azure finding does instead is point at
+  `anything_applies_the_containment_rules` by name, and that has its own second
+  guard, because a pointer fails quietly in a way an assertion does not: a
+  rename would leave the finding naming a key no report has. Anything in a
+  finding shaped like a field name must be one. The same reach appeared in a
+  test module's docstring and is corrected there too.
 
 - **The containment answers a seventh question, and it was found by planning
   the test rather than by reading the rules.** Stage C's attack list has always

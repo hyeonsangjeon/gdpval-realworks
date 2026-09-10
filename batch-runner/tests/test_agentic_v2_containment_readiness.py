@@ -649,6 +649,36 @@ def test_no_finding_answers_the_repository_wide_question_for_itself():
             )
 
 
+def test_a_finding_that_points_at_a_report_field_points_at_a_real_one():
+    """Pointing instead of asserting only helps while the pointer resolves.
+
+    The azure finding now hands the repository-wide question to
+    ``anything_applies_the_containment_rules`` rather than answering it. That
+    is the whole of the fix above, and it fails quietly in a second way if the
+    field is ever renamed: the finding would name a key that no report has,
+    which is the same dead reference as the stale claim it replaced.
+
+    Anything in a finding that is shaped like a field name has to be one. The
+    threshold keeps ordinary prose out; nothing in English reaches sixteen
+    characters with an underscore in it by accident.
+    """
+    looks_like_a_field = re.compile(r"[a-z][a-z0-9]*(?:_[a-z0-9]+)+")
+    report = containment_answer_everywhere(facts=a_machine())
+
+    for finding in RECORDED_FINDINGS:
+        named = {
+            token
+            for token in looks_like_a_field.findall(finding.finding)
+            if len(token) >= 16
+        }
+        for field in sorted(named):
+            assert field in report, (
+                f"the {finding.machine} finding points at {field}, which is "
+                "not a key of the report; a pointer that no longer resolves "
+                "is the staleness this rule exists to stop"
+            )
+
+
 def test_the_github_runner_finding_rests_on_githubs_own_documentation():
     github = next(
         finding for finding in RECORDED_FINDINGS if "github-hosted" in finding.machine
