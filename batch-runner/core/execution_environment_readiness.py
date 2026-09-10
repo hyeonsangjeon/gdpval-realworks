@@ -181,13 +181,21 @@ DOCUMENTED_BLOCKERS_BY_ENVIRONMENT: Mapping[str, tuple[str, ...]] = {
     # that has not been *observed*, and no amount of reading will clear any of
     # them — only a request that is answered will.
     ENVIRONMENT_CODEX_COMMAND_LINE_TOOL_FOUNDRY: (
-        "the sign-in has been built but never accepted: this repository "
-        "forbids every static Azure credential variable in "
+        "the sign-in mints and is accepted, but not yet from inside the place "
+        "Codex runs it: this repository forbids every static Azure credential "
+        "variable in "
         "core.azure_ai_clients.FORBIDDEN_STATIC_AZURE_CREDENTIAL_ENV, so the "
         "provider is authenticated by an auth command "
-        "(core.codex_azure_token) that mints an Entra token instead; no token "
-        "from it has yet been presented to a Foundry deployment and accepted, "
-        "and a route that has not answered is not a route that works",
+        "(core.codex_azure_token) that mints an Entra token instead, and run "
+        "34442249527 presented a token from that command to this deployment "
+        "and was answered 200 — so the credential, the identity and the "
+        "address are settled. What was not settled is that Codex starts that "
+        "command in the task's own directory and in the isolated environment, "
+        "where until now it could neither import its package nor find the "
+        "Azure CLI sign-in; it printed nothing, and the empty bearer that "
+        "followed was refused as an invalid subscription key. The fix is in "
+        "and checked locally, and a turn on a runner has not yet been "
+        "answered",
         "which API contract the deployment serves Codex on has not been "
         "observed: core.codex_runtime_config refuses a dated api-version on "
         "the undated /openai/v1/ route and lets query_params carry one on the "

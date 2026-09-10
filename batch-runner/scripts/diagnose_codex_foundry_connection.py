@@ -159,6 +159,12 @@ VERDICT_SANDBOX_FAILED = "sandbox_failed"
 VERDICT_TURN_TIMED_OUT = "turn_timed_out"
 #: The pinned SDK or binary is missing or is the wrong version.
 VERDICT_RUNTIME_UNAVAILABLE = "runtime_unavailable"
+#: The provider's auth command could not produce a token inside the isolated
+#: environment, so no bearer existed to send. Its own verdict rather than a
+#: shade of ``runtime_unavailable``: the runtime is fine and the deployment is
+#: fine, and filing this under either is how it went unseen. Nothing is sent
+#: and nothing is billed.
+VERDICT_AUTH_COMMAND_FAILED = "auth_command_produced_no_token"
 #: The runtime started and the session did not open, so nothing was sent.
 VERDICT_SESSION_NOT_STARTED = "session_not_started"
 #: The environment does not describe a deployment. Nothing was sent, and
@@ -620,6 +626,9 @@ def _empty_observation() -> dict[str, Any]:
             "item_types": [],
         },
         "usage": None,
+        # Whether the sign-in could produce a token where Codex runs it, and
+        # why not. Never the token, and never anything derived from one.
+        "auth_command": None,
         "final_response_present": False,
         "final_response_matched_instruction": False,
         "tool_execution_observed": False,
@@ -785,6 +794,27 @@ def probe(
     workspace = CodexWorkspace.create(task_id="foundry-connection-probe")
     codex: Any = None
     try:
+        # Asked and recorded before anything is sent, and recorded whichever
+        # way it answers. A turn started on a sign-in that cannot mint reaches
+        # the deployment carrying an empty bearer and is refused there, and the
+        # refusal — "invalid subscription key or wrong API endpoint" — is about
+        # the two things that were never wrong. Paid runs 34319880025 and
+        # 34347516170 are what that costs.
+        auth_probe = runner.preflight_auth_command(workspace)
+        observed["auth_command"] = auth_probe.as_record()
+        if auth_probe.ran and not auth_probe.ok:
+            return _record(
+                verdict=VERDICT_AUTH_COMMAND_FAILED,
+                description=description,
+                observed=observed,
+                note=(
+                    "the auth command produced no token in the isolated "
+                    "environment, so no request was sent and nothing was "
+                    "billed; the fault is local to the sign-in, not the "
+                    "deployment"
+                ),
+            )
+
         try:
             codex = runner.open_runtime(workspace)
         except Exception as exc:  # noqa: BLE001

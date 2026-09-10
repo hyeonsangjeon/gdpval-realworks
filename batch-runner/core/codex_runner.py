@@ -30,6 +30,7 @@ from __future__ import annotations
 import os
 import re
 import shutil
+import subprocess
 import tempfile
 import threading
 from dataclasses import dataclass, field
@@ -84,9 +85,84 @@ _NOT_A_DELIVERABLE = (
 
 _NTFS_FORBIDDEN = re.compile(r'[:"<>|*?\r\n]')
 
+#: How long the auth-command preflight waits. Generous next to the runtime's
+#: own 30s auth timeout, because a first sign-in can be slower than a cached
+#: one and a preflight that times out early would report the wrong fault.
+_AUTH_PREFLIGHT_TIMEOUT = 60
+
+#: A GUID is a tenant or subscription identifier. Not a secret, but not ours to
+#: scatter through logs either, so the preflight's reason drops them.
+_GUID = re.compile(
+    r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
+    r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b"
+)
+
+#: Belt and braces. ``core.codex_azure_token`` promises never to put a token in
+#: its diagnostics, and the preflight never reads one from stdout — but the
+#: reason string is the one thing here that gets written down, so anything
+#: shaped like a JSON Web Token is removed from it before it can be.
+_JWT_SHAPED = re.compile(r"\beyJ[A-Za-z0-9_\-\.]{10,}")
+
+
+def _auth_failure_reason(stderr: str) -> str:
+    """One short line saying why the auth command produced no token."""
+    lines = [line.strip() for line in (stderr or "").splitlines()]
+    lines = [line for line in lines if line]
+    if not lines:
+        return "the auth command failed without saying why"
+    # The command's own message is the one written for this situation; the
+    # SDK's chained credential report above it is long and mostly about
+    # credentials that were never going to work here.
+    chosen = next(
+        (line for line in reversed(lines) if line.startswith("codex-azure-token:")),
+        lines[-1],
+    )
+    chosen = _JWT_SHAPED.sub("<redacted>", _GUID.sub("<guid>", chosen))
+    return chosen[:300]
+
 
 class CodexRunError(RuntimeError):
     """A Codex run could not start or could not be trusted to have run."""
+
+
+class CodexAuthCommandFailed(CodexRunError):
+    """The provider's auth command could not produce a token where Codex runs it.
+
+    Its own category, because the alternative is what this project actually
+    lived through. Codex reads the token from the command's stdout; when the
+    command fails it prints nothing, Codex forwards an empty bearer, and the
+    gateway answers ``401 Access denied due to invalid subscription key or
+    wrong API endpoint``. Every noun in that sentence points somewhere the
+    fault is not, and several paid runs went looking there. Raising here, with
+    the command's own reason attached, keeps a local sign-in problem local.
+    """
+
+
+#: What the auth-command preflight reports. Deliberately holds no token and no
+#: token-derived value — only whether stdout carried one, and why not.
+@dataclass(frozen=True)
+class AuthCommandProbe:
+    """Whether the auth command can mint where Codex will run it."""
+
+    ran: bool
+    exit_code: int | None
+    produced_a_token: bool
+    reason: str | None
+    azure_config_dir: str | None
+
+    @property
+    def ok(self) -> bool:
+        return self.ran and self.exit_code == 0 and self.produced_a_token
+
+    def as_record(self) -> dict[str, Any]:
+        return {
+            "ran": self.ran,
+            "exit_code": self.exit_code,
+            "produced_a_token": self.produced_a_token,
+            "reason": self.reason,
+            "azure_config_dir": self.azure_config_dir,
+            "ok": self.ok,
+        }
 
 
 # ── Orphan sweep ────────────────────────────────────────────────────────────
@@ -358,6 +434,7 @@ class CodexAgentRunner(RecordsItsFirstRequest):
         condition_name: str | None = None,
         codex_bin: str | None = None,
         verify_runtime: bool = True,
+        preflight_auth: bool = True,
     ) -> None:
         """
         Args:
@@ -375,6 +452,10 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                 the one the pinned distribution installed, which is what any
                 real run uses.
             verify_runtime: check the pinned versions on construction.
+            preflight_auth: run the provider's auth command once, in the
+                isolated environment, before starting a runtime, and refuse to
+                start when it produces no token. Off only for the connection
+                diagnostic, which sometimes needs the failing request itself.
         """
         if not isinstance(provider, CodexProviderLike):
             raise CodexProviderConfigurationError(
@@ -387,6 +468,8 @@ class CodexAgentRunner(RecordsItsFirstRequest):
         self.run_id = run_id
         self.condition_name = condition_name
         self.codex_bin = codex_bin
+        self.preflight_auth = bool(preflight_auth)
+        self._auth_probe: AuthCommandProbe | None = None
         self.shared_first_request = False
         self.last_run_diagnostics: dict[str, Any] | None = None
         self._turns_per_task: dict[str, int] = {}
@@ -425,6 +508,121 @@ class CodexAgentRunner(RecordsItsFirstRequest):
             environment.update(extra)
         return environment
 
+    def preflight_auth_command(
+        self, workspace: CodexWorkspace
+    ) -> AuthCommandProbe:
+        """Run the provider's auth command where Codex will run it.
+
+        Same argv, same isolated environment, same working directory. The point
+        is not to obtain a token — the token is read, checked for emptiness and
+        dropped without being stored, logged or returned — but to find out
+        whether one *can* be obtained from inside the isolation, before a turn
+        turns that question into a gateway error about something else.
+
+        Providers that authenticate by environment variable have no command to
+        run; for those this reports ``ran=False`` and nothing is claimed.
+        """
+        build = getattr(self.provider, "auth_command", None)
+        if not callable(build):
+            return AuthCommandProbe(
+                ran=False,
+                exit_code=None,
+                produced_a_token=False,
+                reason="this provider authenticates by environment variable",
+                azure_config_dir=None,
+            )
+        argv = list(build())
+        config_dir = None
+        if "--azure-config-dir" in argv:
+            config_dir = argv[argv.index("--azure-config-dir") + 1]
+        # The overlay merged onto this process's environment, because that is
+        # what the child actually gets: the pinned SDK does
+        # ``env = os.environ.copy(); env.update(self.config.env)`` before
+        # ``Popen``. Handing the overlay alone would give the auth command a
+        # smaller environment than a real turn does, and a preflight that
+        # tests a stricter world than production can fail on things production
+        # would not — which is its own kind of wrong answer.
+        environment = {**os.environ, **self._build_environment(workspace)}
+        try:
+            completed = subprocess.run(
+                argv,
+                cwd=str(workspace.workspace),
+                env=environment,
+                capture_output=True,
+                text=True,
+                timeout=_AUTH_PREFLIGHT_TIMEOUT,
+            )
+        except subprocess.TimeoutExpired:
+            return AuthCommandProbe(
+                ran=True,
+                exit_code=None,
+                produced_a_token=False,
+                reason=(
+                    f"the auth command did not finish within "
+                    f"{_AUTH_PREFLIGHT_TIMEOUT}s"
+                ),
+                azure_config_dir=config_dir,
+            )
+        except OSError as exc:
+            return AuthCommandProbe(
+                ran=False,
+                exit_code=None,
+                produced_a_token=False,
+                reason=f"the auth command could not be started ({exc.strerror})",
+                azure_config_dir=config_dir,
+            )
+        # Truthiness only. The value is not kept, not returned and not logged;
+        # what is recorded is that stdout was or was not empty.
+        produced = bool(completed.stdout.strip())
+        return AuthCommandProbe(
+            ran=True,
+            exit_code=completed.returncode,
+            produced_a_token=produced,
+            reason=None if produced and completed.returncode == 0
+            else _auth_failure_reason(completed.stderr),
+            azure_config_dir=config_dir,
+        )
+
+    def require_a_usable_auth_command(
+        self, workspace: CodexWorkspace
+    ) -> AuthCommandProbe:
+        """Check the sign-in once per runner, and refuse to start without it.
+
+        Cached on the runner rather than repeated per task: the answer is a
+        property of the environment, not of the task, and a batch of 220 would
+        otherwise pay for 220 sign-ins to learn the same thing.
+
+        A provider with no auth command, or a runner built with
+        ``preflight_auth=False``, passes through untouched — the first because
+        there is nothing to check, the second because the connection diagnostic
+        sometimes needs to send the request that fails and see what comes back.
+        """
+        if not self.preflight_auth:
+            return AuthCommandProbe(
+                ran=False,
+                exit_code=None,
+                produced_a_token=False,
+                reason="the auth-command preflight was turned off for this run",
+                azure_config_dir=None,
+            )
+        if self._auth_probe is None:
+            self._auth_probe = self.preflight_auth_command(workspace)
+        probe = self._auth_probe
+        if probe.ran and not probe.ok:
+            where = (
+                f" (sign-in read from {probe.azure_config_dir})"
+                if probe.azure_config_dir
+                else " (this machine has no Azure CLI sign-in to point at)"
+            )
+            raise CodexAuthCommandFailed(
+                "the provider's auth command produced no token inside the "
+                f"isolated environment{where}: {probe.reason}. Codex would "
+                "send an empty bearer and the gateway would answer 401 about "
+                "an invalid subscription key, which would be about the wrong "
+                "thing."
+            )
+        return probe
+
     def open_runtime(self, workspace: CodexWorkspace) -> Any:
         """Start the Codex client a run uses, against this provider.
 
@@ -441,7 +639,13 @@ class CodexAgentRunner(RecordsItsFirstRequest):
         start and a session that will not open are reported under different
         categories, and merging them would lose that distinction at the only
         moment it matters.
+
+        Before either, the auth command is run once per runner in the same
+        isolated environment. A runtime that starts with a sign-in that cannot
+        mint will reach the deployment and be refused there, and the refusal
+        will describe the endpoint rather than the sign-in.
         """
+        self.require_a_usable_auth_command(workspace)
         environment = self._build_environment(workspace)
         overrides = self.provider.config_overrides()
         try:
