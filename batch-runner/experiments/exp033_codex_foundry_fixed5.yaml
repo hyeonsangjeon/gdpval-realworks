@@ -54,6 +54,19 @@
 #   1 turn per task attempt, 1800s wall clock each
 #   at most 1 task at a time (this pipeline does not run tasks concurrently)
 #   Self-QA off, so no second call per task
+#   at most 600s of waiting between a task's attempts — 60s then 120s at this
+#     setting, so the budget only binds if `max_retries` is raised
+#
+# What those turn counts are worth in wall clock, now that the retries are
+# real. A task that times out is not retried, so its 1800s is spent once. A
+# task refused for rate can be refused at the end of a long turn rather than
+# at the start of it, three times over — so one task's worst case is about
+# 3 x 1800s plus 180s of waiting, and the run's is about seven and three
+# quarter hours. That is longer than a single leg's watchdog allows, and it
+# does not lose the run: Step 2 exits 42 with tasks still pending, progress is
+# checkpointed to the Hub, and the workflow retriggers itself for another leg.
+# The figure is written down so that a second leg reads as the bound doing its
+# job rather than as something having gone wrong.
 #
 # Retries are the one real decision here, and they are made at the batch
 # runner's layer rather than inside Codex. `execution.max_retries: 2` gives a

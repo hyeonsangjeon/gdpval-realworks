@@ -234,6 +234,88 @@ entries land under a fresh dated heading the day they merge to `main`.
   file is the decision the pin asks to see.
 
 ### Fixed
+- **A task refused for rate was told it had three attempts, and got one.** Run
+  `34485072751` attempted five tasks. Three ended the same way:
+
+      [1/5] 02aa1805-...-02dec146063a (Project Management Specialists)... ✗
+      the Codex turn failed: stream disconnected before completion: Your
+      requests to gpt-5.4 for gpt-5.4 in eastus2 have exceeded rate limit.
+
+  The experiment file running them sets `execution.max_retries: 2` and says
+  beside it, "Attempts after an infrastructure failure, per task. Three at
+  most, each a fresh session," and in its header, "5 tasks x at most 3 turns
+  each = 15 turns, worst case." Neither was true. `max_retries` was read from
+  the config, printed at startup as "(per task, infra)", and then never used
+  again: the only exit from a failed task was a `break`. The run sent five
+  turns, and three tasks were written down as defeats of the harness on the
+  first refusal that a minute's wait would have cleared.
+
+  Retrying was the last of three changes, not the first, because two things
+  had to be true before a retry could be right.
+
+  The first is that a run has to know *why* a turn failed. It did not.
+  `CodexRunOutcome.error_category` existed and every failed turn was given the
+  same word, `turn_failed` — true of a rate limit and equally true of a task
+  the agent could not do. `classify_execution_error` already kept a vocabulary
+  for this, so the turn now asks it, and it has gained a `rate_limited`
+  category: the `RateLimitError` class, and the phrases a provider uses when
+  it refuses for rate rather than for content. A bare `429` is deliberately
+  not one of those phrases — a traceback's `line 429` would match it, and
+  reading a deterministic defect as a transient one is how a real bug earns
+  three paid attempts. When the text says nothing, the answer stays
+  `turn_failed`; the classifier's own fallback, `execution_error`, says less.
+
+  The second is that the word has to reach the record. It did not: the
+  backends each set it and `_build_execution_observability` dropped it, so a
+  caller that does not know which backend ran could not find out what kind of
+  failure it was looking at. It is carried now, bounded to eighty characters
+  and admitted only as a string, because this field is published and a
+  category that quoted its message would put the endpoint and the wording back
+  into the artefact that `public_task_error_text` exists to keep them out of.
+
+  Only then, the retry. It is deliberately narrow. Two categories are worth
+  another attempt: `rate_limited`, and `turn_start_failed` — the one case
+  where the code can prove nothing was billed, since it abandons its own cost
+  reservation with the note "the turn never started". `timeout` is not on the
+  list: the turn was sent and may have been charged, the runner keeps whatever
+  files the agent had written before it was cut off, and three 1800-second
+  attempts is ninety minutes spent on one task. `turn_failed` is not on it
+  either — a failure that would not say why is exactly the one a second
+  identical attempt repeats. Nor are the three start failures, which are local
+  configuration that waiting does not change. A failure carrying no category
+  at all is not retried: silence is not permission.
+
+  The waits are 60, 120, then 240 seconds. Sixty first because an Azure OpenAI
+  rate limit is counted over a sixty-second window, so trying again inside it
+  fails the same way, sooner, having spent one of three attempts. The run
+  itself shows this: tasks 4 and 5 were refused at 14:00:10 and 14:00:12,
+  one and eight tenths of a second apart, the fifth never having had a window
+  to be allowed in. A retry quicker than the window is that second refusal,
+  paid for out of a budget of three. Above the ceiling sits a stop condition
+  — ten minutes of total waiting per task — so that a provider refusing
+  everything ends the run saying so instead of sleeping through the job's
+  time limit. Each retry clears the failed attempt's files before the wait
+  rather than after it, so a job cancelled mid-wait does not leave them
+  behind looking like the task's answer.
+
+  Each attempt is a fresh session and a separate line in the ledger.
+  `RETRY_INFRASTRUCTURE` has been in the cost vocabulary since it was written
+  and no caller had ever passed it, so until now a receipt could say only
+  "first attempt" or "the model tried again"; a retry forced on us by the
+  provider is neither, and it is now recorded as neither.
+
+  A rate-limited turn's reservation is left neither settled nor abandoned,
+  because the stream disconnected and there is no way to know whether tokens
+  were billed. Three attempts can therefore leave three reservations that
+  resolve to `partial`. That is not a defect introduced here: it is the
+  ledger saying a cost may exist that it cannot measure, which is the only
+  honest thing it can say, and retrying makes it say so up to three times
+  rather than making it say zero once.
+
+  What this does not do: `retry_counts_by_reason`, which
+  `execution_environment_readiness.py` requires of a run record, is still
+  produced nowhere. That is a gap in how the record is assembled rather than
+  in how retries are decided, and it is left for the change that assembles it.
 - **A stray dotfile cost a task the model had already solved.** On the same
   run, `34485072751`, task 3 of 5:
 
