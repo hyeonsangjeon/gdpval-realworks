@@ -300,6 +300,14 @@ entries land under a fresh dated heading the day they merge to `main`.
   "first attempt" or "the model tried again"; a retry forced on us by the
   provider is neither, and it is now recorded as neither.
 
+  A rate-limited turn's reservation is left neither settled nor abandoned,
+  because the stream disconnected and there is no way to know whether tokens
+  were billed. Three attempts can therefore leave three reservations that
+  resolve to `partial`. That is not a defect introduced here: it is the
+  ledger saying a cost may exist that it cannot measure, which is the only
+  honest thing it can say, and retrying makes it say so up to three times
+  rather than making it say zero once.
+
   What this does not do: `retry_counts_by_reason`, which
   `execution_environment_readiness.py` requires of a run record, is still
   produced nowhere. That is a gap in how the record is assembled rather than
