@@ -37,7 +37,7 @@ import time
 import yaml
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional, List
+from typing import Any, Callable, Optional, List
 
 # Deliberately not in ``core/``: ``step8_grade.compute_grader_source_hash``
 # hashes every ``core/**/*.py``, so a module there would move the grader's
@@ -72,6 +72,7 @@ from core.cost_receipts import (
     BUCKET_PROBLEM_SOLVING,
     REASON_LEDGER_ABSENT,
     REASON_STAGE_UNSUPPORTED,
+    RETRY_INFRASTRUCTURE,
     RETRY_NONE,
     RETRY_RESUME,
     RETRY_SEMANTIC,
@@ -132,6 +133,123 @@ from core.video_analyzer import (
 # ── Constants ──────────────────────────────────────────────────────────────
 
 RETRIABLE_STATUSES = {"error", "qa_failed", "pending"}
+
+#: The failure categories a second attempt can actually fix.
+#:
+#: `execution.max_retries` has been described in every experiment file and in
+#: `--help` as "infra retries per task" since it was added, and it resolved to
+#: a number that was printed at startup and then never read again. Run
+#: `34485072751` is what that costs: three of five tasks ended on
+#: `rate_limited` at the first refusal, with `max_retries: 2` set in the
+#: config and its own comment promising "three at most, each a fresh session".
+#:
+#: Only two categories are in this set, and the ones left out matter more than
+#: the ones in it:
+#:
+#: * `timeout` is not here. The turn was sent, so it may have been billed, and
+#:   `_run_one_turn` collects whatever files the agent had written before it
+#:   was interrupted -- a retry would throw those away. It is also the one
+#:   category whose retry multiplies the wall clock by the attempt count: at
+#:   exp033's 1800-second limit, three attempts is ninety minutes on one task.
+#: * `turn_failed` is not here. It means the turn failed and the text did not
+#:   say why, which is exactly when a second identical attempt produces a
+#:   second identical failure.
+#: * `runtime_unavailable`, `runtime_start_failed` and `session_start_failed`
+#:   are not here. They are the local environment and its configuration; they
+#:   do not improve by being asked again a minute later.
+RETRYABLE_INFRA_ERROR_CATEGORIES = frozenset({
+    # The provider refused for rate, not for content. This is the failure the
+    # setting was written for.
+    "rate_limited",
+    # `_run_one_turn` abandons the cost reservation here with the note "the
+    # turn never started" -- nothing was sent and nothing was billed, which is
+    # the strongest evidence a retry can have that it is not paying twice.
+    "turn_start_failed",
+})
+
+#: How long to wait before each infrastructure retry, by attempt.
+#:
+#: The first is sixty seconds because an Azure OpenAI rate limit is counted
+#: over a sixty-second window: retrying inside it does not fail differently,
+#: it just fails sooner and spends another attempt from the same budget. The
+#: last value repeats for any further attempt.
+INFRA_RETRY_BACKOFF_SECONDS = (60.0, 120.0, 240.0)
+
+#: The most total time one task may spend waiting to try again. A stop
+#: condition, not a target: a run whose provider is refusing everything should
+#: end saying so rather than sleep its way through a job's time limit.
+INFRA_RETRY_MAX_TOTAL_WAIT_SECONDS = 600.0
+
+
+def infra_retry_category(result: dict) -> Optional[str]:
+    """The transient failure this result should be attempted again for.
+
+    ``None`` when the task succeeded, when the backend said nothing about why
+    it failed, or when what it said is not something another attempt fixes.
+    """
+    if not isinstance(result, dict) or result.get("status") == "success":
+        return None
+    observability = result.get("observability")
+    if not isinstance(observability, dict):
+        return None
+    category = observability.get("error_category")
+    if category in RETRYABLE_INFRA_ERROR_CATEGORIES:
+        return str(category)
+    return None
+
+
+def infra_retry_pause_seconds(infra_attempt: int) -> float:
+    """How long to wait before the attempt after ``infra_attempt``."""
+    if infra_attempt < 0:
+        raise ValueError("infra attempt index is negative")
+    return INFRA_RETRY_BACKOFF_SECONDS[
+        min(infra_attempt, len(INFRA_RETRY_BACKOFF_SECONDS) - 1)
+    ]
+
+
+def run_with_infra_retries(
+    attempt: Callable[[int], dict],
+    *,
+    max_attempts: int,
+    before_retry: Optional[Callable[[], None]] = None,
+    sleep: Callable[[float], None] = time.sleep,
+) -> dict:
+    """Run ``attempt`` again while it fails for a reason another try can fix.
+
+    ``attempt`` takes the attempt's index -- ``0`` for the first, which is not
+    a retry -- and returns a task result. The last result is returned whether
+    or not it succeeded: this decides how many times to ask, not what to do
+    with the answer.
+
+    ``max_attempts`` is a ceiling, not a target, and it is the *only* thing
+    that bounds the number of paid attempts. It comes from
+    ``execution.max_retries`` plus one, which is what every experiment file
+    that sets that key has always claimed it did.
+    """
+    result = attempt(0)
+    waited = 0.0
+    for infra_attempt in range(1, max(1, int(max_attempts))):
+        category = infra_retry_category(result)
+        if category is None:
+            return result
+        pause = infra_retry_pause_seconds(infra_attempt - 1)
+        if waited + pause > INFRA_RETRY_MAX_TOTAL_WAIT_SECONDS:
+            print(f"\n      ⏱️  {category} — not retried: this task's retry "
+                  f"wait budget ({INFRA_RETRY_MAX_TOTAL_WAIT_SECONDS:.0f}s) "
+                  f"is spent", end=" ", flush=True)
+            return result
+        waited += pause
+        print(f"\n      ⏳ {category} — attempt {infra_attempt + 1}"
+              f"/{max_attempts} in {pause:.0f}s...", end=" ", flush=True)
+        if before_retry is not None:
+            # Before the wait rather than after it. The failed attempt's
+            # leftovers are not this task's answer, and a job cancelled during
+            # the wait should not leave them behind looking like one.
+            before_retry()
+        sleep(pause)
+        result = attempt(infra_attempt)
+    return result
+
 
 # Exit code convention
 EXIT_CHECKPOINT = 42  # checkpoint saved, relay retrigger needed
@@ -1000,6 +1118,15 @@ def _build_execution_observability(
 ) -> dict:
     """Build compact task provenance without duplicating heavy QA reports."""
     observability = {"preprocessors": preprocessor_observations}
+    # Why the attempt failed, in one word from a fixed vocabulary. Every
+    # backend already produces this and, until now, only the sandbox and
+    # agentic paths kept it -- inside their own metrics, where a caller that
+    # does not know which backend ran cannot find it. It is bounded like
+    # `terminal_error_category` beside it, and carries no message, so it is
+    # publishable for the same reason that one is.
+    error_category = (result or {}).get("error_category")
+    if isinstance(error_category, str) and error_category:
+        observability["error_category"] = error_category[:80]
     execution_metrics = _bounded_execution_metrics(
         (result or {}).get("execution_metrics")
     )
@@ -2919,6 +3046,11 @@ def _run_inference_impl(
         sys.exit(1)
     if max_retries is None:
         max_retries = execution_cfg.get("max_retries", prepared.get("max_retries", 3))
+    # Retries after an infrastructure failure, so attempts is one more than
+    # retries. Clamped rather than validated: a negative number here would
+    # otherwise mean zero attempts, and a task that is never attempted is a
+    # worse answer to a bad setting than a task attempted once.
+    infra_max_attempts = max(0, int(max_retries or 0)) + 1
     if resume_max_rounds is None:
         resume_max_rounds = execution_cfg.get("resume_max_rounds", 3)
     tokens_cfg_raw = execution_cfg.get("tokens", {})
@@ -3075,7 +3207,9 @@ def _run_inference_impl(
     print(f"   Model:              {model}")
     print(f"   Mode:               {execution_mode}")
     print(f"   Tasks:              {len(tasks)}")
-    print(f"   Max retries:        {max_retries} (per task, infra)")
+    print(f"   Max retries:        {max_retries} (per task, infra — "
+          f"{infra_max_attempts} attempts at most, on "
+          f"{', '.join(sorted(RETRYABLE_INFRA_ERROR_CATEGORIES))})")
     print(f"   Resume max rounds:  {resume_max_rounds} (re-run failed tasks)")
     print(f"   Tokens:             code={tokens_cfg['code_generation']}, "
           f"qa={tokens_cfg['qa_check']}, render={tokens_cfg['json_render']}")
@@ -3674,16 +3808,28 @@ def _run_inference_impl(
         # paid for whether or not its output survived.
         solving_retry_kind = RETRY_RESUME if resume_round else RETRY_NONE
 
-        def _solving_scope(stage: str, attempt: int):
-            """Attribute the calls made inside to this task, at one stage."""
+        def _solving_scope(stage: str, attempt: int, *, infra_attempt: int = 0):
+            """Attribute the calls made inside to this task, at one stage.
+
+            An infrastructure retry is its own kind of retry, not a semantic
+            one: the model did not judge its answer inadequate, the request
+            did not get through. ``RETRY_INFRASTRUCTURE`` has been in the
+            ledger's vocabulary since it was written and no caller had ever
+            passed it, so every receipt so far has been able to say only
+            "first attempt" or "the model tried again".
+            """
             if cost_recorder is None:
                 return contextlib.nullcontext()
+            if infra_attempt:
+                retry_kind = RETRY_INFRASTRUCTURE
+            elif attempt == 0:
+                retry_kind = solving_retry_kind
+            else:
+                retry_kind = RETRY_SEMANTIC
             return cost_recorder.attributed(
                 task_id=task_id,
                 stage=stage,
-                retry_kind=(
-                    solving_retry_kind if attempt == 0 else RETRY_SEMANTIC
-                ),
+                retry_kind=retry_kind,
                 attempt_index=attempt,
             )
 
@@ -3864,23 +4010,35 @@ def _run_inference_impl(
                     # 파일을 생성했을 때 구/신 파일이 공존하게 됨
                     _clear_task_files()
 
-                with _solving_scope(STAGE_GENERATION, qa_attempts):
-                    result = _execute_single_task(
-                        task, condition, executor, execution_mode,
-                        client, model, manifest,
-                        error_context=last_qa_feedback,
-                        verbose=verbose,
-                        run_id=run_identity,
-                        condition_name=execution_condition,
-                        strict_inputs=hardened_requested,
-                        experiment_id=experiment_id,
-                        upload_root=condition_upload_root,
-                        azure_ai_factory=azure_ai_factory,
-                        azure_ai_route_plan=azure_ai_route_plan,
-                        cost_recorder=cost_recorder,
-                    )
-                if metrics_enabled:
-                    _record_execution_metrics(result)
+                def _attempt(infra_attempt: int) -> dict:
+                    """One attempt at this task, counted and attributed."""
+                    with _solving_scope(
+                        STAGE_GENERATION, qa_attempts,
+                        infra_attempt=infra_attempt,
+                    ):
+                        attempted = _execute_single_task(
+                            task, condition, executor, execution_mode,
+                            client, model, manifest,
+                            error_context=last_qa_feedback,
+                            verbose=verbose,
+                            run_id=run_identity,
+                            condition_name=execution_condition,
+                            strict_inputs=hardened_requested,
+                            experiment_id=experiment_id,
+                            upload_root=condition_upload_root,
+                            azure_ai_factory=azure_ai_factory,
+                            azure_ai_route_plan=azure_ai_route_plan,
+                            cost_recorder=cost_recorder,
+                        )
+                    if metrics_enabled:
+                        _record_execution_metrics(attempted)
+                    return attempted
+
+                result = run_with_infra_retries(
+                    _attempt,
+                    max_attempts=infra_max_attempts,
+                    before_retry=_clear_task_files,
+                )
 
                 # If execution failed, return best if available
                 if result["status"] != "success":

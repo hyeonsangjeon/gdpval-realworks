@@ -58,6 +58,7 @@ from core.execution_envelope_observed import (
     API_FAMILY_RESPONSES,
     RecordsItsFirstRequest,
 )
+from core.execution_errors import classify_execution_error
 from core.execution_environment_readiness import (
     ENVIRONMENT_CODEX_COMMAND_LINE_TOOL_FOUNDRY,
 )
@@ -422,6 +423,30 @@ class CodexWorkspace:
 
 
 # ── The runner ──────────────────────────────────────────────────────────────
+
+
+def _turn_failure_category(failure: Any) -> str:
+    """Why a turn failed, when the failure says so.
+
+    ``turn_failed`` is true of every failed turn and useful about none of
+    them. On run ``34485072751`` three of the five tasks ended with
+
+        stream disconnected before completion: Your requests to <deployment>
+        ... have exceeded rate limit.
+
+    and were recorded under the same word as a turn that failed for any other
+    reason -- so the run could not say, from its own record, that it had been
+    refused for rate rather than defeated by the task.
+
+    :func:`classify_execution_error` already keeps that vocabulary. Its
+    fallback, ``execution_error``, says less than ``turn_failed`` does, so the
+    fallback is not taken; only an answer more specific than "the turn failed"
+    replaces it.
+    """
+    category = classify_execution_error(str(failure))
+    if not category or category == "execution_error":
+        return "turn_failed"
+    return category
 
 
 @dataclass
@@ -979,7 +1004,7 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                     text="",
                     files=files,
                     error=f"the Codex turn failed: {failure}",
-                    error_category="turn_failed",
+                    error_category=_turn_failure_category(failure),
                     thread_id=getattr(thread, "id", None),
                     turn_id=getattr(turn_handle, "id", None),
                 )

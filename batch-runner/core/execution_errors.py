@@ -1,4 +1,11 @@
-"""Stable error categories shared by generated-code execution backends."""
+"""Stable error categories shared by the execution backends.
+
+Written for the generated-code backends, whose failure text is a traceback;
+the Codex agent backend uses it too, for the sentence a provider returns when
+it refuses a turn. Both need the same thing from it -- a fixed word for why,
+carrying none of the message, so a failure can be counted and published
+without the endpoint or the wording travelling with it.
+"""
 
 from __future__ import annotations
 
@@ -16,6 +23,7 @@ _EXCEPTION_CATEGORY = {
     "modulenotfounderror": "import_error",
     "outofmemoryerror": "out_of_memory",
     "permissionerror": "permission_error",
+    "ratelimiterror": "rate_limited",
     "syntaxerror": "syntax_error",
     "timeouterror": "timeout",
     "timeoutexpired": "timeout",
@@ -24,9 +32,28 @@ _EXCEPTION_CATEGORY = {
     "valueerror": "value_error",
 }
 
+#: What a provider says when it refused the request for rate rather than for
+#: content. Deliberately no bare ``429``: a traceback's ``line 429`` would
+#: match it, and mistaking a real defect for a transient one is how a
+#: deterministic failure gets attempted three times.
+_RATE_LIMIT_MARKERS = (
+    "rate limit",
+    "ratelimit",
+    "too many requests",
+    "error code: 429",
+    "status code: 429",
+    "http 429",
+)
+
 
 def _message_category(message: str) -> Optional[str]:
     lowered = message.lower()
+    # First, because it is the one marker set that reliably co-occurs with
+    # another: a client that keeps retrying a refused request reports its own
+    # deadline, so the text says both "rate limit" and "timed out". The
+    # refusal is the cause; the deadline is what the cause looked like.
+    if any(marker in lowered for marker in _RATE_LIMIT_MARKERS):
+        return "rate_limited"
     oom_markers = (
         "out of memory",
         "insufficient memory",
@@ -73,6 +100,10 @@ def classify_execution_error(text: Optional[str]) -> Optional[str]:
     if direct_message_category:
         return direct_message_category
 
+    # No ``rate_limited`` row below. Every rate-limit text is already decided
+    # by one of the two `_message_category` calls above -- as the exception's
+    # message, or as the whole text -- so a row here could never be reached,
+    # and an unreachable row is a second place to keep the answer in.
     categories = (
         (
             "out_of_memory",
