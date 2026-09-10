@@ -182,8 +182,17 @@ def real_model_voice(
     Kept as a function that can refuse rather than left absent, so the refusal
     can be *run* by the free check instead of inferred from a file not
     existing. Called with nothing — which is how the free check calls it — it
-    still raises, because nothing has been approved and there is nothing to
-    charge against.
+    still raises.
+
+    **The reason it raises is not that nothing has been approved.** It was that
+    once; stage A has since been approved, run and paid for, so leaving the old
+    sentence here would make this docstring say something false. What is still
+    true is narrower and does not expire: an approval is a number in a document,
+    and a document cannot stop the next call. :class:`StageOneBudget` is the
+    object that knows what has already gone out and refuses before the turn that
+    would pass the ceiling. A caller holding an approval and no budget has
+    permission to spend and no way to stop, which is the case this refusal is
+    for.
 
     Given a client and a budget, it hands back a voice that really asks a
     Microsoft Foundry deployment. Building the client is somebody else's job:
