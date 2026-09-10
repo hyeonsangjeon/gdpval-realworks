@@ -357,6 +357,100 @@ entries land under a fresh dated heading the day they merge to `main`.
   runner. The gate stays closed; only the reason is now true.
 
 ### Added
+- **The containment rules now have the arguments that would apply them, and
+  saying so is not the same as saying they are applied.** Stage C0 left eleven
+  rules written down in one place and nothing anywhere turning any of them into
+  an argument. `core/agentic_v2_microvm_launch.py` closes the translation half
+  of that gap: it reads `REQUIRED_MICROVM_POLICY` and returns the jailer and
+  Firecracker arguments that would enforce each rule. It starts nothing — no
+  process, no machine — which is exactly why it can be checked on a box whose
+  3.10 kernel could not boot one.
+
+  The care went into the reporting rather than the arguments. The readiness
+  report gained a fourth field for the translation,
+  `every_rule_has_an_argument_that_would_apply_it`, derived from the builder
+  against the policy rather than declared by hand, so a twelfth rule added to
+  the policy and not to the builder turns it `False` without anyone
+  remembering to. `anything_applies_the_containment_rules` **stays `False`**,
+  and the new field is deliberately not an input to
+  `available_on_any_machine_in_play`. Wiring it in would have been the obvious
+  thing and the wrong one: a recorded finding already carries
+  `could_be_hosted_anywhere`, so a `True` here would have flipped the aggregate
+  and made the report announce the containment as in place on the strength of
+  code that has never booted anything. That is the failure this module exists to
+  prevent, and it very nearly arrived through good news rather than through a
+  deletion.
+
+  Every flag was checked against **v1.13.1**, the version stage B found
+  installed, and two readings from that check contradicted the merged plan:
+
+  - **`--no-api` is required, and the plan's wording was too weak.** It said the
+    builder "emits no snapshot route". True, and not enough: pinning a device in
+    a configuration file is a statement about start-up, and with the API socket
+    live it says nothing about the rest of the run. `balloon`, `vsock` and
+    `mmds-config` can all be added back after boot, and `/snapshot/load` can
+    bring in a machine configured somewhere else entirely. `--no-api` is what
+    makes the configuration file the whole of what the machine will ever be.
+  - **`--new-pid-ns` does not write the PID file.** The plan said it did.
+    `src/jailer/src/env.rs:735-740` writes it in both branches, after `chroot()`,
+    so the file lands inside the jail. Both flags are still passed; only the
+    explanation was wrong, and it is the kind of wrong that surfaces as
+    confusion at the moment somebody omits the flag and finds the file anyway.
+
+    Checking that correction turned up a **bug in the new module**, which is the
+    part worth recording. The PID file is named after the **exec file**, not
+    after the word: `save_exec_file_pid` appends `.pid` to the binary's own
+    name, and the jailer requires that name to *contain* `firecracker` rather
+    than to be it. So `/opt/firecracker-v1.13.1` writes
+    `/firecracker-v1.13.1.pid`, and the hard-coded `/firecracker.pid` would have
+    named a file that never appears on any host whose binary carries a version
+    suffix. Nothing would have failed — the deadline would have been recorded,
+    the plan would have hashed, and `wall_clock_seconds` would have had nothing
+    to act on at the moment it was needed. Derived from the binary now, with a
+    test that asserts it against a versioned name rather than against the
+    constant it used to be pinned to.
+
+  Two gaps are named rather than papered over. The policy has no rule about
+  processor share, so `vcpu_count` comes from the caller and the missing rule is
+  written down — closing it means amending the policy in a change of its own,
+  not defaulting a number in a launcher. And the jailer `mknod`s `/dev/net/tun`
+  unconditionally, so `network: none` rests on no interface being configured and
+  on `--netns` being absent, not on the device being missing; stage C3 should
+  expect to find the node there.
+
+  83 tests, and they were checked by breaking the builder rather than by
+  passing. Fifteen deliberate mutations — the flag deleted, the host memory
+  bound dropped to the guest's, the v1 cgroup file name used under v2, the root
+  drive made writable — each had to fail a test. Three initially did not, and
+  all three were holes in the tests rather than in the builder: `fsize=` was
+  matched as a string anywhere in the argument list, so removing the
+  `--resource-limit` that carries it changed nothing; the in-jail paths were
+  asserted against their own constants, so moving one to a host path took the
+  test along with it; and the PID file was asserted against the constant that
+  turned out to be wrong, so it agreed with the bug rather than catching it.
+  All three now assert the requirement rather than the spelling. The last
+  survivor was the builder's own backstop, which no healthy build exercises, and
+  it now has a test that stages the drop it exists for.
+
+  One more thing broke on the way out, and it was prose rather than code.
+  Reading the generated report afterwards showed it asserting both halves of a
+  contradiction three lines apart: the new section said every rule now has an
+  argument, while the recorded azure finding above it still ended by saying no
+  code turns the policy into launch arguments. That sentence was true the day it
+  was measured and false the moment this module merged, and **nothing failed**,
+  because a recorded finding is a frozen string and no test compared it against
+  the live answer. The fix is structural rather than editorial: whether anything
+  applies the rules is a property of this repository, it changes without any
+  machine changing, and `describe_containment` already answers it live in its
+  own section — so a finding may no longer name `REQUIRED_MICROVM_POLICY` or the
+  launch module at all, and a test enforces that for every finding rather than
+  for the one that went stale. What the azure finding does instead is point at
+  `anything_applies_the_containment_rules` by name, and that has its own second
+  guard, because a pointer fails quietly in a way an assertion does not: a
+  rename would leave the finding naming a key no report has. Anything in a
+  finding shaped like a field name must be one. The same reach appeared in a
+  test module's docstring and is corrected there too.
+
 - **The containment answers a seventh question, and it was found by planning
   the test rather than by reading the rules.** Stage C's attack list has always
   ended with one that is not like the others: the command must not be able to

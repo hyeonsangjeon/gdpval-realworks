@@ -49,6 +49,7 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
 from core.agentic_v2_microvm import inspect_microvm_readiness
+from core.agentic_v2_microvm_launch import rules_this_builder_accounts_for
 from core.agentic_v2_substrate import REQUIRED_MICROVM_POLICY
 
 # ── What Firecracker itself says it needs ─────────────────────────────────
@@ -117,10 +118,13 @@ _POLICY_SETTING_AS_A_CLAIM = {
 
 # What has to exist before any of the settings above can be reported as met.
 #
-# Nothing in this repository turns a containment rule into an argument for
-# starting a virtual machine. core/agentic_v2_microvm.py looks for the
-# Firecracker programs on the search path and stops there; no module reads
-# REQUIRED_MICROVM_POLICY and produces a start-up configuration from it.
+# This said "nothing turns these rules into arguments" until 2026-09-10, and
+# that sentence was retired by core/agentic_v2_microvm_launch.py, which does
+# exactly that and starts nothing with them. The gap it describes did not close;
+# it moved one step. Reported as the second half rather than dropped, because
+# arguments nobody runs enforce nothing at all, and a report that let the
+# translation stand in for the launch would be making the substitution this
+# module exists to refuse.
 #
 # This matters more than it sounds. Until 2026-08-26 this report marked every
 # one of those settings as met the moment a machine could start a virtual
@@ -132,10 +136,12 @@ _POLICY_SETTING_AS_A_CLAIM = {
 # A rule nobody applies is not met. It is unenforced, which is a different
 # answer, and the report now gives that one.
 NOTHING_APPLIES_THESE_RULES_YET = (
-    "no module turns core.agentic_v2_substrate.REQUIRED_MICROVM_POLICY into "
-    "arguments for starting a virtual machine, so this rule is written down "
-    "and unenforced rather than met. core.agentic_v2_microvm only looks for "
-    "the Firecracker programs; it applies nothing"
+    "core.agentic_v2_microvm_launch turns "
+    "core.agentic_v2_substrate.REQUIRED_MICROVM_POLICY into the jailer and "
+    "Firecracker arguments that would apply this rule, and nothing runs them: "
+    "it returns a document and starts no process. So this rule is written down "
+    "and unenforced rather than met — one step nearer than it was, the "
+    "translation existing and the launch not"
 )
 
 
@@ -650,10 +656,12 @@ RECORDED_FINDINGS: tuple[RecordedFinding, ...] = (
             "firecracker and jailer programs are not on the image and were "
             "installed during the measurement, so a freshly deployed host "
             "answers no on that fourth point until it is bootstrapped. This "
-            "says the containment could be hosted, and nothing more: no code "
-            "turns REQUIRED_MICROVM_POLICY into arguments for starting a "
-            "virtual machine, so on this machine too the rules are written "
-            "down and unapplied"
+            "says the containment could be hosted, and nothing more. Whether "
+            "anything applies the rules is a fact about this repository and "
+            "not about this machine, so it is left to "
+            "anything_applies_the_containment_rules, which is worked out on "
+            "every run, rather than frozen into a finding that would go stale "
+            "the moment the repository moved"
         ),
         established_by=(
             "az vm run-command on gdpval-devhost-vm in rg-gdpval-devhost-krc, "
@@ -748,13 +756,21 @@ def containment_answer_everywhere(
         Is there a machine that could start the containment? Fixed by finding,
         configuring or building one.
     ``anything_applies_the_containment_rules``
-        Does any code turn the rules into arguments for starting it? Fixed by
-        writing that code. False today, on every machine, for the reason in
+        Does any code start a machine with these rules applied? Fixed by writing
+        that code. False today, on every machine, for the reason in
         :data:`NOTHING_APPLIES_THESE_RULES_YET`.
     ``available_on_any_machine_in_play``
         Is the containment actually in place anywhere? Needs both of the above,
         so it is false today and would stay false if a perfect machine appeared
         tomorrow.
+
+    A fourth reports how far the third has got.
+    ``every_rule_has_an_argument_that_would_apply_it`` asks whether the
+    translation from rule to argument exists and covers every rule — which since
+    2026-09-10 it does. It is deliberately not the same question as the second
+    one and deliberately not an input to the third: arguments nobody runs
+    enforce nothing, and folding the two together is how a containment comes to
+    read as available on the strength of code that starts nothing.
 
     ``every_machine_in_play_has_an_answer`` is ``None`` rather than ``True``
     when no workflows directory was given, because in that case nothing looked.
@@ -768,10 +784,17 @@ def containment_answer_everywhere(
     could_be_hosted_anywhere = here.machine_could_host_it or any(
         finding.could_host_the_containment is True for finding in RECORDED_FINDINGS
     )
-    # Not a machine fact and so not read off one. A rule is applied by code, and
-    # no code here applies these; if that changes, this changes with it and so
-    # does everything below.
+    # Not a machine fact and so not read off one. A rule is applied by starting
+    # a machine with it, and nothing here starts one; if that changes, this
+    # changes with it and so does everything below.
     anything_applies_the_rules = False
+    # Derived rather than declared, and derived from the set of rules the
+    # builder accounts for rather than from its existence. A rule added to the
+    # policy and not to the builder turns this false on its own, which is the
+    # only version of this answer worth reporting.
+    every_rule_has_an_argument = rules_this_builder_accounts_for() >= set(
+        REQUIRED_MICROVM_POLICY
+    )
     gaps = (
         check_every_machine_has_a_containment_finding(workflows_directory)
         if workflows_directory is not None
@@ -786,6 +809,7 @@ def containment_answer_everywhere(
             None if workflows_directory is None else not gaps
         ),
         "could_be_hosted_on_any_machine_in_play": could_be_hosted_anywhere,
+        "every_rule_has_an_argument_that_would_apply_it": every_rule_has_an_argument,
         "anything_applies_the_containment_rules": anything_applies_the_rules,
         "available_on_any_machine_in_play": (
             could_be_hosted_anywhere and anything_applies_the_rules
@@ -880,13 +904,28 @@ def describe_containment(report: Mapping[str, Any]) -> list[str]:
 
     lines.append("Whether anything applies the rules, on any machine")
     lines.append("-" * 74)
-    if report["anything_applies_the_containment_rules"]:
+    if report["every_rule_has_an_argument_that_would_apply_it"]:
         lines.append(
-            "  Something now turns the containment rules into arguments for "
-            "starting the machine."
+            "  Every rule now has an argument that would apply it: "
+            "core.agentic_v2_microvm_launch builds them."
         )
     else:
-        lines.append(f"  Nothing does: {NOTHING_APPLIES_THESE_RULES_YET}.")
+        lines.append(
+            "  Some rule has no argument that would apply it, so the "
+            "translation is incomplete."
+        )
+    if report["anything_applies_the_containment_rules"]:
+        lines.append("  Something starts a machine with those arguments.")
+    else:
+        # Not NOTHING_APPLIES_THESE_RULES_YET itself: that sentence is worded
+        # for a single rule's verdict ("this rule"), which has no antecedent
+        # here, and it would restate the line directly above it. It is still
+        # printed once per rule under "The answer".
+        lines.append(
+            "  Nothing runs those arguments: the builder returns a document "
+            "and starts no process, so the rules stay written down and "
+            "unenforced rather than met."
+        )
         lines.append(
             "  This is the same on every machine, because it is a fact about "
             "this repository rather than about any machine."

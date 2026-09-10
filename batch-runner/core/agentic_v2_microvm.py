@@ -1,4 +1,12 @@
-"""Model-free readiness report for a future Firecracker containment plane."""
+"""Model-free readiness report for a future Firecracker containment plane.
+
+Four of the fields below used to be containment values written out as literals,
+which made this the fourth place stating one set of rules and the only one no
+check compared against the others. They read
+:data:`core.agentic_v2_substrate.REQUIRED_MICROVM_POLICY` now. The values are
+unchanged, so no report already recorded by its ``report_sha256`` says anything
+different than it did.
+"""
 
 from __future__ import annotations
 
@@ -9,7 +17,7 @@ import stat
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
-from core.agentic_v2_substrate import canonical_sha256
+from core.agentic_v2_substrate import REQUIRED_MICROVM_POLICY, canonical_sha256
 
 
 def inspect_microvm_readiness(
@@ -50,14 +58,14 @@ def inspect_microvm_readiness(
         "schema_version": "1.0",
         "foundation_only": True,
         "production_activation": "disabled",
-        "runtime": "firecracker",
+        "runtime": REQUIRED_MICROVM_POLICY["runtime"],
         "status": "ready_for_boot_test" if ready else "not_run",
         "checks": checks,
         "tools": tools,
         "assets": assets,
-        "network": "none",
-        "rootfs_mode": "read-only",
-        "workdir": "ephemeral-quota",
+        "network": REQUIRED_MICROVM_POLICY["network"],
+        "rootfs_mode": REQUIRED_MICROVM_POLICY["rootfs"],
+        "workdir": REQUIRED_MICROVM_POLICY["workdir"],
     }
     report["report_sha256"] = canonical_sha256(report)
     return report
@@ -85,10 +93,10 @@ def validate_microvm_readiness_report(value: Any) -> dict[str, Any]:
         document["schema_version"] != "1.0"
         or document["foundation_only"] is not True
         or document["production_activation"] != "disabled"
-        or document["runtime"] != "firecracker"
-        or document["network"] != "none"
-        or document["rootfs_mode"] != "read-only"
-        or document["workdir"] != "ephemeral-quota"
+        or document["runtime"] != REQUIRED_MICROVM_POLICY["runtime"]
+        or document["network"] != REQUIRED_MICROVM_POLICY["network"]
+        or document["rootfs_mode"] != REQUIRED_MICROVM_POLICY["rootfs"]
+        or document["workdir"] != REQUIRED_MICROVM_POLICY["workdir"]
         or set(document["checks"]) != {"firecracker", "jailer", "kvm", "kernel", "rootfs"}
         or any(type(item) is not bool for item in document["checks"].values())
         or set(document["tools"]) != {"firecracker", "jailer"}

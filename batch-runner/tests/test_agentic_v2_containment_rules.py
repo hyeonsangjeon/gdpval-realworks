@@ -20,10 +20,12 @@ is refused rather than accepted.
 
 What they deliberately do not do is start a virtual machine, run a command,
 exceed a limit and watch it stop. That is the test these rules will eventually
-need, and it cannot be written yet — though for one reason now rather than two.
-A machine in play *can* host the containment: the Azure dev host was measured on
-2026-09-10 and its finding is recorded. What is still missing is the other half,
-that no code turns these rules into arguments for starting one. Writing a
+need, and it cannot be written yet — though for one reason now rather than
+three. A machine in play *can* host the containment: the Azure dev host was
+measured on 2026-09-10 and its finding is recorded. The rules also *have* the
+arguments that would apply them now: core/agentic_v2_microvm_launch.py builds
+them. What is still missing is the last of the three, that nothing runs those
+arguments — the builder returns a document and starts no process. Writing a
 pretend version of it would be worse than leaving it out, because a passing test
 named after a thing that never happened is how an unenforced rule comes to look
 enforced. core/agentic_v2_containment_readiness.py reports the gap instead.
