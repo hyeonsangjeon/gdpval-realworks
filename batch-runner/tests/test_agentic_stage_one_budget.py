@@ -600,35 +600,36 @@ def _preflight(plan, catalog, assumptions):
     )
 
 
-def test_stage_one_is_refused_today_and_says_no_model_can_be_reached(
+def test_stage_one_is_refused_today_and_says_the_amount_is_what_is_missing(
     stage_one_plan, catalog, assumptions
 ):
-    """The honest first answer is still not about money.
+    """The honest first answer names which of the two things is missing.
 
-    The loop stage one is about now exists and is proven against stand-ins.
-    What does not exist is any way to put a real model into it, so stage one
-    could not start even with an amount approved — and saying which of the two
-    is missing is more useful than letting the money question stand in for it.
+    A real model can now be reached: ``AzureFoundryVoice`` asks a Foundry
+    deployment. What has not happened is anybody writing down an amount for
+    stage one, and the refusal says so rather than letting a stale "no model
+    exists" stand in for it.
     """
     result = _preflight(stage_one_plan, catalog, assumptions)
 
     assert result.may_start is False
     assert any(
-        "nothing here can reach a real model" in note
-        for note in result.problems
+        "no amount has been approved" in note for note in result.problems
     )
 
 
-def test_the_missing_model_is_established_by_running_the_code():
+def test_the_missing_amount_is_established_by_running_the_code():
     """Established by calling the refusing seam, not by reading a comment."""
     problems = check_stage_one_cannot_reach_a_model()
     assert len(problems) == 1
-    assert "real_model_voice refuses" in problems[0]
-    assert "core.agentic_v2_conversation.run_model_conversation" in problems[0]
+    assert "no amount has been approved" in problems[0]
+    assert "core.agentic_v2_model_voice.AzureFoundryVoice" in problems[0]
 
 
-def test_the_check_reports_it_if_a_way_to_reach_a_model_appears(monkeypatch):
-    """The answer must change by itself the day somebody builds one."""
+def test_the_check_reports_it_if_the_seam_stops_asking_for_an_amount(
+    monkeypatch,
+):
+    """The answer must change by itself the day the seam stops refusing."""
     import core.agentic_v2_conversation as conversation
 
     monkeypatch.setattr(
@@ -641,8 +642,44 @@ def test_the_check_reports_it_if_a_way_to_reach_a_model_appears(monkeypatch):
 
     assert any("now hands back a way to reach a real model" in note
                for note in problems)
-    assert any("dispatcher's own tool-call ceiling" in note
-               for note in problems)
+
+
+def test_the_check_reports_it_if_an_undeclared_model_is_let_through(
+    monkeypatch,
+):
+    """An approved amount must not become permission to ask anything.
+
+    The loop refuses a voice that never said whether asking it costs money,
+    and it refuses it on a budgeted run too. If that stops being true, this
+    check has to say so rather than pass because the money question was
+    settled.
+    """
+    import core.agentic_v2_conversation as conversation
+
+    real_loop = conversation.run_model_conversation
+
+    def lets_the_undeclared_one_through(*, voice, **kwargs):
+        if getattr(voice, "makes_paid_calls", None) is None:
+            # What the loop would produce if it no longer refused: an ordinary
+            # run that stops for an ordinary reason.
+            return real_loop(
+                voice=conversation.ScriptedVoice(
+                    replies=[conversation.GaveUp(note="asked and answered")]
+                ),
+                **kwargs,
+            )
+        return real_loop(voice=voice, **kwargs)
+
+    monkeypatch.setattr(
+        conversation, "run_model_conversation", lets_the_undeclared_one_through
+    )
+
+    problems = check_stage_one_cannot_reach_a_model()
+
+    assert any(
+        "no longer refuses a model that does not say" in note
+        for note in problems
+    )
 
 
 def test_the_check_reports_it_if_the_loop_stops_refusing_paid_models(
@@ -755,13 +792,13 @@ def test_choosing_a_row_reports_the_limit_each_task_would_be_stopped_by(
         assert budget.max_input_tokens > 0
         assert budget.refusal_before_next_call() is None
 
-    # The money is settled and the settings are chosen, so the only thing left
-    # standing between here and a run is that no real model can be reached.
+    # The settings are chosen and the arithmetic is settled, so the only thing
+    # left standing between here and a run is that no amount has been approved.
     assert result.may_start is False
     assert [
         note
         for note in result.problems
-        if "nothing here can reach a real model" in note
+        if "no amount has been approved" in note
     ] == result.problems
 
 
@@ -988,7 +1025,7 @@ def test_running_the_tool_refuses_and_prints_the_table():
 
     assert finished.returncode == 1, finished.stdout + finished.stderr
     assert "What each candidate setting could cost at most" in finished.stdout
-    assert "nothing here can reach a real model" in finished.stdout
+    assert "no amount has been approved" in finished.stdout
     # The dispatcher's real ceiling, read from code, must reach the report.
     assert str(read_dispatcher_limits().max_total_calls) in finished.stdout
 

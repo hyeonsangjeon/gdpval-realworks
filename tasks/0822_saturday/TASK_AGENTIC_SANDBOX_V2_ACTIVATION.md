@@ -278,7 +278,37 @@ and price fingerprint.
 
 Appended as stages complete. A stage with nothing here has not been run.
 
-### Stage A — not yet run
+### Stage A — half built, 2026-09-10. Not passed.
+
+Reported as two things, because they are two things.
+
+**Built and proven for free.** `core/agentic_v2_model_voice.AzureFoundryVoice`
+asks a Foundry deployment through the Responses API. It is exercised by 18
+tests against a stand-in client (`tests/test_agentic_v2_model_voice.py`), which
+cover the four ways a paid loop goes quiet: spending past a limit, counting a
+call it did not make, missing a call it did, and carrying on after the thing
+answering changed underneath it. Alongside it, the seam
+`real_model_voice()` now returns a voice when it is given a client **and** a
+budget, and raises otherwise; and the loop's refusal was narrowed from "any
+paid voice" to "a paid voice with no approved amount".
+
+**Not done.** Nothing has asked a real model. The exit condition above — two
+real turns, turn two carrying turn one's tool result, one ledger row per call —
+has not been met, and the plan file still has no approved amount, so the free
+check still exits 1.
+
+**One thing was made stricter rather than looser.** Narrowing the refusal would
+have let through a voice that never declared whether it costs anything, because
+the old code read a missing declaration as "paid" and the new gate would then
+have been satisfied by the budget. That is now its own refusal: an undeclared
+voice is refused *even on a budgeted run*. An approved amount is approval to
+spend on a known model, not permission to ask an unexamined one. The free check
+runs all three refusals rather than reading them.
+
+**What stands between here and the exit condition:** an amount written into
+`experiments/execution_envelope/agentic_stage_one_plan.yaml`, a client built
+through `core/azure_ai_clients.py`, and a probe that wires the two to the loop
+while reaching neither `finalize` nor the grader.
 ### Stage B — not yet run
 ### Stage C — not yet run
 ### Stage D — not yet run

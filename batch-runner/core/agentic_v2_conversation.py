@@ -129,10 +129,12 @@ class ModelRequest:
 class ModelVoice(Protocol):
     """Anything that can answer :class:`ModelRequest` with a next action.
 
-    ``makes_paid_calls`` is asked for rather than assumed. The loop refuses any
-    voice that says yes, so wiring a real client in cannot be done by accident
-    — it has to be done alongside removing that refusal, which is a change a
-    reviewer will see.
+    ``makes_paid_calls`` is asked for rather than assumed, and a voice that does
+    not declare it at all is refused — silence is read as "nobody has looked at
+    this", not as "free". A voice that declares itself paid runs only on a run
+    that carries an approved amount to charge it against, so wiring a real
+    client in cannot be done by accident: it takes a budget somebody wrote down,
+    which is a change a reviewer will see.
     """
 
     makes_paid_calls: bool
@@ -165,21 +167,59 @@ class NoModelVoiceAvailable(RuntimeError):
     """Raised where a real model would be reached, because none can be."""
 
 
-def real_model_voice(*_args: Any, **_kwargs: Any) -> ModelVoice:
-    """The seam a real model would be plugged into, which refuses.
+def real_model_voice(
+    *,
+    client: Any = None,
+    deployment: str = "",
+    resource: str = "",
+    budget: Any = None,
+    instructions: str = "",
+    max_output_tokens_per_turn: int = 0,
+    **extra: Any,
+) -> ModelVoice:
+    """The seam a real model is plugged into, which refuses without an amount.
 
-    Kept as a function that raises rather than left absent, so the refusal can
-    be *run* by the free check instead of inferred from a file not existing.
-    When somebody does build this, that check fails and says what has to be
-    reviewed before a paid run is allowed.
+    Kept as a function that can refuse rather than left absent, so the refusal
+    can be *run* by the free check instead of inferred from a file not
+    existing. Called with nothing — which is how the free check calls it — it
+    still raises, because nothing has been approved and there is nothing to
+    charge against.
+
+    Given a client and a budget, it hands back a voice that really asks a
+    Microsoft Foundry deployment. Building the client is somebody else's job:
+    this repository already has one reviewed place that chooses an endpoint, a
+    route profile and a credential, and a second place would be a second thing
+    to keep right.
     """
-    raise NoModelVoiceAvailable(
-        "Agentic Sandbox V2 stage one has no way to reach a real model. "
-        "Building one costs money in a loop, and no amount has been approved "
-        "for it: experiments/execution_envelope/agentic_stage_one_plan.yaml "
-        "leaves the amount empty on purpose. The run place is also still "
-        "refused in three separate places. Use ScriptedVoice to exercise the "
-        "loop, which spends nothing."
+    from core.agentic_v2_model_voice import AzureFoundryVoice
+    from core.agentic_v2_stage_one_budget import StageOneBudget
+
+    # The amount is asked about first, before the client is even looked at. A
+    # caller who has somewhere to send the call and no approval to send it is
+    # the case this refusal is for, and it should get the answer about money
+    # rather than an answer about plumbing.
+    if not isinstance(budget, StageOneBudget):
+        raise NoModelVoiceAvailable(
+            "Agentic Sandbox V2 was asked for a real model with no budget to "
+            "charge it against. Asking a model in a loop costs money on every "
+            "turn, so an amount has to be written down first: see "
+            "experiments/execution_envelope/agentic_stage_one_plan.yaml and "
+            "scripts/check_agentic_stage_one_ceiling.py."
+        )
+    if client is None:
+        raise NoModelVoiceAvailable(
+            "Agentic Sandbox V2 was asked for a real model without a client to "
+            "reach one with. Build one through core.azure_ai_clients rather "
+            "than here, or use ScriptedVoice, which spends nothing."
+        )
+    return AzureFoundryVoice(
+        client=client,
+        deployment=deployment,
+        resource=resource,
+        budget=budget,
+        instructions=instructions,
+        max_output_tokens_per_turn=max_output_tokens_per_turn,
+        **extra,
     )
 
 
@@ -590,14 +630,35 @@ def run_model_conversation(
             **extra,
         )
 
-    # Asked before anything else, and defaulting to "yes it is paid" when the
-    # voice does not say. A voice that forgot to declare itself is refused
-    # rather than assumed free.
-    if getattr(voice, "makes_paid_calls", True):
+    # Asked before anything else, in two steps, because "did not say" and "said
+    # yes" are different problems with different answers.
+    #
+    # A voice that does not declare itself is refused outright, and no budget
+    # lets it through. Silence is not a claim to be free, and it is not a claim
+    # to be paid-and-budgeted either — it is a voice nobody has looked at, and
+    # the whole point of the declaration is that somebody looked.
+    declared_paid = getattr(voice, "makes_paid_calls", None)
+    if declared_paid is None:
         return finish(
             StopReason.PAID_CALL_REFUSED,
-            "this model would be charged for, and no amount has been approved "
-            "for an Agentic Sandbox V2 stage-one run. Nothing was asked",
+            "this model did not say whether asking it costs anything, so it was "
+            "treated as though it does. Nothing was asked",
+        )
+
+    # A voice that says yes is allowed through on one condition: this run
+    # carries a budget. That is not a formality. A StageOneBudget cannot be
+    # built without somebody having written down an amount, it is asked before
+    # every call rather than after, and it refuses rather than reports. So
+    # "paid and budgeted" is a different thing from "paid", and only the first
+    # may run.
+    #
+    # Everything that was refused before is still refused. A stand-in that
+    # merely declares itself paid, with no budget, stops here exactly as it did.
+    if declared_paid and not isinstance(limits.budget, StageOneBudget):
+        return finish(
+            StopReason.PAID_CALL_REFUSED,
+            "this model would be charged for, and this run carries no budget "
+            "to charge it against. Nothing was asked",
         )
 
     missing = limits.whats_missing()

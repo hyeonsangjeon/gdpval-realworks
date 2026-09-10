@@ -567,23 +567,32 @@ def load_stage_one_plan(path: Any = None) -> dict:
 
 
 def check_stage_one_cannot_reach_a_model() -> list[str]:
-    """Confirm nothing here can put a real model into the stage-one loop.
+    """Confirm nothing can put a real model into the loop without an amount.
 
-    The loop stage one is about now exists:
-    :func:`core.agentic_v2_conversation.run_model_conversation` asks something,
-    runs the tool it asked for, shows it what came back, and asks again. What
-    does not exist is any way to reach a *real* model with it. The seam a real
-    client would be plugged into refuses, because reaching one costs money in a
-    loop and no amount has been approved for that.
+    The loop exists: :func:`core.agentic_v2_conversation.run_model_conversation`
+    asks something, runs the tool it asked for, shows it what came back, and
+    asks again. Since 2026-09-10 a real model *can* be plugged into it —
+    :class:`core.agentic_v2_model_voice.AzureFoundryVoice` really asks a
+    Microsoft Foundry deployment.
 
-    So stage one still cannot start, but for a different and much smaller
-    reason than before, and the difference is worth stating rather than
-    flattening into "not built yet".
+    What stands between that and a paid run is no longer missing code. It is
+    an amount. Three things enforce it, and this checks all three by running
+    them rather than by reading them:
 
-    Everything below is established by running the code, not by reading it:
-    the refusing seam is called and required to refuse, and the loop is run
-    with a stand-in that declares itself paid and required to stop before
-    asking it anything. A comment could say either of those and be wrong.
+    * the seam refuses when it is handed no budget, which is how it is called
+      here and how anything that forgot would call it;
+    * the loop refuses a voice that declares itself paid when the run carries
+      no budget, before asking it anything;
+    * the loop refuses a voice that does not declare itself at all, *even on a
+      run that carries a budget*. An approved amount is approval to spend on a
+      known model, not permission to ask an unexamined one.
+
+    A budget cannot be built without somebody having written an amount down,
+    and the checks further down this file are what decide whether that amount
+    covers the settings chosen. So the question this answers is narrow and
+    worth keeping narrow: can anything reach a model *by accident*.
+
+    A comment could claim either refusal and be wrong, so both are exercised.
     """
     import inspect
 
@@ -620,10 +629,9 @@ def check_stage_one_cannot_reach_a_model() -> list[str]:
     else:
         problems.append(
             "core.agentic_v2_conversation.real_model_voice now hands back a "
-            "way to reach a real model. Stage one may be about to spend money "
-            "in a loop, so before any paid run is allowed somebody must "
-            "confirm the amount is approved here and that the loop still "
-            "stops at the dispatcher's own tool-call ceiling"
+            "way to reach a real model when it is asked for one with nothing. "
+            "That is the accident this refusal exists to stop, and it must be "
+            "put back before any paid run is allowed"
         )
 
     would_be_charged_for = ScriptedVoice(
@@ -638,7 +646,7 @@ def check_stage_one_cannot_reach_a_model() -> list[str]:
     if refused.stop_reason is not StopReason.PAID_CALL_REFUSED:
         problems.append(
             "the stage-one loop no longer refuses a model that would be "
-            "charged for: it stopped with "
+            "charged for when the run carries no budget: it stopped with "
             f"{refused.stop_reason.value!r} instead. That refusal is what "
             "keeps an unapproved paid run from starting by accident"
         )
@@ -647,6 +655,48 @@ def check_stage_one_cannot_reach_a_model() -> list[str]:
             "the stage-one loop asked a model that declares itself paid "
             "before refusing it, so the money would already have been spent "
             "by the time anything noticed"
+        )
+
+    # And the case an approved amount must *not* open: a voice that never said
+    # whether asking it costs anything. Run with a budget on purpose, because
+    # the refusal above would fire without one and prove nothing about this.
+    #
+    # The stand-in records being asked rather than raising. A check that blows
+    # up on a regression is a check whose other findings are never reached.
+    class _SaysNothingAboutBeingPaid:
+        def __init__(self) -> None:
+            self.was_asked = False
+
+        def next_turn(self, request):
+            self.was_asked = True
+            return GaveUp(note="never should have been asked")
+
+    undeclared_voice = _SaysNothingAboutBeingPaid()
+    undeclared = run_model_conversation(
+        task_prompt="a check that spends nothing",
+        voice=undeclared_voice,
+        desk=ScriptedToolDesk(),
+        limits=LoopLimits(
+            budget=StageOneBudget(
+                max_model_calls=1,
+                max_input_tokens=1,
+                max_output_tokens=1,
+            )
+        ),
+    )
+    if undeclared.stop_reason is not StopReason.PAID_CALL_REFUSED:
+        problems.append(
+            "the stage-one loop no longer refuses a model that does not say "
+            "whether asking it costs anything: it stopped with "
+            f"{undeclared.stop_reason.value!r} instead. An approved amount is "
+            "approval to spend on a known model, not permission to ask an "
+            "unexamined one"
+        )
+    if undeclared_voice.was_asked:
+        problems.append(
+            "the stage-one loop asked a model that never declared whether it "
+            "costs anything. On a real client that call is already paid for by "
+            "the time the answer comes back"
         )
 
     try:
@@ -671,11 +721,11 @@ def check_stage_one_cannot_reach_a_model() -> list[str]:
     if problems:
         return problems
     return [
-        "stage one cannot start because nothing here can reach a real model: "
-        "the loop exists at core.agentic_v2_conversation.run_model_conversation "
-        "and is proven against stand-ins that spend nothing, but "
-        "real_model_voice refuses and the loop refuses any model that would be "
-        "charged for. Approving an amount below is what removes this"
+        "stage one cannot start because no amount has been approved for it. A "
+        "real model can now be reached — core.agentic_v2_model_voice."
+        "AzureFoundryVoice asks a Foundry deployment — but the seam refuses "
+        "without a budget and the loop refuses a paid voice on a run that "
+        "carries none. Approving an amount below is what removes this"
     ]
 
 
