@@ -12,6 +12,7 @@ or is this machine, read the same read-only way the check itself reads it.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -586,16 +587,29 @@ def test_every_recorded_finding_says_where_it_came_from_and_when():
     for finding in RECORDED_FINDINGS:
         assert finding.machine
         assert finding.established_by
-        assert finding.on_date == "2026-08-26"
+        assert re.fullmatch(r"\d{4}-\d{2}-\d{2}", finding.on_date), finding.on_date
         assert len(finding.finding) > 80, "a finding with no reasoning in it"
 
 
-def test_no_recorded_finding_claims_the_containment_is_available():
-    """The answer as it stands. This test changes on the day the answer does."""
-    assert all(
-        finding.could_host_the_containment is not True
+def test_the_one_machine_that_could_host_it_does_not_claim_to_have_it():
+    """The answer as it stands, and it moved on 2026-09-10.
+
+    A machine that could host the containment now exists and has been measured
+    rather than argued for. This is the single most misreadable value in the
+    file, so the finding is required to disclaim in its own words the thing a
+    True here does not mean.
+    """
+    capable = [
+        finding
         for finding in RECORDED_FINDINGS
-    )
+        if finding.could_host_the_containment is True
+    ]
+
+    assert len(capable) == 1
+    assert "azure dev host" in capable[0].machine
+    assert capable[0].on_date == "2026-09-10"
+    assert "could be hosted, and nothing more" in capable[0].finding
+    assert "sha256" in capable[0].established_by
 
 
 def test_the_github_runner_finding_rests_on_githubs_own_documentation():
@@ -685,7 +699,10 @@ def test_the_whole_answer_covers_this_machine_and_the_recorded_ones():
     assert report["this_machine"]["required_containment_available"] is False
     assert len(report["recorded_findings"]) == len(RECORDED_FINDINGS)
     assert report["machines_without_a_finding"] == []
-    assert report["could_be_hosted_on_any_machine_in_play"] is False
+    # This machine cannot host it and the aggregate is True anyway: a recorded
+    # machine carries it, which is what recording one is for. The second flag
+    # is the one that stayed false, and it is the one the refusal reads.
+    assert report["could_be_hosted_on_any_machine_in_play"] is True
     assert report["available_on_any_machine_in_play"] is False
 
 

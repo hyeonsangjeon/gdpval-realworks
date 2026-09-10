@@ -707,7 +707,65 @@ whether the four readings passed, and the answer — yes or no — is written in
 as the two findings already there. A yes is not the exit condition. A recorded,
 sourced answer is.
 
-**Not yet run.**
+#### Run, and answered — 2026-09-10
+
+**The answer is yes, and it was measured rather than argued for.**
+
+The host was deployed from `infra/dev-host` with no change to the template:
+`gdpval-devhost-vm`, `Standard_D8as_v5`, `koreacentral`, Ubuntu 24.04 image
+`24.04.202608270`, `TrustedLaunch`, password authentication disabled, **no
+public IP and no inbound allow rule** — the NSG carries only the deny-all rule,
+so the machine is reachable solely through the Azure control plane
+(`az vm run-command`). That was established before any key material was
+generated, and the key that was generated is a dedicated one for this host, not
+the box's default identity.
+
+`scripts/check_agentic_containment.py --json` was run on the VM against a clone
+of this repository at `86152b7`. The report is 10,560 bytes, sha256
+`ee2222285af39a4674ed524865b08397413ab7d758543db20a8caf2477eda070`, verified
+against the VM's own computation of that hash after transfer:
+
+| reading | result |
+|---|---|
+| processor virtualisation flag | `svm` — **met** |
+| `/dev/kvm` | present, `crw-rw---- root kvm 10, 232` — **met** |
+| kernel release | `6.17.0-1022-azure`, above the 5.10 floor — **met** |
+| `firecracker` and `jailer` | v1.13.1, both run — **met** |
+
+`machine_could_host_it: true`.
+
+**The plan's prediction was wrong, and that is the point of having written it
+down first.** It expected the AMD default might not expose `/dev/kvm` and
+pre-authorised the Intel `Standard_D8s_v5`. The device is there, so no size
+change was made and the pre-authorisation went unused. Nested virtualisation
+survived `TrustedLaunch` on this size, which does not hold everywhere and is
+recorded as a reading rather than carried forward as an assumption.
+
+**One honest caveat.** `firecracker` and `jailer` are not on the image; they
+were installed during the measurement from the project's own release. A freshly
+deployed host therefore answers *no* on that fourth reading until it is
+bootstrapped. The three that no install can supply — processor, device, kernel —
+are the ones that make this a property of the machine.
+
+**What did not change.** `required_containment_available` is still `false`, and
+the nine policy rules still read `cannot be established here`, because no module
+turns `REQUIRED_MICROVM_POLICY` into arguments for starting a virtual machine.
+That is stage C. So `could_be_hosted_on_any_machine_in_play` flips to `true`,
+`available_on_any_machine_in_play` stays `false`, and
+`refuse_command_execution` keeps refusing — now naming the second ground rather
+than the first. No guard was removed, no activation flag was moved, `exec_run`
+stays shut, and nothing fell back to the V1 Docker runner.
+
+**Cost.** Allocated 2026-09-10 08:40:50Z, deallocated by 08:54Z: about 13
+minutes of `Standard_D8as_v5`, confirmed `PowerState/deallocated`. The disks are
+kept and still charge. The per-hour rate for this size under this subscription
+is not established here, so the entry is `partial`, not zero.
+
+**Done when — met.** The readiness JSON is an artefact, the four readings are in
+it, and the answer is written into `RECORDED_FINDINGS` as a third finding with
+its date and its source, in the same shape as the two already there. The finding
+disclaims in its own words the thing a `true` there does not mean.
+
 ### Stage C — not yet run
 ### Stage D — not yet run
 ### Stage E — not yet run
