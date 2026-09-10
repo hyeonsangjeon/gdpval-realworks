@@ -46,6 +46,37 @@ def _public_agentic_config(value):
     return output or None
 
 
+def _public_codex_config(value):
+    """Keep the Codex settings, but never the deployment's address.
+
+    The prepared file is written to the workspace and travels as a run
+    artifact, so an endpoint written here is an endpoint published. An
+    experiment says ``endpoint_from_route: true`` instead of naming an address,
+    and it is that boolean which survives into this file — step 2 derives the
+    address from this run's Azure route again at the point of use.
+
+    A literal ``endpoint`` is dropped rather than copied. That is deliberate
+    and it is not a silent one: ``core.codex_runtime_config`` refuses a block
+    with neither key, so a file that set the endpoint literally fails in step 2
+    with the missing-key message rather than quietly running against an address
+    this file leaked.
+    """
+    if not isinstance(value, dict):
+        return None
+    output = {}
+    for key in (
+        "endpoint_from_route",
+        "model",
+        "provider_id",
+        "query_params",
+        "request_max_retries",
+        "stream_max_retries",
+    ):
+        if key in value:
+            output[key] = value[key]
+    return output or None
+
+
 def prepare_tasks(config_path: str) -> dict:
     """Load data, apply filters, enrich with needs_files, save to workspace."""
 
@@ -205,6 +236,11 @@ def prepare_tasks(config_path: str) -> dict:
             **({
                 "agentic_v2": dict(config.execution.agentic_v2)
             } if config.execution.agentic_v2 is not None else {}),
+            **({
+                "codex": public_codex
+            } if (public_codex := _public_codex_config(
+                config.execution.codex
+            )) is not None else {}),
             **({"metrics": config.execution.metrics} if config.execution.metrics is not None else {}),
         },
         "total_tasks": len(task_list),

@@ -162,12 +162,18 @@ def _require_runnable_execution_mode(execution_mode: str) -> None:
             "the scripted fixture harness"
         )
     if execution_mode == "codex_foundry" and not _codex_connection_confirmed():
-        # The adapter is finished and exercised against a stand-in runtime, but
-        # no request has yet been answered by the Foundry deployment. Until one
-        # has, a batch run started here would be the first attempt at the
-        # connection and a spend at the same time. The gate is an explicit
-        # setting rather than a code reading, so that turning it on is somebody
-        # deciding the connection is confirmed, not this file assuming it.
+        # The adapter is finished, exercised against a stand-in runtime, and as
+        # of run 34465567349 answered by the Foundry deployment itself: one
+        # turn, `verdict: connected`, and the reply matched the instruction it
+        # was given. So the condition this message names has been met, and what
+        # remains is the decision that follows it.
+        #
+        # The gate stays, and stays an explicit setting rather than a code
+        # reading, because "a request was answered" and "this batch may spend"
+        # are different claims. One answered turn cost 24 output tokens; a
+        # batch leg is a different order of commitment, and turning it on
+        # should be somebody deciding that, not this file inferring it from a
+        # diagnostic that already passed.
         raise ValueError(
             "codex_foundry has not been shown to reach its Foundry "
             "deployment; run the connection check first and set "
@@ -2914,6 +2920,9 @@ def _run_inference_impl(
     # something nobody agreed on, and this setting rewrites every prompt.
     shared_first_request = execution_cfg.get("shared_first_request") is True
     agentic_options = execution_cfg.get("agentic", {}) or {}
+    # Codex-mode settings (execution.codex block, carried through step 1 with
+    # the endpoint variable's *name* rather than its value).
+    codex_config = execution_cfg.get("codex", {}) or {}
     hardened_requested = (
         execution_mode == "agentic_sandbox"
         or (
@@ -3196,7 +3205,31 @@ def _run_inference_impl(
         )
         sys.exit(1)
 
-    if execution_mode == "agentic_sandbox" or hardened_baseline:
+    if execution_mode == "codex_foundry":
+        # Codex drives the task itself and signs in through its own provider
+        # auth command, so there is no client here for anything to make a
+        # request with — and `core.executor` refuses this mode outright if one
+        # is handed to it. Building an unused Azure client anyway would create
+        # a second, invisible way for the run to authenticate, which is exactly
+        # the confusion the auth command exists to remove.
+        if condition.get("qa", {}).get("enabled"):
+            # Self-review is the one thing in this file that would build a
+            # client of its own regardless: the branch below hands Self-QA an
+            # `AzureAIWorkload.INFERENCE` client whenever the provider is
+            # azure. In this mode that would be a second sign-in beside the one
+            # Codex performs, on a run whose whole point is that the model
+            # reaches the deployment one documented way. Refused here rather
+            # than written down as a caution, so no experiment file can open
+            # that path by setting one field.
+            print(
+                "❌ codex_foundry disables Self-QA until review runs through "
+                "the same provider auth Codex signs in with"
+            )
+            sys.exit(1)
+        client = None
+        print("   Client:             none — Codex signs in for itself")
+
+    elif execution_mode == "agentic_sandbox" or hardened_baseline:
         if condition.get("qa", {}).get("enabled"):
             print("❌ paired hardened modes disable Self-QA until it shares the signed budget ledger")
             sys.exit(1)
@@ -3448,6 +3481,55 @@ def _run_inference_impl(
         print(f"   Paired run:         {run_identity}")
         print(f"   Workflow audit:     {workflow_audit}")
     typed_executor_error_type = None
+    codex_options = None
+    # Codex opens its own requests inside a turn and does not report how many,
+    # so what this ledger records is one reservation per task with the count
+    # inside it marked `call_reachability_unknown` — see
+    # `CodexAgentRunner.SENDS_A_FRESH_REQUEST_PER_TURN`. Partial is the honest
+    # shape here. `None` would not be: it would report a run that spent money
+    # as a run with no priced record, which is the reading this repository
+    # refuses everywhere else.
+    codex_cost_ledger = (
+        cost_recorder.ledger if cost_recorder is not None else None
+    )
+    if execution_mode == "codex_foundry":
+        # Resolved here rather than carried from step 1, so the address exists
+        # in this process and in no file this run writes.
+        from core.codex_runtime_config import (
+            DEFAULT_PROVIDER_ID,
+            CodexProviderSettings,
+            resolve_endpoint_setting,
+        )
+
+        try:
+            codex_settings = CodexProviderSettings(
+                endpoint=resolve_endpoint_setting(codex_config, os.environ),
+                model=str(codex_config.get("model") or model),
+                provider_id=str(
+                    codex_config.get("provider_id") or DEFAULT_PROVIDER_ID
+                ),
+                query_params=dict(codex_config.get("query_params") or {}),
+                request_max_retries=int(
+                    codex_config.get("request_max_retries", 0)
+                ),
+                stream_max_retries=int(
+                    codex_config.get("stream_max_retries", 0)
+                ),
+            )
+        except (ValueError, TypeError) as exc:
+            # The message names the setting, never the address: this is the one
+            # place in the run where a bad endpoint is in hand, and the log is
+            # published.
+            print(f"❌ execution.codex is not usable: {exc}")
+            sys.exit(1)
+        codex_options = {"provider_settings": codex_settings}
+        print(f"   Codex provider:     {codex_settings.provider_id}")
+        print(f"   Codex retries:      {codex_settings.request_max_retries} "
+              f"request / {codex_settings.stream_max_retries} stream")
+        if codex_cost_ledger is None:
+            print("   Codex cost ledger:  none — this run records no cost")
+        else:
+            print(f"   Codex cost ledger:  {cost_ledger_path.name}")
     try:
         executor = _create_executor_with_client_cleanup(
             client,
@@ -3460,6 +3542,8 @@ def _run_inference_impl(
             provider=provider,
             client_factory=client_factory,
             agentic_options=agentic_options,
+            codex_options=codex_options,
+            codex_cost_ledger=codex_cost_ledger,
             agentic_endpoint=(approved_endpoint if hardened_requested else None),
             agentic_ordered_task_ids=(
                 ordered_task_ids if hardened_requested else None

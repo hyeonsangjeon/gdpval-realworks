@@ -1,0 +1,181 @@
+# Codex against Foundry — the first five tasks
+# ============================================
+#
+# The model is not asked to write code for somebody else to run. It is given a
+# working directory, its own tools, and one turn, and it does the task the way
+# a person with a terminal would: read the reference files, run what it needs
+# to run, leave the deliverables on disk. `core/codex_runner.py` opens a fresh
+# session per task, stages that task's reference files into a directory named
+# after it, and collects whatever is left there afterwards.
+#
+# This is the first experiment file in this repository that names
+# `execution.mode: codex_foundry`. Everything below it existed before this file
+# and none of it could be reached: nothing could say which deployment to call,
+# because the endpoint is a secret and the setting only took a literal; and
+# step 2 handed every executor an Azure client, which this mode refuses by
+# design. Those are fixed in the same change as this file.
+#
+# What has been shown to work, and what has not
+# ---------------------------------------------
+#
+# Shown: the runtime starts, the isolated environment's auth command mints a
+# token, and the deployment answers. Run 34465567349 sent one turn and got
+# `verdict: connected` with the reply matching the instruction it was given —
+# 10,970 input tokens, 24 output, 17 reasoning.
+#
+# Not shown: a task. That turn's prompt forbids tools on purpose, so
+# `tool_execution_observed` was false and no file was produced. A model that
+# answers is not an agent that works, and this file is the first attempt at the
+# second thing. It may fail. A failure here is a result about the harness, and
+# the point of doing it at five tasks rather than two hundred and twenty.
+#
+# The five tasks
+# --------------
+#
+# The same five as exp030/exp031/exp032, chosen by the rule in
+# `core/execution_envelope_tasks.py` — task numbers, industries, jobs, and the
+# file types of the human expert's own answer — rather than by anyone picking
+# them. On 2026-09-01 those three run places finished 3, 4 and 0 of these five,
+# so a number from this file is readable against real numbers instead of
+# against nothing.
+#
+# It is *not* a fourth column of that comparison, and must not be reported as
+# one. That comparison holds one first request across its three places through
+# `shared_first_request: true`; `core/shared_first_request.py` has no Codex
+# entry, and this run place builds its own message
+# (`CodexAgentRunner.build_task_text`). Same tasks, different question. Making
+# it a fourth column is real work — teaching that module this run place — and
+# it is not what this file does.
+#
+# The limits, fixed before the run
+# --------------------------------
+#
+#   5 tasks x at most 3 turns each  = 15 turns, worst case
+#   1 turn per task attempt, 1800s wall clock each
+#   at most 1 task at a time (this pipeline does not run tasks concurrently)
+#   Self-QA off, so no second call per task
+#
+# Retries are the one real decision here, and they are made at the batch
+# runner's layer rather than inside Codex. `execution.max_retries: 2` gives a
+# task up to three attempts, each one a fresh session, each one counted in the
+# record. The Codex-side counters stay at 0. The measured table beside
+# `DEFAULT_REQUEST_MAX_RETRIES` is why: with the runtime's shipped defaults one
+# turn against a server answering HTTP 500 sends thirty requests, and none of
+# those thirty appear as attempts anywhere a reader would look. Retrying where
+# it can be counted keeps "one turn, one paid unit" true, which is what makes
+# the cost ledger's per-task reservation mean anything.
+
+experiment:
+  id: "exp033_codex_foundry_fixed5"
+  name: "Codex command-line tool against Foundry — five tasks"
+  description: >-
+    The first five tasks run by the Codex agent against the confirmed Foundry
+    deployment. One fresh Codex session per task, the task's reference files
+    staged into an isolated working directory, the agent's own tools, and
+    whatever files it leaves behind collected as the deliverables. The first
+    stage of five, then thirty, then two hundred and twenty.
+  author: "Hyeonsang Jeon"
+  created_at: "2026-09-10"
+
+control:
+  fixed:
+    - tasks
+    - model
+    - temperature
+    - self_qa
+  changed:
+    - execution_environment
+
+data:
+  source: "HyeonSang/exp033_codex_foundry_fixed5"
+  filter:
+    sector: null
+    occupation: null
+    sample_size: null
+    # Fixed by the rule in core/execution_envelope_tasks.py. Identical to the
+    # list in exp030/exp031/exp032 so this run place's five are the same five,
+    # not a comparable-looking different five.
+    task_ids:
+      - "02aa1805-c658-4069-8a6a-02dec146063a"
+      - "0112fc9b-c3b2-4084-8993-5a4abb1f54f1"
+      - "2ea2e5b5-257f-42e6-a7dc-93763f28b19d"
+      - "3baa0009-5a60-4ae8-ae99-4955cb328ff3"
+      - "0818571f-5ff7-4d39-9d2c-ced5ae44299e"
+
+condition_a:
+  name: "Codex command-line tool, Foundry deployment"
+  model:
+    provider: "azure"
+    # The deployment Codex is pointed at. `execution.codex.model` below must
+    # name the same one: `CodexAgentRunner.run` refuses a mismatch rather than
+    # calling one deployment and recording another.
+    deployment: "gpt-5.4"
+    # Codex owns the request. It sets its own sampling and does not take a
+    # temperature or a seed from here, so these are the inherited defaults and
+    # are not claims about what was sent.
+    temperature: 0.0
+    seed: 42
+    reasoning_effort: null
+  prompt:
+    # The only field that reaches the agent, as its developer instructions.
+    # `prefix`, `body` and `suffix` are refused for this mode by
+    # `ExperimentConfig.validate` — the runner writes the rest of the message
+    # itself, so text put there would be text this file claims and no request
+    # carries.
+    #
+    # Deliberately short. This run place's whole premise is that the agent has
+    # tools and can look; telling it which libraries to use, or to inspect a
+    # file before assuming its columns, is advice the other run places need
+    # because they write code blind. Repeating it here would make the prompt,
+    # not the run place, the thing that changed.
+    system: |
+      You are completing a professional work task. You have a terminal and a
+      working directory. Do the task and leave the finished deliverables in
+      the working directory as real files.
+    prefix: null
+    body: null
+    suffix: null
+
+  # Off. `step2_run_inference.py` refuses Self-QA for this mode outright: the
+  # reviewer would be an Azure client built here, a second sign-in beside the
+  # one Codex performs through its provider auth command, on a run whose point
+  # is that the model reaches the deployment exactly one documented way.
+  qa:
+    enabled: false
+    max_retries: 0
+    model: null
+    min_score: 6
+    prompt: ""
+
+execution:
+  mode: "codex_foundry"
+
+  codex:
+    # No address here, and no variable name either. The address comes from this
+    # run's Azure route, derived by `AzureAIRouteSettings.from_env` — the same
+    # derivation every other Azure caller in this repository uses and the one
+    # the answered turn used. A key naming some other variable would be a
+    # second way to reach a resource this run is supposed to be pinned to.
+    endpoint_from_route: true
+    model: "gpt-5.4"
+    # Both 0 on purpose; see the header. Retries live in `max_retries` below,
+    # where they are counted. These two numbers are in the settings
+    # fingerprint, so the record says which run had them.
+    request_max_retries: 0
+    stream_max_retries: 0
+
+  # Wall clock for one turn. The agent reads files, runs commands and writes
+  # output within it, where the subprocess run place spends its time limit on
+  # generated code alone — so 1800 rather than the 1200 the envelope trio uses.
+  # It is a ceiling, not a target.
+  timeout: 1800
+  # Attempts after an infrastructure failure, per task. Three at most, each a
+  # fresh session. The model's own judgement never causes one: Self-QA is off.
+  max_retries: 2
+  # Off. A resume round would give some tasks more attempts than others
+  # depending on where their failures happened to fall.
+  resume_max_rounds: 0
+
+output:
+  publish_to_hf: false
+  submit_to_evals: false
