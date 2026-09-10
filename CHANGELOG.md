@@ -12,6 +12,33 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Added
+- **A run record now says how many retries it made, and for which reason.**
+  `REQUIRED_RUN_RECORD_FIELDS` has asked for `retry_counts_by_reason` since it
+  was written, and no production code has ever produced it;
+  `check_run_record_fields` has no production caller either, so the absence
+  blocked nothing and was invisible. `retry_counts_by_reason()` derives the
+  count from the cost ledger, and Step 3 publishes it in `summary` beside the
+  count of tasks that were retried — the two answer different questions, and
+  on a run where one task is retried three times they disagree by design.
+
+  The ledger is the source rather than the task results because a retry is a
+  call that was made: run `34500590783` retried four times, left no task
+  record for any of them, and reported `summary.retried_count: 0`, that field
+  counting self-QA retries only. Only the problem-solving bucket is counted,
+  and which stages belong to it is asked of `core.cost_receipts` rather than
+  restated, so a grading retry cannot arrive inside a solving figure.
+
+  One gap is reported rather than papered over. The spec's three reasons are
+  infrastructure error, model self-review and tool-loop internal recovery, and
+  `resume` is none of them. A resumed round does re-attempt a task, but not
+  because the model reviewed itself, not because a tool loop corrected course,
+  and not because a request failed to arrive — the previous *process* stopped.
+  `infrastructure_error` would be the closest of three wrong answers and would
+  inflate the one count this measurement exists to take, so resumes are
+  counted separately under `unmapped_retry_kinds`. That key is present and
+  empty when everything mapped: an empty dict is a measurement, where a
+  missing key would be the absence of one. A ledger that will not parse
+  publishes no key at all, rather than a row of zeroes it never counted.
 - **An experiment can now ask for the Codex run place.** The runtime, the auth
   command, the per-task workspace, deliverable collection and the cost adapter
   all existed and were exercised; what did not exist was any way for an
@@ -234,6 +261,60 @@ entries land under a fresh dated heading the day they merge to `main`.
   file is the decision the pin asks to see.
 
 ### Fixed
+- **A refused turn threw away the measurement of what it had already spent.**
+  Run `34500590783` wrote nine ledger rows and settled two. The seven with
+  empty token fields are the tasks the provider refused mid-stream, and they
+  are not empty because nothing was spent — they are empty because the
+  measurement left with the exception.
+
+  `openai_codex._run._collect_turn_result` accumulates the running
+  `ThreadTokenUsage` and the thread items while it walks the stream, then
+  calls `_raise_for_failed_turn` **before** it returns. `turn_handle.run()`
+  therefore hands its caller a complete result or nothing at all, and a turn
+  that ran for 110 seconds before the stream disconnected reached the ledger
+  looking exactly like a turn that never started.
+
+  The stream is now read on the way past. `_recording_stream` is a tee that
+  yields every event unchanged and remembers three of them. The SDK's own
+  collector is still what turns the stream into a result: it is imported
+  lazily and fed the tee rather than reimplemented, because it decides which
+  agent message is the final answer, and that answer is the deliverable text
+  Step 4 fills into the parquet — a local copy of that rule is a way to lose a
+  deliverable to a version bump. If the import fails, the path degrades to
+  today's `turn_handle.run()`.
+
+  What the tee recovers, and the question each answers:
+  - **What the turn had spent.** A refused turn now settles for the figure the
+    stream reported. Its reservation was opened with
+    `call_reachability_unknown`, so the receipt stays `partial` either way —
+    the difference is between "a cost may exist here" and "at least this much
+    was spent, and there may be more". A turn that reported no usage before it
+    failed still leaves its reservation open, which is the older and still
+    correct answer. Nothing here settles a turn at zero.
+  - **How far it got.** `items_seen` reaches `last_run_diagnostics`. A turn
+    refused after forty completed items is a different fact from one refused
+    after two, and only the first is evidence that the limit is reached by
+    what a single turn spends rather than by how quickly turns arrive. That is
+    the question the rate-limit narrowing is down to, and the pipeline could
+    not previously answer it.
+  - **What refused it.** `TurnError.codex_error_info` carries an
+    `http_status_code` on each of the three variants that have one, and it is
+    now asked ahead of the text. Reading a bare `429` out of prose is the
+    mistake `core.execution_errors` is careful not to make — a traceback names
+    line numbers — but a status-code *field* holding 429 means one thing, and
+    it does not depend on the wording surviving a runtime version or a change
+    of region. The text path is unchanged and still runs when there is no
+    code.
+- **Every attempt on the Codex path was recorded as a first attempt.** All
+  nine ledger rows of run `34500590783` say `retry_kind: none`, including the
+  four that were retries. #502's own description — "Each attempt is attributed
+  with `RETRY_INFRASTRUCTURE`" — was false on this path: `_reserve_call` wrote
+  the literal `RETRY_NONE` instead of reading the attribution scope that
+  `step2_run_inference` opens immediately around the call, on the same thread.
+  It now reads `CostRecorder.current()`. The retrying itself worked — the 60 s
+  and 120 s waits are in the production log and the timestamps confirm they
+  really happened — but a receipt could not tell a forced second attempt from
+  a first one, which is the one thing the retry was added to make visible.
 - **A task refused for rate was told it had three attempts, and got one.** Run
   `34485072751` attempted five tasks. Three ended the same way:
 

@@ -34,6 +34,7 @@ from core.prepared_fingerprint import validate_prepared_fingerprint
 from core.result_fingerprint import validate_inference_result_fingerprint
 from core.publication_generation import validate_publication_generation
 from core.result_projection import project_result_row
+from core.execution_environment_readiness import retry_counts_by_reason
 from core.repository_identity import (
     validate_experiment_id,
     validate_hf_dataset_repo_id,
@@ -123,6 +124,40 @@ def _cost_ledger_reference(inference: dict) -> dict | None:
     if reference is None:
         return None
     return verify_cost_ledger(reference, WORKSPACE_DIR / reference["path"])
+
+
+def _retry_counts(reference: dict | None) -> dict | None:
+    """How many retries this run made, and for which of the three reasons.
+
+    Counted from the ledger rather than from the task results, because a retry
+    is a call that was made and only the ledger has a row per call whether or
+    not the call came back: run ``34500590783`` retried four times and left no
+    task record for any of them, so a count taken from the results would have
+    said zero.
+
+    The reference's digest was re-checked a moment ago by
+    :func:`_cost_ledger_reference`, so the file read here is the same file the
+    result publishes a pointer to.
+
+    ``None`` — no ledger, or a ledger that will not parse — publishes no key at
+    all. An experiment with no cost instrumentation has nothing to say about
+    retries, and saying ``0`` on its behalf would be a measurement it never
+    made.
+    """
+    if not reference:
+        return None
+    path = WORKSPACE_DIR / reference["path"]
+    rows: list[dict] = []
+    try:
+        with path.open(encoding="utf-8") as handle:
+            for line in handle:
+                stripped = line.strip()
+                if stripped:
+                    rows.append(json.loads(stripped))
+    except (OSError, ValueError) as exc:
+        print(f"⚠️  retry counts unavailable: the ledger would not read ({exc})")
+        return None
+    return retry_counts_by_reason(rows)
 
 
 def _write_json_outputs(data: dict, *paths: Path) -> None:
@@ -275,6 +310,7 @@ def format_results():
         successful_deliverables=successful_deliverable_count(enriched_results),
     )
     cost_ledger = _cost_ledger_reference(inference)
+    retry_counts = _retry_counts(cost_ledger)
     duration = _duration_str(
         inference.get("started_at", ""),
         inference.get("completed_at", ""),
@@ -328,6 +364,12 @@ def format_results():
         final_json.setdefault("cost_summary", {})[field] = cost_summary
     if cost_ledger:
         final_json["cost_ledger"] = cost_ledger
+    # Retries counted by reason, beside the count of tasks that were retried.
+    # The two answer different questions -- how many tasks needed a second go,
+    # and how many second goes there were and why -- and on a run where one
+    # task is retried three times they disagree by design.
+    if retry_counts is not None:
+        final_json["summary"]["retry_counts_by_reason"] = retry_counts
 
     json_path = results_dir / f"{experiment_id}.json"
     workspace_result = WORKSPACE_DIR / "result.json"

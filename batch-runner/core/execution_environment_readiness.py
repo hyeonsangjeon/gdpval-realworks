@@ -31,6 +31,20 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping, Sequence, get_args
 
+# The ledger's own words for the kind of attempt a call was, and its own table
+# of which stage belongs to which pipeline. Imported rather than restated: the
+# retry vocabulary below has to translate between the two, and a second copy of
+# either side would be a second thing to keep true. ``core.cost_receipts``
+# imports only the standard library, so this cannot become a cycle.
+from core.cost_receipts import (
+    BUCKET_PROBLEM_SOLVING,
+    RETRY_INFRASTRUCTURE,
+    RETRY_INTERNAL_RECOVERY,
+    RETRY_NONE,
+    RETRY_SEMANTIC,
+    STAGE_BUCKET,
+)
+
 # ── The five states an execution environment can be in ─────────────────────
 # Written as plain sentences so a reader never needs a separate word list.
 
@@ -315,6 +329,85 @@ RETRY_REASONS = (
     RETRY_MODEL_SELF_REVIEW,
     RETRY_TOOL_LOOP_INTERNAL_RECOVERY,
 )
+
+#: How a ledger row's ``retry_kind`` reads as one of the three reasons above.
+#:
+#: The two vocabularies were written for different jobs — the ledger names the
+#: *kind* of attempt so a receipt can be split by it, this module names the
+#: *reason* a task was attempted again — and they meet only here, so that a
+#: reader never has to hold both.
+#:
+#: ``RETRY_NONE`` is absent because a first attempt is not a retry.
+#:
+#: ``RETRY_RESUME`` is absent for a different reason, and the difference
+#: matters: a resumed round genuinely re-attempts a task, but none of the three
+#: reasons above describes why. It is not the model reviewing itself, not a
+#: tool loop correcting course, and not the request failing to get through —
+#: the previous *process* stopped. Mapping it onto ``infrastructure_error``
+#: would be the closest of three wrong answers and would inflate the one count
+#: this run is trying to measure. It is reported separately instead, under
+#: :data:`RETRY_COUNT_UNMAPPED_KEY`.
+RETRY_KIND_TO_REASON: Mapping[str, str] = {
+    RETRY_INFRASTRUCTURE: RETRY_INFRASTRUCTURE_ERROR,
+    RETRY_SEMANTIC: RETRY_MODEL_SELF_REVIEW,
+    RETRY_INTERNAL_RECOVERY: RETRY_TOOL_LOOP_INTERNAL_RECOVERY,
+}
+
+RETRY_COUNT_UNMAPPED_KEY = "unmapped_retry_kinds"
+"""Retries the three reasons have no name for, counted by their ledger kind.
+
+Present and empty when everything mapped. An empty dict is a measurement; a
+missing key would be an absence of one.
+"""
+
+
+def retry_counts_by_reason(
+    ledger_rows: Sequence[Mapping[str, Any]],
+    *,
+    bucket: str | None = None,
+) -> dict[str, Any]:
+    """Count a run's retries by reason, from the ledger's own rows.
+
+    The ledger is the source rather than the inference results because a retry
+    is a call that was made, and the ledger is the only record that has one row
+    per call whether or not the call came back. A count taken from the results
+    would miss every attempt that never produced a task record — which on run
+    ``34500590783`` was four of the nine rows.
+
+    Only the solving bucket is counted, and which stages those are is asked of
+    ``core.cost_receipts`` rather than restated here. Grading retries are real
+    and are counted by the grading pipeline against its own ledger; folding
+    them in here would put marking work inside the solving run's record, which
+    is the one confusion this repository's cost split exists to prevent.
+
+    Rows whose ``retry_kind`` is missing or unreadable are counted under
+    :data:`RETRY_COUNT_UNMAPPED_KEY` rather than dropped. A row that cannot be
+    classified is a row we have to say we could not classify.
+    """
+    wanted = BUCKET_PROBLEM_SOLVING if bucket is None else bucket
+    counts: dict[str, Any] = {reason: 0 for reason in RETRY_REASONS}
+    unmapped: dict[str, int] = {}
+    for row in ledger_rows:
+        if not isinstance(row, Mapping):
+            continue
+        if row.get("record_type", "call") != "call":
+            continue
+        if STAGE_BUCKET.get(str(row.get("stage", ""))) != wanted:
+            continue
+        kind = row.get("retry_kind")
+        if not isinstance(kind, str) or not kind:
+            unmapped["unreadable"] = unmapped.get("unreadable", 0) + 1
+            continue
+        if kind == RETRY_NONE:
+            continue
+        reason = RETRY_KIND_TO_REASON.get(kind)
+        if reason is None:
+            unmapped[kind] = unmapped.get(kind, 0) + 1
+            continue
+        counts[reason] += 1
+    counts[RETRY_COUNT_UNMAPPED_KEY] = unmapped
+    return counts
+
 
 # ── What every run must write down, whichever place it ran in ──────────────
 
