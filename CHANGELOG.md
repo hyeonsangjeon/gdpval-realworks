@@ -90,6 +90,65 @@ entries land under a fresh dated heading the day they merge to `main`.
   runner. The gate stays closed; only the reason is now true.
 
 ### Added
+- **The containment answers a seventh question, and it was found by planning
+  the test rather than by reading the rules.** Stage C's attack list has always
+  ended with one that is not like the others: the command must not be able to
+  read a token, key or environment secret the orchestrator holds. Writing it out
+  properly meant asking which rule it enforces — and the answer was none. At
+  `0076295`, the commit this was written against, `credential`, `secret` and
+  `token` appeared nowhere in `core/agentic_v2_substrate.py`,
+  `security/agentic-v2-supply-chain-policy.json` or
+  `sandbox/agentic_v2_capabilities.json`: zero matches in all three. The test
+  would have passed against nothing at all.
+
+  **A test with no rule behind it is the same fault as a rule with no code
+  behind it, seen from the other side**, and this repository has spent a lot of
+  effort on the first kind. So `credentials: "none-inherited"` is now the
+  eleventh containment rule, in `REQUIRED_MICROVM_POLICY` and in the manifest
+  that would travel with a built image, which the tests require to be equal
+  rather than merely compatible. It is
+  refused if it is weakened to `inherit-environment`, refused if it is softened
+  to a bare `"none"`, refused if it is deleted, and the readiness report now
+  carries it beside the other ten as *"cannot be established here"* — the same
+  verdict, for the same reason, because nothing turns any of these rules into
+  arguments for starting a machine yet.
+
+  It does **not** appear in the signed supply-chain policy, and that is not an
+  omission: that file mirrors four of the eleven rules — `runtime`, `network`,
+  `read_only_rootfs`, `ephemeral_work_disk` — and always has. Seven rules,
+  including the three numeric limits and `on_breach`, live in the policy and the
+  manifest only. Worth knowing before someone reads the signed policy as the
+  full statement of the containment; it is a signed subset of it.
+
+  Every other rule here arrived because something was written down and nothing
+  applied it. This one arrived the opposite way: nothing was written down, and a
+  test was about to be aimed at it anyway.
+
+- **Checking that rule against the jailer's own documentation moved a flag from
+  optional to required.** The plan said the launcher could lean on the jailer,
+  which "already clears inherited environment variables and file descriptors
+  before exec". Firecracker's jailer documentation for **v1.13.1** — the version
+  measured on the Azure host, not the development branch — says something
+  narrower: it will *"cleanup all environment variables received from the parent
+  process"*, but *"close all open file descriptors … **except input, output and
+  error**"*. Those three survive, and get pointed at `/dev/null` only by the
+  separate step that runs when the launcher asks to daemonize.
+
+  So the new rule holds by default for the environment and only conditionally
+  for the descriptors. `--daemonize` is now something stage C1's launcher has to
+  pass rather than something it may, and C3's attack on this rule inspects the
+  descriptors instead of trusting the sentence. A rule written down on the
+  strength of a mechanism that turns out to work differently is the fault this
+  stage exists to fix, one layer further down.
+
+- **Three records still say six, and are left saying it.** `CHANGELOG.md`,
+  `TASK_AGENTIC_SANDBOX_V2_FOUNDATION.md` and the recorded Azure finding all
+  describe a day on which the count was six, or a hashed report that contained
+  nine policy rules. Only the last one gained a clause saying so, because it
+  sits in `core/` next to a report a reader can run today and get ten from.
+  Rewriting the other two would not fix a stale sentence; it would falsify a
+  record of when the rule set changed, which is what those records are for.
+
 - **The identity may infer on this resource — measured, not argued — and the
   question is now which property of a Codex request stops it.** Run
   `34442249527` sent `--valid-request` to the pinned deployment and got `200`,

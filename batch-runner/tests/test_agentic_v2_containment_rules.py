@@ -1,13 +1,19 @@
 """The containment rules: that they are complete, numbered, and hard to weaken.
 
-Six questions have to be answered before a set of settings is a containment
+Seven questions have to be answered before a set of settings is a containment
 rather than a gesture — where a command may write, whether it can reach the
-network, how much memory it gets, how long it may run, who it runs as, and what
-happens when it exceeds any of them. Until 2026-08-26 only the first two were
-written down, and the working directory said "there is a quota" without ever
-saying what the quota was.
+network, how much memory it gets, how long it may run, who it runs as, what it
+may read of what the orchestrator holds, and what happens when it exceeds any of
+them. Until 2026-08-26 only the first two were written down, and the working
+directory said "there is a quota" without ever saying what the quota was.
 
-These tests do three things and no more. They check that all six are answered;
+The seventh was added on 2026-09-10 and arrived by the opposite route to the
+others. Those were rules nothing applied. This was a boundary nothing stated:
+planning the test that a command cannot read a token, key or environment secret
+found that no rule said it may not, so the test would have passed against
+nothing at all.
+
+These tests do three things and no more. They check that all seven are answered;
 they check that the numbers which are derived from something else still agree
 with what they were derived from; and they check that weakening any one of them
 is refused rather than accepted.
@@ -68,10 +74,10 @@ def _signed_policy() -> dict:
     return json.loads(SIGNED_POLICY_PATH.read_text(encoding="utf-8"))
 
 
-# ── All six questions are answered ────────────────────────────────────────
+# ── All seven questions are answered ──────────────────────────────────────
 
 
-def test_every_one_of_the_six_questions_has_an_answer():
+def test_every_one_of_the_seven_questions_has_an_answer():
     """A containment that leaves one of these open is not a containment.
 
     Named individually rather than counted, so that a failure says which
@@ -83,6 +89,7 @@ def test_every_one_of_the_six_questions_has_an_answer():
     assert REQUIRED_MICROVM_POLICY["memory_mib"] == MICROVM_MEMORY_MIB
     assert REQUIRED_MICROVM_POLICY["wall_clock_seconds"] == MICROVM_WALL_CLOCK_SECONDS
     assert REQUIRED_MICROVM_POLICY["user"] == "jailer-unprivileged"
+    assert REQUIRED_MICROVM_POLICY["credentials"] == "none-inherited"
     assert REQUIRED_MICROVM_POLICY["on_breach"] == "stop-and-report"
 
 
@@ -188,6 +195,8 @@ def test_the_memory_rule_says_it_was_picked_rather_than_derived():
         ("memory_mib", MICROVM_MEMORY_MIB * 4),
         ("wall_clock_seconds", MICROVM_WALL_CLOCK_SECONDS * 4),
         ("user", "root"),
+        ("credentials", "inherit-environment"),
+        ("credentials", "none"),
         ("on_breach", "continue"),
         ("on_breach", "log-and-continue"),
         ("runtime", "docker"),
