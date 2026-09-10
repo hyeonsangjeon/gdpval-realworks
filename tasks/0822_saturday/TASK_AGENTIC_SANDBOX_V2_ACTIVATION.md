@@ -1020,10 +1020,28 @@ ephemeral work disk, which the `workdir` rule already governs.
 > found by a launcher that omitted `--new-pid-ns` and then could not understand
 > why the PID file was there anyway. `src/jailer/src/env.rs:735-740` in v1.13.1
 > writes the PID file in **both** branches; `save_exec_file_pid` runs after
-> `chroot()`, so the file lands at the in-jail path `/firecracker.pid`, which is
-> `<chroot_dir>/firecracker.pid` seen from the host. What `--new-pid-ns` buys is
-> the namespace and nothing else. Both flags are still passed, for the two
-> separate reasons above; only the explanation was wrong.
+> `chroot()`, so the file lands inside the jail, which is `<chroot_dir>` seen
+> from the host. What `--new-pid-ns` buys is the namespace and nothing else.
+> Both flags are still passed, for the two separate reasons above; only the
+> explanation was wrong.
+>
+> **And the correction found a bug in C1's own code**, which is why it is worth
+> writing down rather than just fixing. The file is named after the **exec
+> file**, not after the word: `save_exec_file_pid` appends `.pid` to
+> `chroot_exec_file`, which is `/` joined to the binary's own name. The jailer
+> requires that name to *contain* `firecracker`, not to be it — so
+> `/opt/firecracker-v1.13.1` writes `/firecracker-v1.13.1.pid`. C1 had the path
+> hard-coded as `/firecracker.pid`, and on any host where the binary carries a
+> version suffix the plan would have named a file that never appears. Nothing
+> would have failed: the deadline would have been recorded, the plan would have
+> hashed, and `wall_clock_seconds` would have had nothing to act on at the
+> moment it was needed. It is derived from the binary now, and the test asserts
+> it against a versioned name rather than against the constant.
+>
+> Which PID is in the file is worth knowing too, before somebody removes a flag.
+> With `--new-pid-ns` the jailer clones and records the **child's** PID, which is
+> Firecracker. Without it, and with `--daemonize`, it records the daemonised
+> grandchild's. Both are the right process to signal, by different routes.
 
 **A fourth flag, and it is stronger than this plan first had it.** The section
 below says C1's builder "emits no snapshot route". That is true and it is not
@@ -1093,23 +1111,25 @@ a comment, and not moved to a later stage to be forgotten in.
 
 **Cost.** None. This runs on any machine, including this one.
 
-**Done.** `core/agentic_v2_microvm_launch.py` and its 81 tests. The exit
+**Done.** `core/agentic_v2_microvm_launch.py` and its 83 tests. The exit
 condition is met in both directions: every rule has a test that reads the built
 arguments, every rule has a case that deletes it from a copy of the policy and
 requires a refusal naming it, and a weakened value is refused rather than
 adapted to. The guards were checked by mutation rather than by their passing —
-fourteen deliberate breakages of the builder (the flag dropped, the host memory
+fifteen deliberate breakages of the builder (the flag dropped, the host memory
 bound lowered to the guest's, the v1 cgroup file name used under v2, the root
 drive made writable, the in-jail config path turned into a host path) and each
-one had to fail a test before the work was called done. Two of the fourteen
-initially did not, and both were holes in the tests rather than in the builder:
-`fsize=` was asserted as a string anywhere in the argument list, so deleting the
-`--resource-limit` that carries it changed nothing, and the in-jail paths were
-asserted against their own constants, so moving a constant to a host path took
-the test with it. Both now assert the requirement instead of the spelling. The
-last surviving mutation was the builder's own backstop — the check that every
-accepted rule reached `rules_applied` — which no healthy build exercises; it now
-has a test that stages the drop.
+one had to fail a test before the work was called done. Three of the fifteen
+initially did not, and all three were holes in the tests rather than in the
+builder: `fsize=` was asserted as a string anywhere in the argument list, so
+deleting the `--resource-limit` that carries it changed nothing; the in-jail
+paths were asserted against their own constants, so moving a constant to a host
+path took the test with it; and the PID file was asserted against the constant
+that turned out to be wrong, so it agreed with the bug instead of catching it.
+All three now assert the requirement instead of the spelling. The last surviving
+mutation was the builder's own backstop — the check that every accepted rule
+reached `rules_applied` — which no healthy build exercises; it now has a test
+that stages the drop.
 
 Four things the building of it settled, recorded here because they are not
 visible in the diff:

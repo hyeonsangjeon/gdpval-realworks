@@ -240,6 +240,33 @@ def test_the_clock_rule_becomes_a_host_side_deadline_with_a_pid_to_use(plan):
     )
 
 
+@pytest.mark.parametrize(
+    "binary", ["/opt/firecracker-v1.13.1", "/usr/local/bin/firecracker-jailed"]
+)
+def test_the_pid_file_follows_the_binarys_name_and_not_the_word(
+    binary, images, tmp_path
+):
+    """The bug this test was written after, rather than before.
+
+    The jailer requires the exec file's name to *contain* ``firecracker``; it
+    does not require it to be ``firecracker``. ``save_exec_file_pid`` appends
+    ``.pid`` to that name, so a binary called ``firecracker-v1.13.1`` writes
+    ``firecracker-v1.13.1.pid`` — and a plan that hard-coded ``firecracker.pid``
+    would name a file that never appears.
+
+    Nothing would have failed. The deadline would have been recorded, the plan
+    would have hashed, and ``wall_clock_seconds`` would have had nothing to act
+    on at the moment it was needed. Asserted against the binary's name now, and
+    the chroot directory is asserted the same way for the same reason.
+    """
+    plan = _build(images, tmp_path, firecracker_binary=binary)
+    name = Path(binary).name
+
+    assert plan["host_side"]["pid_file"] == f"/srv/jailer/{name}/stage-c1/root/{name}.pid"
+    assert plan["host_side"]["chroot_dir"] == f"/srv/jailer/{name}/stage-c1/root"
+    assert plan["host_side"]["pid_file"].startswith(plan["host_side"]["chroot_dir"] + "/")
+
+
 def test_the_user_rule_is_two_flags_and_neither_may_be_root(plan):
     argv = plan["jailer"]["argv"]
 

@@ -228,9 +228,22 @@ entries land under a fresh dated heading the day they merge to `main`.
     makes the configuration file the whole of what the machine will ever be.
   - **`--new-pid-ns` does not write the PID file.** The plan said it did.
     `src/jailer/src/env.rs:735-740` writes it in both branches, after `chroot()`,
-    at the in-jail path `/firecracker.pid`. Both flags are still passed; only the
+    so the file lands inside the jail. Both flags are still passed; only the
     explanation was wrong, and it is the kind of wrong that surfaces as
     confusion at the moment somebody omits the flag and finds the file anyway.
+
+    Checking that correction turned up a **bug in the new module**, which is the
+    part worth recording. The PID file is named after the **exec file**, not
+    after the word: `save_exec_file_pid` appends `.pid` to the binary's own
+    name, and the jailer requires that name to *contain* `firecracker` rather
+    than to be it. So `/opt/firecracker-v1.13.1` writes
+    `/firecracker-v1.13.1.pid`, and the hard-coded `/firecracker.pid` would have
+    named a file that never appears on any host whose binary carries a version
+    suffix. Nothing would have failed — the deadline would have been recorded,
+    the plan would have hashed, and `wall_clock_seconds` would have had nothing
+    to act on at the moment it was needed. Derived from the binary now, with a
+    test that asserts it against a versioned name rather than against the
+    constant it used to be pinned to.
 
   Two gaps are named rather than papered over. The policy has no rule about
   processor share, so `vcpu_count` comes from the caller and the missing rule is
@@ -240,17 +253,19 @@ entries land under a fresh dated heading the day they merge to `main`.
   on `--netns` being absent, not on the device being missing; stage C3 should
   expect to find the node there.
 
-  81 tests, and they were checked by breaking the builder rather than by
-  passing. Fourteen deliberate mutations — the flag deleted, the host memory
+  83 tests, and they were checked by breaking the builder rather than by
+  passing. Fifteen deliberate mutations — the flag deleted, the host memory
   bound dropped to the guest's, the v1 cgroup file name used under v2, the root
-  drive made writable — each had to fail a test. Two initially did not, and both
-  were holes in the tests: `fsize=` was matched as a string anywhere in the
-  argument list, so removing the `--resource-limit` that carries it changed
-  nothing, and the in-jail paths were asserted against their own constants, so
-  moving one to a host path took the test along with it. Both now assert the
-  requirement rather than the spelling. The last survivor was the builder's own
-  backstop, which no healthy build exercises, and it now has a test that stages
-  the drop it exists for.
+  drive made writable — each had to fail a test. Three initially did not, and
+  all three were holes in the tests rather than in the builder: `fsize=` was
+  matched as a string anywhere in the argument list, so removing the
+  `--resource-limit` that carries it changed nothing; the in-jail paths were
+  asserted against their own constants, so moving one to a host path took the
+  test along with it; and the PID file was asserted against the constant that
+  turned out to be wrong, so it agreed with the bug rather than catching it.
+  All three now assert the requirement rather than the spelling. The last
+  survivor was the builder's own backstop, which no healthy build exercises, and
+  it now has a test that stages the drop it exists for.
 
 - **The containment answers a seventh question, and it was found by planning
   the test rather than by reading the rules.** Stage C's attack list has always

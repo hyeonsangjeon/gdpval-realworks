@@ -108,7 +108,23 @@ IN_JAIL_KERNEL = "/vmlinux"
 IN_JAIL_ROOTFS = "/rootfs.ext4"
 IN_JAIL_WORK_DISK = "/work.ext4"
 IN_JAIL_CONFIG = "/vmconfig.json"
-IN_JAIL_PID_FILE = "/firecracker.pid"
+
+PID_FILE_EXTENSION = ".pid"
+"""The jailer's own suffix, appended to the exec file's name and not to a word.
+
+``save_exec_file_pid`` builds this path as ``chroot_exec_file`` plus ``.pid``,
+and ``chroot_exec_file`` is ``/`` joined to the **exec file's own name**. So a
+binary at ``/opt/firecracker-v1.13.1`` produces ``/firecracker-v1.13.1.pid``,
+not ``/firecracker.pid``. This was a fixed constant here until it was checked
+against the source: the name only has to *contain* ``firecracker``, which is the
+rule the jailer enforces on ``--exec-file``, and every other spelling of it
+would have produced a plan whose deadline pointed at a file that never appears.
+
+That is the failure this stage is about, in the one field that decides whether
+``wall_clock_seconds`` can be enforced at all — a limit with no process to stop
+is a limit in name. Derived from the binary now, by
+:func:`_pid_file_the_jailer_will_write`.
+"""
 
 DEVICES_THAT_MUST_BE_ABSENT: dict[str, str] = {
     "balloon": "memory_mib — a balloon device reshapes guest memory at runtime, "
@@ -366,7 +382,9 @@ def build_launch_plan(
         ],
         "host_side": {
             "chroot_dir": chroot_dir,
-            "pid_file": (Path(chroot_dir) / IN_JAIL_PID_FILE.lstrip("/")).as_posix(),
+            "pid_file": _pid_file_the_jailer_will_write(
+                chroot_dir, firecracker_binary
+            ),
             "deadline_seconds": rules["wall_clock_seconds"],
             "on_deadline": rules["on_breach"],
             "destroy_after_the_run": [chroot_dir],
@@ -385,6 +403,32 @@ def build_launch_plan(
 
     plan["plan_sha256"] = canonical_sha256(plan)
     return plan
+
+
+def _pid_file_the_jailer_will_write(chroot_dir: str, firecracker_binary: Path) -> str:
+    """Where the deadline will find the process it has to be able to stop.
+
+    Two facts from ``src/jailer/src/env.rs`` in v1.13.1, both of which have to
+    hold for ``wall_clock_seconds`` to mean anything:
+
+    The **name** is the exec file's own, with ``.pid`` appended — not the word
+    ``firecracker``. The jailer requires only that the name *contain* it, so
+    ``firecracker-v1.13.1`` is a legal binary that writes
+    ``firecracker-v1.13.1.pid``.
+
+    The **place** is inside the jail. ``chroot()`` runs before either call site,
+    so the in-jail ``/`` is ``<chroot_dir>`` seen from the host, and the file the
+    host-side deadline opens is ``<chroot_dir>/<name>.pid``.
+
+    The PID in it is the right one to signal because ``--new-pid-ns`` is passed:
+    that branch clones and records the **child's** PID, which is Firecracker.
+    Without it, and with ``--daemonize``, the recorded PID is the daemonised
+    grandchild's — still the right process, by a different route worth knowing
+    about before somebody removes a flag and changes which one it is.
+    """
+    return (
+        Path(chroot_dir) / (firecracker_binary.name + PID_FILE_EXTENSION)
+    ).as_posix()
 
 
 def rules_this_builder_accounts_for() -> frozenset[str]:
