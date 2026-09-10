@@ -1,0 +1,247 @@
+name: Agentic Sandbox V2 — Stage A Probe
+
+# Stage A's one paid question, and the only place it can be asked.
+#
+# The question is narrow on purpose: shown two tools and one real benchmark
+# task, does a real Microsoft Foundry deployment *choose* one of them, and does
+# the turn after that arrive holding the first turn's answer? Everything under
+# it is already proved for free — the loop against a scripted voice, the tools
+# against a backend that really writes bytes, the containment rules against
+# tests that read the rules. None of that establishes the one thing above, and
+# nothing that runs offline ever could.
+#
+# It has to be a workflow rather than a command someone runs. The client
+# factory refuses static Azure credentials outright and takes its identity from
+# a federated OIDC session, so the only place a client can be built at all is
+# a job holding `id-token: write`. That is a property of the code, not a
+# convention: `core/azure_ai_clients.py` calls `_reject_static_azure_credential_env`
+# before it builds anything.
+#
+# What it does NOT do, deliberately:
+#   * It does not grade. `finalize` is not among the offered tools, so nothing
+#     here can reach the grader. Marking is about $2,504 of stage one's $2,543,
+#     and a probe that could reach it would be the stage-one run wearing a
+#     smaller name.
+#   * It does not run stage one. One task, not five. Stage one is a separate
+#     purchase held to its own amount, and that amount is still `null`.
+#   * It does not open anything. `exec_run` stays shut, the V2 activation flags
+#     stay as they are, and this workflow changes no file in the repository.
+#   * It does not publish. The record leaves as an artifact, not a commit. It
+#     is one diagnostic run and has no place in data/grades or on the dashboard.
+#
+# What the record holds: one row per model call — turn, deployment asked for,
+# model that answered, token counts, how much earlier conversation the call
+# carried, and either a price or an explicit `price_missing`. No request body,
+# no reply body, no reasoning, no credential, and not the benchmark wording.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: >-
+          dry-run does everything except reach the network. paid asks the
+          question, once, for at most the amount the plan worked out.
+        type: choice
+        options:
+          - dry-run
+          - paid
+        default: dry-run
+        required: true
+
+# A push must never be able to spend. There is no push, pull_request or
+# schedule trigger above, and adding one would be the change that made this
+# workflow able to charge without anybody asking it to.
+
+permissions:
+  contents: read
+
+concurrency:
+  # One at a time, and never cancelled part-way. A run killed mid-conversation
+  # has already been charged for the turns it made and would leave no record of
+  # them, which is the one outcome worse than an expensive run.
+  group: agentic-v2-stage-a-probe
+  cancel-in-progress: false
+
+jobs:
+  # ── Everything except the network ───────────────────────────────────────
+  #
+  # Runs on both modes and gates the paid job. It is the whole path: the free
+  # check, the plan, the pinned dataset, the wording hash, the arithmetic. If
+  # any of that is wrong, it is wrong for free here rather than after a spend.
+  free:
+    name: Dry run
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+          cache-dependency-path: batch-runner/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          pip install -r requirements.txt
+
+      # The tests that hold the two things a paid run rests on: that the tool
+      # list cannot reach the grader, and that a second turn really goes out
+      # carrying the first turn's answer. Run before the dataset is fetched, so
+      # a broken probe fails in a minute rather than after a download.
+      - name: Test the probe
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          python -m pytest -q \
+            tests/test_agentic_v2_stage_a_probe.py \
+            tests/test_run_agentic_stage_a_probe.py \
+            tests/test_agentic_v2_model_voice.py \
+            tests/test_agentic_stage_one_budget.py
+
+      # No charge. The revision is the one the catalogue was built from and the
+      # one every figure in the comparison rests on; the runner hashes the
+      # wording it reads and refuses if it is not what was priced.
+      - name: Fetch the pinned dataset
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          set -euo pipefail
+          hf download openai/gdpval --repo-type dataset \
+            --revision 11e7900cdcac61bc4daf59e65feb238acda98fbf
+
+      - name: Dry run
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          python scripts/run_agentic_stage_a_probe.py --dry-run
+
+  # ── The one paid question ───────────────────────────────────────────────
+  paid:
+    name: Ask it
+    needs: free
+    if: ${{ inputs.mode == 'paid' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+          cache-dependency-path: batch-runner/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          pip install -r requirements.txt
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca # v3.0.1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Verify Azure OIDC session identity
+        env:
+          AZURE_AI_EXPECTED_CLIENT_ID: ${{ vars.AZURE_AI_EXPECTED_CLIENT_ID }}
+          AZURE_AI_EXPECTED_TENANT_ID: ${{ vars.AZURE_AI_EXPECTED_TENANT_ID }}
+          AZURE_AI_EXPECTED_SUBSCRIPTION_ID: ${{ vars.AZURE_AI_EXPECTED_SUBSCRIPTION_ID }}
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          python scripts/azure_oidc_identity_preflight.py --verify-session
+
+      - name: Fetch the pinned dataset
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          set -euo pipefail
+          hf download openai/gdpval --repo-type dataset \
+            --revision 11e7900cdcac61bc4daf59e65feb238acda98fbf
+
+      # Read from the plan rather than written here. The deployment appears in
+      # exactly one place in the repository, so a workflow cannot come to
+      # validate a route for one model while the runner asks another.
+      - name: Read the deployment the plan fixes
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          python - <<'PY' >> "$GITHUB_ENV"
+          import json
+          from core.agentic_v2_stage_one_budget import load_stage_one_plan
+
+          deployment = load_stage_one_plan()["model"]["deployment"]
+          print("AZURE_AI_WORKLOADS_JSON=" + json.dumps([f"inference={deployment}"]))
+          PY
+
+      # The repository's own route check, run before the runner's. It resolves
+      # the endpoint and asserts the identity assertions below hold, so a
+      # misconfigured route is caught by the code that owns routes rather than
+      # by the one script that spends money.
+      - name: Validate the Azure AI route
+        env:
+          AZURE_AI_ROUTE_PROFILE: project-ci
+          FOUNDRY_PROJECT_ENDPOINT: ${{ secrets.FOUNDRY_PROJECT_ENDPOINT }}
+          AZURE_AI_REQUIRE_EXPECTED_IDENTITIES: '1'
+          AZURE_AI_EXPECTED_DIRECT_ACCOUNT: ${{ vars.AZURE_AI_EXPECTED_DIRECT_ACCOUNT }}
+          AZURE_AI_EXPECTED_PROJECT_ACCOUNT: ${{ vars.AZURE_AI_EXPECTED_PROJECT_ACCOUNT }}
+          AZURE_AI_EXPECTED_PROJECT_NAME: ${{ vars.AZURE_AI_EXPECTED_PROJECT_NAME }}
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          python scripts/azure_ai_route_preflight.py
+
+      # `project-ci` because that is what the plan fixes, along with the account
+      # and the project. The runner checks all three against the route it was
+      # actually given and refuses after building the client and before asking
+      # it anything, so a misconfigured dispatch costs nothing.
+      - name: Ask
+        id: ask
+        env:
+          AZURE_AI_ROUTE_PROFILE: project-ci
+          FOUNDRY_PROJECT_ENDPOINT: ${{ secrets.FOUNDRY_PROJECT_ENDPOINT }}
+          AZURE_AI_REQUIRE_EXPECTED_IDENTITIES: '1'
+          AZURE_AI_EXPECTED_DIRECT_ACCOUNT: ${{ vars.AZURE_AI_EXPECTED_DIRECT_ACCOUNT }}
+          AZURE_AI_EXPECTED_PROJECT_ACCOUNT: ${{ vars.AZURE_AI_EXPECTED_PROJECT_ACCOUNT }}
+          AZURE_AI_EXPECTED_PROJECT_NAME: ${{ vars.AZURE_AI_EXPECTED_PROJECT_NAME }}
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          # `set +e` on purpose. A model that was reached and declined to use a
+          # tool exits 1, and that is a finding stage A exists to collect --
+          # the record has to be uploaded either way, and the exit code is
+          # re-raised at the end so the run still reports honestly.
+          set +e
+          python scripts/run_agentic_stage_a_probe.py \
+            --output "$GITHUB_WORKSPACE/agentic-v2-stage-a-record.json"
+          echo "probe_exit=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Keep the record
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: agentic-v2-stage-a-record
+          path: agentic-v2-stage-a-record.json
+          if-no-files-found: warn
+
+      - name: Report what happened
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          PROBE_EXIT="${{ steps.ask.outputs.probe_exit }}"
+          if [ -z "$PROBE_EXIT" ]; then
+            echo "The probe never recorded an exit code, so nothing here can" \
+                 "say what it did. Read the artifact, and treat the run as" \
+                 "possibly charged until it says otherwise."
+            exit 1
+          fi
+          exit "$PROBE_EXIT"

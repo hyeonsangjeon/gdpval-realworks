@@ -118,6 +118,18 @@ def a_request(*, turn: int = 1, history=(), tools=("capabilities_query",)):
     )
 
 
+def an_exchange(*, tool_name: str = "capabilities_query") -> ToolExchange:
+    """One tool call and its answer, as an earlier turn would leave it."""
+    return ToolExchange(
+        call_id="call-1",
+        tool_name=tool_name,
+        arguments={"kind": "commands"},
+        ok=True,
+        error_type=None,
+        data={"commands": []},
+    )
+
+
 def prices_for(model: str = MODEL) -> dict[str, ModelPrice]:
     return {
         model: ModelPrice(
@@ -264,16 +276,45 @@ def test_a_call_whose_usage_did_not_come_back_stops_the_run():
 
 
 def test_a_call_is_counted_even_when_its_answer_is_useless():
-    """The money is spent by the time the answer is read."""
+    """The money is spent by the time the answer is read.
+
+    The counting happens once, in the loop, for every voice alike — so a voice
+    that forgot to count is still counted, and a voice that counted twice
+    cannot halve its own allowance. What this asserts of the voice is the part
+    only the voice can do: the ledger row for a call that bought nothing.
+    """
     voice = a_voice([a_reply(text="I would rather not")])
 
     reply = voice.next_turn(a_request())
 
     assert isinstance(reply, GaveUp)
-    assert voice.budget.model_calls_made == 1
-    assert voice.budget.input_tokens_used == 100
-    assert voice.budget.output_tokens_used == 20
     assert len(voice.calls) == 1
+    assert voice.calls[0].input_tokens == 100
+    assert voice.calls[0].output_tokens == 20
+
+
+def test_the_voice_does_not_charge_the_budget_the_loop_already_charges():
+    """Counted once, or an approved run stops at half of what was approved."""
+    voice = a_voice([a_reply(), a_reply()])
+
+    voice.next_turn(a_request(turn=1))
+    voice.next_turn(a_request(turn=2))
+
+    assert len(voice.calls) == 2
+    assert voice.budget.model_calls_made == 0
+    assert voice.budget.input_tokens_used == 0
+    assert voice.budget.output_tokens_used == 0
+
+
+def test_every_call_records_how_much_of_the_conversation_it_carried():
+    """What makes "the second turn saw the first turn's answer" a fact."""
+    voice = a_voice([a_reply(), a_reply()])
+
+    voice.next_turn(a_request(turn=1))
+    voice.next_turn(a_request(turn=2, history=(an_exchange(),)))
+
+    assert [record.history_entries_sent for record in voice.calls] == [0, 1]
+    assert voice.ledger()[1]["history_entries_sent"] == 1
 
 
 def test_a_deployment_that_answers_as_two_models_stops_the_run():
@@ -284,9 +325,10 @@ def test_a_deployment_that_answers_as_two_models_stops_the_run():
     with pytest.raises(ResolvedModelDisagrees):
         voice.next_turn(a_request(turn=2))
 
-    # The second call is still counted: it happened, and it was charged for.
-    assert voice.budget.model_calls_made == 2
+    # The second call is still recorded: it happened, and it will be charged
+    # for. The charging is the loop's, so what is checked here is the row.
     assert len(voice.calls) == 2
+    assert voice.calls[1].resolved_model == "something-else"
 
 
 def test_the_service_failing_is_a_stop_not_an_exception():
@@ -368,6 +410,7 @@ def test_nothing_of_what_was_said_reaches_the_ledger():
         "resolved_model",
         "input_tokens",
         "output_tokens",
+        "history_entries_sent",
         "price_usd",
         "price_missing",
     }

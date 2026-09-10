@@ -609,12 +609,18 @@ def test_stage_one_is_refused_today_and_says_the_amount_is_what_is_missing(
     deployment. What has not happened is anybody writing down an amount for
     stage one, and the refusal says so rather than letting a stale "no model
     exists" stand in for it.
+
+    Said in the preflight's own words rather than the safety check's standing
+    line. Since stage A reaches a separate verdict on a separate amount, that
+    line is no longer a fact about every purchase, so the sentence a reader
+    gets here is the one about stage one's own missing amount.
     """
     result = _preflight(stage_one_plan, catalog, assumptions)
 
     assert result.may_start is False
     assert any(
-        "no amount has been approved" in note for note in result.problems
+        "largest amount that may be spent on stage one" in note
+        for note in result.problems
     )
 
 
@@ -792,14 +798,16 @@ def test_choosing_a_row_reports_the_limit_each_task_would_be_stopped_by(
         assert budget.max_input_tokens > 0
         assert budget.refusal_before_next_call() is None
 
-    # The settings are chosen and the arithmetic is settled, so the only thing
-    # left standing between here and a run is that no amount has been approved.
-    assert result.may_start is False
-    assert [
-        note
-        for note in result.problems
-        if "no amount has been approved" in note
-    ] == result.problems
+    # And with the row chosen and exactly its price approved, nothing is left
+    # standing. That is the whole shape of this gate: the amount is the last
+    # thing, so supplying it here empties the list rather than shortening it.
+    #
+    # Nothing starts because of this. The check is a verdict, not a switch —
+    # the safety blocks it just confirmed are separate code and are still shut,
+    # and this ran against a copy of the plan. The shipped file still carries
+    # no amount and is still refused, which the tool test below runs to see.
+    assert result.problems == []
+    assert result.may_start is True
 
 
 def test_nothing_is_chosen_so_no_limit_is_reported(
@@ -982,6 +990,233 @@ def test_the_stage_one_plan_uses_the_same_five_tasks(stage_one_plan):
     )
 
 
+# ── Stage A: a second verdict on the same gate ────────────────────────────
+#
+# Stage A asks one paid question before the five-task run: can a real
+# deployment be reached, does it choose a tool, and does the turn after that
+# arrive holding the first turn's answer. It runs one task and marks nothing.
+#
+# What these hold in place is that it is a second *verdict* and not a second
+# *gate*. The safety checks are shared and refuse both together; only the
+# amount, the settings and the task count are decided separately. So stage A
+# passing must never make stage one's answer true, and stage one's missing
+# amount must never be the reason stage A cannot go.
+
+
+def test_the_probe_may_go_today_while_stage_one_still_may_not(
+    stage_one_plan, catalog, assumptions
+):
+    """The two verdicts as the shipped plan leaves them, and why they differ.
+
+    Stage A has an amount and settings written down; stage one has neither.
+    Nothing else separates them, which is the point — the same safety checks
+    were run for both, and only the money question came out differently.
+    """
+    result = _preflight(stage_one_plan, catalog, assumptions)
+
+    assert result.may_start is False
+    assert result.probe is not None
+    assert result.probe.may_start is True
+    assert result.probe.problems == []
+
+
+def test_a_safety_block_opening_refuses_the_probe_as_well(
+    stage_one_plan, catalog, assumptions
+):
+    """The shared half is really shared, established by breaking it.
+
+    A gate where the cheap purchase quietly answers on fewer checks than the
+    expensive one is worse than no gate, because the cheap one is the one that
+    runs first.
+    """
+    plan = copy.deepcopy(stage_one_plan)
+    plan["fixed_settings"]["exec_run_open"] = True
+
+    result = _preflight(plan, catalog, assumptions)
+
+    assert result.probe is not None
+    assert result.probe.may_start is False
+    assert any("exec_run" in note for note in result.probe.problems)
+    assert any("exec_run" in note for note in result.problems)
+
+
+def test_the_probe_is_priced_on_one_task_with_no_marking(
+    stage_one_plan, catalog, assumptions
+):
+    """Marking is nearly the whole of stage one's cost, and is not bought here.
+
+    Priced through the same arithmetic as the table rather than a second copy
+    of it, so a correction to stage one's pricing reaches this figure too.
+    """
+    result = _preflight(stage_one_plan, catalog, assumptions)
+    probe = result.probe
+
+    assert probe.task_id == stage_one_plan["task_ids"][0]
+    assert probe.ceiling.grading_usd == 0
+    assert probe.ceiling.total_usd > 0
+    assert probe.most_it_could_cost_usd <= probe.approved_maximum_usd
+
+    # And it really is a fraction of the same row run five times and marked.
+    cheapest_stage_one = min(
+        (
+            option
+            for option in result.options
+            if option.tool_calls_per_attempt == probe.tool_calls_per_attempt
+            and option.max_output_tokens_per_turn
+            == probe.max_output_tokens_per_turn
+        ),
+        key=lambda option: option.most_it_could_cost_usd,
+    )
+    assert probe.most_it_could_cost_usd < cheapest_stage_one.most_it_could_cost_usd
+
+
+def test_the_probe_reports_the_limit_that_would_stop_it(
+    stage_one_plan, catalog, assumptions
+):
+    """An amount says what could be spent; the limit says what stops a run."""
+    probe = _preflight(stage_one_plan, catalog, assumptions).probe
+
+    assert probe.budget is not None
+    # Four tool calls across a first attempt and one retry.
+    assert probe.budget.max_model_calls == 4 * 2
+    assert probe.budget.max_output_tokens == 2_048 * 4 * 2
+    assert probe.budget.refusal_before_next_call() is None
+
+
+def test_an_amount_below_what_the_probe_could_cost_is_refused(
+    stage_one_plan, catalog, assumptions
+):
+    plan = copy.deepcopy(stage_one_plan)
+    plan["cost"]["stage_a_probe"]["approved_maximum_usd"] = Decimal("0.01")
+
+    result = _preflight(plan, catalog, assumptions)
+
+    assert result.probe.may_start is False
+    assert any("is above the" in note for note in result.probe.problems)
+
+
+def test_no_amount_for_the_probe_is_refused_rather_than_borrowed(
+    stage_one_plan, catalog, assumptions
+):
+    """Approval for one purchase is not approval for the other, either way."""
+    plan = copy.deepcopy(stage_one_plan)
+    plan["cost"]["stage_a_probe"]["approved_maximum_usd"] = None
+    plan["cost"]["approved_maximum_usd"] = Decimal("10000")
+
+    result = _preflight(plan, catalog, assumptions)
+
+    assert result.probe.may_start is False
+    assert any(
+        "largest amount that may be spent on the stage A probe" in note
+        for note in result.probe.problems
+    )
+
+
+def test_one_tool_call_cannot_answer_the_question_and_is_refused(
+    stage_one_plan, catalog, assumptions
+):
+    """A single call has no second turn, and the second turn is the question."""
+    plan = copy.deepcopy(stage_one_plan)
+    plan["candidate_settings"]["tool_calls_per_attempt"] = [1, 4]
+    plan["cost"]["stage_a_probe"]["chosen_settings"][
+        "tool_calls_per_attempt"
+    ] = 1
+
+    result = _preflight(plan, catalog, assumptions)
+
+    assert result.probe.may_start is False
+    assert any(
+        "arrives holding that call's answer" in note
+        for note in result.probe.problems
+    )
+
+
+def test_settings_nobody_priced_are_refused(
+    stage_one_plan, catalog, assumptions
+):
+    plan = copy.deepcopy(stage_one_plan)
+    plan["cost"]["stage_a_probe"]["chosen_settings"][
+        "max_output_tokens_per_turn"
+    ] = 3_000
+
+    result = _preflight(plan, catalog, assumptions)
+
+    assert result.probe.may_start is False
+    assert any(
+        "not among the candidates" in note for note in result.probe.problems
+    )
+
+
+def test_the_offered_tools_are_read_from_the_probe_and_not_from_the_plan(
+    stage_one_plan, catalog, assumptions, monkeypatch
+):
+    """A list in a document is a claim; the tuple in the code is what is sent.
+
+    Established by changing the code and leaving the document alone. The plan
+    says where the tools come from and nothing more, so a probe that gained
+    ``finalize`` fails this check even though nobody edited the plan.
+    """
+    import core.agentic_v2_stage_a_probe as probe_module
+
+    assert (
+        stage_one_plan["cost"]["stage_a_probe"]["tools_come_from"]
+        == "core/agentic_v2_stage_a_probe.py PROBE_TOOLS"
+    )
+
+    clean = _preflight(stage_one_plan, catalog, assumptions).probe
+    assert clean.tools_offered == probe_module.PROBE_TOOLS
+
+    monkeypatch.setattr(
+        probe_module,
+        "PROBE_TOOLS",
+        ("capabilities_query", "finalize"),
+    )
+    widened = _preflight(stage_one_plan, catalog, assumptions).probe
+
+    assert widened.may_start is False
+    assert any("finalize" in note for note in widened.problems)
+
+
+def test_the_probe_cannot_be_pointed_at_a_task_the_plan_did_not_fix(
+    stage_one_plan, catalog, assumptions
+):
+    """Its task is taken by position, so nobody can choose the easy one."""
+    from core.agentic_v2_stage_one_budget import stage_a_probe_ceiling
+
+    with pytest.raises(ValueError, match="not one of the tasks"):
+        stage_a_probe_ceiling(
+            conditions=StageOneConditions(
+                resource="hjeon-fdpo-foundry-eus2",
+                deployment="gpt-5.4",
+                resolved_model="gpt-5.4",
+                task_ids=tuple(stage_one_plan["task_ids"]),
+                tool_calls_per_attempt=4,
+                max_output_tokens_per_turn=2_048,
+                retry_max_attempts=1,
+                per_task_timeout_seconds=1_200,
+            ),
+            task_id="a-task-nobody-fixed",
+            tasks_by_id=catalog.by_task_id(),
+            assumptions=assumptions,
+        )
+
+
+def test_the_probe_verdict_survives_being_written_down(
+    stage_one_plan, catalog, assumptions
+):
+    written = _preflight(stage_one_plan, catalog, assumptions).as_dict()
+    probe = written["stage_a_probe"]
+
+    assert probe["may_start"] is True
+    assert probe["tools_offered"] == ["capabilities_query", "workspace_apply"]
+    assert probe["most_marking_could_cost_usd"] == "0.00"
+    assert Decimal(probe["most_it_could_cost_usd"]) <= Decimal(
+        probe["approved_maximum_usd"]
+    )
+    # The two verdicts are reported side by side and disagree.
+    assert written["may_start"] is False
+
+
 # ── The tool a person actually runs ────────────────────────────────────────
 
 
@@ -990,7 +1225,10 @@ def test_the_stage_one_plan_uses_the_same_five_tasks(stage_one_plan):
     [
         "batch-runner/scripts/check_agentic_stage_one_ceiling.py",
         "batch-runner/core/agentic_v2_stage_one_budget.py",
+        "batch-runner/core/agentic_v2_stage_a_probe.py",
+        "batch-runner/scripts/run_agentic_stage_a_probe.py",
         "batch-runner/experiments/execution_envelope/agentic_stage_one_plan.yaml",
+        ".github/workflows/agentic-v2-stage-a-probe.yml",
     ],
 )
 def test_the_new_files_are_in_the_repository(relative):
@@ -1025,9 +1263,68 @@ def test_running_the_tool_refuses_and_prints_the_table():
 
     assert finished.returncode == 1, finished.stdout + finished.stderr
     assert "What each candidate setting could cost at most" in finished.stdout
-    assert "no amount has been approved" in finished.stdout
+    assert (
+        "nobody has written down the largest amount that may be spent on "
+        "stage one" in finished.stdout
+    )
     # The dispatcher's real ceiling, read from code, must reach the report.
     assert str(read_dispatcher_limits().max_total_calls) in finished.stdout
+
+
+def test_the_probe_flag_follows_the_probe_s_verdict_and_says_so():
+    """A green light for stage A, printed in the same report that refuses stage one.
+
+    Two verdicts in one place is the risk this covers: a reader who sees a zero
+    exit could take it for permission to run the five tasks. The report says
+    plainly that it is not, and the default form of the same command still
+    refuses.
+    """
+    finished = subprocess.run(
+        [sys.executable, str(STAGE_ONE_SCRIPT), "--probe"],
+        cwd=BATCH_RUNNER_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+
+    assert finished.returncode == 0, finished.stdout + finished.stderr
+    assert "Every stage A condition is met" in finished.stdout
+    assert "separate purchase" in finished.stdout
+    # The refusal of the larger purchase is printed by the same run.
+    assert (
+        "nobody has written down the largest amount that may be spent on "
+        "stage one" in finished.stdout
+    )
+
+
+def test_the_probe_is_reported_whichever_form_of_the_command_is_run():
+    """The figures are the same either way; only the exit code follows a side."""
+    default = subprocess.run(
+        [sys.executable, str(STAGE_ONE_SCRIPT), "--json"],
+        cwd=BATCH_RUNNER_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+    probed = subprocess.run(
+        [sys.executable, str(STAGE_ONE_SCRIPT), "--json", "--probe"],
+        cwd=BATCH_RUNNER_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+
+    assert default.returncode == 1
+    assert probed.returncode == 0
+    assert default.stdout == probed.stdout
+
+    import json
+
+    probe = json.loads(default.stdout)["stage_a_probe"]
+    assert probe["may_start"] is True
+    assert probe["task_id"] == load_stage_one_plan(STAGE_ONE_PLAN_PATH)[
+        "task_ids"
+    ][0]
 
 
 def test_the_tool_can_report_itself_as_json():

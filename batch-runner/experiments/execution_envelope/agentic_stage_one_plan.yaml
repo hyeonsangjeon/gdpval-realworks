@@ -160,6 +160,42 @@ cost:
     tool_calls_per_attempt: null
     max_output_tokens_per_turn: null
 
+  # ── Stage A: the one paid question that comes before the run above ──────
+  #
+  # Stage A is not a fifth of stage one and is not priced as one. It asks a
+  # single thing — can a real deployment be reached, does it choose a tool, and
+  # does the turn after that arrive holding the first turn's answer — on one
+  # task, and it marks nothing. Marking is about 2504 of the cheapest stage-one
+  # row's 2543 dollars, so a figure carrying a share of it would be almost
+  # entirely for work this does not do.
+  #
+  # The figure below is not copied from anywhere. The free check works it out
+  # from the same arithmetic as the table above, with two things changed: one
+  # task instead of five, and no marking. At 4 tool calls and 2048 tokens a
+  # turn that is 0.47 to run and 0.59 with the safety multiplier, against the
+  # one dollar written here.
+  #
+  # Which task is not chosen here either. It is the first of the five fixed
+  # above, taken by position in core/agentic_v2_stage_one_budget.py, so the
+  # probe cannot be quietly pointed at whichever one looks easiest.
+  #
+  # The cheapest row is deliberate. Four calls is enough for a model to spend a
+  # turn orienting and still have a second turn that must react to the first
+  # one's answer, which is the whole question. Stage A is not trying to produce
+  # good work, so paying for longer replies would buy nothing it is asking
+  # about.
+  stage_a_probe:
+    approved_maximum_usd: 1.00
+    chosen_settings:
+      tool_calls_per_attempt: 4
+      max_output_tokens_per_turn: 2048
+
+    # Read from core/agentic_v2_stage_a_probe.py rather than declared here. A
+    # list written in a file is a claim; the check compares the tuple the probe
+    # will actually offer, so a probe that gained finalize would fail this even
+    # if nobody updated the document.
+    tools_come_from: "core/agentic_v2_stage_a_probe.py PROBE_TOOLS"
+
   # The written guesses the figures rest on. These are the same ones the
   # three-place comparison uses, taken from
   # experiments/execution_envelope/advance_check_plan.yaml so the two cannot
@@ -169,12 +205,19 @@ cost:
   # One of those guesses is borrowed rather than measured here: the length of
   # the standing instructions. Stage one will have its own wording, which does
   # not exist yet, so the three-place comparison's figure stands in for it. That
-  # figure is now measured rather than written down — the comparison renders the
-  # prompt each of its run places really sends and takes the widest, which is
-  # 5020 characters, where it used to say 1068. Borrowing it moved the cheapest
-  # row here from 3.24 to 3.32 to run. The wording is sent on every turn, so if
-  # stage one's own instructions turn out longer than the widest of those three,
-  # this must be measured again before the figures are trusted.
+  # figure is measured rather than written down — the comparison renders the
+  # prompt each of its run places really sends, takes the widest, and adds the
+  # sections its runner builds around it. The wording is sent on every turn, so
+  # if stage one's own instructions turn out longer than the widest of those
+  # three, this must be measured again before the figures are trusted.
+  #
+  # No figure for it is repeated here on purpose. It has already moved twice —
+  # 1068 written down, then 5020 measured, then 7307 once the sections nobody
+  # had counted were counted — and each move changed the cheapest row above
+  # (3.24, then 3.32, then 3.37 to run). A number copied into this sentence is
+  # a number that goes stale the next time that happens without anything
+  # noticing, which is exactly what it did. The live one is in the file named
+  # below, and the free check reads it from there.
   assumptions_come_from: "experiments/execution_envelope/advance_check_plan.yaml"
 
   # One thing is NOT taken from that file: how much a single tool result may

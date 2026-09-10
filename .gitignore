@@ -136,6 +136,15 @@ batch-runner/scripts/*
 # tests/test_dev_host_definition.py.
 !batch-runner/scripts/check_dev_host_definition.py
 
+# The only thing in the repository that spends money on Agentic Sandbox V2, and
+# it spends it once. It has to be committed because it cannot be run from a
+# checkout at all: the client factory refuses static credentials, so the only
+# place it works is a workflow job holding a federated token -- and that job
+# runs what the repository contains. Its --dry-run path is the same code minus
+# the network and runs in a pull request. Held by
+# tests/test_run_agentic_stage_a_probe.py.
+!batch-runner/scripts/run_agentic_stage_a_probe.py
+
 
 # Experiment report HTML (skews GitHub language stats)
 batch-runner/results/*/report/report.html

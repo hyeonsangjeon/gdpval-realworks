@@ -46,7 +46,7 @@ import dataclasses
 from dataclasses import dataclass, field
 from decimal import Decimal, ROUND_CEILING
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from core.agentic_v2_tools import AgenticV2ToolDispatcher
 from core.execution_envelope_cost import (
@@ -263,6 +263,54 @@ def stage_one_ceiling(
         conditions_by_environment={place: conditions.as_run_conditions()},
         tasks_by_id=tasks_by_id,
         assumptions=stage_one_assumptions,
+        prices=prices,
+    )
+
+
+#: The one task stage A's probe runs, chosen by position rather than by name.
+#:
+#: First of the five the plan already fixed, so the probe cannot be pointed at
+#: a task picked for being easy. Which five was decided in
+#: ``core/execution_envelope_tasks.py`` from a catalogue holding no score, and
+#: stage A does not re-open that.
+STAGE_A_PROBE_TASK_INDEX = 0
+
+
+def stage_a_probe_ceiling(
+    *,
+    conditions: StageOneConditions,
+    task_id: str,
+    tasks_by_id: Mapping[str, CatalogTask],
+    assumptions: CostAssumptions,
+    limits: DispatcherLimits | None = None,
+    prices: Mapping[str, ModelPrice] | None = None,
+) -> CostCeiling:
+    """What one task costs to run when nothing is marked afterwards.
+
+    Stage A is not the stage-one run and must not be priced as a fifth of it.
+    It asks one question — can a real deployment be reached, and does the
+    second turn carry the first turn's tool result — on one task, producing
+    nothing to mark. Marking is $2,504 of the cheapest row's $2,543, so a
+    figure that carried a share of it would be almost entirely for work the
+    probe does not do, and approving that figure would be approving the
+    stage-one run by another name.
+
+    The two things that differ are passed to the same arithmetic rather than
+    written down again, so a correction to stage one's pricing reaches this.
+    """
+    if task_id not in conditions.task_ids:
+        raise ValueError(
+            f"{task_id} is not one of the tasks the plan fixed, so running it "
+            "would be running work chosen after the plan was written"
+        )
+    return stage_one_ceiling(
+        conditions=dataclasses.replace(conditions, task_ids=(task_id,)),
+        tasks_by_id=tasks_by_id,
+        # The probe reaches neither finalize nor the grader. That is checked
+        # against the probe's own tool list rather than assumed here; this only
+        # says the figure does not include marking.
+        assumptions=dataclasses.replace(assumptions, grading_required=False),
+        limits=limits,
         prices=prices,
     )
 
@@ -523,6 +571,14 @@ class StageOnePreflight:
 
     approved_maximum_usd: Decimal | None = None
     dispatcher_limits: DispatcherLimits | None = None
+    probe: "StageAProbePreflight | None" = None
+    """Stage A's separate verdict, on the one paid question that comes first.
+
+    A second verdict rather than a second gate. Stage A and stage one rest on
+    the same safety checks and are refused together by any of them; what
+    differs is the amount, the settings and the number of tasks, so only those
+    are decided separately. Nothing here can make :attr:`may_start` true.
+    """
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -544,7 +600,69 @@ class StageOnePreflight:
                 if self.dispatcher_limits
                 else None
             ),
+            "stage_a_probe": self.probe.as_dict() if self.probe else None,
         }
+
+
+@dataclass
+class StageAProbePreflight:
+    """Whether stage A's one paid question may be asked, and every reason not.
+
+    Kept apart from stage one's verdict because they are different purchases.
+    Stage one runs five tasks and marks them; stage A runs one and marks
+    nothing. An amount approved for either is not approval for the other, and
+    holding one figure to both would let the smaller purchase be waved through
+    on the larger one's approval — or, just as badly, the smaller one be
+    blocked because nobody has yet decided about the larger.
+    """
+
+    may_start: bool
+    problems: list[str] = field(default_factory=list)
+    task_id: str | None = None
+    tools_offered: tuple[str, ...] = ()
+    tool_calls_per_attempt: int | None = None
+    max_output_tokens_per_turn: int | None = None
+    ceiling: Any = None
+    approved_maximum_usd: Decimal | None = None
+    budget: StageOneBudget | None = None
+
+    @property
+    def most_it_could_cost_usd(self) -> Decimal | None:
+        return self.ceiling.total_usd if self.ceiling is not None else None
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "may_start": self.may_start,
+            "problems": list(self.problems),
+            "task_id": self.task_id,
+            "tools_offered": list(self.tools_offered),
+            "chosen_settings": {
+                "tool_calls_per_attempt": self.tool_calls_per_attempt,
+                "max_output_tokens_per_turn": self.max_output_tokens_per_turn,
+            },
+            "most_it_could_cost_usd": (
+                _money(self.most_it_could_cost_usd)
+                if self.most_it_could_cost_usd is not None
+                else None
+            ),
+            "most_running_could_cost_usd": (
+                _money(self.ceiling.running_usd)
+                if self.ceiling is not None
+                else None
+            ),
+            "most_marking_could_cost_usd": (
+                _money(self.ceiling.grading_usd)
+                if self.ceiling is not None
+                else None
+            ),
+            "approved_maximum_usd": (
+                _money(self.approved_maximum_usd)
+                if self.approved_maximum_usd is not None
+                else None
+            ),
+            "budget": self.budget.as_dict() if self.budget else None,
+        }
+
 
 
 def load_stage_one_plan(path: Any = None) -> dict:
@@ -566,7 +684,20 @@ def load_stage_one_plan(path: Any = None) -> dict:
     return raw
 
 
-def check_stage_one_cannot_reach_a_model() -> list[str]:
+#: What a clean safety check reports when nobody has approved anything for the
+#: five-task run: not a finding, a standing fact about where stage one stands.
+STAGE_ONE_HAS_NO_APPROVED_AMOUNT = (
+    "stage one cannot start because no amount has been approved for it. A "
+    "real model can now be reached — core.agentic_v2_model_voice."
+    "AzureFoundryVoice asks a Foundry deployment — but the seam refuses "
+    "without a budget and the loop refuses a paid voice on a run that "
+    "carries none. Approving an amount below is what removes this"
+)
+
+
+def check_stage_one_cannot_reach_a_model(
+    *, include_amount_note: bool = True
+) -> list[str]:
     """Confirm nothing can put a real model into the loop without an amount.
 
     The loop exists: :func:`core.agentic_v2_conversation.run_model_conversation`
@@ -593,6 +724,14 @@ def check_stage_one_cannot_reach_a_model() -> list[str]:
     worth keeping narrow: can anything reach a model *by accident*.
 
     A comment could claim either refusal and be wrong, so both are exercised.
+
+    ``include_amount_note`` decides whether a clean result is reported as a
+    problem. It is one by default, because a caller asking this on its own is
+    asking "may stage one go", and the answer is no while no amount is on
+    record. A caller that decides about amounts itself — the preflight, which
+    reaches a separate verdict for stage A on a separate amount — asks for the
+    safety findings alone, so that stage one's missing amount is not made into
+    a reason stage A cannot proceed.
     """
     import inspect
 
@@ -720,13 +859,173 @@ def check_stage_one_cannot_reach_a_model() -> list[str]:
 
     if problems:
         return problems
-    return [
-        "stage one cannot start because no amount has been approved for it. A "
-        "real model can now be reached — core.agentic_v2_model_voice."
-        "AzureFoundryVoice asks a Foundry deployment — but the seam refuses "
-        "without a budget and the loop refuses a paid voice on a run that "
-        "carries none. Approving an amount below is what removes this"
-    ]
+    return [STAGE_ONE_HAS_NO_APPROVED_AMOUNT] if include_amount_note else []
+
+
+def check_stage_a_probe(
+    plan: Mapping[str, Any],
+    *,
+    shared_problems: Sequence[str],
+    tasks_by_id: Mapping[str, CatalogTask],
+    assumptions: CostAssumptions,
+    limits: DispatcherLimits | None = None,
+    prices: Mapping[str, ModelPrice] | None = None,
+) -> StageAProbePreflight:
+    """Whether stage A's one paid question may be asked yet.
+
+    Starts from everything that would stop the five-task run for reasons that
+    have nothing to do with how many tasks it runs — the safety blocks, the
+    shut command tool, the fixed model. Stage A is subject to all of them. What
+    it decides for itself is only what is genuinely its own: one task rather
+    than five, no marking, a narrower tool list, and its own amount.
+    """
+    problems = list(shared_problems)
+
+    fixed = dict(plan.get("fixed_settings") or {})
+    model = dict(plan.get("model") or {})
+    resource = str((dict(plan.get("azure_connection") or {})).get("account") or "")
+    task_ids = tuple(str(value) for value in (plan.get("task_ids") or []))
+
+    # Read from the probe's own code, never from the plan. A plan can say the
+    # probe offers a safe list and be out of date; the tuple below is the one
+    # that will be handed to the model.
+    tools: tuple[str, ...] = ()
+    try:
+        from core.agentic_v2_stage_a_probe import PROBE_TOOLS, check_probe_tools
+
+        tools = tuple(PROBE_TOOLS)
+        problems.extend(check_probe_tools(tools))
+    except ImportError as error:  # pragma: no cover - defensive
+        problems.append(
+            "the stage A probe could not be loaded, so which tools it would "
+            f"offer a model cannot be established: {error}"
+        )
+
+    task_id: str | None = None
+    if len(task_ids) <= STAGE_A_PROBE_TASK_INDEX:
+        problems.append(
+            "the plan names too few tasks for the stage A probe to take the "
+            f"{STAGE_A_PROBE_TASK_INDEX + 1}th of them"
+        )
+    else:
+        task_id = task_ids[STAGE_A_PROBE_TASK_INDEX]
+
+    block = dict((dict(plan.get("cost") or {})).get("stage_a_probe") or {})
+    chosen_raw = dict(block.get("chosen_settings") or {})
+    chosen_calls = chosen_raw.get("tool_calls_per_attempt")
+    chosen_output = chosen_raw.get("max_output_tokens_per_turn")
+    candidates = dict(plan.get("candidate_settings") or {})
+    call_choices = {
+        int(value) for value in (candidates.get("tool_calls_per_attempt") or [])
+    }
+    output_choices = {
+        int(value)
+        for value in (candidates.get("max_output_tokens_per_turn") or [])
+    }
+
+    if chosen_calls is None or chosen_output is None:
+        problems.append(
+            "no settings have been chosen for the stage A probe, so there is "
+            "nothing to work out what one question would cost"
+        )
+    elif int(chosen_calls) not in call_choices or (
+        int(chosen_output) not in output_choices
+    ):
+        problems.append(
+            f"the stage A probe's settings — {chosen_calls} tool calls and "
+            f"{chosen_output} tokens per turn — are not among the candidates "
+            "the plan offers, so the probe would be run at settings nobody "
+            "priced"
+        )
+    elif int(chosen_calls) < 2:
+        problems.append(
+            "the stage A probe is set to one tool call, which cannot answer "
+            "the question it exists for: whether the turn after a tool call "
+            "arrives holding that call's answer"
+        )
+
+    ceiling = None
+    budget = None
+    if (
+        task_id is not None
+        and chosen_calls is not None
+        and chosen_output is not None
+    ):
+        try:
+            ceiling = stage_a_probe_ceiling(
+                conditions=StageOneConditions(
+                    resource=resource,
+                    deployment=str(model.get("deployment") or ""),
+                    resolved_model=str(model.get("resolved_model") or ""),
+                    task_ids=task_ids,
+                    tool_calls_per_attempt=int(chosen_calls),
+                    max_output_tokens_per_turn=int(chosen_output),
+                    retry_max_attempts=int(fixed.get("retry_max_attempts", 0)),
+                    per_task_timeout_seconds=int(
+                        fixed.get("per_task_timeout_seconds", 1200)
+                    ),
+                ),
+                task_id=task_id,
+                tasks_by_id=tasks_by_id,
+                assumptions=assumptions,
+                limits=limits,
+                prices=prices,
+            )
+        except ValueError as error:
+            problems.append(f"the stage A probe could not be priced: {error}")
+        else:
+            if ceiling.grading_usd:
+                problems.append(
+                    "the stage A probe was priced with marking in it, which "
+                    "means it is not the question it claims to be"
+                )
+            budget = budget_for_one_task(ceiling, task_id)
+
+    approved_raw = block.get("approved_maximum_usd")
+    approved: Decimal | None = None
+    if approved_raw is None:
+        problems.append(
+            "nobody has written down the largest amount that may be spent on "
+            "the stage A probe. It is a separate purchase from stage one and "
+            "is not covered by an amount approved for that"
+        )
+    else:
+        try:
+            approved = Decimal(str(approved_raw))
+        except Exception:
+            problems.append(
+                f"the stage A probe's largest amount, {approved_raw!r}, is not "
+                "a number"
+            )
+        else:
+            if approved <= 0:
+                problems.append(
+                    "the stage A probe's largest amount must be greater than "
+                    "zero"
+                )
+            elif ceiling is not None and ceiling.total_usd > approved:
+                problems.append(
+                    "the most the stage A probe could cost, "
+                    f"{_money(ceiling.total_usd)} United States dollars, is "
+                    f"above the {_money(approved)} written for it"
+                )
+
+    return StageAProbePreflight(
+        may_start=not problems,
+        problems=problems,
+        task_id=task_id,
+        tools_offered=tools,
+        tool_calls_per_attempt=(
+            int(chosen_calls) if chosen_calls is not None else None
+        ),
+        max_output_tokens_per_turn=(
+            int(chosen_output) if chosen_output is not None else None
+        ),
+        ceiling=ceiling,
+        approved_maximum_usd=approved,
+        budget=budget,
+    )
+
 
 
 def run_stage_one_preflight(
@@ -747,7 +1046,13 @@ def run_stage_one_preflight(
         check_agentic_sandbox_v2_blocks_are_intact,
     )
 
-    problems: list[str] = []
+    # Two verdicts come out of this one pass, and most of what they rest on is
+    # the same. Everything that would stop *anything* from asking a model goes
+    # in here; the two verdicts each add what is theirs alone. Collected in one
+    # place rather than checked twice, so a rule cannot come to apply to the
+    # five-task run and quietly not to the one-task probe.
+    shared: list[str] = []
+    problems = shared
     dispatcher_limits = limits if limits is not None else read_dispatcher_limits()
 
     if plan.get("safety_blocks_must_stay_closed") is not True:
@@ -757,7 +1062,10 @@ def run_stage_one_preflight(
             "stay true"
         )
     problems.extend(check_agentic_sandbox_v2_blocks_are_intact())
-    problems.extend(check_stage_one_cannot_reach_a_model())
+    # The findings only. Whether an amount is on record is asked separately of
+    # each verdict below, against that verdict's own amount, because stage one
+    # and stage A are different purchases and neither approves the other.
+    problems.extend(check_stage_one_cannot_reach_a_model(include_amount_note=False))
 
     fixed = dict(plan.get("fixed_settings") or {})
     if fixed.get("exec_run_open") is not False:
@@ -839,6 +1147,11 @@ def run_stage_one_preflight(
                 f"ceiling of {dispatcher_limits.max_total_calls} tool calls, "
                 "so there is nothing that could be run"
             )
+
+    # From here on the two verdicts part company. Everything above is now
+    # settled and shared; ``problems`` becomes stage one's own list, and the
+    # probe gets its own built from the same starting point.
+    problems = list(shared)
 
     cost = dict(plan.get("cost") or {})
     chosen_raw = dict(cost.get("chosen_settings") or {})
@@ -927,6 +1240,15 @@ def run_stage_one_preflight(
                     "approved"
                 )
 
+    probe = check_stage_a_probe(
+        plan,
+        shared_problems=shared,
+        tasks_by_id=tasks_by_id,
+        assumptions=assumptions,
+        limits=dispatcher_limits,
+        prices=prices,
+    )
+
     return StageOnePreflight(
         may_start=not problems,
         problems=problems,
@@ -935,6 +1257,7 @@ def run_stage_one_preflight(
         chosen_budget=chosen_budget,
         approved_maximum_usd=approved,
         dispatcher_limits=dispatcher_limits,
+        probe=probe,
     )
 
 
@@ -1000,4 +1323,61 @@ def describe_stage_one_preflight(result: StageOnePreflight) -> list[str]:
             lines.append(f"  - {note}")
     else:
         lines.append("Every stage-one condition is met.")
+    if result.probe is not None:
+        lines.append("")
+        lines.extend(describe_stage_a_probe(result.probe))
+    return lines
+
+
+def describe_stage_a_probe(probe: StageAProbePreflight) -> list[str]:
+    """The stage A verdict, said in full next to stage one's rather than
+    instead of it."""
+    lines = [
+        "Stage A — one paid question, before the five-task run above",
+        "-" * 74,
+        "One task, no marking, and the tools below. It asks whether a real "
+        "deployment",
+        "chooses a tool and whether the turn after that arrives holding the "
+        "first",
+        "turn's answer. Nothing it produces is graded.",
+        "",
+    ]
+    if probe.task_id:
+        lines.append(f"  task           {probe.task_id}")
+    lines.append(
+        "  tools offered  "
+        + (", ".join(probe.tools_offered) or "(none)")
+        + "   (read from the probe's own code)"
+    )
+    if probe.tool_calls_per_attempt is not None:
+        lines.append(
+            f"  settings       {probe.tool_calls_per_attempt} tool calls, "
+            f"{probe.max_output_tokens_per_turn} tokens per turn"
+        )
+    if probe.ceiling is not None:
+        lines.append(
+            f"  at most        ${_money(probe.ceiling.running_usd)} to run, "
+            f"${_money(probe.ceiling.grading_usd)} to mark, "
+            f"${_money(probe.ceiling.total_usd)} in total"
+        )
+    if probe.approved_maximum_usd is not None:
+        lines.append(
+            f"  approved       ${_money(probe.approved_maximum_usd)}"
+        )
+    if probe.budget is not None:
+        lines.append(
+            f"  stopped by     at most {probe.budget.max_model_calls} model "
+            f"calls, {probe.budget.max_input_tokens} tokens sent, "
+            f"{probe.budget.max_output_tokens} tokens received"
+        )
+    lines.append("")
+    if probe.problems:
+        lines.append("The stage A probe must not start yet, because:")
+        for note in probe.problems:
+            lines.append(f"  - {note}")
+    else:
+        lines.append(
+            "Every stage A condition is met. This says nothing about stage "
+            "one, which is a separate purchase held to its own amount."
+        )
     return lines

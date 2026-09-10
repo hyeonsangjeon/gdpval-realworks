@@ -309,6 +309,182 @@ runs all three refusals rather than reading them.
 `experiments/execution_envelope/agentic_stage_one_plan.yaml`, a client built
 through `core/azure_ai_clients.py`, and a probe that wires the two to the loop
 while reaching neither `finalize` nor the grader.
+
+### Stage A — approved and built, 2026-09-10. Still not passed.
+
+Two of the three things above are done. The third is the paid call itself.
+
+**The amount.** `cost.stage_a_probe.approved_maximum_usd` is $1.00, against a
+priced ceiling of **$0.59** — $0.47 to run, $0.00 to mark, 8 model calls at
+most, at the cheapest candidate row (4 tool calls, 2,048 tokens a turn). The
+figure is not copied from anywhere: `stage_a_probe_ceiling()` reuses the same
+arithmetic the 24-row table above comes from, with exactly two things changed —
+one task instead of five, and `grading_required=False` — so a correction to
+stage one's pricing reaches this figure too. Stage one's own
+`approved_maximum_usd` is untouched and still `null`.
+
+Four calls is a deliberate floor rather than economising. It is the smallest
+setting that leaves a model room to spend a turn orienting and still have a
+later turn that must react to an earlier one's answer, which is the entire
+question. Paying for longer replies would buy nothing stage A is asking about.
+
+**The probe.** `core/agentic_v2_stage_a_probe.py` offers two tools —
+`capabilities_query` and `workspace_apply` — and not the eighth.
+`check_probe_tools()` raises `ProbeToolsAreWrong` **before the first call** if
+`finalize` or `exec_run` ever appears, so the cheapest moment to catch a probe
+that could reach the grader is the one it is caught at. The instructions name
+no tool: a probe that tells a model to call `capabilities_query` and then
+reports that it called `capabilities_query` has established that models follow
+instructions, not that they choose.
+
+**One gate, two verdicts.** `run_stage_one_preflight` collects the safety
+findings once and hands the same list to both verdicts. Stage A decides for
+itself only what is genuinely its own — one task, no marking, its narrower tool
+list, its own amount. Held in place by tests that break a safety block and
+require *both* verdicts to turn red, and that give stage one $10,000 while
+leaving stage A's amount empty and require stage A to refuse anyway.
+`scripts/check_agentic_stage_one_ceiling.py --probe` exits 0; the same command
+without the flag still exits 1 and prints stage one's refusal in the same
+report.
+
+**A double charge was found and removed.** Both `AzureFoundryVoice.next_turn`
+and `run_model_conversation` were calling `budget.record(...)`, so every paid
+call was charged twice and an approved run would have stopped at half the calls
+it paid for — looking, from the outside, like a model that gave up. The loop is
+now the only place that charges, matching what `ScriptedVoice` already did. At
+stage A's settings this was not cosmetic: a two-call budget exhausted after one
+call, and the second turn is the whole question.
+
+**Each call now records what it carried.** `history_entries_sent` goes onto
+every ledger row, so "the second turn saw the first turn's answer" is a fact
+about a request that was paid for rather than something inferred afterwards
+from its token count. Two turns that each started from nothing read as `[0, 0]`
+and fail, which is the failure it exists to catch.
+
+**Proven end to end without paying.** A stand-in client, the real voice, the
+real dispatcher, the real fixture backend: the model asks for
+`workspace_apply`, a file is really written to disk, and the request after it
+goes out carrying that answer — `history_entries_sent` of `[0, 1, 2]`. 19 tests
+in `tests/test_agentic_v2_stage_a_probe.py`, none of which reach a network.
+
+**Still not done.** Nothing has asked a real model. What is left is a client
+built through `core/azure_ai_clients.AzureAIClientFactory` on the `project-ci`
+route profile, and the one paid run.
+
+### Stage A — the asking built, 2026-09-10. The one call still not made.
+
+**It cannot be a command someone runs here, and that is a property of the
+code.** `AzureAIClientFactory` calls `_reject_static_azure_credential_env`
+before it builds anything and takes its identity from a federated session, so a
+client cannot be built at all outside a job holding `id-token: write`. On this
+box `AzureAIClientFactory()` raises `AZURE_AI_ROUTE_PROFILE is required` and no
+Azure environment is configured. The paid run is therefore a workflow —
+`.github/workflows/agentic-v2-stage-a-probe.yml` — and not a local invocation.
+
+**`scripts/run_agentic_stage_a_probe.py`.** Runs the free check first and stops
+on its verdict. Reads the task's wording from the pinned dataset at run time and
+hashes it against the catalogue, because the catalogue holds a hash and never
+the benchmark text — a prompt that changed is a different task, and a different
+task is not the one that was priced. Builds the client through the one reviewed
+place. Checks the resolved route against all three things the plan fixes — the
+account, the project and the route profile — *after* the client exists and
+*before* anything is asked, so a misconfigured dispatch costs nothing. Runs in a
+fresh empty `mkdtemp` directory.
+
+**`--dry-run` is the whole path minus the network**, and it is free for a reason
+rather than by intention: with no Azure environment configured, a client cannot
+be built, so a clean exit is a run that never tried. It reports the same figures
+the gate published, character for character, read back from the verdict's own
+report rather than formatted a second time:
+
+```
+  at most        $0.59 ($0.47 running, $0.00 marking) against the $1.00 approved
+  deployment     gpt-5.4 at hjeon-fdpo-foundry-eus2
+  route          project-ci into project gdpval-realworks
+```
+
+**The exit code answers stage A's question, not "did it work".** Zero needs
+three things together: a model reached, at least two turns, and a later call
+that went out holding an earlier tool's answer. Any one alone is true of a run
+that proved nothing — two turns could each have started from an empty history,
+and reaching a model is only a connection. A model that was reached and declined
+to use a tool exits 1 and is uploaded anyway. That is a finding about the model,
+and stage A collects findings; it does not launder them into successes.
+
+**What survives a paid run** is one row per model call — turn, deployment asked
+for, model that answered, token counts, `history_entries_sent`, and either a
+price or an explicit `price_missing`. Not the benchmark wording, not the model's
+words, no credential, and the route only as its endpoint-free fingerprint. Held
+by tests rather than by reading.
+
+**The workflow cannot be made to spend by accident.** `workflow_dispatch` only —
+no push, pull_request or schedule trigger — the mode defaults to `dry-run`, the
+paid job needs both `inputs.mode == 'paid'` and the free job to have passed, and
+only the paid job holds `id-token: write`. A run is never cancelled part-way,
+because a killed conversation has been charged for turns it would leave no
+record of. The deployment is read from the plan at run time rather than restated
+in the workflow, so the route that gets validated cannot drift from the model
+that gets asked. 33 tests in `tests/test_run_agentic_stage_a_probe.py`, nine of
+them on the workflow file itself.
+
+**The 59 cents were checked against the raw data, not against the check that
+printed them.** A figure produced by the code that also approves it is one
+number wearing two hats. Worked out again by hand from the sources instead:
+`1.25`/`5.00` per million from `model_price_table.json`, `3.0` characters a
+token and `7307` characters of instruction and the `1.25` multiplier from
+`advance_check_plan.yaml`, `1589` characters of task from the catalogue, `65536`
+bytes of tool result from the dispatcher's own dataclass, and 4 calls across 2
+attempts from the plan. That gives 310,456 tokens sent and 16,384 received, and
+`$0.46999` before the multiplier and `$0.5874875` after it — the same figures to
+the last digit, and the same token counts the free check prints.
+
+It also caught something. The arithmetic only lands there with `7307`
+characters of instruction; at the `5020` the plan's own prose still claimed, it
+would be `$0.46`. That sentence had gone stale when the sections nobody had
+counted were counted, and it took the cheapest stage-one row with it — `3.37` to
+run, where the prose said `3.32`. The figures were never wrong; the sentence
+describing where they came from was. It now names the history rather than a
+number, because a number copied into prose is a number that goes stale the next
+time the measurement moves, which is what happened.
+
+**The route check would have refused the run, and the fault was in the check.**
+Found by resolving the route the workflow really configures rather than the one
+the tests imagined. Under `project-ci` the selection for inference comes back as
+an account-scoped `direct-v1` URL derived from the project endpoint — it carries
+the account and a `project` of `None`. Checking the selection's project alone
+therefore refused the one configuration the paid job uses, after the Azure
+sign-in and before anything was asked. No money, but a dispatch spent reporting
+a fault that was in the check.
+
+The project the run is held to is the one the client was built from, so it is
+read from those settings when the selected route does not carry it. Not a
+fallback that looks away: a wrong project endpoint is still refused, and a
+project that *nothing* names is refused too, with a different sentence, because
+an unconfirmable project is exactly what a quiet skip would hide. Four more
+tests, all three cases exercised against the real resolution and not a stand-in.
+
+**And the job would not have got as far as that check.** Turning
+`AZURE_AI_REQUIRE_EXPECTED_IDENTITIES` on makes `AzureAIRouteSettings.from_env`
+demand every name its own table lists for the profile, and `project-ci` lists
+three. The job passed two. `from_env` therefore raises
+`required Azure AI endpoint identities are missing: AZURE_AI_EXPECTED_DIRECT_ACCOUNT`
+— after the federated sign-in, before the route check, before the question.
+Measured by handing the step's exact environment to `from_env`, not by reading
+it: two names in, that error; three names in, a client, `settings.project.project`
+of `gdpval-realworks`, and the account-scoped route above.
+
+Every other paid workflow in the repository passes all three. This one is the
+only one that did not, which is what a first workflow is for. The fix is one
+line in each of two steps, but the test that came with it is not about those
+two lines: it reads the required names out of `REQUIRED_IDENTITY_ENV_BY_PROFILE`
+and checks every step that switches the demand on can meet it. A profile that
+grows a fourth requirement now fails on the day it grows one, rather than on
+the day somebody dispatches. Run against the file as it stood, it names both
+steps and the missing variable.
+
+**Still not done.** The dispatch has not been made and no model has been asked.
+Everything that decides whether it may be is now built, tested and refusable.
+
 ### Stage B — not yet run
 ### Stage C — not yet run
 ### Stage D — not yet run
