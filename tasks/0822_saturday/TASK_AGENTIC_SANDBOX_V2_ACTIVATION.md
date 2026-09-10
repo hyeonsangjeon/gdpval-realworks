@@ -874,6 +874,24 @@ so *"the signed policy still validates"* is not the same statement as *"the
 containment is intact"*, and a launcher built by reading the signed policy would
 enforce well under half of it.
 
+**And a fourth partial copy, found while checking the third.**
+`core/agentic_v2_microvm.py` reports `network`, `rootfs_mode` and `workdir` at
+the top level of its readiness report, and writes them as the string literals
+`"none"`, `"read-only"` and `"ephemeral-quota"`. It imports `canonical_sha256`
+from the substrate and nothing else — not `REQUIRED_MICROVM_POLICY` — and
+`validate_microvm_readiness_report` checks the report against the same literals
+rather than against the rules. So three rules are stated a fourth time, by a
+module that would go on stating them if the rules changed underneath it.
+
+This is not currently a hole that hides anything: all three are among the four
+the signed policy mirrors, so weakening one is still caught by
+`containment_rules_that_disagree` — the stale report would appear beside a
+failure rather than instead of one. It is left alone here because C0's scope is
+a missing rule and not a drift surface, and because the fix belongs to the
+module that will read the policy for real. **C1 imports
+`REQUIRED_MICROVM_POLICY` and restates no value of it**, and takes this one with
+it rather than adding a fifth.
+
 **Cost.** None.
 
 **Result — done, 2026-09-10.** `credentials: "none-inherited"` is the eleventh
@@ -899,6 +917,15 @@ launcher might pass to something C1 has to, and C3's attack on this rule checks
 the descriptors rather than trusting the sentence. **A rule written down on the
 strength of a mechanism that turns out to work differently is the same fault
 this stage exists to fix**, arriving one layer down.
+
+The same reading corrected a second thing C1 would have built on: the device
+table below said four, and the fourth was `memory-hotplug`, which does not exist
+in this Firecracker. No such key in v1.13.1's configuration fixture and no
+occurrence of *hotplug* anywhere in its API specification. Balloon is the
+runtime-memory mechanism, and the table had it twice under two names. Three
+checks in this stage would have held against nothing — attack 7, the jailer's
+descriptors, and this — and all three were found by reading the sources the plan
+cites rather than the plan.
 
 **What was deliberately not renumbered.** Three records still say six or nine:
 `CHANGELOG.md`, `TASK_AGENTIC_SANDBOX_V2_FOUNDATION.md` — which says it in five
@@ -935,7 +962,7 @@ Each of the eleven policy keys maps to something a reader can point at:
 | `on_breach: stop-and-report` | the launcher's error path returns the breached rule by name |
 | `required: true` | any rule that cannot be expressed is a refusal to launch, never a silent drop |
 
-**Four devices that are not in the policy and can each defeat a rule that is.**
+**Three devices that are not in the policy and can each defeat a rule that is.**
 Read off Firecracker's own configuration fixtures rather than assumed, and named
 here because a launcher that sets every key in the table above and leaves these
 at a default would enforce less than it appears to:
@@ -944,8 +971,28 @@ at a default would enforce less than it appears to:
 |---|---|---|
 | `mmds-config` | `network: none`, by a route that is not a NIC — MMDS is a metadata service the *guest* reads over HTTP, and it is the standard way host-side data is handed to a guest | `null` |
 | `vsock` | `network: none` — a host↔guest socket is a channel whether or not it is a NIC | `null` |
-| `memory-hotplug` | `memory_mib` — memory added after boot is memory the bound never saw | `null` |
-| `balloon` | `memory_mib` — a balloon device reshapes guest memory at runtime | `null` |
+| `balloon` | `memory_mib` — a balloon device reshapes guest memory at runtime, and it is the only mechanism in this Firecracker that does | `null` |
+
+**This table said four until C0 checked it, and the fourth was not real.** It
+listed `memory-hotplug`, on the reasoning that memory added after boot is memory
+the bound never saw. The reasoning is sound and the device is not: v1.13.1's
+configuration fixture has no such key, and its API specification — 43 KB, every
+route — contains no occurrence of *hotplug* at all. The routes are `/balloon`,
+`/boot-source`, `/cpu-config`, `/drives`, `/entropy`, `/logger`,
+`/machine-config`, `/metrics`, `/mmds`, `/mmds/config`, `/network-interfaces`,
+`/snapshot/create`, `/snapshot/load`, `/vsock`, `/vm`, `/vm/config`, `/actions`
+and `/version`. Balloon **is** the runtime-memory mechanism here; the table had
+it twice under two names. A test pinning `memory-hotplug: null` would have
+asserted something about a key Firecracker never emits and passed for that
+reason — the third time in this stage that a check would have held against
+nothing.
+
+**And one route that is not a device.** `/snapshot/load` restores a machine
+whose configuration was decided elsewhere: a snapshot can carry a NIC, a vsock
+or a different memory size, none of which the launcher's own arguments would
+show. It is not in the table because it is not a setting to pin at `null` — it
+is a way in that bypasses the table entirely, so C1's builder emits no snapshot
+route and C3 treats loading one as an escape rather than a configuration.
 
 These get tests of their own in C1, on the same footing as the policy keys. The
 policy is not amended to add them: they are not rules about what the containment

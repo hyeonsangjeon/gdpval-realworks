@@ -141,6 +141,28 @@ entries land under a fresh dated heading the day they merge to `main`.
   strength of a mechanism that turns out to work differently is the fault this
   stage exists to fix, one layer further down.
 
+- **The same reading deleted a device from stage C's plan, because it does not
+  exist.** The plan named four devices a launcher must pin at `null` or lose a
+  rule it appears to enforce: `mmds-config`, `vsock`, `balloon`, and
+  `memory-hotplug`. The reasoning behind the fourth is sound — memory added
+  after boot is memory the bound never saw — and the device is not. Firecracker
+  v1.13.1's own configuration fixture has no such key, and its API
+  specification, 43 KB covering every route, contains no occurrence of *hotplug*
+  at all. Balloon **is** the runtime-memory mechanism in this Firecracker; the
+  table had it twice under two names.
+
+  A test pinning `memory-hotplug: null` would have asserted something about a
+  key Firecracker never emits, and passed for that reason. That is the third
+  check in this stage that would have held against nothing — the credential
+  attack, the jailer's three surviving descriptors, and this — and all three
+  were found by reading the sources the plan cites rather than the plan.
+
+  Added in its place, as a route rather than a device: `/snapshot/load` restores
+  a machine whose configuration was decided elsewhere, so it can carry a NIC, a
+  vsock or a different memory size that the launcher's own arguments would never
+  show. It is not a setting to pin; it is a way in that bypasses the table, and
+  stage C3 treats loading one as an escape rather than a configuration.
+
 - **Three records still say six, and are left saying it.** `CHANGELOG.md`,
   `TASK_AGENTIC_SANDBOX_V2_FOUNDATION.md` and the recorded Azure finding all
   describe a day on which the count was six, or a hashed report that contained
