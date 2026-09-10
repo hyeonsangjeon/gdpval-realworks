@@ -237,7 +237,7 @@ entries land under a fresh dated heading the day they merge to `main`.
 - **A task refused for rate was told it had three attempts, and got one.** Run
   `34485072751` attempted five tasks. Three ended the same way:
 
-      [1/5] 02aa1805-...-02dec146063a (Financial Managers)... ✗
+      [1/5] 02aa1805-...-02dec146063a (Project Management Specialists)... ✗
       the Codex turn failed: stream disconnected before completion: Your
       requests to gpt-5.4 for gpt-5.4 in eastus2 have exceeded rate limit.
 
@@ -287,12 +287,16 @@ entries land under a fresh dated heading the day they merge to `main`.
 
   The waits are 60, 120, then 240 seconds. Sixty first because an Azure OpenAI
   rate limit is counted over a sixty-second window, so trying again inside it
-  fails the same way, sooner, having spent one of three attempts. Above the
-  ceiling sits a stop condition — ten minutes of total waiting per task —
-  so that a provider refusing everything ends the run saying so instead of
-  sleeping through the job's time limit. Each retry clears the failed
-  attempt's files before the wait rather than after it, so a job cancelled
-  mid-wait does not leave them behind looking like the task's answer.
+  fails the same way, sooner, having spent one of three attempts. The run
+  itself shows this: tasks 4 and 5 were refused at 14:00:10 and 14:00:12,
+  one and eight tenths of a second apart, the fifth never having had a window
+  to be allowed in. A retry quicker than the window is that second refusal,
+  paid for out of a budget of three. Above the ceiling sits a stop condition
+  — ten minutes of total waiting per task — so that a provider refusing
+  everything ends the run saying so instead of sleeping through the job's
+  time limit. Each retry clears the failed attempt's files before the wait
+  rather than after it, so a job cancelled mid-wait does not leave them
+  behind looking like the task's answer.
 
   Each attempt is a fresh session and a separate line in the ledger.
   `RETRY_INFRASTRUCTURE` has been in the cost vocabulary since it was written

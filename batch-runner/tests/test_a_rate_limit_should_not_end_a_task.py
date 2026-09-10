@@ -2,7 +2,7 @@
 
 Run `34485072751` attempted five tasks. Three of them ended here:
 
-    [1/5] 02aa1805-...-02dec146063a (Financial Managers)... ✗
+    [1/5] 02aa1805-...-02dec146063a (Project Management Specialists)... ✗
     the Codex turn failed: stream disconnected before completion: Your
     requests to gpt-5.4 for gpt-5.4 in eastus2 have exceeded rate limit.
 
