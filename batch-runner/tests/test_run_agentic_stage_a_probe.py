@@ -384,6 +384,102 @@ def test_every_way_the_route_is_wrong_is_reported_at_once():
     assert len(problems) == 3
 
 
+# ── the route CI actually produces, which is not the one above ────────────
+#
+# Measured rather than imagined. With AZURE_AI_ROUTE_PROFILE=project-ci and a
+# project endpoint configured, the selection for inference comes back as an
+# account-scoped `direct-v1` URL derived from that project endpoint — carrying
+# the account, and `project` of None. Checking the selection's project alone
+# would therefore refuse the one configuration the workflow uses, after the
+# Azure sign-in and before anything was asked: no money, but a dispatch spent
+# reporting a fault that was in the check.
+
+
+def the_route_ci_produces():
+    """What `project-ci` really selects for inference: no project on it."""
+    from core.azure_ai_clients import (
+        AzureAIWorkload,
+        ClassifiedEndpoint,
+        EndpointKind,
+        RouteProfile,
+        RouteSelection,
+    )
+
+    return RouteSelection(
+        profile=RouteProfile.PROJECT_CI,
+        workload=AzureAIWorkload.INFERENCE,
+        endpoint=ClassifiedEndpoint(
+            kind=EndpointKind.DIRECT_V1,
+            url="https://hjeon-fdpo-foundry-eus2.services.ai.azure.com/openai/v1/",
+            account="hjeon-fdpo-foundry-eus2",
+            project=None,
+        ),
+        token_scope="https://ai.azure.com/.default",
+    )
+
+
+def settings_naming(project: str | None):
+    from core.azure_ai_clients import (
+        AzureAIRouteSettings,
+        ClassifiedEndpoint,
+        EndpointKind,
+        RouteProfile,
+    )
+
+    endpoint = None
+    if project is not None:
+        endpoint = ClassifiedEndpoint(
+            kind=EndpointKind.PROJECT,
+            url="https://hjeon-fdpo-foundry-eus2.services.ai.azure.com/"
+            f"api/projects/{project}",
+            account="hjeon-fdpo-foundry-eus2",
+            project=project,
+        )
+    return AzureAIRouteSettings(profile=RouteProfile.PROJECT_CI, project=endpoint)
+
+
+def test_the_route_the_workflow_really_gets_is_accepted():
+    assert (
+        runner.check_route_is_the_one_the_plan_fixed(
+            the_route_ci_produces(),
+            PLAN_CONNECTION,
+            settings=settings_naming("gdpval-realworks"),
+        )
+        == []
+    )
+
+
+def test_a_project_endpoint_for_somebody_else_is_still_refused():
+    """The point of looking further, not a way of looking away."""
+    problems = runner.check_route_is_the_one_the_plan_fixed(
+        the_route_ci_produces(),
+        PLAN_CONNECTION,
+        settings=settings_naming("somebody-elses-project"),
+    )
+
+    assert len(problems) == 1
+    assert "somebody-elses-project" in problems[0]
+
+
+def test_a_project_nothing_names_is_refused_rather_than_skipped():
+    """An unconfirmable project is the case a quiet skip would hide."""
+    problems = runner.check_route_is_the_one_the_plan_fixed(
+        the_route_ci_produces(), PLAN_CONNECTION, settings=settings_naming(None)
+    )
+
+    assert len(problems) == 1
+    assert "nothing to check it against" in problems[0]
+
+
+def test_the_runner_hands_the_check_the_settings_it_built_the_client_from():
+    """Two readings of the environment could disagree; there is only one."""
+    source = RUNNER_PATH.read_text(encoding="utf-8")
+
+    assert "settings = AzureAIRouteSettings.from_env()" in source
+    assert "settings=settings," in source
+    assert "managed.route, connection, settings=settings" in source
+
+
 # ── the command itself ────────────────────────────────────────────────────
 
 

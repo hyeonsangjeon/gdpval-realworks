@@ -447,6 +447,22 @@ describing where they came from was. It now names the history rather than a
 number, because a number copied into prose is a number that goes stale the next
 time the measurement moves, which is what happened.
 
+**The route check would have refused the run, and the fault was in the check.**
+Found by resolving the route the workflow really configures rather than the one
+the tests imagined. Under `project-ci` the selection for inference comes back as
+an account-scoped `direct-v1` URL derived from the project endpoint — it carries
+the account and a `project` of `None`. Checking the selection's project alone
+therefore refused the one configuration the paid job uses, after the Azure
+sign-in and before anything was asked. No money, but a dispatch spent reporting
+a fault that was in the check.
+
+The project the run is held to is the one the client was built from, so it is
+read from those settings when the selected route does not carry it. Not a
+fallback that looks away: a wrong project endpoint is still refused, and a
+project that *nothing* names is refused too, with a different sentence, because
+an unconfirmable project is exactly what a quiet skip would hide. Four more
+tests, all three cases exercised against the real resolution and not a stand-in.
+
 **Still not done.** The dispatch has not been made and no model has been asked.
 Everything that decides whether it may be is now built, tested and refusable.
 

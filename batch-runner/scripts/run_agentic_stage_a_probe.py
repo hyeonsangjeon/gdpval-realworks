@@ -149,7 +149,7 @@ def _verdict(plan_path: Path):
     return plan, result.probe, catalog
 
 
-def check_route_is_the_one_the_plan_fixed(route, connection) -> list[str]:
+def check_route_is_the_one_the_plan_fixed(route, connection, *, settings=None):
     """Every way the resolved route could differ from what was approved.
 
     The plan fixes an account, a project and a route profile. A run that
@@ -160,6 +160,16 @@ def check_route_is_the_one_the_plan_fixed(route, connection) -> list[str]:
 
     All three collected rather than the first returned, so a reader fixing a
     misconfigured dispatch sees the whole of it at once.
+
+    The project needs its own paragraph, because the route selected for
+    inference under ``project-ci`` does not carry one. That profile derives an
+    account-scoped ``direct-v1`` URL from the configured project endpoint and
+    sends inference over it, so the selected endpoint has an account and a
+    ``project`` of ``None`` — while the project it was derived from is still
+    the fact being checked. Where it is, the project endpoint says so, and that
+    is read here rather than assumed away. If neither the selection nor the
+    settings names a project, the run is refused: an unconfirmable project is
+    the case a silent skip would hide.
     """
     problems: list[str] = []
     account = str(connection.get("account") or "")
@@ -171,11 +181,20 @@ def check_route_is_the_one_the_plan_fixed(route, connection) -> list[str]:
             f"the route resolves to account {route.endpoint.account!r}, but "
             f"the plan fixes {account!r}"
         )
-    if project and route.endpoint.project != project:
-        problems.append(
-            f"the route resolves to project {route.endpoint.project!r}, but "
-            f"the plan fixes {project!r}"
-        )
+    if project:
+        configured = getattr(getattr(settings, "project", None), "project", None)
+        found = route.endpoint.project or configured
+        if found is None:
+            problems.append(
+                f"the plan fixes project {project!r}, but neither the route "
+                "that was selected nor the endpoints it was built from names "
+                "a project, so there is nothing to check it against"
+            )
+        elif found != project:
+            problems.append(
+                f"the route resolves to project {found!r}, but the plan "
+                f"fixes {project!r}"
+            )
     if profile and str(route.profile.value) != str(profile):
         problems.append(
             f"the route profile is {route.profile.value!r}, but the plan "
@@ -318,17 +337,23 @@ def main() -> int:
     )
     print(f"  workspace      {workspace}")
 
-    from core.azure_ai_clients import AzureAIWorkload
+    from core.azure_ai_clients import AzureAIRouteSettings, AzureAIWorkload
     from core.llm_client import create_typed_azure_client
+
+    # Read from the environment the factory reads, so the project checked below
+    # is the one the client was actually built from rather than a second
+    # reading that could differ from it.
+    settings = AzureAIRouteSettings.from_env()
 
     managed = create_typed_azure_client(
         AzureAIWorkload.INFERENCE,
         deployment,
+        settings=settings,
         timeout=float(plan["fixed_settings"]["per_task_timeout_seconds"]),
     )
     try:
         wrong_route = check_route_is_the_one_the_plan_fixed(
-            managed.route, connection
+            managed.route, connection, settings=settings
         )
         if wrong_route:
             print(
