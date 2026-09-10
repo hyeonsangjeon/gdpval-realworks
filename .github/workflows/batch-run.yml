@@ -225,7 +225,20 @@ jobs:
   batch-run:
     needs: inspect-mode
     if: needs.inspect-mode.outputs.uses_agentic != 'true' && needs.inspect-mode.outputs.codex_blocked != 'true'
-    runs-on: ubuntu-latest
+    # Every other mode keeps the host it has always had. codex_foundry cannot,
+    # and the reason is measured rather than argued: batch-runner/docs/
+    # codex_sandbox_hosts.json records ubuntu-24.04 -- what `ubuntu-latest`
+    # resolves to -- as user_namespaces_restricted_by_security_policy, and
+    # ubuntu-22.04 as the one host where a command has actually run inside
+    # Codex's sandbox. Sending a Codex batch to `ubuntu-latest` would buy the
+    # turn and then fail at the agent's first command.
+    #
+    # Nothing is relaxed to earn this. 22.04's default posture simply predates
+    # kernel.apparmor_restrict_unprivileged_userns; no sysctl is written and no
+    # capability is added. It is also not permanent -- GitHub is retiring the
+    # image, and that record says so -- so this line is the current answer to
+    # "where can this run", not a claim that the question is closed.
+    runs-on: ${{ needs.inspect-mode.outputs.uses_codex_foundry == 'true' && 'ubuntu-22.04' || 'ubuntu-latest' }}
     timeout-minutes: 360    # max 6 hours
     env:
       EXPERIMENT_YAML_INPUT: ${{ inputs.experiment_yaml }}
@@ -527,6 +540,72 @@ jobs:
           echo "two parsers disagree and that disagreement is itself the fault to"
           echo "report. No model client or cloud credential was used."
           exit 1
+
+      # ── Codex execution host: install, then prove, before anything is paid ──
+      # These three steps run only for codex_foundry and only after both block
+      # steps above, so a dispatch that is about to be refused installs nothing.
+      # They sit before the first Azure step on purpose: every failure they can
+      # produce is a fact about this runner, and a fact about this runner is
+      # worth nothing once a turn has been bought.
+      #
+      # Same stall guard as `Install system dependencies` above -- the mirror
+      # outage that hung five jobs for 5h18m apiece did not care which package
+      # was being fetched.
+      - name: 'Codex: install bubblewrap'
+        if: needs.inspect-mode.outputs.uses_codex_foundry == 'true'
+        run: |
+          set -euo pipefail
+          if command -v bwrap > /dev/null; then
+            echo "bwrap already present: $(command -v bwrap)"
+          else
+            APT_OPTS=(
+              -o Acquire::Retries=3
+              -o Acquire::http::Timeout=30
+              -o Acquire::https::Timeout=30
+              -o DPkg::Lock::Timeout=60
+            )
+            install_bubblewrap() {
+              sudo timeout 240 apt-get "${APT_OPTS[@]}" update -qq || return 1
+              sudo DEBIAN_FRONTEND=noninteractive timeout 420 apt-get \
+                "${APT_OPTS[@]}" install -y --no-install-recommends \
+                bubblewrap || return 1
+            }
+            for attempt in 1 2 3; do
+              if install_bubblewrap; then
+                break
+              fi
+              if [[ "$attempt" -eq 3 ]]; then
+                echo "::error::apt could not install bubblewrap after 3 attempts"
+                exit 1
+              fi
+              echo "::warning::apt attempt $attempt failed; retrying in $((attempt * 60))s"
+              sleep "$((attempt * 60))"
+            done
+          fi
+          echo "bwrap: $(command -v bwrap)  $(bwrap --version 2>&1 | head -1)"
+
+      # Installed is not the same as working, and the difference is the whole
+      # reason this step exists. The diagnostic exits 0 only when it watched a
+      # command run inside the sandbox; every other verdict names the wall.
+      # Without this, a runner image that quietly loses the ability to sandbox
+      # would look exactly like one that has it, right up until the agent's
+      # first command -- after the input tokens are spent.
+      - name: 'Codex: refuse to continue unless this host can isolate'
+        if: needs.inspect-mode.outputs.uses_codex_foundry == 'true'
+        working-directory: batch-runner
+        run: |
+          set -euo pipefail
+          python3 scripts/diagnose_codex_sandbox_host.py
+
+      # If pip left the pinned binary uninstalled, the run would reach step 2
+      # and report runtime_unavailable -- a true statement about this runner and
+      # nothing at all about the deployment. Stop here instead.
+      - name: 'Codex: refuse to continue unless the pinned runtime is installed'
+        if: needs.inspect-mode.outputs.uses_codex_foundry == 'true'
+        working-directory: batch-runner
+        run: |
+          set -euo pipefail
+          python3 -c "from core.codex_runtime_config import require_pinned_runtime; print('pinned runtime:', require_pinned_runtime())"
 
       - name: Validate Azure OIDC identity before remote access
         env:
