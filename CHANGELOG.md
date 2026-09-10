@@ -234,6 +234,42 @@ entries land under a fresh dated heading the day they merge to `main`.
   file is the decision the pin asks to see.
 
 ### Fixed
+- **A stray dotfile cost a task the model had already solved.** On the same
+  run, `34485072751`, task 3 of 5:
+
+      [3/5] 2ea2e5b5-...-93763f28b19d (Computer and Information Systems
+      Managers)... ✗ deliverable filename is invalid or duplicated
+
+  The model had answered by then — the task's own receipt records one model
+  call, 268,999 input tokens and 8,727 output tokens. The answer was collected
+  out of the workspace and refused on the way to disk, and because the saver
+  refuses a *batch* rather than a file, the good files went down with whichever
+  one was bad. Which one that was cannot be recovered: the message named no
+  file, and a task's workspace is deleted when the task ends.
+
+  Two rules had drifted apart. `CodexWorkspace.collect_deliverables` excluded
+  six names by hand — `.codex`, `.git`, `__pycache__`, `.pytest_cache`,
+  `.venv`, `node_modules` — while `_save_files` refuses *any* path component
+  beginning with a dot, plus backslashes, plus a name it has already seen. Four
+  of the collector's six were dot-names, so the intent was the same; the
+  collector had just written it out as a list, and a seventh dot-name passed it
+  and hit the saver. An agent told to build something in a directory writes
+  `.gitignore` and friends without being asked. Neither function had a test.
+
+  The collector now emits only names the saver will accept. Anything with a
+  hidden component is skipped rather than enumerated; `\` joins the NTFS
+  replacement set it was always a member of, so a Linux-legal `q1\q2.md`
+  becomes `q1_q2.md` instead of a refusal; and two files that collide after
+  replacement are numbered — `q1_ (2).md` — rather than one of them killing the
+  task. A test asserts the property directly: whatever the collector produced,
+  the real `_save_files` accepts.
+
+  A refusal that remains now says which file it is about. The collector is not
+  the only producer of deliverables, so the saver still refuses names, and the
+  name comes from the model and goes into a build log: it is `repr`-quoted so a
+  newline cannot forge a log line, and truncated so a long one cannot flood it.
+  The deliberate limit: a name that is too long or too deep for the filesystem
+  is still fatal to its task. It is now diagnosable.
 - **A run that solved a task could not be recorded, because Step 3 had never
   heard of the mode that solved it.** Run `34485072751` is the first
   `codex_foundry` dispatch to reach a model. It passed the config check, the

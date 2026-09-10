@@ -73,17 +73,49 @@ CODEX_TURN_TIMEOUT = int(os.getenv("CODEX_TURN_TIMEOUT", "900"))
 #: interrupt first; only when that produces nothing is the process torn down.
 CODEX_INTERRUPT_GRACE_SECONDS = float(os.getenv("CODEX_INTERRUPT_GRACE", "20"))
 
-#: Files the runtime keeps for its own purposes, which are not deliverables.
+#: Files the runtime keeps for its own purposes, which are not deliverables
+#: and whose names do not begin with a dot. The four that did -- ``.codex``,
+#: ``.git``, ``.pytest_cache``, ``.venv`` -- are covered by the rule in
+#: :meth:`CodexWorkspace.collect_deliverables` that skips anything hidden, and
+#: naming them here as well would suggest the others are collectable.
 _NOT_A_DELIVERABLE = (
-    ".codex",
-    ".git",
     "__pycache__",
-    ".pytest_cache",
-    ".venv",
     "node_modules",
 )
 
-_NTFS_FORBIDDEN = re.compile(r'[:"<>|*?\r\n]')
+#: Characters NTFS will not take in a name, replaced so a deliverable produced
+#: on Linux can still be downloaded on Windows. ``\`` is on that list for the
+#: same reason the rest are, and was the one member missing: a file named
+#: ``q1\q2.md`` is one legal name here and a name ``_save_files`` refuses.
+_NTFS_FORBIDDEN = re.compile(r'[\\:"<>|*?\r\n]')
+
+
+def _unused_deliverable_name(name: str, taken: set[str]) -> str:
+    """``name``, or the first free variation of it.
+
+    Replacing forbidden characters can map two distinct files onto one name --
+    ``q1?.md`` and ``q1_.md`` both become ``q1_.md``. ``_save_files`` refuses a
+    repeat, and refusing costs the task every other file with it. Neither of
+    the two is litter, so neither is dropped; the second is numbered, the way
+    anything else that receives a name it already has does it.
+
+    Returns ``name`` unchanged if nothing is free, leaving the saver to refuse
+    it. That is the honest outcome for a hundred colliding names: better a
+    refusal that says which file than a silent hundred-and-first guess.
+    """
+    if name not in taken:
+        return name
+    parent, separator, base = name.rpartition("/")
+    stem, dot, extension = base.rpartition(".")
+    # `rpartition` puts everything in the third value when there is no dot, and
+    # the split is done on the base so `v1.0/README` is not read as an
+    # extension of `v1`.
+    head, tail = (stem, dot + extension) if dot else (base, "")
+    for ordinal in range(2, 100):
+        candidate = f"{parent}{separator}{head} ({ordinal}){tail}"
+        if candidate not in taken:
+            return candidate
+    return name
 
 #: How long the auth-command preflight waits. Generous next to the runtime's
 #: own 30s auth timeout, because a first sign-in can be slower than a cached
@@ -333,9 +365,15 @@ class CodexWorkspace:
         makes one. The staged references are excluded by name: they came from
         the task, and returning them as output would credit the run with
         producing its own inputs.
+
+        Every name returned is one ``_save_files`` will accept. That is not a
+        courtesy. The saver refuses a batch, not a file, so one unsaveable
+        name discards the whole task -- and on run 34485072751 one did, to a
+        task the model had already answered.
         """
         skip = set(self.staged_reference_names)
         collected: list[dict[str, Any]] = []
+        taken: set[str] = set()
         for path in sorted(self.workspace.rglob("*")):
             if path.is_dir():
                 continue
@@ -344,6 +382,12 @@ class CodexWorkspace:
             except ValueError:  # pragma: no cover - rglob stays inside
                 continue
             if any(part in _NOT_A_DELIVERABLE for part in relative.parts):
+                continue
+            if any(part.startswith(".") for part in relative.parts):
+                # Not a deliverable, and not saveable either: `_save_files`
+                # refuses any hidden component. An agent building something in
+                # a directory writes `.gitignore` and friends without being
+                # asked, and before this they took the answer down with them.
                 continue
             if relative.as_posix() in skip or relative.name in skip:
                 continue
@@ -357,12 +401,11 @@ class CodexWorkspace:
                 content = path.read_bytes()
             except OSError:
                 continue
-            collected.append(
-                {
-                    "filename": _NTFS_FORBIDDEN.sub("_", relative.as_posix()),
-                    "content": content,
-                }
+            filename = _unused_deliverable_name(
+                _NTFS_FORBIDDEN.sub("_", relative.as_posix()), taken
             )
+            taken.add(filename)
+            collected.append({"filename": filename, "content": content})
         return collected
 
     def cleanup(self) -> None:

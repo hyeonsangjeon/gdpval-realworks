@@ -37,7 +37,7 @@ import time
 import yaml
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional, List
+from typing import Any, Optional, List
 
 # Deliberately not in ``core/``: ``step8_grade.compute_grader_source_hash``
 # hashes every ``core/**/*.py``, so a module there would move the grader's
@@ -1805,6 +1805,21 @@ def _run_self_qa(
 # ── File saving (matches main.py _save_files) ─────────────────────────────
 
 
+def _quote_rejected_name(filename: Any) -> str:
+    """The name a refusal is about, safe to put in a build log.
+
+    Run 34485072751 lost a task to ``deliverable filename is invalid or
+    duplicated`` and the log could not say which file, because the message
+    never held one and the task's directory is deleted when the task ends. So
+    the name goes in the message -- but the name came from the model, and the
+    message goes into a log, so it is quoted rather than interpolated: ``repr``
+    escapes a newline that would otherwise forge a log line, and the result is
+    cut short of a name long enough to bury the rest of the run's output.
+    """
+    quoted = repr(filename)
+    return quoted if len(quoted) <= 160 else quoted[:157] + "..."
+
+
 def _save_files(
     files: List[dict],
     task_id: str,
@@ -1824,7 +1839,9 @@ def _save_files(
             raise ValueError("deliverable file record is invalid")
         filename = file_data["filename"]
         if not isinstance(filename, str) or "\\" in filename:
-            raise ValueError("deliverable filename is invalid")
+            raise ValueError(
+                f"deliverable filename is invalid: {_quote_rejected_name(filename)}"
+            )
         relative = Path(filename)
         canonical = relative.as_posix()
         if (
@@ -1837,7 +1854,10 @@ def _save_files(
             or len(canonical.encode("utf-8")) > 240
             or canonical in seen
         ):
-            raise ValueError("deliverable filename is invalid or duplicated")
+            raise ValueError(
+                "deliverable filename is invalid or duplicated: "
+                f"{_quote_rejected_name(filename)}"
+            )
         content = file_data["content"]
         if isinstance(content, str):
             encoded = content.encode("utf-8")
