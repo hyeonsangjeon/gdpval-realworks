@@ -28,10 +28,16 @@ that report takes neither of them:
 It also reports only ``ready_for_boot_test`` or ``not_run``, which tells a reader
 that something is missing without telling them what or whether it is fixable.
 
-**Three machines are in play, and only one can be read from here.** The other
-two are recorded in :data:`RECORDED_FINDINGS` with the source and the date they
-were established, kept deliberately separate from anything probed, so a reader
-is never left guessing which kind of evidence they are looking at.
+**Four machines are in play, and only one can be read from here.** The other
+three are recorded in :data:`RECORDED_FINDINGS` with the source and the date
+they were established, kept deliberately separate from anything probed, so a
+reader is never left guessing which kind of evidence they are looking at.
+
+One of those three, the Azure dev host, is the first to answer yes to the
+hosting question. That moved one of the two questions this module asks and left
+the other exactly where it was: no code applies these rules, so the containment
+is still in place nowhere, and the refusal below still stands on that second
+ground.
 """
 
 from __future__ import annotations
@@ -627,6 +633,36 @@ RECORDED_FINDINGS: tuple[RecordedFinding, ...] = (
             "agentic-sandbox-preflight.yml returned nothing"
         ),
         on_date="2026-08-26",
+    ),
+    RecordedFinding(
+        machine="azure dev host (Standard_D8as_v5, koreacentral, Ubuntu 24.04)",
+        could_host_the_containment=True,
+        finding=(
+            "the things a machine must supply itself, which no amount of "
+            "installing can add, were read off this machine while it was "
+            "running: the processor reports svm, /dev/kvm is present and "
+            "reachable by an ordinary user, and the kernel is "
+            "6.17.0-1022-azure, above the 5.10 Firecracker validates against. "
+            "Nested virtualisation survived TrustedLaunch here, which is worth "
+            "recording because it does not hold on every Azure size. The "
+            "firecracker and jailer programs are not on the image and were "
+            "installed during the measurement, so a freshly deployed host "
+            "answers no on that fourth point until it is bootstrapped. This "
+            "says the containment could be hosted, and nothing more: no code "
+            "turns REQUIRED_MICROVM_POLICY into arguments for starting a "
+            "virtual machine, so on this machine too the rules are written "
+            "down and unapplied"
+        ),
+        established_by=(
+            "az vm run-command on gdpval-devhost-vm in rg-gdpval-devhost-krc, "
+            "running scripts/check_agentic_containment.py --json at commit "
+            "86152b713c687a0906b56533d989a14607570811. The returned report is "
+            "sha256 ee2222285af39a4674ed524865b08397413ab7d758543db20a8caf247"
+            "7eda070 and records all four host requirements as met, with the "
+            "nine policy rules as cannot-be-established. Firecracker v1.13.1 "
+            "from the project's own release"
+        ),
+        on_date="2026-09-10",
     ),
 )
 
