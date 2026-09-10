@@ -884,6 +884,23 @@ the policy describes even though no key names them: `--new-pid-ns`, so the guest
 process is not in the host's PID namespace, and `--cgroup` for the host-side
 memory bound that sits underneath the guest-visible one.
 
+**And a third, which is a default that would quietly be wrong here.**
+`--cgroup-version` defaults to `1` in the jailer's own documentation, while
+Ubuntu has defaulted to the cgroup **v2** unified hierarchy since 21.10 and the
+host stage B measured runs 24.04. A launcher that passes `--cgroup` and leaves
+the version at its default would be writing to a hierarchy that is not the one
+in use — a memory bound that does not apply, on a host where nothing would
+announce that it had not. So the version is passed explicitly and asserted,
+rather than inherited. This is the failure mode the whole stage is about,
+arriving through a default instead of through a deletion: **a rule that reads as
+enforced and is not.**
+
+The v2 part is a fact about the distribution, not a reading taken from that
+machine — stage B measured the processor, `/dev/kvm`, the kernel and the two
+programs, and not this. C2 reads it off the host as its first action, before
+anything is launched, and the plan says so here rather than letting a reasonable
+inference be mistaken later for a measurement.
+
 **Where the kernel and rootfs come from is already decided, and C1 does not get
 to decide it again.** `inspect_microvm_readiness` takes `asset_paths` for
 `kernel` and `rootfs`, hashes both, and only reports `ready_for_boot_test` when
