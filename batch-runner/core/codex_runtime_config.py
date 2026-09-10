@@ -53,11 +53,12 @@ import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Mapping
+from typing import Any, Mapping
 
 from core.azure_ai_clients import (
     DIRECT_TOKEN_SCOPE,
     FORBIDDEN_STATIC_AZURE_CREDENTIAL_ENV,
+    AzureAIRouteSettings,
     EndpointKind,
     classify_endpoint,
 )
@@ -571,6 +572,100 @@ AUTH_RETRY_REQUESTS_NOT_REMOVED_BY_PINNING = 2
 
 class CodexProviderConfigurationError(ValueError):
     """A provider setting is missing, malformed, or forbidden here."""
+
+
+#: The experiment-file key that says the address comes from this run's Azure
+#: route, the same one every other Azure caller in this repository derives.
+#: It holds ``true``, never an address and never a variable name.
+ENDPOINT_FROM_ROUTE_KEY = "endpoint_from_route"
+
+#: The experiment-file key that holds the endpoint literally. Every other run
+#: place in this repository takes its address this way, and so may this one on
+#: a machine where the address is not a secret.
+ENDPOINT_LITERAL_KEY = "endpoint"
+
+
+def resolve_endpoint_setting(
+    block: Mapping[str, Any] | None,
+    environ: Mapping[str, str],
+) -> str:
+    """Read the deployment address out of an ``execution.codex`` block.
+
+    This exists because of a collision between two things that are both true:
+    ``CodexProviderSettings`` needs a literal address, and this deployment's
+    address is a secret that cannot be committed to a public repository. Every
+    other run place here resolves that by taking the address from the
+    environment at run time; this one had no way to say so, which is why no
+    experiment file could name this mode at all.
+
+    ``endpoint_from_route: true`` is that way of saying so, and it deliberately
+    names nothing. An earlier version of this function took an ``endpoint_env``
+    key holding the *name* of an environment variable, which would have been a
+    new variable and a new secret for an address this repository already knows
+    how to find: ``scripts/diagnose_codex_foundry_connection.py`` derives it
+    with :meth:`AzureAIRouteSettings.from_env`, and that is the derivation the
+    one answered turn used. A second way to reach the same address is a second
+    thing to keep in agreement, and it would also let an experiment file point
+    a run at some other resource without changing any code — which is exactly
+    what "the confirmed Foundry resource only" rules out.
+
+    So a block may carry ``endpoint`` *or* ``endpoint_from_route``, and exactly
+    one of them. Not neither, and not both:
+
+    * neither, and there is nothing to call;
+    * both, and the file has two answers to one question, which is worth
+      refusing rather than resolving by precedence — a precedence rule is
+      invisible in review, and the loser would be a plausible-looking address
+      that never gets used.
+
+    A route that describes no ``/openai/v1/`` endpoint is an error, not an
+    empty string. Falling through to ``""`` would reach
+    ``CodexProviderSettings`` as a missing-endpoint failure with no mention of
+    where the address was supposed to come from, which is the same class of
+    mistake as the empty bearer token: a silent absence reported as something
+    else.
+
+    The value is deliberately *not* stored anywhere by the caller that
+    validates it. ``core.experiment_config`` calls this only to fail early on
+    a run whose address is missing; the address itself is resolved again at the
+    point of use, so it never reaches ``workspace/step1_tasks_prepared.json``
+    or any other file this run writes down.
+    """
+    if not isinstance(block, Mapping):
+        raise CodexProviderConfigurationError(
+            "codex_foundry needs an execution.codex block naming the "
+            "deployment and its address"
+        )
+    literal = str(block.get(ENDPOINT_LITERAL_KEY) or "").strip()
+    from_route = bool(block.get(ENDPOINT_FROM_ROUTE_KEY))
+    if literal and from_route:
+        raise CodexProviderConfigurationError(
+            f"execution.codex sets both {ENDPOINT_LITERAL_KEY} and "
+            f"{ENDPOINT_FROM_ROUTE_KEY}; set exactly one, so the file has one "
+            "answer for which deployment is called"
+        )
+    if not literal and not from_route:
+        raise CodexProviderConfigurationError(
+            f"execution.codex needs {ENDPOINT_LITERAL_KEY} or "
+            f"{ENDPOINT_FROM_ROUTE_KEY}; neither is set, so there is no "
+            "deployment to call"
+        )
+    if literal:
+        return literal
+    try:
+        route = AzureAIRouteSettings.from_env(environ)
+    except ValueError as exc:
+        raise CodexProviderConfigurationError(
+            f"execution.codex.{ENDPOINT_FROM_ROUTE_KEY} is set, but this "
+            f"environment describes no usable Azure route: {exc}"
+        ) from None
+    if route.direct_v1 is None:
+        raise CodexProviderConfigurationError(
+            f"execution.codex.{ENDPOINT_FROM_ROUTE_KEY} is set, but this "
+            "environment describes no direct /openai/v1/ endpoint; the dated "
+            "legacy route is a different contract rather than a fallback"
+        )
+    return route.direct_v1.url
 
 
 class CodexProviderLike:

@@ -24,9 +24,9 @@ retries after an API error or a timeout. Sweeping it up in the same rename
 would replace a true comment with a false one, so it is asserted to still say
 retries.
 
-Silence is left alone. Eighteen self-review blocks carry the value with no
+Silence is left alone. Nineteen self-review blocks carry the value with no
 comment at all, in files whose whole ``qa:`` block is comment-free. Saying
-nothing is not a false claim, and adding a sentence to eighteen files to fix a
+nothing is not a false claim, and adding a sentence to nineteen files to fix a
 problem none of them has is churn.
 """
 
@@ -131,13 +131,19 @@ def test_the_corrected_comment_says_what_the_value_buys(qa_budgets):
 
 
 def test_the_silent_ones_are_still_silent(qa_budgets):
-    """Eighteen say nothing, which is not a claim and so not a defect.
+    """Nineteen say nothing, which is not a claim and so not a defect.
 
     Pinned so that a later sweep adding a comment to all of them is a visible
     decision rather than a side effect.
+
+    It was eighteen. exp033 is the nineteenth and it is a new file, not a
+    comment removed from an old one: its self-review is off and its budget is
+    zero, so there is nothing for a comment to describe. The number counts
+    files, so adding one moves it, and moving it here in the same change that
+    adds the file is the visible decision this pin asks for.
     """
     silent = [c for _, _, v, c in qa_budgets if v <= 1 and not c.strip()]
-    assert len(silent) == 18
+    assert len(silent) == 19
 
 
 def test_the_infra_retry_comment_was_not_swept_up():

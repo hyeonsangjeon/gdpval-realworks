@@ -15,10 +15,11 @@ Usage:
 """
 
 import yaml
+import os
 import re
 from pathlib import Path
 from dataclasses import dataclass, field
-from typing import Optional, List, Dict, Any, Literal
+from typing import Optional, List, Dict, Any, Literal, get_args, get_type_hints
 
 from core.config import DEFAULT_TOKENS
 from core.repository_identity import (
@@ -529,10 +530,17 @@ class ExperimentConfig:
             ))
 
         # Validate execution mode (Phase 5-3)
-        valid_modes = [
-            "code_interpreter", "subprocess", "sandbox", "agentic_sandbox",
-            "agentic_sandbox_v2", "json_renderer",
-        ]
+        #
+        # Read off the annotation rather than typed out again. The two used to
+        # be separate lists and they drifted: `codex_foundry` was added to the
+        # type, the whole `codex_foundry` validation branch below was written
+        # against it, and this check still refused the mode — so an experiment
+        # naming it collected an error saying the mode does not exist, next to
+        # the errors from the branch that knows it does. One list cannot
+        # disagree with itself.
+        valid_modes = list(
+            get_args(get_type_hints(ExecutionConfig)["mode"])
+        )
         if self.execution.mode not in valid_modes:
             errors.append(f"execution.mode must be one of {valid_modes}")
 
@@ -597,6 +605,7 @@ class ExperimentConfig:
             from core.codex_runtime_config import (
                 DEFAULT_PROVIDER_ID,
                 CodexProviderSettings,
+                resolve_endpoint_setting,
             )
 
             settings_data = self.execution.codex
@@ -607,8 +616,13 @@ class ExperimentConfig:
                 )
             else:
                 try:
+                    # Resolved and then thrown away. This is a fail-fast check
+                    # that the address exists, not a hand-off: the value is
+                    # read again where it is used, so a secret endpoint never
+                    # enters a config object that other steps write to disk.
+                    endpoint = resolve_endpoint_setting(settings_data, os.environ)
                     CodexProviderSettings(
-                        endpoint=str(settings_data.get("endpoint", "")),
+                        endpoint=endpoint,
                         model=str(settings_data.get("model", "")),
                         provider_id=str(
                             settings_data.get("provider_id") or DEFAULT_PROVIDER_ID
@@ -624,6 +638,31 @@ class ExperimentConfig:
                     "codex_foundry mode asks a Microsoft Foundry deployment, "
                     "so condition_a must name the azure provider"
                 )
+            # Only `system` reaches the agent, as its developer instructions.
+            # `CodexAgentRunner.build_task_text` writes the rest of the message
+            # itself — the working-directory rule and the reference listing —
+            # so a prefix, body or suffix set here would be text a reader of
+            # the file believes was sent and that no request contained.
+            #
+            # This repository has that mistake already written down: exp026
+            # declared `reasoning_effort: low`, step 1 dropped the field, and
+            # exp027's header exists to correct the record. Refusing the
+            # setting is cheaper than a second such correction.
+            for label, condition in (
+                ("condition_a", self.condition_a),
+                ("condition_b", self.condition_b),
+            ):
+                if condition is None:
+                    continue
+                for part in ("prefix", "body", "suffix"):
+                    text = getattr(condition.prompt, part, None)
+                    if isinstance(text, str) and text.strip():
+                        errors.append(
+                            f"{label}.prompt.{part} is set, but codex_foundry "
+                            "builds its own task message and sends only "
+                            "prompt.system; leave it unset rather than "
+                            "recording text no request carries"
+                        )
         elif self.execution.codex is not None:
             errors.append(
                 "execution.codex is only valid for codex_foundry mode"

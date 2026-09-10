@@ -166,14 +166,15 @@ def test_the_codex_place_has_code_but_is_still_not_a_place_that_can_run():
 
 
 def test_the_codex_blockers_are_about_the_task_not_about_the_connection():
-    """The three reasons must move on once the thing they named has happened.
+    """The reasons must move on once the thing they named has happened.
 
-    Twice now this list has kept a reason past its expiry: first documentation
-    objections the product had already answered, then connection questions run
-    34461522053 answered. Both times the effect was the same — a solved problem
-    reading as unsolvable. This pins the shape of the third list rather than
-    its wording: nothing may claim the connection is unproven, and each reason
-    must name the code that would have to change for it to clear.
+    Three times now this list has kept a reason past its expiry: first
+    documentation objections the product had already answered, then connection
+    questions run 34461522053 answered, then wiring that has since been built.
+    Every time the effect was the same — a solved problem reading as
+    unsolvable. This pins the shape of the list rather than its wording:
+    nothing may claim the connection is unproven or the wiring absent, and each
+    reason must name the code that would have to change for it to clear.
     """
     reasons = DOCUMENTED_BLOCKERS_BY_ENVIRONMENT[
         ENVIRONMENT_CODEX_COMMAND_LINE_TOOL_FOUNDRY
@@ -182,14 +183,18 @@ def test_the_codex_blockers_are_about_the_task_not_about_the_connection():
         "has not been observed",
         "has not been shown to be compatible",
         "a turn on a runner has not yet been answered",
+        # Cleared by the change that added exp033 and wired step 2. Kept here
+        # so that neither can come back as a reason after being built.
+        "no experiment asks for this place",
+        "the configuration cannot reach the runner",
     )
     for reason in reasons:
         for phrase in retired:
             assert phrase not in reason, (
-                f"a blocker still says {phrase!r}, which run 34461522053 "
+                f"a blocker still says {phrase!r}, which has since been "
                 "settled"
             )
-    named = ("core.experiment_config", "core.executor", "test_codex_runtime")
+    named = ("step2_run_inference", "batch-run.yml", "test_codex_runtime")
     for module in named:
         assert any(module in reason for reason in reasons), (
             f"no blocker names {module}, so a reader cannot check any of them"
@@ -221,19 +226,28 @@ def test_the_new_place_reports_its_documented_reasons(environment):
 def test_each_of_the_three_has_more_than_one_reason_where_that_is_true():
     """One cleared blocker must not read as a cleared place.
 
-    The Codex program and the GitHub-served place each fail for three separate
-    reasons and the own-key place for two. Recording only the first would let
+    The GitHub-served place fails for three separate reasons, the own-key place
+    and the Codex program for two each. Recording only the first would let
     somebody solve one and believe the way was open.
+
+    Codex was three until the wiring was built. Two of those three named code
+    that now exists — an experiment file that asks for the mode, and a step 2
+    that reaches the runner — so they are gone rather than reworded, and the
+    count moves with them. What is left is a decision a person must make and a
+    thing that has never happened; inventing a third to hold the number would
+    be padding a list whose whole purpose is to be true.
     """
     counted = {
         environment: len(DOCUMENTED_BLOCKERS_BY_ENVIRONMENT[environment])
         for environment in THE_THREE
     }
     assert counted == {
-        ENVIRONMENT_CODEX_COMMAND_LINE_TOOL_FOUNDRY: 3,
+        ENVIRONMENT_CODEX_COMMAND_LINE_TOOL_FOUNDRY: 2,
         ENVIRONMENT_COPILOT_COMMAND_LINE_TOOL_FOUNDRY: 2,
         ENVIRONMENT_COPILOT_COMMAND_LINE_TOOL_GITHUB_SERVED: 3,
     }
+    for environment, count in counted.items():
+        assert count > 1, environment
 
 
 # ── The written reasons are checked against the code they name ─────────────

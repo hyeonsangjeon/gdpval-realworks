@@ -170,44 +170,35 @@ RUNNER_CLASS_BY_ENVIRONMENT: Mapping[str, tuple[str, str] | None] = {
 # is a separate reason: clearing one of them does not clear the others.
 
 DOCUMENTED_BLOCKERS_BY_ENVIRONMENT: Mapping[str, tuple[str, ...]] = {
-    # Rewritten twice, and the second rewrite is the interesting one.
+    # Rewritten three times, and each rewrite is the same lesson.
     #
     # The first three reasons here were read out of an older copy of the Codex
     # configuration reference and stopped being true of the product. The three
     # that replaced them were about this deployment instead, each naming
     # something that had not been *observed*, with the note that no amount of
     # reading would clear any of them — only a request that is answered would.
+    # Run 34461522053 was that request, and it cleared all three at once.
     #
-    # Run 34461522053 is that request. It was answered, and it cleared all
-    # three at once: the auth command ran inside Codex's own isolated
-    # environment and produced a token, the deployment served the pinned
-    # runtime's Responses payload on the undated route, and the turn completed.
-    # So all three are gone, and keeping them would be the mirror image of the
-    # first mistake — making a solved problem look unsolvable.
+    # The three that replaced *those* were about wiring this repository had
+    # not built: no experiment file could name the mode, and the configuration
+    # could not reach the runner if one did. Both are now built, and both are
+    # checkable in the code they used to name — exp033 names the mode and
+    # validates, and step 2 builds no client for it and passes the settings
+    # and the cost ledger through. Keeping them would be the same mistake a
+    # third time: a solved problem left reading as unsolvable.
     #
-    # What stands here now is what a *task* still needs and does not have.
-    # None of it is about reaching the model; all of it is wiring this
-    # repository has not built yet, which is why each one names the code that
-    # would have to change.
+    # Two are left, and neither is about reaching the model or about wiring.
+    # One is a decision a person has to make and this repository must not make
+    # for them. The other is the only thing that has never happened.
     ENVIRONMENT_CODEX_COMMAND_LINE_TOOL_FOUNDRY: (
-        "no experiment asks for this place: no file under batch-runner/"
-        "experiments names execution.mode codex_foundry, and none can be "
-        "written as core.experiment_config validates it today, because that "
-        "check builds CodexProviderSettings from a literal "
-        "execution.codex.endpoint with no environment expansion anywhere in "
-        "the module — and this deployment's address is a secret, so it cannot "
-        "be committed to a public repository. Until the setting can name a "
-        "variable instead of a value, the run place has a runner and no way "
-        "to be asked for",
-        "the configuration cannot reach the runner even if a file asked for "
-        "it: core.executor.TaskExecutor takes the Codex settings through its "
-        "codex_options argument, and nothing outside core.executor and "
-        "tests/test_codex_runtime_end_to_end.py ever passes it. "
-        "step2_run_inference._create_executor_with_client_cleanup builds "
-        "every executor with llm_client=client, which core.executor refuses "
-        "for this mode with 'codex_foundry takes no llm_client and no "
-        "api_key'. A batch run would therefore fail at construction rather "
-        "than reach a turn",
+        "the batch gate is closed and only a person may open it: "
+        "step2_run_inference._require_runnable_execution_mode raises for this "
+        "mode unless CODEX_FOUNDRY_CONNECTION_CONFIRMED is set, and "
+        ".github/workflows/batch-run.yml does not set it. The gate is "
+        "deliberately a setting rather than a reading of this repository's own "
+        "code: 'a request was answered' and 'this batch may spend' are "
+        "different claims, and one answered turn cost 28 output tokens while a "
+        "batch leg is a different order of commitment",
         "no task has produced a deliverable through this place against the "
         "real deployment: the turn that was answered carried no tools and "
         "wrote no file (the connection record reports "
@@ -1001,6 +992,17 @@ def inspect_environment_support(
                 "served by pinned and installed openai-codex 0.147.0 — which "
                 "settles the two questions core.codex_runtime_config could "
                 "only refuse to guess at"
+            )
+            evidence.append(
+                "an experiment can now ask for this place: "
+                "batch-runner/experiments/exp033_codex_foundry_fixed5.yaml "
+                "names execution.mode codex_foundry and validates, its "
+                "address is derived by core.azure_ai_clients."
+                "AzureAIRouteSettings.from_env rather than committed as a "
+                "literal, and step2_run_inference builds no provider client "
+                "for this mode and passes both the settings and the run's "
+                "cost ledger to the runner — see "
+                "tests/test_an_experiment_can_ask_for_the_codex_run_place.py"
             )
             blockers.extend(
                 DOCUMENTED_BLOCKERS_BY_ENVIRONMENT.get(environment, ())

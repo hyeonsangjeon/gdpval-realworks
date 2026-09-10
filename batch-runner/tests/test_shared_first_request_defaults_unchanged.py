@@ -21,6 +21,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import yaml
 
 import core.code_interpreter as code_interpreter_module
 import core.sandbox_runner as sandbox_runner_module
@@ -66,7 +67,21 @@ def reference_files(tmp_path: Path) -> list[str]:
 
 
 def test_the_setting_is_off_unless_an_experiment_writes_it():
-    """Every committed experiment, parsed, with the reason it is off recorded."""
+    """Every committed experiment, parsed, with the reason it is off recorded.
+
+    ``declared`` reads the key out of the parsed ``execution`` block rather
+    than searching the file's text for the name. The text search was the first
+    version and it counted prose: exp033 explains in a comment why it is *not*
+    part of the run-place comparison that uses this setting, and was reported
+    as running it without saying so. A file that names the setting to say it
+    does not use it is exactly the file that should not fail here.
+
+    What the check means is unchanged in both directions. A file with the
+    setting on has the key, so it is declared; and a file that writes the key
+    must write it ``true``, which is the rule exp030's own comment states —
+    anything else leaves the run place on the path it always used, and writing
+    it down as ``false`` would suggest otherwise.
+    """
     yaml_paths = sorted(EXPERIMENTS_DIR.glob("*.yaml"))
     assert yaml_paths, f"no experiment files found under {EXPERIMENTS_DIR}"
 
@@ -80,11 +95,12 @@ def test_the_setting_is_off_unless_an_experiment_writes_it():
         (on if config.execution.shared_first_request else off).append(path.name)
 
     assert not unparsable, unparsable
-    declared = {
-        path.name
-        for path in yaml_paths
-        if "shared_first_request" in path.read_text(encoding="utf-8")
-    }
+    declared = set()
+    for path in yaml_paths:
+        document = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        execution = document.get("execution")
+        if isinstance(execution, dict) and "shared_first_request" in execution:
+            declared.add(path.name)
     assert set(on) == declared, (
         "an experiment is running the shared first request without saying so in "
         f"its file. on={sorted(on)} declared={sorted(declared)}"

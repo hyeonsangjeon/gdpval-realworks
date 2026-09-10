@@ -11,7 +11,85 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Added
+- **An experiment can now ask for the Codex run place.** The runtime, the auth
+  command, the per-task workspace, deliverable collection and the cost adapter
+  all existed and were exercised; what did not exist was any way for an
+  experiment file to reach them. `grep -rln codex_foundry experiments/` was
+  empty, and it could not have been otherwise. Five separate things stood in
+  the way, each found by trying to build the path rather than by reading it:
+  - `ExperimentConfig.validate` checked `execution.mode` against a list typed
+    out a second time, without `codex_foundry` — while the `Literal`
+    annotation beside it had the mode and a whole validation branch was
+    written against it. A file naming the mode collected "execution.mode must
+    be one of [...]" next to errors from the branch that knows it exists. The
+    check now reads the annotation, so the two cannot disagree again.
+  - The endpoint setting took a literal address only, and this deployment's
+    address is a secret in a public repository. `execution.codex` now takes
+    `endpoint_from_route: true`, which resolves through
+    `AzureAIRouteSettings.from_env` — the derivation every other Azure caller
+    here uses and the one the answered turn used. Exactly one of that key and
+    a literal `endpoint` may be set; neither, or both, is refused rather than
+    resolved by precedence. An earlier draft took an `endpoint_env` key naming
+    a variable; that was a new variable and a new secret for an address the
+    run already knows how to find, and it would have let a file point a run at
+    a resource other than the confirmed one.
+  - `step1_prepare_tasks.py` did not carry `execution.codex` into the prepared
+    file at all. It now carries the settings and never the address: the
+    prepared file travels as a run artifact, so `endpoint_from_route` (a
+    boolean) survives and a literal `endpoint` is dropped.
+  - `step2_run_inference.py` built a provider client for every mode, and
+    `core.executor` refuses `codex_foundry` outright if it is handed one. It
+    now builds no client for this mode, resolves the provider settings in the
+    process rather than from any file, and passes the run's cost ledger
+    through to the runner — which was accepted by `TaskExecutor` and never
+    passed by anything, so the leg would have recorded no cost at all.
+  - Only `prompt.system` reaches the agent, as its developer instructions;
+    `CodexAgentRunner.build_task_text` writes the rest. A `prefix`, `body` or
+    `suffix` is now refused for this mode instead of silently dropped. exp026
+    declared `reasoning_effort: low`, step 1 dropped it, and exp027's header
+    exists to correct the record — one such correction is enough.
+- **`experiments/exp033_codex_foundry_fixed5.yaml`** — the first experiment
+  file in this repository that names `execution.mode: codex_foundry`. Five
+  tasks: the same five as exp030/exp031/exp032, chosen by the rule in
+  `core/execution_envelope_tasks.py`, so a number from it is readable against
+  the 3, 4 and 0 those three run places finished on 2026-09-01. It is *not* a
+  fourth column of that comparison and the file says so: that comparison holds
+  one first request across its places, this run place is not in the module
+  that enforces that, and it builds its own message. Limits are fixed before
+  the run — 5 tasks x at most 3 attempts, one turn each, 1800s per turn, one
+  task at a time, Self-QA off. Retries are taken at the batch runner's layer
+  where they are counted; the Codex-side counters stay at 0, because with the
+  runtime's shipped defaults one turn against a server answering HTTP 500
+  sends thirty requests and none of them appear as attempts anywhere a reader
+  would look.
+- **Self-QA is refused for `codex_foundry`** rather than cautioned against.
+  The reviewer would be an Azure client built in step 2 — a second sign-in
+  beside the one Codex performs through its provider auth command, on a run
+  whose premise is that the model reaches the deployment exactly one
+  documented way.
+
 ### Changed
+- **The Codex readiness record drops the two blockers this change cleared.**
+  It listed three; two of them named code — no experiment file could ask for
+  the mode, and the configuration could not reach the runner if one did — and
+  both now exist and are checked. That list has now been rewritten three times
+  for the same reason each time: a reason kept past the point where it was
+  true, making a solved problem read as unsolvable. Two remain, and neither is
+  about reaching the model or about wiring:
+  - the batch gate is closed and only a person may open it.
+    `_require_runnable_execution_mode` refuses the mode without
+    `CODEX_FOUNDRY_CONNECTION_CONFIRMED`, and `batch-run.yml` does not set it.
+    "A request was answered" and "this batch may spend" are different claims.
+  - no task has produced a deliverable through this place against the real
+    deployment. Tool execution, reference-file staging, deliverable collection
+    and the cost receipt are still exercised only against the stand-in
+    app-server.
+
+  The count moves from three to two rather than gaining an invented third.
+  `test_the_codex_blockers_are_about_the_task_not_about_the_connection` keeps
+  both cleared claims in its retired list, so neither can return as a reason
+  after being built.
 - **The Codex readiness record now says what run `34461522053` actually
   settled, and what it did not.** The three blockers standing against
   `ENVIRONMENT_CODEX_COMMAND_LINE_TOOL_FOUNDRY` were all written as things that
@@ -67,6 +145,20 @@ entries land under a fresh dated heading the day they merge to `main`.
   `core.codex_azure_token` rather than merely stated, and a test that demands a
   settled conflict be listed as an obstacle is a test that keeps the record
   wrong on purpose.
+- **`test_the_setting_is_off_unless_an_experiment_writes_it` reads the parsed
+  key instead of searching the file's text.** The text search counted prose:
+  exp033 explains in a comment why it is *not* part of the run-place
+  comparison that uses the shared first request, and was reported as running
+  it without saying so. The guarantee is unchanged in both directions — a file
+  with the setting on has the key, and a file that writes the key must write
+  it `true`.
+- **`test_the_silent_ones_are_still_silent` counts nineteen, not eighteen.**
+  The number is a census of experiment files whose self-review budget carries
+  no comment, pinned so that adding a comment to all of them is a visible
+  decision. exp033 is a new file rather than a comment removed from an old
+  one — its self-review is off and its budget is zero, so there is nothing for
+  a comment to describe — and moving the number in the change that adds the
+  file is the decision the pin asks to see.
 
 ### Fixed
 - **The connection diagnostic asked the turn for a field the turn does not
