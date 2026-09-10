@@ -766,7 +766,285 @@ it, and the answer is written into `RECORDED_FINDINGS` as a third finding with
 its date and its source, in the same shape as the two already there. The finding
 disclaims in its own words the thing a `true` there does not mean.
 
-### Stage C — not yet run
+### Stage C — the launcher, and the attacks that test it
+
+#### The plan, written before any of it is built
+
+Stage C is where the rules stop being written down and start being applied.
+Stage B established that a machine *could* host the containment; nothing yet
+turns `REQUIRED_MICROVM_POLICY` into arguments for starting one. Until that
+module exists, nine of the ten rules read `cannot be established here`, and that
+is the honest reading rather than a gap in the report. The tenth is `required:
+true`, which is satisfied by the policy saying so — it is the rule that makes the
+other nine mandatory, not one of the things a machine has to provide. C0 adds an
+eleventh, and it joins the nine rather than the one.
+
+**Stage C is split into four changes, merged in order, because they fail
+differently and only the first two can be checked without spending anything.**
+
+##### C0 — the rule that is missing, found before anything was built on top of it
+
+**Builds.** One new entry in `REQUIRED_MICROVM_POLICY`, the same entry in
+`sandbox/agentic_v2_capabilities.json`, and its wording in
+`_POLICY_SETTING_AS_A_CLAIM`. Three places, established by trying it rather
+than by reading — see below.
+
+**Why.** The seven attacks in C3 include reading a token, key or environment
+secret the orchestrator holds. Checking the sources rather than assuming: the
+words *credential*, *secret* and *token* do not appear in
+`core/agentic_v2_substrate.py`, in the signed policy, or in the capabilities
+manifest. The six questions the containment answers are where a command may
+write, whether it can reach the network, how much memory, how long, who it runs
+as, and what happens on breach. **The credential boundary is not among them.**
+
+So attack 7 as first drafted would have tested a boundary no rule states, which
+is the same pretend-enforcement this stage exists to end, only pointed the other
+way: instead of a rule nothing applies, a test with no rule behind it. The fix is
+to write the rule down first.
+
+**Scope, measured rather than guessed — and the guess was short by one.**
+The plan first said two files. Adding `credentials: "none-inherited"` to the
+policy and the manifest on a scratch copy and running every agentic test found
+exactly one failure:
+`test_a_machine_with_everything_still_does_not_have_the_containment`. The report
+builds one sentence per rule from `_POLICY_SETTING_AS_A_CLAIM`, and a key with
+no wording there does not go unnoticed — it produces a line saying the manifest
+"has gained a containment setting this report does not know how to describe or
+check", which is not the "unenforced rather than met" the test requires. **The
+codebase names its own third place**, and reading rather than running would
+have missed it.
+
+What did *not* break is as useful. `containment_rules_that_disagree` and the
+signed-policy validation both passed untouched, which confirms the rest of the
+scope: `_SUPPLY_CHAIN_RULE_NAMES` translates only four of the ten containment
+rules into the signed policy's naming, and the other six — including every limit
+with a number — live on the containment side alone. A seventh joins them there.
+It is deliberately **not** added to the signed policy: that file carries a
+signature, and extending it is a separate question from writing the rule down.
+The drop test and the manifest-equality test came along on their own, since
+`test_a_manifest_that_drops_a_rule_entirely_is_refused` iterates whatever the
+policy holds. The weaken test does not — it is parametrised by hand, so C0 adds
+its entry there too, a coverage gap rather than a failure and therefore the kind
+that stays open unless it is written down.
+
+**Six becomes seven, and prose does not follow a dict on its own.** The last
+change of this shape made a docstring false — PR #490 added a finding and left a
+test file still asserting the opposite, caught only by grepping the tree
+afterwards. The same failure is available here, so the places that say *six* are
+listed before the change rather than hunted after it:
+
+| says six | change it |
+|---|---|
+| `core/agentic_v2_substrate.py:143` — "Six things have to be stated" | yes |
+| `core/agentic_v2_substrate.py:222` — "one of the six questions" | yes |
+| `tests/test_agentic_v2_containment_rules.py:3` — "Six questions have to be answered" | yes |
+| `tests/test_agentic_v2_containment_rules.py:71` — section comment | yes |
+| the test named `test_every_one_of_the_six_questions_has_an_answer` | yes, renamed |
+| this document, the inherited-state table and stage C's exit condition | yes |
+| `CHANGELOG.md` and `TASK_AGENTIC_SANDBOX_V2_FOUNDATION.md` | **no** |
+
+The last row is the one worth stating. Those record what was true on
+2026-08-26, when six was the answer. Rewriting them would not fix a stale
+sentence, it would falsify a record of when the rule set changed — and the
+count moving is exactly the thing a history is for.
+
+**Exit condition.** The new rule is stated, the manifest equals the policy again,
+weakening it is refused like the other ten, `containment_rules_that_disagree`
+still returns nothing, and nothing in `core/` or `tests/` still says the
+containment answers six questions.
+
+**Failure response.** If the boundary cannot be stated as a rule the launcher
+could apply, C3's attack 7 is recorded as untestable with the reason, rather than
+written as a test that passes because nothing was ever at risk.
+
+**Cost.** None.
+
+##### C1 — the mapping, as data
+
+**Builds.** `core/agentic_v2_microvm_launch.py`: a pure function from
+`REQUIRED_MICROVM_POLICY` to the arguments `jailer` and `firecracker` are
+actually given. It returns data and starts nothing, in the same spirit as
+`agentic_v2_microvm.py`, which inspects and applies nothing, and
+`agentic_v2_containment_readiness.py`, which judges and acts on nothing.
+
+Each of the eleven policy keys maps to something a reader can point at:
+
+| policy key | how it is applied |
+|---|---|
+| `runtime: firecracker` | the `--exec-file` the jailer launches |
+| `network: none` | **no interface configured, and no `--netns`.** Firecracker's own fixtures write this as `"network-interfaces": []`, so the test asserts that no interface is configured rather than that a key is missing — an empty list and an absent key mean the same thing here and a test that only knows one of them is a test that can be walked around |
+| `rootfs: read-only` | the root drive's `is_read_only: true` |
+| `workdir: ephemeral-quota` + `workdir_quota_mib` | a second drive, a fresh image of exactly that many MiB, writable, destroyed after the run. `--resource-limit fsize=` bounds any single file as well, but the image size is what bounds the total |
+| `memory_mib` | `machine-config.mem_size_mib` |
+| `wall_clock_seconds` | a host-side deadline, since a guest cannot be trusted to time itself |
+| `user: jailer-unprivileged` | `--uid`/`--gid` of a non-root user, and a refusal if either resolves to 0 |
+| the credential rule added in C0 | the jailer already clears inherited environment variables and file descriptors before exec — the launcher relies on that rather than reimplementing it, and passes nothing of its own. The two devices that would reopen the path, `mmds-config` and `vsock`, are covered in the table below |
+| `on_breach: stop-and-report` | the launcher's error path returns the breached rule by name |
+| `required: true` | any rule that cannot be expressed is a refusal to launch, never a silent drop |
+
+**Four devices that are not in the policy and can each defeat a rule that is.**
+Read off Firecracker's own configuration fixtures rather than assumed, and named
+here because a launcher that sets every key in the table above and leaves these
+at a default would enforce less than it appears to:
+
+| device | which rule it defeats | required |
+|---|---|---|
+| `mmds-config` | `network: none`, by a route that is not a NIC — MMDS is a metadata service the *guest* reads over HTTP, and it is the standard way host-side data is handed to a guest | `null` |
+| `vsock` | `network: none` — a host↔guest socket is a channel whether or not it is a NIC | `null` |
+| `memory-hotplug` | `memory_mib` — memory added after boot is memory the bound never saw | `null` |
+| `balloon` | `memory_mib` — a balloon device reshapes guest memory at runtime | `null` |
+
+These get tests of their own in C1, on the same footing as the policy keys. The
+policy is not amended to add them: they are not rules about what the containment
+allows, they are devices that must be absent for the rules it already has to
+mean what they say. If that reasoning is wrong, the fix is to add them to
+`REQUIRED_MICROVM_POLICY` in a change of their own, not to quietly rely on a
+default.
+
+Two further flags are passed because leaving them off would weaken the boundary
+the policy describes even though no key names them: `--new-pid-ns`, so the guest
+process is not in the host's PID namespace, and `--cgroup` for the host-side
+memory bound that sits underneath the guest-visible one.
+
+**And a third, which is a default that would quietly be wrong here.**
+`--cgroup-version` defaults to `1` in the jailer's own documentation, while
+Ubuntu has defaulted to the cgroup **v2** unified hierarchy since 21.10 and the
+host stage B measured runs 24.04. A launcher that passes `--cgroup` and leaves
+the version at its default would be writing to a hierarchy that is not the one
+in use — a memory bound that does not apply, on a host where nothing would
+announce that it had not. So the version is passed explicitly and asserted,
+rather than inherited. This is the failure mode the whole stage is about,
+arriving through a default instead of through a deletion: **a rule that reads as
+enforced and is not.**
+
+The v2 part is a fact about the distribution, not a reading taken from that
+machine — stage B measured the processor, `/dev/kvm`, the kernel and the two
+programs, and not this. C2 reads it off the host as its first action, before
+anything is launched, and the plan says so here rather than letting a reasonable
+inference be mistaken later for a measurement.
+
+Every flag named above was checked against the jailer documentation for
+**v1.13.1**, which is the version stage B found installed — not against the
+current development branch, where a flag can exist that the deployed binary does
+not have. `--cgroup-version` is in v1.13.1 and defaults to `1` there.
+
+**Where the kernel and rootfs come from is already decided, and C1 does not get
+to decide it again.** `inspect_microvm_readiness` takes `asset_paths` for
+`kernel` and `rootfs`, hashes both, and only reports `ready_for_boot_test` when
+they and the three host checks are all present. The launcher takes its images
+from the same paths and reuses those hashes rather than computing its own, so
+there is one answer to "which kernel booted" instead of two that can disagree.
+Nothing in this seam touches `foundation_only` or `production_activation`: both
+are pinned inside the readiness report's own validation, which is where they
+should stay.
+
+**One thing to state plainly rather than discover halfway through.** Firecracker's
+jailer runs as root — its own documentation says so — because building the jail
+requires `mknod`, `pivot_root` and cgroup writes. It drops to `--uid`/`--gid`
+immediately before exec'ing Firecracker. So `user: jailer-unprivileged` is a
+statement about the process that runs the model's command, which is unprivileged,
+and not about the jailer that built the jail around it. That is the documented
+design of the mechanism, not a shortcut taken to make something pass, and it is
+written here so that nobody reads the root in `ps` later as a rule quietly
+dropped. What stays forbidden is unchanged: no root for the model's command, no
+`--privileged`, no capability added to make a test pass.
+
+**Exit condition.** Every key above has a test that reads the built arguments
+and fails if the rule is missing, plus one test that removes a key from a copy
+of the policy and requires the builder to refuse rather than emit arguments
+without it. **A rule the builder cannot express must fail loudly**; a builder
+that quietly emits every rule but one is exactly the "written down but
+unenforced" state stage C exists to end.
+
+**Failure response.** If a rule turns out not to be expressible in Firecracker's
+configuration, it is recorded as such and raised — not dropped, not softened to
+a comment, and not moved to a later stage to be forgotten in.
+
+**Cost.** None. This runs on any machine, including this one.
+
+##### C2 — the first boot, on the machine stage B measured
+
+**Builds.** The thin spawn that C1 deliberately left out, and one command run
+inside the guest whose output comes back.
+
+**Why it is separate.** This box runs kernel 3.10 and cannot boot a Firecracker
+machine at all. Claiming otherwise is the specific dishonesty the instruction
+names. So C1's mapping is tested here and C2's boot is tested only on the Azure
+host, and the two are not allowed to be confused for one another.
+
+**Exit condition.** A guest boots under `jailer`, a command runs inside it, its
+output and exit status come back, and the machine is gone afterwards with its
+workdir image destroyed. The artefact records the kernel and rootfs images used
+and their hashes.
+
+**Where the guest's contents come from, which is an open question and not a
+detail.** `security/agentic-v2-supply-chain-policy.json` governs what may run
+inside V2: `cosign-offline-v1` signatures with a trusted key and a bundle
+required, `buildkit-max-v1` provenance, CVE scanning against a database no more
+than seven days old, and unknown licences treated as failures. Every one of
+those is written for an **OCI image**. Its `required_evidence` list names
+`oci_layout`, and its provenance subjects include `dockerfile`. A Firecracker
+guest needs a `vmlinux` and an ext4 root filesystem, and neither is an OCI image,
+so none of those rules reaches them as written — not because the policy is weak
+but because it is about a different kind of artefact. A guest built beside the
+image could not produce the evidence the policy asks for even if someone wanted
+it to.
+
+The answer that keeps the chain intact is to build the rootfs *from* the image
+the policy already governs, so what boots is what was signed, scanned and
+attested, rather than a second filesystem assembled beside it. That path exists
+rather than being hoped for: `core/agentic_v2_oci.py` already verifies a local
+OCI layout blob by blob, and its layers are
+`application/vnd.oci.image.layer.v1.tar`, so a rootfs is verified layers
+unpacked in order into a filesystem image. The kernel has no such parent: a
+`vmlinux` has to come from somewhere, and the practical source is Firecracker's
+own published kernels, pinned by hash.
+
+So C2 records the kernel as an input whose provenance is **weaker than the OCI
+chain's**, and says so in those words rather than listing a hash and letting the
+reader assume it was signed. If that is not acceptable, the response is to build
+the kernel too and record how — not to proceed and leave the gap unnamed. Either
+way `foundation_only` and `production_activation: disabled` are untouched here.
+
+**Failure response.** If it will not boot, stage C stops at C2 with a recorded
+reason. `exec_run` stays shut. There is no fallback to the V1 Docker runner and
+no describing a weaker boundary as this one.
+
+**Cost.** The dev host, allocated for the length of the test and deallocated
+immediately after, on the same terms as stage B: measured minutes, price
+`partial` if the rate is not established.
+
+##### C3 — the seven attacks
+
+**Builds.** `tests/test_agentic_v2_containment_rules.py` gains the test its own
+docstring currently declines to fake. Each attack starts a machine, exceeds one
+rule, and requires the machine to stop it:
+
+1. write past the 256 MiB workdir quota
+2. allocate past 4,096 MiB
+3. run past 1,200 seconds
+4. open a network connection
+5. write to the read-only root
+6. run as a privileged user
+7. read a token, key or environment secret the orchestrator holds — against the
+   rule C0 adds, not against an expectation held only in this list
+
+**Exit condition.** All seven are stopped, and each stop names the rule it
+enforced. Seven passes is the condition — not six and a note.
+
+**Failure response.** Any attack that succeeds is an escape. It is recorded with
+the exact path it took, `exec_run` stays shut, and stage C does not advance.
+**No attack is downgraded to a warning and no rule is relaxed to make its test
+pass** — a rule the launcher does not enforce is a rule that does not exist.
+
+**What is not built anywhere in stage C.** Nothing that runs as root, no
+`--privileged`, no capability added to make a test pass, no host security
+setting turned off, no guard removed, and no opening of `exec_run` — that is
+stage D and gets its own change. If the containment cannot be demonstrated, the
+honest outcome is that commands do not run, and stage C is allowed to return
+that.
+
+**Not yet run.**
 ### Stage D — not yet run
 ### Stage E — not yet run
 ### Stage F — not yet run
