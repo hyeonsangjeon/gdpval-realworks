@@ -352,6 +352,54 @@ class TestReplacingTheHostWorkspace:
             image=staged["image"], workspace=work, scratch=tmp_path / "scratch"
         )
         assert not work.with_name(work.name + ".previous").exists()
+        assert sorted(p.name for p in work.parent.iterdir()) == [work.name]
+
+    def test_the_directory_the_backend_pinned_is_still_the_one_it_pinned(
+        self, tmp_path
+    ):
+        # AgenticV2FixtureBackend opens the workspace once in __init__, keeps
+        # the descriptor, and re-checks (st_dev, st_ino) before later work. A
+        # carriage that renames the directory away leaves that descriptor on a
+        # directory nobody can reach -- and the session does not fail here, it
+        # fails on the *next* exec_run, after this one looked like it worked.
+        work = _workspace(tmp_path)
+        pinned = os.open(
+            work, os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0)
+        )
+        try:
+            opened = os.fstat(pinned)
+            staged = self._staged(tmp_path, work)
+            (work / "job" / "plain.txt").write_text("stale\n", encoding="utf-8")
+            carry_the_workspace_back(
+                image=staged["image"], workspace=work, scratch=tmp_path / "scratch"
+            )
+            after = work.lstat()
+            assert (after.st_dev, after.st_ino) == (opened.st_dev, opened.st_ino)
+            # And the descriptor still reaches the workspace the model reads,
+            # which is what the backend does with it every call.
+            written = os.open(
+                "kept_by_the_backend.txt",
+                os.O_WRONLY | os.O_CREAT,
+                0o600,
+                dir_fd=pinned,
+            )
+            os.close(written)
+            assert (work / "kept_by_the_backend.txt").exists()
+        finally:
+            os.close(pinned)
+
+    def test_the_old_contents_are_gone_and_not_merged_with_the_new(self, tmp_path):
+        # Keeping the directory must not turn the replacement into a merge: a
+        # file the guest deleted would come back every call, and the model would
+        # be told its own delete did not take.
+        work = _workspace(tmp_path)
+        staged = self._staged(tmp_path, work)
+        (work / "job" / "deleted_by_the_guest.txt").write_text("gone\n")
+        carry_the_workspace_back(
+            image=staged["image"], workspace=work, scratch=tmp_path / "scratch"
+        )
+        assert not (work / "job" / "deleted_by_the_guest.txt").exists()
+        assert (work / "job" / "plain.txt").read_text() == "hello\n"
 
 
 class TestTheArgumentsAreReadableWithoutRunningThem:

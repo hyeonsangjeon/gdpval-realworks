@@ -16,7 +16,7 @@ written where it can be tested on its own, on a box that cannot boot a machine
 at all, using the same ``mke2fs`` and ``debugfs`` that will do the work in
 production.
 
-Three facts were measured with those tools rather than assumed, and each one
+Four facts were measured with those tools rather than assumed, and each one
 changed the code:
 
 **``debugfs -R`` exits 0 when it fails.** A missing directory in the image, a
@@ -43,6 +43,16 @@ opens everything with ``O_NOFOLLOW`` and would refuse it, but the carriage must
 not depend on the other end being careful — a deliverable collector, a report
 step or an operator's ``cp -r`` would all follow it. So a link that leaves the
 workspace is not carried, and is recorded as having been refused.
+
+**A renamed workspace is a broken workspace.** The obvious way to install what
+came back is to rename the old directory aside and the new one into its place,
+which is atomic. It also destroys the session: the backend holding the workspace
+pins ``(st_dev, st_ino)`` at construction and keeps the descriptor, so after a
+rename its own re-check refuses and a write through that descriptor raises
+``FileNotFoundError``. Measured here, not reasoned about. The children are moved
+instead and the directory keeps its identity; :func:`carry_the_workspace_back`
+says what that costs. The failure this avoids would have appeared on the second
+``exec_run`` of a session, after the first looked fine.
 
 What is deliberately not here: booting. This module stages a disk and reads one
 back. :func:`core.agentic_v2_first_boot.first_boot` is what runs in between, and
@@ -370,7 +380,7 @@ def carry_the_workspace_back(
     scratch: str | Path,
     run: Callable[[Sequence[str]], Any] | None = None,
 ) -> dict[str, Any]:
-    """Replace the host workspace with what the machine left on the disk.
+    """Replace the *contents* of the host workspace with what the disk holds.
 
     **Only if something came back.** A read-back that produced nothing leaves
     the host workspace exactly as it was: the alternative is deleting a
@@ -379,20 +389,51 @@ def carry_the_workspace_back(
     output. The result says which happened, and the caller reports it as an
     infrastructure failure rather than as an empty answer.
 
-    The replacement is a rename, so there is no window in which the workspace is
-    half of each. The old one is removed after the new one is in place.
+    **The directory itself is never replaced, and that is not a style choice.**
+    The obvious implementation renames the old workspace aside and renames the
+    new one into its place, which is atomic and would be better in every way
+    except the one that matters: the object holding this workspace opens it once
+    and keeps the descriptor. ``AgenticV2FixtureBackend.__init__`` pins
+    ``(st_dev, st_ino)`` and re-checks it before later work. Measured on this
+    box, a rename-swap leaves that descriptor pointing at the renamed-away
+    directory, so the backend's re-check refuses and a write through the pinned
+    descriptor raises ``FileNotFoundError`` once the old directory is removed.
+    The failure would arrive on the *second* ``exec_run`` of a session, after
+    the first had already looked like it worked.
+
+    So the children are moved instead and the directory stays the one it was.
+    The cost is a window in which the workspace holds neither set whole; it is
+    inside one synchronous call with no other reader, and it is a far smaller
+    thing than losing the inode. If the move in fails partway, what was moved
+    aside is put back, so a half-carriage does not become an empty workspace.
+
+    ``shutil.move`` rather than ``rename`` because the read-back lands in the
+    caller's scratch and the workspace need not be on the same filesystem.
     """
     read = workspace_out_of_work_disk(image=image, into=scratch, run=run)
     workspace = Path(workspace)
     if not read["read_back"]:
         return {**read, "replaced": False}
 
-    previous = workspace.with_name(workspace.name + ".previous")
-    if previous.exists():
-        shutil.rmtree(previous)
-    workspace.rename(previous)
-    Path(read["root"]).rename(workspace)
-    shutil.rmtree(previous, ignore_errors=True)
+    landed = Path(read["root"])
+    held = Path(scratch) / "previous"
+    if held.exists():
+        shutil.rmtree(held)
+    held.mkdir(parents=True)
+
+    moved_aside = []
+    for child in sorted(workspace.iterdir()):
+        shutil.move(str(child), str(held / child.name))
+        moved_aside.append(child.name)
+    try:
+        for child in sorted(landed.iterdir()):
+            shutil.move(str(child), str(workspace / child.name))
+    except OSError:
+        for name in moved_aside:
+            if not (workspace / name).exists():
+                shutil.move(str(held / name), str(workspace / name))
+        raise
+    shutil.rmtree(held, ignore_errors=True)
     return {**read, "replaced": True}
 
 
