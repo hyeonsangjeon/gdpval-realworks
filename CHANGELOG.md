@@ -11,6 +11,84 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Fixed
+- **The Codex `401` was never about the deployment: the auth command could not
+  produce a token where Codex runs it.** Three independent faults, each
+  sufficient on its own, each producing the same silent symptom.
+
+  Codex authenticates the provider by running a command and reading the token
+  from its stdout. It starts that command with the **task's directory** as the
+  working directory — `CodexAgentRunner.open_runtime` sets `CodexConfig.cwd` to
+  the workspace and the pinned SDK passes it straight to `Popen` — and in the
+  **isolated environment**, where `HOME` is rewritten to a throwaway directory.
+  From there:
+
+  1. `python -m core.codex_azure_token` cannot import `core`. It failed before
+     the module's first line.
+  2. `DefaultAzureCredential`'s working leg is the Azure CLI, which reads its
+     sign-in from `$HOME/.azure`. With `HOME` rewritten there was none.
+  3. On any failure the command prints nothing on stdout — deliberately, so
+     Codex cannot mistake an error for a token. Codex therefore sent an **empty
+     bearer**, and the gateway answered `401 Access denied due to invalid
+     subscription key or wrong API endpoint`.
+
+  That sentence names the endpoint and the key, both of which were correct
+  throughout — run `34442249527` had already proved the identity may infer on
+  this resource. Runs `34319880025` and `34347516170` are what reading it
+  literally cost.
+
+  The first fault alone accounts for those runs, without appealing to anything
+  local: `PYTHONPATH` is neither inherited nor neutralised by
+  `build_isolated_environment`, and the diagnostic workflow never sets it, so
+  `-m core.codex_azure_token` from the task's directory raises
+  `No module named 'core'` on any host. Whether the second also bites on a
+  runner — where `azure/login` writes the sign-in that the rewritten `HOME`
+  then hides — is a prediction, and the new free `auth_command` record is what
+  settles it.
+
+  The fixes, in the same order. `CodexProviderSettings.auth_entrypoint()` names
+  the module by resolved file path instead of `-m`, and the module puts its own
+  package root on `sys.path` when run that way, so it no longer depends on
+  where it is started. `discover_azure_cli_config_dir()` reads the sign-in's
+  location in the **parent** and `auth_command()` appends it as
+  `--azure-config-dir`; the value travels in the command's own argv, so the
+  Codex process's environment is unchanged and the model's tools see exactly
+  the isolation they saw before — asserted by
+  `test_the_isolation_still_hides_the_sign_in_from_codex_itself`. And
+  `CodexAgentRunner.require_a_usable_auth_command()` runs the real command in
+  the real isolated environment once per runner and refuses to start a runtime
+  when no token comes back, raising `CodexAuthCommandFailed` with the
+  command's own reason attached.
+
+  Measured locally end to end: the auth command now exits `0` with a token
+  **inside** the isolation, started from the task directory. The probe keeps no
+  token and no token-derived value — only whether stdout carried one, and why
+  not.
+
+- **`diagnose_codex_foundry_connection.py` asks the sign-in before it spends.**
+  New verdict `auth_command_produced_no_token`, and an `auth_command` block in
+  every record. A sign-in that cannot mint now ends the run before a request
+  exists, so this failure costs nothing instead of a paid `401`.
+
+  The **free plan** answers it too. Minting an Entra token is a call to the
+  identity platform, not to the deployment: no model runs and nothing is
+  billed. So a run without `--send-request` now runs the real auth command in
+  the real isolated environment and fills the same `auth_command` block — which
+  turns "does the second fault bite on a runner?" from a paid dispatch into a
+  free one. It reports rather than gates: a sign-in that cannot mint still
+  leaves the plan green and exit `0`, because a red plan reads as "the
+  diagnostic broke" and the finding here is the opposite. A host that cannot
+  run the preflight at all leaves the field `null` — *not asked*, which is not
+  the same as *asked, and no*. `reason` goes through the record's redactor like
+  every other runtime message; `azure_config_dir` does not, because which home
+  the sign-in was found in is the one thing the record is for.
+
+- **Corrected the first `codex_foundry` readiness blocker.** Its old text said
+  no token from the auth command had ever been accepted by a Foundry
+  deployment; run `34442249527` had already disproved that. The replacement
+  says what is actually unobserved — a turn from inside the isolation, on a
+  runner. The gate stays closed; only the reason is now true.
+
 ### Added
 - **The identity may infer on this resource — measured, not argued — and the
   question is now which property of a Codex request stops it.** Run
@@ -57,6 +135,20 @@ entries land under a fresh dated heading the day they merge to `main`.
   requests, which is emphatically not free. Pinned by 31 tests in
   `batch-runner/tests/test_codex_closing_sweep.py`, every host in them a
   loopback socket on the test machine.
+
+  **Fired, run `34448607605`, verdict `no_property_closes_a_served_request`.**
+  The baseline was re-tested that day and served, so the premise held and the
+  other eight were bought honestly. All nine arms answered `200`, including
+  `everything` — 30,981 bytes, nine added headers, `stream: true`, a 19 KB
+  `instructions` and ten tool definitions, materially larger and stranger than
+  a Codex turn and served without complaint. `properties_that_closed_the_gate`
+  is `[]`, 9 planned and 9 sent. Summed usage 5,942 in / 35 out over the seven
+  arms that reported it; the two that set `stream: true` hold the SSE prelude
+  rather than a parsed final status and report none. `price_usd: null`,
+  `pricing: partial` — unpriced, not free.
+
+  Finding nothing was the finding: it is what pointed away from the request
+  body, and the thing this sweep does not vary turned out to be the sign-in.
 
 - **The one request in this diagnostic that the route can actually serve.**
   `--valid-request` in `batch-runner/scripts/diagnose_codex_foundry_connection.py`,

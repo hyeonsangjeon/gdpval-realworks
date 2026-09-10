@@ -48,6 +48,7 @@ real connection is on record.
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import re
 from dataclasses import dataclass, field
@@ -486,6 +487,41 @@ _PROVIDER_ID_PATTERN = re.compile(r"\A[a-z0-9][a-z0-9-]{0,63}\Z")
 #: ``core.azure_ai_clients.FORBIDDEN_STATIC_AZURE_CREDENTIAL_ENV``.
 DEFAULT_AUTH_MODULE = "core.codex_azure_token"
 
+#: Where the Azure CLI keeps its configuration and its signed-in accounts. The
+#: CLI reads ``AZURE_CONFIG_DIR`` when it is set and falls back to this name
+#: under ``HOME`` when it is not.
+AZURE_CLI_CONFIG_DIR_NAME = ".azure"
+
+
+def discover_azure_cli_config_dir(
+    source_environment: Mapping[str, str] | None = None,
+) -> str | None:
+    """Find the Azure CLI sign-in this machine already has, or ``None``.
+
+    This is read in the **parent** — the process that builds the Codex command
+    line — because by the time the auth command runs there is nothing left to
+    read it from. :func:`build_isolated_environment` rewrites ``HOME`` to the
+    task's directory, and the CLI's sign-in is the one thing under the real
+    ``HOME`` that the auth command genuinely needs. Passing the answer down as
+    an argument is narrower than inheriting ``HOME``, and narrower than adding
+    a name to :data:`INHERITED_ENV_NAMES`: the Codex process's own environment
+    does not change at all, so neither does what the model's tools can see.
+
+    ``None`` means "this machine has no Azure CLI sign-in to point at", which
+    is the ordinary case on a runner authenticating some other way. The caller
+    then omits the argument and ``DefaultAzureCredential`` behaves as before.
+    """
+    source = dict(os.environ if source_environment is None else source_environment)
+    configured = source.get("AZURE_CONFIG_DIR", "").strip()
+    if configured:
+        return configured if Path(configured).is_dir() else None
+    home = source.get("HOME", "").strip()
+    if not home:
+        return None
+    candidate = Path(home) / AZURE_CLI_CONFIG_DIR_NAME
+    return str(candidate) if candidate.is_dir() else None
+
+
 #: Codex re-runs the auth command on this interval. Entra access tokens are
 #: good for roughly an hour; refreshing well inside that avoids a long task
 #: dying mid-turn on an expiry.
@@ -681,18 +717,58 @@ class CodexProviderSettings(CodexProviderLike):
         """The provider ``base_url``, without the trailing slash Codex adds."""
         return self.endpoint.rstrip("/")
 
-    def auth_command(self) -> list[str]:
+    def auth_command(
+        self, source_environment: Mapping[str, str] | None = None
+    ) -> list[str]:
         """The command Codex runs to get a token, as argv.
 
         It prints one Entra access token to stdout and nothing else — see
         ``core/codex_azure_token.py``. Passing a command rather than a key is
         what keeps this run place inside the repository's rule that no static
         Azure credential exists in any environment we build.
+
+        When this machine has an Azure CLI sign-in, its location is appended as
+        ``--azure-config-dir``. Codex runs this command inside the isolated
+        environment, where ``HOME`` no longer points at that sign-in; without
+        the argument the mint fails, the command prints nothing by design, and
+        Codex sends an empty bearer that the gateway rejects as an invalid
+        subscription key. The argument is a path, not a credential, and it goes
+        to this command alone — the Codex process's environment is untouched.
         """
         import sys
 
         executable = self.python_executable or sys.executable
-        return [executable, "-m", self.auth_module, "--scope", self.auth_scope]
+        argv = [executable, *self.auth_entrypoint(), "--scope", self.auth_scope]
+        config_dir = discover_azure_cli_config_dir(source_environment)
+        if config_dir:
+            argv += ["--azure-config-dir", config_dir]
+        return argv
+
+    def auth_entrypoint(self) -> list[str]:
+        """How to name the auth module to an interpreter, as argv fragments.
+
+        A file path when one can be resolved, because Codex starts the auth
+        command with the *task's* directory as its working directory — see
+        ``CodexConfig.cwd`` in :meth:`core.codex_runner.CodexAgentRunner.
+        open_runtime`, which the pinned SDK passes straight to ``Popen``. From
+        there ``-m core.codex_azure_token`` raises ``No module named 'core'``
+        before the module's first line runs, and the command exits with an
+        empty stdout that Codex forwards as an empty bearer.
+
+        ``-m`` remains the fallback for a module that cannot be resolved to a
+        file, which is how the tests point this at a stub on ``PYTHONPATH``.
+        """
+        try:
+            spec = importlib.util.find_spec(self.auth_module)
+        except (ImportError, ValueError, AttributeError):
+            spec = None
+        origin = getattr(spec, "origin", None)
+        if origin and origin.endswith(".py") and Path(origin).is_file():
+            # Resolved, because the recorded argv is read by people comparing
+            # one run's configuration with another's, and ``a/./b`` and ``a/b``
+            # are the same file wearing two names.
+            return [str(Path(origin).resolve())]
+        return ["-m", self.auth_module]
 
     def config_overrides(self) -> tuple[str, ...]:
         """The provider table for this deployment, as command-line overrides."""

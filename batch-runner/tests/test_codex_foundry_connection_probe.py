@@ -629,7 +629,27 @@ ROUTED = {
 }
 
 
-def _run(argv, environ, monkeypatch, capsys):
+#: What the sign-in preflight would say, for the tests that are not about the
+#: sign-in. Stubbed by default in :func:`_run` because the real one starts a
+#: subprocess that talks to the Azure identity platform, and a unit test that
+#: reaches the network is a unit test that can fail for a reason it was never
+#: written to detect. The tests below that *are* about the sign-in say so.
+STUB_AUTH_PROBE = {
+    "ran": True,
+    "exit_code": 0,
+    "produced_a_token": True,
+    "reason": None,
+    "azure_config_dir": "/home/somebody/.azure",
+    "ok": True,
+}
+
+
+def _run(argv, environ, monkeypatch, capsys, auth_probe=STUB_AUTH_PROBE):
+    import scripts.diagnose_codex_foundry_connection as module
+
+    monkeypatch.setattr(
+        module, "_plan_auth_command", lambda _settings_: auth_probe
+    )
     for name in (
         "AZURE_AI_ROUTE_PROFILE",
         "AZURE_OPENAI_V1_ENDPOINT",
@@ -709,6 +729,155 @@ def test_a_run_that_could_not_be_configured_still_leaves_a_record(
 def test_a_deployment_must_be_named(capsys):
     with pytest.raises(SystemExit):
         main([])
+
+
+# ── The sign-in, which the free plan can ask about ──────────────────────────
+#
+# The 401 this diagnostic was built to explain turned out to be ours: Codex
+# reads its bearer from an auth command's stdout, the command could neither
+# import its package nor find the Azure CLI sign-in from inside the isolated
+# environment, and an empty bearer came back as "invalid subscription key".
+#
+# Minting an Entra token is a call to the identity platform, not to the
+# deployment — no model runs and nothing is billed. So the plan runs it, and
+# the question "can this host mint from where Codex runs it?" is answered by a
+# dispatch that spends nothing instead of by a paid one that stops early.
+
+
+def _probe(**overrides):
+    from core.codex_runner import AuthCommandProbe
+
+    fields = {
+        "ran": True,
+        "exit_code": 0,
+        "produced_a_token": True,
+        "reason": None,
+        "azure_config_dir": "/home/somebody/.azure",
+    }
+    fields.update(overrides)
+    return AuthCommandProbe(**fields)
+
+
+class _FakeRunner:
+    """Stands in for the runner, so no subprocess and no network."""
+
+    def __init__(self, probe):
+        self._probe = probe
+        self.workspaces = []
+
+    def __call__(self, settings, verify_runtime=True):
+        self.verify_runtime = verify_runtime
+        return self
+
+    def preflight_auth_command(self, workspace):
+        self.workspaces.append(workspace)
+        return self._probe
+
+
+def test_the_free_plan_says_whether_the_sign_in_can_mint(monkeypatch, capsys):
+    code, record = _run(["--deployment", DEPLOYMENT], ROUTED, monkeypatch, capsys)
+    assert code == 0
+    assert record["verdict"] == VERDICT_NOT_SENT
+    assert record["observed"]["turn_sent"] is False
+    assert record["observed"]["auth_command"] == STUB_AUTH_PROBE
+    assert "costs nothing" in record["note"]
+
+
+def test_a_sign_in_that_cannot_mint_still_leaves_the_plan_green(
+    monkeypatch, capsys
+):
+    """The free step reports; it does not gate.
+
+    A red plan would be read as "the diagnostic broke", and the thing it is
+    reporting is the opposite: it worked, and the answer is no.
+    """
+    failed = _probe(
+        exit_code=1,
+        produced_a_token=False,
+        reason="codex-azure-token: could not acquire an access token",
+    ).as_record()
+    code, record = _run(
+        ["--deployment", DEPLOYMENT], ROUTED, monkeypatch, capsys, auth_probe=failed
+    )
+    assert code == 0
+    assert record["verdict"] == VERDICT_NOT_SENT
+    assert record["observed"]["auth_command"]["ok"] is False
+
+
+def test_a_preflight_that_could_not_run_at_all_leaves_the_field_empty(
+    monkeypatch, capsys
+):
+    """``null`` is "not asked", and it must not be confused with "asked, no"."""
+    code, record = _run(
+        ["--deployment", DEPLOYMENT], ROUTED, monkeypatch, capsys, auth_probe=None
+    )
+    assert code == 0
+    assert record["observed"]["auth_command"] is None
+    assert "costs nothing" not in record["note"]
+
+
+def test_a_preflight_that_raised_is_swallowed_rather_than_reported(monkeypatch):
+    """A host without the pinned runtime keeps getting the plan it used to get.
+
+    The plan ran on every host before this was added, and the only acceptable
+    way to add a step that cannot run everywhere is for the places it cannot
+    run to be unchanged by it.
+    """
+    import core.codex_runner as runner_module
+    import scripts.diagnose_codex_foundry_connection as module
+
+    def _explode(*args, **kwargs):
+        raise RuntimeError("no runtime here")
+
+    monkeypatch.setattr(runner_module, "CodexAgentRunner", _explode)
+    assert module._plan_auth_command(_settings()) is None
+
+
+def test_the_workspace_the_preflight_opened_is_cleaned_up(monkeypatch):
+    """Otherwise a plan leaves a directory behind every time it is run."""
+    import core.codex_runner as runner_module
+    import scripts.diagnose_codex_foundry_connection as module
+
+    fake = _FakeRunner(_probe())
+    monkeypatch.setattr(runner_module, "CodexAgentRunner", fake)
+    record = module._plan_auth_command(_settings())
+
+    assert record["ok"] is True
+    assert fake.verify_runtime is False, (
+        "the preflight needs the settings and a workspace, not the Codex "
+        "binary, and requiring the binary would make the free plan stop "
+        "running on hosts where it used to run"
+    )
+    assert len(fake.workspaces) == 1
+    assert not os.path.exists(fake.workspaces[0].workspace)
+
+
+def test_what_the_sign_in_said_is_redacted_like_every_other_message(monkeypatch):
+    """``reason`` is a subprocess's words, and this artifact is published.
+
+    The command's own failure line is short and safe, but it is not the only
+    line that can reach that field, and every other runtime message in this
+    script goes through the redactor before it is written down.
+    """
+    import core.codex_runner as runner_module
+    import scripts.diagnose_codex_foundry_connection as module
+
+    for name, value in ROUTED.items():
+        monkeypatch.setenv(name, value)
+    talkative = _probe(
+        exit_code=1,
+        produced_a_token=False,
+        reason=(
+            f"failed for https://{ACCOUNT}.services.ai.azure.com/ as {ACCOUNT}"
+        ),
+    )
+    monkeypatch.setattr(runner_module, "CodexAgentRunner", _FakeRunner(talkative))
+
+    record = module._plan_auth_command(_settings())
+
+    assert ACCOUNT not in json.dumps(record)
+    assert "<url redacted>" in record["reason"]
+    assert "<name redacted>" in record["reason"]
 
 
 # ── The workflow that runs it ───────────────────────────────────────────────
@@ -1220,6 +1389,20 @@ def test_the_check_passes_the_record_the_script_actually_writes(tmp_path):
     result = _run_redaction_check(tmp_path, _real_record())
     assert result.returncode == 0, result.stdout + result.stderr
     assert "record=clean" in result.stdout
+
+
+def test_the_check_passes_a_record_carrying_the_sign_ins_answer(tmp_path):
+    """The auth block is new, and this check is what stands between it and a
+    public artifact — including the home directory the sign-in was found in."""
+    record = _real_record()
+    record["observed"]["auth_command"] = _probe(
+        exit_code=1,
+        produced_a_token=False,
+        reason="codex-azure-token: could not acquire an access token",
+        azure_config_dir="/home/runner/.azure",
+    ).as_record()
+    result = _run_redaction_check(tmp_path, record)
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 def test_the_one_url_allowed_through_is_the_repositorys_own_constant():

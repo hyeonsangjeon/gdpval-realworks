@@ -12,6 +12,11 @@
   free role inventory and the one authorised paid turn have closed four of the
   five candidate causes of the 401 and left the refusal itself unexplained. See
   section 3c.
+- Updated: 2026-09-10 — the sweep was fired and found nothing: all nine paid
+  arms served. The refusal was then located, and it was ours — the auth command
+  could not produce a token where Codex runs it, for three separate reasons.
+  Fixed and tested locally; no turn has yet been sent through the fixed path.
+  See the last three bullets of section 12.
 - Status: **built, executing on one host, and not connected.** The code exists
   and most of the chain is checked against the real Codex binary. As of
   2026-09-08 the agent has been observed executing a command inside its sandbox
@@ -522,7 +527,8 @@ until the evidence exists.
 | `batch-runner/core/codex_runner.py` | Starts the runtime per task, hands over the prompt and reference files, collects deliverables, enforces the time limit, and cleans up. `open_runtime()` and `start_thread()` are the one construction path the diagnostic shares. |
 | `batch-runner/scripts/diagnose_codex_foundry_connection.py` | Asks the deployment one question and names which "no" came back, by reading the turn stream the SDK's collector discards (§3c). |
 | `.github/workflows/codex-foundry-connection-diagnostic.yml` | Runs it from `main` under the existing OIDC sign-in. `send_request` defaults off; the plan step always runs. |
-| `batch-runner/core/codex_azure_token.py` | Prints an Entra token to stdout for `auth.command`. |
+| `batch-runner/core/codex_azure_token.py` | Prints an Entra token to stdout for `auth.command`. Now runnable by path from any directory, and takes `--azure-config-dir` so it can find a sign-in the isolation has hidden from it. |
+| `batch-runner/tests/test_the_auth_command_runs_where_codex_runs_it.py` | Holds the three faults of §12 apart: the working directory, the sign-in, and the silence — plus the assertion that the fix did not buy the connection with isolation. |
 | `batch-runner/core/codex_cost.py` | Adapts thread-cumulative usage onto the repository's existing receipt contract. |
 | `batch-runner/core/executor.py` | Gained the `codex_foundry` mode and its dispatch entry. |
 | `batch-runner/core/experiment_config.py` | Accepts the mode in an experiment file. |
@@ -1176,6 +1182,128 @@ paid run must be preceded by a fresh smoke at the new fingerprint.
   (namespace granted, capability stripped) still cannot run it and still skip.
   The execution-host card stays open, because one retiring runner image is a
   reprieve rather than an answer.
-- The next decision is whoever can run one paid request against the pinned
-  deployment. Until it succeeds, the column stays empty and is reported as
-  unconfirmed. It is not filled with a substitute.
+- **The sweep was fired and it found nothing — which was the answer.** Run
+  `34448607605`, verdict `no_property_closes_a_served_request`. The baseline was
+  re-tested that day and served (`200`, `completed`, `gpt-5.4`, 13 in / 5 out),
+  so the premise held and the other eight were bought honestly. **All nine arms
+  returned `200`**, including `everything`: 30,981 bytes, nine added headers,
+  `stream: true`, a 19 KB `instructions` and ten tool definitions — a request
+  materially larger and stranger than a Codex turn, served without complaint.
+  `properties_that_closed_the_gate: []`. Summed usage 5,942 in / 35 out,
+  `price_usd: null`, `pricing: partial`; nine paid requests, unpriced, not free.
+  Two arms (`stream_true`, `everything`) set `stream: true`, so their records
+  hold the SSE prelude instead of a parsed final status and report no usage;
+  the sum is over the seven that did, and the gate question is answered at the
+  HTTP level for all nine.
+
+  So the refusal is not in what Codex puts in the request. That is a real
+  elimination and it cost nine requests, and the sweep's own record said what
+  was left: the transport, or something the sweep does not vary. It was the
+  second, and it was not in the request at all.
+
+- **The 401 was ours the whole time: the auth command could not produce a token
+  where Codex runs it.** Three faults, stacked, each sufficient alone, each
+  producing the same silence.
+
+  Codex authenticates by running a command and reading the token off its stdout.
+  It runs that command **from the task's directory** — `open_runtime` sets
+  `CodexConfig.cwd` to the workspace and the pinned SDK hands it to `Popen` —
+  and **inside the isolated environment**, where `HOME` is rewritten so the
+  model cannot reach the operator's home. Both are deliberate; both stay. From
+  there: `python -m core.codex_azure_token` cannot import `core`, so it died
+  before its first line; `DefaultAzureCredential`'s only working leg here is the
+  Azure CLI, which reads `$HOME/.azure`, and with `HOME` rewritten there was no
+  sign-in to read; and on failure the command prints **nothing** on stdout, by
+  design, so that an error can never be mistaken for a token. Codex forwarded an
+  empty bearer and the gateway answered `401 Access denied due to invalid
+  subscription key or wrong API endpoint` — a sentence naming the endpoint and
+  the key, both of which were correct throughout.
+
+  Measured, free, locally, before anything was changed: the same command exits
+  `0` with a 2,083-character token in the parent environment and exits `1` with
+  an empty stdout under `build_isolated_environment`. A per-credential sweep of
+  `DefaultAzureCredential` in the parent showed exactly one leg minting —
+  `AzureCliCredential` — and six unavailable, which is why the rewritten `HOME`
+  is decisive rather than incidental.
+
+  **The first fix proposed here was wrong and its own test said so.** Pointing
+  the credential at the real config directory alone still failed, because this
+  development box installs `az` into user site-packages, whose path Python
+  derives from `HOME`; under isolation `az` cannot start at all, and that
+  masked the sign-in question. Only pointing at the config directory *and*
+  neutralising that second, box-local breakage restored minting. A GitHub runner
+  installs the CLI system-wide, so the second condition should not apply
+  there — should, not does, and the diagnostic now carries the free instrument
+  that will say which.
+
+  The repairs are in `core/codex_runtime_config.py`, `core/codex_azure_token.py`
+  and `core/codex_runner.py`, and the important property of the second one is
+  what it refused to do. The sign-in's location travels in the **auth command's
+  own argv** as `--azure-config-dir`. It is not added to the Codex process's
+  environment, `HOME` is still rewritten, and `AZURE_CONFIG_DIR` is still absent
+  from what the model's tools inherit — the easy fix, and the one a later change
+  will be tempted by, is blocked by
+  `test_the_isolation_still_hides_the_sign_in_from_codex_itself`. §6's
+  prohibition on buying a connection with isolation is enforced here, not
+  promised.
+
+  Third, `CodexAgentRunner.require_a_usable_auth_command()` runs the real
+  command in the real isolated environment once per runner and refuses to open a
+  runtime when nothing comes back, raising `CodexAuthCommandFailed` with the
+  command's own reason. The probe reports *that* stdout carried a token and
+  never *which*; GUIDs and JWT-shaped strings are redacted out of the reason
+  before it is recorded. The connection diagnostic asks first and returns
+  `auth_command_produced_no_token` without sending anything, so this whole class
+  of failure now costs nothing instead of arriving as a paid `401`.
+
+  Twenty tests in
+  `batch-runner/tests/test_the_auth_command_runs_where_codex_runs_it.py` hold
+  the three faults apart, including one that runs the real module as a
+  subprocess from a directory where `core` is not importable and fails
+  *at the argument* rather than at the import. The existing credential test
+  could not have caught any of this and is not at fault:
+  `test_what_one_codex_turn_actually_sends.py` uses a **stub** token printer
+  that needs no sign-in, which is correct for what it measures — that the
+  runtime forwards whatever the command printed — and blind to the command
+  printing nothing.
+
+  What this is not. No request has been sent through the fixed path, on a runner
+  or anywhere else. The local end-to-end check is the auth command minting
+  inside a real isolated environment from a real task directory; it is not a
+  turn, not a tool, not a deliverable, and not the column. §11's fifth box stays
+  unticked.
+
+  **Which of the three bit on the runner, which is where the 401s were
+  bought.** The first one, certainly, and by itself it is enough. `PYTHONPATH`
+  is neither inherited nor neutralised by `build_isolated_environment`, so it
+  reaches the child only if the parent had it — and
+  `codex-foundry-connection-diagnostic.yml` never sets it. With the working
+  directory the task's and `PYTHONPATH` unset, `-m core.codex_azure_token`
+  raises `No module named 'core'` on any host, so run `34319880025`'s empty
+  bearer is accounted for without appealing to anything about this development
+  box.
+
+  The second is a **prediction and is recorded as one**. The workflow signs in
+  with `azure/login`, which writes to `/home/runner/.azure` — the directory the
+  rewritten `HOME` hides. `INHERITED_ENV_NAMES` does pass `AZURE_CLIENT_ID`,
+  `AZURE_TENANT_ID`, `AZURE_FEDERATED_TOKEN_FILE` and the two
+  `ACTIONS_ID_TOKEN_REQUEST_*` names through, so a credential that needs only
+  those could still work there; but `azure/login` with OIDC writes no federated
+  token file and no client secret, which is what `WorkloadIdentityCredential`
+  and `EnvironmentCredential` respectively require. The expectation is
+  therefore that the CLI is the working leg on the runner too and that the
+  second fault bites there as well. The free `auth_command` record settles it
+  either way, and it is not being assumed in advance.
+
+  The third bit everywhere, because it is what turned both of the others into
+  a sentence about a subscription key.
+
+- The next decision is one dispatch of the connection diagnostic from `main`
+  **in plan mode** — `send_request` left off, nothing billed — because the plan
+  now runs the real auth command in the real isolated environment and writes the
+  `auth_command` block. Minting is a call to the identity platform, not to the
+  deployment, so the runner question is answered by a dispatch that spends
+  nothing. It reports rather than gates: a runner that cannot mint still returns
+  `not_sent` and exit `0`, with `ok: false` and the reason. Then a real turn
+  through the fixed path. Until a turn is answered, the column stays empty and
+  is reported as unconfirmed. It is not filled with a substitute.

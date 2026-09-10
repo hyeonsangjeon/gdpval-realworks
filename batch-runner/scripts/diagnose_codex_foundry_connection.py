@@ -159,6 +159,12 @@ VERDICT_SANDBOX_FAILED = "sandbox_failed"
 VERDICT_TURN_TIMED_OUT = "turn_timed_out"
 #: The pinned SDK or binary is missing or is the wrong version.
 VERDICT_RUNTIME_UNAVAILABLE = "runtime_unavailable"
+#: The provider's auth command could not produce a token inside the isolated
+#: environment, so no bearer existed to send. Its own verdict rather than a
+#: shade of ``runtime_unavailable``: the runtime is fine and the deployment is
+#: fine, and filing this under either is how it went unseen. Nothing is sent
+#: and nothing is billed.
+VERDICT_AUTH_COMMAND_FAILED = "auth_command_produced_no_token"
 #: The runtime started and the session did not open, so nothing was sent.
 VERDICT_SESSION_NOT_STARTED = "session_not_started"
 #: The environment does not describe a deployment. Nothing was sent, and
@@ -620,6 +626,9 @@ def _empty_observation() -> dict[str, Any]:
             "item_types": [],
         },
         "usage": None,
+        # Whether the sign-in could produce a token where Codex runs it, and
+        # why not. Never the token, and never anything derived from one.
+        "auth_command": None,
         "final_response_present": False,
         "final_response_matched_instruction": False,
         "tool_execution_observed": False,
@@ -785,6 +794,27 @@ def probe(
     workspace = CodexWorkspace.create(task_id="foundry-connection-probe")
     codex: Any = None
     try:
+        # Asked and recorded before anything is sent, and recorded whichever
+        # way it answers. A turn started on a sign-in that cannot mint reaches
+        # the deployment carrying an empty bearer and is refused there, and the
+        # refusal — "invalid subscription key or wrong API endpoint" — is about
+        # the two things that were never wrong. Paid runs 34319880025 and
+        # 34347516170 are what that costs.
+        auth_probe = runner.preflight_auth_command(workspace)
+        observed["auth_command"] = auth_probe.as_record()
+        if auth_probe.ran and not auth_probe.ok:
+            return _record(
+                verdict=VERDICT_AUTH_COMMAND_FAILED,
+                description=description,
+                observed=observed,
+                note=(
+                    "the auth command produced no token in the isolated "
+                    "environment, so no request was sent and nothing was "
+                    "billed; the fault is local to the sign-in, not the "
+                    "deployment"
+                ),
+            )
+
         try:
             codex = runner.open_runtime(workspace)
         except Exception as exc:  # noqa: BLE001
@@ -2379,16 +2409,70 @@ def closing_sweep_probe(
 # ── Command line ────────────────────────────────────────────────────────────
 
 
-def _plan(description: Mapping[str, Any]) -> dict[str, Any]:
+def _plan(
+    description: Mapping[str, Any],
+    settings: CodexProviderSettings | None = None,
+) -> dict[str, Any]:
+    observed = _empty_observation()
+    note = (
+        "--send-request was not passed. This is the plan, fixed and "
+        "fingerprinted; no request exists and no cost was incurred"
+    )
+    if settings is not None:
+        auth_probe = _plan_auth_command(settings)
+        if auth_probe is not None:
+            observed["auth_command"] = auth_probe
+            note += (
+                "; the auth command was run once against this host's own "
+                "sign-in, which costs nothing and is not a request to the "
+                "deployment — see auth_command for whether a token can be "
+                "minted from inside the isolated environment"
+            )
     return _record(
         verdict=VERDICT_NOT_SENT,
         description=description,
-        observed=_empty_observation(),
-        note=(
-            "--send-request was not passed. This is the plan, fixed and "
-            "fingerprinted; no request exists and no cost was incurred"
-        ),
+        observed=observed,
+        note=note,
     )
+
+
+def _plan_auth_command(
+    settings: CodexProviderSettings,
+) -> dict[str, Any] | None:
+    """Ask the sign-in, in the free plan, because asking is free.
+
+    Minting an Entra token is a call to the identity platform, not to the
+    deployment: no model runs, no tokens are billed and nothing appears on an
+    invoice. Doing it here means the question "can this host mint from inside
+    the isolation?" is answered by a dispatch that spends nothing, rather than
+    by a paid dispatch that happens to stop early.
+
+    ``verify_runtime=False`` because the preflight needs the provider settings
+    and a workspace and not the Codex binary. A host without the pinned runtime
+    still gets a real answer, and a plan that used to run everywhere keeps
+    running everywhere — returning ``None`` on any failure, so an unexpected
+    one leaves the free step green and the field ``null`` rather than turning
+    a plan into a red run.
+
+    ``reason`` is a runtime message and goes through the redactor like every
+    other one in this file. ``azure_config_dir`` does not: it is a path this
+    repository discovered rather than something a subprocess said, and which
+    home the sign-in was found in is the one thing this record is for.
+    """
+    from core.codex_runner import CodexAgentRunner, CodexWorkspace
+
+    workspace = None
+    try:
+        runner = CodexAgentRunner(settings, verify_runtime=False)
+        workspace = CodexWorkspace.create(task_id="foundry-auth-preflight")
+        record = runner.preflight_auth_command(workspace).as_record()
+    except Exception:  # noqa: BLE001 - a free step must not fail the run
+        return None
+    finally:
+        if workspace is not None:
+            workspace.cleanup()
+    record["reason"] = build_redactor()(record.get("reason"))
+    return record
 
 
 def _emit(record: Mapping[str, Any], out: str | None) -> None:
@@ -2590,7 +2674,7 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     if not args.send_request:
-        _emit(_plan(description), args.out)
+        _emit(_plan(description, settings), args.out)
         return 0
     record = probe(settings, timeout=args.timeout, redact=redact)
     _emit(record, args.out)

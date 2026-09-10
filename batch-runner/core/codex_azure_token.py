@@ -15,7 +15,29 @@ makes, at the same scopes.
 
 Usage, as Codex invokes it::
 
-    python -m core.codex_azure_token --scope https://ai.azure.com/.default
+    python -m core.codex_azure_token --scope https://ai.azure.com/.default \
+        --azure-config-dir /home/runner/.azure
+
+Where the sign-in lives
+-----------------------
+
+Codex runs this command **inside the isolated environment it builds for a
+task**, and that environment rewrites ``HOME`` to the task's own directory so
+that anything the model writes "to the user's home" lands somewhere disposable.
+That is worth keeping. But ``DefaultAzureCredential``'s working leg here is the
+Azure CLI, and the CLI finds its sign-in under ``$HOME/.azure``. With ``HOME``
+rewritten there is no sign-in to find, the mint fails, and — per the output
+discipline below — the command prints nothing. Codex then sends an empty
+bearer, and the gateway answers ``401 Access denied due to invalid subscription
+key or wrong API endpoint``: a message about the endpoint and the key, which
+are both fine, for a fault that is neither.
+
+``--azure-config-dir`` is how the caller hands the location back. It travels in
+argv rather than in the environment on purpose: only *this* process, which
+prints a token and exits, learns where the sign-in is. The Codex process and
+every tool it runs keep the environment they had, so the isolation the sandbox
+depends on is unchanged. A path is not a credential, and the directory itself
+stays outside everything Codex can reach.
 
 Output discipline
 -----------------
@@ -34,8 +56,19 @@ than an error message it might try to send as one.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
-from typing import Sequence
+from pathlib import Path
+from typing import MutableMapping, Sequence
+
+if __package__ in (None, ""):  # pragma: no cover - exercised as a subprocess
+    # Run by path rather than as ``-m core.codex_azure_token``, because Codex
+    # starts this command with the *task's* directory as the working
+    # directory. From there ``core`` is not importable and ``-m`` fails before
+    # argument parsing — which, given the output discipline below, means an
+    # empty stdout and a token-shaped silence. Putting the package root on the
+    # path here makes the command independent of where it is started from.
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from core.azure_ai_clients import (
     DIRECT_TOKEN_SCOPE,
@@ -43,6 +76,10 @@ from core.azure_ai_clients import (
     DefaultAzureCredential,
     get_bearer_token_provider,
 )
+
+#: The variable the Azure CLI reads its configuration and token cache from.
+#: Setting it is equivalent to pointing the CLI at a different ``~/.azure``.
+AZURE_CONFIG_DIR_ENV = "AZURE_CONFIG_DIR"
 
 #: The scopes this helper will ask for. An arbitrary scope is refused rather
 #: than passed through: a token minted for an audience nobody here reviewed is
@@ -53,6 +90,33 @@ ALLOWED_SCOPES: tuple[str, ...] = (DIRECT_TOKEN_SCOPE, LEGACY_TOKEN_SCOPE)
 
 class TokenCommandError(RuntimeError):
     """The token could not be produced. The message never carries the token."""
+
+
+def point_at_azure_config_dir(
+    directory: str | os.PathLike[str],
+    environment: MutableMapping[str, str] | None = None,
+) -> str:
+    """Point the Azure CLI at ``directory`` for the rest of this process.
+
+    Returns the resolved path, so the caller can report *which* directory was
+    used without having to re-derive it.
+
+    A directory that does not exist is refused rather than set. Setting it
+    anyway would land us back where this option started: the CLI would look in
+    an empty place, report no sign-in, and this command would exit quietly —
+    the failure would just have moved. A wrong path is a fixable mistake, and
+    saying so is the whole point.
+    """
+    path = Path(directory)
+    if not path.is_dir():
+        raise TokenCommandError(
+            f"the Azure CLI configuration directory {str(path)!r} does not "
+            "exist, so there is no sign-in to read there"
+        )
+    resolved = str(path)
+    target = os.environ if environment is None else environment
+    target[AZURE_CONFIG_DIR_ENV] = resolved
+    return resolved
 
 
 def acquire_token(scope: str) -> str:
@@ -109,9 +173,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         default=DIRECT_TOKEN_SCOPE,
         help="token audience; one of: " + ", ".join(ALLOWED_SCOPES),
     )
+    parser.add_argument(
+        "--azure-config-dir",
+        default=None,
+        help=(
+            "the Azure CLI configuration directory to sign in from, for when "
+            "this command runs somewhere HOME does not point at it"
+        ),
+    )
     args = parser.parse_args(argv)
 
     try:
+        if args.azure_config_dir is not None:
+            point_at_azure_config_dir(args.azure_config_dir)
         token = acquire_token(args.scope)
     except TokenCommandError as exc:
         print(f"codex-azure-token: {exc}", file=sys.stderr)
