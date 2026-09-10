@@ -80,6 +80,13 @@ on:
         required: false
         default: false
         type: boolean
+      send_valid_request:
+        description: >-
+          Send one servable Responses request through plain urllib (paid, not
+          Codex). This is the only probe here that can produce a completion.
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -471,9 +478,82 @@ jobs:
               sys.exit(1)
           PY
 
-      # The one request. Skipped entirely unless it was asked for, so the
-      # difference between a free run and a paid one is a deliberate input and
-      # not a forgotten flag.
+      # The one request this file can send that the route is able to serve.
+      #
+      # Run 34437632382 finished the free line of questioning: all six header
+      # arms, up to and including every runtime header at once with
+      # `stream: true`, still cleared the gate with the same `400`. Nothing the
+      # runtime *adds to its headers* is what refuses it. What has never been
+      # sent to this resource is a body it could serve — every probe above
+      # deliberately omits the `model` field, which is exactly the field that
+      # resolves a deployment and therefore the field a per-deployment
+      # authorization check would key on.
+      #
+      # So this is not another free diagnostic. It costs, it is gated on its
+      # own input, and it answers a question none of the free ones can:
+      #
+      #   200 with text -> this identity infers here through urllib. Whatever
+      #                    refuses Codex is Codex-side, and there is now a
+      #                    working reference to diff its request against.
+      #   401/403       -> this identity may not infer here at all. That is a
+      #                    permission fact, and the first evidence in this
+      #                    whole diagnostic that would bear on a role.
+      #   400/404       -> the shape or the deployment name is wrong and the
+      #                    message says which. Still not a permission fact.
+      #
+      # Ceilings are in the script, not here, so they cannot be dispatched
+      # around: one request, no retry, 16 output tokens, 90 seconds, no
+      # fallback. Pinned by batch-runner/tests/test_codex_valid_request.py.
+      - name: Send one request the route can actually serve
+        id: valid_request
+        if: ${{ inputs.send_valid_request && steps.pinned.outputs.confirmed == 'yes' }}
+        working-directory: batch-runner
+        env:
+          AZURE_AI_ROUTE_PROFILE: direct-v1
+          FOUNDRY_PROJECT_ENDPOINT: ${{ secrets.FOUNDRY_PROJECT_ENDPOINT }}
+          DEPLOYMENT: ${{ inputs.deployment }}
+        run: |
+          set -euo pipefail
+          # `|| true` for the same reason as the turn below: the script exits
+          # non-zero for everything except a completion, and a refusal is the
+          # finding rather than a broken job. The verdict is read out of the
+          # file, which is also what keeps a missing file from passing.
+          python3 scripts/diagnose_codex_foundry_connection.py \
+            --deployment "${DEPLOYMENT}" \
+            --valid-request \
+            --out /tmp/codex-foundry-valid-request.json || true
+          test -s /tmp/codex-foundry-valid-request.json
+          python3 - <<'PY'
+          import json
+          import sys
+
+          record = json.load(open("/tmp/codex-foundry-valid-request.json"))
+          attempt = record["attempt"] or {}
+          print("token minted:", record["token"]["minted"])
+          print("requests planned:", record["requests_planned"],
+                "sent:", record["requests_sent"])
+          print("status:", attempt.get("status"))
+          print("produced text:", bool(attempt.get("answer")))
+          usage = attempt.get("usage") or {}
+          print("usage reported:", usage.get("reported"),
+                "pricing:", usage.get("pricing"))
+          print("verdict:", record["verdict"])
+          print("what that means:", record["verdict_note"])
+
+          if not record["token"]["minted"]:
+              print("::error::the token could not be minted, so nothing was "
+                    "sent and this run measures nothing about the resource.")
+              sys.exit(1)
+
+          # The count on the wire, not the constant. This is the paid probe;
+          # a run that sent more than it planned is the failure mode the
+          # ceilings exist to prevent, and it must be loud.
+          if record["requests_sent"] > record["requests_planned"]:
+              print(f"::error::planned {record['requests_planned']} request(s) "
+                    f"and sent {record['requests_sent']}.")
+              sys.exit(1)
+          PY
+
       #
       # Two conditions, not one. `inputs.send_request` is the person's
       # intention; `steps.pinned.outputs.confirmed` is the machine's evidence
@@ -559,6 +639,7 @@ jobs:
               "/tmp/codex-foundry-readonly.json",
               "/tmp/codex-foundry-auth-discriminator.json",
               "/tmp/codex-foundry-transmission-sweep.json",
+              "/tmp/codex-foundry-valid-request.json",
               "/tmp/codex-foundry-connection.json",
           ):
               if not os.path.exists(path):
@@ -577,16 +658,17 @@ jobs:
                           f"{path}: contains a URL that is not the public token scope"
                       )
               record = json.loads(text)
-              # Four record shapes now land here and only one of them observes
-              # a turn. Branch on the record's own schema rather than on
-              # whether the key happens to be present: `.get("observed", {})`
-              # would turn a renamed field in the connection record into a
-              # silent pass, and this check exists precisely to catch a claim
-              # nobody measured. The three free shapes are matched by prefix
-              # and the turn shape is the `else`, so a *new* free record added
-              # without touching this list fails closed rather than skipping.
-              # It has now done that once, for real, on the sweep record --
-              # which is the whole argument for writing it this way.
+              # Five record shapes now land here and they do not share a
+              # check, so every one of them is matched by name and an
+              # unrecognised schema is fatal. The previous shape -- three
+              # prefixes and the turn record as the `else` -- was right about
+              # failing closed and it did fail closed once, for real, on the
+              # sweep record. But it failed by `KeyError` inside the turn
+              # branch, which is a crash that happens to be safe rather than a
+              # check that refuses. The valid-request record would have hit the
+              # same branch and is worse: it is the *paid* one, so the run that
+              # crashes here is the run that already spent the money and then
+              # throws the evidence away. Named branches, explicit `else`.
               schema = str(record.get("schema", ""))
               if schema.startswith((
                   "codex_foundry_readonly_probe/",
@@ -595,9 +677,23 @@ jobs:
               )):
                   if record["inference_requested"] is not False:
                       leaked.append(f"{path}: a free-probe record claims a request was made")
-              else:
+              elif schema.startswith("codex_foundry_valid_request/"):
+                  # The reverse check. This probe does buy inference, and the
+                  # field is how a reader tells a paid record from a free one.
+                  # A `false` here would hide a real request inside the cheap
+                  # branch, so `true` is required rather than merely allowed.
+                  if record["inference_requested"] is not True:
+                      leaked.append(f"{path}: a paid probe's record denies sending a request")
+                  if record["requests_sent"] > record["requests_planned"]:
+                      leaked.append(f"{path}: sent more requests than it planned")
+              elif schema.startswith("codex_foundry_connection/"):
                   if record["observed"]["tool_execution_observed"] is not False:
                       leaked.append(f"{path}: claims tool execution, which this probe cannot observe")
+              else:
+                  leaked.append(
+                      f"{path}: schema {schema!r} has no check here, so nothing "
+                      f"vouched for this record"
+                  )
 
           if leaked:
               print("FATAL:")
@@ -632,6 +728,7 @@ jobs:
             /tmp/codex-foundry-readonly.json
             /tmp/codex-foundry-auth-discriminator.json
             /tmp/codex-foundry-transmission-sweep.json
+            /tmp/codex-foundry-valid-request.json
             /tmp/codex-foundry-connection.json
           if-no-files-found: warn
           retention-days: 90
@@ -675,6 +772,17 @@ jobs:
           TS_BASELINE="$(python3 -c "import json,sys;print((json.load(open(sys.argv[1]))['arms'].get('baseline') or {}).get('status'))" "$TS" 2>/dev/null || echo 'unknown')"
           # An empty list prints as nothing and would read as "not measured".
           TS_CLOSED="$(python3 -c "import json,sys;v=json.load(open(sys.argv[1]))['properties_that_closed_the_gate'];print(', '.join(v) if v else 'none — nothing closed it')" "$TS" 2>/dev/null || echo 'not measured')"
+          VR=/tmp/codex-foundry-valid-request.json
+          VR_VERDICT="$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['verdict'])" "$VR" 2>/dev/null || echo 'not measured')"
+          VR_NOTE="$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['verdict_note'])" "$VR" 2>/dev/null || echo 'not measured')"
+          VR_STATUS="$(python3 -c "import json,sys;print((json.load(open(sys.argv[1]))['attempt'] or {}).get('status'))" "$VR" 2>/dev/null || echo 'unknown')"
+          # Whether text came back, not the text itself. The answer is in the
+          # artifact; a model's words do not belong in a job summary.
+          VR_TEXT="$(python3 -c "import json,sys;print(bool((json.load(open(sys.argv[1]))['attempt'] or {}).get('answer')))" "$VR" 2>/dev/null || echo 'unknown')"
+          VR_SENT="$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['requests_sent'])" "$VR" 2>/dev/null || echo 'unknown')"
+          VR_PRICING="$(python3 -c "import json,sys;print((((json.load(open(sys.argv[1]))['attempt'] or {}).get('usage')) or {}).get('pricing'))" "$VR" 2>/dev/null || echo 'unknown')"
+          VR_IN="$(python3 -c "import json,sys;print((((json.load(open(sys.argv[1]))['attempt'] or {}).get('usage')) or {}).get('input_tokens'))" "$VR" 2>/dev/null || echo 'unknown')"
+          VR_OUT="$(python3 -c "import json,sys;print((((json.load(open(sys.argv[1]))['attempt'] or {}).get('usage')) or {}).get('output_tokens'))" "$VR" 2>/dev/null || echo 'unknown')"
           {
             echo "### Codex → Foundry, one turn"
             echo ""
@@ -769,8 +877,42 @@ jobs:
             echo "지나 안에서 걸렸다는 뜻입니다. 이건 **검사 순서**(토큰을 본문보다"
             echo "먼저 본다)를 말해 줄 뿐, 이 신원이 **추론을 실행해도 되는지**는"
             echo "말해 주지 않습니다. 그걸 보여 줄 수 있는 유일한 요청은 *답할 수"
-            echo "있는* 요청인데, 그건 이 진단이 절대 보내지 않는 바로 그것입니다."
-            echo "그래서 여기서 무엇이 나오든 **220문제가 돌아간다는 뜻이 아닙니다.**"
+            echo "있는* 요청이고, 그건 아래 칸이 하는 일입니다 — 무료가 아니라서"
+            echo "따로 켜야 합니다. 그래서 **이 칸에서** 무엇이 나오든"
+            echo "**220문제가 돌아간다는 뜻이 아닙니다.**"
+            echo ""
+            echo "### 답할 수 있는 요청 한 번 (유료, Codex 아님)"
+            echo ""
+            echo "- 보낸 요청 수: \`${VR_SENT}\` (상한 1회, 재시도 없음)"
+            echo "- 응답 코드: \`${VR_STATUS}\`"
+            echo "- 모델이 글자를 만들었는가: \`${VR_TEXT}\`"
+            echo "- 토큰 사용량: 입력 \`${VR_IN}\` / 출력 \`${VR_OUT}\`, 가격 \`${VR_PRICING}\`"
+            echo "- 판정: \`${VR_VERDICT}\`"
+            echo "- 뜻: ${VR_NOTE}"
+            echo ""
+            echo "이게 왜 다른가: **위의 확인들은 전부 일부러 답할 수 없는 요청**을"
+            echo "보냈습니다. 본문에 모델 이름이 없어서 아무것도 생성될 수 없고,"
+            echo "그래서 돈이 들지 않았습니다. 대신 \"이 신원이 여기서 추론을 해도"
+            echo "되는가\"라는 질문에는 **한 번도 답하지 못했습니다.** 이 칸은"
+            echo "그 질문에만 답합니다."
+            echo ""
+            echo "- \`inference_succeeded\` → 이 자원과 신원은 **된다**는 뜻입니다."
+            echo "  그러면 Codex를 막는 것은 자원도 신원도 주소도 아니고"
+            echo "  **Codex 쪽**이며, 이제 비교할 성공 사례가 생깁니다."
+            echo "- \`inference_refused_at_the_auth_gate\` (401/403) → 이 신원은"
+            echo "  여기서 **추론을 할 수 없습니다.** 이건 위의 어떤 확인도 낼 수"
+            echo "  없었던 결론이고, 권한 이야기를 꺼낼 근거가 되는 첫 증거입니다."
+            echo "- \`inference_request_rejected\` (400/404) → 요청 형식이나 배포"
+            echo "  이름 문제이지 **권한 문제가 아닙니다.**"
+            echo "- \`valid_request_inconclusive\` → \`200\`인데 글자가 없었거나"
+            echo "  요청이 아예 도달하지 못한 경우입니다. **성공이 아닙니다.**"
+            echo ""
+            echo "**여기서도 넘겨짚지 않기:** 이건 \`urllib\`이지 Codex 런타임이"
+            echo "아닙니다. 성공해도 \"자원과 신원은 된다\"까지이고 \"Codex가 된다\"가"
+            echo "아닙니다. 도구도 안 돌았고 파일도 안 만들었으므로 **문제 한 개를"
+            echo "푼 것도 아닙니다.** 사용량은 응답이 준 대로 적었고, 이 저장소에"
+            echo "이 경로의 단가가 등록돼 있지 않아 가격은 \`partial\`입니다 —"
+            echo "**0달러라는 뜻이 아니라 아직 값을 매기지 않았다는 뜻입니다.**"
             echo ""
             echo "이 줄이 뜻하는 것: Codex 런타임이 만든 요청 한 번을 실제 배포에"
             echo "보내고, 그쪽이 무엇이라고 답했는지를 이름 붙여 기록한 것입니다."

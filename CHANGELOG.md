@@ -12,6 +12,71 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Added
+- **The one request in this diagnostic that the route can actually serve.**
+  `--valid-request` in `batch-runner/scripts/diagnose_codex_foundry_connection.py`,
+  wired as a step gated on its own `send_valid_request` input *and* the resource
+  fingerprint. It is paid, and it is the only probe here that can produce a
+  completion.
+
+  Everything before it deliberately sends something unservable — a listing, a
+  body with no `model` in it, a bearer that was never valid — which is what
+  makes those probes free and is also their ceiling. Run `34437632382` finished
+  that line of questioning: all six header arms of the sweep, up to and
+  including every runtime header at once with `stream: true`, still cleared the
+  gate with the same `400`. Nothing the runtime adds to its headers is what
+  refuses it. What has never been sent to this resource, across every probe, is
+  a body it could serve — so *may this identity infer here* has never been
+  asked, and no record on disk answers it.
+
+  One request. No retry, no fallback, `max_output_tokens: 512`, `stream: false`,
+  `store: false`, a 90-second wall clock and a trivial public prompt carrying no
+  benchmark content. The ceilings live in the script rather than in the
+  workflow, so a dispatch cannot widen them.
+
+  512 rather than the API's minimum of 16, and that difference matters more than
+  the cost does. These deployments are reasoning models: they spend output
+  tokens on reasoning before emitting any text, so a ceiling of 16 is consumed
+  entirely by that and the answer comes back `200 incomplete` with nothing in
+  it. This probe correctly refuses to call that a success — which would have
+  meant spending the one request that was supposed to settle the question on an
+  artefact of its own configuration. If it happens anyway the record now says
+  so: the Responses status and `incomplete_details.reason` are written down
+  alongside the HTTP status, and the note names the ceiling as the thing to
+  change rather than leaving a bare "200 with no text" to read as a failure of
+  the route.
+
+  Its three outcomes point at three different repairs. `200` with model text:
+  the resource, identity and route are fine, what refuses Codex is Codex-side,
+  and a working request now exists to diff the runtime's against. `401`/`403`
+  on a servable body: a permission fact, the first evidence here that would
+  bear on a role, and unobtainable from any free probe. `400`/`404`: the shape
+  or the deployment name, still not permission.
+
+  Read strictly on purpose. A `200` carrying no model text is recorded as
+  inconclusive rather than as a success, and the exit code is `0` only for a
+  completion — a `401` here would be the most useful result this script has
+  ever produced and it still exits `1`. Usage is written down as the response
+  reported it with `price_usd: null` and `pricing: partial`: no rate for this
+  route is registered in this repository, and `partial` means unpriced, not
+  free. The record carries what a completion would still not establish — this
+  is `urllib` and not the runtime, no tool ran and no file was written, and the
+  220-task column is untouched either way. Pinned by 48 tests in
+  `batch-runner/tests/test_codex_valid_request.py`.
+
+### Fixed
+- **The diagnostic's redaction check no longer routes an unknown record shape
+  into another shape's check.** Its branches were three free-record schema
+  prefixes with the turn record as the `else`. That failed closed once, for
+  real, on the sweep record — by `KeyError`, which is a crash that happens to
+  be safe. The valid-request record would have hit the same branch, and there
+  the accident is expensive: it is the paid record, so the run that crashes is
+  the run that already spent the money, and a failed check skips `Keep the
+  record` and destroys the evidence. Every schema is now matched by name, the
+  paid record is *required* to admit `inference_requested: true` rather than
+  merely permitted to, and an unrecognised schema is refused by name instead of
+  being vouched for by a check written for something else.
+
+### Added
 - **A free sweep that asks which request property closes a gate the plain
   request already clears — and states, in the record, that clearing a gate is
   not permission to do the work.** `--transmission-sweep` in

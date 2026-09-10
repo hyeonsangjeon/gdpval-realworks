@@ -1049,6 +1049,67 @@ paid run must be preceded by a fresh smoke at the new fingerprint.
   authorization is checked before the body is read. It does not show that a
   servable body would be served — the only request that could show that is the
   one this diagnostic never sends. Nothing here moves the 220-task column.
+- **The sweep ran, and it is a clean null: run `34437632382`, seven requests,
+  nothing closed the gate.** Baseline `400`. `Accept: text/event-stream` `400`.
+  `originator` + `User-Agent` `400`. All six session/turn headers `400`.
+  `stream: true` `400`. **Everything at once** — nine headers plus the body
+  flag — `400`, with the same `Missed model deployment` text as the baseline
+  and a text different from the control's every time. The control was `401`, so
+  the instrument was live for all seven. `properties_that_closed_the_gate: []`.
+
+  So no property the runtime *adds to its headers* is what refuses it, and the
+  remaining suspects are the part of the body the sweep cannot vary and the
+  transport. That list is shorter than it looks, because every free probe here
+  omits exactly one field on purpose: `model`. It is the field that resolves a
+  request to a deployment, and therefore the field a per-deployment
+  authorization check would have to key on. A body with no model in it may
+  simply never reach that check — which would explain, without any of the
+  transmission hypotheses, why the same token clears the gate for `urllib` and
+  is refused for a runtime that names a model.
+- **What has never been sent to this resource is a request it could serve.** Not
+  once, across a listing, four transmission hypotheses, an auth discriminator
+  and a seven-arm sweep. So the question *may this identity infer here* is
+  still open, and no record on disk narrows it. `--valid-request` sends one
+  servable Responses request through plain `urllib`: the deployment named, a
+  trivial public prompt, `max_output_tokens: 512`, `stream: false`,
+  `store: false`, one attempt, no retry, no fallback, 90-second wall clock.
+  Gated on its own `send_valid_request` input *and* the resource fingerprint,
+  so it cannot be reached by a forgotten flag. Pinned by
+  `batch-runner/tests/test_codex_valid_request.py`.
+
+  It is worth its cost because its three outcomes point at three different
+  repairs. `200` **with model text** means the resource, the identity and the
+  route are all fine and what refuses Codex is Codex-side — and a working
+  request now exists to diff the runtime's against. `401`/`403` on a *servable*
+  body is a permission fact, the first evidence in this whole diagnostic that
+  would bear on a role, and unavailable from any free probe. `400`/`404` names
+  the shape or the deployment and is still not about permission.
+
+  Read strictly. A `200` carrying no text is recorded as inconclusive, not as a
+  success, and the exit code is `0` only for a completion. Token counts are
+  written down as the response reported them with `price_usd: null` and
+  `pricing: partial`, because no rate for this route is registered here —
+  `partial` means unpriced, not free. And a completion still says nothing about
+  the Codex path (`urllib` is not the runtime), about the harness (no tool ran,
+  no file was written), or about the 220-task column.
+
+  The ceiling is 512 output tokens rather than the API's minimum of 16, and that
+  is not a cost decision. These deployments reason before they emit text, so at
+  16 the ceiling is spent entirely on reasoning and the answer is `200
+  incomplete` with nothing in it — refused as a success, correctly, and
+  therefore the decisive request wasted on an artefact of this probe's own
+  configuration. If it happens anyway the record says which: the Responses
+  status and `incomplete_details.reason` sit beside the HTTP status, and the
+  note names the ceiling instead of leaving a bare "200 with no text" to be read
+  as a failure of the route.
+
+  The leak check needed rebuilding for it. Its branches were three free-record
+  prefixes with the turn record as the `else`; this record is the first *paid*
+  one and has no `observed`, so it would have crashed in the same place the
+  sweep did — except after the money was spent, and the crash skips `Keep the
+  record`. Every schema is now matched by name, the paid one is required to
+  admit `inference_requested: true` rather than merely permitted to, and an
+  unrecognised schema is refused instead of falling into somebody else's check.
 - **The exec leg is closed, on one host, and it took a repair to close it.** The
   host limit was real and was closed by finding a host rather than by removing
   isolation: no sandbox was disabled, no network was opened, no container was
