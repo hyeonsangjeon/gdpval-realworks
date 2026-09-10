@@ -40,7 +40,11 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
-from core.agentic_v2_guest_image import files_out_of_work_disk, sha256_file
+from core.agentic_v2_guest_image import (
+    GUEST_INIT_PATH,
+    files_out_of_work_disk,
+    sha256_file,
+)
 from core.agentic_v2_substrate import canonical_sha256
 
 WORK_DISK_INPUT = "/in/command.sh"
@@ -290,7 +294,10 @@ def unjailed_image_check(
     config = {
         "boot-source": {
             "kernel_image_path": Path(kernel).as_posix(),
-            "boot_args": "console=ttyS0 reboot=k panic=1 pci=off root=/dev/vda ro",
+            "boot_args": (
+                "console=ttyS0 reboot=k panic=1 pci=off root=/dev/vda ro "
+                f"init={GUEST_INIT_PATH}"
+            ),
         },
         "drives": [
             {

@@ -126,6 +126,24 @@ _INDEX_TYPES = frozenset(
     }
 )
 
+_EXTRACTION_FILTER: dict[str, str] = (
+    {"filter": "tar"} if hasattr(tarfile, "data_filter") else {}
+)
+"""CPython's own extraction filter, where the running interpreter has one.
+
+``tar`` rather than ``data``: ``data`` refuses device nodes and absolute
+symbolic-link targets, and a root filesystem legitimately contains both, so it
+would reject images this is meant to boot. ``tar`` blocks what is dangerous —
+absolute paths, traversal, and a destination that escapes *after* symbolic links
+are followed — and that last one is the same defence :func:`_refuse_symlinked_parents`
+implements, kept as well because the filter is absent on older interpreters.
+
+Presence is detected through :data:`tarfile.data_filter` rather than a version
+comparison: the ``filter`` parameter arrived in 3.12 and was backported into
+security releases of four earlier branches, so the version number does not
+answer the question and the attribute does.
+"""
+
 
 class ImageRefused(RuntimeError):
     """An image or kernel was not what its digest said it would be."""
@@ -318,6 +336,55 @@ def _remove(path: Path) -> None:
         shutil.rmtree(path, ignore_errors=True)
 
 
+def _inside_the_root(name: str, digest: str) -> str | None:
+    """Where a tar member lands under the root, or ``None`` for the root itself.
+
+    The first version of this stripped ``"./"`` off the front with
+    :meth:`str.lstrip`, which was wrong in both directions and refused the real
+    image on its first entry. ``lstrip`` takes a *set of characters*, so it ate
+    every leading dot and slash: ``"."`` — the root entry every OCI layer starts
+    with — became the empty string and was refused as an escape, while
+    ``"../x"`` became ``"x"`` and ``"/etc/shadow"`` became ``"etc/shadow"``, so
+    the two members the check exists to stop were the two it let through.
+
+    :func:`os.path.normpath` is the right tool: it collapses the traversal
+    first, so what is compared against ``".."`` is where the member actually
+    lands rather than how it spelled itself.
+    """
+    if name.startswith("/") or os.path.isabs(name):
+        raise ImageRefused(
+            f"layer {digest} contains the absolute path {name!r}"
+        )
+    landing = os.path.normpath(name)
+    if landing in (".", ""):
+        return None
+    if landing == ".." or landing.startswith(".." + os.sep):
+        raise ImageRefused(
+            f"layer {digest} contains {name!r}, which points outside the "
+            "filesystem it describes"
+        )
+    return landing
+
+
+def _refuse_symlinked_parents(into: Path, landing: str, digest: str) -> None:
+    """Refuse a member whose parent directory is a symbolic link.
+
+    An image can name ``etc`` as a link to ``/`` and then write ``etc/passwd``.
+    Neither member escapes on its own reading, and the second one lands on the
+    host's own file. Checking the parents at the moment of extraction catches it
+    because the link has to exist by then for the trick to work.
+    """
+    current = into
+    for part in Path(landing).parent.parts:
+        current = current / part
+        if current.is_symlink():
+            raise ImageRefused(
+                f"layer {digest} writes through {current.as_posix()}, which an "
+                "earlier entry made a symbolic link, so the write leaves the "
+                "filesystem being assembled"
+            )
+
+
 def unpack_layers(
     layers: Sequence[Mapping[str, Any]], into: str | Path
 ) -> dict[str, Any]:
@@ -336,48 +403,92 @@ def unpack_layers(
     into = Path(into)
     into.mkdir(parents=True, exist_ok=True)
     applied: list[str] = []
+    directory_modes: dict[Path, int] = {}
     whiteouts = 0
     entries = 0
     for layer in layers:
+        digest = str(layer["digest"])
         with tarfile.open(layer["path"], "r:*") as archive:
             for member in archive:
-                name = member.name.lstrip("./")
-                if not name or name == ".." or name.startswith("../") or "/../" in name:
-                    raise ImageRefused(
-                        f"layer {layer['digest']} contains {member.name!r}, "
-                        "which points outside the filesystem it describes"
-                    )
-                if os.path.isabs(name):
-                    raise ImageRefused(
-                        f"layer {layer['digest']} contains the absolute path "
-                        f"{member.name!r}"
-                    )
-                base = os.path.basename(name)
+                landing = _inside_the_root(member.name, digest)
+                if landing is None:
+                    continue
+                if member.islnk():
+                    _inside_the_root(member.linkname, digest)
+                base = os.path.basename(landing)
                 if base == ".wh..wh..opq":
-                    directory = into / os.path.dirname(name)
+                    directory = into / os.path.dirname(landing)
                     if directory.is_dir() and not directory.is_symlink():
                         for child in directory.iterdir():
                             _remove(child)
                     whiteouts += 1
                     continue
                 if base.startswith(".wh."):
-                    _remove(into / os.path.dirname(name) / base[len(".wh.") :])
+                    _remove(into / os.path.dirname(landing) / base[len(".wh.") :])
                     whiteouts += 1
                     continue
-                target = into / name
+                _refuse_symlinked_parents(into, landing, digest)
+                target = into / landing
                 if member.isdir() and target.is_dir() and not target.is_symlink():
                     pass
                 elif target.is_symlink() or target.exists():
                     _remove(target)
-                archive.extract(member, into, set_attrs=True)
+                try:
+                    archive.extract(member, into, set_attrs=True, **_EXTRACTION_FILTER)
+                except tarfile.TarError as refused:
+                    # Covers the filter's own refusals, which subclass this, and
+                    # a corrupt archive. Both mean the same thing here: what
+                    # came back is not the filesystem the manifest described.
+                    raise ImageRefused(
+                        f"layer {digest} would not extract {member.name!r}: {refused}"
+                    ) from refused
+                if member.isdir() and not target.is_symlink():
+                    _hold_open_until_the_end(target, directory_modes)
                 entries += 1
-        applied.append(layer["digest"])
+        applied.append(digest)
+    restored = _restore_directory_modes(directory_modes)
     return {
         "root": into.as_posix(),
         "layers_applied_in_order": applied,
         "entries_written": entries,
         "whiteouts_honoured": whiteouts,
+        "directory_modes_restored": restored,
+        "extraction_filter": _EXTRACTION_FILTER.get("filter", "none available"),
+        "what_the_filter_changed": (
+            "the tar filter clears setuid, setgid and sticky bits. Nothing in "
+            "this guest depends on them: it boots one process as root and has "
+            "no second user to escalate from. Recorded because it means the "
+            "unpacked tree is not byte-for-byte the image's own permissions."
+        ),
     }
+
+
+def _hold_open_until_the_end(directory: Path, remember: dict[Path, int]) -> None:
+    """Give a freshly-extracted directory the bits needed to descend into it.
+
+    A layer can name a directory ``0o750`` or narrower, and later entries in the
+    same layer land underneath it. Extracting members one at a time — which is
+    what the whiteout and escape checks above require — means that mode is in
+    place before its children arrive, and the extraction of the next child then
+    fails on a permission error that reads like a corrupt archive.
+
+    :meth:`tarfile.TarFile.extractall` solves this by applying directory modes
+    only after everything is written. This does the same thing, split in two so
+    the recorded mode is the one the image asked for rather than the one that
+    made the unpack possible.
+    """
+    mode = directory.stat().st_mode & 0o7777
+    remember.setdefault(directory, mode)
+    if mode & 0o700 != 0o700:
+        directory.chmod(mode | 0o700)
+
+
+def _restore_directory_modes(remembered: Mapping[Path, int]) -> int:
+    """Put the image's own directory modes back, deepest first."""
+    for directory in sorted(remembered, key=lambda path: len(path.parts), reverse=True):
+        if directory.is_dir() and not directory.is_symlink():
+            directory.chmod(remembered[directory])
+    return len(remembered)
 
 
 def add_guest_init(root: str | Path, *, text: str = GUEST_INIT) -> dict[str, Any]:
