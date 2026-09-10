@@ -901,6 +901,11 @@ programs, and not this. C2 reads it off the host as its first action, before
 anything is launched, and the plan says so here rather than letting a reasonable
 inference be mistaken later for a measurement.
 
+Every flag named above was checked against the jailer documentation for
+**v1.13.1**, which is the version stage B found installed — not against the
+current development branch, where a flag can exist that the deployed binary does
+not have. `--cgroup-version` is in v1.13.1 and defaults to `1` there.
+
 **Where the kernel and rootfs come from is already decided, and C1 does not get
 to decide it again.** `inspect_microvm_readiness` takes `asset_paths` for
 `kernel` and `rootfs`, hashes both, and only reports `ready_for_boot_test` when
