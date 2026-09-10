@@ -194,13 +194,25 @@ def test_the_mode_is_accepted_rather_than_reported_as_unknown(exp033, monkeypatc
     assert exp033.validate() == []
 
 
-def test_without_a_route_the_file_fails_early_rather_than_at_spend(
-    exp033, monkeypatch
-):
+def test_without_a_route_the_file_is_still_readable(exp033, monkeypatch):
+    """Reading the file is not the step that needs the run place's credentials.
+
+    This assertion used to be the other way round, under the name
+    *fails early rather than at spend*, and that name was the mistake: the
+    process that reads the file and the process that spends are not the same
+    one. ``batch-run.yml`` validates the experiment in an early step that
+    deliberately holds no credentials — before the gate that decides whether
+    the dispatch may spend at all — and the eager check failed run
+    ``34479664460`` there with "this environment describes no usable Azure
+    route" on a dispatch whose route was present three steps later.
+
+    Nothing about the file goes unchecked as a result; see
+    ``test_the_config_check_does_not_need_the_run_places_credentials.py``,
+    which also holds the guard that still stops a routeless run before a turn.
+    """
     for name in ("AZURE_AI_ROUTE_PROFILE", DIRECT_ENDPOINT_ENV, PROJECT_ENDPOINT_ENV):
         monkeypatch.delenv(name, raising=False)
-    errors = exp033.validate()
-    assert any("execution.codex is not usable" in error for error in errors)
+    assert exp033.validate() == []
 
 
 def test_the_five_tasks_are_the_envelope_five(exp033):

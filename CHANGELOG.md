@@ -234,6 +234,54 @@ entries land under a fresh dated heading the day they merge to `main`.
   file is the decision the pin asks to see.
 
 ### Fixed
+- **Reading an experiment file demanded the run place's credentials, and the
+  step that reads it deliberately has none.** The first `codex_foundry`
+  dispatch, run `34479664460`, died at step 9 of the batch job:
+
+      Invalid experiment config: execution.codex is not usable:
+      execution.codex.endpoint_from_route is set, but this environment
+      describes no usable Azure route: AZURE_AI_ROUTE_PROFILE is required
+
+  on a run whose route was present three steps later. `ExperimentConfig.validate`
+  called `resolve_endpoint_setting(block, os.environ)`, which does two things
+  at once: it decides *which of the two ways* a block names its address, and it
+  resolves the deferred one against the environment. The first question is
+  about the file and can be answered anywhere. The second is about the run
+  place. `batch-run.yml` validates the experiment in an early step that holds
+  no credentials — it runs before the gate that decides whether the dispatch
+  may spend at all — so it was made to prove it had credentials it is not
+  supposed to have. The check was not wrong about the environment it was
+  handed; it was asking the wrong process.
+
+  `select_endpoint_source` now answers the file's question alone, returning the
+  literal address or `None`, and still refusing a block that sets both keys or
+  neither. For a deferred block, `check_block_apart_from_its_address` validates
+  everything else the file decides — the deployment name, `provider_id`,
+  `query_params` names and types, and the `api-version` prohibition. That last
+  one survives without an address because a deferred block has exactly one
+  possible endpoint kind: `resolve_endpoint_setting` returns `route.direct_v1`
+  or raises, so "undated" is known from the file alone. `resolve_endpoint_setting`
+  keeps its signature and behaviour and is still what `step2_run_inference.py`
+  calls, where the route exists.
+
+  **Nothing stopped being checked, and no credential moved.** The alternative
+  fix — giving the early step the Foundry endpoint — would have put a secret
+  earlier in the job than the gate deciding whether this dispatch may spend;
+  a test now asserts that step declares no route variable and still runs before
+  both that gate and the OIDC check. The guarantee the eager check claimed, that
+  a run whose address is missing stops before it spends, is kept by the step
+  that has the environment to keep it: `step2_run_inference.py` resolves the
+  real address and `sys.exit(1)`s before the executor is built, which a test
+  pins by source order. `test_the_config_check_does_not_need_the_run_places_credentials.py`
+  holds both halves, and reverting either one fails it with the run's own
+  message. The test that encoded the wrong belief — `test_without_a_route_the_file_fails_early_rather_than_at_spend`,
+  which asserted exactly the behaviour that killed the dispatch — is replaced,
+  with the run ID in its docstring.
+
+  The dispatch failed in the cheapest place available: before the bubblewrap
+  install, before the sandbox probe, before OIDC, before a token was bought.
+  No paid call was made by run `34479664460`.
+
 - **The connection diagnostic asked the turn for a field the turn does not
   have, and reported the answer as missing.** Run `34461522053` connected: the
   stream carried `UserMessageThreadItem`, `ReasoningThreadItem` and
