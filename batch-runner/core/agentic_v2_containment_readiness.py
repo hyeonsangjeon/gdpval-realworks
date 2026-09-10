@@ -110,6 +110,8 @@ _POLICY_SETTING_AS_A_CLAIM = {
     "memory_mib": "the command is given at most {value} mebibytes of memory",
     "wall_clock_seconds": "the command is stopped after {value} seconds",
     "user": "the command runs as {value} rather than as a privileged user",
+    "credentials": "the command's access to the tokens, keys and environment "
+    "the orchestrator holds is {value}",
     "on_breach": "exceeding any rule above results in {value}",
 }
 
@@ -659,7 +661,9 @@ RECORDED_FINDINGS: tuple[RecordedFinding, ...] = (
             "86152b713c687a0906b56533d989a14607570811. The returned report is "
             "sha256 ee2222285af39a4674ed524865b08397413ab7d758543db20a8caf247"
             "7eda070 and records all four host requirements as met, with the "
-            "nine policy rules as cannot-be-established. Firecracker v1.13.1 "
+            "nine policy rules of that commit as cannot-be-established — the "
+            "credential rule was added afterwards on the same day, so a report "
+            "run today lists ten. Firecracker v1.13.1 "
             "from the project's own release"
         ),
         on_date="2026-09-10",

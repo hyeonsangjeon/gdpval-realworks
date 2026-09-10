@@ -140,12 +140,20 @@ def canonical_sha256(value: Any) -> str:
 # What a command is allowed to touch when Agentic Sandbox V2 eventually runs
 # one. A substrate manifest promising anything different fails to validate.
 #
-# Six things have to be stated for this to be a containment rather than a
+# Seven things have to be stated for this to be a containment rather than a
 # gesture: where it may write, whether it can reach the network, how much
-# memory it gets, how long it may run, who it runs as, and what happens when it
-# exceeds any of them. Until 2026-08-26 only the first two were written down,
-# and the working directory said "there is a quota" without ever saying what
-# the quota was. A limit with no number is not a limit.
+# memory it gets, how long it may run, who it runs as, what it may read of what
+# the orchestrator holds, and what happens when it exceeds any of them. Until
+# 2026-08-26 only the first two were written down, and the working directory
+# said "there is a quota" without ever saying what the quota was. A limit with
+# no number is not a limit.
+#
+# The seventh arrived last, on 2026-09-10, and by the opposite route to the
+# others. Those were rules nothing applied; this was a boundary nothing stated.
+# Planning the test that a command cannot read a token, key or environment
+# secret turned up the fact that no rule here said it may not — so the test
+# would have passed against nothing. A test with no rule behind it is the same
+# fault as a rule with no code behind it, seen from the other side.
 #
 # Every value here is a *chosen* limit rather than a measured one, and for a
 # containment that is the right kind of number — the point is to decide what is
@@ -219,9 +227,31 @@ REQUIRED_MICROVM_POLICY: dict[str, Any] = {
     "wall_clock_seconds": MICROVM_WALL_CLOCK_SECONDS,
     # Not a separate decision: Firecracker's jailer is what drops privileges,
     # and the signed policy already requires it. Written down anyway, because
-    # "which user does the command run as" is one of the six questions, and
+    # "which user does the command run as" is one of the seven questions, and
     # answering it by implication elsewhere is how it went unanswered here.
     "user": "jailer-unprivileged",
+    # What the command may read of what the orchestrator holds: nothing.
+    # Written as a rule because the alternative was a test aimed at a boundary
+    # no rule stated, which would have passed whether or not anything was ever
+    # at risk.
+    #
+    # Most of the mechanism already exists, and the part that does not is the
+    # reason this is worth writing down. The jailer, as documented for v1.13.1,
+    # will "cleanup all environment variables received from the parent process"
+    # and "close all open file descriptors based on /proc/<jailer-pid>/fd
+    # **except input, output and error**". Those three survive, and they are
+    # closed only by the separate step that runs when the launcher asks to
+    # daemonize, which points them at /dev/null. So this rule holds by default
+    # for the environment and only conditionally for the descriptors, and a
+    # launcher that hands the jailer a standard descriptor carrying anything
+    # has defeated it without changing a setting.
+    #
+    # Two devices outside these rules would reopen the path the same quiet way:
+    # MMDS, a metadata service the guest reads over HTTP, and vsock, a
+    # host-to-guest socket. Both must be absent. Neither is a rule about what
+    # the containment allows, so neither is listed here; they are part of why
+    # this rule needs a launcher that knows about them rather than a setting.
+    "credentials": "none-inherited",
     # What happens on breach. Stop and say so — never carry on with the rule
     # relaxed, and never fail quietly. Section 7 of the specification asks for
     # exactly this: stage three must fail loudly when its containment is

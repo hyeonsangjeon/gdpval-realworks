@@ -95,6 +95,7 @@
     "memory_mib": 4096,
     "wall_clock_seconds": 1200,
     "user": "jailer-unprivileged",
+    "credentials": "none-inherited",
     "on_breach": "stop-and-report"
   }
 }

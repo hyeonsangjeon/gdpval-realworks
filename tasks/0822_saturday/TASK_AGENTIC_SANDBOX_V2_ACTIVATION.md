@@ -45,9 +45,9 @@ Not from the prose. Each of these was read out of the file named.
 | `exec_run` answers `capability_unavailable` for every command except a three-argument `fixture-upper` that upper-cases a file. | `core/agentic_v2_fixture_backend.py:197-213` |
 | The batch entry point refuses the mode outright. | `step2_run_inference.py:158-163` |
 | The runner in use today replays a written-down list of calls and has no model client. | `core/agentic_v2_runner.py:1` |
-| The containment rules exist, in one copy, with all six questions answered. | `core/agentic_v2_substrate.py` `REQUIRED_MICROVM_POLICY` |
+| The containment rules exist, in one copy, with all six questions answered. Stage C0, later the same day, added a seventh — so this row is what was inherited, not what is there now. | `core/agentic_v2_substrate.py` `REQUIRED_MICROVM_POLICY` |
 | **Nothing turns those rules into arguments for starting a machine.** The readiness report says so on every rule, on every machine — "this is the same on every machine, because it is a fact about this repository". | `core/agentic_v2_containment_readiness.py:851`, via `scripts/check_agentic_containment.py`, run 2026-09-10 |
-| No machine in play can host the containment: this box is kernel 3.10.102 inside a container with no virtualisation device; GitHub-hosted runners are documented as unsupported for it; the `agentic-sandbox` self-hosted runner does not exist. | same run |
+| No machine in play can host the containment: this box is kernel 3.10.102 inside a container with no virtualisation device; GitHub-hosted runners are documented as unsupported for it; the `agentic-sandbox` self-hosted runner does not exist. Stage B, later the same day, brought a machine into play that can — `machine_could_host_it: true` — so this row too is what was inherited rather than where things stand. | same run |
 
 And one fact that is easy to miss and matters more than any of the above:
 
@@ -197,12 +197,17 @@ unknown it is `null`, never `0`.
 blocker the readiness report calls "the same on every machine, because it is a
 fact about this repository".
 
-**Exit condition.** For each of the six rules, a test that **starts the
+**Exit condition.** For each of the seven rules, a test that **starts the
 machine, exceeds the rule, and requires the machine to stop it**: writing past
 the 256 MiB working-directory quota, allocating past 4,096 MiB, running past
-1,200 seconds, opening a network connection, writing to the read-only root, and
-running as a privileged user. Plus a credential test: the process must not be
-able to read any token, key or environment secret the orchestrator holds.
+1,200 seconds, opening a network connection, writing to the read-only root,
+running as a privileged user, and reading a token, key or environment secret
+the orchestrator holds.
+
+The last of those was written here as an eighth test alongside six rules, which
+was the wrong shape: no rule said a command may not read the orchestrator's
+credentials, so the test would have passed against nothing at all. C0 adds the
+rule, and the count becomes seven and seven.
 
 This is the test `tests/test_agentic_v2_containment_rules.py` names in its own
 docstring and declines to fake — "that is the test these rules will eventually
@@ -748,7 +753,8 @@ bootstrapped. The three that no install can supply — processor, device, kernel
 are the ones that make this a property of the machine.
 
 **What did not change.** `required_containment_available` is still `false`, and
-the nine policy rules still read `cannot be established here`, because no module
+the nine policy rules of that commit still read `cannot be established here` —
+ten, once C0 added the credential rule later the same day — because no module
 turns `REQUIRED_MICROVM_POLICY` into arguments for starting a virtual machine.
 That is stage C. So `could_be_hosted_on_any_machine_in_play` flips to `true`,
 `available_on_any_machine_in_play` stays `false`, and
@@ -857,7 +863,81 @@ containment answers six questions.
 could apply, C3's attack 7 is recorded as untestable with the reason, rather than
 written as a test that passes because nothing was ever at risk.
 
+**One thing the check turned up that C1 and C3 both need.** The signed
+supply-chain policy is not a second copy of the containment. It mirrors four
+rules — `runtime`, `network`, `read_only_rootfs`, `ephemeral_work_disk` — and
+always has; the other seven, including all three numeric limits, `on_breach`,
+`user` and now `credentials`, exist only in `REQUIRED_MICROVM_POLICY` and the
+manifest. Nothing is wrong with that, and it is not changed here. It is written
+down because the drift check between the two files can only ever guard the four,
+so *"the signed policy still validates"* is not the same statement as *"the
+containment is intact"*, and a launcher built by reading the signed policy would
+enforce well under half of it.
+
+**And a fourth partial copy, found while checking the third.**
+`core/agentic_v2_microvm.py` reports `network`, `rootfs_mode` and `workdir` at
+the top level of its readiness report, and writes them as the string literals
+`"none"`, `"read-only"` and `"ephemeral-quota"`. It imports `canonical_sha256`
+from the substrate and nothing else — not `REQUIRED_MICROVM_POLICY` — and
+`validate_microvm_readiness_report` checks the report against the same literals
+rather than against the rules. So three rules are stated a fourth time, by a
+module that would go on stating them if the rules changed underneath it.
+
+This is not currently a hole that hides anything: all three are among the four
+the signed policy mirrors, so weakening one is still caught by
+`containment_rules_that_disagree` — the stale report would appear beside a
+failure rather than instead of one. It is left alone here because C0's scope is
+a missing rule and not a drift surface, and because the fix belongs to the
+module that will read the policy for real. **C1 imports
+`REQUIRED_MICROVM_POLICY` and restates no value of it**, and takes this one with
+it rather than adding a fifth.
+
 **Cost.** None.
+
+**Result — done, 2026-09-10.** `credentials: "none-inherited"` is the eleventh
+key of `REQUIRED_MICROVM_POLICY` and the eleventh line of the manifest's
+`microvm` block. Weakening it to `inherit-environment` or to a bare `"none"` is
+refused, deleting it is refused, and the manifest-equals-policy check holds. On
+this box the readiness report goes from 14 requirements to 15 and from 12
+missing to 13, the new one reading *"the command's access to the tokens, keys
+and environment the orchestrator holds is none-inherited — cannot be established
+here"*, which is the same honest verdict the other ten get. 1,280 agentic tests
+pass, 3 skipped.
+
+**What checking it changed.** The plan said the launcher could lean on the
+jailer, which "already clears inherited environment variables and file
+descriptors before exec". The jailer documentation for v1.13.1 — the version
+stage B found installed — says something narrower: it will *"cleanup all
+environment variables received from the parent process"* but *"close all open
+file descriptors … **except input, output and error**"*. Those three survive,
+and are pointed at `/dev/null` only by the separate step that runs when the
+launcher asks to daemonize. So the rule holds by default for the environment and
+only conditionally for the descriptors; `--daemonize` moved from something the
+launcher might pass to something C1 has to, and C3's attack on this rule checks
+the descriptors rather than trusting the sentence. **A rule written down on the
+strength of a mechanism that turns out to work differently is the same fault
+this stage exists to fix**, arriving one layer down.
+
+The same reading corrected a second thing C1 would have built on: the device
+table below said four, and the fourth was `memory-hotplug`, which does not exist
+in this Firecracker. No such key in v1.13.1's configuration fixture and no
+occurrence of *hotplug* anywhere in its API specification. Balloon is the
+runtime-memory mechanism, and the table had it twice under two names. Three
+checks in this stage would have held against nothing — attack 7, the jailer's
+descriptors, and this — and all three were found by reading the sources the plan
+cites rather than the plan.
+
+**What was deliberately not renumbered.** Three records still say six or nine:
+`CHANGELOG.md`, `TASK_AGENTIC_SANDBOX_V2_FOUNDATION.md` — which says it in five
+places, all of them dated to the day the count was six — and the recorded Azure
+finding, which describes a report pinned by its sha256 that did contain nine.
+Only the last needed an as-of clause, because it sits in `core/` beside a report
+a reader can run today and get ten from; the two dated documents are left
+exactly as they are. The count moving is the thing those records exist to show.
+The two rows of section 1 that stage B and C0 overtook on the same day say so in
+the row rather than being rewritten, for the same reason: a table headed *"read
+from the code on 2026-09-10"* cannot silently mean two different states of that
+day.
 
 ##### C1 — the mapping, as data
 
@@ -878,11 +958,11 @@ Each of the eleven policy keys maps to something a reader can point at:
 | `memory_mib` | `machine-config.mem_size_mib` |
 | `wall_clock_seconds` | a host-side deadline, since a guest cannot be trusted to time itself |
 | `user: jailer-unprivileged` | `--uid`/`--gid` of a non-root user, and a refusal if either resolves to 0 |
-| the credential rule added in C0 | the jailer already clears inherited environment variables and file descriptors before exec — the launcher relies on that rather than reimplementing it, and passes nothing of its own. The two devices that would reopen the path, `mmds-config` and `vsock`, are covered in the table below |
+| `credentials: none-inherited` (added in C0) | the jailer does most of it: for v1.13.1 it will "cleanup all environment variables received from the parent process" and "close all open file descriptors … **except input, output and error**". The environment half holds by default; the descriptor half leaves three open, and they are pointed at `/dev/null` only by the separate `--daemonize` step. So the launcher passes `--daemonize`, passes nothing of its own, and the test checks the descriptors rather than trusting the sentence. The two devices that would reopen the path, `mmds-config` and `vsock`, are covered in the table below |
 | `on_breach: stop-and-report` | the launcher's error path returns the breached rule by name |
 | `required: true` | any rule that cannot be expressed is a refusal to launch, never a silent drop |
 
-**Four devices that are not in the policy and can each defeat a rule that is.**
+**Three devices that are not in the policy and can each defeat a rule that is.**
 Read off Firecracker's own configuration fixtures rather than assumed, and named
 here because a launcher that sets every key in the table above and leaves these
 at a default would enforce less than it appears to:
@@ -891,8 +971,28 @@ at a default would enforce less than it appears to:
 |---|---|---|
 | `mmds-config` | `network: none`, by a route that is not a NIC — MMDS is a metadata service the *guest* reads over HTTP, and it is the standard way host-side data is handed to a guest | `null` |
 | `vsock` | `network: none` — a host↔guest socket is a channel whether or not it is a NIC | `null` |
-| `memory-hotplug` | `memory_mib` — memory added after boot is memory the bound never saw | `null` |
-| `balloon` | `memory_mib` — a balloon device reshapes guest memory at runtime | `null` |
+| `balloon` | `memory_mib` — a balloon device reshapes guest memory at runtime, and it is the only mechanism in this Firecracker that does | `null` |
+
+**This table said four until C0 checked it, and the fourth was not real.** It
+listed `memory-hotplug`, on the reasoning that memory added after boot is memory
+the bound never saw. The reasoning is sound and the device is not: v1.13.1's
+configuration fixture has no such key, and its API specification — 43 KB, every
+route — contains no occurrence of *hotplug* at all. The routes are `/balloon`,
+`/boot-source`, `/cpu-config`, `/drives`, `/entropy`, `/logger`,
+`/machine-config`, `/metrics`, `/mmds`, `/mmds/config`, `/network-interfaces`,
+`/snapshot/create`, `/snapshot/load`, `/vsock`, `/vm`, `/vm/config`, `/actions`
+and `/version`. Balloon **is** the runtime-memory mechanism here; the table had
+it twice under two names. A test pinning `memory-hotplug: null` would have
+asserted something about a key Firecracker never emits and passed for that
+reason — the third time in this stage that a check would have held against
+nothing.
+
+**And one route that is not a device.** `/snapshot/load` restores a machine
+whose configuration was decided elsewhere: a snapshot can carry a NIC, a vsock
+or a different memory size, none of which the launcher's own arguments would
+show. It is not in the table because it is not a setting to pin at `null` — it
+is a way in that bypasses the table entirely, so C1's builder emits no snapshot
+route and C3 treats loading one as an escape rather than a configuration.
 
 These get tests of their own in C1, on the same footing as the policy keys. The
 policy is not amended to add them: they are not rules about what the containment
@@ -901,10 +1001,21 @@ mean what they say. If that reasoning is wrong, the fix is to add them to
 `REQUIRED_MICROVM_POLICY` in a change of their own, not to quietly rely on a
 default.
 
-Two further flags are passed because leaving them off would weaken the boundary
-the policy describes even though no key names them: `--new-pid-ns`, so the guest
-process is not in the host's PID namespace, and `--cgroup` for the host-side
-memory bound that sits underneath the guest-visible one.
+Three further flags are passed because leaving them off would weaken the
+boundary the policy describes even though no key names them: `--new-pid-ns`, so
+the guest process is not in the host's PID namespace, `--cgroup` for the
+host-side memory bound that sits underneath the guest-visible one, and
+`--daemonize`, which is what closes the three descriptors the jailer's own
+cleanup step leaves open — see the credential row above.
+
+`--daemonize` has a consequence worth stating before it is discovered as a bug:
+it points Firecracker's standard output at `/dev/null`, so console output is
+gone unless the launcher asks for a log path. That is acceptable here only
+because it is not where results come from — deliverables are collected off the
+ephemeral work disk, which the `workdir` rule already governs. It also pairs
+with `--new-pid-ns`, which is what writes the child's PID to a file; a detached
+process the launcher could not find again would leave `wall_clock_seconds` with
+nothing to enforce against.
 
 **And a third, which is a default that would quietly be wrong here.**
 `--cgroup-version` defaults to `1` in the jailer's own documentation, while
@@ -1027,7 +1138,11 @@ rule, and requires the machine to stop it:
 5. write to the read-only root
 6. run as a privileged user
 7. read a token, key or environment secret the orchestrator holds — against the
-   rule C0 adds, not against an expectation held only in this list
+   rule C0 adds, not against an expectation held only in this list. Tested in
+   both halves, because the jailer covers them differently: the environment is
+   wiped unconditionally, the three standard descriptors only by `--daemonize`.
+   An attack that checks the environment alone would pass on a launcher that had
+   dropped that flag
 
 **Exit condition.** All seven are stopped, and each stop names the rule it
 enforced. Seven passes is the condition — not six and a note.
