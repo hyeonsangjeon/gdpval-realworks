@@ -102,10 +102,12 @@ def _clean_sweep(**overrides):
                 "outcome": "booted",
                 "results": {
                     "/out/stdout": (
-                        "MemTotal:        4014520 kB\n"
-                        "dd: error writing '/dev/shm/gdpval-balloon': Cannot "
-                        "allocate memory\nrc=1\n"
-                    )
+                        "MemTotal:        4036852 kB\n"
+                        "allocated_mib=64\n"
+                        "allocated_mib=3840\n"
+                        "rc=137\n"
+                    ),
+                    "/out/stderr": "Killed\n",
                 },
             },
             BOOT_WALL_CLOCK: {
@@ -311,6 +313,62 @@ def test_an_allocation_past_the_bound_that_succeeded_is_an_escape():
         )
     )
     assert _verdict(judgement, "memory")["stopped"] is False
+
+
+def test_an_allocator_that_reported_holding_it_all_is_an_escape():
+    """``rc`` comes from the shell, and the shell is not what did the allocating.
+
+    A machine that let the guest hold every requested byte and then returned a
+    non-zero status — a tidy-up that failed, a signal on the way out — would pass
+    on the exit status alone, while the bound it was meant to enforce did not
+    hold.
+    """
+    judgement = judge_all(
+        _clean_sweep(
+            **{
+                BOOT_MEMORY: {
+                    "results": {
+                        "/out/stdout": (
+                            "MemTotal: 4014520 kB\nallocated_mib=6144\n"
+                            "ALLOCATED_ALL\nrc=1\n"
+                        )
+                    }
+                }
+            }
+        )
+    )
+    assert _verdict(judgement, "memory")["stopped"] is False
+
+
+def test_holding_more_than_the_bound_is_an_escape_however_the_guest_ended():
+    """The high-water mark is the rule; the exit status is only how it ended.
+
+    Every page counted there was written to, and a guest with no swap cannot give
+    touched anonymous memory back — so a number past the bound is memory the
+    machine actually handed over.
+    """
+    judgement = judge_all(
+        _clean_sweep(
+            **{
+                BOOT_MEMORY: {
+                    "results": {
+                        "/out/stdout": (
+                            "MemTotal: 4014520 kB\nallocated_mib=5120\nrc=137\n"
+                        )
+                    }
+                }
+            }
+        )
+    )
+    verdict = _verdict(judgement, "memory")
+    assert verdict["stopped"] is False
+    assert "5120" in verdict["evidence"]
+
+
+def test_the_verdict_says_how_far_the_allocation_got():
+    """"Something stopped it" and "it stopped 102 MiB short" are different findings."""
+    judgement = judge_all(_clean_sweep())
+    assert "3840 MiB" in _verdict(judgement, "memory")["evidence"]
 
 
 def test_a_hanging_guest_that_finished_on_its_own_did_not_test_the_deadline():
@@ -527,8 +585,46 @@ def test_the_overshoot_is_taken_from_the_rule_and_not_written_as_a_number():
     commands = guest_commands(raised)
 
     assert "count=2048" in commands[BOOT_WORKDIR]
-    assert "count=12288" in commands[BOOT_MEMORY]
+    assert "12288 * 1024 * 1024" in commands[BOOT_MEMORY]
     assert "quota_mib_configured=1024" in commands[BOOT_WORKDIR]
+
+
+def test_the_memory_attack_reports_from_a_shell_that_allocates_nothing():
+    """The regression from the first C3 run, where the reporter was the casualty.
+
+    ``rc=$?`` inside a command substitution runs in a fork. When the machine
+    filled, that fork was what the kernel took, so the attack came back with no
+    exit status at all — judged, correctly, as an attack that never ran, while
+    the bound had in fact held. The report has to be made by a process that is
+    never a candidate.
+    """
+    allocate = guest_commands()[BOOT_MEMORY]
+
+    assert "$(dd" not in allocate, "the reporter is inside a fork again"
+    assert "wait \"$allocator\"" in allocate
+    assert allocate.index('wait "$allocator"') < allocate.index('echo "rc=$?"')
+
+
+def test_the_memory_attack_allocates_memory_that_is_charged_to_it():
+    """tmpfs is shmem, and shmem belongs to no process the OOM killer can weigh.
+
+    The first run filled a tmpfs, the kernel found nothing large to pick, and it
+    picked a bystander. Anonymous memory that has been written to is charged to
+    the allocator, which is the only way this attack points the kernel at itself.
+    """
+    allocate = guest_commands()[BOOT_MEMORY]
+    runs = "\n".join(
+        line for line in allocate.splitlines() if not line.lstrip().startswith("#")
+    )
+
+    assert "tmpfs" not in runs
+    assert "/dev/shm" not in runs
+    assert "block[offset] = 1" in runs, "untouched pages are address space"
+
+
+def test_the_memory_attack_reports_as_it_goes_and_not_only_at_the_end():
+    """A process the kernel kills does not reach its last line."""
+    assert "allocated_mib=" in guest_commands()[BOOT_MEMORY]
 
 
 def test_the_quota_attack_removes_its_filler_before_the_guest_ends():

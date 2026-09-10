@@ -102,12 +102,45 @@ echo "$outcome" | tail -3
 
 _ALLOCATE_PAST_THE_BOUND = r"""
 grep MemTotal /proc/meminfo
-mkdir -p /dev/shm 2>/dev/null
-mount -t tmpfs -o size={tmpfs_mib}m tmpfs /dev/shm 2>/dev/null || echo "tmpfs_mount=failed"
-outcome=$(dd if=/dev/zero of=/dev/shm/gdpval-balloon bs=1M count={overshoot} 2>&1; echo "rc=$?")
-rm -f /dev/shm/gdpval-balloon 2>/dev/null
-umount /dev/shm 2>/dev/null
-echo "$outcome" | tail -3
+
+# Two things about the shape of this attack, both learned from a run where the
+# bound held and the attack reported nothing, which reads as a failure.
+#
+# The allocation has to be charged to the process making it. tmpfs pages are
+# shmem and count against no process's RSS, so when the machine filled, the
+# kernel's OOM killer found nothing large to pick and took a bystander. And the
+# reporter cannot be a child: `rc=$?` inside a command substitution runs in a
+# fork, and that fork was the bystander it took. The attack destroyed its own
+# evidence.
+#
+# So: anonymous memory, touched a page at a time, which makes the allocator the
+# largest thing in the machine and the unambiguous target; and the report is
+# made by the top-level shell, which allocates nothing and is never picked.
+cat > /work/gdpval-allocate.py <<'PY'
+import sys
+
+step = 64 * 1024 * 1024
+target = {overshoot} * 1024 * 1024
+held = []
+allocated = 0
+while allocated < target:
+    # bytearray(n) is calloc, and calloc over a fresh mapping is a promise of
+    # zeroes rather than pages. Untouched it would allocate address space and
+    # never reach the bound at all.
+    block = bytearray(step)
+    for offset in range(0, step, 4096):
+        block[offset] = 1
+    held.append(block)
+    allocated += step
+    sys.stdout.write("allocated_mib=%d\n" % (allocated // (1024 * 1024)))
+    sys.stdout.flush()
+sys.stdout.write("ALLOCATED_ALL\n")
+PY
+python3 /work/gdpval-allocate.py &
+allocator=$!
+wait "$allocator"
+echo "rc=$?"
+rm -f /work/gdpval-allocate.py
 """
 
 _HANG_FOREVER = """
@@ -130,9 +163,7 @@ def guest_commands(policy: Mapping[str, Any] = REQUIRED_MICROVM_POLICY) -> dict[
         BOOT_WORKDIR: _FILL_THE_WORK_DISK.format(
             quota=quota, overshoot=quota * 2
         ),
-        BOOT_MEMORY: _ALLOCATE_PAST_THE_BOUND.format(
-            tmpfs_mib=memory * 2, overshoot=int(memory * 1.5)
-        ),
+        BOOT_MEMORY: _ALLOCATE_PAST_THE_BOUND.format(overshoot=int(memory * 1.5)),
         BOOT_WALL_CLOCK: _HANG_FOREVER,
     }
 
@@ -202,16 +233,27 @@ def _memory_bound(evidence: Mapping[str, Any]) -> tuple[bool, str]:
             f"the guest sees {total_kib // 1024} MiB, which is more than the "
             f"{allowed_mib} MiB the rule allows"
         )
-    if "rc=0" in output:
+    reached = _high_water_mib(output)
+    if reached is not None and reached > allowed_mib:
+        # Every one of those pages was written to, and a guest with no swap
+        # cannot reclaim anonymous memory it has touched. Getting past the
+        # number is the escape whatever the process's exit status ends up being.
+        return False, (
+            f"the guest held {reached} MiB of touched anonymous memory, past the "
+            f"{allowed_mib} MiB the rule allows"
+        )
+    if "rc=0" in output or "ALLOCATED_ALL" in output:
         return False, (
             f"an allocation of {int(allowed_mib * 1.5)} MiB succeeded inside a "
             f"machine bounded to {allowed_mib} MiB"
         )
     if "rc=" not in output:
         return False, "the allocation probe did not report, so it did not run"
+    got_to = f", having reached {reached} MiB" if reached is not None else ""
     return True, (
         f"the guest sees {total_kib // 1024} MiB against a {allowed_mib} MiB "
-        f"bound and the over-allocation failed: {_line_with(output, 'rc=')}"
+        f"bound and the over-allocation was stopped{got_to}: "
+        f"{_line_with(output, 'rc=')}"
     )
 
 
@@ -346,6 +388,22 @@ def _mem_total_kib(output: str) -> int | None:
         if part.isdigit():
             return int(part)
     return None
+
+
+def _high_water_mib(output: str) -> int | None:
+    """The most the allocator was holding, as it last reported it.
+
+    Printed as it goes rather than at the end, because the end is exactly what a
+    process the kernel decided to kill does not get to reach. It is also the
+    only number that says how far the guest got, as opposed to merely that
+    something stopped it.
+    """
+    marks = [
+        int(line.split("=", 1)[1])
+        for line in output.splitlines()
+        if line.startswith("allocated_mib=") and line.split("=", 1)[1].isdigit()
+    ]
+    return max(marks) if marks else None
 
 
 ATTACKS: tuple[dict[str, Any], ...] = (
