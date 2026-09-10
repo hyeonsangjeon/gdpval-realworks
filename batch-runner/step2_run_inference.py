@@ -154,6 +154,16 @@ RETRIABLE_STATUSES = {"error", "qa_failed", "pending"}
 #: * `turn_failed` is not here. It means the turn failed and the text did not
 #:   say why, which is exactly when a second identical attempt produces a
 #:   second identical failure.
+#: * `content_filtered` is not here, and must never be. It is not a failure of
+#:   this run at all: the provider stopped the answer because of what the
+#:   answer contained, which is a result the benchmark is asking for. Retrying
+#:   until something gets through would convert a filtered task into a scored
+#:   one and raise the success rate by changing the question.
+#: * `transport_error` is not here. The connection broke while the answer was
+#:   arriving, so the turn was sent, may have been billed, and may have left
+#:   files behind -- the same three reasons `timeout` is left out. Whether a
+#:   second attempt is worth that is a question for evidence, and no run has
+#:   produced enough of it yet: run `34528903950` saw exactly one.
 #: * `runtime_unavailable`, `runtime_start_failed` and `session_start_failed`
 #:   are not here. They are the local environment and its configuration; they
 #:   do not improve by being asked again a minute later.

@@ -261,6 +261,41 @@ entries land under a fresh dated heading the day they merge to `main`.
   file is the decision the pin asks to see.
 
 ### Fixed
+- **Two failures that said exactly why were both recorded as "no reason
+  given".** Run `34528903950` ended three of five tasks. One was refused for
+  rate and was recorded as `rate_limited`. The other two ended with
+
+      stream disconnected before completion: Incomplete response returned,
+      reason: content_filter
+
+      stream disconnected before completion: Transport error: network error:
+      error decoding response body
+
+  and both were recorded as `turn_failed`, whose definition beside
+  `RETRYABLE_INFRA_ERROR_CATEGORIES` is *the turn failed and the text did not
+  say why*. One of those is the benchmark's own result — the provider stopped
+  the answer over what the answer contained — and the other is the connection
+  dropping mid-answer. Opposite kinds of thing, published under one word, so a
+  reader of the artifact could not separate a filtered task from an
+  infrastructure fault. This is the same defect `rate_limited` was pulled out
+  of one release earlier.
+
+  `classify_execution_error` now returns `content_filtered` and
+  `transport_error`, which `_turn_failure_category` passes through unchanged.
+  The markers require the providers' exact punctuation: `transport error`
+  without its colon is a phrase about moving goods, and *content management
+  policy* unqualified is an ordinary thing for a professional task to be
+  about. `test_prose_about_transport_is_not_a_dropped_connection` caught that
+  first version. Mislabelling a broken connection as a refused answer would
+  understate this run's defects while overstating the benchmark's, which is
+  the expensive direction to be wrong in.
+
+  Neither category becomes retryable. `content_filtered` must never be:
+  attempting a filtered task until something gets through raises the score by
+  changing the question. `transport_error` is left out for the reasons
+  `timeout` is — the turn was sent, may have been billed, and may have left
+  files behind — and because the case for it is one observation wide.
+
 - **How far a Codex turn got was measured and then left behind.** The
   preceding entry added `items_seen` and the provider's own
   `http_status_code`, and wrote both to `CodexAgentRunner.last_run_diagnostics`
