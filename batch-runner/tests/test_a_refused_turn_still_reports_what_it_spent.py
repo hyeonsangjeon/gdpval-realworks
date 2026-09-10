@@ -39,7 +39,7 @@ import sys
 import types
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, get_args
 
 import pytest
 
@@ -49,6 +49,7 @@ from core.codex_cost import CodexTokenTotals  # noqa: E402
 from core.codex_runner import (  # noqa: E402
     CodexAgentRunner,
     TurnObservation,
+    _ERROR_INFO_WITH_STATUS,
     _http_status_from_turn_error,
     _load_turn_collector,
     _recording_stream,
@@ -445,6 +446,40 @@ def test_the_stand_ins_match_the_sdk():
         "total",
         "model_context_window",
     }
+
+
+def test_every_status_carrying_variant_is_named():
+    """The list of variants to look in is asked of the SDK, not remembered.
+
+    ``core.codex_runner`` names the variants as strings because it does not
+    import the SDK at module scope. That list is only as good as the version
+    it was written against: a variant added later would carry a status code
+    that nothing reads, and the symptom would be a ``None`` where a 429 was
+    available — silence, not an error. This asks the SDK directly, so a
+    version bump that adds one fails here instead.
+
+    Written after the first draft named three and the SDK had four.
+    """
+    try:
+        from openai_codex.generated.v2_all import CodexErrorInfo
+    except Exception:  # pragma: no cover - SDK absent
+        pytest.skip("the pinned Codex SDK is not installed here")
+
+    carries_status = set()
+    for variant in get_args(CodexErrorInfo.model_fields["root"].annotation):
+        for field, spec in getattr(variant, "model_fields", {}).items():
+            detail = spec.annotation
+            if "http_status_code" in getattr(detail, "model_fields", {}):
+                carries_status.add(field)
+
+    assert carries_status, "the SDK reports no status-carrying variant at all"
+    assert carries_status == set(_ERROR_INFO_WITH_STATUS)
+
+
+def test_a_connection_failure_reports_its_status_too():
+    """The variant the first draft missed, read the same way as the rest."""
+    error = _error_carrying("http_connection_failed", 429)
+    assert _http_status_from_turn_error(error) == 429
 
 
 # ── Which attempt the row belongs to ────────────────────────────────────────

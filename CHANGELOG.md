@@ -298,13 +298,17 @@ entries land under a fresh dated heading the day they merge to `main`.
     the question the rate-limit narrowing is down to, and the pipeline could
     not previously answer it.
   - **What refused it.** `TurnError.codex_error_info` carries an
-    `http_status_code` on each of the three variants that have one, and it is
+    `http_status_code` on each of the four variants that have one, and it is
     now asked ahead of the text. Reading a bare `429` out of prose is the
     mistake `core.execution_errors` is careful not to make — a traceback names
     line numbers — but a status-code *field* holding 429 means one thing, and
     it does not depend on the wording surviving a runtime version or a change
     of region. The text path is unchanged and still runs when there is no
-    code.
+    code. Which variants those are is named as strings, because this module
+    does not import the SDK at module scope; a test asks the SDK whether the
+    list is still complete, so a variant added by a version bump fails a test
+    instead of quietly carrying a status nothing reads. The first draft named
+    three and the SDK had four, which is how the test came to exist.
 - **Every attempt on the Codex path was recorded as a first attempt.** All
   nine ledger rows of run `34500590783` say `retry_kind: none`, including the
   four that were retries. #502's own description — "Each attempt is attributed

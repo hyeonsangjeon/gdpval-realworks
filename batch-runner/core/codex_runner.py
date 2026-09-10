@@ -467,8 +467,13 @@ _NOTIFY_TOKEN_USAGE = "thread/tokenUsage/updated"
 _NOTIFY_ITEM_COMPLETED = "item/completed"
 _NOTIFY_TURN_COMPLETED = "turn/completed"
 
-#: Fields of a ``CodexErrorInfo`` variant that carry an HTTP status.
+#: Fields of a ``CodexErrorInfo`` variant that carry an HTTP status. Named
+#: rather than derived, because this module does not import the SDK at module
+#: scope; ``test_every_status_carrying_variant_is_named`` asks the SDK whether
+#: this list is still complete, so a variant added by a version bump is a
+#: failing test rather than a status silently going unread.
 _ERROR_INFO_WITH_STATUS = (
+    "http_connection_failed",
     "response_stream_disconnected",
     "response_stream_connection_failed",
     "response_too_many_failed_attempts",
