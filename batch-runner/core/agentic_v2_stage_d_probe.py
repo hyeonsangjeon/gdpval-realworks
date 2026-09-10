@@ -45,10 +45,37 @@ no reply body, no reasoning. What is added here is the boot record — what ran,
 under which machine name, for how long it was allowed, and whether the workspace
 came back — because a run whose commands cannot be accounted for is not evidence
 of anything.
+
+**The substrate manifest is a declaration, and this module says so out loud.**
+``sandbox/agentic_v2_capabilities.json`` lists twenty commands as
+``{"name": "Rscript", "capability": "data-science", "probe": ["Rscript",
+"--version"]}`` — probe command *lines*, with no versions and no hashes — and a
+``supply_chain`` block naming policy profiles (``cosign-offline-v1``,
+``buildkit-max-v1``) rather than the result of applying them. It says what an
+image ought to contain and how to check. It is not the check. The repository
+already keeps that distinction: the measurement is a separate *capability
+receipt*, validated by
+:func:`core.agentic_v2_substrate.validate_capability_receipt` against the
+manifest, and it carries a status from ``{"verified", "failed", "not_run"}``.
+
+Which matters here for a specific and checkable reason. The receipt that reads
+``verified`` for those twenty commands was measured on a locally built candidate
+(``sandbox/v2/README.md``: image ID ``sha256:e47537b8…``, OCI manifest
+``sha256:0064ce70…``) which was never pushed anywhere. The digest this probe is
+handed in practice, ``sha256:ee6ef798…``, is the one ``sandbox/v2/parent.lock.json``
+pins, and that is the *parent* — the V1 image the candidate is built **from**.
+So the image stage D can actually fetch is not the image the capability evidence
+describes, and per the same README, signature and provenance are ``not_run`` for
+both. :func:`capability_evidence_for` reads that off the lock file rather than
+asserting it, and the answer travels in the record, so a stage D result can
+never be read as a claim that the image it booted was verified. Computing a
+sha256 of a file this repository built is an identity check on that file. It is
+not a supplier signature, and nothing here presents it as one.
 """
 
 from __future__ import annotations
 
+import json
 import shutil
 from dataclasses import dataclass, field
 from decimal import Decimal
@@ -135,10 +162,71 @@ class ProbeToolsAreWrong(RuntimeError):
 class ProbeCannotDescribeItself(RuntimeError):
     """The backend could not say what it is, so no model call is worth making.
 
-    Raised before spending. A run whose substrate manifest is missing produces a
-    record with no verified image behind it — the numbers would be real and
-    would refer to nothing checkable, which is worse than not having them.
+    Raised before spending. Without the substrate manifest the run cannot name
+    the declaration its image was built against, so the numbers would be real
+    and would refer to nothing nameable — which is worse than not having them.
+    Naming it is not verifying it: see :func:`capability_evidence_for` for what
+    is actually known about the image being booted, which is usually
+    ``not_run``.
     """
+
+
+#: Where the digest of the image this repository can actually fetch is pinned.
+PARENT_LOCK = Path("sandbox/v2/parent.lock.json")
+
+
+def capability_evidence_for(
+    image: GuestImage, *, lock_path: str | Path = PARENT_LOCK
+) -> dict[str, Any]:
+    """What is known — measured, not declared — about the image being booted.
+
+    Returns a status in the vocabulary
+    :mod:`core.agentic_v2_supply_chain` already uses for evidence items:
+    ``verified``, ``failed``, ``not_run``, plus ``unknown`` for a digest this
+    repository has no record of at all.
+
+    The only answer this can currently return for a real run is ``not_run``, and
+    that is the point of having it. The capability receipt that reads
+    ``verified`` was measured on a candidate image that was never pushed; the
+    digest ``parent.lock.json`` pins is the parent it was built from. A record
+    that named an image and said nothing else would be read as though the
+    evidence followed the name. This makes the gap a field.
+
+    Never raises. A missing or unreadable lock file is itself an answer, and
+    losing a whole probe run over it would be a poor trade.
+    """
+    digest = (image.digest or "").strip()
+    try:
+        pinned = json.loads(Path(lock_path).read_text(encoding="utf-8"))
+    except (OSError, ValueError) as unreadable:
+        return {
+            "status": "unknown",
+            "subject": digest,
+            "grounds": (
+                f"{Path(lock_path).as_posix()} could not be read ({unreadable}), "
+                "so nothing is known about this digest"
+            ),
+        }
+    if digest and digest == pinned.get("manifest_digest"):
+        return {
+            "status": "not_run",
+            "subject": digest,
+            "grounds": (
+                "this is the parent image parent.lock.json pins, not the "
+                "candidate the capability receipt was measured on, and the "
+                "receipt was never measured against this digest. Signature and "
+                "provenance are not_run for it either"
+            ),
+            "source_revision": pinned.get("source_revision"),
+        }
+    return {
+        "status": "unknown",
+        "subject": digest,
+        "grounds": (
+            "this digest is neither the pinned parent nor anything this "
+            "repository holds a receipt for"
+        ),
+    }
 
 
 def check_probe_tools(tools: Sequence[str] = PROBE_TOOLS) -> list[str]:
@@ -205,6 +293,7 @@ class StageDProbeOutcome:
     detail: str
     guest_image: Mapping[str, str]
     substrate_manifest_sha256: Optional[str] = None
+    image_evidence: Mapping[str, Any] = field(default_factory=dict)
     boots: tuple[Mapping[str, Any], ...] = ()
     machines: tuple[Mapping[str, Any], ...] = ()
     collected: Mapping[str, Any] = field(default_factory=dict)
@@ -297,6 +386,7 @@ class StageDProbeOutcome:
             "detail": self.detail,
             "guest_image": dict(self.guest_image),
             "substrate_manifest_sha256": self.substrate_manifest_sha256,
+            "image_evidence": dict(self.image_evidence),
             "boots": [dict(row) for row in self.boots],
             "machines": [dict(row) for row in self.machines],
             "collected": dict(self.collected),
@@ -341,7 +431,10 @@ def run_stage_d_probe(
     Refuses before spending anything if the tool list is wrong or the backend
     cannot describe itself. Both are cheap to establish and neither is cheaper
     later: the first would let a probe reach the grader, and the second would
-    produce a paid record with no verified image behind it.
+    produce a paid record that cannot name the declaration its image was built
+    against. What is *known* about that image — as opposed to declared about it —
+    is recorded separately by :func:`capability_evidence_for`, and for the
+    digest this repository can fetch the answer is ``not_run``.
 
     **The workspace is collected before it is destroyed.** ``close()`` purges
     the work directory, which is the ``workdir: ephemeral-quota`` rule doing its
@@ -431,6 +524,7 @@ def run_stage_d_probe(
             substrate_manifest_sha256=(
                 substrate_manifest.sha256 if substrate_manifest is not None else None
             ),
+            image_evidence=capability_evidence_for(image),
             boots=tuple(dict(row) for row in backend.boots),
             machines=tuple(
                 dict(row) for row in getattr(boot_one_command, "record", ())
