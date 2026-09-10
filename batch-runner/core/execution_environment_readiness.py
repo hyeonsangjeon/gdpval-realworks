@@ -1025,6 +1025,21 @@ def inspect_environment_support(
                 "truth table is executed against the real experiment files "
                 "rather than described"
             )
+            evidence.append(
+                "and it lands where a command can be isolated: that workflow "
+                "sends a codex_foundry run to the one host "
+                "docs/codex_sandbox_hosts.json records ready, ubuntu-22.04, "
+                "rather than to ubuntu-latest, which resolves to the 24.04 "
+                "image that record measures as "
+                "user_namespaces_restricted_by_security_policy; it installs "
+                "bubblewrap there and reaches no Azure step until "
+                "scripts/diagnose_codex_sandbox_host.py has watched a command "
+                "run inside the sandbox and the pinned runtime has been "
+                "confirmed installed. Nothing is relaxed to earn that — no "
+                "sysctl, capability or profile is written — which is what "
+                "tests/test_the_codex_batch_lands_on_a_host_that_can_isolate."
+                "py holds the steps to"
+            )
             blockers.extend(
                 DOCUMENTED_BLOCKERS_BY_ENVIRONMENT.get(environment, ())
             )

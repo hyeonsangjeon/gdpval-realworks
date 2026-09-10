@@ -103,6 +103,36 @@ entries land under a fresh dated heading the day they merge to `main`.
   the relay forwards every input on every leg, and a run must not start
   failing halfway through for carrying a flag it never used.
 
+- **A Codex batch now runs on a host that can actually isolate a command.**
+  `batch-run.yml` runs on `ubuntu-latest`, and the repository had already
+  measured what that means for this mode: `docs/codex_sandbox_hosts.json`
+  records `ubuntu-24.04` — what `ubuntu-latest` resolves to — as
+  `user_namespaces_restricted_by_security_policy`, and `ubuntu-22.04` as the
+  only host where a command has been observed running inside Codex's sandbox.
+  A `codex_foundry` batch dispatched before this change would have paid for the
+  turn and then died at the agent's first command. Three steps, all gated on
+  the mode and all placed after the two refusals and before the first Azure
+  step:
+  - The job's `runs-on` picks `ubuntu-22.04` for `codex_foundry` and leaves
+    every other mode on `ubuntu-latest`. Nothing is relaxed to earn it —
+    22.04's default posture simply predates
+    `kernel.apparmor_restrict_unprivileged_userns`. It is also not permanent:
+    GitHub is retiring that image, and the record says so.
+  - `bubblewrap` is installed there, because it is not preinstalled on either
+    image — with the same stall guard as the neighbouring `apt-get` call, whose
+    comment says every bare one in this repository gets it.
+  - Installed is not working, so `diagnose_codex_sandbox_host.py` runs and the
+    job stops unless it watched a command run inside the sandbox; then
+    `require_pinned_runtime()` runs, so a missing pinned binary is caught here
+    rather than surfacing at step 2 as `runtime_unavailable` — a true statement
+    about the runner and nothing at all about the deployment.
+
+  The test reads the record and requires the workflow to name whichever host it
+  calls ready, rather than pinning the label twice, and holds all three steps
+  to the absence of `--privileged`, `--cap-add`, `--security-opt`, `sysctl`
+  writes and `setcap`. Buying a green host by removing the isolation is the one
+  thing this line of work is not allowed to do.
+
 ### Changed
 - **The Codex readiness record narrows its gate blocker rather than dropping
   it.** It said the gate was closed and `batch-run.yml` did not set it; the
