@@ -156,6 +156,15 @@ batch-runner/scripts/*
 # this box is not, so the host gets it by cloning the repository.
 !batch-runner/scripts/run_agentic_c3_attacks.py
 
+# Answers the three questions exp034 registered in its header before it was
+# allowed to spend, against a downloaded run artifact. Committed because those
+# answers have to be checkable by someone who was not in the room: a figure
+# computed once in a terminal and pasted into a report is a figure nobody can
+# reproduce. It is also imported by
+# tests/test_an_unanswerable_question_is_declined.py, so a checkout missing it
+# fails collection loudly instead of skipping the tests in silence.
+!batch-runner/scripts/analyze_codex_run.py
+
 
 # Experiment report HTML (skews GitHub language stats)
 batch-runner/results/*/report/report.html
