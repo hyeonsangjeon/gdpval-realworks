@@ -45,6 +45,7 @@ from core.agentic_v2_stage_a_probe import (  # noqa: E402
     PROBE_TOOLS as STAGE_A_TOOLS,
 )
 from core.agentic_v2_stage_d_probe import (  # noqa: E402
+    PARENT_LOCK,
     PROBE_INSTRUCTIONS,
     PROBE_TOOLS,
     TOOLS_THIS_BACKEND_REFUSES,
@@ -52,6 +53,7 @@ from core.agentic_v2_stage_d_probe import (  # noqa: E402
     ProbeCannotDescribeItself,
     ProbeToolsAreWrong,
     StageDProbeOutcome,
+    capability_evidence_for,
     check_probe_tools,
     run_stage_d_probe,
 )
@@ -599,3 +601,66 @@ def test_running_something_is_read_from_the_boots_not_from_the_tool_calls():
 
     assert asked_but_refused.asked_to_run_something is True
     assert asked_but_refused.a_command_really_ran is False
+
+
+class TestWhatIsKnownAboutTheImageAsOpposedToDeclaredAboutIt:
+    """The manifest says what an image should hold. It is not the check.
+
+    ``sandbox/agentic_v2_capabilities.json`` lists twenty commands with a
+    ``probe`` argv apiece and a ``supply_chain`` block naming policy profiles.
+    Both are instructions for a measurement, not its result. The measurement is
+    a capability receipt, and the one that reads ``verified`` was taken on a
+    locally built candidate that was never pushed. The digest this repository
+    can actually fetch is the parent that candidate was built from.
+
+    So a stage D record that named an image and stopped there would be read as
+    though the evidence followed the name. These tests exist to keep the gap in
+    the record.
+    """
+
+    def test_the_pinned_digest_is_the_parent_and_its_evidence_is_not_run(self):
+        known = capability_evidence_for(AN_IMAGE)
+        assert known["status"] == "not_run"
+        assert known["subject"] == AN_IMAGE.digest
+        assert "parent" in known["grounds"]
+
+    def test_the_answer_is_read_off_the_lock_file_and_not_asserted(self):
+        pinned = json.loads(Path(PARENT_LOCK).read_text(encoding="utf-8"))
+        assert pinned["manifest_digest"] == AN_IMAGE.digest
+        assert capability_evidence_for(AN_IMAGE)["source_revision"] == (
+            pinned["source_revision"]
+        )
+
+    def test_a_digest_nobody_holds_a_receipt_for_is_unknown_not_verified(self):
+        # The failure mode being closed: defaulting to a friendly answer for an
+        # image the repository has never seen. Unknown and not_run are both
+        # honest; verified would be the only wrong answer here.
+        stranger = GuestImage(
+            reference="example.invalid/nothing",
+            digest="sha256:" + "c" * 64,
+            kernel_sha256="a" * 64,
+            rootfs_sha256="b" * 64,
+        )
+        assert capability_evidence_for(stranger)["status"] == "unknown"
+
+    def test_nothing_ever_comes_back_verified(self):
+        # Until a receipt is measured against a fetchable digest, there is no
+        # input to this function that should produce "verified". If that changes
+        # this test is the thing that has to change with it, deliberately.
+        for image in (AN_IMAGE,):
+            assert capability_evidence_for(image)["status"] != "verified"
+
+    def test_an_unreadable_lock_file_is_an_answer_rather_than_a_crash(self, tmp_path):
+        # Losing a whole probe run -- model calls, boot record, price -- because
+        # a lock file moved would be a poor trade for a field.
+        known = capability_evidence_for(AN_IMAGE, lock_path=tmp_path / "absent.json")
+        assert known["status"] == "unknown"
+        assert "could not be read" in known["grounds"]
+
+    def test_the_record_carries_the_gap_rather_than_only_the_name(self, tmp_path):
+        guest = AGuestThatReallyWritesADisk(writes={"out.txt": "done\n"})
+        client = FakeClient([runs(["true"]), says_nothing_useful()])
+        outcome = run_probe([], tmp_path, client=client, guest=guest)
+        recorded = outcome.as_dict()
+        assert recorded["guest_image"]["digest"] == AN_IMAGE.digest
+        assert recorded["image_evidence"]["status"] == "not_run"
