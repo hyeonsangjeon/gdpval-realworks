@@ -45,6 +45,40 @@ _RATE_LIMIT_MARKERS = (
     "http 429",
 )
 
+#: What a provider says when it stopped the answer because of what the answer
+#: contained. This is a benchmark result, not a fault of the run: the model was
+#: asked a real question and what it produced was refused. It must not read as
+#: an infrastructure failure, and it must not be retried -- retrying it until
+#: something gets through is how a filtered task turns into a scored one.
+#:
+#: Only phrasings a provider emits are listed, punctuation included. A looser
+#: marker such as a bare ``content filter`` -- or an unqualified ``content
+#: management policy``, which is an ordinary thing for a professional task to
+#: be *about* -- would also match a deliverable on the subject. A run that
+#: mislabels a broken connection as a refused answer understates its own
+#: defects while overstating the benchmark's, which is the expensive direction
+#: to be wrong in.
+_CONTENT_FILTER_MARKERS = (
+    "reason: content_filter",
+    "content_filter_result",
+    "openai's content management policy",
+)
+
+#: The connection carrying the answer broke while the answer was arriving.
+#: Distinct from a refusal: nothing decided against this turn, the bytes just
+#: stopped. Named so that it stops being counted as a turn that failed without
+#: saying why, which is what it looked like on run ``34528903950``.
+#:
+#: These are the runtime's own words for it, and the colon is load-bearing:
+#: ``transport error`` without one is a phrase about moving goods, and
+#: `test_prose_about_transport_is_not_a_dropped_connection` failed on exactly
+#: that before the colon was required. Not retried today -- this names the
+#: failure, it does not change what is done about it.
+_TRANSPORT_ERROR_MARKERS = (
+    "transport error:",
+    "error decoding response body",
+)
+
 
 def _message_category(message: str) -> Optional[str]:
     lowered = message.lower()
@@ -54,6 +88,10 @@ def _message_category(message: str) -> Optional[str]:
     # refusal is the cause; the deadline is what the cause looked like.
     if any(marker in lowered for marker in _RATE_LIMIT_MARKERS):
         return "rate_limited"
+    if any(marker in lowered for marker in _CONTENT_FILTER_MARKERS):
+        return "content_filtered"
+    if any(marker in lowered for marker in _TRANSPORT_ERROR_MARKERS):
+        return "transport_error"
     oom_markers = (
         "out of memory",
         "insufficient memory",
@@ -100,10 +138,11 @@ def classify_execution_error(text: Optional[str]) -> Optional[str]:
     if direct_message_category:
         return direct_message_category
 
-    # No ``rate_limited`` row below. Every rate-limit text is already decided
-    # by one of the two `_message_category` calls above -- as the exception's
-    # message, or as the whole text -- so a row here could never be reached,
-    # and an unreachable row is a second place to keep the answer in.
+    # No ``rate_limited``, ``content_filtered`` or ``transport_error`` row
+    # below. Every text carrying those markers is already decided by one of
+    # the two `_message_category` calls above -- as the exception's message,
+    # or as the whole text -- so a row here could never be reached, and an
+    # unreachable row is a second place to keep the answer in.
     categories = (
         (
             "out_of_memory",
