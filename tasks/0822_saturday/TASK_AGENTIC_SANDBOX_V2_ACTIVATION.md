@@ -427,6 +427,26 @@ in the workflow, so the route that gets validated cannot drift from the model
 that gets asked. 33 tests in `tests/test_run_agentic_stage_a_probe.py`, nine of
 them on the workflow file itself.
 
+**The 59 cents were checked against the raw data, not against the check that
+printed them.** A figure produced by the code that also approves it is one
+number wearing two hats. Worked out again by hand from the sources instead:
+`1.25`/`5.00` per million from `model_price_table.json`, `3.0` characters a
+token and `7307` characters of instruction and the `1.25` multiplier from
+`advance_check_plan.yaml`, `1589` characters of task from the catalogue, `65536`
+bytes of tool result from the dispatcher's own dataclass, and 4 calls across 2
+attempts from the plan. That gives 310,456 tokens sent and 16,384 received, and
+`$0.46999` before the multiplier and `$0.5874875` after it — the same figures to
+the last digit, and the same token counts the free check prints.
+
+It also caught something. The arithmetic only lands there with `7307`
+characters of instruction; at the `5020` the plan's own prose still claimed, it
+would be `$0.46`. That sentence had gone stale when the sections nobody had
+counted were counted, and it took the cheapest stage-one row with it — `3.37` to
+run, where the prose said `3.32`. The figures were never wrong; the sentence
+describing where they came from was. It now names the history rather than a
+number, because a number copied into prose is a number that goes stale the next
+time the measurement moves, which is what happened.
+
 **Still not done.** The dispatch has not been made and no model has been asked.
 Everything that decides whether it may be is now built, tested and refusable.
 
