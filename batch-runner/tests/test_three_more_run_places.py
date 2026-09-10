@@ -130,12 +130,14 @@ def test_the_new_place_has_no_way_to_run_a_task_here(environment):
 
 
 def test_the_codex_place_has_code_but_is_still_not_a_place_that_can_run():
-    """Registration is not reachability, and the grade must say so.
+    """Reachability is not runnability, and the grade must say so.
 
-    The adapter exists, is named by the mode table, and is exercised against a
-    stand-in runtime. None of that is a request a Foundry deployment answered,
-    so the grade is the one meaning "structure only" — moving it up would put a
-    run place in the comparison on the strength of its own code reading.
+    This test used to rest on "none of that is a request a Foundry deployment
+    answered". Run 34461522053 was answered, so that reason is retired and the
+    grade has to survive without it. It does: what the place still lacks is an
+    experiment that asks for it, a way for the settings to reach the executor,
+    and a single deliverable produced through it. A model saying one word back
+    is not a task being done, and the grade must not read as if it were.
     """
     environment = ENVIRONMENT_CODEX_COMMAND_LINE_TOOL_FOUNDRY
     assert EXECUTION_MODE_BY_ENVIRONMENT[environment] == "codex_foundry"
@@ -154,9 +156,44 @@ def test_the_codex_place_has_code_but_is_still_not_a_place_that_can_run():
         "tests/test_codex_runtime_end_to_end.py" in line
         for line in entry.evidence
     )
+    # The answered turn is named by its run id for the same reason: it is the
+    # one claim here that cannot be checked by reading this repository, so it
+    # has to point at the record that can be downloaded and read instead.
+    assert any("34461522053" in line for line in entry.evidence)
     # And the reasons it still cannot run are all still reported.
     for reason in DOCUMENTED_BLOCKERS_BY_ENVIRONMENT[environment]:
         assert reason in entry.blockers
+
+
+def test_the_codex_blockers_are_about_the_task_not_about_the_connection():
+    """The three reasons must move on once the thing they named has happened.
+
+    Twice now this list has kept a reason past its expiry: first documentation
+    objections the product had already answered, then connection questions run
+    34461522053 answered. Both times the effect was the same — a solved problem
+    reading as unsolvable. This pins the shape of the third list rather than
+    its wording: nothing may claim the connection is unproven, and each reason
+    must name the code that would have to change for it to clear.
+    """
+    reasons = DOCUMENTED_BLOCKERS_BY_ENVIRONMENT[
+        ENVIRONMENT_CODEX_COMMAND_LINE_TOOL_FOUNDRY
+    ]
+    retired = (
+        "has not been observed",
+        "has not been shown to be compatible",
+        "a turn on a runner has not yet been answered",
+    )
+    for reason in reasons:
+        for phrase in retired:
+            assert phrase not in reason, (
+                f"a blocker still says {phrase!r}, which run 34461522053 "
+                "settled"
+            )
+    named = ("core.experiment_config", "core.executor", "test_codex_runtime")
+    for module in named:
+        assert any(module in reason for reason in reasons), (
+            f"no blocker names {module}, so a reader cannot check any of them"
+        )
 
 
 def test_a_batch_run_still_refuses_to_start_the_codex_mode():
@@ -203,22 +240,27 @@ def test_each_of_the_three_has_more_than_one_reason_where_that_is_true():
 
 
 def test_the_static_key_conflict_the_blockers_cite_is_real():
-    """Both products hand a provider a static key. This repository refuses one.
+    """Copilot own-key hands a provider a static key. This repository refuses.
 
     Checked against the list itself rather than against a copy of it, so a
     later decision to allow one of these names would fail here rather than
     leave the blocker text quietly wrong.
+
+    Codex used to be checked here too, and no longer is. The rule still binds
+    it — no static Azure key is allowed for any place — but for Codex the
+    conflict was *resolved* rather than merely stated: core.codex_azure_token
+    mints an Entra token instead, and run 34461522053 was answered using it.
+    Requiring the blocker list to keep citing a conflict that has been settled
+    would force a solved problem to be written down as an obstacle forever.
     """
     assert FORBIDDEN_STATIC_AZURE_CREDENTIAL_ENV
     assert "AZURE_OPENAI_API_KEY" in FORBIDDEN_STATIC_AZURE_CREDENTIAL_ENV
-    for environment in (
-        ENVIRONMENT_CODEX_COMMAND_LINE_TOOL_FOUNDRY,
-        ENVIRONMENT_COPILOT_COMMAND_LINE_TOOL_FOUNDRY,
-    ):
-        assert any(
-            "FORBIDDEN_STATIC_AZURE_CREDENTIAL_ENV" in reason
-            for reason in DOCUMENTED_BLOCKERS_BY_ENVIRONMENT[environment]
-        )
+    assert any(
+        "FORBIDDEN_STATIC_AZURE_CREDENTIAL_ENV" in reason
+        for reason in DOCUMENTED_BLOCKERS_BY_ENVIRONMENT[
+            ENVIRONMENT_COPILOT_COMMAND_LINE_TOOL_FOUNDRY
+        ]
+    )
 
 
 def test_the_address_the_copilot_documentation_gives_is_really_refused():

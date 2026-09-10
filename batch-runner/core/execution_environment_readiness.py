@@ -161,53 +161,62 @@ RUNNER_CLASS_BY_ENVIRONMENT: Mapping[str, tuple[str, str] | None] = {
     ENVIRONMENT_COPILOT_COMMAND_LINE_TOOL_GITHUB_SERVED: None,
 }
 
-# ── What each product's own documentation says stands in the way ───────────
+# ── What stands in the way of each place, and where that is written ────────
 # A place with no code here is already refused. These add the reason a reader
-# would otherwise have to go and find, and they are quoted from the product's
-# own published reference rather than guessed. Each one is a separate reason:
-# clearing one of them does not clear the others.
+# would otherwise have to go and find. For the two Copilot places they are
+# quoted from the product's own published reference rather than guessed; for
+# Codex, whose documented objections have all been answered, they are now
+# statements about this repository, checkable in the code they name. Each one
+# is a separate reason: clearing one of them does not clear the others.
 
 DOCUMENTED_BLOCKERS_BY_ENVIRONMENT: Mapping[str, tuple[str, ...]] = {
-    # Rewritten once the adapter was built. The three reasons that stood here
-    # before were read out of an older copy of the Codex configuration
-    # reference, and two of them have since stopped being true of the product:
-    # that reference now carries an Azure provider example and a query_params
-    # setting, so "no Azure example" and "no way to pass an api-version" are no
-    # longer statements about Codex. Keeping them would have been the easiest
-    # way to make a solved problem look unsolvable.
+    # Rewritten twice, and the second rewrite is the interesting one.
     #
-    # What replaces them is narrower and, unlike the old text, is about this
-    # deployment rather than about the documentation. Each one names something
-    # that has not been *observed*, and no amount of reading will clear any of
-    # them — only a request that is answered will.
+    # The first three reasons here were read out of an older copy of the Codex
+    # configuration reference and stopped being true of the product. The three
+    # that replaced them were about this deployment instead, each naming
+    # something that had not been *observed*, with the note that no amount of
+    # reading would clear any of them — only a request that is answered would.
+    #
+    # Run 34461522053 is that request. It was answered, and it cleared all
+    # three at once: the auth command ran inside Codex's own isolated
+    # environment and produced a token, the deployment served the pinned
+    # runtime's Responses payload on the undated route, and the turn completed.
+    # So all three are gone, and keeping them would be the mirror image of the
+    # first mistake — making a solved problem look unsolvable.
+    #
+    # What stands here now is what a *task* still needs and does not have.
+    # None of it is about reaching the model; all of it is wiring this
+    # repository has not built yet, which is why each one names the code that
+    # would have to change.
     ENVIRONMENT_CODEX_COMMAND_LINE_TOOL_FOUNDRY: (
-        "the sign-in mints and is accepted, but not yet from inside the place "
-        "Codex runs it: this repository forbids every static Azure credential "
-        "variable in "
-        "core.azure_ai_clients.FORBIDDEN_STATIC_AZURE_CREDENTIAL_ENV, so the "
-        "provider is authenticated by an auth command "
-        "(core.codex_azure_token) that mints an Entra token instead, and run "
-        "34442249527 presented a token from that command to this deployment "
-        "and was answered 200 — so the credential, the identity and the "
-        "address are settled. What was not settled is that Codex starts that "
-        "command in the task's own directory and in the isolated environment, "
-        "where until now it could neither import its package nor find the "
-        "Azure CLI sign-in; it printed nothing, and the empty bearer that "
-        "followed was refused as an invalid subscription key. The fix is in "
-        "and checked locally, and a turn on a runner has not yet been "
-        "answered",
-        "which API contract the deployment serves Codex on has not been "
-        "observed: core.codex_runtime_config refuses a dated api-version on "
-        "the undated /openai/v1/ route and lets query_params carry one on the "
-        "legacy route, but which of the two this resource answers Codex's "
-        "Responses payload on is unmeasured, and the two are not "
-        "interchangeable",
-        "the pinned Codex version has not been shown to be compatible with "
-        "this deployment in this region: core.codex_runtime_config pins "
-        "openai-codex and its bundled binary to one version, and whether that "
-        "version's Responses request is accepted by this resource's model "
-        "version and content filters is a separate question from whether the "
-        "sign-in works",
+        "no experiment asks for this place: no file under batch-runner/"
+        "experiments names execution.mode codex_foundry, and none can be "
+        "written as core.experiment_config validates it today, because that "
+        "check builds CodexProviderSettings from a literal "
+        "execution.codex.endpoint with no environment expansion anywhere in "
+        "the module — and this deployment's address is a secret, so it cannot "
+        "be committed to a public repository. Until the setting can name a "
+        "variable instead of a value, the run place has a runner and no way "
+        "to be asked for",
+        "the configuration cannot reach the runner even if a file asked for "
+        "it: core.executor.TaskExecutor takes the Codex settings through its "
+        "codex_options argument, and nothing outside core.executor and "
+        "tests/test_codex_runtime_end_to_end.py ever passes it. "
+        "step2_run_inference._create_executor_with_client_cleanup builds "
+        "every executor with llm_client=client, which core.executor refuses "
+        "for this mode with 'codex_foundry takes no llm_client and no "
+        "api_key'. A batch run would therefore fail at construction rather "
+        "than reach a turn",
+        "no task has produced a deliverable through this place against the "
+        "real deployment: the turn that was answered carried no tools and "
+        "wrote no file (the connection record reports "
+        "tool_execution_observed false, and the prompt forbade tools by "
+        "design), so tool execution, reference-file staging, deliverable "
+        "collection and the cost receipt have still only been exercised "
+        "against the stand-in app-server in "
+        "tests/test_codex_runtime_end_to_end.py. A model that answers is not "
+        "an agent that works",
     ),
     ENVIRONMENT_COPILOT_COMMAND_LINE_TOOL_FOUNDRY: (
         "the GitHub Copilot command-line own-key documentation supplies the "
@@ -939,14 +948,17 @@ def inspect_environment_support(
             continue
 
         if environment == ENVIRONMENT_CODEX_COMMAND_LINE_TOOL_FOUNDRY:
-            # Registered, so the two "there is no code path" grades above no
-            # longer apply — but registration is not reachability. The adapter
-            # starts the real Codex runtime and the settings are validated
-            # before a turn begins; what has never happened is a request this
-            # deployment answered. That gap is exactly what
+            # Registered and now reachable — but reachable is not runnable.
+            # A turn was sent to the real deployment and answered, so the
+            # sentence that stood here before ("what has never happened is a
+            # request this deployment answered") is retired. What has still
+            # never happened is a *task*: no experiment file asks for this
+            # mode, the settings cannot reach the executor, and nothing has
+            # been produced through it. That gap is exactly what
             # STATUS_STRUCTURE_CHECK_ONLY is for, and moving this to
-            # STATUS_CAN_RUN_REAL_EXPERIMENT before it closes would put a run
-            # place in the comparison on the strength of its own code reading.
+            # STATUS_CAN_RUN_REAL_EXPERIMENT on the strength of one answered
+            # turn would put a run place in the comparison for being able to
+            # say hello.
             evidence.append(
                 "the runtime is the product's own: core.codex_runner builds "
                 "openai_codex.Codex, whose client starts the pinned Codex "
@@ -966,6 +978,29 @@ def inspect_environment_support(
                 "tests/test_codex_runtime_end_to_end.py, which starts a "
                 "runtime, has it call a tool, read a staged reference file, "
                 "write a deliverable, and settle a cost receipt"
+            )
+            evidence.append(
+                "the real deployment answered a real turn: run 34461522053 "
+                "recorded verdict 'connected' with turn_status 'completed' "
+                "and a stream carrying UserMessageThreadItem, "
+                "ReasoningThreadItem and AgentMessageThreadItem, at a cost of "
+                "10,994 input and 28 output tokens — so this is a served "
+                "answer rather than a reachability check"
+            )
+            evidence.append(
+                "the sign-in worked where Codex actually starts it: that same "
+                "run reports auth_command ok with exit code 0 from inside the "
+                "isolated environment and the task's own directory, which is "
+                "the leg that had been failing silently and returning an "
+                "empty bearer"
+            )
+            evidence.append(
+                "the contract it answered on is recorded rather than "
+                "assumed: endpoint_kind 'direct-v1' on the undated /openai/v1/ "
+                "route with wire_api 'responses' and no query parameters, "
+                "served by pinned and installed openai-codex 0.147.0 — which "
+                "settles the two questions core.codex_runtime_config could "
+                "only refuse to guess at"
             )
             blockers.extend(
                 DOCUMENTED_BLOCKERS_BY_ENVIRONMENT.get(environment, ())

@@ -11,6 +11,63 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Changed
+- **The Codex readiness record now says what run `34461522053` actually
+  settled, and what it did not.** The three blockers standing against
+  `ENVIRONMENT_CODEX_COMMAND_LINE_TOOL_FOUNDRY` were all written as things that
+  had *not been observed*, with the explicit note that no amount of reading
+  would clear any of them — only a request that is answered would. That request
+  has now been answered, and it cleared all three at once:
+
+  - the auth command ran **inside Codex's own isolated environment and the
+    task's own directory** and produced a token (`auth_command.ok: true`,
+    `exit_code: 0`, `azure_config_dir: /home/runner/.azure`);
+  - the contract the deployment serves Codex on is no longer a guess —
+    `endpoint_kind: direct-v1` on the undated `/openai/v1/` route,
+    `wire_api: responses`, no query parameters;
+  - the pinned runtime is compatible with this deployment in this region:
+    pinned **and** installed `openai-codex 0.147.0`, deployment `gpt-5.4`,
+    `turn_status: completed`.
+
+  This is the second time this list has had to be rewritten, and both rewrites
+  were the same mistake caught late: a reason kept past the point where it was
+  true. The first time it was documentation objections the product had already
+  answered; this time it was connection questions a real turn answered. Both
+  make a solved problem read as unsolvable, which is the more expensive
+  direction to be wrong in — it argues against work that is already done.
+
+  **The status does not move.** It stays `structure_check_only`. What replaces
+  the three cleared blockers is what a *task* still needs and does not have,
+  and each one names the code that would have to change:
+
+  - **no experiment asks for this place.** No file under
+    `batch-runner/experiments` names `execution.mode: codex_foundry`, and none
+    can be written as `core.experiment_config` validates it today: that check
+    builds `CodexProviderSettings` from a **literal** `execution.codex.endpoint`
+    with no environment expansion anywhere in the module, and this deployment's
+    address is a secret that cannot be committed to a public repository.
+  - **the configuration cannot reach the runner.** `TaskExecutor` takes the
+    Codex settings through `codex_options`, and nothing outside `core.executor`
+    and `tests/test_codex_runtime_end_to_end.py` ever passes it;
+    `step2_run_inference._create_executor_with_client_cleanup` builds every
+    executor with `llm_client=client`, which `core.executor` refuses for this
+    mode. A batch run would fail at construction rather than reach a turn.
+  - **nothing has been produced through it.** The answered turn carried no
+    tools and wrote no file (`tool_execution_observed: false`; the prompt
+    forbade tools by design), so tool execution, reference-file staging,
+    deliverable collection and the cost receipt are still exercised only
+    against the stand-in app-server. A model that answers is not an agent that
+    works.
+
+  `test_the_codex_blockers_are_about_the_task_not_about_the_connection` pins
+  the shape rather than the wording: no blocker may claim the connection is
+  unproven, and each must name checkable code. The static-key test stops
+  requiring Codex to cite `FORBIDDEN_STATIC_AZURE_CREDENTIAL_ENV` — the rule
+  still binds it, but for Codex that conflict was *resolved* by
+  `core.codex_azure_token` rather than merely stated, and a test that demands a
+  settled conflict be listed as an obstacle is a test that keeps the record
+  wrong on purpose.
+
 ### Fixed
 - **The connection diagnostic asked the turn for a field the turn does not
   have, and reported the answer as missing.** Run `34461522053` connected: the
