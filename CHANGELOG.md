@@ -123,6 +123,20 @@ entries land under a fresh dated heading the day they merge to `main`.
   `batch-runner/tests/test_codex_closing_sweep.py`, every host in them a
   loopback socket on the test machine.
 
+  **Fired, run `34448607605`, verdict `no_property_closes_a_served_request`.**
+  The baseline was re-tested that day and served, so the premise held and the
+  other eight were bought honestly. All nine arms answered `200`, including
+  `everything` — 30,981 bytes, nine added headers, `stream: true`, a 19 KB
+  `instructions` and ten tool definitions, materially larger and stranger than
+  a Codex turn and served without complaint. `properties_that_closed_the_gate`
+  is `[]`, 9 planned and 9 sent. Summed usage 5,942 in / 35 out over the seven
+  arms that reported it; the two that set `stream: true` hold the SSE prelude
+  rather than a parsed final status and report none. `price_usd: null`,
+  `pricing: partial` — unpriced, not free.
+
+  Finding nothing was the finding: it is what pointed away from the request
+  body, and the thing this sweep does not vary turned out to be the sign-in.
+
 - **The one request in this diagnostic that the route can actually serve.**
   `--valid-request` in `batch-runner/scripts/diagnose_codex_foundry_connection.py`,
   wired as a step gated on its own `send_valid_request` input *and* the resource

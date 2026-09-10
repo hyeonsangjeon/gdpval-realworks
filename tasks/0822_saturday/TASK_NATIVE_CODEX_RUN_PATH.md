@@ -1191,6 +1191,10 @@ paid run must be preceded by a fresh smoke at the new fingerprint.
   materially larger and stranger than a Codex turn, served without complaint.
   `properties_that_closed_the_gate: []`. Summed usage 5,942 in / 35 out,
   `price_usd: null`, `pricing: partial`; nine paid requests, unpriced, not free.
+  Two arms (`stream_true`, `everything`) set `stream: true`, so their records
+  hold the SSE prelude instead of a parsed final status and report no usage;
+  the sum is over the seven that did, and the gate question is answered at the
+  HTTP level for all nine.
 
   So the refusal is not in what Codex puts in the request. That is a real
   elimination and it cost nine requests, and the sweep's own record said what
