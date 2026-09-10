@@ -265,6 +265,44 @@ entries land under a fresh dated heading the day they merge to `main`.
   not because a result came back — nothing has been measured and nothing has
   been bought.
 
+- **344 ran, and the V3 header lost: `format_lost`, candidate closed.** Run
+  `34363078893`, ten calls to `gpt-audio-1.5`, dispatched on `--ref main`
+  under the amended §12. Its `head_sha` is `c301771`, byte-identical to the
+  tag `audio-344-dispatch` cut at the merge commit, and that comparison was
+  made **before** the paid gate was approved — the order the amendment exists
+  to enforce. All four pins were re-measured at that SHA with the repository's
+  own accessors and match the document: grader `7e745a18…`, price table
+  `b01b384c…`, manifest `97755288…`, header `dd0380fa…` at 1,931 chars.
+
+  Six of the seven registered conditions passed. The sixth did not: the
+  candidate arm came back readable **3 of 5** against a registered 5/5, while
+  the production control arm came back **5/5** — so the control behaved and
+  the number is about the candidate. §6 calls a near miss a loss, and 3/5 is
+  not a near miss. The candidate is closed: not re-worded, not re-ordered, not
+  re-scored at a lower bar, and #338 stays shut.
+
+  What #337 bought ten calls and could not produce, this run produced. The two
+  unreadable replies are not the transcribed prose the standing hypothesis
+  predicted. They are **refusals claiming the audio never arrived** — "I don't
+  have access to the audio you're referring to", "I can't process the audio
+  input without first receiving it" — on calls whose own usage records
+  `audio_tokens: 30` and `34`, in the same run where the production arm parsed
+  the same five clips at 30–34 audio tokens each. `finish_reason: stop`, zero
+  braces, zero code fences, parser failing at character 0, `refusal_present:
+  false`. §3.4 asked whether "the model is following an instruction to write
+  prose" survives a header with no output instruction in it; it does not, and
+  the surviving explanation — that the observation header can make the model
+  fail to see the attachment — is recorded as a hypothesis and **not bought**.
+
+  The ledger has 10 rows, 10 distinct `call_id`, `retry_kind: none` throughout
+  (the SDK-retry-zero setting held), `requested_model` and `resolved_model`
+  both `gpt-audio-1.5`, 320 audio input tokens, 4,095 input and 648 output
+  text tokens. `model_cost_usd` is `null` on every row with
+  `missing_reasons: ["price_missing"]`, so the receipt is `partial` and the
+  amount is **null, not `$0`** — `gpt-audio-1.5` is absent from the pinned
+  price table, and the token counts are kept so this run can be priced the day
+  it is listed.
+
 - **The Codex 401 is now surrounded by measurements, and four of its five
   candidate causes are closed.** Three runs on 2026-09-09 from `main` at
   `cb043af`: the free read-only probe (`34346945494`), the free ARM role
