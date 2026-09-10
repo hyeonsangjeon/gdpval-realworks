@@ -1575,6 +1575,250 @@ evidence the bound held, and it is still not accepted, because it does not say
 death as containment. The first run's six-of-seven stands in the record as a
 failed run.
 
+###### The host is stopped, and this is what it ran for
+
+C2 and C3 were the only work scheduled on `gdpval-devhost-vm`, and both are done,
+so it is deallocated. Idleness was checked before stopping it rather than
+assumed: nobody logged in, no `firecracker` or `jailer` process, nothing outside
+kernel threads.
+
+| | |
+|---|---|
+| Started | `2026-09-10T19:33:33.115Z` requested, `19:34:03.528Z` succeeded |
+| Deallocated | `2026-09-10T20:52:57.917Z` requested, `20:53:10.886Z` succeeded |
+| Outer window | **4,777.8 s — 79.63 min — 1.3272 h** |
+| Size / region | `Standard_D8as_v5`, `koreacentral` |
+| Published Linux rate | 0.424 USD/h pay-as-you-go, from the public retail price API |
+| Rate × window | 0.5627 USD |
+| Price status | **`partial`** |
+
+The two timestamps come from the subscription's own activity log, so the
+**duration is measured, not estimated**. The dollar figure is not. 0.424 USD/h is
+the *published list rate* for this size in this region; what the subscription is
+actually billed depends on agreement terms this session cannot read. So the
+arithmetic is recorded as arithmetic and the price stays `partial`.
+
+**`partial` is not zero.** Something was spent for 79.63 minutes of an 8-vCPU
+machine, and the number simply is not verifiable from here.
+
+Two smaller things worth keeping:
+
+- **`az monitor activity-log` does not run on this box** — the installed CLI
+  raises `TypeError: ord() expected string of length 1, but int found` out of a
+  bundled antlr4 that disagrees with its own generated lexer. That is a local
+  packaging fault, not an access one; the same query answers through
+  `az rest` against `Microsoft.Insights/eventtypes/management/values`.
+- **The artefacts survive the deallocation.** They are on `/var/tmp`, which on
+  this VM is the OS disk, and both are committed to the repository anyway.
+
 ### Stage D — not yet run
+
+#### The plan, written before any of it is built
+
+Stage C proved a machine that boots with the rules applied and stops seven ways
+of getting out of them. What it did **not** build is the thing on the other side
+of the tool contract. The gap is worth naming precisely, because it is not
+"wire two finished pieces together".
+
+**C boots a machine to run one command and then destroys it.** The tool
+contract's `exec_run` is a call made repeatedly inside a session that holds
+state: the model writes a file with `workspace_apply`, runs something with
+`exec_run`, reads what came out, and runs something else. Between those calls
+the workspace has to still be there. A one-shot boot has nowhere to keep it.
+
+##### One machine per call, not one machine per session
+
+Two ways to close that gap, and the choice matters enough to write down.
+
+**A long-lived machine per task.** Boot once when the session starts, keep it
+running, send each `exec_run` to an agent inside it over vsock, tear it down at
+`finalize`. Fewer boots, so less latency per call. It needs a guest agent, a
+channel protocol, and a way to bound a call without killing the machine — none
+of which stage C looked at, so none of which has evidence behind it.
+
+**A fresh machine per call, with the work disk carried across.** The workspace
+lives on the host between calls. Each `exec_run` builds a work disk out of it,
+boots, runs, and the machine is destroyed; the results and the changed workspace
+are read back out of the disk image afterwards. **This is exactly the sequence
+stage C measured** — `build_launch_plan`, boot, collect, teardown with
+`all_gone: true` — repeated.
+
+**Taking the second.** The cost is real: C2's guest ran for 1.269 s but the
+orchestration around it is seconds, and 220 tasks at ten calls each is thousands
+of boots. That is hours, and it is affordable. What is bought for it is that
+every `exec_run` inherits stage C's evidence instead of needing its own, and
+that nothing whatever survives a call except a disk image the host controls —
+so a call that gets compromised has no resident machine to stay in.
+
+This does not weaken `workdir: ephemeral`. Carrying the disk between calls
+*within* one task is the workspace working; what `ephemeral` forbids is carrying
+it between tasks. That is a runner property, and stage E is where it is kept.
+
+##### What gets built, and in what order
+
+**D1 — the pure part, testable on a box that cannot boot.** A module that turns
+a validated `exec_run` request into the guest command, and turns what a boot
+returned into the tool contract's result. No subprocess, no Firecracker, no
+network. Same shape as C3: pure data and pure judging, with the boot injected.
+
+**D2 — the backend.** A real `AgenticV2Backend` whose `workspace_apply` reads
+and writes a host-side session directory, whose `exec_run` calls D1 and boots,
+and whose `finalize` collects the produced files with their hashes. Guards
+untouched.
+
+**D3 — the model's voice.** `real_model_voice` currently refuses, and its stated
+reason — *"reaching one costs money that has not been approved"* — **is now out
+of date**, because the calls have been approved. It will keep refusing, on the
+reason that is still true, and the docstring gets corrected rather than quietly
+left saying something false.
+
+**D4 — the guards, each in its own change.** Only after D1–D3 exist, run, and
+have artefacts. Nothing is flipped before then.
+
+##### The one judging rule that decides whether any of this is honest
+
+A guest that panicked on boot and a guest whose command returned 0 leave
+**different** evidence, and the difference is the whole thing:
+
+- `/out/exit_status` **present** — the command ran and this is its returncode,
+  whatever the number is. A non-zero returncode is a *successful tool call*
+  reporting a failed command, and the model is shown it.
+- `/out/exit_status` **absent** — the command did not run to completion, and
+  there is no returncode to report. This is `compute_backend_error`. It is
+  **never** `returncode: 0`, and never a made-up non-zero either.
+
+Getting this backwards is how a run of 220 tasks reports a wall of clean
+failures that were really a broken launcher. Stage C's first run was this exact
+mistake in the other direction, and the discipline is the same: **absent
+evidence is not a result.**
+
+##### The bound a model asks for, and the bound it gets
+
+`exec_run`'s schema allows `timeout_seconds` up to 2700. The containment policy
+allows 1200. A model asking for more than the policy permits is not an error and
+is not a refusal — it gets the policy's bound, and **the result says which
+number was actually applied**, so nobody later reads a 1200 s kill as the model's
+own 2700 s choice having been honoured.
+
+##### D1 — the pure part, built and green
+
+`core/agentic_v2_exec_boot.py` and `tests/test_agentic_v2_exec_boot.py`.
+**47 tests, 0.26 s, nothing booted.**
+
+The technique that made it worth doing first: the tests **run the wrapper they
+built**, under a real `/bin/sh`, with `/work` pointed at a temporary directory —
+the same way `GUEST_INIT` runs it, output redirected to files. That is not a
+microVM and does not pretend to be one; the containment is stage C's business
+and was measured there. What it proves is the part a microVM would not have
+helped with: that the wrapper is valid shell, that it enters the directory it
+was asked to, that the payload arrives byte for byte, and that a command reading
+standard input gets what the request said.
+
+It found a real bug on the first run, which is the entire argument for the
+technique. The reader downstream matches stderr **exactly** against a marker, and
+a shell that cannot enter a directory prints its own sentence first — worded
+differently in dash, ash and bash. The match would have fired on no real guest
+at all, and the fault would have surfaced once, expensively, on a booted machine.
+The fix is `2>/dev/null` on the `cd`, and the same treatment on `base64 -d`.
+
+Two decisions worth keeping written down:
+
+**The payload travels as base64, and that is not decoration.** It closes three
+things at once. The heredoc delimiter is `GDPVAL_SCRIPT_EOF`, containing `_`,
+which base64's alphabet — `A-Z a-z 0-9 + / =` — provably never emits, so a
+payload cannot end its own document early. A heredoc appends a newline the
+model's bytes may not have had. And a 256 KiB script as one `printf` argument
+would be past `MAX_ARG_STRLEN` and simply fail to execute.
+
+**A setup failure and a command's own status are told apart by a marker, not by
+a number.** The wrapper exits 125 when its own setup failed, but 125 is a number
+a real command can return, so it counts as a setup failure only alongside the
+matching marker on stderr — and there are two markers, not one. A path it could
+not enter is something the model can fix by asking for another; a guest with no
+working `base64` is a fault in the image, and telling the model to correct its
+path would send it chasing something it cannot reach.
+
+##### D2 — the backend, built and green
+
+`core/agentic_v2_microvm_backend.py` and `tests/test_agentic_v2_microvm_backend.py`.
+**36 tests.** Wider selection re-run afterwards: **1,971 passed, 3 skipped** —
+no fingerprint regression from adding a `core/` module.
+
+It subclasses `AgenticV2FixtureBackend`, and the reason is specific. Most of that
+class is not a stub: it is roughly four hundred lines of workspace path safety —
+a directory descriptor pinned by device and inode, every open relative to it with
+`O_NOFOLLOW`, every resulting descriptor checked back against the root before a
+byte moves, and quotas on entries, file size and total size. That is the code
+that stops a model writing through a symlink into the host, and it is identical
+whether the command afterwards runs in a fixture or in a machine. Two copies of
+it would mean two versions of the part that must never drift.
+
+What makes the fixture a fixture is overridden away: its identity, its
+`fixture-upper` command, its demonstration package catalogue. **A test pins the
+exact set of inherited public methods**, so a convenience added to the fixture
+years from now cannot become a production capability while nothing fails.
+
+###### The guard I did not touch, and where it is
+
+`core/agentic_v2_runner.py:466` compares the startup identity against the
+foundation fixture's and fails **anything else** with `compute_start_failed`.
+This backend does not satisfy that check, and this change does not alter it.
+That is not an oversight — it is the guard that has to be opened as its own
+reviewable change, once the pieces under it have evidence, and opening it quietly
+from inside the backend would make every other honest thing in the file
+worthless. So the backend is proven directly by its tests, and **the runner still
+refuses it.** There is now a line number for D4 to argue about.
+
+###### Two capability gaps, named as gaps
+
+`environment_resolve` and `environment_activate` refuse. Resolving a requirement
+needs an index and the machine has no route to one — that is stage C's fourth
+attack, the containment working, and the refusal is its consequence rather than
+a missing feature.
+
+`browser_run` refuses **including `open_local`**, and the two reasons differ.
+`search` and `open_url` need a network. `open_local` needs none — the image has
+chromium and the file is on the work disk — but nothing here starts it, collects
+what it rendered, or bounds how long it runs. Returning a hash of the file the
+model already handed over would read as a browser having run, which is worse than
+an error. **Both gaps will change the outcome of some tasks, and a task that
+failed for want of a browser has to read as that and not as a model that could
+not do the work.**
+
+###### Identity is the image, because the image is the behaviour
+
+The fixture hashes its own source, which is right for something whose behaviour
+is entirely its own code. Here the code decides very little: the same wrapper in
+a different guest is a different machine with different programs in it. So the
+implementation hash covers the image reference and digest, the kernel and root
+filesystem hashes, the manifest, the pinned interpreter binaries and the policy.
+`state_sha256` carries it too — an identical workspace under a different guest is
+not the same state, and a resume that treated it as one would carry a run across
+a change it should have noticed.
+
+Two digests the runner insists on are derived rather than invented, and both are
+described for what they are. `package_snapshot_sha256` is the hash of an **empty**
+inventory — a real digest of a real state, since nothing can be installed.
+`browser_build_sha256` identifies the browser *in this image*, from the image
+digest and the manifest's own record of the command. **It is not a build
+attestation from whoever built chromium**, and calling it one would be a claim
+nobody here can support.
+
+With no manifest, `start` returns `substrate_manifest_missing` rather than
+describing itself. The tempting alternative is a placeholder digest, which would
+put a hash into the run record that no file on disk corresponds to.
+
+###### One thing found that has to be settled by probing, not by reasoning
+
+The substrate manifest requires a command named **`python`**. D1 invokes
+**`python3`**. On a Debian image both normally exist — but *normally* is not
+evidence, and a guest with only one of them would fail every Python call with
+"not found" while the manifest went on reporting the capability as present.
+
+So the interpreter binaries are an **argument** to the backend rather than a
+constant, defaulting to D1's mapping. The capability probe runs both and records
+the answer, and the answer gets pinned here without editing D1 on the strength of
+what is usually true.
+
 ### Stage E — not yet run
 ### Stage F — not yet run
