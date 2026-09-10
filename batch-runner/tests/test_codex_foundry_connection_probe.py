@@ -1029,22 +1029,23 @@ def _redaction_check() -> str:
 
 def _run_redaction_check(tmp_path, plan, endpoint=None):
     script = tmp_path / "check.py"
-    script.write_text(_redaction_check(), encoding="utf-8")
     plan_path = tmp_path / "plan.json"
     if plan is not None:
         plan_path.write_text(json.dumps(plan), encoding="utf-8")
-    body = _redaction_check().replace(
-        '"/tmp/codex-foundry-plan.json"', json.dumps(str(plan_path))
+    # Every path the check reads has to point somewhere this test owns.
+    # Left alone they read whatever a real dispatch happened to leave in /tmp
+    # on this machine, which would make the result depend on it. Rewritten by
+    # pattern rather than one at a time, so a path added to the check later
+    # cannot quietly reintroduce that.
+    body = re.sub(
+        r'"/tmp/(codex-foundry-[a-z-]+\.json)"',
+        lambda match: json.dumps(str(tmp_path / f"absent-{match.group(1)}")),
+        _redaction_check(),
     ).replace(
-        '"/tmp/codex-foundry-connection.json"',
-        json.dumps(str(tmp_path / "absent.json")),
-    ).replace(
-        # Every path in the checked list has to be pointed somewhere this test
-        # owns. Left alone, this one reads whatever a real dispatch happened to
-        # leave in /tmp on this machine.
-        '"/tmp/codex-foundry-readonly.json"',
-        json.dumps(str(tmp_path / "absent-readonly.json")),
+        json.dumps(str(tmp_path / "absent-codex-foundry-plan.json")),
+        json.dumps(str(plan_path)),
     )
+    assert "/tmp/codex-foundry" not in body, "a checked path still reads real /tmp"
     script.write_text(body, encoding="utf-8")
     environment = dict(os.environ)
     environment["FOUNDRY_PROJECT_ENDPOINT"] = endpoint or PROJECT_ENDPOINT
@@ -1061,6 +1062,9 @@ def _run_redaction_check(tmp_path, plan, endpoint=None):
 
 
 CLEAN_RECORD = {
+    # The check picks its rules by schema and refuses a record whose schema it
+    # does not know, so a stand-in without one is not a stand-in for anything.
+    "schema": SCHEMA,
     "observed": {"tool_execution_observed": False},
     "settings": {"endpoint_host_fingerprint": "sha256:0123456789abcdef"},
 }
@@ -1078,6 +1082,7 @@ def test_the_workflows_own_check_passes_a_clean_record(tmp_path):
         (
             "the account name",
             {
+                "schema": SCHEMA,
                 "observed": {"tool_execution_observed": False},
                 "note": f"account {ACCOUNT} refused the request",
             },
@@ -1085,6 +1090,7 @@ def test_the_workflows_own_check_passes_a_clean_record(tmp_path):
         (
             "the project name",
             {
+                "schema": SCHEMA,
                 "observed": {"tool_execution_observed": False},
                 "note": f"project {PROJECT} is not visible",
             },
@@ -1092,6 +1098,7 @@ def test_the_workflows_own_check_passes_a_clean_record(tmp_path):
         (
             "a url",
             {
+                "schema": SCHEMA,
                 "observed": {"tool_execution_observed": False},
                 "note": "POST https://elsewhere.example/responses failed",
             },
@@ -1099,13 +1106,14 @@ def test_the_workflows_own_check_passes_a_clean_record(tmp_path):
         (
             "a token",
             {
+                "schema": SCHEMA,
                 "observed": {"tool_execution_observed": False},
                 "note": "eyJhbGciOiJSUzI1NiJ9.eyJhdWQiOiJodHRwcyJ9",
             },
         ),
         (
             "a claim of tool execution",
-            {"observed": {"tool_execution_observed": True}},
+            {"schema": SCHEMA, "observed": {"tool_execution_observed": True}},
         ),
     ],
 )
@@ -1116,9 +1124,29 @@ def test_the_workflows_own_check_catches_what_must_not_be_published(
 
     Held here rather than only in the workflow so the check itself cannot rot
     into a step that greps for nothing and reports clean.
+
+    Each record carries a schema the check recognises, so what catches it is
+    the rule named in the label. Without one they would all be caught by the
+    unknown-schema rule instead and every case here would pass while testing
+    nothing.
     """
     result = _run_redaction_check(tmp_path, record)
     assert result.returncode == 1, f"{label} was not caught: {result.stdout}"
+
+
+def test_a_record_whose_schema_the_check_does_not_know_is_refused(tmp_path):
+    """Fail closed. A check written for one record vouches only for that one.
+
+    The rules differ per schema -- a free probe must say it sent nothing, the
+    paid one must say it sent something -- so there is no rule left to apply
+    to a shape the check has never heard of. Passing it would mean reporting
+    clean on the strength of checks that were never run against it.
+    """
+    result = _run_redaction_check(
+        tmp_path, {"schema": "something_new/1", "observed": {}}
+    )
+    assert result.returncode == 1
+    assert "no check here" in result.stdout
 
 
 def test_a_run_with_no_record_is_not_reported_as_clean(tmp_path):

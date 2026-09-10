@@ -1722,6 +1722,338 @@ def transmission_sweep(
     return record
 
 
+# ── Does this identity get a completion, or not? ────────────────────────────
+#
+# Every probe above this line sends a body no deployment can serve. That is
+# what makes them free, and it is also the exact reason none of them can settle
+# the question the environment work now depends on: whether this identity may
+# run inference on this route at all.
+#
+# The sweep and the discriminator read *check order* -- which test the host
+# applies first. A `400` from them means an unservable body got past
+# authorization. It does not mean a servable body would be served, because
+# neither of them has ever sent one. `GET /models` returning `200` does not
+# mean it either: listing and completing are different data actions and a
+# resource may permit one and refuse the other.
+#
+# So this sends a real Responses request: a model, an input, and a ceiling. It
+# is the only thing in this file that can produce a completion, and it is the
+# only thing that can answer:
+#
+#   200 with output text -> this identity infers on this route through
+#                           `urllib`. Whatever refuses Codex is Codex-side, and
+#                           there is now a working reference to diff against.
+#   401/403              -> this identity cannot infer here at all. That is a
+#                           different and larger finding than anything above,
+#                           and the first evidence that would bear on a role.
+#   400/404              -> the request shape or the deployment name is wrong,
+#                           and the message says which. Not a permission fact.
+
+VALID_REQUEST_SCHEMA = "codex_foundry_valid_request/1"
+
+#: Ceilings, fixed here rather than accepted as arguments. A runaway cannot be
+#: configured into this probe because there is nothing to configure: one
+#: request, no retry, a small output ceiling and a wall clock. These are the
+#: pre-declared limits for this experiment, not advice.
+#:
+#: 512 rather than the API's minimum of 16, and the difference matters more than
+#: the cost does. The deployments this is pointed at are reasoning models: they
+#: spend output tokens on reasoning before any text is produced, and a ceiling
+#: of 16 would be consumed entirely by that. The result would be a `200` with
+#: `status: incomplete` and no text -- which this probe correctly refuses to
+#: call a success, and which would therefore have burned the one request that
+#: was supposed to settle the question on an artefact of the ceiling. 512 is
+#: still a hard bound, and still a fraction of a cent at any plausible rate.
+VALID_REQUEST_MAX_OUTPUT_TOKENS = 512
+VALID_REQUEST_TIMEOUT_SECONDS = 90
+VALID_REQUEST_ATTEMPTS = 1
+
+#: Deliberately trivial and public. No benchmark task, no reference file, no
+#: repository content. What is being read is the status code; the answer is
+#: only evidence that a model produced one.
+VALID_REQUEST_INPUT = "Reply with the single word: ok"
+
+#: A cap on what is written down, not on what may come back. A model that
+#: ignored the ceiling cannot spill anything into the record.
+VALID_REQUEST_ANSWER_KEPT_CHARS = 200
+
+VERDICT_INFERENCE_SUCCEEDED = "inference_succeeded"
+VERDICT_INFERENCE_REFUSED_AT_THE_AUTH_GATE = "inference_refused_at_the_auth_gate"
+VERDICT_INFERENCE_REQUEST_REJECTED = "inference_request_rejected"
+VERDICT_VALID_REQUEST_INCONCLUSIVE = "valid_request_inconclusive"
+
+NOT_ESTABLISHED_BY_A_VALID_REQUEST: tuple[str, ...] = (
+    "the Codex path: this is `urllib`. A completion here says the resource "
+    "and the identity can do it, not that the Codex runtime can",
+    "the harness: one completion is not a task solved. No tool ran, no file "
+    "was written, and nothing here bears on isolation, resume or collection",
+    "the benchmark: nothing about this moves any task to runnable, and the "
+    "220-task column is untouched by it",
+    "the price: token counts are recorded because the response carried them. "
+    "No rate is applied here, so the cost is `partial` -- a usage record "
+    "without a price is not a priced call and is not a free one",
+)
+
+
+def _answer_text_in(payload: Mapping[str, Any]) -> str | None:
+    """Pull the model's text out of a Responses body, whichever shape it uses.
+
+    Returns ``None`` when there is no text, and that is load-bearing: a `200`
+    carrying no output is not a completion, and the verdict below refuses to
+    call it one.
+    """
+    direct = payload.get("output_text")
+    if isinstance(direct, str) and direct.strip():
+        return direct
+    if isinstance(direct, list):
+        joined = "".join(part for part in direct if isinstance(part, str))
+        if joined.strip():
+            return joined
+    pieces: list[str] = []
+    for item in payload.get("output") or []:
+        if not isinstance(item, Mapping):
+            continue
+        for part in item.get("content") or []:
+            if isinstance(part, Mapping) and isinstance(part.get("text"), str):
+                pieces.append(part["text"])
+    joined = "".join(pieces)
+    return joined if joined.strip() else None
+
+
+def _usage_in(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Token counts as the service reported them, with no rate applied.
+
+    ``price_usd`` is ``None`` and ``pricing`` is ``partial`` on purpose. This
+    repository has no rate registered for this route, and inventing one to fill
+    the field would put a number in a ledger that nothing measured.
+    """
+    usage = payload.get("usage")
+    if not isinstance(usage, Mapping):
+        return {
+            "reported": False,
+            "input_tokens": None,
+            "output_tokens": None,
+            "total_tokens": None,
+            "price_usd": None,
+            "pricing": "null",
+            "why": "the response carried no usage object, so nothing was counted",
+        }
+    def _count(name: str) -> int | None:
+        value = usage.get(name)
+        return int(value) if isinstance(value, (int, float)) else None
+
+    return {
+        "reported": True,
+        "input_tokens": _count("input_tokens"),
+        "output_tokens": _count("output_tokens"),
+        "total_tokens": _count("total_tokens"),
+        "price_usd": None,
+        "pricing": "partial",
+        "why": (
+            "token counts came back and are recorded; no rate for this route "
+            "is registered in this repository, so no price is derived"
+        ),
+    }
+
+
+def post_valid_request(
+    settings: CodexProviderSettings,
+    token: str,
+    *,
+    timeout: int = VALID_REQUEST_TIMEOUT_SECONDS,
+) -> dict[str, Any]:
+    """``POST {base_url}/responses`` with a body this route can actually serve.
+
+    Sent once. There is no retry loop here and adding one would change what the
+    ceilings above mean, so the count is asserted by the caller's record rather
+    than left implicit.
+    """
+    import urllib.error
+    import urllib.request
+
+    body = {
+        "model": settings.model,
+        "input": VALID_REQUEST_INPUT,
+        "max_output_tokens": VALID_REQUEST_MAX_OUTPUT_TOKENS,
+        "stream": False,
+        "store": False,
+    }
+    payload = json.dumps(body).encode("utf-8")
+    request = urllib.request.Request(  # noqa: S310 - scheme fixed by classify_endpoint
+        f"{settings.base_url}/responses",
+        method="POST",
+        data=payload,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+    )
+    outcome: dict[str, Any] = {
+        "requested": "POST /responses",
+        "body_sha256": hashlib.sha256(payload).hexdigest(),
+        "body_bytes": len(payload),
+        "max_output_tokens": VALID_REQUEST_MAX_OUTPUT_TOKENS,
+        "status": None,
+        "message": None,
+        "answer": None,
+        "model_echoed": None,
+        # The Responses API's own status, which is not the HTTP one. A model
+        # that ran and was cut off by the ceiling above returns `200` with
+        # `incomplete` here, and without this field that case is
+        # indistinguishable in the record from a route that answered nothing.
+        "response_status": None,
+        "incomplete_reason": None,
+        "usage": None,
+        "error": None,
+    }
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310
+            outcome["status"] = int(response.status)
+            answer = response.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as exc:
+        outcome["status"] = int(exc.code)
+        try:
+            answer = exc.read().decode("utf-8", "replace")
+        except Exception:  # noqa: BLE001 - a body we cannot read is not a crash
+            answer = ""
+    except Exception as exc:  # noqa: BLE001 - a transport failure is a finding
+        outcome["error"] = f"{type(exc).__name__}: {exc}"
+        return outcome
+
+    outcome["message"] = _message_in(answer)
+    try:
+        parsed = json.loads(answer)
+    except Exception:  # noqa: BLE001 - a body that is not JSON is still a status
+        return outcome
+    if not isinstance(parsed, Mapping):
+        return outcome
+    text = _answer_text_in(parsed)
+    outcome["answer"] = None if text is None else text[:VALID_REQUEST_ANSWER_KEPT_CHARS]
+    echoed = parsed.get("model")
+    outcome["model_echoed"] = echoed if isinstance(echoed, str) else None
+    status_field = parsed.get("status")
+    outcome["response_status"] = status_field if isinstance(status_field, str) else None
+    details = parsed.get("incomplete_details")
+    if isinstance(details, Mapping) and isinstance(details.get("reason"), str):
+        outcome["incomplete_reason"] = details["reason"]
+    outcome["usage"] = _usage_in(parsed)
+    return outcome
+
+
+def classify_valid_request(attempt: Mapping[str, Any]) -> tuple[str, str]:
+    """Say what came back, and refuse to overstate a `200`.
+
+    A `200` that carried no model text is not a completion. It is reported as
+    inconclusive rather than as a success, because the whole value of this
+    probe is that it is the one thing entitled to say inference worked.
+    """
+    if attempt.get("error"):
+        return (
+            VERDICT_VALID_REQUEST_INCONCLUSIVE,
+            "the request did not reach a status: this is a transport failure "
+            "and says nothing about the identity or the deployment",
+        )
+    status = attempt.get("status")
+    if status in AUTH_GATE_STATUSES:
+        return (
+            VERDICT_INFERENCE_REFUSED_AT_THE_AUTH_GATE,
+            f"a servable request was refused at the gate ({status}). This "
+            "identity is not permitted to infer on this route, which no "
+            "earlier probe could establish -- a listing succeeded and an "
+            "unservable body got past the gate, and neither of those is this",
+        )
+    if status == 200:
+        if attempt.get("answer"):
+            return (
+                VERDICT_INFERENCE_SUCCEEDED,
+                "a model produced output for this identity on this route. "
+                "What refuses the Codex runtime is therefore not the resource, "
+                "the identity or the route, and a working reference now exists "
+                "to diff the runtime's request against",
+            )
+        if attempt.get("incomplete_reason") == "max_output_tokens":
+            # Not a success, and not a refusal either. Saying only
+            # "200 with no text" here would read as a failure of the route,
+            # when what happened is that a model ran and this probe's own
+            # ceiling cut it off before any text was emitted.
+            return (
+                VERDICT_VALID_REQUEST_INCONCLUSIVE,
+                "200, and the model ran -- the response is `incomplete` "
+                f"because it hit this probe's own ceiling of "
+                f"{attempt.get('max_output_tokens')} output tokens before "
+                "emitting text, which is what reasoning models do when the "
+                "ceiling is small. Tokens were spent, so this was not free. "
+                "Raise the ceiling and re-run; the request was accepted, "
+                "which is not the same as a completion and is not recorded "
+                "as one",
+            )
+        return (
+            VERDICT_VALID_REQUEST_INCONCLUSIVE,
+            "200 with no model text in the body. A status is not a completion "
+            "and this is not recorded as one",
+        )
+    return (
+        VERDICT_INFERENCE_REQUEST_REJECTED,
+        f"the route answered {status}, which is about the request or the "
+        "deployment name rather than about permission. This is not an "
+        "inference success and must not be read as one",
+    )
+
+
+def valid_request_probe(
+    settings: CodexProviderSettings,
+    *,
+    timeout: int = VALID_REQUEST_TIMEOUT_SECONDS,
+    redact: Callable[[Any], str | None],
+) -> dict[str, Any]:
+    """Mint the token the Codex way, then send one request that can be served."""
+    description = describe_settings(settings)
+    record: dict[str, Any] = {
+        "schema": VALID_REQUEST_SCHEMA,
+        # True, and the one probe in this file for which it is. The field
+        # exists so the redaction check can tell free records from paid ones,
+        # and writing `false` here to keep it in the cheap branch would be a
+        # lie that the check is built to catch.
+        "inference_requested": True,
+        "settings": description,
+        "settings_fingerprint": settings_fingerprint(description),
+        "endpoint_host_fingerprint": host_fingerprint(settings.base_url),
+        "limits": {
+            "attempts": VALID_REQUEST_ATTEMPTS,
+            "max_output_tokens": VALID_REQUEST_MAX_OUTPUT_TOKENS,
+            "timeout_seconds": timeout,
+            "concurrency": 1,
+            "abort_on": "the first non-200; there is no retry and no fallback",
+        },
+        "token": {"minted": False, "mechanism": "auth_command", "error": None},
+        "requests_planned": VALID_REQUEST_ATTEMPTS,
+        "requests_sent": 0,
+        "attempt": None,
+        "verdict": VERDICT_VALID_REQUEST_INCONCLUSIVE,
+        "verdict_note": "the probe did not run",
+        "not_established": list(NOT_ESTABLISHED_BY_A_VALID_REQUEST),
+    }
+    try:
+        token = mint_token_the_way_codex_does(settings, timeout=timeout)
+    except Exception as exc:  # noqa: BLE001 - a mint failure is the finding
+        record["token"]["error"] = redact(exc)
+        record["verdict_note"] = (
+            "the token could not be minted, so nothing was sent and nothing "
+            "about the resource was measured"
+        )
+        return record
+    record["token"]["minted"] = True
+
+    attempt = post_valid_request(settings, token, timeout=timeout)
+    record["requests_sent"] += 1
+    attempt["error"] = redact(attempt.get("error"))
+    attempt["message"] = redact(attempt.get("message"))
+    record["attempt"] = attempt
+    record["verdict"], record["verdict_note"] = classify_valid_request(attempt)
+    return record
+
+
 # ── Command line ────────────────────────────────────────────────────────────
 
 
@@ -1802,6 +2134,16 @@ def main(argv: list[str] | None = None) -> int:
         "Exits 0 only when it establishes an answer, not when it merely ran.",
     )
     parser.add_argument(
+        "--valid-request",
+        action="store_true",
+        help="send one request this route can actually serve: a model, a "
+        "trivial public input and a 16-token ceiling. This is the only "
+        "option here that can produce a completion, and the only one that "
+        "can establish whether this identity may infer on this route -- a "
+        "listing and an unservable body getting past the gate establish "
+        "neither. Exits 0 only on a 200 that carried model output.",
+    )
+    parser.add_argument(
         "--timeout",
         type=int,
         default=DEFAULT_TIMEOUT_SECONDS,
@@ -1820,6 +2162,7 @@ def main(argv: list[str] | None = None) -> int:
             ("--read-only-probe", args.read_only_probe),
             ("--auth-discriminator", args.auth_discriminator),
             ("--transmission-sweep", args.transmission_sweep),
+            ("--valid-request", args.valid_request),
             ("--send-request", args.send_request),
         )
         if on
@@ -1888,10 +2231,17 @@ def main(argv: list[str] | None = None) -> int:
             else 1
         )
 
+    if args.valid_request:
+        record = valid_request_probe(settings, redact=redact)
+        _emit(record, args.out)
+        # 0 only for a completion. A 401 here is the most informative result
+        # this script has ever produced and it is still not a pass: the exit
+        # code answers "did inference work", and nothing else may borrow it.
+        return 0 if record["verdict"] == VERDICT_INFERENCE_SUCCEEDED else 1
+
     if not args.send_request:
         _emit(_plan(description), args.out)
         return 0
-
     record = probe(settings, timeout=args.timeout, redact=redact)
     _emit(record, args.out)
     return 0 if record["verdict"] == VERDICT_CONNECTED else 1
