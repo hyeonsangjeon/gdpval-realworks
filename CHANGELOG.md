@@ -192,6 +192,66 @@ entries land under a fresh dated heading the day they merge to `main`.
   runner. The gate stays closed; only the reason is now true.
 
 ### Added
+- **The containment rules now have the arguments that would apply them, and
+  saying so is not the same as saying they are applied.** Stage C0 left eleven
+  rules written down in one place and nothing anywhere turning any of them into
+  an argument. `core/agentic_v2_microvm_launch.py` closes the translation half
+  of that gap: it reads `REQUIRED_MICROVM_POLICY` and returns the jailer and
+  Firecracker arguments that would enforce each rule. It starts nothing — no
+  process, no machine — which is exactly why it can be checked on a box whose
+  3.10 kernel could not boot one.
+
+  The care went into the reporting rather than the arguments. The readiness
+  report gained a fourth field for the translation,
+  `every_rule_has_an_argument_that_would_apply_it`, derived from the builder
+  against the policy rather than declared by hand, so a twelfth rule added to
+  the policy and not to the builder turns it `False` without anyone
+  remembering to. `anything_applies_the_containment_rules` **stays `False`**,
+  and the new field is deliberately not an input to
+  `available_on_any_machine_in_play`. Wiring it in would have been the obvious
+  thing and the wrong one: a recorded finding already carries
+  `could_be_hosted_anywhere`, so a `True` here would have flipped the aggregate
+  and made the report announce the containment as in place on the strength of
+  code that has never booted anything. That is the failure this module exists to
+  prevent, and it very nearly arrived through good news rather than through a
+  deletion.
+
+  Every flag was checked against **v1.13.1**, the version stage B found
+  installed, and two readings from that check contradicted the merged plan:
+
+  - **`--no-api` is required, and the plan's wording was too weak.** It said the
+    builder "emits no snapshot route". True, and not enough: pinning a device in
+    a configuration file is a statement about start-up, and with the API socket
+    live it says nothing about the rest of the run. `balloon`, `vsock` and
+    `mmds-config` can all be added back after boot, and `/snapshot/load` can
+    bring in a machine configured somewhere else entirely. `--no-api` is what
+    makes the configuration file the whole of what the machine will ever be.
+  - **`--new-pid-ns` does not write the PID file.** The plan said it did.
+    `src/jailer/src/env.rs:735-740` writes it in both branches, after `chroot()`,
+    at the in-jail path `/firecracker.pid`. Both flags are still passed; only the
+    explanation was wrong, and it is the kind of wrong that surfaces as
+    confusion at the moment somebody omits the flag and finds the file anyway.
+
+  Two gaps are named rather than papered over. The policy has no rule about
+  processor share, so `vcpu_count` comes from the caller and the missing rule is
+  written down — closing it means amending the policy in a change of its own,
+  not defaulting a number in a launcher. And the jailer `mknod`s `/dev/net/tun`
+  unconditionally, so `network: none` rests on no interface being configured and
+  on `--netns` being absent, not on the device being missing; stage C3 should
+  expect to find the node there.
+
+  81 tests, and they were checked by breaking the builder rather than by
+  passing. Fourteen deliberate mutations — the flag deleted, the host memory
+  bound dropped to the guest's, the v1 cgroup file name used under v2, the root
+  drive made writable — each had to fail a test. Two initially did not, and both
+  were holes in the tests: `fsize=` was matched as a string anywhere in the
+  argument list, so removing the `--resource-limit` that carries it changed
+  nothing, and the in-jail paths were asserted against their own constants, so
+  moving one to a host path took the test along with it. Both now assert the
+  requirement rather than the spelling. The last survivor was the builder's own
+  backstop, which no healthy build exercises, and it now has a test that stages
+  the drop it exists for.
+
 - **The containment answers a seventh question, and it was found by planning
   the test rather than by reading the rules.** Stage C's attack list has always
   ended with one that is not like the others: the command must not be able to

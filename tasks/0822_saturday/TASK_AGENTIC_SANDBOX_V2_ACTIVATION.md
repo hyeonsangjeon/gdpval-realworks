@@ -1012,10 +1012,30 @@ cleanup step leaves open — see the credential row above.
 it points Firecracker's standard output at `/dev/null`, so console output is
 gone unless the launcher asks for a log path. That is acceptable here only
 because it is not where results come from — deliverables are collected off the
-ephemeral work disk, which the `workdir` rule already governs. It also pairs
-with `--new-pid-ns`, which is what writes the child's PID to a file; a detached
-process the launcher could not find again would leave `wall_clock_seconds` with
-nothing to enforce against.
+ephemeral work disk, which the `workdir` rule already governs.
+
+> **Correction, made while building C1.** This paragraph used to go on to say
+> that `--daemonize` "pairs with `--new-pid-ns`, which is what writes the child's
+> PID to a file". That is wrong, and it is the kind of wrong that would have been
+> found by a launcher that omitted `--new-pid-ns` and then could not understand
+> why the PID file was there anyway. `src/jailer/src/env.rs:735-740` in v1.13.1
+> writes the PID file in **both** branches; `save_exec_file_pid` runs after
+> `chroot()`, so the file lands at the in-jail path `/firecracker.pid`, which is
+> `<chroot_dir>/firecracker.pid` seen from the host. What `--new-pid-ns` buys is
+> the namespace and nothing else. Both flags are still passed, for the two
+> separate reasons above; only the explanation was wrong.
+
+**A fourth flag, and it is stronger than this plan first had it.** The section
+below says C1's builder "emits no snapshot route". That is true and it is not
+enough. Pinning a device in a configuration file is a statement about start-up;
+with the API socket live it says nothing about the rest of the run. In v1.13.1
+(`src/firecracker/src/main.rs:198-205`) `--no-api` takes no value and requires
+`--config-file`, and `api_enabled` is simply its absence. Without it, every
+device pinned out above — `balloon`, `vsock`, `mmds-config` — can be added back
+after boot over the socket, and `/snapshot/load` can bring in a machine whose
+configuration was decided somewhere else entirely. `--no-api` is what makes the
+configuration file the whole of what the machine will ever be, so it is passed
+and asserted alongside the three above.
 
 **And a third, which is a default that would quietly be wrong here.**
 `--cgroup-version` defaults to `1` in the jailer's own documentation, while
@@ -1072,6 +1092,53 @@ configuration, it is recorded as such and raised — not dropped, not softened t
 a comment, and not moved to a later stage to be forgotten in.
 
 **Cost.** None. This runs on any machine, including this one.
+
+**Done.** `core/agentic_v2_microvm_launch.py` and its 81 tests. The exit
+condition is met in both directions: every rule has a test that reads the built
+arguments, every rule has a case that deletes it from a copy of the policy and
+requires a refusal naming it, and a weakened value is refused rather than
+adapted to. The guards were checked by mutation rather than by their passing —
+fourteen deliberate breakages of the builder (the flag dropped, the host memory
+bound lowered to the guest's, the v1 cgroup file name used under v2, the root
+drive made writable, the in-jail config path turned into a host path) and each
+one had to fail a test before the work was called done. Two of the fourteen
+initially did not, and both were holes in the tests rather than in the builder:
+`fsize=` was asserted as a string anywhere in the argument list, so deleting the
+`--resource-limit` that carries it changed nothing, and the in-jail paths were
+asserted against their own constants, so moving a constant to a host path took
+the test with it. Both now assert the requirement instead of the spelling. The
+last surviving mutation was the builder's own backstop — the check that every
+accepted rule reached `rules_applied` — which no healthy build exercises; it now
+has a test that stages the drop.
+
+Four things the building of it settled, recorded here because they are not
+visible in the diff:
+
+- **The vCPU gap is real and is left open on purpose.** Firecracker requires
+  `vcpu_count` and the policy has no rule about processor share, so the builder
+  takes the number from its caller and says so rather than inventing a bound.
+  Closing it means adding a rule to `REQUIRED_MICROVM_POLICY` in a change of its
+  own, the way the credential rule was added — not a default picked in a
+  launcher.
+- **`/dev/net/tun` is inside the jail whatever the policy says.** The jailer
+  `mknod`s it unconditionally, along with `/dev/kvm` and `/dev/urandom`. So
+  `network: none` rests on no interface being configured and on `--netns` being
+  absent, not on the device being unavailable. Stage C3 attacks that, and should
+  not be surprised to find the node there.
+- **The host-side memory bound is deliberately larger than the guest's.**
+  `HOST_SIDE_MEMORY_OVERHEAD_MIB = 256`, picked rather than derived and named as
+  picked. A host bound equal to the guest bound would kill the monitor rather
+  than the command that went over, which is a containment that stops the wrong
+  process and reports the wrong thing.
+- **The readiness report gained a fourth field, and it is not an input to the
+  third.** `every_rule_has_an_argument_that_would_apply_it` is derived from the
+  builder against the policy. `anything_applies_the_containment_rules` stays
+  `False`, because a rule is applied by starting a machine with it and this
+  builder starts nothing. Wiring the new field into
+  `available_on_any_machine_in_play` would have made the report announce the
+  containment as in place on the strength of code that has never booted
+  anything — the exact failure the readiness module exists to prevent, arriving
+  through good news instead of through a deletion.
 
 ##### C2 — the first boot, on the machine stage B measured
 

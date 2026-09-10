@@ -35,6 +35,7 @@ from core.agentic_v2_containment_readiness import (
     refuse_command_execution,
     runner_labels_used_by_workflows,
 )
+from core.agentic_v2_microvm_launch import rules_this_builder_accounts_for
 from core.agentic_v2_substrate import (
     MICROVM_MEMORY_MIB,
     MICROVM_WALL_CLOCK_SECONDS,
@@ -147,13 +148,19 @@ def test_the_report_names_the_module_that_would_have_to_apply_the_rules():
     "Cannot be established" with no address sends somebody looking for a better
     machine, which is the wrong work: the rules would go unapplied on the best
     machine in the world.
+
+    The address moved once the builder existed. It used to be the readiness
+    module, which reads a host; it is now the launch module, which turns the
+    rules into arguments. Both spellings start ``core.agentic_v2_microvm``, so
+    the module is named in full here — a substring that passes because it is a
+    prefix of a different module's name is not a test of anything.
     """
     answer = judge_containment(a_machine())
     quota = claim(answer, "the command may write at most")
 
     assert "core.agentic_v2_substrate.REQUIRED_MICROVM_POLICY" in quota.because
-    assert "core.agentic_v2_microvm" in quota.because
-    assert "it applies nothing" in quota.because
+    assert "core.agentic_v2_microvm_launch" in quota.because
+    assert "nothing runs them" in quota.because
 
 
 # ── Each requirement, taken away one at a time ────────────────────────────
@@ -726,6 +733,44 @@ def test_a_machine_here_that_could_do_it_changes_one_answer_and_not_the_other():
     assert report["anything_applies_the_containment_rules"] is False
     assert report["available_on_any_machine_in_play"] is False
     assert refuse_command_execution(report) is not None
+
+
+def test_every_rule_now_has_an_argument_and_that_is_not_the_same_as_applying_it():
+    """The trap this fourth field was written to avoid.
+
+    Stage C1 built the translation from the rules to the arguments that would
+    apply them. That is real progress and it is not containment: the builder
+    returns a document and starts nothing. Had the arrival of the translation
+    flipped ``anything_applies_the_containment_rules``, this report would say
+    the containment is in place on the strength of code that has never started
+    a machine — which is the exact failure the whole readiness module exists to
+    make impossible.
+
+    So the translation gets a field of its own, and that field is deliberately
+    not an input to the availability answer.
+    """
+    report = containment_answer_everywhere(facts=a_machine())
+
+    assert report["every_rule_has_an_argument_that_would_apply_it"] is True
+    assert report["anything_applies_the_containment_rules"] is False
+    assert report["available_on_any_machine_in_play"] is False
+    assert refuse_command_execution(report) is not None
+
+
+def test_the_translation_being_complete_is_measured_against_the_policy():
+    """Derived from the two modules, never declared by hand.
+
+    A hand-set True would go on saying the translation is complete after a rule
+    is added to the policy and not to the builder. Reading the builder is what
+    makes a twelfth rule turn this field False without anyone remembering to.
+    """
+    report = containment_answer_everywhere(facts=a_machine())
+    covered = rules_this_builder_accounts_for()
+
+    assert report["every_rule_has_an_argument_that_would_apply_it"] is (
+        covered >= set(REQUIRED_MICROVM_POLICY)
+    )
+    assert set(report["required_containment"]) <= covered
 
 
 def test_the_refusal_on_a_capable_machine_names_the_rules_nobody_applies():
