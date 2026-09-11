@@ -11,6 +11,7 @@ import { fileURLToPath } from 'url';
 import {
   projectCostLedgerReference,
   projectCostSummaries,
+  projectDerivedCost,
 } from './cost-receipt.mjs';
 
 const ROOT = new URL('..', import.meta.url).pathname;
@@ -35,6 +36,34 @@ async function readLocalReport(reportPath) {
     return JSON.parse(content);
   } catch (err) {
     throw new Error(`local report_data.json is present but is not valid JSON: ${err.message}`);
+  }
+}
+
+// The sibling a run's cost is reconstructed into after the fact.
+//
+// Some runs finish with an empty dollar column — the Codex path attaches a
+// reason to every turn saying how many model requests it made is unknown, and
+// a ledger written before that stopped deleting the amount recorded nothing
+// for any of them. `batch-runner/derive_run_cost.py` prices those runs'
+// recorded tokens afterwards and writes the result here, beside the report it
+// belongs to. A run that never needed it simply has no such file.
+//
+// Absence is ENOENT and nothing else. A file that exists but cannot be read is
+// the same defect readLocalReport describes above: it used to be possible for
+// a truncated sidecar to read as "this run has no derived cost", which is a
+// different and much quieter claim than "this file is broken".
+async function readDerivedCost(derivedPath) {
+  let content;
+  try {
+    content = await readFile(derivedPath, 'utf-8');
+  } catch (err) {
+    if (err?.code === 'ENOENT') return null;
+    throw new Error(`local derived_cost.json could not be read: ${err.message}`);
+  }
+  try {
+    return JSON.parse(content);
+  } catch (err) {
+    throw new Error(`local derived_cost.json is present but is not valid JSON: ${err.message}`);
   }
 }
 
@@ -334,9 +363,11 @@ async function loadAllReports(deps = {}) {
 
   for (const { dirName, shortId } of candidates) {
     const reportPath = join(RESULTS_DIR, dirName, 'report', 'report_data.json');
+    const derivedPath = join(RESULTS_DIR, dirName, 'report', 'derived_cost.json');
 
     let data;
     let source;
+    let derived;
     try {
       ({ data, source } = await fetchReportData(dirName, reportPath, deps));
       // Inside the same try, so a payload that claims money it cannot support
@@ -348,6 +379,10 @@ async function loadAllReports(deps = {}) {
       // match the contract the dashboard renders them under is a report that
       // could not be loaded, not one to publish and hope about.
       validateReportSummary(data);
+      // And again for the reconstructed figure. It is only ever local — a run
+      // whose report came from the hub has no sidecar here, which reads as
+      // absent, not as zero.
+      derived = projectDerivedCost(await readDerivedCost(derivedPath));
     } catch (err) {
       failures.push(`  ${dirName}: ${err.message}`);
       continue;
@@ -366,6 +401,9 @@ async function loadAllReports(deps = {}) {
     const { task_results: _ignored, ...indexEntry } = data;
     indexEntry.task_qa = taskQa;
     indexEntry.short_id = shortId;
+    // Beside `cost_summary`, never inside it: one is what the run recorded,
+    // the other is what someone priced afterwards from the tokens it left.
+    if (derived) indexEntry.derived_cost = derived;
 
     reports.push(indexEntry);
   }

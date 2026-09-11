@@ -23,6 +23,7 @@ import type {
   CostReceipt,
   CostStatus,
   CostSummary,
+  DerivedCost,
 } from '../types/cost'
 
 /** Shown beside every amount, hover or visible. Goal: no amount reads as billed. */
@@ -94,6 +95,13 @@ export type CostCellState =
   | 'unpriced'
   | 'absent'
   | 'never_ran'
+  // Not a fifth flavour of `recorded`. A recorded amount is one the run
+  // settled and stood behind; a derived one was worked out afterwards from
+  // the tokens the run left behind, because its own dollar column came back
+  // empty. Same currency, different provenance, so a different state — a
+  // reader who cannot tell them apart has been told the run measured
+  // something it never did.
+  | 'derived'
 
 export interface CostCell {
   state: CostCellState
@@ -509,6 +517,52 @@ export function summaryTotalCell(summary: CostSummary, field: CostField): CostCe
   }
 }
 
+/**
+ * A run's cost reconstructed after the fact, labelled as reconstructed.
+ *
+ * Shown only when a run has one, and never in place of `summaryTotalCell` —
+ * the two sit next to each other so the reader can see that the run recorded
+ * nothing and that someone priced its tokens anyway. The `≈` and `≥` marks
+ * carry their usual meaning: `≥` when some calls could not be priced at all,
+ * `≈` when they all could and the figure is simply not a bill.
+ */
+export function derivedTotalCell(derived: DerivedCost): CostCell {
+  // Nothing priced means nothing derived. The producer sums an empty set to
+  // 0.0 and reports it as a total like any other, so a run whose ledger was
+  // never written — or was written and could not be read — arrives here as a
+  // well-formed block carrying $0. Rendering that as `≈ $0.0000` would state
+  // the one thing this whole path exists to avoid saying: that a run nobody
+  // could price was free. A floor over zero priced calls is `≥ $0`, which is
+  // true of every run ever made and so tells a reader nothing either.
+  if (derived.calls_measured === 0) {
+    return {
+      state: 'unpriced',
+      text: '되짚지 못함',
+      title: withNote(
+        '값을 매길 수 있는 호출 기록이 없어 다시 계산하지 못했습니다. '
+          + `기록된 호출 ${derived.calls_total}건 가운데 토큰이 남아 있는 것은 0건입니다. `
+          + '비용이 0이라는 뜻이 아니라, 얼마인지 알 수 없다는 뜻입니다.',
+      ),
+      isAmount: false,
+    }
+  }
+
+  const amount = formatCostUsd(derived.derived_total_usd)
+  const unpriced = derived.calls_unmeasured
+  const detail = derived.derived_total_is_a_floor
+    ? `호출 ${derived.calls_total}건 중 ${unpriced}건은 값을 매길 수 없어 총액이 아니라 최소값입니다.`
+    : `호출 ${derived.calls_measured}건 전부의 토큰을 다시 계산했습니다.`
+  return {
+    state: 'derived',
+    text: derived.derived_total_is_a_floor ? `≥ ${amount}` : `≈ ${amount}`,
+    title: withNote(
+      '실행이 스스로 남긴 금액이 아닙니다. 실행이 기록해 둔 토큰 수를 나중에 ' +
+        `단가표로 다시 계산한 값입니다. ${detail}`,
+    ),
+    isAmount: true,
+  }
+}
+
 /** A single statistic inside the summary card; `null` renders as 기록 없음. */
 export function summaryStatCell(value: number | null): CostCell {
   if (value === null) {
@@ -616,6 +670,11 @@ export function costCellClass(cell: CostCell): string {
       return 'text-amber-400'
     case 'unpriced':
       return 'text-amber-400/70'
+    // Deliberately not the plain text colour `recorded` gets. The figure is
+    // real arithmetic but nobody's settlement, and it reads next to amounts
+    // that are.
+    case 'derived':
+      return 'text-sky-400'
     default:
       return 'text-dash-text-faint'
   }

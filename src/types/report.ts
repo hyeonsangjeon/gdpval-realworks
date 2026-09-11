@@ -3,7 +3,7 @@
  * Sourced from batch-runner/results/(experiment_id)/report/report_data.json
  */
 
-import type { CostLedgerReference, CostReceipt, CostSummaries } from './cost'
+import type { CostLedgerReference, CostReceipt, CostSummaries, DerivedCost } from './cost'
 
 export interface TaskResult {
   task_id: string
@@ -378,6 +378,16 @@ export interface ReportData {
   cost_summary?: CostSummaries
   /** Pointer to the published per-call audit sidecar, when one exists. */
   cost_ledger?: CostLedgerReference
+  /**
+   * What this run's recorded tokens price to, worked out after the run.
+   *
+   * Present only for runs that needed it — the ones whose own dollar column
+   * came back empty. Sits outside `cost_summary` on purpose: that field is
+   * what the run settled, this is what someone computed later from outside
+   * it, and a reader who cannot tell the two apart has been misinformed
+   * about which one the run stands behind.
+   */
+  derived_cost?: DerivedCost
 }
 
 export interface ExperimentEntry {
