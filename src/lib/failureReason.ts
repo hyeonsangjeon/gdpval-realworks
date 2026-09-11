@@ -21,9 +21,18 @@ import type { TaskResult } from '../types/report'
  * shows a red cross, zero files, and no reason at all.
  *
  * exp034's eight are five `rate_limited` and three `content_filtered`. Those
- * are opposite findings — one says the run could not get a call through, the
+ * are opposite findings — one says the deployment refused a turn for rate, the
  * other says the model was asked a real question and what it produced was
  * refused — and the page painted them identically.
+ *
+ * The first of those is a refusal, not a turn that went nowhere. exp034's five
+ * `rate_limited` tasks hold 20 ledger rows, 19 of them settled against
+ * `gpt-5.4` with 898,085 input and 46,693 output tokens. The refusal ends a
+ * task that the model had already been answering, which is why
+ * `test_a_refusal_is_not_an_unreached_call.py` files a refusal as an answer and
+ * `test_a_rate_refusal_arrived_after_the_work_not_before.py` refutes the
+ * arrives-before-anything mechanism on a second run. A reader who takes the
+ * refusal for an unreached deployment concludes the failed turns were free.
  *
  * ## Why this names one category and buckets nothing
  *
