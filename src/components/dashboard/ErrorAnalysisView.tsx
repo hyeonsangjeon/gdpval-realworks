@@ -11,7 +11,7 @@ import { parseTraceback } from '../../utils/tracebackParser'
 import InfoTooltip from '../common/InfoTooltip'
 import SectionHint from '../common/SectionHint'
 import { tooltipTexts, sectionHintTexts } from '../../data/tooltipTexts'
-import { readFileGenerationCount, readFileGenerationRate } from './fileGenerationReading'
+import { readFileGenerationCount, readFileGenerationRate, recoveredNote, resolveFileGeneration } from './fileGenerationReading'
 
 /* ─── props ─── */
 interface ErrorAnalysisViewProps {
@@ -269,7 +269,7 @@ export default function ErrorAnalysisView({ experiments, reports }: ErrorAnalysi
       </div>
 
       {/* ─── 5. File Generation Risk ─── */}
-      {reports.some((r) => r.file_generation) && (
+      {reports.some((r) => r.file_generation || r.file_generation_recovered) && (
         <div className="rounded-xl bg-dash-card border border-dash-border p-4">
           <div className="flex items-center gap-2 mb-4">
             <FileWarning className="w-4 h-4 text-amber-400" />
@@ -278,7 +278,10 @@ export default function ErrorAnalysisView({ experiments, reports }: ErrorAnalysi
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {sortedExps.map((exp) => {
               const r = reports.find((rr) => rr.short_id === exp.short_id)
-              const fg = r?.file_generation
+              // A run whose step 5 was skipped records nothing here, but may
+              // carry a count rebuilt from its artifact beside the null.
+              const resolved = resolveFileGeneration(r)
+              const fg = resolved.fg
               if (!fg) return null
               // A failure rate needs a denominator. Four published 220-task
               // runs record none, and the old form here — `needs_files_total >
@@ -293,6 +296,11 @@ export default function ErrorAnalysisView({ experiments, reports }: ErrorAnalysi
               return (
                 <div key={exp.short_id} className="space-y-2">
                   <ExpBadge id={exp.short_id} />
+                  {resolved.recovered && (
+                    <span className="ml-2 text-[10px] text-sky-400/90" title={recoveredNote(resolved)}>
+                      rebuilt after the run
+                    </span>
+                  )}
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <div>
                       <div className="text-[10px] text-dash-text-muted">Needed</div>

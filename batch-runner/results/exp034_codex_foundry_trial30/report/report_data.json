@@ -3289,5 +3289,22 @@
       "rounds_used": 0,
       "per_round": {}
     }
+  },
+  "file_generation_recovered": {
+    "needs_files_total": 28,
+    "files_succeeded": 22,
+    "files_failed": 6,
+    "files_absent": 0,
+    "dummy_files_created": 0,
+    "dummy_task_ids": [],
+    "absent_task_ids": [],
+    "policy_caveat": null,
+    "provenance": {
+      "recovered_at": "2026-09-11T11:08:44+00:00",
+      "source_run_id": "34540053904",
+      "step5_skipped_by": "dry_run",
+      "step5_skipped_because": "inputs.dry_run != true — no upload, so no validation",
+      "tool": "recover_file_rollup.py"
+    }
   }
 }

@@ -52,6 +52,8 @@ export interface FileGenerationLike {
   files_succeeded?: number | null
   files_failed?: number | null
   files_absent?: number | null
+  /** Read but not divided by: a count, rendered through `readFileGenerationCount`. */
+  dummy_files_created?: number | null
 }
 
 /** Which of the two outcomes the rate is being taken over. */
@@ -137,8 +139,7 @@ export function readFileGenerationRate(
   }
 }
 
-/**
- * A count that may itself be absent, rendered without turning that into a zero.
+/** A count that may itself be absent, rendered without turning that into a zero.
  *
  * The same payload that carries no denominator carries no counts, and
  * `{fg.files_failed}` on a `null` renders as an empty cell that reads as one
@@ -146,4 +147,73 @@ export function readFileGenerationRate(
  */
 export function readFileGenerationCount(value: number | null | undefined): string {
   return isNumber(value) ? String(value) : 'not recorded'
+}
+
+/**
+ * Which of the two roll-ups a run carries, and which one is being read.
+ *
+ * A run whose step 5 was skipped publishes an all-`null` `file_generation`. The
+ * count is still recoverable from its artifact — `recover_file_rollup.py` runs
+ * step 5's own `validate()` against it offline — and lands beside the null as
+ * `file_generation_recovered` rather than inside it, so the run goes on saying
+ * what it recorded.
+ *
+ * Which means a reader who takes `file_generation` alone sees `not recorded`
+ * for a run whose number is sitting in the same payload. This picks between
+ * them, and says which one it picked; it never merges fields across the two,
+ * because half a measurement and half a reconstruction is neither.
+ */
+export interface ResolvedFileGeneration {
+  /** The block to read counts and rates from, or nothing to read. */
+  fg: FileGenerationLike | null | undefined
+  /** True when the run recorded no denominator and this was rebuilt after it. */
+  recovered: boolean
+  /** The run the reconstruction was made from, when it is one. */
+  sourceRunId?: string
+  /** Which of step 5's four gates skipped the count, when it is one. */
+  skippedBy?: string
+}
+
+/** The two fields, named once so a rename cannot go unnoticed. */
+export interface ReportWithFileGeneration {
+  file_generation?: FileGenerationLike | null
+  file_generation_recovered?:
+    | (FileGenerationLike & {
+        provenance?: { source_run_id?: string; step5_skipped_by?: string }
+      })
+    | null
+}
+
+export function resolveFileGeneration(
+  report: ReportWithFileGeneration | null | undefined,
+): ResolvedFileGeneration {
+  const measured = report?.file_generation
+  // A measurement taken during the run always wins, even against a recovery
+  // that disagrees with it. Preferring the reconstruction would make the
+  // recovery tool able to overwrite a real count by being run twice.
+  if (isNumber(measured?.needs_files_total)) {
+    return { fg: measured, recovered: false }
+  }
+
+  const recovered = report?.file_generation_recovered
+  if (isNumber(recovered?.needs_files_total)) {
+    return {
+      fg: recovered,
+      recovered: true,
+      sourceRunId: recovered?.provenance?.source_run_id,
+      skippedBy: recovered?.provenance?.step5_skipped_by,
+    }
+  }
+
+  // Neither: hand back whichever block exists so the reading below can tell
+  // `absent` from `not-recorded`, which are different things to a reader.
+  return { fg: measured ?? recovered ?? undefined, recovered: false }
+}
+
+/** One line saying a figure was rebuilt after the run, for rendering beside it. */
+export function recoveredNote(resolved: ResolvedFileGeneration): string | undefined {
+  if (!resolved.recovered) return undefined
+  const from = resolved.sourceRunId ? ` from run ${resolved.sourceRunId}` : ''
+  const why = resolved.skippedBy ? ` (step 5 was skipped: ${resolved.skippedBy})` : ''
+  return `Reconstructed after the run${from}${why}. The run itself recorded no count.`
 }
