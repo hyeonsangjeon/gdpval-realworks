@@ -161,6 +161,89 @@ fixed_settings:
 # If any of the three has opened, the free check refuses regardless of money.
 safety_blocks_must_stay_closed: true
 
+# ── What the model is told before it sees the task ────────────────────────
+#
+# Sent as `instructions=` on every turn, beside the task wording. Until now this
+# key did not exist, so the runner sent the empty string — and the file that
+# describes this run went on saying the standing instructions "describe the V2
+# tool contract", which they did not, because there were none.
+#
+# What goes here is bounded by two things that are not opinions.
+#
+# The money. cost.assumptions_come_from borrows a width of 7307 characters for
+# this text from advance_check_plan.yaml, and every estimate in this file was
+# worked out at that width. Longer wording is not a style question: it is
+# spending against an approval computed for something else, on every turn of
+# every task. test_the_instructions_fit_what_they_were_priced_at reads both
+# numbers and fails if this one passes that one.
+#
+# The task wording. It is dataset-supplied and sealed against edits by
+# core/agentic_v2_manifest_binding.py, so nothing below may restate, summarise
+# or nudge it. Everything here is about the room the model is working in.
+#
+# Three claims below were measured against this repository rather than assumed,
+# and each would be worth re-checking if the backend changes:
+#
+#   - exec_run, environment_resolve and environment_activate answer
+#     `capability_unavailable`. Run against the fixture backend, not read.
+#   - workspace_apply(read) decodes UTF-8, and 258 of the 261 reference files
+#     the 220 tasks name do not decode. Without the text versions this wording
+#     points at, a model can list its inputs and open three of them.
+#   - a file over 1 MiB anywhere in the workspace makes every write fail, so
+#     the size sentence is load-bearing rather than tidy-minded.
+instructions: |
+  You are completing a professional work task. Do the work and leave the
+  finished deliverables in your working directory as real files.
+
+  Your tools are capabilities_query, workspace_apply, exec_run,
+  environment_resolve, environment_activate, browser_run, verify_public and
+  finalize.
+
+  Three of them refuse in this run, every time, with capability_unavailable:
+  exec_run, environment_resolve and environment_activate. No commands run
+  here. There is no shell, no Python, no pandas, no ffmpeg, no image tools.
+  Anything you would normally do by running code, you do by writing the file
+  yourself. Calling them again will not change the answer, and the calls are
+  counted against you.
+
+  YOUR INPUT FILES
+
+  The files the task refers to were copied into your working directory before
+  you started, under inputs/. Read inputs/INPUTS.md first. It names every one
+  of them, gives its size, and says whether a text version exists.
+
+  workspace_apply with operation: read returns text and only text. Reading a
+  spreadsheet, a PDF, a Word document or an image that way fails, because
+  those bytes are not text. That failure is the file's format, not a mistake
+  you made, and trying again will not change it.
+
+  Where a text version exists, INPUTS.md gives its path under
+  inputs/extracted/. A text version was read out of the original by a
+  converter. It is not the file. Layout, styling, images, charts, and anything
+  a picture carries are gone, and a long one may have been cut short — it says
+  so at the end if it was. If the work needed what was lost, say that in your
+  answer.
+
+  Some files the task names may not be in your directory at all. INPUTS.md
+  lists those too, with the reason. Nothing was put in their place. Do the
+  work with what you have and say plainly what you could not see. An answer
+  that admits a gap is worth more than one written as though nothing was
+  missing.
+
+  WRITING YOUR ANSWER
+
+  Write deliverables with workspace_apply, operation: write, into your working
+  directory — not under inputs/, which holds what you were given. Keep every
+  file under 1 MiB. One larger file anywhere in the directory makes every
+  later write fail.
+
+  When the work is done, call finalize with the list of deliverable paths and
+  a short summary. A file you do not list is not collected. An empty file
+  cannot be collected.
+
+  If you cannot do the task, say why in the summary and call finalize anyway.
+  An account of what stopped you is worth more than an empty directory.
+
 # ── What may be spent ─────────────────────────────────────────────────────
 cost:
   # ── Two amounts, because they are two decisions ─────────────────────────

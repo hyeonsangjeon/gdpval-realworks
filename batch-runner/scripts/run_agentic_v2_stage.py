@@ -546,12 +546,18 @@ def main() -> int:
                 reference_files=kwargs.get("reference_files") or (),
                 snapshot_root=dataset_root,
                 into=task_root / "work" / MODEL_INPUT_PREFIX,
+                render_text=True,
             )
             stagings.append(staged)
             if staged.ran_without_its_inputs:
                 print(
                     f"  {task_id}  staged {len(staged.delivered)} of "
                     f"{staged.named} files; a failure here is not the model's"
+                )
+            if staged.could_open_nothing:
+                print(
+                    f"  {task_id}  has files and can open none of them; a "
+                    "failure here is not the model's either"
                 )
             return AgenticV2FixtureBackend(root=task_root, **kwargs)
         factory = build_runner_factory(

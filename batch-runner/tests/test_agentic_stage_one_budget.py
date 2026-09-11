@@ -1816,3 +1816,137 @@ def test_a_plan_with_no_stages_block_refuses_rather_than_passing_by_default(
 
     assert not pricing.may_run
     assert "no `stages` block" in " ".join(pricing.problems)
+
+
+# ── What the model is actually told, and what that costs ───────────────────
+#
+# Until 2026-09-11 the plan had no `instructions` key at all, so the runner sent
+# the empty string on every turn while this repository's own notes said the
+# standing instructions "describe the V2 tool contract". The model was told
+# nothing: not that three of its eight tools refuse, not that its input files
+# exist, not where they are.
+#
+# The text is now in the plan, which puts it in two places at once. It is the
+# thing most likely to be edited casually, and it is billed on every turn of
+# every task -- so it is tested as both.
+
+
+@pytest.fixture
+def stage_one_instructions(stage_one_plan):
+    return stage_one_plan["instructions"]
+
+
+def test_the_runner_has_something_to_send(stage_one_instructions):
+    """`scripts/run_agentic_v2_stage.py` reads `plan.get("instructions") or ""`.
+
+    That expression cannot fail, which is exactly the problem: an absent key
+    reads as an empty instruction and the run still goes ahead, costing the same
+    money and producing a model that was never told anything.
+    """
+    assert isinstance(stage_one_instructions, str)
+    assert stage_one_instructions.strip()
+
+
+def test_the_instructions_fit_what_they_were_priced_at(
+    stage_one_instructions, assumptions
+):
+    """Named in the plan file's own comment, and this is that test.
+
+    Every figure under `cost:` was worked out at the width borrowed from
+    `advance_check_plan.yaml`. Wording longer than that is not a matter of
+    style: it is spending against an approval computed for something else, once
+    per turn, for every task in the cohort.
+    """
+    assert len(stage_one_instructions) <= assumptions.instruction_character_count
+
+
+def test_the_instructions_name_every_tool_the_model_is_given(
+    stage_one_instructions
+):
+    """Read from the dispatcher's vocabulary, so the two cannot drift apart.
+
+    A tool the model holds but is never told about is one it finds by guessing,
+    and a tool named here that does not exist is an instruction to call
+    something that will be refused as unknown.
+    """
+    from core.agentic_v2_tools import TOOL_SCHEMAS
+
+    missing = [name for name in TOOL_SCHEMAS if name not in stage_one_instructions]
+    assert missing == []
+
+
+def test_the_instructions_claim_only_the_refusals_that_were_measured(
+    stage_one_instructions, tmp_path
+):
+    """The sentence "these three refuse" is checked by asking them.
+
+    An earlier draft also said `browser_run` and `verify_public` refuse because
+    nothing here reaches the network. Probing them disproved it -- `browser_run`
+    opens local files and `verify_public` checks deliverables, both answering
+    ``ok: True``. Telling a model a working tool is shut costs it the tool.
+    """
+    from core.agentic_v2_contract import AgenticV2Profile
+    from core.agentic_v2_fixture_backend import AgenticV2FixtureBackend
+
+    backend = AgenticV2FixtureBackend(
+        root=tmp_path / "task",
+        profile=AgenticV2Profile(
+            tool_contract_version="2.0",
+            policy_profile_id="offline-full-v1",
+            foundation_only=True,
+        ),
+    )
+
+    for name in ("exec_run", "environment_resolve", "environment_activate"):
+        answer = getattr(backend, name)({"argv": ["true"]})
+        assert answer["ok"] is False
+        assert answer["error_type"] == "capability_unavailable"
+
+    assert "capability_unavailable" in stage_one_instructions
+    for working in ("browser_run", "verify_public"):
+        assert f"{working} refuse" not in stage_one_instructions
+
+
+def test_the_instructions_point_at_the_file_that_lists_the_inputs(
+    stage_one_instructions
+):
+    """Bound to the staging constants rather than to a typed-out path.
+
+    The guide is written by `core.agentic_v2_reference_staging`. If its name or
+    its directory moves and this text does not, the model is sent to look for a
+    file that is not there -- and it has no other way to learn its inputs exist,
+    because the task wording is dataset-supplied and sealed.
+    """
+    from core.agentic_v2_reference_staging import INPUTS_GUIDE, MODEL_INPUT_PREFIX
+
+    assert f"{MODEL_INPUT_PREFIX}/{INPUTS_GUIDE}" in stage_one_instructions
+    assert f"{MODEL_INPUT_PREFIX}/extracted" in stage_one_instructions
+
+
+def test_the_instructions_say_a_format_failure_is_not_the_model_s_fault(
+    stage_one_instructions
+):
+    """The distinction step five of the goal asks for, at the point it bites.
+
+    258 of the 261 reference files do not decode as UTF-8, and
+    `workspace_apply(read)` decodes UTF-8. A model that reads this and keeps
+    retrying the spreadsheet is failing; one that was never told and keeps
+    retrying is being failed by the environment. Only the first is evidence
+    about the model.
+    """
+    assert "not a mistake" in stage_one_instructions
+    assert "is not the file" in stage_one_instructions
+
+
+def test_the_instructions_carry_the_size_rule_that_stops_every_write(
+    stage_one_instructions
+):
+    """A deliverable over 1 MiB does not fail on its own -- it fails the rest.
+
+    The backend applies the limit during a walk over the whole workspace, and
+    the walk runs on write, so one oversized file makes every later write raise.
+    The model is told the rule because it is the one it can break by accident
+    and cannot diagnose from what it is shown.
+    """
+    assert "1 MiB" in stage_one_instructions
+    assert "later write fail" in stage_one_instructions

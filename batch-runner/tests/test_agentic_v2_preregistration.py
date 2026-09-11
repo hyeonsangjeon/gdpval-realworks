@@ -41,8 +41,12 @@ from core.agentic_v2_preregistration import (
     STAGE_THIRTY,
     STAGE_TWO_TWENTY,
     STOP_RULES,
+    FILES_NAMED_BY_THE_TASKS,
+    FILES_THE_MODEL_COULD_OPEN_UNAIDED,
+    OVER_THE_WORKSPACE_FILE_LIMIT,
     UNDELIVERABLE_INPUTS,
     UNKNOWN,
+    WORKSPACE_FILE_LIMIT,
     cohorts,
     compare_with_codex_run,
     escalation_shape,
@@ -53,6 +57,7 @@ from core.agentic_v2_preregistration import (
     residual_after_alignment,
     seal,
     verify_input_disposition,
+    verify_reader_reach,
     verify_seal,
 )
 from core.execution_envelope_tasks import full_run_tasks, load_task_catalog
@@ -409,12 +414,21 @@ def _fake_snapshot(root: Path, sizes: dict[str, int] | None = None) -> Path:
     """A dataset-shaped tree with the right names and made-up sizes.
 
     Every file the two hundred and twenty name, one byte each unless `sizes`
-    says otherwise, and the undeliverable one at its recorded size. Written
-    sparse: nothing here allocates 689 MB, and `st_size` -- the only thing the
-    check reads -- is the same either way.
+    says otherwise, and every file the record calls oversized at its recorded
+    size. Written sparse: nothing here allocates 689 MB, and `st_size` -- the
+    only thing the check reads -- is the same either way.
+
+    The oversized ones are taken from the record rather than typed out again.
+    Typed out, this fixture would be a second copy of the same list, and a test
+    that a record matches a hand-maintained duplicate of itself is a test of
+    nothing. What stops it agreeing with whatever it is shown is that the check
+    also re-derives the band from the limit: a file dropped out of the record
+    reappears here as an unrecorded file over the limit.
     """
     sizes = dict(sizes or {})
     sizes.setdefault(UNDELIVERABLE_PATH, UNDELIVERABLE_SIZE)
+    for one in OVER_THE_WORKSPACE_FILE_LIMIT:
+        sizes.setdefault(str(one["path"]), int(one["size_bytes"]))
     catalog = load_task_catalog()
     by_id = catalog.by_task_id()
     for task_id in full_run_tasks(catalog):
@@ -585,6 +599,184 @@ class TestTheDispositionIsCheckedAgainstDiskRatherThanTrusted:
 
         assert any("is not present" in one for one in wrong)
         assert len(wrong) > 1
+
+    def test_an_unrecorded_file_over_the_workspace_limit_is_reported(
+        self, tmp_path
+    ):
+        """The second limit, and the worse one.
+
+        A file over the compute contract's limit costs its task that file. A
+        file over the workspace's costs the task every deliverable, because the
+        limit is applied while walking the whole workspace and the walk runs on
+        write. The model sees only `fixture_backend_error`, so it retries until
+        its budget is gone and the record afterwards shows a model that produced
+        nothing.
+        """
+        catalog = load_task_catalog()
+        by_id = catalog.by_task_id()
+        recorded = {str(one["path"]) for one in OVER_THE_WORKSPACE_FILE_LIMIT}
+        victim = next(
+            path
+            for task_id in full_run_tasks(catalog)
+            for path in by_id[str(task_id)].reference_file_paths
+            if path not in recorded
+        )
+        root = _fake_snapshot(tmp_path, {victim: WORKSPACE_FILE_LIMIT + 1})
+
+        wrong = verify_input_disposition(root)
+
+        assert any(
+            victim in one and "could write nothing at all" in one for one in wrong
+        )
+
+    def test_a_recorded_oversized_file_that_now_fits_is_reported(self, tmp_path):
+        """The same bug class as the per-file one, one limit down.
+
+        If the workspace limit is ever raised, the record would carry on
+        refusing files that fit -- handing the model less than it could have had
+        and calling that a measurement.
+        """
+        root = _fake_snapshot(tmp_path)
+        with mock.patch(
+            "core.agentic_v2_preregistration.WORKSPACE_FILE_LIMIT",
+            UNDELIVERABLE_SIZE * 2,
+        ):
+            wrong = verify_input_disposition(root)
+
+        assert len(wrong) == len(OVER_THE_WORKSPACE_FILE_LIMIT)
+        assert all(
+            "recorded as over the workspace file limit but" in one for one in wrong
+        )
+
+    def test_every_recorded_oversized_file_is_over_the_limit(self):
+        """Read from the record, checked against the limit it claims to apply.
+
+        Nothing on disk is needed for this one, which is the point: it fails in
+        CI, where the dataset is absent, if an entry is ever added that the
+        limit would not actually have refused.
+        """
+        too_small = [
+            one["path"]
+            for one in OVER_THE_WORKSPACE_FILE_LIMIT
+            if int(one["size_bytes"]) <= WORKSPACE_FILE_LIMIT
+        ]
+        assert too_small == []
+        assert len({one["path"] for one in OVER_THE_WORKSPACE_FILE_LIMIT}) == len(
+            OVER_THE_WORKSPACE_FILE_LIMIT
+        )
+
+
+class TestWhatTheModelCanOpenWithoutHelp:
+    """The figure that decides whether a V2 result is about the model at all.
+
+    `workspace_apply(read)` decodes UTF-8 and `exec_run` is shut, so a file that
+    does not decode cannot be opened by any means the model has. Measured rather
+    than assumed, because the assumption everybody makes -- "it is a text file,
+    the model can read it" -- is true of three of the two hundred and sixty-one.
+    """
+
+    def test_the_record_says_how_many_and_out_of_how_many(self):
+        disposition = input_disposition()["what_the_model_can_open_by_itself"]
+
+        assert disposition["files_named_by_the_tasks"] == FILES_NAMED_BY_THE_TASKS
+        assert disposition["files_that_decode_as_utf8"] == (
+            FILES_THE_MODEL_COULD_OPEN_UNAIDED
+        )
+        assert "workspace_apply(read)" in disposition["how_that_was_measured"]
+
+    def test_the_renderings_are_recorded_as_a_difference_and_not_a_fix(self):
+        """Step five's rule, at the place it would be broken.
+
+        A text rendering is a thing A's run does not have and does not need. A
+        V2 score on a task that needed a chart is not comparable to A's on the
+        same task, and the record has to say so before either runs -- afterwards
+        it reads as an excuse for whichever number came out lower.
+        """
+        renderings = input_disposition()["text_renderings"]
+
+        assert "never presented as the file" in renderings["never_a_replacement"]
+        assert "not comparable" in (
+            renderings["this_is_a_difference_from_the_codex_run"]
+        )
+
+    def test_the_two_figures_agree_with_the_sentence_that_explains_them(self):
+        """The arithmetic anchor, and the only one CI can run.
+
+        Both the number and the record that reports it come from the same
+        constant, so comparing them proves nothing on its own -- move the
+        constant and the pair moves together. What does not move is the prose
+        that says how many files failed, so the subtraction is checked here.
+        On a machine with the dataset the real anchor is the test below; on one
+        without, this is what stops the figure drifting quietly.
+        """
+        disposition = input_disposition()
+        measured = disposition["what_the_model_can_open_by_itself"][
+            "how_that_was_measured"
+        ]
+        unreadable = FILES_NAMED_BY_THE_TASKS - FILES_THE_MODEL_COULD_OPEN_UNAIDED
+
+        assert f"the other {unreadable} do not" in measured
+        assert str(FILES_NAMED_BY_THE_TASKS) in (
+            disposition["text_renderings"]["what_they_are"]
+        )
+
+    def test_the_pinned_snapshot_still_gives_the_recorded_reach(self):
+        """The measurement itself, where the bytes exist to make it.
+
+        Skipped rather than faked when they do not. A fixture cannot answer
+        this question -- sparse files are NUL bytes and NUL decodes -- so a
+        version of this test that ran everywhere would be measuring its own
+        fixture and reporting the answer as the dataset's.
+        """
+        pinned = manifest()
+        root = (
+            Path.home()
+            / ".cache"
+            / "huggingface"
+            / "hub"
+            / f"datasets--{pinned['dataset_repo_id'].replace('/', '--')}"
+            / "snapshots"
+            / pinned["dataset_revision"]
+        )
+        if not (root / "reference_files").is_dir():
+            pytest.skip(f"the pinned snapshot is not on this machine: {root}")
+
+        assert verify_reader_reach(root) == []
+
+    def test_a_tree_of_readable_files_is_reported_rather_than_accepted(
+        self, tmp_path
+    ):
+        """Sparse files are all NUL bytes, and NUL decodes as UTF-8.
+
+        Which makes the empty fixture the exact shape of the mistake worth
+        catching: a check that measured sizes and inferred readability would
+        call this snapshot fine and report that the model can open all 261.
+        """
+        wrong = verify_reader_reach(_fake_snapshot(tmp_path))
+
+        assert any("decode as UTF-8" in one for one in wrong)
+
+    def test_a_snapshot_missing_a_named_file_is_reported(self, tmp_path):
+        root = _fake_snapshot(tmp_path)
+        catalog = load_task_catalog()
+        by_id = catalog.by_task_id()
+        gone = next(
+            by_id[str(task_id)].reference_file_paths[0]
+            for task_id in full_run_tasks(catalog)
+            if by_id[str(task_id)].reference_file_paths
+        )
+        (root / gone).unlink()
+
+        assert any(
+            gone in one and "not in the snapshot" in one
+            for one in verify_reader_reach(root)
+        )
+
+    def test_an_empty_root_does_not_pass_by_finding_nothing(self, tmp_path):
+        wrong = verify_reader_reach(tmp_path)
+
+        assert any("not in the snapshot" in one for one in wrong)
+        assert any("were measured and the record is written about" in one for one in wrong)
 
 
 class TestTheRecordSaysWhatItIsNot:

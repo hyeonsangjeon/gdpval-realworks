@@ -549,3 +549,493 @@ def test_a_task_directory_is_not_named_with_the_task_id_itself(
 
 def test_a_cohort_of_nothing_stages_nothing_and_does_not_fail(tmp_path, snapshot):
     assert stage_cohort(tasks=[], snapshot_root=snapshot, into=tmp_path) == ()
+
+
+# ── The limit that breaks writing, not reading ────────────────────────────
+#
+# The tests above were written believing an oversized input costs a task that
+# one file. Measured against the real backend, it costs the task everything:
+# the fixture workspace applies its 1 MiB per-file limit during a walk over the
+# whole workspace, and that walk runs on `write`. One file over it and no
+# deliverable can be written at all -- reported to the model only as
+# `fixture_backend_error`, so it retries until its call budget is gone and the
+# record shows a model that produced nothing.
+#
+# 0 of the 5 advance-check tasks would have hit it. 3 of 30 and 16 of 220
+# would. Stage one would have passed clean and stage two would have failed
+# about a fifth of the time for no visible reason.
+
+
+def _backend(root: Path):
+    from core.agentic_v2_contract import AgenticV2Profile
+    from core.agentic_v2_fixture_backend import AgenticV2FixtureBackend
+
+    return AgenticV2FixtureBackend(
+        root=root,
+        profile=AgenticV2Profile(
+            tool_contract_version="2.0",
+            policy_profile_id="offline-full-v1",
+            foundation_only=True,
+        ),
+    )
+
+
+def test_a_file_over_the_workspace_limit_is_refused_and_the_others_arrive(
+    snapshot, tmp_path
+):
+    """Refused by name, and local to that one file.
+
+    The reason is its own, not :data:`TOO_LARGE`. Those two refusals mean
+    different things -- one file is too big to carry, the other is small enough
+    to carry and too big to keep company with -- and a record that merges them
+    cannot say which limit to raise.
+    """
+    big = snapshot / "reference_files" / "abc123" / "video.mp4"
+    big.write_bytes(b"m" * 4096)
+
+    result = stage_task_reference_files(
+        task_id="t",
+        reference_files=[
+            "reference_files/abc123/video.mp4",
+            "reference_files/abc123/sheet.xlsx",
+        ],
+        snapshot_root=snapshot,
+        into=tmp_path / "workspace",
+        workspace_file_limit=2048,
+    )
+
+    assert _reasons(result) == [staging.TOO_LARGE_FOR_THE_WORKSPACE]
+    assert result.refused[0].relative_path == "reference_files/abc123/video.mp4"
+    assert "2048" in result.refused[0].detail
+    assert [one.relative_path for one in result.delivered] == [
+        "reference_files/abc123/sheet.xlsx"
+    ]
+    assert not (Path(result.workspace) / "reference_files/abc123/video.mp4").exists()
+
+
+def test_staging_an_oversized_file_would_stop_every_write(tmp_path):
+    """The measurement this whole section exists for, run rather than quoted.
+
+    Deliberately bypasses staging and copies the oversized file in by hand,
+    because the claim under test is about the backend and not about our code.
+    If the backend ever stops applying the limit on write, this fails and the
+    refusal above can be reconsidered -- which is the only honest way to find
+    that out.
+    """
+    root = tmp_path / "task"
+    inputs = root / "work" / "inputs"
+    inputs.mkdir(parents=True)
+    (inputs / "huge.bin").write_bytes(b"x" * (staging.WORKSPACE_FILE_LIMIT + 1))
+
+    backend = _backend(root)
+    assert backend.workspace_apply({"operation": "list", "path": "inputs"})["ok"]
+
+    with pytest.raises(ValueError):
+        backend.workspace_apply(
+            {"operation": "write", "path": "answer.md", "content": "hello"}
+        )
+
+
+def test_writing_works_once_that_file_is_refused_instead_of_staged(
+    snapshot, tmp_path
+):
+    """The same task, staged through the refusal, can write its deliverable.
+
+    Paired with the test above on purpose: together they say the refusal is
+    load-bearing rather than tidy-minded.
+    """
+    big = snapshot / "reference_files" / "abc123" / "huge.bin"
+    big.write_bytes(b"x" * (staging.WORKSPACE_FILE_LIMIT + 1))
+
+    root = tmp_path / "task"
+    result = stage_task_reference_files(
+        task_id="t",
+        reference_files=[
+            "reference_files/abc123/huge.bin",
+            "reference_files/abc123/sheet.xlsx",
+        ],
+        snapshot_root=snapshot,
+        into=root / "work" / staging.MODEL_INPUT_PREFIX,
+    )
+    assert _reasons(result) == [staging.TOO_LARGE_FOR_THE_WORKSPACE]
+
+    written = _backend(root).workspace_apply(
+        {"operation": "write", "path": "answer.md", "content": "hello"}
+    )
+    assert written["ok"] is True
+
+
+# ── Reading a binary file when nothing can run ────────────────────────────
+#
+# `workspace_apply(read)` decodes UTF-8, and 258 of the 261 files the 220 tasks
+# name do not decode. With `exec_run` shut there is no pandas, no PDF library and
+# no way to turn those bytes into anything -- so a text rendering is staged
+# beside the file it came from. It is a compensation, and a difference from a
+# run that has a shell, and the record has to be able to say which files got
+# one and what it cost them.
+
+
+def _render(snapshot: Path, tmp_path: Path, *names: str, limit: int | None = None):
+    return stage_task_reference_files(
+        task_id="t",
+        reference_files=list(names),
+        snapshot_root=snapshot,
+        into=tmp_path / "workspace",
+        render_text=True,
+        **({} if limit is None else {"workspace_file_limit": limit}),
+    )
+
+
+def _rendering(result, name: str):
+    return next(one for one in result.extractions if one.relative_path == name)
+
+
+def test_a_text_file_is_rendered_and_the_model_can_read_what_landed(
+    snapshot, tmp_path
+):
+    (snapshot / "reference_files" / "abc123" / "notes.txt").write_text(
+        "the second quarter figures", encoding="utf-8"
+    )
+
+    result = _render(snapshot, tmp_path, "reference_files/abc123/notes.txt")
+    one = _rendering(result, "reference_files/abc123/notes.txt")
+
+    assert one.outcome == staging.EXTRACTION_IS_TEXT
+    assert one.is_readable
+    assert one.model_path == (
+        "inputs/extracted/reference_files/abc123/notes.txt.txt"
+    )
+    landed = Path(result.workspace) / one.written_to
+    assert "the second quarter figures" in landed.read_text(encoding="utf-8")
+
+
+def test_the_rendering_keeps_the_original_extension_in_its_name(
+    snapshot, tmp_path
+):
+    """`report.csv.txt`, not `report.txt`.
+
+    Two files in one directory differing only by extension are ordinary in this
+    dataset, and a rendering that dropped the extension would silently overwrite
+    one of them with the other -- leaving the model one file where it was given
+    two, with no sign that a swap happened.
+    """
+    folder = snapshot / "reference_files" / "abc123"
+    (folder / "report.csv").write_text("a,b\n1,2\n", encoding="utf-8")
+    (folder / "report.txt").write_text("the written version", encoding="utf-8")
+
+    result = _render(
+        snapshot,
+        tmp_path,
+        "reference_files/abc123/report.csv",
+        "reference_files/abc123/report.txt",
+    )
+    landed = {one.written_to for one in result.extractions}
+
+    assert landed == {
+        "extracted/reference_files/abc123/report.csv.txt",
+        "extracted/reference_files/abc123/report.txt.txt",
+    }
+    rendered = Path(result.workspace) / "extracted/reference_files/abc123"
+    assert (rendered / "report.txt.txt").read_text(encoding="utf-8") == (
+        "the written version"
+    )
+
+
+def test_a_file_the_reader_only_describes_is_recorded_as_a_label(
+    snapshot, tmp_path
+):
+    """A PNG is not a failure and must not be counted as one.
+
+    The reader describes images, audio, archives and CAD rather than reading
+    them. Nine PNGs counted beside five scanned PDFs would read as fourteen
+    broken files, and the two need different answers.
+    """
+    (snapshot / "reference_files" / "abc123" / "logo.png").write_bytes(
+        b"\x89PNG\r\n\x1a\n"
+    )
+
+    result = _render(snapshot, tmp_path, "reference_files/abc123/logo.png")
+    one = _rendering(result, "reference_files/abc123/logo.png")
+
+    assert one.outcome == staging.EXTRACTION_IS_A_LABEL
+    assert one.is_readable is False
+    assert one.written_to is None
+    assert one.label
+
+
+def test_a_file_with_no_text_in_it_is_told_apart_from_one_that_failed(
+    snapshot, tmp_path
+):
+    """Five of the dataset's PDFs are scans and render to nothing.
+
+    That is a real property of the document, and the model needs to be told it
+    rather than left to infer it from an empty file.
+    """
+    (snapshot / "reference_files" / "abc123" / "scan.txt").write_text(
+        "   \n\n  ", encoding="utf-8"
+    )
+
+    one = _rendering(
+        _render(snapshot, tmp_path, "reference_files/abc123/scan.txt"),
+        "reference_files/abc123/scan.txt",
+    )
+
+    assert one.outcome == staging.EXTRACTION_IS_EMPTY
+    assert one.characters == 0
+    assert one.written_to is None
+
+
+def test_a_reader_error_is_recorded_as_a_failure_and_nothing_is_staged(
+    snapshot, tmp_path, monkeypatch
+):
+    """The reader returns its errors as text, so they must not be staged.
+
+    ``[Error reading x.xlsx: …]`` written into the workspace would be a file the
+    model opens expecting a document and finds an apology in.
+    """
+    monkeypatch.setattr(
+        staging,
+        "read_reference_file",
+        lambda path: "[Error reading sheet.xlsx: zipfile.BadZipFile]",
+    )
+
+    one = _rendering(
+        _render(snapshot, tmp_path, "reference_files/abc123/sheet.xlsx"),
+        "reference_files/abc123/sheet.xlsx",
+    )
+
+    assert one.outcome == staging.EXTRACTION_FAILED
+    assert one.written_to is None
+    assert "[Error reading" in one.label
+
+
+def test_the_reader_still_swallows_what_it_cannot_open(tmp_path):
+    """Named by ``_READER_ERROR_PREFIX``'s docstring, and checked against it.
+
+    Everything above depends on the reader returning its failures as a string
+    rather than raising. If a future version raises instead, the rendering step
+    would take a task down on a corrupt spreadsheet, so this is checked against
+    the real reader with real broken bytes rather than a mock.
+    """
+    from core.file_reader import read_reference_file
+
+    broken = tmp_path / "sheet.xlsx"
+    broken.write_bytes(b"PK\x03\x04 this is not a workbook")
+
+    answer = read_reference_file(str(broken))
+
+    assert isinstance(answer, str)
+    assert answer.startswith(staging._READER_ERROR_PREFIX)
+
+
+def test_a_long_rendering_is_cut_to_fit_and_says_so(snapshot, tmp_path):
+    """Cut on bytes, because the limit is bytes and the text may not be ASCII.
+
+    The note at the end is the point: a model reading a truncated extraction
+    with no marker would take the missing half for a document that ends there.
+    """
+    (snapshot / "reference_files" / "abc123" / "long.txt").write_text(
+        "é" * 4000, encoding="utf-8"
+    )
+
+    result = _render(
+        snapshot, tmp_path, "reference_files/abc123/long.txt", limit=2048
+    )
+    one = _rendering(result, "reference_files/abc123/long.txt")
+
+    assert one.outcome == staging.EXTRACTION_TRUNCATED
+    assert one.is_readable
+    landed = Path(result.workspace) / one.written_to
+    assert len(landed.read_bytes()) <= 2048
+    assert "cut here" in landed.read_text(encoding="utf-8")
+
+
+def test_a_file_too_big_to_stage_still_gets_its_text_rendered(
+    snapshot, tmp_path
+):
+    """The compensation that keeps a refusal from being a total loss.
+
+    Five of the 24 over-limit originals in the 220 tasks hold real text -- a
+    14.5 MB spreadsheet renders to 1,973 characters. Refusing the bytes and
+    dropping the text would throw away the part that fits.
+    """
+    big = snapshot / "reference_files" / "abc123" / "big.txt"
+    big.write_text("the figures that matter " * 200, encoding="utf-8")
+
+    result = _render(
+        snapshot, tmp_path, "reference_files/abc123/big.txt", limit=2048
+    )
+
+    assert _reasons(result) == [staging.TOO_LARGE_FOR_THE_WORKSPACE]
+    one = _rendering(result, "reference_files/abc123/big.txt")
+    assert one.is_readable
+    landed = Path(result.workspace) / one.written_to
+    assert "the figures that matter" in landed.read_text(encoding="utf-8")
+
+
+def test_nothing_is_rendered_unless_it_is_asked_for(snapshot, tmp_path):
+    """The default stays what it was, so callers that never asked are unchanged."""
+    result = _stage(snapshot, tmp_path, "reference_files/abc123/sheet.xlsx")
+
+    assert result.extractions == ()
+    assert result.guide is None
+    assert not (Path(result.workspace) / staging.INPUTS_GUIDE).exists()
+
+
+# ── Telling the model its inputs exist ────────────────────────────────────
+#
+# Staging files into a directory the model has never been told about leaves it
+# no better off than an empty one. The task wording comes from the dataset and
+# is hash-sealed, so it cannot carry the directory layout; a staged file can.
+
+
+def test_the_guide_is_written_where_the_model_can_find_it(snapshot, tmp_path):
+    result = _render(snapshot, tmp_path, "reference_files/abc123/sheet.xlsx")
+
+    assert result.guide == "inputs/INPUTS.md"
+    assert (Path(result.workspace) / staging.INPUTS_GUIDE).is_file()
+
+
+def test_the_guide_names_every_file_and_every_one_that_is_missing(
+    snapshot, tmp_path
+):
+    """Named, not counted. A count cannot be checked against a result."""
+    (snapshot / "reference_files" / "abc123" / "notes.txt").write_text(
+        "some text", encoding="utf-8"
+    )
+    big = snapshot / "reference_files" / "abc123" / "huge.bin"
+    big.write_bytes(b"x" * 4096)
+
+    result = _render(
+        snapshot,
+        tmp_path,
+        "reference_files/abc123/notes.txt",
+        "reference_files/abc123/huge.bin",
+        "reference_files/abc123/gone.docx",
+        limit=2048,
+    )
+    guide = (Path(result.workspace) / staging.INPUTS_GUIDE).read_text(
+        encoding="utf-8"
+    )
+
+    assert "inputs/reference_files/abc123/notes.txt" in guide
+    assert "inputs/extracted/reference_files/abc123/notes.txt.txt" in guide
+    assert "reference_files/abc123/huge.bin" in guide
+    assert staging.TOO_LARGE_FOR_THE_WORKSPACE in guide
+    assert "reference_files/abc123/gone.docx" in guide
+    assert staging.NOT_IN_SNAPSHOT in guide
+
+
+def test_the_guide_does_not_offer_a_replacement_it_did_not_make(
+    snapshot, tmp_path
+):
+    """It says a text version is not the file, and it must not contradict that.
+
+    An earlier draft said "nothing was put in their place" two lines under a
+    path to a rendering of that same file.
+    """
+    result = _render(snapshot, tmp_path, "reference_files/abc123/gone.docx")
+    guide = (Path(result.workspace) / staging.INPUTS_GUIDE).read_text(
+        encoding="utf-8"
+    )
+
+    assert "is not a replacement" in guide
+    assert "Nothing was put in their place" not in guide
+
+
+def test_a_task_that_names_nothing_gets_no_guide(snapshot, tmp_path):
+    """There is nothing to describe, and an empty guide would read as a fault."""
+    result = stage_task_reference_files(
+        task_id="t",
+        reference_files=[],
+        snapshot_root=snapshot,
+        into=tmp_path / "workspace",
+        render_text=True,
+    )
+
+    assert result.guide is None
+    assert not (Path(result.workspace) / staging.INPUTS_GUIDE).exists()
+
+
+# ── Saying so in the record ───────────────────────────────────────────────
+
+
+def test_a_task_holding_only_files_it_cannot_open_is_marked(snapshot, tmp_path):
+    """Files arrived, none can be opened: a third state, and its own field.
+
+    Without it, such a task is indistinguishable in the record from one that got
+    everything -- ``ran_without_its_inputs`` is False for both, because nothing
+    was refused.
+    """
+    (snapshot / "reference_files" / "abc123" / "logo.png").write_bytes(b"\x89PNG")
+
+    result = _render(snapshot, tmp_path, "reference_files/abc123/logo.png")
+
+    assert result.refused == ()
+    assert result.ran_without_its_inputs is False
+    assert result.could_open_nothing is True
+
+
+def test_one_readable_file_is_enough_to_clear_that_mark(snapshot, tmp_path):
+    (snapshot / "reference_files" / "abc123" / "logo.png").write_bytes(b"\x89PNG")
+    (snapshot / "reference_files" / "abc123" / "notes.txt").write_text(
+        "readable", encoding="utf-8"
+    )
+
+    result = _render(
+        snapshot,
+        tmp_path,
+        "reference_files/abc123/logo.png",
+        "reference_files/abc123/notes.txt",
+    )
+
+    assert result.could_open_nothing is False
+
+
+def test_a_task_with_no_renderings_is_not_claimed_to_be_blind(
+    snapshot, tmp_path
+):
+    """The field answers from renderings, so with none it must say nothing.
+
+    Reporting True here would turn every caller that never asked for renderings
+    into a cohort of blind tasks.
+    """
+    result = _stage(snapshot, tmp_path, "reference_files/abc123/sheet.xlsx")
+
+    assert result.extractions == ()
+    assert result.could_open_nothing is False
+
+
+def test_the_record_counts_blind_tasks_and_renderings_by_outcome(
+    snapshot, tmp_path
+):
+    (snapshot / "reference_files" / "abc123" / "logo.png").write_bytes(b"\x89PNG")
+    (snapshot / "reference_files" / "abc123" / "notes.txt").write_text(
+        "readable", encoding="utf-8"
+    )
+    blind = _render(snapshot, tmp_path / "a", "reference_files/abc123/logo.png")
+    sighted = _render(
+        snapshot, tmp_path / "b", "reference_files/abc123/notes.txt"
+    )
+
+    record = staging_record([blind, sighted])
+
+    assert record["tasks_that_could_open_nothing"] == 1
+    assert record["renderings_by_outcome"] == {
+        staging.EXTRACTION_IS_A_LABEL: 1,
+        staging.EXTRACTION_IS_TEXT: 1,
+    }
+    assert [one["could_open_nothing"] for one in record["tasks"]] == [True, False]
+
+
+def test_the_record_says_what_a_rendering_is_and_is_not(snapshot, tmp_path):
+    """A reader of the record must not take an extraction for the file.
+
+    It is the difference between "the model was given the spreadsheet" and "the
+    model was given some text read out of the spreadsheet", and every judgement
+    about a task that needed a chart depends on which one is true.
+    """
+    record = staging_record([])
+
+    assert "lossy" in record["what_a_rendering_is"]
+    assert "never in place of it" in record["what_a_rendering_is"]
