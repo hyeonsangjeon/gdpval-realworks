@@ -444,6 +444,72 @@ STOP_RULES: tuple[str, ...] = (
     "reach the next",
 )
 
+#: Stop rules whose trigger is a fact about the run, not about one shard.
+#:
+#: A stage above five tasks is run as a matrix of shards, and that matrix sets
+#: ``fail-fast: false`` on a deliberate argument: a shard that failed has
+#: already been charged for the turns it made, and cancelling its siblings
+#: throws away work that was paid for. That argument is right for most of the
+#: eight. It is wrong for these, and the difference is not about severity.
+#:
+#: These five trip on something every shard shares -- one deployment, one seal,
+#: one set of gates, one approved amount for the whole cohort. A sibling's halt
+#: is therefore evidence about *this* shard as well, and the sixteen jobs still
+#: to come are not "results that were paid for": they are spend producing
+#: records that say something the run cannot support. Rule 0 is the plainest
+#: case. If the deployment answered under a name the plan does not pin, it will
+#: answer under that name for every remaining shard, and each one adds tasks
+#: attributed to a model that did not do them.
+#:
+#: The other three are classified below rather than left out, so that a ninth
+#: rule cannot join the tuple and default quietly to the permissive answer.
+#:
+#: Out of scope here on purpose: this says which halts propagate, not what
+#: happens to a stage afterwards. Even a per-shard halt leaves the stage
+#: unfinished, and :func:`~core.agentic_v2_sharding.coverage_problems` is what
+#: refuses to call it run.
+RULES_ABOUT_THE_WHOLE_RUN: dict[int, str] = {
+    0: "every shard is asked through the same deployment, so a reply that "
+    "named something other than the pinned model is not one shard's bad luck",
+    1: "the switch is in the thing all the shards are talking to",
+    2: "there is one pre-registration and one seal over it; a seal that no "
+    "longer verifies did not stop verifying for one shard only",
+    3: "the gates are in the checked-out source, identical in every job, so a "
+    "gate found open is open in all of them",
+    4: "the approved amount is for the whole cohort and never per shard -- "
+    "which is the point of pricing a stage rather than a job. Sixteen shards "
+    "that are each 'within budget' are how the approval gets spent several "
+    "times over",
+}
+
+#: Stop rules that really are one shard's own business.
+#:
+#: The same test as above, applied honestly rather than cautiously. For these
+#: the matrix's ``fail-fast: false`` comment is exactly right: a failed shard is
+#: a finding and the other sixteen are still results.
+#:
+#: Rule 5 is the arguable one and is written down as arguable. A ledger that
+#: cannot be written may be one runner's disk, which says nothing about
+#: another's, or it may be a broken path that every shard will hit -- in which
+#: case every shard halts on its own and nothing needed propagating. Stopping
+#: fifteen paid-for shards on the strength of the weaker reading is the more
+#: expensive way to be wrong, and it is the reading this entry declines.
+RULES_THAT_ARE_ONE_SHARDS_OWN: dict[int, str] = {
+    5: "one runner failing to write its ledger says nothing about another "
+    "runner's disk; if the cause is shared, each shard finds it unaided",
+    6: "three consecutive runner defects is a fact about this code on this "
+    "shard's tasks, and the next shard's tasks are different ones",
+    7: "the guest is this job's, and so is its failure to come clean",
+}
+
+if (set(RULES_ABOUT_THE_WHOLE_RUN) | set(RULES_THAT_ARE_ONE_SHARDS_OWN)) != set(
+    range(len(STOP_RULES))
+) or (set(RULES_ABOUT_THE_WHOLE_RUN) & set(RULES_THAT_ARE_ONE_SHARDS_OWN)):
+    raise RuntimeError(  # pragma: no cover - import guard
+        "a stop rule was added, removed or classified twice without deciding "
+        "whether a sibling shard's halt is evidence about the rest of the run"
+    )
+
 #: Things that are results and are recorded as such. Written down beside the
 #: stop rules because the temptation is to treat a bad number as a fault.
 NOT_STOP_RULES: tuple[str, ...] = (
@@ -1271,6 +1337,19 @@ def record(catalog: TaskCatalog | None = None) -> dict[str, Any]:
             "residual_after_alignment": residual_after_alignment(comparisons),
         },
         "stop_rules": list(STOP_RULES),
+        # Which of them a sibling shard's halt is evidence about. In the record
+        # rather than only in the source because it decides whether a stage
+        # with one halted shard has sixteen usable results or none, and that is
+        # a question asked at the grading table, by somebody holding the record
+        # and not the code.
+        "stop_rules_about_the_whole_run": {
+            STOP_RULES[index]: why
+            for index, why in sorted(RULES_ABOUT_THE_WHOLE_RUN.items())
+        },
+        "stop_rules_that_are_one_shards_own": {
+            STOP_RULES[index]: why
+            for index, why in sorted(RULES_THAT_ARE_ONE_SHARDS_OWN.items())
+        },
         "not_stop_rules": list(NOT_STOP_RULES),
         "what_this_is_not": _what_this_is_not(),
     }
