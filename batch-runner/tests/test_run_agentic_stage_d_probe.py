@@ -495,3 +495,50 @@ def test_the_refusal_happens_without_an_azure_route_configured():
 
     assert finished.returncode == 1
     assert "Traceback" not in finished.stderr
+
+
+# ── what the dry run is allowed to say ────────────────────────────────────
+#
+# Both tests above stop on a missing artefact, several hundred lines above the
+# dry run's own exit. That is not a gap in them -- it is the C2 check doing its
+# job, and it is also why this script's dry run cannot be run to completion
+# anywhere except the host C2 booted on. For a long time the sentence it printed
+# there was "Every condition for the paid run is met", and nothing could have
+# contradicted it.
+#
+# On 2026-09-11 the V2 stage runner, which had the identical sentence and the
+# identical shape, sent out its first paid dispatch four minutes after a green
+# dry run and died on a constructor keyword in a branch no dry run executes. The
+# claim moved here for the same reason it moved there.
+
+
+def test_the_files_the_paid_run_loads_can_be_loaded():
+    """The substrate manifest and the price table, for real.
+
+    The two pieces of stage D's paid setup that need no Azure identity and no
+    booted guest -- so the only two the free job has any business vouching for.
+    """
+    assert runner.the_paid_setup_a_dry_run_can_reach() == []
+
+
+def test_a_file_that_will_not_load_is_reported_rather_than_waved_through(
+    monkeypatch,
+):
+    """A missing price table is a paid-run failure, found for nothing."""
+    monkeypatch.setattr(
+        runner, "SUBSTRATE_MANIFEST", Path("/nonexistent/capabilities.json")
+    )
+
+    problems = runner.the_paid_setup_a_dry_run_can_reach()
+
+    assert len(problems) == 1
+    assert "the substrate manifest cannot be loaded" in problems[0]
+
+
+def test_the_dry_run_no_longer_speaks_for_the_machine_or_the_model():
+    """It can reach neither, and now says so."""
+    source = RUNNER_PATH.read_text(encoding="utf-8")
+
+    assert "Every condition for the paid run is met" not in source
+    assert "Every condition this job can reach is met" in source
+    assert "It cannot reach the model or the machine" in source

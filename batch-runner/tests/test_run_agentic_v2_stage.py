@@ -114,7 +114,7 @@ def test_every_registered_stage_is_priced_and_dry_runs_to_zero(stage):
     finished = _run("--stage", stage, "--dry-run")
 
     assert finished.returncode == 0, finished.stdout + finished.stderr
-    assert "Every condition for the paid run is met" in finished.stdout
+    assert "Every condition this job can reach is met" in finished.stdout
     assert "nothing was spent" in finished.stdout
 
 
@@ -193,11 +193,24 @@ def _run(*args, env=None):
 
 @needs_dataset
 def test_the_priced_stage_dry_runs_to_zero_without_any_azure_environment():
-    """The whole path minus the network, with nothing configured to reach it."""
+    """The whole path minus the network, with nothing configured to reach it.
+
+    The assertion below used to read "Every condition for the paid run is met",
+    which is what the script printed and what this test therefore pinned. On
+    2026-09-11 a paid run that had just been told exactly that crashed on a
+    constructor keyword in a branch no dry run executes. The sentence was never
+    checkable from here: this job holds no Azure identity, so the route, the
+    deployment and the conversation are out of its reach by design.
+
+    What it can reach it now reaches, so the narrower claim is worth more than
+    the broad one was.
+    """
     finished = _run("--stage", "advance_check_5", "--dry-run")
 
     assert finished.returncode == 0, finished.stdout + finished.stderr
-    assert "Every condition for the paid run is met" in finished.stdout
+    assert "Every condition this job can reach is met" in finished.stdout
+    assert "the ledger the paid run settles into" in finished.stdout
+    assert "It cannot reach the model" in finished.stdout
     assert "nothing was spent" in finished.stdout
 
 

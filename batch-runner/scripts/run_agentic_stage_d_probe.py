@@ -301,6 +301,33 @@ def build_record(
     }
 
 
+def the_paid_setup_a_dry_run_can_reach() -> list[str]:
+    """Load the part of the paid path that needs no Azure and no guest.
+
+    Returns what broke, empty when nothing did. A named function rather than a
+    block inside the dry run, because a block inside the dry run can only be
+    tested by running the dry run, and this script's dry run refuses on any
+    host that is not the one C2 booted on. That refusal is correct and it is
+    also why both of the existing dry-run tests stop several hundred lines
+    above here, against a missing artefact. A check nothing can execute is the
+    shape of the defect this is here to close, not a fix for it.
+
+    Two files, and only two. The route, the client, the Firecracker boot and
+    the probe's own tool list are reachable from neither this function nor the
+    job that calls it, and are not claimed to be.
+    """
+    problems: list[str] = []
+    for reading, load in (
+        ("the substrate manifest", lambda: AgenticV2SubstrateManifest.load(SUBSTRATE_MANIFEST)),
+        ("the price table", load_price_table),
+    ):
+        try:
+            load()
+        except Exception as broke:  # noqa: BLE001 - reported, not handled
+            problems.append(f"{reading} cannot be loaded: {broke!r}")
+    return problems
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Stage D: one paid task over one real guest per call."
@@ -389,9 +416,30 @@ def main(argv: list[str] | None = None) -> int:
     print()
 
     if args.dry_run:
+        # Reach what the paid path loads before speaking for it. This script
+        # had the same sentence, and the same shape, as the V2 stage runner:
+        # a `return 0` several hundred lines above a branch no free job has
+        # ever executed. On 2026-09-11 that shape cost the stage runner a paid
+        # dispatch, which died on a constructor keyword after its identity and
+        # route checks had passed.
+        broke = the_paid_setup_a_dry_run_can_reach()
+        if broke:
+            print("Dry run. Nothing was asked, nothing was booted and "
+                  "nothing was spent.\n")
+            for problem in broke:
+                print(f"  - {problem}")
+            print(
+                "\nThe paid run loads this after the model client is built, "
+                "so it would have failed there. Failing here instead."
+            )
+            return 1
         print(
             "Dry run. Nothing was asked, nothing was booted and nothing was "
-            "spent. Every condition for the paid run is met."
+            "spent. Every condition this job can reach is met, including the "
+            "substrate manifest and the price table the paid run loads.\n\n"
+            "It cannot reach the model or the machine. The route, the client, "
+            "the Firecracker boot and the probe itself are checked in the paid "
+            "run and nowhere else."
         )
         return 0
 

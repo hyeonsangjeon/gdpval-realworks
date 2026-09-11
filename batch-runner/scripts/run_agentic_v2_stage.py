@@ -409,6 +409,49 @@ def check_the_plan_priced_this_stage(plan: dict, stage: str, bound, catalog) -> 
     return pricing, list(pricing.problems)
 
 
+def open_the_ledger(into: Path, *, run_id: str):
+    """Open the sqlite ledger the paid run settles every call into.
+
+    One function rather than one call site, because the dry run opens it too --
+    against a directory it throws away -- and the point of that is that the two
+    cannot drift apart. The paid run reached this line for the first time ever
+    on 2026-09-11 and died on it: the constructor had grown a required
+    ``run_id`` keyword and this call had not, so the stage crashed after the
+    identity check, the route check and the cohort binding had all passed.
+
+    Nothing caught it earlier because nothing could. The dry run returned
+    several hundred lines above, having printed that every condition for the
+    paid run was met, and the paid branch it was speaking for had never been
+    executed -- not in CI, not in a test. A ``TypeError`` on a keyword argument
+    is the cheapest possible version of that gap. The expensive version is the
+    same gap one line further down, after the model has been asked.
+    """
+    from core.cost_receipts import CostReceiptLedger
+
+    return CostReceiptLedger(str(into / "cost_receipts.sqlite3"), run_id=run_id)
+
+
+def the_paid_setup_a_dry_run_can_reach(stage: str) -> list[str]:
+    """Run the paid path's setup against a throwaway directory.
+
+    Returns what broke, empty when nothing did. Called from the dry run, so the
+    free job pays for this class of mistake instead of the paid one.
+
+    It is deliberately not much: the ledger is the only part of the paid setup
+    that needs no Azure identity, and the free job holds none. The voice, the
+    route, the deployment and the conversation cannot be reached from here and
+    are not claimed to be. Saying which is the other half of the fix -- the
+    sentence this used to print claimed all of them.
+    """
+    with tempfile.TemporaryDirectory(prefix=f"agentic-v2-{stage}-dry-") as scratch:
+        try:
+            ledger = open_the_ledger(Path(scratch), run_id="dry-run")
+        except Exception as broke:  # noqa: BLE001 - reported, not handled
+            return [f"the paid run's cost ledger cannot be opened: {broke!r}"]
+        ledger.close()
+    return []
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Run one pre-registered Agentic Sandbox V2 stage."
@@ -605,9 +648,31 @@ def main() -> int:
     print()
 
     if args.dry_run:
+        # Reach the paid setup before speaking for it. The sentence below used
+        # to say every condition for the paid run was met, and on 2026-09-11 a
+        # paid run that had just been told exactly that died on the next part
+        # of the script the dry run never executes.
+        broke = the_paid_setup_a_dry_run_can_reach(args.stage)
+        if broke:
+            print("Dry run. Nothing was asked and nothing was spent.\n")
+            for problem in broke:
+                print(f"  - {problem}")
+            print(
+                "\nThis is a paid-run condition and it is not met, so the paid "
+                "run would have failed after its identity and route checks had "
+                "passed. Failing here instead."
+            )
+            return 1
         print(
             "Dry run. Nothing was asked and nothing was spent. Every condition "
-            "for the paid run is met."
+            "this job can reach is met: the plan, the seal, the cohort, the "
+            "amounts, the staged inputs, and the ledger the paid run settles "
+            "into.\n\n"
+            "It cannot reach the model. This job holds no Azure identity, so "
+            "the route, the deployment and the conversation itself are checked "
+            "in the paid job and nowhere else. A green dry run is not a "
+            "promise that the paid run will reach the model -- only that it "
+            "will not be stopped by anything checkable without one."
         )
         return 0
 
@@ -848,15 +913,15 @@ def main() -> int:
             ),
         )
 
-        from core.cost_receipts import CostReceiptLedger
-
         if rehearsing is not None:
             # Every task ends unaccounted, which is the true answer. A rehearsal
             # makes no call, and a ledger row saying $0 would be the one number
             # that reads as a measurement of a model that was never asked.
             receipt_for = lambda task, attempt: None  # noqa: E731
         else:
-            ledger = CostReceiptLedger(str(into / "cost_receipts.sqlite3"))
+            # Through the same helper the dry run calls, so this line cannot
+            # drift from the one that is supposed to be checking it.
+            ledger = open_the_ledger(into, run_id=run_id)
 
             def receipt_for(task, attempt: int):
                 outcome = held.outcome_of(task.task_id, attempt)

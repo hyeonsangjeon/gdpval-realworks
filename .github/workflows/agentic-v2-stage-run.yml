@@ -154,6 +154,13 @@ jobs:
       # until then nothing in this job exercised the one part of the path that
       # had never run in CI at all. A cohort can be perfectly priced, sealed and
       # bound and still hand every task an empty directory.
+      #
+      # The last one was added after the first paid dispatch, on 2026-09-11,
+      # crashed on a constructor keyword. Every test above it passed that day,
+      # and the dry run below reported that every condition for the paid run
+      # was met, because none of them touched the paid branch. It holds the
+      # part of the paid setup a free job can reach, and it is the reason the
+      # dry run's claim is now narrower than it was.
       - name: Test the runner
         run: |
           set -euo pipefail
@@ -166,7 +173,8 @@ jobs:
             tests/test_free_checks_agree_on_the_loop.py \
             tests/test_agentic_v2_reference_staging.py \
             tests/test_agentic_v2_preregistration.py \
-            tests/test_run_agentic_v2_stage.py
+            tests/test_run_agentic_v2_stage.py \
+            tests/test_the_dry_run_certified_a_path_it_never_reached.py
 
       # No charge. The revision is the one the catalogue was built from and the
       # one every figure in the plan rests on; the binding hashes the wording it
@@ -435,6 +443,23 @@ jobs:
 
       # Before the report, and `always()`, because an unrecorded spend is the
       # one outcome with no way back. Cost missing is partial, never zero.
+      #
+      # `if-no-files-found: warn` is not a shrug. The ledger file is created
+      # when the ledger is opened, which is before the first call goes out and
+      # before any task runs. So nothing arriving here means the run died
+      # earlier than that -- earlier than anything could be charged.
+      #
+      # The first paid dispatch, on 2026-09-11, was exactly this. It crashed
+      # opening the ledger, `agentic-v2-run/` held no file to upload, and the
+      # run finished with zero artifacts: not an empty archive, none at all,
+      # which is what `warn` does with an empty directory. `collect` then
+      # refused to call five unrun tasks a stage, which is the behaviour this
+      # step is here to feed. Nothing uploaded is a claim about spend, and the
+      # claim is none.
+      #
+      # It is only that claim because of the ordering above. If the ledger were
+      # ever opened later than the first call, the same silence would mean the
+      # opposite, and nothing here would say so.
       #
       # Named per shard because artifact names have to be unique within a run,
       # and because a directory of seventeen indistinguishable `-run` archives
