@@ -1,0 +1,702 @@
+{
+  "0112fc9b-c3b2-4084-8993-5a4abb1f54f1": [
+    {
+      "name": "SOAP_note_2024-03-01_CS.md",
+      "bytes": 4821,
+      "sha256": "fd97ea9ba621a9b4153438941b9e51b14fbb094f2464d58789509345885fa027"
+    }
+  ],
+  "01d7e53e-0513-4109-a242-8ccaf442cd21": [
+    {
+      "name": "RecFit_Agreement_Draft.docx",
+      "bytes": 45447,
+      "sha256": "e37b5b628b47b90549450bf33dc36c8123b8a7eb6e125ad1fce15119a63c4982"
+    },
+    {
+      "name": "generate_recfit_agreement.py",
+      "bytes": 30849,
+      "sha256": "ea7b62fa99d5b7af163b5d52ae8aba0918bfd618fabbae621a39797f780d58c0"
+    }
+  ],
+  "02314fc6-a24e-42f4-a8cd-362cae0f0ec1": [
+    {
+      "name": "monthly_store_safety_checklist.html",
+      "bytes": 33426,
+      "sha256": "ed497292e0fb5dafa76d306b8e65ec54e7c241e0c67855779be4bbf1941fc80c"
+    },
+    {
+      "name": "monthly_store_safety_checklist.pdf",
+      "bytes": 41431,
+      "sha256": "821f77cbc595e7887ec93fe6eff3818891fb1e34608b49e36b09685acf82aef8"
+    }
+  ],
+  "0419f1c3-d669-45d0-81cd-f4d5923b06a5": [
+    {
+      "name": "John Miller Performance Improvement Plan.docx",
+      "bytes": 40360,
+      "sha256": "d1b1a4e244e73fafc45433df134bdeb2461856d0fb8a04ed1c8b14f2c8a357a3"
+    }
+  ],
+  "05389f78-589a-473c-a4ae-67c61050bfca": [
+    {
+      "name": "01_Juvoxa_Termination_Email.docx",
+      "bytes": 37848,
+      "sha256": "d96e8d1d8b770a22344d54260dd4dcad2fe80878b076fd213148fbf4eb70db72"
+    },
+    {
+      "name": "02_Model_A_Headlamp_Replacement_Recommendation_Report.docx",
+      "bytes": 39596,
+      "sha256": "d291090833509ab7a8575ab63c17caf88ba9d780ec93b5d36c528aa600c01c38"
+    },
+    {
+      "name": "generate_model_a_docs.py",
+      "bytes": 15678,
+      "sha256": "07c90817d29e8820281f48152b781a0e955f462112cc18451def49679c274ddf"
+    }
+  ],
+  "0e386e32-df20-4d1f-b536-7159bc409ad5": [
+    {
+      "name": "PRODUCTION_NOTES.md",
+      "bytes": 1062,
+      "sha256": "1b0c52697486392c83d7ecc470ddce064a7c595cf348670922630324e7415206"
+    },
+    {
+      "name": "PrivateCrypMix.zip",
+      "bytes": 33580,
+      "sha256": "3055245b6190364d6542d1e7c681311ba02ca534ecb85d9aa5115a7088affc3c"
+    },
+    {
+      "name": "README.md",
+      "bytes": 1627,
+      "sha256": "d485bfcd4d425cca0f558ac4d2a5e712bb45465e37f84636c63a1edf651201a6"
+    },
+    {
+      "name": "package.json",
+      "bytes": 451,
+      "sha256": "dd0bfc8efc9a316fe67eef68cddecfbfa03feb86ec7020f8f67383a6b83c3275"
+    },
+    {
+      "name": "packages/contracts/hardhat.config.ts",
+      "bytes": 727,
+      "sha256": "cffca49dd103c7ddc2bba4c670d28548f78ad5e372c6163ed2d2764b4b117b5d"
+    },
+    {
+      "name": "packages/contracts/package.json",
+      "bytes": 476,
+      "sha256": "b33f74e7028d80194508165427043ae6cd8e3c5b4fb46f82659e6b706ba6cbe6"
+    },
+    {
+      "name": "packages/contracts/tsconfig.json",
+      "bytes": 347,
+      "sha256": "01da8dff1edb940b6a3cf64c997f24e9a419bea0b20eac6225e006f1aaee7651"
+    },
+    {
+      "name": "packages/contracts/contracts/PrivateCrypMix.sol",
+      "bytes": 7742,
+      "sha256": "35ac9a303eba8a546174a09534fa286437e6a5074ca1c600e8d27edd3ca3bbf1"
+    },
+    {
+      "name": "packages/contracts/contracts/interfaces/IAToken.sol",
+      "bytes": 113,
+      "sha256": "6be73b9e643f8b25cd3b07120fc00582f8f593c3ba2efd7f652190908f252180"
+    },
+    {
+      "name": "packages/contracts/contracts/interfaces/IAavePool.sol",
+      "bytes": 277,
+      "sha256": "d20165cdeb4c4877710c017704a31098ad3d392d57709cb6db506448b1e50550"
+    },
+    {
+      "name": "packages/contracts/contracts/interfaces/IConnext.sol",
+      "bytes": 322,
+      "sha256": "8ca649dbca84348cf0ecadd3278674ed889d1e3d2e3ebca89da1f7256d3bc4d7"
+    },
+    {
+      "name": "packages/contracts/contracts/interfaces/IERC20.sol",
+      "bytes": 602,
+      "sha256": "8f275ab75ec6631c34aef56aebff9db1398a1f5962cdb1cd06243b691744e5e0"
+    },
+    {
+      "name": "packages/contracts/contracts/interfaces/IVerifier.sol",
+      "bytes": 192,
+      "sha256": "7245a071f4234eef78954ee431c5663b18a14695aba84369394a48a284d81e20"
+    },
+    {
+      "name": "packages/contracts/contracts/libraries/Hashing.sol",
+      "bytes": 231,
+      "sha256": "2d4d0c3ef26dd19f27e01e8f55757e6e5446b99f5a71d0248a4e9b58d61e4f6b"
+    },
+    {
+      "name": "packages/contracts/contracts/libraries/MerkleTreeWithHistory.sol",
+      "bytes": 2289,
+      "sha256": "9a649af502d445e4f9dca9b07556b3afbf6e201565b2eb659215b619918919e3"
+    },
+    {
+      "name": "packages/contracts/contracts/libraries/ReentrancyGuard.sol",
+      "bytes": 391,
+      "sha256": "751226d9cb13bb550d9536fd9cea5c1edbc5b8fac65cab3b603e33182dc222e2"
+    },
+    {
+      "name": "packages/contracts/contracts/libraries/SafeERC20.sol",
+      "bytes": 671,
+      "sha256": "39b7769e02fcc728eeee05e7638c24cbc5644ef002c27c7c8376de9e142f093a"
+    },
+    {
+      "name": "packages/contracts/contracts/mocks/MockAToken.sol",
+      "bytes": 462,
+      "sha256": "43b62c9a42b4bbeabdeb0e8af47ab690a7e15f98ef475a5e3c078f85da5ff551"
+    },
+    {
+      "name": "packages/contracts/contracts/mocks/MockAavePool.sol",
+      "bytes": 1090,
+      "sha256": "bc4b5faf4e36b093902b2801eb08fa5cf476989b1557011070547325ac3df7e2"
+    },
+    {
+      "name": "packages/contracts/contracts/mocks/MockConnext.sol",
+      "bytes": 806,
+      "sha256": "dd7300744590b866af4e33573fafefdf6e489335208e91ffc709d3cc8f80e5d0"
+    },
+    {
+      "name": "packages/contracts/contracts/mocks/MockERC20.sol",
+      "bytes": 1602,
+      "sha256": "eca73260ad9b087c63aca9dc3b21ca5f688a9c656866ff453e767d11c407c930"
+    },
+    {
+      "name": "packages/contracts/contracts/mocks/MockVerifier.sol",
+      "bytes": 399,
+      "sha256": "57a3c0a43b3329e9fc0951384ddfbb8e099bf85adff0573a8aaa4049706429b4"
+    },
+    {
+      "name": "packages/contracts/scripts/deploy.ts",
+      "bytes": 1414,
+      "sha256": "db2cc640ddd0a5c27b15256508ad68a2ff2f873e2f9f1031e179bfea931f0d4b"
+    },
+    {
+      "name": "packages/contracts/test/PrivateCrypMix.ts",
+      "bytes": 2487,
+      "sha256": "2a07399d14e45475f56b83284bb33ee96ad42de3d5cfd9ddc4249d785931b1ff"
+    },
+    {
+      "name": "packages/frontend/index.html",
+      "bytes": 301,
+      "sha256": "ecd0e5b95c8de7d834488e99d84a8dc0ee591849e27c9d226d477060d2afeae9"
+    },
+    {
+      "name": "packages/frontend/package.json",
+      "bytes": 580,
+      "sha256": "56638c418dfaf7620286c0c86e0d4a393461bcabdbdf9f6c8c125ee7d27bfcc4"
+    },
+    {
+      "name": "packages/frontend/tsconfig.app.json",
+      "bytes": 441,
+      "sha256": "4de61ce19609f869cd0de3f10312c5cd5414462c794058106ab4b9f80a5eb3bb"
+    },
+    {
+      "name": "packages/frontend/tsconfig.json",
+      "bytes": 139,
+      "sha256": "3a11d1d758b82ceae1687b3b3b673d98febb16b81305239be576b6aa30148fed"
+    },
+    {
+      "name": "packages/frontend/tsconfig.node.json",
+      "bytes": 221,
+      "sha256": "cc258bf15145c4e621e8b0b7c947b696cd44fe6c43759a49b507134a81ccfc57"
+    },
+    {
+      "name": "packages/frontend/vite.config.ts",
+      "bytes": 135,
+      "sha256": "c9f2b1d8adb74ccdf5b3279875524ab2f6c1dccf88474c85e96d02aec6964910"
+    },
+    {
+      "name": "packages/frontend/src/App.tsx",
+      "bytes": 2254,
+      "sha256": "a152a3609bf4cb82a9a8ce88669d650cdd466d7aadd3bf234306c574d238964a"
+    },
+    {
+      "name": "packages/frontend/src/main.tsx",
+      "bytes": 241,
+      "sha256": "a828338757a8ce734e6771982108631793e0c1cf679f1895341170bfcbe060a9"
+    },
+    {
+      "name": "packages/frontend/src/components/DepositCard.tsx",
+      "bytes": 3428,
+      "sha256": "8fc06f3c1f78446f2d00d1c4315e230c7bc11879bb39f1826547cc0f9818c16c"
+    },
+    {
+      "name": "packages/frontend/src/components/WalletPanel.tsx",
+      "bytes": 1278,
+      "sha256": "b6d6059be840834d5cbe18ca0ad4ac74bfe0e1626fa40ea71f9046ac4cbd39c3"
+    },
+    {
+      "name": "packages/frontend/src/components/WithdrawCard.tsx",
+      "bytes": 5300,
+      "sha256": "34046db3f0d7321952eff31ce07fb1f789970abac0944ee8ffd2b6a4fcc00e98"
+    },
+    {
+      "name": "packages/frontend/src/hooks/useMixer.ts",
+      "bytes": 5525,
+      "sha256": "15b84b27f84d8fa0b0ad40d5cdd92845044674d7c1decf2d498d2d3fcd1acd1c"
+    },
+    {
+      "name": "packages/frontend/src/lib/abi.ts",
+      "bytes": 986,
+      "sha256": "0991d7a262eee8c6927534a6266b33030de79e330ab806c9d8eae0b40083709c"
+    },
+    {
+      "name": "packages/frontend/src/lib/config.ts",
+      "bytes": 522,
+      "sha256": "228310da7de52d500532a204bf00f4cdeae16c2cb50aba763f04cb224221f569"
+    },
+    {
+      "name": "packages/frontend/src/lib/note.ts",
+      "bytes": 1381,
+      "sha256": "6cc7c173595c72f401ba177673b7abc9df86758dc157581e79f8eb316eb39fc8"
+    },
+    {
+      "name": "packages/frontend/src/lib/types.ts",
+      "bytes": 401,
+      "sha256": "6304824a0a43effb325d6b32bfe5bc7aa6f23fef2918ca3072dda4c2b5bd51fa"
+    },
+    {
+      "name": "packages/frontend/src/styles/app.css",
+      "bytes": 2587,
+      "sha256": "aa640070eeefe26b0379db14952f60f9acb54b9be27c4c9946075a9d4092025c"
+    },
+    {
+      "name": "packages/relayer/package.json",
+      "bytes": 577,
+      "sha256": "1a77c1bc4b7516043ed43f0bafcba572b25c2e608f991ab470f5331d8ab3c2f6"
+    },
+    {
+      "name": "packages/relayer/tsconfig.json",
+      "bytes": 331,
+      "sha256": "38ffae0131d1bc47505300413b3d42689f09a451080afd93cd51ea35c67815d8"
+    },
+    {
+      "name": "packages/relayer/src/index.ts",
+      "bytes": 2518,
+      "sha256": "f7e518b9f1cfe3cb5713507276a094b322f7b3ca9a76d4c329533d94510d1e16"
+    }
+  ],
+  "0ec25916-1b5c-4bfe-93d3-4e103d860f3a": [
+    {
+      "name": "SBAR_Template_Emergency_Department.pdf",
+      "bytes": 4455,
+      "sha256": "23a50c649d8d4afe526d3fc8f9b33ec9b555f4dea9cd5d92e4d08dfab602c7db"
+    },
+    {
+      "name": "SBAR_Template_Emergency_Department_preview.png",
+      "bytes": 235004,
+      "sha256": "f0ae95c2c5c7366d26151a8d2fe8b77fd82be1bba90193be8c459938d05193be"
+    },
+    {
+      "name": "SBAR_sources.txt",
+      "bytes": 678,
+      "sha256": "4980118729f109cff72b6ac057cec316b8e35df2993cf5a162b3af185d0d78c8"
+    },
+    {
+      "name": "generate_sbar_pdf.py",
+      "bytes": 8608,
+      "sha256": "0bc83417ccf5cd2b9d2b3076e9703558298555d0dfc2c28955b336938eeea5d1"
+    }
+  ],
+  "0ed38524-a4ad-405f-9dee-7b2252659aad": [
+    {
+      "name": "ECID_Board_Meeting_Talking_Points.pdf",
+      "bytes": 4516,
+      "sha256": "c1f53c678c37a5d4e92fd6ea31926d4683ecb27890bbb6923b451167c8398e82"
+    },
+    {
+      "name": "ECID_District_Constituent_Summary.pdf",
+      "bytes": 4888,
+      "sha256": "6eed2e1bea2512ec279121e59f31a7536ae7642a505c106218c5a609f7c278cc"
+    },
+    {
+      "name": "generate_ecid_reports.py",
+      "bytes": 14633,
+      "sha256": "c7025643a9909e8525092d1607ea17d9abc4875de0ccfe6824c23196943a36e3"
+    }
+  ],
+  "0fad6023-767b-42c1-a1b3-027cd4f583cb": [
+    {
+      "name": "Meat Seafood FSC POG Template.xlsx",
+      "bytes": 16834,
+      "sha256": "05187757554ae36ecc57661906fd2a7dc73c5e0839ec14a2e747682c72fcc78e"
+    },
+    {
+      "name": "generate_fsc_pog_template.py",
+      "bytes": 14509,
+      "sha256": "8899b54ce72459067d96d02e0b0c8ab076efdf6b4c76c55c13107c6bf328c8c7"
+    }
+  ],
+  "1137e2bb-bdf9-4876-b572-f29b7de5e595": [
+    {
+      "name": "Wholesale_Order_Audit.xlsx",
+      "bytes": 11978,
+      "sha256": "32d4f1911d39b9f5315e248d1480262a9704fe5f03e4891f707fc287663c2b94"
+    },
+    {
+      "name": "Wholesale_Order_Audit_Summary.docx",
+      "bytes": 37759,
+      "sha256": "c356bdfd0a809ac5f35ae45108d43ad301200701a353e7d25252aef56485d84e"
+    },
+    {
+      "name": "build_order_audit.py",
+      "bytes": 12514,
+      "sha256": "509469def69382e2d982860bb4468319be89239b5b9af4e290cb099043170fbb"
+    }
+  ],
+  "116e791e-890c-42b1-ba90-1db02e8bfd45": [
+    {
+      "name": "ab_nursing_care_plan.html",
+      "bytes": 7802,
+      "sha256": "8339a100801c228c1eca5ce37e8cd3e3e68a56783f74abccd869a9acc469d898"
+    },
+    {
+      "name": "ab_nursing_care_plan.pdf",
+      "bytes": 16128,
+      "sha256": "75013bf0f41e22d34b19693e62889faa8392653fecd00b11fb468208ef28e0a6"
+    }
+  ],
+  "11dcc268-cb07-4d3a-a184-c6d7a19349bc": [
+    {
+      "name": "Location Report 062425.xlsx",
+      "bytes": 7015,
+      "sha256": "fa183a41d280332abdc1797b8d642215b7a4e44b2b7fd9e9c386b5982e696921"
+    }
+  ],
+  "15d37511-75c5-4c7f-81f1-16e00c0d95f3": [
+    {
+      "name": "GloNGroRealEstate_Year1_UV_Projection.csv",
+      "bytes": 983,
+      "sha256": "e42b3aca87381e4b2e5d762e16b2e24a91a85111639c669729530734d5a37854"
+    },
+    {
+      "name": "GloNGroRealEstate_Year1_UV_Projection.xlsx",
+      "bytes": 7318,
+      "sha256": "13b60ce773f86f6133da7c9bfdf75a335b9cc941fc216d04df86fccb17d0b2e1"
+    },
+    {
+      "name": "build_projection.py",
+      "bytes": 6698,
+      "sha256": "13ad9dd14b5524e3d45214eb9caaab1ae73ebcb5d8aaf16eca6e2d8eb8f0770f"
+    }
+  ],
+  "15ddd28d-8445-4baa-ac7f-f41372e1344e": [
+    {
+      "name": "LiIon_Modlev_Tail_Lamp_Negotiation_Strategy.docx",
+      "bytes": 41271,
+      "sha256": "34be7f68eef8894c01fdc9dee0d25c38fbf2e8c61676f20145ef6c7278653260"
+    },
+    {
+      "name": "LiIon_Modlev_Tail_Lamp_Negotiation_Strategy.pdf",
+      "bytes": 8544,
+      "sha256": "e3029d265dd2b63437f3c1d4b434f990560a83da79f95a0addbb5b49cd69bdb7"
+    },
+    {
+      "name": "generate_modlev_strategy.py",
+      "bytes": 18793,
+      "sha256": "7a2c2a7c256bf9424b1311b799d3867181bb3c0c3790845473c7203d365efdf4"
+    }
+  ],
+  "17111c03-aac7-45c2-857d-c06d8223d6ad": [
+    {
+      "name": "Administrative_Services_Memo.pdf",
+      "bytes": 3322,
+      "sha256": "e4159d8040ea331891f38c581b72997f17521dd46275e246bdbe1182547e3571"
+    },
+    {
+      "name": "Tentative_Cleanup_Schedule.xlsx",
+      "bytes": 6464,
+      "sha256": "35c4aa0948feef1cc40ce4d6d30cd946048af91a84bd5a5643fb1e3aaf67df66"
+    },
+    {
+      "name": "generate_cleanup_documents.py",
+      "bytes": 9396,
+      "sha256": "e19444c7bdc2e6f4452727d3d7367e4f1e8d9f29bc8315d2c7b5faaed369ad0f"
+    }
+  ],
+  "1752cb53-5983-46b6-92ee-58ac85a11283": [
+    {
+      "name": "Completed Week One Test Plan.xlsx",
+      "bytes": 8190,
+      "sha256": "94460fd4da0367f2dee341930e209e31f4a70f7195957834c38f917907a1035f"
+    },
+    {
+      "name": "Plant Manager Email Draft.txt",
+      "bytes": 381,
+      "sha256": "42a583d3a3fd108d7de2753539ecbdf44215f40fe4b44cde38de679461ba1493"
+    },
+    {
+      "name": "build_week_one_test_plan.py",
+      "bytes": 7184,
+      "sha256": "311cd940fd130f7e461143d591a2b4b40a8b379c3a46603f288a68fdb13aa0a1"
+    }
+  ],
+  "19403010-3e5c-494e-a6d3-13594e99f6af": [
+    {
+      "name": "XR Retailer 2023 Sales Performance Analysis Makeup Category Final.xlsx",
+      "bytes": 7780,
+      "sha256": "33e4d8500b7a9ba5eacfdc14540581f8bb52e4bcd6d00651d52c5ef1ae73864f"
+    },
+    {
+      "name": "build_xr_makeup_recap.py",
+      "bytes": 12153,
+      "sha256": "247eaa543b727a31b241ce0e24f53a3e41b741fec890a0902cfce9ca19f7a141"
+    }
+  ],
+  "1aecc095-4d76-4b89-b752-1a0f870502cd": [
+    {
+      "name": "MA Telehealth Email Draft.docx",
+      "bytes": 37138,
+      "sha256": "5836a408ccd554b37b1e7faba664b1a8e2769da3300d03c4c28d172b390b527f"
+    },
+    {
+      "name": "Telehealth Roadmap.docx",
+      "bytes": 37778,
+      "sha256": "7ecaa7b7699c196166c946b43414dbc36515ebab83519aa424e816bc2b881fe6"
+    },
+    {
+      "name": "Telehealth Workflow.docx",
+      "bytes": 39571,
+      "sha256": "3ed11d526055da4fc057fd5d46dab855898ac3a3ce244385e3feaf7830ff6eb5"
+    }
+  ],
+  "1b1ade2d-f9f6-4a04-baa5-aa15012b53be": [
+    {
+      "name": "Revised_Sourcing_and_Nomination_Workflow.docx",
+      "bytes": 42300,
+      "sha256": "0d45df13bf931563363650e0e414958d4cea1e8a050128611f2031d51f024cde"
+    },
+    {
+      "name": "generate_workflow_doc.py",
+      "bytes": 4719,
+      "sha256": "802638276557b97953aed73c4782cbc79e17f3158dcee546a1a953839741243f"
+    },
+    {
+      "name": "revised_sourcing_nomination_workflow.md",
+      "bytes": 10390,
+      "sha256": "ea7a5a653dd518b4cae2b0bdf5916f034254ce57a688126c227750a4d248947b"
+    }
+  ],
+  "1b9ec237-bf9c-41f9-8fa9-0e685fcd93c6": [
+    {
+      "name": "bp_measurement_illustration.png",
+      "bytes": 63400,
+      "sha256": "8eaed40742ca185799e7854e082b47f174712899a2706307348fad44d9f32211"
+    },
+    {
+      "name": "generate_hypertension_presentation.py",
+      "bytes": 43805,
+      "sha256": "530a1e4344cd3d2cccf08aafeb1e09e53ebe580483ab94cac48708a548561d89"
+    },
+    {
+      "name": "hypertension_nursing_lecture.pptx",
+      "bytes": 143145,
+      "sha256": "1880f083695525e5865264dd89ed46d3d94393fc0ed223bb8a1b849814b649d4"
+    }
+  ],
+  "1e5a1d7f-12c1-48c6-afd9-82257b3f2409": [
+    {
+      "name": "Property Manager Weekly Schedule.docx",
+      "bytes": 38635,
+      "sha256": "9143e60fbdfff44c7543ec8c29132f75e8c6ccbe28c6c6d66009cf498b6316b0"
+    }
+  ],
+  "211d0093-2c64-4bd0-828c-0201f18924e7": [
+    {
+      "name": "Daily Task List.pdf",
+      "bytes": 5242,
+      "sha256": "0321ef731b9d2f9bec3beebdc930e24979c6706ad6ba2ec268d4d6fafd6a1535"
+    },
+    {
+      "name": "generate_dtl.py",
+      "bytes": 8373,
+      "sha256": "8a9ba2b2c162ee8dc8133f0f561f6cadd2a47fa413725ec2d322b1bd850e7169"
+    }
+  ],
+  "24d1e93f-9018-45d4-b522-ad89dfd78079": [
+    {
+      "name": "Model_I_Headlamp_NPV_Analysis.xlsx",
+      "bytes": 14454,
+      "sha256": "1c4077b0264da2a1c5904035be1b906596dc43d3e75d34e5da0a9699749e2e1d"
+    },
+    {
+      "name": "build_headlamp_npv_workbook.py",
+      "bytes": 17357,
+      "sha256": "1ef3c62b8f5975aab3b417f7d4f3e761e1e54e2641a08f48d42a91570e9e1f9d"
+    }
+  ],
+  "27e8912c-8bd5-44ba-ad87-64066ea05264": [
+    {
+      "name": "Organizational_Action_Items_Ergonomics.docx",
+      "bytes": 38095,
+      "sha256": "77258884289fad022e309a994a5c1999c08e5b14f6cfd9dfeff78c35a846d671"
+    },
+    {
+      "name": "Workstation_Ergonomics_Checklist.pdf",
+      "bytes": 138881,
+      "sha256": "635509427bbdfc0bee2983b8c2552215b52724d2bb8013c1e6971a4bb5b404d2"
+    },
+    {
+      "name": "generate_ergonomics_docs.py",
+      "bytes": 27342,
+      "sha256": "bd358c25a87dd7e1d9f967c854980d561fe214f7e2438b268d548c7a7c69288d"
+    },
+    {
+      "name": "ergonomics_assets/chair_reference.png",
+      "bytes": 44996,
+      "sha256": "228c6c3db71ec136777cd8a8377aff42b4dbdea70907162b26dd034657f6e6c5"
+    },
+    {
+      "name": "ergonomics_assets/keyboard_mouse_reference.png",
+      "bytes": 37693,
+      "sha256": "79af2adc0abc0afacceb6c88f3b4cfdd048a4174ab904dd37975baed47cbc370"
+    },
+    {
+      "name": "ergonomics_assets/preview_page_1.png",
+      "bytes": 102869,
+      "sha256": "2a9ba880cdc1e0bdea0183e185b273d6c56ca4f026d7c62847b966d6e7dcad72"
+    },
+    {
+      "name": "ergonomics_assets/preview_page_2.png",
+      "bytes": 46653,
+      "sha256": "0d01561e68233915167f02fda7b296a03a1cdac946b103068759d4b1d6da5177"
+    },
+    {
+      "name": "ergonomics_assets/preview_page_3.png",
+      "bytes": 59040,
+      "sha256": "4bea0e5c326c7bb0dab67123bc118e8f3a815135c38a639cffd48b4e8d9b2d93"
+    },
+    {
+      "name": "ergonomics_assets/preview_page_4.png",
+      "bytes": 85708,
+      "sha256": "13321e26a2f593dc15df0253f5a02eab51936428e3aa34c8fd3e65ea3cc86bfb"
+    },
+    {
+      "name": "ergonomics_assets/preview_page_5.png",
+      "bytes": 19115,
+      "sha256": "e1dc7b04107f460fcbba2a0e6541ae1acaeff57225ab7eda55319c3ea8781fd6"
+    },
+    {
+      "name": "ergonomics_assets/work_surface_reference.png",
+      "bytes": 48455,
+      "sha256": "ab41549aa5342967b133b7b6d7c9a197cbc285c4dcfd8fc421afbf54c48b25e8"
+    }
+  ],
+  "2c249e0f-4a8c-4f8e-b4f4-6508ba29b34f": [
+    {
+      "name": "data_flow.txt",
+      "bytes": 4960,
+      "sha256": "1c65acdf587a2305c3d0da45d7542fe240ebbd621b539ccfe967c7b175e333ac"
+    },
+    {
+      "name": "mission_data_api.yaml",
+      "bytes": 25326,
+      "sha256": "9df8395ecf4a31960e9cbb803e9a1e40de7ba2e47231b3b3d5ceb851ef72c5a1"
+    }
+  ],
+  "2ea2e5b5-257f-42e6-a7dc-93763f28b19d": [
+    {
+      "name": "Work Time Study Analysis.pptx",
+      "bytes": 63000,
+      "sha256": "49a2a1de8b29cc3dff84b94c0d95a1d1e9849ecf8e8f17afff0a600a3c2ab6d6"
+    },
+    {
+      "name": "build_work_time_study_presentation.py",
+      "bytes": 14759,
+      "sha256": "3af81bab67e831f842694b7de28ebceeedba986daba7c8a66e7edda5e4a06db0"
+    }
+  ],
+  "327fbc21-7d26-4964-bf7c-f4f41e55c54d": [
+    {
+      "name": "May By Door Sales Plan.xlsx",
+      "bytes": 14806,
+      "sha256": "67483aa70b701e82397e87f5a2ad152253d172d21812f53091e909409e2ef95f"
+    },
+    {
+      "name": "May Sales Plan Summary.txt",
+      "bytes": 148,
+      "sha256": "9f6709b5376a5ca526ebb87632496f10775de7638963ce016fac05ce38bbe8fb"
+    },
+    {
+      "name": "build_may_sales_plan.py",
+      "bytes": 16373,
+      "sha256": "6b84509623aa12e7eae789d13fb61c32188b5d36dc2fcec86c578470066b38ba"
+    }
+  ],
+  "3600de06-3f71-4e48-9480-e4828c579924": [
+    {
+      "name": "cd_vs_variable_annuity_advisor_briefing.pptx",
+      "bytes": 146273,
+      "sha256": "a86ee1500981ca377a48e6a023fb360dd59712bea6c3cf4e47bce3ff8884edb4"
+    },
+    {
+      "name": "generate_presentation.py",
+      "bytes": 23616,
+      "sha256": "fc76c6967c7ec4091fc68dbd42eb08ad37dd2d7e3e33ba79ffe5d71e68c59722"
+    },
+    {
+      "name": "presentation_sources.md",
+      "bytes": 4256,
+      "sha256": "245c427fb6c4c537ad90cdb1247656185b74815f7025dbfd1e2c1651219f524e"
+    },
+    {
+      "name": "risk_return_hurdle_chart.png",
+      "bytes": 114396,
+      "sha256": "83dfec27f202899ae19d115544cb885d9e81bc946c2295493a939f62b89ecbe5"
+    }
+  ],
+  "36d567ba-e205-4313-9756-931c6e4691fe": [
+    {
+      "name": "Federal Applicant - Risk Assessment Tool.docx",
+      "bytes": 38230,
+      "sha256": "b5594e5abef628b5bd748131ed69613facc93089b76962b61a89b1fee04b8356"
+    },
+    {
+      "name": "build_risk_assessment_tool.py",
+      "bytes": 5603,
+      "sha256": "944125b5f7b8a5171387dbfe8da2a3d30e76e915350f91bd3bb5b76fcefd9190"
+    }
+  ],
+  "38889c3b-e3d4-49c8-816a-3cc8e5313aba": [
+    {
+      "name": "deja_vu_delivery.zip",
+      "bytes": 183257427,
+      "sha256": "79c3c9934234b09d006709277a9ad8544de6e87b243ab503f0d33b8e1472c936"
+    },
+    {
+      "name": "render_track.py",
+      "bytes": 21173,
+      "sha256": "e81e39f2b9dc609e47c4847918b4edcd143aa863fb2dd31ff92781eea2c702aa"
+    },
+    {
+      "name": "deja_vu_delivery/Deja Vu - Master Instrumental.wav",
+      "bytes": 52662944,
+      "sha256": "99b6e41e8d8a751abdd246c30adaf4122efe506365ab6adc89e2d20cce63d7ea"
+    },
+    {
+      "name": "deja_vu_delivery/README.txt",
+      "bytes": 542,
+      "sha256": "5292237be251bd3851215209808bd7652955e0611048789a682c1de0c96405ff"
+    },
+    {
+      "name": "deja_vu_delivery/Stems/Deja Vu - Bass.wav",
+      "bytes": 52662944,
+      "sha256": "27892430c1e9bf5512ae902101d69e38ebdd5c13c383174e62419bb436cdda69"
+    },
+    {
+      "name": "deja_vu_delivery/Stems/Deja Vu - Bridge.wav",
+      "bytes": 52662944,
+      "sha256": "9e64f3528e771a16bd66203d748ffaf32373e53d25a6f6daee3396262c21d2a3"
+    },
+    {
+      "name": "deja_vu_delivery/Stems/Deja Vu - Guitars.wav",
+      "bytes": 52662944,
+      "sha256": "6b93980dced8e24bcdb7f95f4cd93ec31e7e9d5187b47ca40f067f30eaa78bf3"
+    },
+    {
+      "name": "deja_vu_delivery/Stems/Deja Vu - Synths.wav",
+      "bytes": 52662944,
+      "sha256": "3b10c3ffe1abaaac66c2dfcb87ce8258d9c861a72bdff99b5f5715952506f29a"
+    }
+  ]
+}
