@@ -1820,5 +1820,199 @@ constant, defaulting to D1's mapping. The capability probe runs both and records
 the answer, and the answer gets pinned here without editing D1 on the strength of
 what is usually true.
 
+##### D3 — what is actually in the guest, measured in the guest
+
+`sandbox/v2/sweep_in_guest.py`, `tests/test_sweep_in_guest.py` (**23 tests**),
+artefact `tasks/0822_saturday/guest_declared_command_sweep.json`.
+
+The container sweep committed earlier says so itself, in its own `host_caveat`:
+it was taken with docker, on a cgroup v1 host running a 3.10 kernel, and asks to
+be re-taken where tasks will run before its numbers are treated as stage D's.
+This is that re-take. Same probes, same framing, same reader — the only thing
+that changed is the machine, and the machine was the entire question.
+
+**What ran.** One Firecracker guest on `gdpval-devhost-vm`, the rootfs C2
+booted, under `REQUIRED_MICROVM_POLICY`, `policy_sha256`
+`6a5e665d3253c80302f001e8fd624b77838c38f92add1af63024277c5215888e`. Outcome
+`booted`, command exit status 0, **11.775 s of a 1200 s deadline**, teardown
+`all_gone: true`. Kernel and rootfs were re-hashed against C2's record before
+the boot — `b36a4a1b…` and `489188…`, both matching — so this is a measurement
+of the same bytes C2 booted and not of a directory that happens to share their
+paths.
+
+**40 of 40 probes answered. 34 present, 6 absent.** The absent are `Rscript`,
+`chromium`, `cmake`, `node`, `npm` and `python3:ezdxf` — the same six the
+container sweep found in the parent image. That agreement is worth stating
+plainly: the container numbers were not wrong about *the image*, they were
+unable to say anything about *the machine*, and now something can.
+
+**Two changes to the driver, both in the artefact rather than left to be
+noticed.** The container sweep gives each probe `/tmp` to write to; in the guest
+the rootfs is read-only by policy and `/work` is the only writable mount, so the
+redirections move there and `HOME` and `TMPDIR` follow. The second is not
+tidiness. A probe that fails because it had nowhere to write exits non-zero
+exactly like a probe whose command is absent, and without it the artefact would
+have recorded the wrong reason for an unknown number of the forty. The
+substitution is checked at runtime and the check has its own test: if the shared
+driver ever stops writing to `/tmp/probe.`, this module refuses instead of
+silently reporting an image with nothing in it.
+
+**`guest_uid` is 0, and that is not a containment failure.** Root inside the
+guest is the ordinary arrangement for a microVM — the boundary is the machine,
+not a uid — and the host-side process runs as the unprivileged jail account,
+uid 999. Both numbers are in the artefact side by side so no reader has to take
+that on trust. C3 measured the boundary itself, separately, by attacking it.
+
+**It is still not a capability receipt**, and a test asserts
+`validate_capability_receipt` rejects it. No SBOM, no licence classification, no
+package inventory. Signature and provenance remain `not_run`.
+
+###### The `python` versus `python3` question, settled
+
+D2 recorded that the substrate manifest requires a command named `python`, that
+D1 invokes `python3`, that both normally exist on a Debian image — and that
+*normally* is not evidence, so it had to be settled by probing rather than by
+reasoning. It is settled: **both are present and both are Python 3.11.15**, in
+this guest, on this host. `ALWAYS_ASKED` asks for both on every sweep precisely
+so this stays answered rather than assumed after any image change.
+
+###### The first run of this was not reproducible, and that was the point of the second
+
+The sweep was first taken by a one-off script and produced the same 34/6. Its
+artefact used different field names from the module written afterwards, which
+meant a file committed as *what `sweep_in_guest.py` produces* could not have been
+produced by `sweep_in_guest.py`. The test that matters here —
+`test_it_was_taken_in_a_guest_and_not_on_the_host`, which compares the guest
+kernel `6.1.141` against the host kernel `6.17.0-1022-azure` — only means
+anything if the file came out of the code under test. So the host was started
+again and the sweep re-taken by the committed module with `--rehash-images`.
+Cost: about six minutes of a `Standard_D8as_v5`. That is the correct trade
+against a committed artefact that quietly overstates its own provenance.
+
+###### What the six absent commands mean for stage D, stated before it runs
+
+`chromium` is moot: the microVM backend refuses `browser_run` in every form,
+including `open_local`, and D2 already recorded that a task failing for want of
+a browser must read as that. The other five are real narrowing. A task that
+needs R, node, npm, cmake or `ezdxf` will fail in this guest, and **that failure
+is an environment defect, not a model failure** — the distinction stage F is
+required to keep. The image carrying all forty (`sha256:e47537b8…`) was built
+and never pushed, so it is not reachable from here; the reachable parent is what
+stage D executes against. This is written down before execution so no post-hoc
+reading can convert those failures into a claim about the model.
+
+##### The block stage D cannot clear from inside the repository
+
+Stage D needs two things at once, and they live in different Azure tenants.
+
+| | the guest host | the Foundry model |
+|---|---|---|
+| resource | `gdpval-devhost-vm`, RG `RG-GDPVAL-DEVHOST-KRC`, koreacentral | account `hjeon-fdpo-foundry-eus2`, project `gdpval-realworks`, deployment `gpt-5.4` |
+| subscription | `4b7c60a5-b0e5-468e-9a2d-f0dcb2cc60d1` | `d372e9cf-d5f4-497e-b487-1a9973d20df9` |
+| tenant | `6d93cc9b-abb8-4dab-9406-892843d0de0b` | `16b3c013-d300-468d-ac64-7eda0820b6d3` |
+| what reaches it | `az vm run-command invoke` as the local signed-in admin | the GitHub OIDC application `f5e0ecfa-6d29-46b1-bdff-bb19ed3307ba` |
+
+Established by converging readings rather than by one: `az cognitiveservices
+account list` does not return the Foundry account, `az account list` shows one
+subscription, Resource Graph returns **0 records** for it, no workflow in the
+repository invokes `run-command`, and there are no C2 or C3 workflow runs —
+every boot so far was driven from a local shell. The VM's system-assigned
+identity `8544cbfc-76cc-4bd2-81e2-8985afc11a9f` holds **zero role assignments**,
+and a managed identity cannot hold a role in another tenant regardless.
+
+So the paid leg needs one of: a cross-tenant service-principal grant, or a
+booting host inside subscription `d372e9cf…`. **Both are access changes, and
+neither is covered by the cost approval**, which is why this is reported rather
+than performed — even though the credentials to do the first are on this box.
+GitHub-hosted runners remain ruled out for the host role on the grounds already
+recorded here: nested virtualisation is documented as unsupported, and a
+boundary offered with no guarantee is not a boundary. That finding is not loose
+prose — it is `RECORDED_FINDINGS[0]` in
+`batch-runner/core/agentic_v2_containment_readiness.py`, dated 2026-08-26 and
+carrying the GitHub documentation URL it was established from, and
+`_LABELS_COVERED_BY_A_FINDING` maps `ubuntu-latest`, `ubuntu-24.04`,
+`ubuntu-22.04` and `ubuntu-20.04` onto it. Re-checked against that record in
+this window, and it holds. Worth being explicit about why no measurement
+reopens it: the objection is to the *support status*, not to the hardware, so a
+job that found `/dev/kvm` present on a runner would have measured something
+true and answered a different question. `check_every_machine_has_a_containment_finding`
+also means a workflow introducing a *new* runner label reports a gap rather
+than silently inheriting this answer.
+
+The cheapest thing that could dissolve this without any grant has not been tried
+and costs nothing: a read-only `workflow_dispatch` job that logs in as the OIDC
+identity and asks what it can already do in *its own* subscription — `az account
+show`, `az vm list`, provider registration, role assignments, `az vm
+list-usage`. That is the next free step, and it is free because it asks for
+nothing.
+
+###### A matching kernel does not mean the same machine
+
+CI corrected a test in this window, which is the outcome worth having and worth
+recording. `test_this_box_is_refused_by_the_real_artefact` branched on
+`kernel_release == os.uname().release` and read equality as *this is the
+execution host*. GitHub's hosted runners are Azure virtual machines carrying the
+same `6.17.0-…-azure` kernel build as the development host, so on a runner the
+equality held, the test took the execution-host branch, and the reader refused
+for the reason it should have: no `/usr/local/bin/firecracker`. Kernel equality
+is necessary and not sufficient; the binaries check is what separates a runner
+from the machine C2 booted on. Both gates were already there and both are
+load-bearing — only the test's reasoning about them was wrong.
+
+###### Host ledger for this window
+
+Two windows on `gdpval-devhost-vm`, `Standard_D8as_v5`, koreacentral:
+23:02→23:20 UTC and 23:23→23:29 UTC on 2026-09-10, about **25 minutes**
+combined, both ended by `az vm deallocate` after confirming no logged-in users
+and no `firecracker`, `jailer` or sweep processes. List rate 0.424 USD/h puts
+the arithmetic near 0.18 USD; the actual charge is **not verifiable from this
+box** — the local `az` tenant is not the one that bills these workflows — so the
+window is recorded as `partial` and **not** as zero. **Zero model calls were
+made in this window; the only spend is the host.**
+
 ### Stage E — not yet run
+
+Before any of it is written, what the repository already has. Two searches this
+window each turned up a finished implementation of something that looked like
+new work, and both are recorded here so the next reader spends the hour on
+stage E rather than on rediscovering them.
+
+**The three-way retry distinction is built.**
+`core/execution_environment_readiness.py` defines
+`RETRY_INFRASTRUCTURE_ERROR`, `RETRY_MODEL_SELF_REVIEW` and
+`RETRY_TOOL_LOOP_INTERNAL_RECOVERY`, maps them onto the ledger's own
+`retry_kind` vocabulary through `RETRY_KIND_TO_REASON`, and counts them off
+ledger rows in `retry_counts_by_reason`. It also deliberately declines to map
+`RETRY_RESUME` onto any of the three — a resumed round re-attempts a task, but
+because the previous *process* stopped, and calling that an infrastructure
+error would inflate the one count the run is trying to measure. Unmapped kinds
+are reported separately under `unmapped_retry_kinds`, present-and-empty rather
+than absent, so an empty count is a measurement.
+
+**The per-task cost ledger is built, with the rules stage E was going to
+restate.** `core/cost_receipts.py` already holds each task's cost as two
+receipts that never add up — `BUCKET_PROBLEM_SOLVING` and `BUCKET_GRADING` —
+which is the separation of grading cost this task asks for. It already refuses
+to treat a missing usage block as free: `STATUS_PARTIAL` with
+`REASON_USAGE_ABSENT`, `known_cost_usd` carrying the confirmed part and
+`estimated_cost_usd` left `None`. Its own words are "zero is a measurement, not
+a default", and the only real `$0` is a path that never contacted a provider.
+It also refuses prefix or nearest-neighbour price matching, and never removes a
+call that happened, even when the output it paid for was thrown away.
+
+So stage E's work is **wiring, not invention**: making the V2 runner emit one
+ledger row per call in that existing vocabulary, so the existing counting and
+the existing two-bucket receipt apply to a V2 run unchanged. A second ledger
+would be the wrong shape of effort and would give the run two answers about its
+own cost.
+
+**The runner-as-host route is closed, and re-checking it is not free thinking.**
+`RECORDED_FINDINGS[0]` in `core/agentic_v2_containment_readiness.py` rules out
+GitHub-hosted runners for the guest role, and `_LABELS_COVERED_BY_A_FINDING`
+binds all four `ubuntu-*` labels to it. The objection is the documented support
+status, not the hardware, so a job that measured `/dev/kvm` on a runner would
+answer a true but different question — and presenting that measurement as
+reopening the route would be the same overclaim as reading a self-computed
+digest as a supplier signature.
+
 ### Stage F — not yet run
