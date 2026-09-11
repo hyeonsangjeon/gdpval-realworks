@@ -284,9 +284,26 @@ class DispatcherToolDesk:
     against the published contract, counts the call against its own ceiling,
     and refuses ``exec_run`` exactly as it does today. This adapter only
     reshapes what comes back into the form the loop reads.
+
+    ``dispatch`` exists because a dispatcher inside a live run is not reached
+    directly. :class:`core.agentic_v2_runner.AgenticV2ScriptedRunner` owes every
+    tool call a cancel check, a deadline check, a state commitment and two
+    chain appends, and a desk that called ``dispatcher.dispatch`` itself would
+    skip all four and produce a run record that looks like the others and is
+    not. So the runner hands in its own bookkeeping wrapper and this adapter
+    calls that instead. It takes the same keyword arguments and returns the
+    same dispatch, so nothing about the reshaping below changes.
     """
 
-    dispatcher: AgenticV2ToolDispatcher
+    dispatcher: Optional[AgenticV2ToolDispatcher] = None
+    dispatch: Optional[Callable[..., Any]] = None
+
+    def __post_init__(self) -> None:
+        if self.dispatch is None and self.dispatcher is None:
+            raise ValueError(
+                "a tool desk needs somewhere to send calls: pass a dispatcher, "
+                "or the dispatch function of a run that is already open"
+            )
 
     def run_one(
         self,
@@ -295,9 +312,12 @@ class DispatcherToolDesk:
         tool_name: str,
         arguments: Mapping[str, Any],
     ) -> ToolOutcome:
-        dispatch = self.dispatcher.dispatch(
-            call_id=call_id, name=tool_name, arguments=arguments
-        )
+        send = self.dispatch
+        if send is None:
+            # __post_init__ has already established that one of the two is
+            # present, so this is the dispatcher and not None.
+            send = self.dispatcher.dispatch  # type: ignore[union-attr]
+        dispatch = send(call_id=call_id, name=tool_name, arguments=arguments)
         result = dispatch.result
         usage = result.get("usage_delta") or {}
         return ToolOutcome(
