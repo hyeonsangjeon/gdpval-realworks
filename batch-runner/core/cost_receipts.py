@@ -148,6 +148,28 @@ REASON_STAGE_UNSUPPORTED = "stage_unsupported"
 #: and investigate.
 REASON_CALL_REFUSED_UNPRICED = "call_refused_unpriced"
 
+#: Reasons that leave something unknown about a call *other than its amount*.
+#:
+#: Most missing reasons put the money itself in doubt: no usage was reported,
+#: some usage category was withheld, no rate exists for the model. A figure
+#: computed despite one of those is not a smaller figure, it is a made-up one,
+#: so :meth:`CostReceiptLedger.settle` discards it.
+#:
+#: :data:`REASON_CALL_REACHABILITY_UNKNOWN` is not that kind of gap. It says a
+#: turn's *model-request count* is unknown -- the Codex path attaches it to
+#: every turn, because Codex will not say how many requests it made inside one.
+#: Token billing is additive, so a turn's reported token totals price to the
+#: same amount however many requests produced them. The count stays unknown and
+#: the reason stays on the receipt; the amount was never the thing in doubt.
+#:
+#: Before this set existed, every Codex turn -- including turns whose usage was
+#: reported in full -- settled with a null cost, and a whole run published a
+#: ``known_cost_usd`` of ``0`` that a reader had to be warned not to read as
+#: free. The receipt already had the right shape for this: a partial receipt's
+#: ``known_cost_usd`` is documented as a floor, and the reason travels beside
+#: it saying what is still missing.
+REASONS_LEAVING_THE_AMOUNT_DETERMINED = frozenset({REASON_CALL_REACHABILITY_UNKNOWN})
+
 MISSING_REASONS = (
     REASON_USAGE_ABSENT,
     REASON_USAGE_PARTIAL,
@@ -1398,7 +1420,16 @@ class CostReceiptLedger:
                 reasons.append(reason)
         if table is None and REASON_PRICE_MISSING not in reasons:
             reasons.append(REASON_PRICE_MISSING)
-        cost = None if reasons else priced.cost_usd
+        # A reason that does not concern the amount must not delete the amount.
+        # See :data:`REASONS_LEAVING_THE_AMOUNT_DETERMINED`: the reason still
+        # rides on the row, and the receipt built over it still reads partial,
+        # so the figure is published as the floor it is rather than as a total.
+        amount_in_doubt = [
+            reason
+            for reason in reasons
+            if reason not in REASONS_LEAVING_THE_AMOUNT_DETERMINED
+        ]
+        cost = None if amount_in_doubt else priced.cost_usd
 
         if row["state"] == STATE_SETTLED:
             self._require_same_settlement(row, usage, model, cost, reasons)
