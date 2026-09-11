@@ -61,9 +61,8 @@ import argparse
 import json
 import os
 import re
-import subprocess  # nosec B404 - control-plane reads via the pinned az CLI
 import sys
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Any
 
@@ -77,12 +76,49 @@ from core.azure_ai_clients import (  # noqa: E402
     classify_endpoint,
 )
 
+# How to read Azure without naming it. These live in core/ because a second
+# reader -- the deployment capacity this run divides its token counts into --
+# needs the same failure classification and the same redaction, and a security
+# property with two copies is a security property with one stale copy.
+from core.azure_control_plane import (  # noqa: E402
+    FOUNDRY_ACCOUNT_TYPE,
+    FOUNDRY_PROVIDER,
+    MINIMUM_REDACTABLE_LENGTH,
+    SENSITIVE_ENV,
+    AzRunner,
+    AzureReadFailure,
+    as_mappings,
+    collect_secrets,
+    default_runner,
+    leaked_placeholders,
+    redact,
+    resolve_resource_group,
+    resource_group_of,
+    sensitive_values,
+)
+
 # The action that decides whether the principal can fix this itself.
 ROLE_ASSIGNMENT_WRITE = "Microsoft.Authorization/roleAssignments/write"
 
-# The provider path a Foundry project lives under.
-FOUNDRY_PROVIDER = "Microsoft.CognitiveServices"
-FOUNDRY_ACCOUNT_TYPE = f"{FOUNDRY_PROVIDER}/accounts"
+__all__ = [
+    "FOUNDRY_ACCOUNT_TYPE",
+    "FOUNDRY_PROVIDER",
+    "MINIMUM_REDACTABLE_LENGTH",
+    "SENSITIVE_ENV",
+    "AzRunner",
+    "AzureReadFailure",
+    "as_mappings",
+    "collect_secrets",
+    "default_runner",
+    "diagnose",
+    "leaked_placeholders",
+    "main",
+    "redact",
+    "render",
+    "resolve_resource_group",
+    "resource_group_of",
+    "sensitive_values",
+]
 
 
 @dataclass(frozen=True)
@@ -215,16 +251,6 @@ def project_scope(
         f"/providers/{FOUNDRY_ACCOUNT_TYPE}/{account.strip()}"
         f"/projects/{project.strip()}"
     )
-
-
-def resource_group_of(resource_id: str) -> str | None:
-    """Pull the resource group out of an ARM resource id, or say it is absent."""
-    if not isinstance(resource_id, str):
-        return None
-    match = re.search(r"/resourceGroups/([^/]+)", resource_id, re.IGNORECASE)
-    if match is None:
-        return None
-    return match.group(1)
 
 
 # -------------------------------------------------------------------------
@@ -373,63 +399,12 @@ def forbidden_roles_held(held: Sequence[HeldRole]) -> tuple[str, ...]:
 # -------------------------------------------------------------------------
 # Redaction
 # -------------------------------------------------------------------------
-
-SENSITIVE_ENV: tuple[tuple[str, str], ...] = (
-    ("AZURE_SUBSCRIPTION_ID", "<subscriptionId>"),
-    ("AZURE_TENANT_ID", "<tenantId>"),
-    ("AZURE_CLIENT_ID", "<principalId>"),
-    ("AZURE_AI_EXPECTED_SUBSCRIPTION_ID", "<subscriptionId>"),
-    ("AZURE_AI_EXPECTED_TENANT_ID", "<tenantId>"),
-    ("AZURE_AI_EXPECTED_CLIENT_ID", "<principalId>"),
-    ("AZURE_AI_EXPECTED_PROJECT_ACCOUNT", "<accountName>"),
-    ("AZURE_AI_EXPECTED_PROJECT_NAME", "<projectName>"),
-    ("AZURE_AI_EXPECTED_DIRECT_ACCOUNT", "<accountName>"),
-    (PROJECT_ENDPOINT_ENV, "<projectEndpoint>"),
-    ("AZURE_OPENAI_V1_ENDPOINT", "<directEndpoint>"),
-    ("AZURE_OPENAI_ENDPOINT", "<directEndpoint>"),
-)
-
-# Values this short are ordinary words. Redacting them would corrupt the report
-# without protecting anything, so they are excluded from the leak check and the
-# caller is told the value was too short to defend.
-MINIMUM_REDACTABLE_LENGTH = 6
-
-
-def collect_secrets(
-    env: Mapping[str, str], *, extra: Mapping[str, str] | None = None
-) -> dict[str, str]:
-    """Every value that must not survive into the report, and its placeholder."""
-    secrets: dict[str, str] = {}
-    for name, placeholder in SENSITIVE_ENV:
-        value = env.get(name, "")
-        if isinstance(value, str) and len(value.strip()) >= MINIMUM_REDACTABLE_LENGTH:
-            secrets[value.strip()] = placeholder
-    for value, placeholder in (extra or {}).items():
-        if isinstance(value, str) and len(value.strip()) >= MINIMUM_REDACTABLE_LENGTH:
-            secrets[value.strip()] = placeholder
-    return secrets
-
-
-def sensitive_values(
-    env: Mapping[str, str], *, extra: Mapping[str, str] | None = None
-) -> frozenset[str]:
-    """The same values with no length floor, lowercased, for detection only.
-
-    Substitution needs the floor, because replacing a three-letter resource
-    name everywhere would corrupt ordinary words. Detection does not: a field
-    this repository copies out of Azure verbatim can simply be withheld when it
-    contains one, which is safe at any length.
-    """
-    found: set[str] = set()
-    for name, _ in SENSITIVE_ENV:
-        value = env.get(name, "")
-        if isinstance(value, str) and value.strip():
-            found.add(value.strip().lower())
-    for value in extra or {}:
-        if isinstance(value, str) and value.strip():
-            found.add(value.strip().lower())
-    return frozenset(found)
-
+#
+# The values to strip, how to strip them and how to check that the stripping
+# worked all live in ``core.azure_control_plane`` and are imported above. What
+# stays here is the one piece of redaction that is about roles rather than about
+# Azure: a role display name is free text somebody typed, and people do name
+# custom roles after the resource they apply to.
 
 # A role display name is the one field Azure hands back as free text a human
 # wrote. Built-in names are tame; a custom role can be called anything, and
@@ -451,130 +426,13 @@ def safe_role_name(name: str, values: frozenset[str]) -> str:
     return candidate
 
 
-def redact(text: str, secrets: Mapping[str, str]) -> str:
-    """Replace every known secret value with its placeholder, longest first."""
-    result = text
-    for value in sorted(secrets, key=len, reverse=True):
-        if value:
-            result = re.sub(re.escape(value), secrets[value], result, flags=re.IGNORECASE)
-    return result
-
-
-def leaked_placeholders(text: str, secrets: Mapping[str, str]) -> tuple[str, ...]:
-    """Which secret values survived redaction. Empty is the only safe answer."""
-    lowered = text.lower()
-    return tuple(
-        sorted(
-            {
-                secrets[value]
-                for value in secrets
-                if value and value.lower() in lowered
-            }
-        )
-    )
-
-
 # -------------------------------------------------------------------------
-# The az control-plane reads
+# The az reads this diagnostic makes
 # -------------------------------------------------------------------------
-
-
-class AzureReadFailure(RuntimeError):
-    """An az read failed. Carries a classification, never the provider text.
-
-    ``completed`` separates the two ways a read can fail, which are different
-    facts and support different conclusions:
-
-    * ``completed=True``  -- az ran the query, returned parseable output, and
-      the thing being looked for was not in it. Azure answered.
-    * ``completed=False`` -- az did not answer at all: it exited non-zero, or
-      returned something that would not parse. The question never reached the
-      resource, so nothing at all was learned about it.
-
-    Only the first supports an inference about what this identity can see. The
-    default is the second, so a new raise site has to opt in to the stronger
-    claim rather than inherit it.
-    """
-
-    def __init__(
-        self, what: str, *, exit_code: int | None, completed: bool = False
-    ) -> None:
-        self.what = what
-        self.exit_code = exit_code
-        self.completed = completed
-        detail = "no exit code" if exit_code is None else f"exit {exit_code}"
-        super().__init__(f"{what} could not be read ({detail})")
-
-
-AzRunner = Callable[[Sequence[str]], Any]
-
-
-def _default_runner(arguments: Sequence[str]) -> Any:
-    """Run one ``az`` read and parse its JSON.
-
-    The subprocess output is parsed, never echoed. An az error message can name
-    the resource it failed on, which is precisely what must not reach a log.
-    """
-    completed = subprocess.run(  # nosec B603 B607 - fixed argv, no shell
-        ["az", *arguments, "--only-show-errors", "--output", "json"],
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=180,
-    )
-    if completed.returncode != 0:
-        raise AzureReadFailure(
-            " ".join(arguments[:2]), exit_code=completed.returncode
-        )
-    stdout = completed.stdout.strip()
-    if not stdout:
-        return []
-    try:
-        return json.loads(stdout)
-    except json.JSONDecodeError:
-        raise AzureReadFailure(" ".join(arguments[:2]), exit_code=None) from None
-
-
-def _as_mappings(payload: Any) -> list[Mapping[str, Any]]:
-    if not isinstance(payload, list):
-        return []
-    return [item for item in payload if isinstance(item, Mapping)]
-
-
-def resolve_resource_group(
-    runner: AzRunner, *, account: str, subscription_id: str
-) -> str:
-    """Ask Azure where the Foundry account lives.
-
-    No secret and no repository variable records the resource group, so it has
-    to come from Azure itself.
-
-    An answered query that does not contain the account is a finding in its own
-    right: the account is either absent from this subscription or withheld from
-    this principal, and the control plane returns both the same way. That is the
-    ``completed=True`` raise below. A query az never completed is not that
-    finding, and is raised without the flag by the runner.
-    """
-    payload = runner(
-        [
-            "resource",
-            "list",
-            "--name",
-            account,
-            "--resource-type",
-            FOUNDRY_ACCOUNT_TYPE,
-            "--subscription",
-            subscription_id,
-        ]
-    )
-    for resource in _as_mappings(payload):
-        group = resource.get("resourceGroup")
-        if isinstance(group, str) and group.strip():
-            return group.strip()
-        derived = resource_group_of(str(resource.get("id", "")))
-        if derived:
-            return derived
-    raise AzureReadFailure("the Foundry account", exit_code=None, completed=True)
+#
+# ``AzureReadFailure``, the runner and ``resolve_resource_group`` are imported
+# from ``core.azure_control_plane``. The two reads below are the ones that only
+# a role diagnostic makes.
 
 
 def read_assignments(
@@ -594,7 +452,7 @@ def read_assignments(
             "--include-groups",
         ]
     )
-    return _as_mappings(payload)
+    return as_mappings(payload)
 
 
 def read_definitions(
@@ -606,7 +464,7 @@ def read_definitions(
         payload = runner(
             ["role", "definition", "list", "--name", name, "--scope", scope]
         )
-        definitions.extend(_as_mappings(payload))
+        definitions.extend(as_mappings(payload))
     return definitions
 
 
@@ -937,7 +795,7 @@ def main(
     out = sys.stdout if stream is None else stream
 
     try:
-        report = diagnose(values, runner=runner or _default_runner)
+        report = diagnose(values, runner=runner or default_runner)
     except ValueError as exc:
         # Safe to print: these messages name environment variables, not values.
         print(f"azure rbac diagnostic refused to run: {exc}", file=sys.stderr)
