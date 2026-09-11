@@ -67,7 +67,9 @@ def build(root: Path, spec: list[tuple]) -> Path:
 
     A row may carry a seventh element, the HTTP status the turn was refused
     with. Rows without one are unchanged, because a status is a thing most
-    outcomes do not have.
+    outcomes do not have. An eighth element is ``rate_limit_kind``; rows
+    without one are how every run made before that field existed looks, which
+    is every run this project has so far.
     """
     workspace = root / "workspace"
     workspace.mkdir(parents=True, exist_ok=True)
@@ -76,6 +78,7 @@ def build(root: Path, spec: list[tuple]) -> Path:
     for row in spec:
         task_id, status, category, attempts, chars, items_seen = row[:6]
         http_status = row[6] if len(row) > 6 else None
+        rate_limit_kind = row[7] if len(row) > 7 else None
         task = {"task_id": task_id, "sector": "Finance"}
         if chars:
             task["instruction"] = "x" * chars
@@ -92,6 +95,8 @@ def build(root: Path, spec: list[tuple]) -> Path:
             codex = {"items_seen": items_seen}
             if http_status is not None:
                 codex["http_status_code"] = http_status
+            if rate_limit_kind is not None:
+                codex["rate_limit_kind"] = rate_limit_kind
             result["observability"]["codex"] = codex
         results.append(result)
 
@@ -317,8 +322,8 @@ def test_where_a_refusal_lands_in_the_turn_is_reported_beside_the_count(
     A 429 says the provider refused. How far the turn got before being
     refused is the part that distinguishes "this turn consumed too much" from
     "something was decided before this turn spent anything". The analyzer
-    prints both numbers together and declines to name the limit, because a
-    table of item counts cannot settle that on its own.
+    prints both numbers together and declines to name the limit from them,
+    because a table of item counts cannot settle that on its own.
     """
     build(tmp_path, [
         ("aaaa1111", "success", None, 1, 900, 37),
@@ -326,22 +331,104 @@ def test_where_a_refusal_lands_in_the_turn_is_reported_beside_the_count(
         ("eeee5555", "error", "rate_limited", 2, 2400, 22, 429),
     ])
     out = run(tmp_path, capsys)
-    assert "refused with HTTP 429 : 2" in out
+    assert "refused for rate : 2" in out
     assert "dddd4444  items_seen=0" in out
     assert "eeee5555  items_seen=22" in out
     assert "refused before any item : 1/2 = 50.0%" in out
 
 
+def test_a_refusal_that_recorded_no_status_is_still_a_refusal(tmp_path, capsys):
+    """exp034's actual shape, and the one this section used to print as none.
+
+    Selecting on ``http_status_code == 429`` alone was true and useless: all
+    eight of exp034's failures carried ``items_seen`` and nothing else, so its
+    five rate refusals were reported as "no task carried HTTP 429" -- a
+    sentence nobody reads as "five tasks were refused for rate". The category
+    is the other way in, and it is the way that works on every run so far.
+    """
+    build(tmp_path, [
+        ("aaaa1111", "success", None, 1, 900, 37),
+        ("dddd4444", "error", "rate_limited", 4, 1500, 30),
+        ("eeee5555", "error", "rate_limited", 4, 2400, 42),
+    ])
+    out = run(tmp_path, capsys)
+    assert "refused for rate : 2" in out
+    assert "dddd4444  items_seen=30" in out
+    assert "status=-" in out  # the status it does not have, said as absent
+    assert "no task was refused for rate" not in out
+
+
+def test_a_refusal_with_no_measured_count_is_listed_apart_not_dropped(
+    tmp_path, capsys
+):
+    """Its position in the turn is the one thing it cannot report.
+
+    Dropping it would undercount the refusals; folding its unset zero into the
+    rest would answer "was it refused before spending anything?" with a
+    dataclass default, in the direction that flatters the convenient reading.
+    It is counted as a refusal and excluded from the position figure.
+    """
+    build(tmp_path, [
+        ("aaaa1111", "success", None, 1, 900, 37),
+        ("dddd4444", "error", "rate_limited", 3, 1500, 12, 429),
+        ("ffff6666", "error", "rate_limited", 2, 2400, None, 429),
+    ])
+    out = run(tmp_path, capsys)
+    assert "refused for rate : 2" in out
+    assert "ffff6666  items_seen=NOT MEASURED" in out
+    # One refusal has a count; the unmeasured one is not a zero in it.
+    assert "refused before any item : 0/1 = 0.0%" in out
+
+
+def test_which_of_the_two_limits_refused_is_named_when_the_run_recorded_it(
+    tmp_path, capsys
+):
+    """``token`` and ``request`` have opposite fixes, so the count matters."""
+    build(tmp_path, [
+        ("aaaa1111", "success", None, 1, 900, 37),
+        ("dddd4444", "error", "rate_limited", 3, 1500, 12, 429, "token"),
+        ("eeee5555", "error", "rate_limited", 2, 2400, 30, 429, "token"),
+        ("ffff6666", "error", "rate_limited", 2, 2400, 4, 429, "request"),
+    ])
+    out = run(tmp_path, capsys)
+    assert "which limit : {'token': 2, 'request': 1}" in out
+    # Narrowly worded: the cost section says UNDETERMINED about dollars, for
+    # unrelated reasons, and a bare substring check passes on that instead.
+    assert "which limit : UNDETERMINED" not in out
+
+
+@pytest.mark.parametrize("kind", [None, "unattributed"])
+def test_a_run_that_cannot_say_which_limit_says_that_rather_than_neither(
+    tmp_path, capsys, kind
+):
+    """Absent and unattributed both mean undetermined, for different reasons.
+
+    A run predating ``rate_limit_kind`` records nothing; ``unattributed`` means
+    the refusal's wording escaped the markers in ``core/codex_runner.py``. Both
+    must print as UNDETERMINED rather than as an empty breakdown, which reads
+    as "neither limit was reached" -- the one thing that is certainly false
+    about a task that was refused for rate.
+    """
+    build(tmp_path, [
+        ("aaaa1111", "success", None, 1, 900, 37),
+        ("dddd4444", "error", "rate_limited", 3, 1500, 12, 429, kind),
+    ])
+    out = run(tmp_path, capsys)
+    assert "which limit : UNDETERMINED for 1 of 1" in out
+    assert "Not evidence for either limit" in out
+    assert "'token'" not in out
+
+
 def test_a_run_with_no_refusals_says_so_rather_than_printing_an_empty_table(
     tmp_path, capsys
 ):
-    """No 429 is a result. It must not read as a table that failed to print."""
+    """No refusal is a result. It must not read as a table that failed to print."""
     build(tmp_path, [
         ("aaaa1111", "success", None, 1, 900, 37),
         ("bbbb2222", "error", "turn_failed", 2, 1500, 9, 500),
     ])
     out = run(tmp_path, capsys)
-    assert "no task carried HTTP 429 alongside a measured item count" in out
+    assert "no task was refused for rate" in out
     assert "statuses seen: 500" in out
     assert "refused before any item" not in out
 
