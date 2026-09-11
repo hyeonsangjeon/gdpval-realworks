@@ -62,6 +62,29 @@ export async function loadAllTests(testsDir = TESTS_DIR) {
         }`
       );
     }
+    // The same line, one field deeper. generateLlmContext reads both
+    // conditions and `delta` without a guard, and it runs after the index has
+    // already been written, so a file missing one of them published a
+    // correct-looking experiments-index.json and then died at a line number
+    // naming no file — the exact shape the empty-file check above exists to
+    // prevent. `delta` does not even die: it reaches the document an LLM is
+    // handed as fact as `평균 Delta: +NaN%p`.
+    for (const side of ['condition_a', 'condition_b']) {
+      const condition = data[side];
+      if (condition === null || typeof condition !== 'object' || Array.isArray(condition)) {
+        throw new Error(
+          `${file} is present but holds no ${side}: an experiment in this ` +
+            `directory is a comparison of two conditions and both are read`
+        );
+      }
+    }
+    if (typeof data.delta !== 'number' || !Number.isFinite(data.delta)) {
+      throw new Error(
+        `${file} is present but its delta is not a number: ${
+          JSON.stringify(data.delta) ?? 'undefined'
+        }`
+      );
+    }
     experiments.push({ ...data, _sourceFile: file });
   }
 
@@ -169,28 +192,41 @@ function generateLlmContext(experiments) {
 }
 
 // ── Main
-async function main() {
+export async function main(testsDir = TESTS_DIR, outputDir = OUTPUT_DIR) {
   console.log('📦 Aggregating test files...');
 
-  const experiments = await loadAllTests();
+  const experiments = await loadAllTests(testsDir);
   console.log(`   Found ${experiments.length} experiments`);
 
-  await mkdir(OUTPUT_DIR, { recursive: true });
+  // Both documents are rendered before either is written. The index used to be
+  // written first and the markdown rendered after, so any failure in the
+  // markdown pass left a published index beside a companion document that was
+  // stale or absent — two files on disk describing different corpora, with the
+  // build exiting 1 over a line number. The loader's contract cannot anticipate
+  // every field a future section of the markdown will read; this ordering does
+  // not have to.
+  //
+  // Rendering once also fixes a smaller thing: each generator was called twice,
+  // once to write and once to measure, and generateIndexJson stamps
+  // `new Date().toISOString()`, so the size reported was of a string that was
+  // never the one written.
+  const indexJson = generateIndexJson(experiments);
+  const llmContext = generateLlmContext(experiments);
 
-  // 1. JSON for Dashboard
-  const jsonPath = join(OUTPUT_DIR, 'experiments-index.json');
-  await writeFile(jsonPath, generateIndexJson(experiments));
+  await mkdir(outputDir, { recursive: true });
+
+  const jsonPath = join(outputDir, 'experiments-index.json');
+  await writeFile(jsonPath, indexJson);
   console.log(`   ✅ ${jsonPath}`);
 
-  // 2. Markdown for LLM
-  const mdPath = join(OUTPUT_DIR, 'llm-context.md');
-  await writeFile(mdPath, generateLlmContext(experiments));
+  const mdPath = join(outputDir, 'llm-context.md');
+  await writeFile(mdPath, llmContext);
   console.log(`   ✅ ${mdPath}`);
 
-  // 사이즈 리포트
-  const jsonSize = Buffer.byteLength(generateIndexJson(experiments));
-  const mdSize = Buffer.byteLength(generateLlmContext(experiments));
-  console.log(`   📊 JSON: ${(jsonSize / 1024).toFixed(1)}KB, MD: ${(mdSize / 1024).toFixed(1)}KB`);
+  console.log(
+    `   📊 JSON: ${(Buffer.byteLength(indexJson) / 1024).toFixed(1)}KB, ` +
+      `MD: ${(Buffer.byteLength(llmContext) / 1024).toFixed(1)}KB`
+  );
   console.log('   Done!');
 }
 
