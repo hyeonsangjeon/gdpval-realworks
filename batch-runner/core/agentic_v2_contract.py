@@ -17,6 +17,14 @@ from jsonschema import Draft202012Validator
 
 TOOL_CONTRACT_VERSION = "2.0"
 FOUNDATION_BACKEND_ID = "agentic-v2-fixture-v1"
+
+#: The backend that boots a real guest, named here rather than in its own
+#: module. Both identifiers belong in one place because the provenance code
+#: maps them to verification standards and the runner decides which of them it
+#: will admit: a backend id that exists in two files can drift in one of them,
+#: and the drift would show up as a run silently refused at startup rather than
+#: as anything a reader could name.
+MICROVM_BACKEND_ID = "agentic-v2-microvm-v1"
 POLICY_PROFILE_IDS = (
     "offline-full-v1",
     "package-broker-v1",

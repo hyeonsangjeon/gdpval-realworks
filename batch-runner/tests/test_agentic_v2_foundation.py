@@ -23,6 +23,7 @@ import core.agentic_v2_runner as agentic_v2_runner
 from core.agentic_v2_contract import (
     EVENT_SCHEMA,
     FOUNDATION_BACKEND_ID,
+    MICROVM_BACKEND_ID,
     TOOL_CONTRACT_VERSION,
     TOOL_RESULT_SCHEMA,
     AgenticV2Lifecycle,
@@ -3642,27 +3643,270 @@ def test_an_identity_differing_only_in_foundation_only_is_refused(tmp_path):
     verify_agentic_v2_failure_result(result)
 
 
-def test_the_admitted_set_holds_exactly_one_identity_and_names_the_fixture():
-    """The seam, asserted as a set of one.
+class _ClaimsToBeTheGuest(AgenticV2FixtureBackend):
+    """The fixture with the guest's name on it, and nothing else changed.
 
-    There is a second backend in this repository -- the microVM one, which
-    boots a real guest -- and admitting it is a change somebody will want to
-    make. This asserts the shape that makes such a change legible: a named
-    tuple of complete identities, so an addition appears in a diff as a new
-    entry rather than as a comparison that quietly got weaker.
-
-    It is deliberately not a test that the microVM backend is *excluded by
-    name*. Excluding one thing by name would pass while admitting anything
-    else; requiring the set to be exactly one entry, and that entry to be the
-    foundation's, does not.
+    Two different things are being probed with this one object. Without a
+    declaration it must be refused, because the default admits the fixture and
+    only the fixture. *With* a declaration naming the guest it must still not
+    produce a verified run, because its capabilities are the fixture's: the
+    lighter standard exists for results nobody can re-simulate, and a fixture
+    relabelled into it would be getting the discount without the reason.
     """
-    source = inspect.getsource(agentic_v2_runner)
-    start = source.index("admitted_identities = (")
-    body = source[start:source.index("if identity not in admitted_identities:")]
 
-    assert body.count('"backend_id":') == 1
-    assert "FOUNDATION_BACKEND_ID" in body
-    assert "agentic-v2-microvm-v1" not in source
+    def start(self, timeout_seconds: float):
+        startup = dict(super().start(timeout_seconds))
+        data = dict(startup["data"])
+        identity = dict(data["backend_identity"])
+        identity["backend_id"] = MICROVM_BACKEND_ID
+        data["backend_identity"] = identity
+        startup["data"] = data
+        return startup
+
+
+def test_by_default_a_run_admits_the_fixture_and_only_the_fixture(tmp_path):
+    """The default did not move, which is the whole claim about this change.
+
+    Admission became a value a caller supplies. That is only safe if not
+    supplying it leaves behaviour exactly where it was, so this asserts the
+    thing a reader would want to check first: a backend calling itself the
+    guest is refused by a runner that was told nothing.
+    """
+    result = _successful_run(tmp_path, _ClaimsToBeTheGuest)
+
+    assert result["success"] is False
+    assert result["error"] == "compute_start_failed"
+    verify_agentic_v2_failure_result(result)
+
+
+def test_a_declared_identity_does_not_let_the_fixture_pass_as_a_guest(tmp_path):
+    # Admitted at the identity check -- the declaration matches exactly -- and
+    # still refused, because what it then reports about itself is the
+    # fixture's. Being admitted is not being verified.
+    declared = {
+        "backend_id": MICROVM_BACKEND_ID,
+        "foundation_only": True,
+        "implementation_sha256": foundation_implementation_fingerprint(),
+    }
+    result = AgenticV2ScriptedRunner(
+        backend_factory=lambda **kwargs: _ClaimsToBeTheGuest(
+            root=tmp_path, **kwargs
+        ),
+        scripted_calls=deepcopy(_SUCCESSFUL_CALLS),
+        profile=PROFILE,
+        admitted_identity=declared,
+    ).run("Create report", task_id="task-1")
+
+    assert result["success"] is False
+    verify_agentic_v2_failure_result(result)
+
+
+class _ShapedLikeAGuest(AgenticV2FixtureBackend):
+    """A stand-in for a backend whose capabilities come from an image.
+
+    Not a guest -- it still upper-cases a file, because booting a machine in a
+    unit test is not a thing this suite does. What it reproduces is the only
+    property the attested branch actually turns on: capabilities that are *not*
+    the fixture's, because they were read out of a substrate manifest rather
+    than derived from this repository's source. That is enough to exercise the
+    branch, and pretending it is more would be the re-simulation problem all
+    over again.
+    """
+
+    GUEST_COMMANDS = ["fixture-upper", "python3"]
+    GUEST_RUNTIMES = ["python"]
+
+    def _capabilities(self):
+        capabilities = dict(super()._capabilities())
+        capabilities["commands"] = list(self.GUEST_COMMANDS)
+        capabilities["runtimes"] = list(self.GUEST_RUNTIMES)
+        return capabilities
+
+    def start(self, timeout_seconds: float):
+        startup = dict(super().start(timeout_seconds))
+        data = dict(startup["data"])
+        identity = dict(data["backend_identity"])
+        identity["backend_id"] = MICROVM_BACKEND_ID
+        data["backend_identity"] = identity
+        data["capabilities"] = self._capabilities()
+        startup["data"] = data
+        return startup
+
+
+def _declared_guest_run(tmp_path):
+    return AgenticV2ScriptedRunner(
+        backend_factory=lambda **kwargs: _ShapedLikeAGuest(
+            root=tmp_path, **kwargs
+        ),
+        scripted_calls=deepcopy(_SUCCESSFUL_CALLS),
+        profile=PROFILE,
+        admitted_identity={
+            "backend_id": MICROVM_BACKEND_ID,
+            "foundation_only": True,
+            "implementation_sha256": foundation_implementation_fingerprint(),
+        },
+    ).run("Create report", task_id="task-1")
+
+
+def test_a_declared_guest_identity_produces_a_run_that_verifies(tmp_path):
+    """The point of the whole change: admission that is not a hole.
+
+    A backend whose capabilities cannot be re-derived from this repository's
+    source is admitted, runs, and produces a record that passes verification --
+    under the standard its backend id maps to, which is the weaker one, which
+    is named.
+    """
+    result = _declared_guest_run(tmp_path)
+
+    assert result["success"] is True
+    verify_agentic_v2_result(result)
+    started = result["agentic_v2"]["private_audit"]["events"][0]["payload"]
+    assert started["backend_identity"]["backend_id"] == MICROVM_BACKEND_ID
+    assert agentic_v2_provenance.result_verification_standard(
+        started["backend_identity"]["backend_id"]
+    ) == agentic_v2_provenance.RESULT_STANDARD_ATTESTED_EXECUTION
+
+
+def test_the_fixture_still_gets_the_stricter_standard_in_the_same_suite(
+    tmp_path,
+):
+    # The pair that matters: two runs, two standards, neither borrowing the
+    # other's. If the branch ever collapses to one arm, one of these fails.
+    guest = _declared_guest_run(tmp_path / "guest")
+    fixture = _successful_run(tmp_path / "fixture")
+
+    verify_agentic_v2_result(guest)
+    verify_agentic_v2_result(fixture)
+    standards = {
+        agentic_v2_provenance.result_verification_standard(
+            run["agentic_v2"]["backend_identity"]["backend_id"]
+        )
+        for run in (guest, fixture)
+    }
+    assert standards == {
+        agentic_v2_provenance.RESULT_STANDARD_FIXTURE_REPLAY,
+        agentic_v2_provenance.RESULT_STANDARD_ATTESTED_EXECUTION,
+    }
+
+
+def test_a_guest_run_is_still_refused_if_it_declares_nothing_runnable(tmp_path):
+    # `attested-execution-v1` is a standard for results of executions. A
+    # backend declaring no commands has executed nothing, so the record it
+    # would produce describes something the name does not cover.
+    class _OffersNoCommands(_ShapedLikeAGuest):
+        GUEST_COMMANDS: list = []
+
+    result = AgenticV2ScriptedRunner(
+        backend_factory=lambda **kwargs: _OffersNoCommands(
+            root=tmp_path, **kwargs
+        ),
+        scripted_calls=deepcopy(_SUCCESSFUL_CALLS),
+        profile=PROFILE,
+        admitted_identity={
+            "backend_id": MICROVM_BACKEND_ID,
+            "foundation_only": True,
+            "implementation_sha256": foundation_implementation_fingerprint(),
+        },
+    ).run("Create report", task_id="task-1")
+
+    assert result["success"] is False
+    assert result["error"] == "compute_start_failed"
+    verify_agentic_v2_failure_result(result)
+
+
+def test_a_startup_no_standard_accepts_fails_cleanly_rather_than_late(tmp_path):
+    """The failure record of a bad startup must itself be verifiable.
+
+    Found by the test above it: a startup that no standard accepts used to sail
+    past the runner and be rejected only when the finished record was verified,
+    at which point the failure envelope contained the bad event and nothing
+    downstream would accept it either. The reason for the failure survived
+    nowhere. Now it is refused before the event is written.
+    """
+    refused = _successful_run(tmp_path, _ClaimsToBeTheGuest)
+
+    assert refused["error"] == "compute_start_failed"
+    verify_agentic_v2_failure_result(refused)
+    kinds = [
+        event["kind"]
+        for event in refused["agentic_v2"]["private_audit"]["events"]
+    ]
+    assert "started" not in kinds
+
+
+def test_nothing_in_this_repository_declares_a_non_default_identity():
+    """The claim that the guest is mapped but not run, made checkable.
+
+    `_RESULT_STANDARD_BY_BACKEND` now has an entry for the microVM backend, so
+    the old "there is only one backend anywhere" guard no longer says anything.
+    This is what replaces it: admission is possible, and nothing does it. The
+    day some caller does, this test is the line that has to change with it.
+    """
+    core = Path(agentic_v2_runner.__file__).resolve().parent
+    declaring = [
+        path.name
+        for path in sorted(core.glob("*.py"))
+        if "admitted_identity=" in path.read_text(encoding="utf-8")
+        and path.name != "agentic_v2_runner.py"
+    ]
+
+    assert declaring == []
+
+
+@pytest.mark.parametrize(
+    "declared, expected",
+    [
+        ({"backend_id": "agentic-v2-nothing-v1", "foundation_only": True,
+          "implementation_sha256": "a" * 64}, "declared result verification"),
+        ({"backend_id": MICROVM_BACKEND_ID, "foundation_only": False,
+          "implementation_sha256": "a" * 64}, "still be foundation only"),
+        ({"backend_id": MICROVM_BACKEND_ID, "foundation_only": True,
+          "implementation_sha256": "not-a-hash"}, "implementation hash"),
+        ({"backend_id": MICROVM_BACKEND_ID, "foundation_only": True},
+         "malformed"),
+    ],
+)
+def test_a_declaration_is_refused_at_construction_and_says_why(
+    tmp_path, declared, expected
+):
+    # Loudly, and before any task runs. A bad declaration that surfaced as a
+    # per-task compute_start_failed would be counted as an infrastructure
+    # fault in the ledger, which is exactly the wrong story.
+    with pytest.raises(ValueError, match=expected):
+        AgenticV2ScriptedRunner(
+            backend_factory=lambda **kwargs: AgenticV2FixtureBackend(
+                root=tmp_path, **kwargs
+            ),
+            scripted_calls=deepcopy(_SUCCESSFUL_CALLS),
+            profile=PROFILE,
+            admitted_identity=declared,
+        )
+
+
+def test_the_failure_envelope_and_the_admission_rule_agree(tmp_path):
+    """`_failure` writes `foundation_only: True` as a literal. This is why.
+
+    Every identity that can be admitted must declare it, so the literal is a
+    consequence rather than a guess. The two halves are asserted together so
+    that relaxing one without the other fails here instead of producing a
+    failure record that misdescribes the run it came from.
+    """
+    with pytest.raises(ValueError, match="still be foundation only"):
+        AgenticV2ScriptedRunner(
+            backend_factory=lambda **kwargs: AgenticV2FixtureBackend(
+                root=tmp_path, **kwargs
+            ),
+            scripted_calls=[],
+            profile=PROFILE,
+            admitted_identity={
+                "backend_id": FOUNDATION_BACKEND_ID,
+                "foundation_only": False,
+                "implementation_sha256": foundation_implementation_fingerprint(),
+            },
+        )
+
+    refused = _successful_run(tmp_path, _ClaimsToBeTheGuest)
+    assert refused["agentic_v2"]["foundation_only"] is True
 
 
 # ── the second verification standard ──────────────────────────────────────
@@ -3711,7 +3955,7 @@ class TestTheStandardIsNamedAndChosenDeliberately:
         ) == agentic_v2_provenance.RESULT_STANDARD_FIXTURE_REPLAY
 
     @pytest.mark.parametrize(
-        "backend_id", ["agentic-v2-microvm-v1", "", None, 0, object()]
+        "backend_id", ["agentic-v2-nothing-v1", "", None, 0, object()]
     )
     def test_a_backend_with_no_declared_standard_raises_rather_than_defaulting(
         self, backend_id
@@ -3723,12 +3967,20 @@ class TestTheStandardIsNamedAndChosenDeliberately:
         with pytest.raises(ValueError, match="declared result verification standard"):
             agentic_v2_provenance.result_verification_standard(backend_id)
 
-    def test_exactly_one_backend_has_a_standard_today(self):
-        # The microVM backend exists in this repository and is still not here.
-        # Admitting it is an edit to this mapping, which is a line in a diff.
-        assert list(agentic_v2_provenance._RESULT_STANDARD_BY_BACKEND) == [
-            FOUNDATION_BACKEND_ID
-        ]
+    def test_the_two_backends_have_the_two_different_standards(self):
+        # The microVM backend is mapped here, which is what makes it
+        # admissible at all. Mapping is not running: nothing declares it as the
+        # identity to admit, and the manifests still disable activation. What
+        # this pins is that the mapping stayed a mapping of exactly the two
+        # backends that exist, each to the standard its results can support.
+        assert agentic_v2_provenance._RESULT_STANDARD_BY_BACKEND == {
+            FOUNDATION_BACKEND_ID: (
+                agentic_v2_provenance.RESULT_STANDARD_FIXTURE_REPLAY
+            ),
+            MICROVM_BACKEND_ID: (
+                agentic_v2_provenance.RESULT_STANDARD_ATTESTED_EXECUTION
+            ),
+        }
 
     def test_the_run_can_say_which_standard_verified_it(self):
         # The point of naming them. "Verified" is a different claim for a

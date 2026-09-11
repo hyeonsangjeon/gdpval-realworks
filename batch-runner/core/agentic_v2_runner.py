@@ -26,7 +26,9 @@ from core.agentic_v2_provenance import (
     AgenticV2EventChain,
     canonical_sha256,
     foundation_implementation_fingerprint,
+    result_verification_standard,
     runtime_fingerprint,
+    startup_is_admissible,
     trace_pair_fingerprint,
     validate_failure_stage,
     verify_agentic_v2_failure_result,
@@ -363,6 +365,7 @@ class AgenticV2ScriptedRunner:
         cancel_requested: Optional[Callable[[], bool]] = None,
         clock: Callable[[], float] = time.monotonic,
         required_backend_type: type | None = None,
+        admitted_identity: Optional[Mapping[str, Any]] = None,
     ):
         if not callable(backend_factory):
             raise ValueError("agentic v2 backend_factory is required")
@@ -373,6 +376,7 @@ class AgenticV2ScriptedRunner:
         self.cancel_requested = cancel_requested or (lambda: False)
         self.clock = clock
         self.required_backend_type = required_backend_type
+        self.admitted_identity = _validate_admitted_identity(admitted_identity)
         self._closed = False
 
     def close(self) -> None:
@@ -464,32 +468,32 @@ class AgenticV2ScriptedRunner:
                 ))
             startup_data = startup.get("data") or {}
             identity = startup_data.get("backend_identity") or {}
-            expected_implementation_sha = foundation_implementation_fingerprint()
-            # The admitted set, written as a set of one.
+            # The one identity this run will admit.
             #
-            # There is a second backend in this repository --
+            # There are two backends in this repository: the fixture, and
             # core/agentic_v2_microvm_backend.py, which boots a real guest and
             # reports an identity derived from the image rather than from its
-            # own source text. It does not appear here, and this change does
-            # not put it here.
+            # own source text. Which one a run admits is now a value the caller
+            # supplies, not a comparison written into this file, and the
+            # default is the fixture -- so nothing changes for any caller that
+            # does not say otherwise, and no caller in this repository says
+            # otherwise today.
             #
-            # What the shape buys is that admitting it later is an edit to a
-            # named list rather than a loosened comparison, so it shows up in a
-            # diff as what it is. It is also not the only thing that would have
-            # to change: the semantic verifier in agentic_v2_provenance.py
-            # re-simulates every executed tool call against the fixture's known
-            # behaviour, and a command run in a real guest cannot be
-            # re-simulated. Admitting a second identity without answering that
-            # would produce runs this code calls verified while checking
-            # strictly less than the word implies.
-            admitted_identities = (
-                {
-                    "backend_id": FOUNDATION_BACKEND_ID,
-                    "foundation_only": True,
-                    "implementation_sha256": expected_implementation_sha,
-                },
-            )
-            if identity not in admitted_identities:
+            # Two things are checked elsewhere rather than here, and both are
+            # load-bearing. `_validate_admitted_identity` refuses a backend
+            # that has no declared result-verification standard, so admission
+            # cannot outrun the verifier. And the verifier's fixture branch
+            # still re-simulates every executed call against known fixture
+            # behaviour; a guest's results are verified under the weaker,
+            # separately named `attested-execution-v1` instead, which is what
+            # makes admitting a second identity honest rather than a quiet
+            # widening of the word "verified".
+            admitted = self.admitted_identity or {
+                "backend_id": FOUNDATION_BACKEND_ID,
+                "foundation_only": True,
+                "implementation_sha256": foundation_implementation_fingerprint(),
+            }
+            if identity != admitted:
                 lifecycle.transition(LifecycleState.FAILED)
                 return finish(_failure(
                     "compute_start_failed", lifecycle, audit_chain, public_chain,
@@ -548,6 +552,17 @@ class AgenticV2ScriptedRunner:
                     "budget_caps": deepcopy(self.budget_caps),
                 },
             }
+            # Ask now whether a record built on this would verify later. The
+            # checks above cover what the runner can compare things to; this
+            # covers what the backend's own declared standard requires of it,
+            # and asking after the event is appended is too late -- the failure
+            # envelope would carry the bad event and be unverifiable itself.
+            if not startup_is_admissible(started_payload):
+                lifecycle.transition(LifecycleState.FAILED)
+                return finish(_failure(
+                    "compute_start_failed", lifecycle, audit_chain, public_chain,
+                    stage="startup",
+                ))
             audit_chain.append(
                 "started", started_payload, state_sha256=initial_state
             )
@@ -764,6 +779,13 @@ def _failure(
         "error": public_error,
         "agentic_v2": {
             "schema_version": "2.0",
+            # Constant, and now for a stated reason rather than by inheritance
+            # from a time when there was only one backend. Every identity a run
+            # can admit must declare `foundation_only: True` -- see
+            # `_validate_admitted_identity` -- so no run that reaches this
+            # function was anything else. If that condition is ever relaxed,
+            # this literal is one of the places that has to move with it, and a
+            # test pins the pair together so the move cannot be forgotten.
             "foundation_only": True,
             "lifecycle_state": terminal_state,
             "private_audit": private_trace,
@@ -797,6 +819,51 @@ def _public_result_commitment(result: Mapping[str, Any]) -> dict:
         "state_after_sha256",
     )
     return {field: deepcopy(result.get(field)) for field in fields}
+
+
+def _validate_admitted_identity(
+    value: Optional[Mapping[str, Any]],
+) -> Optional[dict[str, Any]]:
+    """Check a caller's declaration of which backend a run may admit.
+
+    ``None`` means the foundation fixture, resolved at run time because its
+    implementation hash is a hash of files on disk. Anything else has to be a
+    complete identity, and has to clear three conditions that are each there
+    for a different reason:
+
+    * **a declared verification standard.** ``result_verification_standard``
+      raises for a backend nobody has mapped, so a run can never admit a
+      backend whose results the verifier would not know how to judge. This is
+      the reason admission lives here rather than in the caller.
+    * **foundation only.** Admitting a second backend is a change of *which*
+      substrate may run; it is not permission to leave the foundation. The
+      substrate manifests carry their own ``production_activation`` brake and
+      this does not touch it.
+    * **a real implementation hash.** An identity with a placeholder in it
+      would put a fingerprint into the run record that corresponds to nothing.
+
+    Raising here rather than failing the run is deliberate: a malformed
+    declaration is a mistake in configuration, and a configuration mistake that
+    surfaces as ``compute_start_failed`` on every task looks like an
+    infrastructure fault and would be counted as one.
+    """
+    if value is None:
+        return None
+    identity = dict(value)
+    if set(identity) != {
+        "backend_id", "foundation_only", "implementation_sha256"
+    }:
+        raise ValueError("agentic v2 admitted identity is malformed")
+    result_verification_standard(identity["backend_id"])
+    if identity["foundation_only"] is not True:
+        raise ValueError(
+            "agentic v2 admitted identity must still be foundation only"
+        )
+    if not is_sha256(identity["implementation_sha256"]):
+        raise ValueError(
+            "agentic v2 admitted identity needs an implementation hash"
+        )
+    return identity
 
 
 def _validate_budget_caps(value: Optional[Mapping[str, Any]]) -> dict[str, int]:
