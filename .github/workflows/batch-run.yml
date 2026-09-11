@@ -427,6 +427,52 @@ jobs:
             raise SystemExit("execution.wall_timeout is invalid")
           if type(relay_max_runs) is not int or not 0 <= relay_max_runs <= 10:
             raise SystemExit("execution.relay_max_runs is invalid")
+          # Those two are checked independently and independently both pass: a
+          # zero watchdog is the documented way to turn the clock off, and a
+          # relay budget is the documented way to permit more legs. Together
+          # they are a trap, because the watchdog is the thing that ends a leg
+          # early enough to hand over. With it off, condition_a runs until the
+          # 350 minute step cap kills the shell, `echo "exit_code=..."` never
+          # runs, and `relay_checkpoint.py status --exit-code ''` exits
+          # non-zero -- measured, not assumed. `needs_relay` is then unset, and
+          # the checkpoint upload step is gated on it, so every task the leg
+          # finished dies with the runner. The budget buys nothing and costs a
+          # run.
+          #
+          # Only an *explicit* budget is refused. `relay_max_runs` defaults to
+          # three with nobody having asked for it, so firing on the default
+          # would reject all thirty-six experiments the moment someone used the
+          # documented `wall_timeout=0`. The author who typed the number is the
+          # one expecting a handover that cannot happen.
+          wall_timeout_input = os.environ.get("WALL_TIMEOUT_INPUT", "")
+          if not re.fullmatch(r"[0-9]+", wall_timeout_input):
+            raise SystemExit(
+              "wall_timeout dispatch input is not a decimal integer: "
+              + repr(wall_timeout_input)
+            )
+          # Mirrors step 2a's resolution exactly -- a non-zero input wins, zero
+          # falls back to the YAML. Restating it here rather than importing it
+          # is this guard's weak point, so the test that covers it executes
+          # this script instead of reading it: a divergence shows up as a
+          # failing assertion rather than as a comment that quietly went stale.
+          effective_wall_timeout = int(wall_timeout_input) or wall_timeout
+          if (
+            "relay_max_runs" in execution
+            and relay_max_runs > 0
+            and effective_wall_timeout == 0
+          ):
+            raise SystemExit(
+              "execution.relay_max_runs is {} but the effective step 2a "
+              "watchdog is 0 minutes (dispatch input {}, execution."
+              "wall_timeout {}). Nothing would end a leg in time to hand "
+              "over, and a leg killed by the 350 minute step cap uploads no "
+              "checkpoint, so the budget is unspendable and the leg's work is "
+              "lost. Pass the wall_timeout dispatch input (290 is its "
+              "default), or declare execution.wall_timeout, or set "
+              "execution.relay_max_runs to 0.".format(
+                relay_max_runs, wall_timeout_input, wall_timeout
+              )
+            )
           mode = execution.get("mode")
           hardened = sandbox.get("hardened_substrate") is True
 
