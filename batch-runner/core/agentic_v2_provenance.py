@@ -778,6 +778,62 @@ def _terminal_finalize_event(private_trace: Mapping[str, Any]) -> dict:
     return terminal
 
 
+def _valid_initial_workspace(value: Any) -> bool:
+    """Is this a usable statement of what the workspace held before turn one?
+
+    Optional, and absent means empty -- which is what every run before staged
+    inputs was, so an old record still verifies unchanged and a backend that
+    does not declare one is held to the stricter starting point rather than a
+    looser one.
+
+    Ordering is required, not merely checked: the replay rebuilds the state
+    digest from this list and the backend built its own from a sorted walk. Two
+    lists with the same entries in different orders describe the same directory
+    and produce different digests, so an unordered declaration would fail
+    verification in a way that looks like tampering.
+    """
+    if not isinstance(value, list):
+        return False
+    seen: list[str] = []
+    for entry in value:
+        if not isinstance(entry, dict):
+            return False
+        kind = entry.get("kind")
+        if kind == "directory":
+            if set(entry) != {"path", "kind"}:
+                return False
+        elif kind == "file":
+            if set(entry) != {
+                "path", "kind", "sha256", "size", "decodes_as_utf8"
+            }:
+                return False
+            if not is_sha256(entry.get("sha256")):
+                return False
+            if not isinstance(entry.get("size"), int) or entry["size"] < 0:
+                return False
+            if not isinstance(entry.get("decodes_as_utf8"), bool):
+                return False
+        else:
+            return False
+        path = entry.get("path")
+        if not isinstance(path, str) or path == ".":
+            return False
+        try:
+            canonical = canonical_relative_path(path)
+        except ValueError:
+            # `canonical_relative_path` raises on anything that climbs out or
+            # is not a relative POSIX path. This is a predicate and its caller
+            # is a shape check, so a bad declaration has to come back as False
+            # here -- letting the exception through would turn "this record is
+            # invalid", which the chain knows how to report, into an unhandled
+            # error partway up the verifier.
+            return False
+        if canonical != path:
+            return False
+        seen.append(path)
+    return len(set(seen)) == len(seen)
+
+
 def _valid_started_payload(value: Any) -> bool:
     """Is this a startup event a run record may be built on?
 
@@ -797,10 +853,14 @@ def _valid_started_payload(value: Any) -> bool:
     only. Admitting a second backend is not the same as lifting that brake, and
     this is the line that keeps the two apart.
     """
-    if not isinstance(value, dict) or set(value) != {
+    if not isinstance(value, dict) or set(value) - {"initial_workspace"} != {
         "run_id", "condition", "task_id", "backend_identity", "capabilities",
         "policy_profile_id", "runtime",
     }:
+        return False
+    if "initial_workspace" in value and not _valid_initial_workspace(
+        value["initial_workspace"]
+    ):
         return False
     identity = value.get("backend_identity")
     capabilities = value.get("capabilities")
@@ -1286,6 +1346,7 @@ def _verify_fixture_result_semantics(
         arguments,
         semantic_ledger,
         canonical=canonical,
+        recorded=result,
     )
     expected_state_after = _fixture_state_sha256(semantic_ledger)
     expected_result = _fixture_result_envelope(
@@ -1374,17 +1435,86 @@ def _fixture_executed_error(
     return value
 
 
+@dataclass
+class _StagedFile:
+    """A file the workspace already held when the task began.
+
+    The replay models the fixture workspace from the empty directory the
+    backend opens, and re-derives every result from the calls that follow. That
+    is exact while the workspace starts empty. It stops being exact the moment a
+    task is given its input files, because the bytes arrived before the first
+    event and nothing in the trace says what they were -- which is why every
+    task with reference files failed verification with ``initial fixture state
+    mismatch`` and was recorded as a runner defect after finishing normally.
+
+    Held as a digest and a size rather than as bytes: the inputs run to
+    hundreds of megabytes across the 220 tasks, and putting them in the trace
+    would make each record carry a copy of the dataset. ``content`` is filled in
+    if the run reads the file whole, and only after the bytes in the recorded
+    result have been checked against ``sha256`` -- so the replay is using the
+    file it was told was staged, not whatever the result happened to contain.
+
+    ``decodes_as_utf8`` is declared because the replay cannot work it out from a
+    digest, and ``workspace_apply(read)`` decodes. Without it a backend could
+    report any file as unreadable and the replay would have to agree.
+    """
+
+    sha256: str
+    size: int
+    decodes_as_utf8: bool
+    content: bytes | None = None
+
+
+def _size_of(value: Any) -> int:
+    return value.size if isinstance(value, _StagedFile) else len(value)
+
+
+def _digest_of(value: Any) -> str:
+    return (
+        value.sha256
+        if isinstance(value, _StagedFile)
+        else hashlib.sha256(value).hexdigest()
+    )
+
+
+def _bytes_of(value: Any) -> bytes:
+    """The real bytes, or a refusal to pretend they are known.
+
+    Raised rather than returned as a tool error, because a tool error is a
+    verdict about the run and this is the replay saying it cannot reach one.
+    """
+    if isinstance(value, _StagedFile):
+        if value.content is None:
+            raise ValueError(
+                "agentic v2 staged file bytes are not in the trace, so this "
+                "call cannot be re-derived"
+            )
+        return value.content
+    return value
+
+
 def _new_fixture_semantic_ledger(started_payload: Mapping[str, Any]) -> dict:
     runtime = started_payload["runtime"]
     canonical = foundation_fixture_identity(
         started_payload["policy_profile_id"], runtime["budget_caps"]
     )
+    directories = {"."}
+    files: dict[str, Any] = {}
+    for entry in started_payload.get("initial_workspace") or ():
+        if entry["kind"] == "directory":
+            directories.add(str(entry["path"]))
+        else:
+            files[str(entry["path"])] = _StagedFile(
+                sha256=str(entry["sha256"]),
+                size=int(entry["size"]),
+                decodes_as_utf8=bool(entry["decodes_as_utf8"]),
+            )
     return {
         "profile": started_payload["policy_profile_id"],
         "budget_caps": deepcopy(runtime["budget_caps"]),
         "package_records": tuple(canonical["package_records"]),
-        "directories": {"."},
-        "files": {},
+        "directories": directories,
+        "files": files,
         "resolved_locks": set(),
         "active_locks": set(),
         "terminal_identity": None,
@@ -1488,8 +1618,8 @@ def _fixture_state_sha256(ledger: Mapping[str, Any]) -> str:
                 entries.append({
                     "path": path,
                     "kind": "file",
-                    "sha256": hashlib.sha256(content).hexdigest(),
-                    "size": len(content),
+                    "sha256": _digest_of(content),
+                    "size": _size_of(content),
                     "mode": 0o600,
                 })
 
@@ -1514,6 +1644,7 @@ def _replay_fixture_tool(
     ledger: dict[str, Any],
     *,
     canonical: Mapping[str, Any],
+    recorded: Any = None,
 ) -> dict:
     if name == "capabilities_query":
         kind = arguments["kind"]
@@ -1525,7 +1656,7 @@ def _replay_fixture_tool(
             },
         }
     if name == "workspace_apply":
-        return _replay_workspace_apply(arguments, ledger)
+        return _replay_workspace_apply(arguments, ledger, recorded=recorded)
     if name == "exec_run":
         return _replay_exec_run(arguments, ledger)
     if name == "environment_resolve":
@@ -1542,6 +1673,8 @@ def _replay_fixture_tool(
 def _replay_workspace_apply(
     arguments: Mapping[str, Any],
     ledger: dict[str, Any],
+    *,
+    recorded: Any = None,
 ) -> dict:
     operation = arguments["operation"]
     if operation == "copy":
@@ -1569,6 +1702,10 @@ def _replay_workspace_apply(
         content = ledger["files"].get(path)
         if content is None:
             return {"ok": False, "error_type": "fixture_backend_error"}
+        if isinstance(content, _StagedFile):
+            if not content.decodes_as_utf8:
+                return {"ok": False, "error_type": "fixture_backend_error"}
+            content = _learn_staged_bytes(content, arguments, recorded)
         try:
             text = content.decode("utf-8")
         except UnicodeDecodeError:
@@ -1613,6 +1750,60 @@ def _replay_workspace_apply(
     return {"ok": True, "data": {"path": path}}
 
 
+def _learn_staged_bytes(
+    staged: _StagedFile,
+    arguments: Mapping[str, Any],
+    recorded: Any,
+) -> bytes:
+    """Take a staged file's bytes from the recorded read, once they check out.
+
+    The replay does not hold the inputs, so a read of one cannot be re-derived
+    from the model alone. What it can do is refuse to accept bytes that are not
+    the ones the run was told it staged: the digest and the length come from the
+    startup declaration, which was made before the call, and the content comes
+    from the result being checked. A backend that returned a different file, a
+    truncated file, or a file it had quietly rewritten fails here.
+
+    Only a whole read teaches. A slice hashes to nothing the declaration knows,
+    so there is no check to pass, and accepting it would be the replay agreeing
+    with itself. The run is refused instead -- loudly, because a quiet downgrade
+    of a verification is worse than the thing it was verifying.
+    """
+    if staged.content is not None:
+        return staged.content
+    if int(arguments.get("offset", 0)) != 0:
+        raise ValueError(
+            "agentic v2 staged file was read from an offset, so the bytes "
+            "cannot be checked against what was staged"
+        )
+    if not isinstance(recorded, Mapping) or recorded.get("ok") is not True:
+        raise ValueError(
+            "agentic v2 staged file read has no result to take its bytes from"
+        )
+    text = (recorded.get("data") or {}).get("content")
+    if not isinstance(text, str):
+        raise ValueError("agentic v2 staged file read returned no content")
+    content = text.encode("utf-8")
+    # Against what was staged, not against what came back. A read cut short by
+    # a limit returns exactly that many characters, so comparing the limit to
+    # the returned length compares a number with itself and can never fire --
+    # the truncation then falls through to the digest check, which does refuse
+    # it, but under a message that says the backend returned the wrong bytes.
+    # The declared size is the only figure here that the call did not produce.
+    limit = arguments.get("limit")
+    if limit is not None and int(limit) < staged.size:
+        raise ValueError(
+            "agentic v2 staged file was read under a limit shorter than the "
+            "file, so the bytes cannot be checked against what was staged"
+        )
+    if len(content) != staged.size or _digest_of(content) != staged.sha256:
+        raise ValueError(
+            "agentic v2 staged file read does not match what was staged"
+        )
+    staged.content = content
+    return content
+
+
 def _replay_exec_run(
     arguments: Mapping[str, Any],
     ledger: dict[str, Any],
@@ -1635,7 +1826,7 @@ def _replay_exec_run(
     ):
         return {"ok": False, "error_type": "fixture_backend_error"}
     error = _virtual_write(
-        ledger, destination, ledger["files"][source].upper()
+        ledger, destination, _bytes_of(ledger["files"][source]).upper()
     )
     if error is not None:
         return {"ok": False, "error_type": error}
@@ -1693,7 +1884,7 @@ def _replay_browser_run(
         return {"ok": False, "error_type": "fixture_backend_error"}
     return {"ok": True, "data": {
         "path": path,
-        "sha256": hashlib.sha256(content).hexdigest(),
+        "sha256": _digest_of(content),
     }}
 
 
@@ -1707,19 +1898,19 @@ def _replay_artifact_tool(
     total = 0
     for path in arguments["deliverables"]:
         content = ledger["files"].get(path)
-        if not content:
+        if content is None or _size_of(content) == 0:
             return {"ok": False, "error_type": "artifact_not_openable"}
-        total += len(content)
+        total += _size_of(content)
         if total > 64 * 1024 * 1024:
             return {"ok": False, "error_type": "artifact_not_openable"}
         artifacts.append({
             "path": path,
-            "sha256": hashlib.sha256(content).hexdigest(),
-            "size": len(content),
+            "sha256": _digest_of(content),
+            "size": _size_of(content),
         })
         terminal_files.append({
             "filename": path,
-            "sha256": hashlib.sha256(content).hexdigest(),
+            "sha256": _digest_of(content),
         })
     if name == "finalize":
         ledger["terminal_identity"] = {
@@ -1730,13 +1921,15 @@ def _replay_artifact_tool(
     return {"ok": True, "data": {"artifacts": artifacts}}
 
 
-def _virtual_write(ledger: dict[str, Any], path: str, content: bytes) -> str | None:
-    if path == "." or path in ledger["directories"] or len(content) > 1048576:
+def _virtual_write(ledger: dict[str, Any], path: str, content: Any) -> str | None:
+    if path == "." or path in ledger["directories"] or _size_of(content) > 1048576:
         return "fixture_backend_error"
     error = _virtual_reserve_entries(ledger, path, temporary_leaf=True)
     if error is not None:
         return error
-    if sum(len(value) for value in ledger["files"].values()) + len(content) > (
+    if sum(
+        _size_of(value) for value in ledger["files"].values()
+    ) + _size_of(content) > (
         64 * 1024 * 1024
     ):
         return "fixture_backend_error"

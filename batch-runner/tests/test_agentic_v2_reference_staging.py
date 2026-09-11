@@ -943,8 +943,22 @@ def test_the_guide_does_not_offer_a_replacement_it_did_not_make(
     assert "Nothing was put in their place" not in guide
 
 
-def test_a_task_that_names_nothing_gets_no_guide(snapshot, tmp_path):
-    """There is nothing to describe, and an empty guide would read as a fault."""
+def test_a_task_that_names_nothing_still_gets_a_guide(snapshot, tmp_path):
+    """This test used to assert the opposite, and the opposite cost 95 tasks.
+
+    "There is nothing to describe, and an empty guide would read as a fault" is
+    a reasonable thing to believe until you look at what the model is told to
+    do. Its standing instructions open with reading ``inputs/INPUTS.md``, and
+    ``dispatch_one`` in :mod:`core.agentic_v2_runner` ends a task on the first
+    tool call that comes back not-ok -- there is no error shown and no second
+    chance. So for every task that names no reference files, turn one was a read
+    of a file that was deliberately not written, and the task died there, three
+    attempts each, recorded as the model failing.
+
+    The guide is written for every task now, and for these it says plainly that
+    the task names no files, which is a fact the model needs rather than a
+    fault.
+    """
     result = stage_task_reference_files(
         task_id="t",
         reference_files=[],
@@ -953,8 +967,37 @@ def test_a_task_that_names_nothing_gets_no_guide(snapshot, tmp_path):
         render_text=True,
     )
 
-    assert result.guide is None
-    assert not (Path(result.workspace) / staging.INPUTS_GUIDE).exists()
+    assert result.guide == "inputs/INPUTS.md"
+    guide = (Path(result.workspace) / staging.INPUTS_GUIDE).read_text(
+        encoding="utf-8"
+    )
+    assert "names no files" in guide
+
+
+def test_how_many_tasks_that_is_comes_from_the_catalogue_and_not_from_a_comment():
+    """The figure above was written by hand once, and it was wrong by fifty.
+
+    A comment saying "145 tasks" survived being read several times, went into a
+    report, and was only caught by counting. Nothing in the code depended on it,
+    which is exactly why it lasted: a wrong number that nothing reads is a wrong
+    number nothing checks.
+
+    So the count lives here, against the pinned catalogue. Both bounds matter --
+    zero would mean the unconditional guide protects nobody and this whole change
+    was for nothing, and all 220 would mean the count is measuring the wrong
+    thing. It is neither, and it is large enough that skipping the guide for them
+    was the difference between a run and a write-off.
+    """
+    from core.execution_envelope_tasks import full_run_tasks, load_task_catalog
+
+    catalog = load_task_catalog()
+    by_id = catalog.by_task_id()
+    tasks = [by_id[task_id] for task_id in full_run_tasks(catalog)]
+    name_nothing = [one for one in tasks if one.reference_file_count == 0]
+
+    assert len(tasks) == 220
+    assert len(name_nothing) == 95
+    assert len(tasks) - len(name_nothing) == 125
 
 
 # ── Saying so in the record ───────────────────────────────────────────────

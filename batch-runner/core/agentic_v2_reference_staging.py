@@ -400,6 +400,30 @@ class _CannotCopy(Exception):
         self.detail = detail
 
 
+def _make_directory_0700(directory: Path) -> None:
+    """Create ``directory`` and any missing parent, each one at 0o700.
+
+    ``Path.mkdir(mode=..., parents=True)`` applies the mode to the last
+    component only; every parent it has to create takes the process umask
+    instead, which is 0o755 in the usual case. That is invisible until the
+    provenance replay runs, because it models every workspace directory as
+    0o700: a staged tree with 0o755 halfway down describes a starting state
+    whose digest the replay cannot reproduce, and the task is thrown away
+    after it has already been worked. Walk the chain and set each mode here,
+    with an explicit chmod so the umask cannot take bits off either.
+    """
+    missing: list[Path] = []
+    current = directory
+    while not current.exists():
+        missing.append(current)
+        if current.parent == current:
+            break
+        current = current.parent
+    for one in reversed(missing):
+        one.mkdir(exist_ok=True)
+        one.chmod(0o700)
+
+
 def _copy_one(
     *, snapshot_root: Path, relative: Path, destination: Path
 ) -> StagedFile:
@@ -435,7 +459,7 @@ def _copy_one(
                 TOO_LARGE,
                 f"{before.st_size} bytes is over the {MAX_INPUT_SINGLE} byte limit",
             )
-        destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        _make_directory_0700(destination.parent)
         digest = hashlib.sha256()
         with os.fdopen(os.dup(descriptor), "rb") as source, destination.open(
             "xb"
@@ -443,6 +467,11 @@ def _copy_one(
             for chunk in iter(lambda: source.read(65536), b""):
                 digest.update(chunk)
                 sink.write(chunk)
+        # 0o600 to match what the fixture backend gives a file the model
+        # writes, and so what the provenance replay models for every file it
+        # holds. A staged file left at the umask default describes a workspace
+        # whose state digest no re-derivation can reproduce.
+        os.chmod(destination, 0o600)
         after = os.fstat(descriptor)
         if _source_identity(after) != _source_identity(before):
             raise _CannotCopy(
@@ -555,8 +584,9 @@ def _extract_one(
 
     written = Path(EXTRACTION_PREFIX) / relative.with_suffix(relative.suffix + ".txt")
     destination = workspace / written
-    destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    _make_directory_0700(destination.parent)
     destination.write_text(text, encoding="utf-8")
+    destination.chmod(0o600)
     return ExtractedText(
         relative_path=relative.as_posix(),
         outcome=outcome,
@@ -594,6 +624,30 @@ def _write_inputs_guide(
         "you started. Paths are relative to your working directory.",
         "",
     ]
+    if not delivered and not refused:
+        # Written anyway, and this is the whole reason the guide is
+        # unconditional. The standing instructions tell the model to open this
+        # file first; when it was skipped for a task that names nothing, that
+        # read came back `ok: False`, and one failed tool call ends a task --
+        # see `dispatch_one` in core.agentic_v2_runner. So every task that
+        # names no files died on turn one, three attempts each, against an
+        # environment defect that would have read as the model failing. How
+        # many that is is counted from the catalogue in
+        # tests/test_agentic_v2_reference_staging.py rather than written here:
+        # the figure in this comment was wrong for a day and nothing noticed.
+        lines.append("## This task names no files")
+        lines.append("")
+        lines.append(
+            "It is not that they are missing: the dataset lists none for this"
+        )
+        lines.append(
+            "task. Nothing was lost on the way here and there is nothing to go"
+        )
+        lines.append(
+            "looking for. Do the task from its wording, and write your answer"
+        )
+        lines.append("into this directory.")
+        lines.append("")
     if delivered:
         lines.append("## Files you have")
         lines.append("")
@@ -658,6 +712,7 @@ def _write_inputs_guide(
     lines.append("the rest of the document exists and you have not been shown it.")
     destination = workspace / INPUTS_GUIDE
     destination.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    destination.chmod(0o600)
     return f"{MODEL_INPUT_PREFIX}/{INPUTS_GUIDE}"
 
 
@@ -700,7 +755,7 @@ def stage_task_reference_files(
     """
     snapshot_root = Path(snapshot_root).resolve()
     workspace = Path(into).resolve()
-    workspace.mkdir(mode=0o700, parents=True, exist_ok=True)
+    _make_directory_0700(workspace)
 
     delivered: list[StagedFile] = []
     refused: list[RefusedFile] = []
@@ -857,7 +912,11 @@ def stage_task_reference_files(
             )
 
     guide = None
-    if render_text and (delivered or refused):
+    if render_text:
+        # Unconditional. A task that names no files still needs the guide,
+        # because the instructions send the model to it first and a read that
+        # fails ends the task outright rather than returning an error the model
+        # can act on.
         guide = _write_inputs_guide(
             workspace=workspace,
             delivered=delivered,

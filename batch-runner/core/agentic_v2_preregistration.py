@@ -632,6 +632,25 @@ def _run_conditions() -> dict[str, Any]:
             "comes first. A task stopped by a ceiling is recorded as stopped "
             "by that ceiling and is not a model failure"
         ),
+        # Registered as a condition of the run rather than quietly fixed before
+        # it. `dispatch_one` ends a task on the first tool call that comes back
+        # not-ok: the model is told nothing and gets no second attempt, so one
+        # mistyped path costs the task and everything already spent on it.
+        # Changing that changes what a trace contains, which is a reviewable
+        # change of its own and not one to slip in beside the run it would
+        # alter. Written down instead, so a run where it fires often is read as
+        # a run under this condition rather than as a model that kept giving up.
+        "one_failed_tool_call_ends_the_task": {
+            "holds": True,
+            "the_model_is_told": "nothing, and is not asked for another turn",
+            "recorded_as": "stop_reason tool_desk_broke",
+            "is_not": (
+                "evidence about the model. It is the desk closing on the "
+                "first mistake, and a task that ends this way says what the "
+                "call was and what came back"
+            ),
+            "comes_from": "core/agentic_v2_runner.py dispatch_one",
+        },
     }
 
 

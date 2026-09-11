@@ -276,6 +276,7 @@ class TestTheFixtureUnderneathStaysUnderneath:
             "exec_run",
             "expected_capabilities",
             "finalize",
+            "initial_workspace_declaration",
             "package_snapshot_sha256",
             "start",
             "state_sha256",
@@ -303,6 +304,13 @@ class TestTheFixtureUnderneathStaysUnderneath:
             "close",
             "expected_capabilities",
             "finalize",
+            # Reads the same host-side tree `workspace_apply` writes to and
+            # `_workspace_snapshot` walks, both of which are inherited here for
+            # the same reason: the machine gets that tree shared into it, so
+            # what the workspace held at startup is the same question on either
+            # backend and has the same answer. An override would be a second
+            # walk of one directory.
+            "initial_workspace_declaration",
             "verify_public",
             "workspace_apply",
             "workspace_state_sha256",

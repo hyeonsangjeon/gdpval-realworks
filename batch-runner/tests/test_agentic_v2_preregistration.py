@@ -383,6 +383,35 @@ class TestTheConditionsAreRecordedBeforeTheRun:
         for guess in ("we expect", "should succeed", "likely", "probably"):
             assert guess not in written
 
+    def test_the_desk_closing_on_one_bad_call_is_registered_not_fixed(self):
+        """It ends a task on turn one and it is still here on purpose.
+
+        ``dispatch_one`` ends a task on the first tool call that comes back
+        not-ok, and the model is told nothing and asked nothing further. Fixing
+        it would change what a trace contains, so it is registered instead --
+        and registering it is only worth anything if the record says what it
+        costs and says the result is not about the model. A run where this fires
+        often has to be readable as a run under this condition.
+        """
+        condition = record()["run_conditions"]["one_failed_tool_call_ends_the_task"]
+
+        assert condition["holds"] is True
+        assert "dispatch_one" in condition["comes_from"]
+        assert condition["is_not"].startswith("evidence about the model")
+        assert "tool_desk_broke" in condition["recorded_as"]
+
+    def test_registering_that_condition_moved_the_seal(self):
+        """A condition added without the seal moving is a condition added after.
+
+        The seal is the whole reason a pre-registration is worth more than a
+        note. This asserts the new entry is inside it rather than beside it.
+        """
+        without = json.loads(json.dumps(record()))
+        del without["seal"]
+        del without["run_conditions"]["one_failed_tool_call_ends_the_task"]
+
+        assert seal(without) != record()["seal"]
+
     def test_a_changed_setting_changes_the_seal(self):
         """The record is only a commitment if editing the plan invalidates it."""
         before = record()["seal"]

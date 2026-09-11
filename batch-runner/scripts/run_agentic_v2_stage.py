@@ -51,6 +51,7 @@ import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 BATCH_RUNNER_ROOT = Path(__file__).resolve().parents[1]
 if str(BATCH_RUNNER_ROOT) not in sys.path:
@@ -333,7 +334,25 @@ def main() -> int:
             "run would be allowed to go ahead."
         ),
     )
+    parser.add_argument(
+        "--rehearse",
+        action="store_true",
+        help=(
+            "Run the whole stage with a stand-in instead of a model: real "
+            "binding, real files, real workspace, real collection, no call and "
+            "no cost. Writes rehearsal_record.json rather than "
+            "run_record.json, because a rehearsal is not a result."
+        ),
+    )
     args = parser.parse_args()
+
+    if args.dry_run and args.rehearse:
+        print(
+            "Refused: --dry-run and --rehearse ask for different things. The "
+            "first stops before the work, the second does the work without a "
+            "model. Pick one."
+        )
+        return 1
 
     try:
         plan, verdict, catalog = verdict_for(args.plan)
@@ -451,6 +470,14 @@ def main() -> int:
         )
         return 0
 
+    if args.rehearse:
+        print(
+            "Rehearsal. A stand-in works every task and no model is asked, so "
+            "the amounts above are what the paid run would be allowed rather "
+            "than what this one costs. Nothing here is a result."
+        )
+        print()
+
     into = (
         args.into
         if args.into is not None
@@ -465,26 +492,39 @@ def main() -> int:
     from core.agentic_v2_model_voice import AzureFoundryVoice
     from core.azure_ai_clients import AzureAIRouteSettings, AzureAIWorkload
     from core.llm_client import create_typed_azure_client
-
-    settings = AzureAIRouteSettings.from_env()
-    managed = create_typed_azure_client(
-        AzureAIWorkload.INFERENCE,
-        deployment,
-        settings=settings,
-        timeout=float(plan["fixed_settings"]["per_task_timeout_seconds"]),
+    from core.agentic_v2_rehearsal_voice import (
+        RehearsalVoice,
+        rehearsal_is_not_a_run,
     )
-    prices = load_price_table()
+
+    # A rehearsal never builds a client. Not as an optimisation: a client that
+    # exists is a client something can be sent through, and the one thing this
+    # mode promises is that nothing was asked. There is no route to check for
+    # the same reason -- there is no route.
+    rehearsing = RehearsalVoice() if args.rehearse else None
+    managed = None
+    prices: Any = {}
+    if rehearsing is None:
+        settings = AzureAIRouteSettings.from_env()
+        managed = create_typed_azure_client(
+            AzureAIWorkload.INFERENCE,
+            deployment,
+            settings=settings,
+            timeout=float(plan["fixed_settings"]["per_task_timeout_seconds"]),
+        )
+        prices = load_price_table()
 
     try:
-        wrong_route = check_route_is_the_one_the_plan_fixed(
-            managed.route, connection, settings=settings
-        )
-        if wrong_route:
-            print(
-                "Refused after building a client and before asking it "
-                "anything.\n\n  - " + "\n  - ".join(wrong_route)
+        if rehearsing is None:
+            wrong_route = check_route_is_the_one_the_plan_fixed(
+                managed.route, connection, settings=settings
             )
-            return 1
+            if wrong_route:
+                print(
+                    "Refused after building a client and before asking it "
+                    "anything.\n\n  - " + "\n  - ".join(wrong_route)
+                )
+                return 1
 
         held = TaskConversations(ceilings, RunWideCeilings())
         attempts: dict[str, int] = {}
@@ -565,30 +605,40 @@ def main() -> int:
             profile=profile,
             conversations=held,
             attempt_of=attempt_of,
-            voice_for=voice_for,
+            **(
+                {"voice": rehearsing}
+                if rehearsing is not None
+                else {"voice_for": voice_for}
+            ),
         )
 
         from core.cost_receipts import CostReceiptLedger
 
-        ledger = CostReceiptLedger(str(into / "cost_receipts.sqlite3"))
+        if rehearsing is not None:
+            # Every task ends unaccounted, which is the true answer. A rehearsal
+            # makes no call, and a ledger row saying $0 would be the one number
+            # that reads as a measurement of a model that was never asked.
+            receipt_for = lambda task, attempt: None  # noqa: E731
+        else:
+            ledger = CostReceiptLedger(str(into / "cost_receipts.sqlite3"))
 
-        def receipt_for(task, attempt: int):
-            outcome = held.outcome_of(task.task_id, attempt)
-            if outcome is None:
-                return None
-            turns = model_turns_of(
-                outcome,
-                run_id=run_id,
-                task_id=task.task_id,
-                attempt=attempt,
-                provider="azure",
-                requested_model=deployment,
-                deployment=deployment,
-                resolved_model=None,
-            )
-            return bind_run_to_ledger(
-                ledger, task_id=task.task_id, model_turns=turns
-            )
+            def receipt_for(task, attempt: int):
+                outcome = held.outcome_of(task.task_id, attempt)
+                if outcome is None:
+                    return None
+                turns = model_turns_of(
+                    outcome,
+                    run_id=run_id,
+                    task_id=task.task_id,
+                    attempt=attempt,
+                    provider="azure",
+                    requested_model=deployment,
+                    deployment=deployment,
+                    resolved_model=None,
+                )
+                return bind_run_to_ledger(
+                    ledger, task_id=task.task_id, model_turns=turns
+                )
 
         outcome = run_manifest(
             tasks_to_run,
@@ -598,14 +648,19 @@ def main() -> int:
             collect_into=into / "deliverables",
             receipt_for=receipt_for,
             on_task=lambda task_id, row: print(
-                f"  {task_id}  {'ok' if row.get('success') else 'failed'}"
+                # `status`, not a `success` key -- the row is a report row and
+                # has never carried one, so the old `row.get("success")` read
+                # None for every task and printed "failed" beside five tasks
+                # that had all succeeded.
+                f"  {task_id}  {'ok' if row.get('status') == 'success' else 'failed'}"
             ),
         )
     except DriverRefused as refusal:
         print(f"\nThe run was refused.\n\n{refusal}")
         return 1
     finally:
-        managed.close()
+        if managed is not None:
+            managed.close()
 
     record = {
         "stage": args.stage,
@@ -633,19 +688,38 @@ def main() -> int:
         # got them. A result is read against this one.
         "reference_files": staging_record(stagings),
         "environment": environment_note(profile),
-        "route_fingerprint": managed.runtime_fingerprint,
+        "route_fingerprint": (
+            rehearsal_is_not_a_run()
+            if rehearsing is not None
+            else managed.runtime_fingerprint
+        ),
         "chosen_settings": chosen.as_dict(),
         "conversations": held.as_dict(),
         "run": outcome.as_dict(),
     }
+    if rehearsing is not None:
+        record["rehearsal"] = rehearsing.as_dict()
     written = json.dumps(record, indent=2, sort_keys=True, default=str)
-    (into / "run_record.json").write_text(written + "\n", encoding="utf-8")
+    # A different name, so that nothing which reads a run's record can be handed
+    # a rehearsal's by accident. The disclaimer inside it is for a person; the
+    # filename is for everything else.
+    name = "rehearsal_record.json" if rehearsing is not None else "run_record.json"
+    (into / name).write_text(written + "\n", encoding="utf-8")
 
     summary = outcome.summary
     print()
-    print(f"  record         {into / 'run_record.json'}")
+    print(f"  record         {into / name}")
     print(f"  finished       {summary.get('succeeded', 0)} of {len(tasks_to_run)}")
-    print(f"  spent          {held.spent}")
+    if rehearsing is not None:
+        found = rehearsing.as_dict()
+        print(
+            f"  guide readable {found['guide_was_readable_in']} of "
+            f"{found['tasks_worked']} tasks"
+        )
+        print(f"  wrote a file   {found['wrote_a_file_in']} of {found['tasks_worked']}")
+        print("  spent          nothing — no model was asked")
+    else:
+        print(f"  spent          {held.spent}")
     if shard is not None:
         print(
             f"\nThis was shard {shard.index} of {shard.of}. The stage has not "

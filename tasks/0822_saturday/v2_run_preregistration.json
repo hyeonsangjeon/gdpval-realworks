@@ -659,6 +659,13 @@
       "resolved_model": "gpt-5.4",
       "route_profile": "project-ci"
     },
+    "one_failed_tool_call_ends_the_task": {
+      "comes_from": "core/agentic_v2_runner.py dispatch_one",
+      "holds": true,
+      "is_not": "evidence about the model. It is the desk closing on the first mistake, and a task that ends this way says what the call was and what came back",
+      "recorded_as": "stop_reason tool_desk_broke",
+      "the_model_is_told": "nothing, and is not asked for another turn"
+    },
     "per_task_ceilings": {
       "max_input_tokens": 737280,
       "max_model_calls": 9,
@@ -707,7 +714,7 @@
     },
     "what_stops_a_task": "any per-task ceiling above, or the per-task budget, whichever comes first. A task stopped by a ceiling is recorded as stopped by that ceiling and is not a model failure"
   },
-  "seal": "0b557a3e0278afba2b2c11bdbd9fb6eb78dfc11b9e1b2b6c5023d266a472c9c8",
+  "seal": "f9a906ab1bcf89cdfdd25a8454c35be17ad2d32e4ae3e0b95782ad236853dcd9",
   "stop_rules": [
     "the deployment or model reported back differs from the pinned one",
     "a run switches model or deployment on its own",

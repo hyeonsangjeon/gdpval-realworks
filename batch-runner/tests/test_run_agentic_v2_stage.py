@@ -27,6 +27,7 @@ Nothing here calls a model, builds a client or spends anything.
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import re
 import subprocess
@@ -616,3 +617,78 @@ def test_the_reference_answers_are_not_fetched_onto_the_machine_that_runs():
             assert "deliverable_files" in fetch and "--exclude" in fetch, (
                 f"job {name!r} fetches the reference answers onto the runner"
             )
+
+
+# ── The rehearsal ─────────────────────────────────────────────────────────
+#
+# ``--rehearse`` walks the entire production path -- real dataset rows, real
+# staging, real backend, real trace verification, real deliverable collection
+# -- with a scripted stand-in where the model goes. It exists because every
+# defect found in that path so far was found after a task had been worked, and
+# on the paid path that means after it had been charged for. Three of them
+# would have looked like the model failing.
+
+
+@needs_dataset
+def test_a_rehearsal_works_every_task_without_any_azure_environment(tmp_path):
+    """The five tasks, end to end, with nothing configured to reach a model.
+
+    This is the check that would have caught all three: the missing guide that
+    killed a task on turn one, the state digest that threw away a finished
+    task, and the display that printed "failed" beside five tasks that had all
+    succeeded.
+    """
+    into = tmp_path / "rehearsal"
+
+    finished = _run(
+        "--stage", "advance_check_5", "--rehearse", "--into", str(into)
+    )
+
+    assert finished.returncode == 0, finished.stdout + finished.stderr
+    assert "finished       5 of 5" in finished.stdout
+    assert "guide readable 5 of 5" in finished.stdout
+    assert "wrote a file   5 of 5" in finished.stdout
+    assert finished.stdout.count("  ok\n") == 5
+
+
+@needs_dataset
+def test_a_rehearsal_says_it_is_not_a_run_and_spent_nothing(tmp_path):
+    """Both on the screen and in the file, and neither says $0.00.
+
+    A record that reports a rehearsal as a zero-cost run is worse than one that
+    reports nothing, because the zero is a number and will be averaged with
+    real ones.
+    """
+    into = tmp_path / "rehearsal"
+
+    finished = _run(
+        "--stage", "advance_check_5", "--rehearse", "--into", str(into)
+    )
+    record = json.loads((into / "rehearsal_record.json").read_text("utf-8"))
+
+    assert "Nothing here is a result" in finished.stdout
+    assert "spent          nothing — no model was asked" in finished.stdout
+    assert record["rehearsal"]["tasks_worked"] == 5
+    # In the slot a real run's route fingerprint occupies, so anything reading
+    # the record to find out which model answered gets the refusal rather than
+    # a plausible-looking route.
+    assert "no call was made" in record["route_fingerprint"]["cost"]
+    assert "$0" not in finished.stdout.split("spent")[-1]
+
+
+@needs_dataset
+def test_a_rehearsal_collects_a_deliverable_for_every_task_onto_disk(tmp_path):
+    """The backend purges its workspace on close, so the record is not enough.
+
+    Every rehearsal before deliverable collection worked left five empty
+    directories behind and a record that said files had been written. Both were
+    true, and the files were gone.
+    """
+    into = tmp_path / "rehearsal"
+
+    _run("--stage", "advance_check_5", "--rehearse", "--into", str(into))
+
+    collected = sorted((into / "deliverables").rglob("*.md"))
+    assert len(collected) == 5
+    for one in collected:
+        assert "must not be scored as one" in one.read_text("utf-8")

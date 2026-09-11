@@ -635,6 +635,22 @@ class AgenticV2ScriptedRunner:
                     "budget_caps": deepcopy(self.budget_caps),
                 },
             }
+            # Only when the backend offers one, and only when it is not empty.
+            # A task that starts with nothing in its workspace produces the
+            # record it produced before this existed, which is what keeps every
+            # run made until now verifiable against the same code.
+            declare = getattr(backend, "initial_workspace_declaration", None)
+            if callable(declare):
+                try:
+                    starting_entries = declare()
+                except Exception:
+                    lifecycle.transition(LifecycleState.FAILED)
+                    return finish(_failure(
+                        "compute_start_failed", lifecycle, audit_chain,
+                        public_chain, stage="startup",
+                    ))
+                if starting_entries:
+                    started_payload["initial_workspace"] = starting_entries
             # Ask now whether a record built on this would verify later. The
             # checks above cover what the runner can compare things to; this
             # covers what the backend's own declared standard requires of it,
