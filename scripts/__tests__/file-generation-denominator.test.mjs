@@ -345,10 +345,12 @@ test('every published report reads as a rate only where one was measured', async
   // exp034 is not-recorded for a different reason than exp026c, and the
   // difference matters: its files exist. Twenty-two of its rows carry a
   // files_count above zero and list that many deliverable_files, and the same
-  // 22 deliverable directories came back in the run artifact — it is the
-  // roll-up that step 6 leaves null under codex_foundry, so this is a gap in
-  // the counting and not a run that produced nothing. Reading it as 0% would
-  // say the opposite. The rows themselves are checked in
+  // 22 deliverable directories came back in the run artifact. What is missing
+  // is only the roll-up, and the reason is mechanical: step 6 reads it from
+  // workspace/validate_stats.json, which step 5 writes, and a dry_run
+  // dispatch skips step 5. So this is a gap in the counting rather than a run
+  // that produced nothing, and reading it as 0% would say the opposite. The
+  // rows themselves are checked in
   // a-run-that-never-reached-the-hub-is-not-a-run-that-never-happened.test.mjs,
   // which reads the committed report; the index does not carry them.
   const exp034 = reports.find((r) => r.short_id === 'exp034');

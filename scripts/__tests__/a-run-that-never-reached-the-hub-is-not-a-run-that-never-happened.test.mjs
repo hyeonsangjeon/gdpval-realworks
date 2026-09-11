@@ -119,9 +119,19 @@ test('exp034 carries the numbers its run produced', async () => {
 });
 
 test('a null file roll-up is a gap in the counting, not a run without files', async () => {
-  // `file_generation` comes back all nulls under codex_foundry, which
+  // `file_generation` comes back all nulls here, which
   // file-generation-denominator.test.mjs reads as `not-recorded` — correctly,
   // because nothing was counted. What it must not be read as is 0%.
+  //
+  // The cause is mechanical and belongs with the rest of this file: step 6
+  // fills the roll-up from workspace/validate_stats.json (step6_report.py:1679)
+  // and step 5 is what writes that file, so a dispatch that skips step 5 for
+  // the same reason it skips step 7 has nothing to read. It is recoverable
+  // afterwards for nothing — the artifact workspace still holds
+  // step0_needs_files_manifest.json and step2_inference_results.json — but it
+  // is not recovered here, and a null is the honest record until it is.
+  // A null roll-up is not exclusively a dry run's doing: exp026c published and
+  // has one too, for a cause not looked into.
   //
   // Two fields on a task row look alike and are not. `has_deliverable_files`
   // is copied from the manifest (step6_report.py:573) and describes the task
