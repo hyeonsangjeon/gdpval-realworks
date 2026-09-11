@@ -15,17 +15,23 @@ never set; and the checkpoint upload step is gated on `needs_relay == 'true'`.
 Every task the leg completed dies with the runner. The budget is unspendable
 and the run is lost.
 
-These tests **execute** the workflow step rather than reading it. The repo's
-existing workflow tests -- `test_agentic_workflows.py`, and
-`test_a_batch_dispatch_can_open_the_codex_gate.py` -- pull the `run:` string
-out and assert that substrings appear in it, which proves a spelling and not a
-behaviour: a guard that is present but inverted, or shadowed by an earlier
-`raise`, passes every one of those assertions. Here the inline `python3`
-heredoc is extracted, dedented, and run in a synthetic checkout with a
-synthetic dispatch environment, and the assertion is on its exit status. The
-script turns out to be entirely offline -- YAML, `ExperimentConfig`, a repo-id
-validator, a route table, and a write to `GITHUB_OUTPUT` -- so this costs
-nothing and reaches nothing.
+These tests **execute** the workflow step rather than reading it. The Python
+side of the repo has not done that before: `test_agentic_workflows.py` and
+`test_a_batch_dispatch_can_open_the_codex_gate.py` pull the `run:` string out
+and assert that substrings appear in it, which proves a spelling and not a
+behaviour -- a guard that is present but inverted, or shadowed by an earlier
+`raise`, passes every one of those assertions. The technique itself is not new
+here: `scripts/__tests__/onboarding-contract.test.mjs` already extracts this
+same heredoc and runs it, and finding that out is how the guard's first draft
+was caught breaking a second caller. That file is the contract's home on the
+Node side and gained the guard's cases too; this file is its home on the
+Python side, where the rest of the relay machinery is tested.
+
+The inline `python3` heredoc is extracted, dedented, and run in a synthetic
+checkout with a synthetic dispatch environment, and the assertion is on its
+exit status. The script turns out to be entirely offline -- YAML,
+`ExperimentConfig`, a repo-id validator, a route table, and a write to
+`GITHUB_OUTPUT` -- so this costs nothing and reaches nothing.
 
 That matters most for one line in particular. The guard restates step 2a's
 resolution rule (a non-zero dispatch input wins, zero falls back to the YAML)
@@ -237,6 +243,26 @@ def test_an_uninterpretable_input_is_refused_rather_than_read_as_zero(
     )
     assert result.returncode != 0
     assert "not a decimal integer" in result.stderr
+
+
+def test_the_job_supplies_the_variable_the_guard_refuses_to_do_without():
+    """Refusing an empty value is only safe while the job always sets one.
+
+    The empty case above is not hypothetical: the first draft of this guard
+    broke `scripts/__tests__/onboarding-contract.test.mjs`, which runs the same
+    heredoc without this variable. The fix was to give that harness the
+    environment the workflow has rather than to soften the guard -- which is
+    the right call only for as long as the workflow really does have it. If a
+    later edit drops it from the job env, every dispatch dies at this step, so
+    the assertion belongs next to the guard that depends on it.
+    """
+    document = yaml.safe_load(BATCH_WORKFLOW.read_text(encoding="utf-8"))
+    job = document["jobs"]["batch-run"]
+    assert job["env"]["WALL_TIMEOUT_INPUT"] == "${{ inputs.wall_timeout }}"
+    # And the input it reads has a non-zero default, so the ordinary dispatch
+    # arms the watchdog without anyone typing a number.
+    on = document.get("on") or document.get(True)
+    assert on["workflow_dispatch"]["inputs"]["wall_timeout"]["default"] == 290
 
 
 # --- the step still does its original job --------------------------------
