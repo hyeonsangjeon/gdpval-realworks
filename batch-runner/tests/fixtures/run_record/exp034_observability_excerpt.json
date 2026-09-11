@@ -1,0 +1,38 @@
+{
+  "_note": "Verbatim task_id/status/observability from run 34540053904 (exp034, 30 tasks). Nothing else of the row is kept; no value here is constructed.",
+  "_run_id": "exp034_codex_foundry_trial30:34540053904:1",
+  "results": [
+    {
+      "task_id": "0ed38524-a4ad-405f-9dee-7b2252659aad",
+      "status": "success",
+      "observability": {
+        "preprocessors": [],
+        "codex": {
+          "items_seen": 28
+        }
+      }
+    },
+    {
+      "task_id": "02aa1805-c658-4069-8a6a-02dec146063a",
+      "status": "error",
+      "observability": {
+        "preprocessors": [],
+        "error_category": "rate_limited",
+        "codex": {
+          "items_seen": 42
+        }
+      }
+    },
+    {
+      "task_id": "11e1b169-5fb6-4d79-8a83-82ddf4987a85",
+      "status": "error",
+      "observability": {
+        "preprocessors": [],
+        "error_category": "content_filtered",
+        "codex": {
+          "items_seen": 10
+        }
+      }
+    }
+  ]
+}

@@ -196,6 +196,12 @@ batch-runner/scripts/*
 # tests/test_azure_boot_host_survey.py hold it to that.
 !batch-runner/scripts/azure_boot_host_survey.py
 
+# Builds the nineteen-field record a finished run is required to leave, from
+# an unpacked run artifact. Reads four files and writes one; it makes no
+# network call and needs no credential, so it runs the same on a downloaded
+# artifact months later as it does in CI.
+!batch-runner/scripts/build_run_record.py
+
 
 # Experiment report HTML (skews GitHub language stats)
 batch-runner/results/*/report/report.html
