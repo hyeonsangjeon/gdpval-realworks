@@ -1,26 +1,34 @@
-"""The run-34571840967 record carries two kinds of money, and they must not merge.
+"""The run-34571840967 record carries two figures for money, and they must not merge.
 
 The ledger that run uploaded holds a dollar figure for none of its 88 calls.
 Not because the price was unknown -- the price table is committed, and the run
 recorded the very fingerprint of it -- but because ``settle`` discards a
 computed cost the moment any reason is attached, and the Codex path attaches
-``call_reachability_unknown`` to every turn unconditionally. So the ledger's
-``model_cost_usd`` is null for all 45 attempted tasks, and that is the honest
-state of the *billed* amount: nobody here can see the provider's invoice.
+``call_reachability_unknown`` to every turn unconditionally.
 
-What the record then adds is a different quantity: the tokens the run did
-measure, priced with the repository's own ``price_call`` and the committed
-table. That is arithmetic, not a bill. It is worth having -- it is the only
-per-task cost the goal asks for that is actually obtainable -- and it is
-exactly the sort of number that gets promoted by a later reader into the empty
-``model_cost_usd`` column, where it would silently become a claim about what
-Azure charged.
+Neither figure is an invoice. ``model_cost_usd`` never was one either: the
+summary built over these receipts stamps itself
+``estimate_basis: usage_estimate_not_azure_invoice``, and the provider's actual
+charge for this subscription is not visible from here at all. So the split this
+file defends is *not* billed-versus-derived. Both numbers are ``price_call``
+over reported tokens; they differ in who computed them and when.
 
-This file makes that promotion fail loudly. It also pins the three-way split
+``model_cost_usd`` is the run pricing its own call as it settled it, against
+the table it had loaded at that moment. The derived column is that same
+arithmetic redone afterwards, by a tool a later reader points at a ledger.
+The second is weaker evidence -- it is only sound because the derivation
+refuses to run unless the committed table's fingerprint matches the one the
+run recorded for itself, and a reader of the finished record cannot see that
+that check happened. Writing the recomputation into the run's own column would
+erase the distinction between a figure the run stood behind and one produced
+later, which is the thing that makes the first auditable.
+
+This file makes that promotion fail loudly. It also pins the four-way split
 that keeps the figure honest: a task whose every call reported usage has a
-complete figure, a task with an unmeasured send has a floor, and a task with
-no call at all has a true zero. Collapsing those into one column is how
-"we don't know" turns into "it was free".
+complete figure, a task with an unmeasured send has a floor, a task with sends
+but no measurement has none at all, and a task never reached has a true zero.
+Collapsing those into one column is how "we don't know" turns into "it was
+free".
 """
 
 from __future__ import annotations
@@ -55,19 +63,20 @@ def test_the_record_still_covers_all_220_tasks(rows):
     assert sum(1 for row in rows if row.get("attempted")) == 45
 
 
-def test_no_attempted_task_claims_a_billed_cost(rows):
-    """The derived figure must never be written into the ledger's column.
+def test_no_attempted_task_claims_the_runs_own_figure(rows):
+    """The recomputation must never be written into the ledger's own column.
 
-    ``model_cost_usd`` answers "what was charged", and for this run the only
-    true answer is "not determinable from here". A number in that column would
-    read as the provider's figure no matter how it got there.
+    ``model_cost_usd`` is what the run priced as it settled the call. For this
+    run it settled nothing, and a number appearing there later would claim a
+    provenance the record cannot support -- indistinguishable, to anyone
+    reading the finished file, from a figure the run itself stood behind.
     """
     attempted = [row for row in rows if row.get("attempted")]
     billed = [row for row in attempted if row.get("model_cost_usd") is not None]
     assert billed == [], (
-        f"{len(billed)} attempted task(s) carry a billed cost. The provider's "
-        "charge for this run was never observed; if this is the derived "
-        f"figure, it belongs in {DERIVED!r}."
+        f"{len(billed)} attempted task(s) carry a settled cost. This run "
+        "settled no call with an amount; if this is the recomputed figure, it "
+        f"belongs in {DERIVED!r}."
     )
     assert all(row["cost_state"] == "undetermined" for row in attempted)
     assert all(row["derived_cost_is_provider_billed"] is False for row in rows)

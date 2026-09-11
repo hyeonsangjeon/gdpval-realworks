@@ -24,11 +24,16 @@ would have used.
 What it will not do:
 
   * It will not write into `model_cost_usd`, in the ledger or anywhere else.
-    That column answers "what was charged", and for a run nobody can see an
-    invoice for, the only true answer is that it is undetermined. A number
-    there reads as the provider's figure no matter how it got in. The derived
-    amount travels in its own column, with `derived_cost_is_provider_billed`
-    set false and the method that produced it attached to every row.
+    That column holds what the run priced as it settled each call, against the
+    table it had loaded at the time. This tool prices the same tokens later,
+    from outside the run. Neither figure is the provider's invoice — the
+    published summary stamps itself `usage_estimate_not_azure_invoice`, and
+    the subscription's actual charge is not visible from here at all. What
+    differs is provenance: a number in `model_cost_usd` says the run stood
+    behind it, and a reader of the finished record cannot tell a later
+    recomputation from that. The recomputed amount therefore travels in its
+    own column, with `derived_cost_is_provider_billed` set false and the
+    method that produced it attached to every row.
   * It will not touch the ledger at all; it is opened read-only.
   * It will not price an unmeasured send as zero. A turn whose stream reported
     nothing before it died leaves an open reservation on purpose (see
