@@ -66,6 +66,12 @@ const SLUG = /^[a-z][a-z0-9_]{0,47}$/;
 const REASON_CODE = /^[a-z][a-z0-9_.:-]{0,63}$/;
 const SHA256 = /^[0-9a-f]{64}$/;
 
+// One or more reason codes joined by commas, which is how `derive_run_cost.py`
+// keys the map of calls its pricer declined: a call refused for two reasons at
+// once is one key naming both.
+const REFUSAL_KEY = /^[a-z][a-z0-9_.:-]*(,[a-z][a-z0-9_.:-]*)*$/;
+const MAX_REFUSAL_KEY_LENGTH = 256;
+
 // How long one path component may be. Not a taste decision: 255 bytes is
 // `NAME_MAX` on every filesystem this runs on, so a longer component cannot
 // name a file that exists, and a bound below it would reject real names. The
@@ -117,6 +123,11 @@ const COMPONENT_IDENTITY = [
 // name. Bounded instead, because the only real risk on a published payload is
 // something long enough to be prose.
 const MAX_IDENTITY_LENGTH = 128;
+
+// `derive_run_cost.py` writes one sentence here naming the function, the table
+// and its fingerprint. Bounded on the same reasoning as the identity fields:
+// it is shown to a reader, so the only real risk is prose.
+const MAX_DERIVED_METHOD_LENGTH = 512;
 
 // Micro-dollars. Fine enough for a single cheap call, coarse enough that
 // float noise never reaches the screen.
@@ -422,6 +433,114 @@ export function projectCostLedgerReference(value, field = 'cost_ledger') {
     fail(field, 'sha256 must be a sha256 digest');
   }
   return { path, sha256 };
+}
+
+/**
+ * A `derived_cost` block: what a finished run's recorded tokens price to, when
+ * the run itself left the dollar column empty.
+ *
+ * This is deliberately not a `cost-receipt-v1` receipt and must never be
+ * folded into one. A receipt's `known_cost_usd` says *the run stood behind
+ * this figure*; a derived amount says *someone priced the run's tokens
+ * afterwards, from outside it*. Once those share a field a reader of the
+ * finished record cannot tell them apart, so they do not share one — this
+ * block sits beside `cost_summary`, never inside it, and keeps its own
+ * display state all the way to the screen.
+ *
+ * Written by `batch-runner/derive_run_cost.py --json`. Three things are
+ * checked rather than trusted:
+ *
+ *   * `derived_total_is_provider_billed` — the producer hard-codes it false.
+ *     Anything else means the file came from somewhere else or from a
+ *     modified tool, and a derived figure claiming to be an invoice is the
+ *     precise misreading this block exists to prevent. Rejected, not shown.
+ *   * the floor flag against the unmeasured count — at the producer these are
+ *     one fact stated twice (`unmeasured_calls > 0`). The flag is what makes
+ *     the screen say `≥` instead of `≈`, so a file where they disagree is
+ *     unreadable rather than half-readable.
+ *   * the counts against each other — a task with a call has at least one
+ *     call, and calls grouped by task cannot outnumber the rows they came
+ *     from. Both are bounds, not identities: rows belonging to no task are
+ *     counted in `calls_total` alone.
+ */
+export function projectDerivedCost(value, field = 'derived_cost') {
+  if (value === null || value === undefined) return null;
+  if (!isPlainObject(value)) fail(field, 'must be an object');
+
+  if (value.derived_total_is_provider_billed !== false) {
+    fail(field, 'must declare derived_total_is_provider_billed false');
+  }
+  if (typeof value.derived_total_is_a_floor !== 'boolean') {
+    fail(`${field}.derived_total_is_a_floor`, 'must be a boolean');
+  }
+
+  const total = costAmount(value.derived_total_usd, `${field}.derived_total_usd`);
+  if (total === null) fail(field, 'must carry a derived total');
+
+  const counts = {};
+  for (const name of ['calls_total', 'calls_measured', 'calls_unmeasured', 'tasks_with_a_call']) {
+    const count = costCount(value[name], `${field}.${name}`, MAX_MODEL_CALLS);
+    if (count === null) fail(`${field}.${name}`, 'is required');
+    counts[name] = count;
+  }
+  if (value.derived_total_is_a_floor !== (counts.calls_unmeasured > 0)) {
+    fail(
+      field,
+      'disagrees with itself: the floor flag and the unmeasured call count '
+      + 'are the same fact at the producer',
+    );
+  }
+  if (counts.calls_measured + counts.calls_unmeasured > counts.calls_total) {
+    fail(`${field}.calls_total`, 'is smaller than the calls attributed to tasks');
+  }
+  if (counts.tasks_with_a_call > counts.calls_total) {
+    fail(`${field}.tasks_with_a_call`, 'exceeds the calls it was counted from');
+  }
+
+  if (typeof value.method !== 'string' || !value.method
+      || value.method.length > MAX_DERIVED_METHOD_LENGTH) {
+    fail(`${field}.method`, 'must say how the figure was arrived at');
+  }
+
+  const refusals = {};
+  if (value.pricer_refusals !== null && value.pricer_refusals !== undefined) {
+    if (!isPlainObject(value.pricer_refusals)) {
+      fail(`${field}.pricer_refusals`, 'must be an object');
+    }
+    const reasons = Object.keys(value.pricer_refusals);
+    if (reasons.length > MAX_MISSING_REASONS) {
+      fail(`${field}.pricer_refusals`, 'lists too many reasons');
+    }
+    for (const reason of reasons.sort()) {
+      // Not `REASON_CODE`. The producer keys this map on
+      // `",".join(priced.missing_reasons)`, so a call refused for two reasons
+      // at once arrives as `usage_absent,price_missing` — one key, not two.
+      // Checking it against the single-code pattern would reject the whole
+      // file precisely when the pricer had the most to say about it.
+      if (!REFUSAL_KEY.test(reason) || reason.length > MAX_REFUSAL_KEY_LENGTH) {
+        fail(`${field}.pricer_refusals`, `has an unreadable reason code ${reason}`);
+      }
+      refusals[reason] = costCount(
+        value.pricer_refusals[reason],
+        `${field}.pricer_refusals.${reason}`,
+        MAX_MODEL_CALLS,
+      );
+    }
+  }
+
+  return {
+    derived_total_usd: total,
+    derived_total_is_a_floor: value.derived_total_is_a_floor,
+    derived_total_is_provider_billed: false,
+    estimate_basis: ESTIMATE_BASIS,
+    ...counts,
+    price_table_sha256: priceTableSha256(
+      value.price_table_sha256,
+      `${field}.price_table_sha256`,
+    ),
+    method: value.method,
+    pricer_refusals: refusals,
+  };
 }
 
 /** Linearly interpolated percentile over a non-empty sample. */

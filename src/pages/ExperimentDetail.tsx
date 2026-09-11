@@ -22,7 +22,7 @@ import { readPromptArchitecture } from '../components/dashboard/promptArchitectu
 import { readFileGenerationCount, readFileGenerationRate, recoveredNote, resolveFileGeneration } from '../components/dashboard/fileGenerationReading'
 import type { TaskResult } from '../types/report'
 import type { ReportMeta } from '../types/report'
-import type { CostReceipt, CostSummary } from '../types/cost'
+import type { CostReceipt, CostSummary, DerivedCost } from '../types/cost'
 import {
   COST_ESTIMATE_NOTE,
   COST_FIELD_LABELS,
@@ -33,6 +33,7 @@ import {
   componentLabel,
   costCell,
   costCellClass,
+  derivedTotalCell,
   failedTaskCostCell,
   formatCostUsd,
   missingReasonText,
@@ -588,6 +589,7 @@ function ExperimentDetail() {
           grading={gradingSummary}
           gradeLedger={gradeRow?.cost_ledger ?? null}
           reportLedger={report.cost_ledger ?? null}
+          derived={report.derived_cost ?? null}
         />
 
         {/* ── File Generation & Resume Rounds ── */}
@@ -1230,15 +1232,24 @@ function CostSummaryCard({
   grading,
   gradeLedger,
   reportLedger,
+  derived,
 }: {
   problemSolving: CostSummary | null
   grading: CostSummary | null
   gradeLedger: { path: string; sha256: string } | null
   reportLedger: { path: string; sha256: string } | null
+  derived: DerivedCost | null
 }) {
   const columns = [
-    { field: 'problem_solving_cost' as const, summary: problemSolving, ledger: reportLedger },
-    { field: 'grading_cost' as const, summary: grading, ledger: gradeLedger },
+    {
+      field: 'problem_solving_cost' as const,
+      summary: problemSolving,
+      ledger: reportLedger,
+      // Only ever on the solving side. Grading runs settle their own receipts,
+      // so nothing there has ever needed reconstructing.
+      derived,
+    },
+    { field: 'grading_cost' as const, summary: grading, ledger: gradeLedger, derived: null },
   ]
   return (
     <motion.div
@@ -1258,7 +1269,7 @@ function CostSummaryCard({
         </span>
       </div>
       <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
-        {columns.map(({ field, summary, ledger }) => (
+        {columns.map(({ field, summary, ledger, derived: derivedCost }) => (
           <div key={field} data-cost-summary-field={field}>
             <div className="flex items-baseline justify-between gap-2 mb-2">
               <h4 className="text-xs font-semibold text-dash-heading">{COST_FIELD_LABELS[field]}</h4>
@@ -1269,17 +1280,45 @@ function CostSummaryCard({
               )}
             </div>
             {!summary ? (
-              <p
-                className="text-xs text-dash-text-faint leading-relaxed"
-                data-cost-state="absent"
-              >
-                기록 없음 — 이 실행에는 비용 기록이 없습니다. $0이 아니라, 얼마가 들었는지
-                알 수 없다는 뜻입니다.
-              </p>
+              <>
+                <p
+                  className="text-xs text-dash-text-faint leading-relaxed"
+                  data-cost-state="absent"
+                >
+                  기록 없음 — 이 실행에는 비용 기록이 없습니다. $0이 아니라, 얼마가 들었는지
+                  알 수 없다는 뜻입니다.
+                </p>
+                {/* A run can leave no receipt and still leave a ledger of
+                    tokens. Withholding the reconstruction here would say
+                    "nobody knows" while a figure sat beside it unread. */}
+                {derivedCost && (() => {
+                  // Read the state off the cell rather than naming it here:
+                  // a derivation over zero priced calls comes back `unpriced`,
+                  // and an attribute that says `derived` anyway would tell a
+                  // test the opposite of what the screen says.
+                  const cell = derivedTotalCell(derivedCost)
+                  return (
+                    <p
+                      className={`text-xs mt-2 font-mono ${costCellClass(cell)}`}
+                      title={cell.title}
+                      data-cost-stat="되짚은 값"
+                      data-cost-state={cell.state}
+                    >
+                      되짚은 값 {cell.text}
+                    </p>
+                  )
+                })()}
+              </>
             ) : (
               <div className="space-y-1 text-xs">
                 {[
                   { label: '총액', cell: summaryTotalCell(summary, field) },
+                  // Directly under the total, so the two are read together:
+                  // the run recorded nothing, and this is what its tokens
+                  // priced to anyway. Apart, either one alone misleads.
+                  ...(derivedCost
+                    ? [{ label: '되짚은 값', cell: derivedTotalCell(derivedCost) }]
+                    : []),
                   { label: '평균', cell: summaryStatCell(summary.avg_cost_usd) },
                   { label: '중앙값', cell: summaryStatCell(summary.median_cost_usd) },
                   { label: 'P95', cell: summaryStatCell(summary.p95_cost_usd) },

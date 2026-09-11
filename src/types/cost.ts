@@ -180,3 +180,33 @@ export interface CostLedgerReference {
   path: string
   sha256: string
 }
+
+/**
+ * What a finished run's recorded tokens price to, computed after the run.
+ *
+ * Kept apart from `CostSummary` on purpose, because the two answer different
+ * questions. A summary's `known_cost_usd` is what the run itself settled and
+ * stood behind. These figures were worked out afterwards, from outside, by
+ * repricing the tokens the run happened to record — which is the only thing
+ * left to go on when the run's own dollar column came back empty.
+ *
+ * They are never a bill either. `derived_total_is_provider_billed` is false at
+ * the producer and the reader refuses the block if it says anything else.
+ */
+export interface DerivedCost {
+  derived_total_usd: number
+  /** True when some calls could not be priced, so the total is a lower bound. */
+  derived_total_is_a_floor: boolean
+  derived_total_is_provider_billed: false
+  estimate_basis: typeof ESTIMATE_BASIS
+  /** Every row in the ledgers, including any belonging to no task. */
+  calls_total: number
+  calls_measured: number
+  calls_unmeasured: number
+  tasks_with_a_call: number
+  price_table_sha256: string | null
+  /** One sentence naming the function and the rate table it used. */
+  method: string
+  /** Reason code → how many calls the pricer declined to price. */
+  pricer_refusals: Record<string, number>
+}
