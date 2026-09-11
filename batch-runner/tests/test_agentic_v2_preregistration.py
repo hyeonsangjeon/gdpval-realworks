@@ -44,6 +44,8 @@ from core.agentic_v2_preregistration import (
     FILES_NAMED_BY_THE_TASKS,
     FILES_THE_MODEL_COULD_OPEN_UNAIDED,
     OVER_THE_WORKSPACE_FILE_LIMIT,
+    RENDERING_OUTCOMES,
+    TASKS_WORKING_FROM_THE_PROMPT_ALONE,
     UNDELIVERABLE_INPUTS,
     UNKNOWN,
     WORKSPACE_FILE_LIMIT,
@@ -58,6 +60,7 @@ from core.agentic_v2_preregistration import (
     seal,
     verify_input_disposition,
     verify_reader_reach,
+    verify_rendering_reach,
     verify_seal,
 )
 from core.execution_envelope_tasks import full_run_tasks, load_task_catalog
@@ -745,9 +748,16 @@ class TestWhatTheModelCanOpenWithoutHelp:
         unreadable = FILES_NAMED_BY_THE_TASKS - FILES_THE_MODEL_COULD_OPEN_UNAIDED
 
         assert f"the other {unreadable} do not" in measured
+        # The denominator used to sit in ``what_they_are``, inside a sentence
+        # claiming all 261 extract without error. That sentence was wrong, so
+        # the figure now anchors to the one that replaced it -- which carries
+        # the same denominator and, unlike its predecessor, a true numerator.
         assert str(FILES_NAMED_BY_THE_TASKS) in (
-            disposition["text_renderings"]["what_they_are"]
+            disposition["text_renderings"]["not_all_of_them_open"]
         )
+        assert sum(
+            disposition["text_renderings"]["what_the_reader_got_out_of_them"].values()
+        ) == FILES_NAMED_BY_THE_TASKS
 
     def test_the_pinned_snapshot_still_gives_the_recorded_reach(self):
         """The measurement itself, where the bytes exist to make it.
@@ -806,6 +816,82 @@ class TestWhatTheModelCanOpenWithoutHelp:
 
         assert any("not in the snapshot" in one for one in wrong)
         assert any("were measured and the record is written about" in one for one in wrong)
+
+
+class TestTheTasksThatGetNothingReadable:
+    """Nine tasks, and a record that used to say all 261 files opened fine."""
+
+    def test_the_record_no_longer_says_every_file_extracts_without_error(self):
+        """Two do not open. The old sentence said none failed.
+
+        Small, and in the direction that flatters the environment -- which is
+        the direction a pre-registration exists to guard, because a record
+        overstating what reached the model turns an input the model never had
+        into an answer the model got wrong.
+        """
+        renderings = input_disposition()["text_renderings"]
+        assert "All 261 files extract without error" not in renderings[
+            "what_they_are"
+        ]
+        assert RENDERING_OUTCOMES["the_reader_could_not_open_it"] == 2
+        assert RENDERING_OUTCOMES["the_reader_found_no_text_in_it"] == 5
+
+    def test_the_outcomes_account_for_every_named_file(self):
+        assert sum(RENDERING_OUTCOMES.values()) == FILES_NAMED_BY_THE_TASKS
+
+    def test_the_record_carries_the_outcomes_and_not_only_a_summary(self):
+        renderings = input_disposition()["text_renderings"]
+        assert renderings["what_the_reader_got_out_of_them"] == RENDERING_OUTCOMES
+        assert "2 of 261" in renderings["not_all_of_them_open"]
+
+    def test_the_nine_are_named_rather_than_counted(self):
+        """A count cannot be checked against a result. A task id can.
+
+        Reading a result for one of these as the model's would be scoring a gap
+        this environment introduced, so the record has to survive being carried
+        to the grading table, and a bare nine does not.
+        """
+        assert len(TASKS_WORKING_FROM_THE_PROMPT_ALONE) == 9
+        assert len(set(TASKS_WORKING_FROM_THE_PROMPT_ALONE)) == 9
+
+    def test_every_one_of_them_is_a_task_the_run_will_actually_reach(self):
+        catalog = load_task_catalog()
+        everything = {str(one) for one in full_run_tasks(catalog)}
+        for task_id in TASKS_WORKING_FROM_THE_PROMPT_ALONE:
+            assert task_id in everything, f"{task_id} is not in the 220"
+
+    def test_the_smaller_stages_carry_their_own_share(self):
+        """Nought of five, one of thirty, nine of 220.
+
+        Worth pinning because the escalation is what decides whether the
+        problem is seen before the money is spent: an advance check of five
+        would have passed clean and said nothing about it.
+        """
+        per_stage = input_disposition()["per_stage"]
+        assert per_stage[STAGE_FIVE]["tasks_that_worked_from_the_prompt_alone"] == []
+        assert per_stage[STAGE_THIRTY][
+            "tasks_that_worked_from_the_prompt_alone"
+        ] == ["38889c3b-e3d4-49c8-816a-3cc8e5313aba"]
+        assert sorted(
+            per_stage[STAGE_TWO_TWENTY]["tasks_that_worked_from_the_prompt_alone"]
+        ) == sorted(TASKS_WORKING_FROM_THE_PROMPT_ALONE)
+
+    def test_a_stage_can_never_report_more_of_them_than_it_has_tasks(self):
+        for stage, section in input_disposition()["per_stage"].items():
+            assert len(
+                section["tasks_that_worked_from_the_prompt_alone"]
+            ) <= section["tasks_naming_reference_files"], stage
+
+    def test_the_disclaimer_covers_the_case_that_was_invisible(self):
+        """The six whose every file was refused, which both old checks passed.
+
+        ``could_open_nothing`` asks about the files that arrived, so a task
+        with none arrived answers no -- the same answer a task given everything
+        gives. The sentence had two cases in it and needed the third.
+        """
+        said = input_disposition()["what_a_failure_there_does_not_show"]
+        assert "every file was refused" in said
+        assert "tasks_that_worked_from_the_prompt_alone" in said
 
 
 class TestTheRecordSaysWhatItIsNot:
@@ -916,14 +1002,46 @@ class TestTheCommittedCopyIsTheOneThatCounts:
 
 
 class TestItOnlyReads:
-    def test_it_reaches_for_no_network_and_writes_nothing(self):
-        source = (
-            Path(__file__).resolve().parents[1]
-            / "core"
-            / "agentic_v2_preregistration.py"
-        ).read_text(encoding="utf-8")
+    #: The substring list below would have kept passing after
+    #: ``verify_rendering_reach`` was added, because writing through
+    #: ``tempfile`` and ``stage_task_reference_files`` spells none of these
+    #: words. A green bar on a claim that had stopped being true is worse than
+    #: a red one, so the claim is split instead: the network ban still covers
+    #: the whole module, and the writing ban now says where writing is allowed.
+    def test_it_reaches_for_no_network(self):
         for forbidden in (
-            "requests", "httpx", "urllib", "socket", "subprocess",
-            "write_text", "write_bytes", "mkdir", "os.system",
+            "requests", "httpx", "urllib", "socket", "subprocess", "os.system",
         ):
-            assert forbidden not in source, f"unexpected reach: {forbidden}"
+            assert forbidden not in _source(), f"unexpected reach: {forbidden}"
+
+    def test_deriving_the_record_writes_nothing(self):
+        for forbidden in ("write_text", "write_bytes", "mkdir"):
+            assert forbidden not in _source(), f"unexpected write: {forbidden}"
+
+    def test_the_only_writing_is_into_a_directory_it_removes(self):
+        """The verifiers stage real files, which cannot be done without writing.
+
+        Staging is how the outcomes are measured at all -- re-implementing the
+        extraction here to avoid the disk would measure a second reader and
+        report it as the first. So it writes, and what this pins is where: a
+        temporary directory the function creates and the context manager
+        removes, never a path in the repository or the snapshot it was given.
+        """
+        source = _source()
+        assert "tempfile.TemporaryDirectory" in source
+        assert source.count("tempfile.TemporaryDirectory") == source.count(
+            "with tempfile.TemporaryDirectory"
+        ), "a temporary directory was made without a block that removes it"
+
+    def test_the_snapshot_it_is_given_is_never_written_into(self):
+        into = inspect.getsource(verify_rendering_reach)
+        assert "into=Path(scratch)" in into
+        assert "into=snapshot_root" not in into
+
+
+def _source() -> str:
+    return (
+        Path(__file__).resolve().parents[1]
+        / "core"
+        / "agentic_v2_preregistration.py"
+    ).read_text(encoding="utf-8")

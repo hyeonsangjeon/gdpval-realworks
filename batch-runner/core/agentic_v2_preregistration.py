@@ -50,6 +50,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import tempfile
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
@@ -67,6 +69,7 @@ from core.agentic_v2_reference_staging import (
     TOO_LARGE,
     TOO_LARGE_FOR_THE_WORKSPACE,
     WORKSPACE_FILE_LIMIT,
+    stage_task_reference_files,
 )
 from core.execution_envelope_tasks import (
     ADVANCE_CHECK_TASK_COUNT,
@@ -739,6 +742,61 @@ OVER_THE_WORKSPACE_FILE_LIMIT: tuple[dict[str, Any], ...] = (
 )
 
 
+#: What the reader actually got out of the 261 named files, by outcome.
+#:
+#: Recorded because the sentence this replaces said all 261 extract without
+#: error, and two of them do not. The difference is small and it is in the
+#: direction that flatters the environment, which is the direction a
+#: pre-registration is written to guard against: a record that overstates what
+#: reached the model turns an input the model never had into an answer the model
+#: got wrong.
+#:
+#: The five that come back empty are not errors and are counted apart from the
+#: two that are. One is a scanned PDF, where the reader opens the file and finds
+#: no text layer in it; that file is no more use to the model for having opened
+#: cleanly. The thirty-two labels are images, recordings and archives, where a
+#: line naming the kind is the honest ceiling of what a text reader can do.
+RENDERING_OUTCOMES: dict[str, int] = {
+    "text_was_read_out_of_it": 221,
+    "text_was_read_out_of_it_and_cut_to_the_workspace_limit": 1,
+    "the_reader_could_not_open_it": 2,
+    "the_reader_describes_this_kind_rather_than_reading_it": 32,
+    "the_reader_found_no_text_in_it": 5,
+}
+
+
+#: The tasks that name reference files and receive not one readable character.
+#:
+#: Nine of the two hundred and twenty, and the count a result has to be read
+#: against, because a thin answer to a task in this state is this environment's
+#: and not the model's. Grading one of them against inputs it never saw would be
+#: scoring a gap we introduced and reporting it as a finding about the model.
+#:
+#: They arrive here two ways and the distinction is worth keeping. Six have
+#: nothing delivered at all -- every file they name refused for size -- and
+#: three are handed a file no reader can open. Only the second three were ever
+#: visible: ``could_open_nothing`` asks its question of the files that arrived,
+#: so a task whose every file was refused has nothing to ask about and answers
+#: no, which is also what a task given everything answers. The six sat in that
+#: gap reporting fine.
+#:
+#: Nought of the five advance-check tasks, one of the thirty, nine of the two
+#: hundred and twenty. Recorded by name rather than by count for the same reason
+#: as the two lists above: a cohort that loses its inputs is indistinguishable
+#: from a model doing the work badly unless the names are written down first.
+TASKS_WORKING_FROM_THE_PROMPT_ALONE: tuple[str, ...] = (
+    "38889c3b-e3d4-49c8-816a-3cc8e5313aba",
+    "46b34f78-6c06-4416-87e2-77b6d8b20ce9",
+    "55ddb773-23a4-454c-8704-d432fe1b99d9",
+    "75401f7c-396d-406d-b08e-938874ad1045",
+    "94925f49-36bc-42da-b45b-61078d329300",
+    "a941b6d8-4289-4500-b45a-f8e4fc94a724",
+    "b9665ca1-4da4-4ff9-86f2-40b9a8683048",
+    "f2986c1f-2bbf-4b83-bc93-624a9d617f45",
+    "ff85ee58-bc9f-4aa2-806d-87edeabb1b81",
+)
+
+
 def input_disposition(catalog: TaskCatalog | None = None) -> dict[str, Any]:
     """What each cohort is given to work from, and what it cannot be given.
 
@@ -790,6 +848,7 @@ def input_disposition(catalog: TaskCatalog | None = None) -> dict[str, Any]:
     over_limit_by_task: dict[str, list[dict[str, Any]]] = {}
     for one in OVER_THE_WORKSPACE_FILE_LIMIT:
         over_limit_by_task.setdefault(str(one["task_id"]), []).append(dict(one))
+    prompt_alone = {str(one) for one in TASKS_WORKING_FROM_THE_PROMPT_ALONE}
 
     per_stage: dict[str, Any] = {}
     for stage in ESCALATION:
@@ -814,6 +873,9 @@ def input_disposition(catalog: TaskCatalog | None = None) -> dict[str, Any]:
             "files_too_large_for_the_workspace": over_limit,
             "tasks_affected_by_the_workspace_limit": len(
                 {str(one["task_id"]) for one in over_limit}
+            ),
+            "tasks_that_worked_from_the_prompt_alone": sorted(
+                {str(one) for one in task_ids} & prompt_alone
             ),
         }
 
@@ -857,9 +919,20 @@ def input_disposition(catalog: TaskCatalog | None = None) -> dict[str, Any]:
             "what_they_are": (
                 "a text extraction made by core.file_reader and staged beside "
                 f"the file it came from, under {MODEL_INPUT_PREFIX}/extracted/. "
-                "All 261 files extract without error; what comes out is text "
-                "for spreadsheets, PDFs and documents, and a one-line label for "
-                "images, recordings and archives"
+                "What comes out is text for spreadsheets, PDFs and documents, "
+                "and a one-line label for images, recordings and archives"
+            ),
+            "what_the_reader_got_out_of_them": dict(RENDERING_OUTCOMES),
+            "not_all_of_them_open": (
+                f"{RENDERING_OUTCOMES['the_reader_could_not_open_it']} of "
+                f"{FILES_NAMED_BY_THE_TASKS} the reader cannot open at all, and "
+                f"{RENDERING_OUTCOMES['the_reader_found_no_text_in_it']} it "
+                "opens and finds no text in -- a scanned PDF among them, which "
+                "is no more use to the model for having opened cleanly. Written "
+                "down because the sentence here used to say all 261 extract "
+                "without error, and a record that overstates what reached the "
+                "model turns an input the model never had into an answer the "
+                "model got wrong"
             ),
             "never_a_replacement": (
                 "the original stays where it is whenever it can be staged, and "
@@ -890,7 +963,12 @@ def input_disposition(catalog: TaskCatalog | None = None) -> dict[str, Any]:
             "cannot be read as one. Nor is a task that was handed files it "
             "could not open: that one is recorded separately again, because a "
             "task holding only unreadable files has nothing refused and would "
-            "otherwise be indistinguishable from a task given everything"
+            "otherwise be indistinguishable from a task given everything. Nor, "
+            "third, is a task whose every file was refused -- it has no "
+            "delivered file to call unreadable either, so it too answered no to "
+            "both questions and read as fine. The three are gathered under "
+            "tasks_that_worked_from_the_prompt_alone, which asks the question "
+            "that actually matters: did one readable character reach it"
         ),
         "how_to_check_this": (
             "core.agentic_v2_preregistration.verify_input_disposition for the "
@@ -1075,6 +1153,81 @@ def verify_reader_reach(
             f"says {FILES_THE_MODEL_COULD_OPEN_UNAIDED}. That figure is what "
             "decides whether a result is about the model, so a record that has "
             "it wrong is worse than none"
+        )
+    return wrong
+
+
+def verify_rendering_reach(
+    snapshot_root: Path, catalog: TaskCatalog | None = None
+) -> list[str]:
+    """Whether the renderings still reach what the record says they reach.
+
+    Apart from :func:`verify_reader_reach` again, and for a sharper reason than
+    tidiness. That one asks what the model can open unaided, which is a property
+    of the bytes. This one asks what our reader got out of them, which is a
+    property of our code -- so a reader upgrade, a dependency bump or a dropped
+    optional import moves this figure without touching a single input file, and
+    moves it silently.
+
+    The direction matters. If the renderings improve, the pre-registration
+    understates what reached the model and the run is better than planned. If
+    they regress, tasks slide into
+    :data:`TASKS_WORKING_FROM_THE_PROMPT_ALONE` without appearing there, and
+    their results get read as the model's. That second case is why this returns
+    the names and not only the count.
+
+    Needs real bytes, like its neighbour, so it does not run in CI and is not
+    meant to.
+    """
+    catalog = catalog or load_task_catalog()
+    by_id = catalog.by_task_id()
+    tasks = [by_id[one] for one in full_run_tasks(catalog) if one in by_id]
+
+    outcomes: Counter[str] = Counter()
+    alone: set[str] = set()
+    with tempfile.TemporaryDirectory(prefix="v2-rendering-reach-") as scratch:
+        for task in tasks:
+            # ``reference_file_paths``, not ``reference_files``: the catalogue
+            # and the parquet row name the same files under different
+            # attributes, and reading for the wrong one gets an empty tuple
+            # rather than an error -- every task then looks like it named
+            # nothing, and the whole check passes by measuring nothing.
+            staging = stage_task_reference_files(
+                task_id=str(task.task_id),
+                reference_files=tuple(task.reference_file_paths),
+                snapshot_root=snapshot_root,
+                into=Path(scratch)
+                / hashlib.sha256(str(task.task_id).encode("utf-8")).hexdigest(),
+                render_text=True,
+            )
+            for extraction in staging.extractions:
+                outcomes[extraction.outcome] += 1
+            if staging.worked_from_the_prompt_alone:
+                alone.add(str(task.task_id))
+
+    wrong: list[str] = []
+    if not outcomes:
+        wrong.append(
+            "nothing was extracted from any of the 220 tasks, which is not a "
+            "reading of the files but a sign that none were found. Check the "
+            "snapshot root before believing any figure below"
+        )
+    elif dict(outcomes) != RENDERING_OUTCOMES:
+        wrong.append(
+            f"the reader now returns {dict(sorted(outcomes.items()))} and the "
+            f"record is written about {dict(sorted(RENDERING_OUTCOMES.items()))}"
+        )
+
+    recorded = {str(one) for one in TASKS_WORKING_FROM_THE_PROMPT_ALONE}
+    for task_id in sorted(alone - recorded):
+        wrong.append(
+            f"{task_id} now receives nothing readable and is not in the "
+            "record. Its result would be read as the model's"
+        )
+    for task_id in sorted(recorded - alone):
+        wrong.append(
+            f"{task_id} is recorded as receiving nothing readable and now "
+            "receives something. The record understates what reached it"
         )
     return wrong
 
