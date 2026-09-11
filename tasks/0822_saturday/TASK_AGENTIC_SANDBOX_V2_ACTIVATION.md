@@ -1901,6 +1901,69 @@ and never pushed, so it is not reachable from here; the reachable parent is what
 stage D executes against. This is written down before execution so no post-hoc
 reading can convert those failures into a claim about the model.
 
+###### The same six, now checked rather than stated — and C2's open item closed
+
+`scripts/explain_guest_command_absences.py`,
+`tests/test_explain_guest_command_absences.py` (**23 tests**), artefact
+`tasks/0822_saturday/guest_command_absences_explained.json`.
+
+The paragraph above is right, and it was also the kind of thing that rots. It
+names a digest, a count and a cause in prose; add one line to
+`debian-extra.lock` and every number in it is wrong while still reading as
+confidently as before. So the claim is now derived on every test run from the
+files it depends on, and fails when they and it diverge.
+
+**What the derivation finds.** The candidate is the parent plus eight locked
+packages — `chromium`, `cmake`, `fonts-noto-color-emoji`, `fonts-noto-core`,
+`nodejs`, `npm`, `r-base-core`, and `ezdxf==1.4.3`. Six provide a command; the
+two fonts provide none, which is stated in the script rather than derived,
+because it is a fact about the packages and leaving it implicit would make the
+arithmetic look as though it had dropped two rows. The six commands those
+packages provide are `Rscript`, `chromium`, `cmake`, `node`, `npm` and
+`python3:ezdxf` — **exactly** the six the guest was missing, with nothing left
+over in either direction. The test that matters most is the one nobody would
+think to write: a candidate-added command found *present* would falsify the
+explanation just as thoroughly as an unexplained absence, because it would mean
+the guest was not purely the parent and the tidy correspondence was a
+coincidence.
+
+**And it did not need to be inferred at all.** `sandbox/v2/declared-command-sweep.json`
+ran the same forty probes against **both** images under docker on 2026-09-10,
+before any of this booted: the candidate answered **40 of 40**, the parent **34
+of 40**, and the six it missed are the six. Its parent digest is the digest C2
+booted. So the six are named identically by two runtimes on two kernels —
+docker on 3.10.102 and Firecracker on 6.1.141 — and the layer's contribution is
+*measured*, not deduced from a lock file. The lock derivation corroborates that;
+it was never the primary evidence, and the record should not have implied
+otherwise.
+
+**C2's open item, closed.** The pre-C2 note asked that C2 either build the
+candidate or pin the parent and **say which it booted**, and not let it be
+implicit. C2 pinned the parent and did not say so. It is said now, and checked:
+the boot's `pinned_digest` equals `parent.lock.json`'s `manifest_digest`, and
+the D3 sweep's layer digests equal the boot's layer for layer, so the sweep
+measured the image C2 booted and not a directory sharing its paths.
+
+**One correction to make in my own record.** The first draft of the script
+disclaimed that "no digest for the candidate is recorded anywhere in this
+repository." That is false three times over: `sandbox/v2/README.md` records an
+image ID `sha256:e47537b8…` *and* an OCI manifest `sha256:0064ce70…`, and the
+container sweep ran a third, `sha256:94ea6cb4…` — evidently a different local
+build, which the artefact reports side by side without claiming they are the
+same bytes. The true statement is narrower and is what the artefact now says:
+none of the three can be pulled from here, because an image ID is not a
+reference and the manifest was never pushed. The overstatement was caught before
+it was committed, by reading the files the claim was about.
+
+**What this does and does not change for stage F.** Not a model failure —
+unchanged. Not a limit of the sandbox design either, which is the part the
+prose above leaves implicit: the layer has been *observed* to supply all six, so
+what stands between the run and those capabilities is an unpublished image
+rather than anything about microVMs, the policy or the guest. And — the reading
+that would be wrong in the other direction — those tasks will still fail. The
+artefact says so in the same sentence as the exoneration, deliberately, so that
+"not an environment defect" cannot be read as "so those tasks are fine."
+
 ##### The block stage D cannot clear from inside the repository
 
 Stage D needs two things at once, and they live in different Azure tenants.
@@ -2135,4 +2198,82 @@ answer a true but different question — and presenting that measurement as
 reopening the route would be the same overclaim as reading a self-computed
 digest as a supplier signature.
 
-### Stage F — not yet run
+### Stage F — pre-registered on 2026-09-11, not yet run
+
+Stage F asks for the fixed task manifest, the model, prompt, tools, token, time
+and retry conditions and the technical stop rules **written down before
+anything runs**, then five tasks, then thirty, then two hundred and twenty.
+
+That is now `core/agentic_v2_preregistration.py`, and its committed output is
+`tasks/0822_saturday/v2_run_preregistration.json`, sealed at
+`fa74921bdfcb9368c4f9140a1f990b6a60d2059963d2abb76e06d6d8eb9115ea`.
+
+It is code and not prose because a document can be edited to agree with a
+result, and because writing the promise down turned out to falsify one of the
+sentences this task has been using since it was written.
+
+**The escalation is not nested.** "Five, then thirty, then two hundred and
+twenty" reads as three circles inside one another. It is not. One of the five —
+`2ea2e5b5-257f-42e6-a7dc-93763f28b19d` — is not in the thirty, so only **four**
+tasks carry across the first two stages. A sentence of the form "the thirty
+confirmed the five" would be false about a fifth of the five.
+
+This is not a defect and nothing needs fixing. `select_advance_check_tasks` and
+`select_trial_run_tasks` answer different questions, both predate every run, and
+neither can see a score — so the gap cannot be score-chasing in either
+direction. What would have been wrong is discovering it in the report, after
+the numbers were in and there was a reason to prefer one reading. A's committed
+`exp034_codex_foundry_trial30.yaml` names the same absence independently: it
+writes its thirty out in full and that identifier is not among them.
+
+**A difference from A's run is not an environment effect.** The instruction is
+to state whether the compared items match and, if they differ, not to claim the
+difference is the environment. `compare_with_codex_run()` reads A's committed
+file field by field rather than restating it, so the comparison tracks A's
+configuration instead of a memory of it. Today:
+
+| | B (V2) | A (Codex) | |
+|---|---|---|---|
+| deployment | `gpt-5.4` | `gpt-5.4` | matches |
+| the thirty tasks | derived | written out | matches, same order |
+| self-review | off | off | matches |
+| resume rounds | 0 | 0 | matches |
+| attempts per task | 1 | 4 | **differs, alignable** |
+| per-task clock | 1200 s | 1800 s | **differs, alignable** |
+| tool surface | eight named tools | the agent's own | **differs, irreducible** |
+| standing instructions | describes those tools | describes its own | **differs, irreducible** |
+
+`may_attribute_difference_to_environment()` returns `False`, and will keep
+returning `False`. An unread field counts as differing, not as agreeing, so a
+missing source file blocks rather than passes.
+
+The useful part is the last column. Two of the four differences are settings
+nobody has aligned yet and B can match before the 220. The other two cannot be
+removed by anyone: the two run places offer different tools, and an instruction
+has to describe the tools the model actually has. `residual_after_alignment()`
+therefore names what a maximally-aligned comparison could honestly claim —
+a joint effect of the run place **and the tool contract it imposes** — which is
+narrower than "the environment did it" and still, in the file's own words, "not
+an effect of the isolation alone, and must not be written as one".
+
+**There is no success quota.** The eight stop rules are all about a record that
+can no longer be trusted: the deployment not matching the pinned one, a run
+switching model on its own, the seal failing, a gate this record calls shut
+reporting itself open, a paid call with no recorded budget or spend past the
+approved amount, an unwritable ledger, the runner-defect disposition three
+tasks running, and a guest that cannot be cleaned between tasks. None mentions
+a score. Beside them, `NOT_STOP_RULES` records in writing that a task scoring
+zero, a capability absence, the first five not all succeeding, and disagreement
+with A's run are **results** — there is no target pass rate anywhere in the
+record, and a stage does not have to look good to proceed.
+
+**What the pre-registration is not.** It is not a statement that the
+environment is ready — no V2 task has run, and the blocker is still the role
+assignment above. It is not an approval to spend; `approved_maximum_usd` is
+still `null` and is the owner's to fill in. And it is not a prediction.
+
+Regenerate with `python batch-runner/scripts/write_v2_preregistration.py`;
+`--check` reports drift without writing. If the drift test fails, read why
+before regenerating: this repository's own inputs moving and A's experiment
+file moving produce the same failure but mean different things, and the second
+one means someone has to decide whether the runs are still comparable at all.
