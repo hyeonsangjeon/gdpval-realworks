@@ -314,6 +314,36 @@ export interface FileGeneration {
   dummy_task_ids: string[]
 }
 
+/**
+ * The same roll-up, reconstructed after the run instead of during it.
+ *
+ * `batch-run.yml` skips step 5 — the only step that counts files — on an `&&`
+ * of four conditions (a dry run, `sample_size <= 3`, a relay handover, and a
+ * failed step 2a). Any of them leaves `file_generation` all-`null`, which means
+ * *not counted* and never `0%`.
+ *
+ * Step 4 is not gated on `dry_run`, so the run's artifact still holds the
+ * upload-staging parquet, the needs-files manifest and the prepared scope —
+ * every input step 5 reads. `batch-runner/recover_file_rollup.py` points step
+ * 5's own `validate()` at the unpacked artifact and gets the number back,
+ * offline, with nothing spent.
+ *
+ * It lands here rather than in `file_generation` on purpose: the run goes on
+ * recording that it recorded nothing, and a reader can still tell a figure
+ * measured during the run from one reconstructed afterwards.
+ */
+export interface RecoveredFileGeneration extends FileGeneration {
+  provenance: {
+    recovered_at: string
+    /** The GitHub Actions run the artifact came from. */
+    source_run_id: string
+    /** Which of step 5's four gates fired. */
+    step5_skipped_by: string
+    step5_skipped_because: string
+    tool: string
+  }
+}
+
 export interface ErrorTask {
   task_id: string
   sector: string
@@ -331,6 +361,12 @@ export interface ReportData {
   narrative: Narrative
   recovery_stats: RecoveryStats
   file_generation?: FileGeneration
+  /**
+   * Present only when someone ran the recovery tool against this run's
+   * artifact. Read it through `resolveFileGeneration`, which will not let it
+   * stand in for a roll-up the run actually measured.
+   */
+  file_generation_recovered?: RecoveredFileGeneration
   execution_metrics?: ExecutionMetricsSummary
   agentic_metrics?: AgenticMetricsSummary
   /** task_id → Self-QA score (0–10). Enriched in scripts/aggregate-reports.mjs for Phase 1 calibration. */

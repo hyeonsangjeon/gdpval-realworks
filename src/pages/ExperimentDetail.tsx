@@ -19,7 +19,7 @@ import { useExperimentPrompt } from '../hooks/useExperimentPrompt'
 import { useGrades, GradeResult } from '../hooks/useGrades'
 import PromptArchitectureView, { PromptArchitectureNotice } from '../components/dashboard/PromptArchitectureView'
 import { readPromptArchitecture } from '../components/dashboard/promptArchitectureReading'
-import { readFileGenerationCount, readFileGenerationRate } from '../components/dashboard/fileGenerationReading'
+import { readFileGenerationCount, readFileGenerationRate, recoveredNote, resolveFileGeneration } from '../components/dashboard/fileGenerationReading'
 import type { TaskResult } from '../types/report'
 import type { ReportMeta } from '../types/report'
 import type { CostReceipt, CostSummary } from '../types/cost'
@@ -592,15 +592,23 @@ function ExperimentDetail() {
 
         {/* ── File Generation & Resume Rounds ── */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-          {report.file_generation && (() => {
+          {(report.file_generation || report.file_generation_recovered) && (() => {
             // Shown whenever the run published the block at all. The old
             // condition was `needs_files_total != null`, which dropped the
             // card for a run that recorded no denominator — and a missing card
             // is not readable as "there was no rate": it cannot be told from a
             // run whose card is simply further down the page.
-            const fg = report.file_generation
+            //
+            // A run whose step 5 was skipped records nothing here but may
+            // still carry a count rebuilt from its artifact afterwards.
+            // `resolveFileGeneration` picks between the two and says which it
+            // picked; without it, a number sitting in the same payload reads
+            // as `not recorded`.
+            const resolved = resolveFileGeneration(report)
+            const fg = resolved.fg
+            const note = recoveredNote(resolved)
             const genReading = readFileGenerationRate(fg, 'succeeded')
-            const absent = fg.files_absent ?? 0
+            const absent = fg?.files_absent ?? 0
             return (
             <motion.div
               initial={{ opacity: 0, y: 8 }}
@@ -611,17 +619,17 @@ function ExperimentDetail() {
               <h3 className="text-sm font-semibold text-dash-heading mb-3">File Generation</h3>
               <div className="space-y-2 text-xs">
                 {[
-                  { label: 'Tasks requiring files', value: readFileGenerationCount(fg.needs_files_total) },
+                  { label: 'Tasks requiring files', value: readFileGenerationCount(fg?.needs_files_total) },
                   // The count and the rate travel together, so a rate that
                   // stands on nothing cannot be printed beside a count that
                   // does. `n/a` and `not recorded` replace the whole cell.
                   {
                     label: 'Successfully generated',
                     value: genReading.standing === 'measured'
-                      ? `${readFileGenerationCount(fg.files_succeeded)} (${genReading.value})`
+                      ? `${readFileGenerationCount(fg?.files_succeeded)} (${genReading.value})`
                       : genReading.value,
                   },
-                  { label: 'Failed → dummy created', value: readFileGenerationCount(fg.files_failed) },
+                  { label: 'Failed → dummy created', value: readFileGenerationCount(fg?.files_failed) },
                   // Only when there are any. A report written before step5
                   // counted them carries no number here, and no number is not
                   // the same claim as none.
@@ -635,6 +643,11 @@ function ExperimentDetail() {
                   </div>
                 ))}
               </div>
+              {note && (
+                <p className="mt-2 text-[10px] leading-snug text-sky-400/90">
+                  {note}
+                </p>
+              )}
               {genReading.caveat && (
                 <p className="mt-2 text-[10px] leading-snug text-dash-text-muted">
                   {genReading.caveat}

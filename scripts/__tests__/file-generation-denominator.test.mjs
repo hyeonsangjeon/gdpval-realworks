@@ -34,7 +34,7 @@
 //
 // `src/components/dashboard/fileGenerationReading.ts` is where the reading now
 // happens, and it is import-free so esbuild — already installed, as vite
-// depends on it — can hand the real decision to node. This file holds seven
+// depends on it — can hand the real decision to node. This file holds eight
 // things in place:
 //
 //   A. the producer's field names and the reader's lookups are the same names,
@@ -47,7 +47,9 @@
 //   E. no surface under `src/` divides by `needs_files_total` itself;
 //   F. the TypeScript contract admits the `null` `exp026c` actually contains;
 //   G. the workflow conditions that skip step 5 are all named and counted,
-//      since they alone decide which runs carry a roll-up at all.
+//      since they alone decide which runs carry a roll-up at all;
+//   H. a run the workflow skipped can still have its count rebuilt from its
+//      own artifact, and the rebuilt figure must not pass for a measured one.
 //
 // (E) is the guard that fails on the code this replaces.
 //
@@ -556,5 +558,90 @@ test('exp026c asked for the upload, so its null is not the dry-run gate', async 
     () => readFile(committed, 'utf8'),
     /ENOENT/,
     'exp026c now commits its report, so the Hub is no longer what proves step 7 ran',
+  );
+});
+
+// ── H. A roll-up the run skipped is not a roll-up that is gone ─────────────
+//
+// The four gates above decide which runs carry a count. They do not decide
+// which runs *can* carry one: step 4 is not gated on `dry_run`, so a dry run's
+// artifact still holds the upload-staging parquet, the needs-files manifest
+// and the prepared scope — every input step 5 reads. `recover_file_rollup.py`
+// points step 5's own `validate()` at the unpacked artifact and gets the
+// number back offline.
+//
+// It is written to `file_generation_recovered`, never into `file_generation`:
+// the run goes on recording that it recorded nothing. Which means a reader
+// taking `file_generation` alone still sees `not recorded` for a run whose
+// number is sitting in the same payload. `resolveFileGeneration` is the pick
+// between them, and it has to keep saying which one it picked.
+
+test('a measurement taken during the run beats one rebuilt afterwards', async () => {
+  const { resolveFileGeneration } = await loadReading();
+  const resolved = resolveFileGeneration({
+    file_generation: { needs_files_total: 10, files_succeeded: 9 },
+    file_generation_recovered: { needs_files_total: 28, files_succeeded: 22 },
+  });
+  assert.equal(resolved.fg.needs_files_total, 10, 'the reconstruction displaced the measurement');
+  assert.equal(resolved.recovered, false);
+});
+
+test('a run that recorded nothing reads the figure rebuilt from its artifact', async () => {
+  const { resolveFileGeneration, readFileGenerationRate, recoveredNote } = await loadReading();
+  const resolved = resolveFileGeneration({
+    file_generation: { needs_files_total: null, files_succeeded: null },
+    file_generation_recovered: {
+      needs_files_total: 28,
+      files_succeeded: 22,
+      provenance: { source_run_id: '34540053904', step5_skipped_by: 'dry_run' },
+    },
+  });
+  assert.equal(resolved.recovered, true);
+
+  const reading = readFileGenerationRate(resolved.fg, 'succeeded');
+  assert.equal(reading.standing, 'measured');
+  assert.equal(reading.value, '78.6%');
+
+  // Without this the figure is indistinguishable from one the run measured,
+  // and the two are not the same kind of evidence.
+  const note = recoveredNote(resolved);
+  assert.match(note, /34540053904/);
+  assert.match(note, /dry_run/);
+});
+
+test('no recovery leaves the null a null, and no note beside it', async () => {
+  const { resolveFileGeneration, readFileGenerationRate, recoveredNote } = await loadReading();
+  const resolved = resolveFileGeneration({ file_generation: { needs_files_total: null } });
+  assert.equal(resolved.recovered, false);
+  assert.equal(recoveredNote(resolved), undefined);
+  assert.equal(readFileGenerationRate(resolved.fg, 'succeeded').standing, 'not-recorded');
+});
+
+test('exp034 publishes the count its own run skipped, and says where from', async () => {
+  // The real anchor. exp034 is a dry run, so step 5 never counted; the figure
+  // below came from its artifact, and all 8 rows with no file are exactly the
+  // 8 tasks that errored — 5 rate limits and 3 content filters, not a
+  // file-generation defect. A reader looking at `null` cannot tell those apart.
+  const exp034 = (await publishedReports()).find((r) => r.short_id === 'exp034');
+  assert.ok(exp034, 'exp034 is not in the index');
+  assert.equal(
+    exp034.file_generation?.needs_files_total ?? null,
+    null,
+    'exp034 now records its own roll-up, so it is no longer the recovery case',
+  );
+
+  const recovered = exp034.file_generation_recovered;
+  assert.ok(recovered, 'the recovered roll-up did not survive aggregation into the index');
+  assert.equal(recovered.needs_files_total, 28);
+  assert.equal(recovered.files_succeeded, 22);
+  assert.equal(recovered.files_failed, 6);
+  assert.equal(recovered.provenance.source_run_id, '34540053904');
+  assert.equal(recovered.provenance.step5_skipped_by, 'dry_run');
+
+  // A path on whoever's machine ran the tool is not provenance, and does not
+  // belong in a published report.
+  assert.ok(
+    !('source_workspace' in recovered.provenance),
+    'the recovery is publishing a local filesystem path',
   );
 });
