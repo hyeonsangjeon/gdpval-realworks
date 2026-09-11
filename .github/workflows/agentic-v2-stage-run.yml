@@ -146,8 +146,14 @@ jobs:
       # The tests that hold what a paid run rests on: that the money question
       # is answered from the plan rather than from a sentence, that the cohort
       # binds to the seal it was priced under, that a task stops at its own
-      # ceiling, and that the tool list cannot reach the grader. Run before the
-      # dataset is fetched, so a broken runner fails in a minute.
+      # ceiling, that the tool list cannot reach the grader, and that the files
+      # a task was told to open are the ones that arrive in its workspace. Run
+      # before the dataset is fetched, so a broken runner fails in a minute.
+      #
+      # The last three were added after the staging code was written, because
+      # until then nothing in this job exercised the one part of the path that
+      # had never run in CI at all. A cohort can be perfectly priced, sealed and
+      # bound and still hand every task an empty directory.
       - name: Test the runner
         run: |
           set -euo pipefail
@@ -157,18 +163,35 @@ jobs:
             tests/test_agentic_v2_manifest_binding.py \
             tests/test_agentic_v2_conversation_runner.py \
             tests/test_agentic_v2_run_driver.py \
-            tests/test_free_checks_agree_on_the_loop.py
+            tests/test_free_checks_agree_on_the_loop.py \
+            tests/test_agentic_v2_reference_staging.py \
+            tests/test_agentic_v2_preregistration.py \
+            tests/test_run_agentic_v2_stage.py
 
       # No charge. The revision is the one the catalogue was built from and the
       # one every figure in the plan rests on; the binding hashes the wording it
       # reads and refuses a prompt that drifted from what was sealed.
+      #
+      # `--local-dir` rather than the default cache. The default writes a tree
+      # of symlinks pointing at a blob store outside it, and the staging code
+      # will not follow a link out of the root it was given. Measured against
+      # the real cache: 301 of 301 reference files are links and none is a
+      # regular file, so a cohort fetched the old way hands every one of the
+      # 125 tasks that name files an empty workspace -- and those failures then
+      # read as the model's. `--local-dir` writes the bytes.
+      #
+      # `deliverable_files` is left behind: 595 MB of reference answers that no
+      # inference run opens. Not fetching them is faster and is one fewer way
+      # for an answer to be sitting on the same disk as a workspace.
       - name: Fetch the pinned dataset
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           set -euo pipefail
           hf download openai/gdpval --repo-type dataset \
-            --revision 11e7900cdcac61bc4daf59e65feb238acda98fbf
+            --revision 11e7900cdcac61bc4daf59e65feb238acda98fbf \
+            --local-dir "$RUNNER_TEMP/gdpval-pinned" \
+            --exclude 'deliverable_files/*'
 
       # Printed as well as captured. The one-line JSON is for `fromJSON`; the
       # object beside it is for whoever has to decide whether a run that has
@@ -184,12 +207,17 @@ jobs:
           MATRIX="$(python scripts/plan_agentic_v2_shards.py --stage "$STAGE")"
           echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
 
+      # Where the reference files come from is derived from `--parquet`, so the
+      # prompts and the files a task opens can only ever be one revision. This
+      # is also the step that catches a dataset fetched the wrong way: it
+      # refuses before the paid job below is allowed to start.
       - name: Dry run
         run: |
           set -euo pipefail
           cd batch-runner
           python scripts/run_agentic_v2_stage.py \
-            --stage '${{ inputs.stage }}' --dry-run
+            --stage '${{ inputs.stage }}' --dry-run \
+            --parquet "$RUNNER_TEMP/gdpval-pinned/data/train-00000-of-00001.parquet"
 
   # ── The run that spends ─────────────────────────────────────────────────
   paid:
@@ -267,13 +295,18 @@ jobs:
           cd batch-runner
           python scripts/azure_oidc_identity_preflight.py --verify-session
 
+      # Fetched the same way as in the free job above, for the reason given
+      # there: the default cache is a farm of symlinks the staging code refuses
+      # to follow, so the files a task is told to open would never arrive.
       - name: Fetch the pinned dataset
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           set -euo pipefail
           hf download openai/gdpval --repo-type dataset \
-            --revision 11e7900cdcac61bc4daf59e65feb238acda98fbf
+            --revision 11e7900cdcac61bc4daf59e65feb238acda98fbf \
+            --local-dir "$RUNNER_TEMP/gdpval-pinned" \
+            --exclude 'deliverable_files/*'
 
       # Read from the plan rather than written here. The deployment appears in
       # exactly one place in the repository, so a workflow cannot come to
@@ -333,7 +366,8 @@ jobs:
           set -euo pipefail
           cd batch-runner
           ARGS=(--stage "$STAGE" --shard "$SHARD" \
-                --into "$GITHUB_WORKSPACE/agentic-v2-run")
+                --into "$GITHUB_WORKSPACE/agentic-v2-run" \
+                --parquet "$RUNNER_TEMP/gdpval-pinned/data/train-00000-of-00001.parquet")
           if [ -n "$RUN_ID" ]; then
             # Namespaced per shard even when a run id was given. The shards are
             # separate journals of separate tasks, and two jobs resuming the

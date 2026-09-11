@@ -65,6 +65,14 @@ class AgenticV2FixtureBackend:
             os.close(self._root_fd)
             raise ValueError("fixture work root identity changed")
         self._root_identity = (opened.st_dev, opened.st_ino)
+        # `mkdir(mode=...)` above is ignored when the directory already exists,
+        # and it is subject to the umask when it does not, so neither call
+        # actually settles the mode. The provenance replay models this root as
+        # 0o700, so set it here through the verified descriptor rather than by
+        # path. Without this a work root prepared by someone else -- reference
+        # file staging creates it before the backend is built -- keeps the
+        # umask's 0o755 and every state digest disagrees with the model.
+        os.fchmod(self._root_fd, 0o700)
         self.profile = profile
         package_catalog_value = dict(
             {"python:demo-pkg==1.0.0": "d" * 64}
@@ -316,6 +324,44 @@ class AgenticV2FixtureBackend:
                 ):
                     self.work.rmdir()
         self.closed = True
+
+    def initial_workspace_declaration(self) -> list[dict]:
+        """What the workspace holds right now, for the run's opening event.
+
+        Called once, before the first tool call, so what it returns is the
+        starting point rather than a snapshot of anything the model did. The
+        replay in :mod:`core.agentic_v2_provenance` models this workspace from
+        the empty directory up and re-derives every result; a task handed its
+        input files starts somewhere else, and without being told where, the
+        replay rejects a run that was correct.
+
+        Digests and sizes rather than bytes -- the inputs reach hundreds of
+        megabytes and the trace would otherwise carry a copy of the dataset.
+        ``decodes_as_utf8`` is included because ``workspace_apply(read)``
+        decodes and the replay cannot tell from a digest whether a read should
+        have succeeded; without it, a backend reporting every input as
+        unreadable would be believed.
+        """
+        _, entries, _ = self._workspace_snapshot()
+        declaration = []
+        for entry in entries:
+            if entry["kind"] == "directory":
+                declaration.append({"path": entry["path"], "kind": "directory"})
+                continue
+            try:
+                self._read_bytes(entry["path"]).decode("utf-8")
+            except (UnicodeDecodeError, OSError, ValueError):
+                decodes = False
+            else:
+                decodes = True
+            declaration.append({
+                "path": entry["path"],
+                "kind": "file",
+                "sha256": entry["sha256"],
+                "size": entry["size"],
+                "decodes_as_utf8": decodes,
+            })
+        return declaration
 
     def _capabilities(self) -> dict:
         return foundation_fixture_identity(

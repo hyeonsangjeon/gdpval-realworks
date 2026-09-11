@@ -44,12 +44,14 @@ reply, never a credential — same rule as the stage A probe, for the same reaso
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 BATCH_RUNNER_ROOT = Path(__file__).resolve().parents[1]
 if str(BATCH_RUNNER_ROOT) not in sys.path:
@@ -74,6 +76,13 @@ from core.agentic_v2_manifest_binding import (  # noqa: E402
     binding_record,
 )
 from core.agentic_v2_preregistration import STAGE_SIZES  # noqa: E402
+from core.agentic_v2_reference_staging import (  # noqa: E402
+    MODEL_INPUT_PREFIX,
+    TaskStaging,
+    snapshot_problem,
+    stage_task_reference_files,
+    staging_record,
+)
 from core.agentic_v2_route_check import (  # noqa: E402
     check_route_is_the_one_the_plan_fixed,
 )
@@ -278,6 +287,19 @@ def main() -> int:
     parser.add_argument("--plan", type=Path, default=STAGE_ONE_PLAN_PATH)
     parser.add_argument("--parquet", type=Path, default=PINNED_DATASET_PARQUET)
     parser.add_argument(
+        "--dataset-root",
+        type=Path,
+        default=None,
+        help=(
+            "Where the reference files are copied from. Defaults to the "
+            "directory holding --parquet's own snapshot, so the prompts and "
+            "the files a task opens always come from one revision. Must be a "
+            "directory of real files: a huggingface_hub cache is a tree of "
+            "symlinks into a blob store outside it, and nothing here will "
+            "follow one. Fetch with `hf download ... --local-dir <dir>`."
+        ),
+    )
+    parser.add_argument(
         "--run-id",
         default=None,
         help=(
@@ -312,7 +334,25 @@ def main() -> int:
             "run would be allowed to go ahead."
         ),
     )
+    parser.add_argument(
+        "--rehearse",
+        action="store_true",
+        help=(
+            "Run the whole stage with a stand-in instead of a model: real "
+            "binding, real files, real workspace, real collection, no call and "
+            "no cost. Writes rehearsal_record.json rather than "
+            "run_record.json, because a rehearsal is not a result."
+        ),
+    )
     args = parser.parse_args()
+
+    if args.dry_run and args.rehearse:
+        print(
+            "Refused: --dry-run and --rehearse ask for different things. The "
+            "first stops before the work, the second does the work without a "
+            "model. Pick one."
+        )
+        return 1
 
     try:
         plan, verdict, catalog = verdict_for(args.plan)
@@ -322,6 +362,29 @@ def main() -> int:
             catalog=catalog,
             catalog_digest=catalog_sha256(),
         )
+        # The snapshot the prompts were read from, so a task cannot be given a
+        # prompt from one revision and a file from another.
+        dataset_root = (
+            args.dataset_root
+            if args.dataset_root is not None
+            else args.parquet.parent.parent
+        )
+        # Asked once, here, rather than discovered 261 times during the run.
+        # A cache of symlinks refuses every file individually and the run then
+        # looks like 125 tasks that failed on their merits, which is the single
+        # most expensive way to find out that a directory was wrong. Only asked
+        # when this cohort actually opens something: a stage whose tasks name no
+        # files is not blocked by a directory it will never read.
+        if any(task.reference_files for task in bound.tasks):
+            wrong_root = snapshot_problem(dataset_root)
+            if wrong_root is not None:
+                raise StageRefused(
+                    "the reference files cannot be staged from "
+                    f"{dataset_root}: {wrong_root}\n\n"
+                    "Refused before spending, because running anyway would "
+                    "hand every task an empty workspace and produce failures "
+                    "that read as the model's."
+                )
         # Priced over the whole stage, never over the shard. A shard is a way of
         # fitting the run into the place it has to happen, not a smaller
         # purchase — pricing each piece separately would let seventeen runs that
@@ -389,10 +452,14 @@ def main() -> int:
         print("  marking        not approved for this stage, and not spent here")
         print(f"                 {money['grading_not_approved_because']}")
     print(f"  isolation      none — fixture backend, exec_run shut")
+    # Was a flat count of tasks whose files "are not in the workspace", which
+    # stopped being true the moment staging existed. What is still true, and is
+    # what a reader needs, is where they come from and the one that cannot be
+    # delivered at any setting.
     print(
-        f"  handicap       {needs['tasks_needing_reference_files_count']} of "
-        f"{len(bound.tasks)} tasks name reference files that are not in the "
-        "workspace"
+        f"  inputs         {needs['tasks_needing_reference_files_count']} of "
+        f"{len(bound.tasks)} tasks name reference files, staged from "
+        f"{dataset_root}"
     )
     print()
 
@@ -402,6 +469,14 @@ def main() -> int:
             "for the paid run is met."
         )
         return 0
+
+    if args.rehearse:
+        print(
+            "Rehearsal. A stand-in works every task and no model is asked, so "
+            "the amounts above are what the paid run would be allowed rather "
+            "than what this one costs. Nothing here is a result."
+        )
+        print()
 
     into = (
         args.into
@@ -417,26 +492,39 @@ def main() -> int:
     from core.agentic_v2_model_voice import AzureFoundryVoice
     from core.azure_ai_clients import AzureAIRouteSettings, AzureAIWorkload
     from core.llm_client import create_typed_azure_client
-
-    settings = AzureAIRouteSettings.from_env()
-    managed = create_typed_azure_client(
-        AzureAIWorkload.INFERENCE,
-        deployment,
-        settings=settings,
-        timeout=float(plan["fixed_settings"]["per_task_timeout_seconds"]),
+    from core.agentic_v2_rehearsal_voice import (
+        RehearsalVoice,
+        rehearsal_is_not_a_run,
     )
-    prices = load_price_table()
+
+    # A rehearsal never builds a client. Not as an optimisation: a client that
+    # exists is a client something can be sent through, and the one thing this
+    # mode promises is that nothing was asked. There is no route to check for
+    # the same reason -- there is no route.
+    rehearsing = RehearsalVoice() if args.rehearse else None
+    managed = None
+    prices: Any = {}
+    if rehearsing is None:
+        settings = AzureAIRouteSettings.from_env()
+        managed = create_typed_azure_client(
+            AzureAIWorkload.INFERENCE,
+            deployment,
+            settings=settings,
+            timeout=float(plan["fixed_settings"]["per_task_timeout_seconds"]),
+        )
+        prices = load_price_table()
 
     try:
-        wrong_route = check_route_is_the_one_the_plan_fixed(
-            managed.route, connection, settings=settings
-        )
-        if wrong_route:
-            print(
-                "Refused after building a client and before asking it "
-                "anything.\n\n  - " + "\n  - ".join(wrong_route)
+        if rehearsing is None:
+            wrong_route = check_route_is_the_one_the_plan_fixed(
+                managed.route, connection, settings=settings
             )
-            return 1
+            if wrong_route:
+                print(
+                    "Refused after building a client and before asking it "
+                    "anything.\n\n  - " + "\n  - ".join(wrong_route)
+                )
+                return 1
 
         held = TaskConversations(ceilings, RunWideCeilings())
         attempts: dict[str, int] = {}
@@ -462,42 +550,95 @@ def main() -> int:
             )
 
         workspaces = into / "workspaces"
+        workspaces.mkdir(parents=True, exist_ok=True)
+        stagings: list[TaskStaging] = []
+        attempts_staged: dict[str, int] = {}
 
         def backend_factory(**kwargs):
-            task_root = workspaces / f"task-{len(list(workspaces.glob('task-*')))}"
-            task_root.mkdir(parents=True, exist_ok=True)
-            return AgenticV2FixtureBackend(root=task_root, **kwargs)
+            """One root per attempt, with that attempt's own copy of the inputs.
 
-        workspaces.mkdir(parents=True, exist_ok=True)
+            Named by the task rather than by how many directories exist, which
+            is what it counted before. A counter answers "how many have run",
+            and the question here is "which task is this" — so a resumed run,
+            or any run where a directory was made for something else, silently
+            handed a task the workspace belonging to another one.
+
+            Re-staged per attempt rather than shared, because the model writes
+            its deliverables into this same tree: a second attempt handed the
+            first attempt's directory starts with the first attempt's output
+            already in it, which is not a retry of the task.
+            """
+            task_id = str(kwargs.get("task_id") or "unknown-task")
+            attempt = attempts_staged[task_id] = attempts_staged.get(task_id, 0) + 1
+            task_root = (
+                workspaces
+                / f"{hashlib.sha256(task_id.encode('utf-8')).hexdigest()[:16]}"
+                f"-attempt-{attempt}"
+            )
+            task_root.mkdir(parents=True, exist_ok=True)
+            # Beneath `work/`, because that is the directory the backend opens
+            # and the only one the model can reach. Beneath `inputs/` within it,
+            # so the path in the record -- `inputs/reference_files/...` -- is
+            # where the file actually is rather than a label for where it
+            # morally belongs.
+            staged = stage_task_reference_files(
+                task_id=task_id,
+                reference_files=kwargs.get("reference_files") or (),
+                snapshot_root=dataset_root,
+                into=task_root / "work" / MODEL_INPUT_PREFIX,
+                render_text=True,
+            )
+            stagings.append(staged)
+            if staged.ran_without_its_inputs:
+                print(
+                    f"  {task_id}  staged {len(staged.delivered)} of "
+                    f"{staged.named} files; a failure here is not the model's"
+                )
+            if staged.could_open_nothing:
+                print(
+                    f"  {task_id}  has files and can open none of them; a "
+                    "failure here is not the model's either"
+                )
+            return AgenticV2FixtureBackend(root=task_root, **kwargs)
         factory = build_runner_factory(
             backend_factory=backend_factory,
             profile=profile,
             conversations=held,
             attempt_of=attempt_of,
-            voice_for=voice_for,
+            **(
+                {"voice": rehearsing}
+                if rehearsing is not None
+                else {"voice_for": voice_for}
+            ),
         )
 
         from core.cost_receipts import CostReceiptLedger
 
-        ledger = CostReceiptLedger(str(into / "cost_receipts.sqlite3"))
+        if rehearsing is not None:
+            # Every task ends unaccounted, which is the true answer. A rehearsal
+            # makes no call, and a ledger row saying $0 would be the one number
+            # that reads as a measurement of a model that was never asked.
+            receipt_for = lambda task, attempt: None  # noqa: E731
+        else:
+            ledger = CostReceiptLedger(str(into / "cost_receipts.sqlite3"))
 
-        def receipt_for(task, attempt: int):
-            outcome = held.outcome_of(task.task_id, attempt)
-            if outcome is None:
-                return None
-            turns = model_turns_of(
-                outcome,
-                run_id=run_id,
-                task_id=task.task_id,
-                attempt=attempt,
-                provider="azure",
-                requested_model=deployment,
-                deployment=deployment,
-                resolved_model=None,
-            )
-            return bind_run_to_ledger(
-                ledger, task_id=task.task_id, model_turns=turns
-            )
+            def receipt_for(task, attempt: int):
+                outcome = held.outcome_of(task.task_id, attempt)
+                if outcome is None:
+                    return None
+                turns = model_turns_of(
+                    outcome,
+                    run_id=run_id,
+                    task_id=task.task_id,
+                    attempt=attempt,
+                    provider="azure",
+                    requested_model=deployment,
+                    deployment=deployment,
+                    resolved_model=None,
+                )
+                return bind_run_to_ledger(
+                    ledger, task_id=task.task_id, model_turns=turns
+                )
 
         outcome = run_manifest(
             tasks_to_run,
@@ -507,14 +648,19 @@ def main() -> int:
             collect_into=into / "deliverables",
             receipt_for=receipt_for,
             on_task=lambda task_id, row: print(
-                f"  {task_id}  {'ok' if row.get('success') else 'failed'}"
+                # `status`, not a `success` key -- the row is a report row and
+                # has never carried one, so the old `row.get("success")` read
+                # None for every task and printed "failed" beside five tasks
+                # that had all succeeded.
+                f"  {task_id}  {'ok' if row.get('status') == 'success' else 'failed'}"
             ),
         )
     except DriverRefused as refusal:
         print(f"\nThe run was refused.\n\n{refusal}")
         return 1
     finally:
-        managed.close()
+        if managed is not None:
+            managed.close()
 
     record = {
         "stage": args.stage,
@@ -537,20 +683,43 @@ def main() -> int:
             }
         ),
         "approved_amounts": pricing.as_dict(),
+        # What each task was actually handed, per attempt, by name. The binding
+        # record's `unmet_needs` says which tasks *want* files; this says which
+        # got them. A result is read against this one.
+        "reference_files": staging_record(stagings),
         "environment": environment_note(profile),
-        "route_fingerprint": managed.runtime_fingerprint,
+        "route_fingerprint": (
+            rehearsal_is_not_a_run()
+            if rehearsing is not None
+            else managed.runtime_fingerprint
+        ),
         "chosen_settings": chosen.as_dict(),
         "conversations": held.as_dict(),
         "run": outcome.as_dict(),
     }
+    if rehearsing is not None:
+        record["rehearsal"] = rehearsing.as_dict()
     written = json.dumps(record, indent=2, sort_keys=True, default=str)
-    (into / "run_record.json").write_text(written + "\n", encoding="utf-8")
+    # A different name, so that nothing which reads a run's record can be handed
+    # a rehearsal's by accident. The disclaimer inside it is for a person; the
+    # filename is for everything else.
+    name = "rehearsal_record.json" if rehearsing is not None else "run_record.json"
+    (into / name).write_text(written + "\n", encoding="utf-8")
 
     summary = outcome.summary
     print()
-    print(f"  record         {into / 'run_record.json'}")
+    print(f"  record         {into / name}")
     print(f"  finished       {summary.get('succeeded', 0)} of {len(tasks_to_run)}")
-    print(f"  spent          {held.spent}")
+    if rehearsing is not None:
+        found = rehearsing.as_dict()
+        print(
+            f"  guide readable {found['guide_was_readable_in']} of "
+            f"{found['tasks_worked']} tasks"
+        )
+        print(f"  wrote a file   {found['wrote_a_file_in']} of {found['tasks_worked']}")
+        print("  spent          nothing — no model was asked")
+    else:
+        print(f"  spent          {held.spent}")
     if shard is not None:
         print(
             f"\nThis was shard {shard.index} of {shard.of}. The stage has not "

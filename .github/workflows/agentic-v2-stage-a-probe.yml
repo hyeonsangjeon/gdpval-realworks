@@ -107,13 +107,19 @@ jobs:
       # No charge. The revision is the one the catalogue was built from and the
       # one every figure in the comparison rests on; the runner hashes the
       # wording it reads and refuses if it is not what was priced.
+      #
+      # Only `data/`, because this probe asks one question of one prompt and
+      # never opens a reference file. The rest of the repository is 2.2 GB
+      # fetched to be ignored. The stage runner, which does open them, fetches
+      # differently and for stated reasons -- see `agentic-v2-stage-run.yml`.
       - name: Fetch the pinned dataset
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           set -euo pipefail
           hf download openai/gdpval --repo-type dataset \
-            --revision 11e7900cdcac61bc4daf59e65feb238acda98fbf
+            --revision 11e7900cdcac61bc4daf59e65feb238acda98fbf \
+            --include 'data/*'
 
       - name: Dry run
         run: |
@@ -169,7 +175,8 @@ jobs:
         run: |
           set -euo pipefail
           hf download openai/gdpval --repo-type dataset \
-            --revision 11e7900cdcac61bc4daf59e65feb238acda98fbf
+            --revision 11e7900cdcac61bc4daf59e65feb238acda98fbf \
+            --include 'data/*'
 
       # Read from the plan rather than written here. The deployment appears in
       # exactly one place in the repository, so a workflow cannot come to

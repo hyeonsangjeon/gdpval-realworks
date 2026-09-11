@@ -83,6 +83,257 @@
     "trial_30",
     "full_220"
   ],
+  "inputs": {
+    "how_to_check_this": "core.agentic_v2_preregistration.verify_input_disposition for the sizes and core.agentic_v2_preregistration.verify_reader_reach for what can be opened, both against a copy of the pinned revision",
+    "limits": {
+      "come_from": "core/agentic_compute.py",
+      "max_bytes_per_file": 536870912,
+      "max_bytes_per_file_in_the_workspace": 1048576,
+      "max_bytes_per_task": 2147483648,
+      "max_files_per_task": 256,
+      "the_workspace_limit_comes_from": "core/agentic_v2_fixture_backend.py, and it is enforced while walking the whole workspace rather than on the file being touched. The walk runs on write, so one file over it stops the task writing anything at all and the model is told only fixture_backend_error"
+    },
+    "no_substitute_is_made": "a file that cannot be delivered is recorded as not delivered. Nothing is put in its place -- subtitles, frames or a summary would each be a different task from the one the dataset sets, and a score reported against a task nobody set is worse than a gap",
+    "per_stage": {
+      "advance_check_5": {
+        "files_named": 2,
+        "files_that_cannot_be_delivered": [],
+        "files_too_large_for_the_workspace": [],
+        "tasks": 5,
+        "tasks_affected_by_the_workspace_limit": 0,
+        "tasks_naming_reference_files": 2
+      },
+      "full_220": {
+        "files_named": 261,
+        "files_that_cannot_be_delivered": [
+          {
+            "occupation": "Film and Video Editors",
+            "path": "reference_files/67469cf2a7509f149c095cf4f6542f6d/TWT_A001_03.mp4",
+            "reason": "larger_than_the_single_file_limit",
+            "size_bytes": 689061330,
+            "task_id": "a941b6d8-4289-4500-b45a-f8e4fc94a724"
+          }
+        ],
+        "files_too_large_for_the_workspace": [
+          {
+            "occupation": "Recreation Workers",
+            "path": "reference_files/21f10d79c065e77a3e36c952a0c3b3b8/Recreare Parks & Recreation Summer Fun Facilities.docx",
+            "rendered_characters": 2615,
+            "size_bytes": 2315023,
+            "task_id": "01d7e53e-0513-4109-a242-8ccaf442cd21"
+          },
+          {
+            "occupation": "Real Estate Sales Agents",
+            "path": "reference_files/1e15759c2909d91e9cd6024813a1a1f7/Massabama active listings.xlsx",
+            "rendered_characters": 1973,
+            "size_bytes": 14509694,
+            "task_id": "11593a50-734d-4449-b5b4-f8986a133fd8"
+          },
+          {
+            "occupation": "Audio and Video Technicians",
+            "path": "reference_files/028fb83486152124cfecf2667c3cef37/DRUM REFERENCE TRACK.wav",
+            "rendered_characters": 139,
+            "size_bytes": 33554432,
+            "task_id": "38889c3b-e3d4-49c8-816a-3cc8e5313aba"
+          },
+          {
+            "occupation": "Editors",
+            "path": "reference_files/1389fc5af6430c02dd7bd93c7ce05cc7/Boilerplate.docx",
+            "rendered_characters": 2456,
+            "size_bytes": 2898134,
+            "task_id": "3a4c347c-4aec-43c7-9a54-eb1f816ab1f9"
+          },
+          {
+            "occupation": "Project Management Specialists",
+            "path": "reference_files/ca6c768fe272f61c00d001c884c42237/INPUT 4 BridgeMind AI POC deployment PROJECT LOG.docx",
+            "rendered_characters": 8794,
+            "size_bytes": 1398074,
+            "task_id": "3c19c6d1-672c-467a-8437-6fe21afb8eae"
+          },
+          {
+            "occupation": "First-Line Supervisors of Retail Sales Workers",
+            "path": "reference_files/2c0a245a7c98c858b2ae975c7bbab3b6/ORDER LIST.pdf",
+            "rendered_characters": 0,
+            "size_bytes": 6984257,
+            "task_id": "45c6237b-f9c9-4526-9a8d-6a5c404624ec"
+          },
+          {
+            "occupation": "Financial and Investment Analysts",
+            "path": "reference_files/40407caad9b871b09e3a075bdd971b15/Research Material.docx",
+            "rendered_characters": 105,
+            "size_bytes": 2799328,
+            "task_id": "46b34f78-6c06-4416-87e2-77b6d8b20ce9"
+          },
+          {
+            "occupation": "Audio and Video Technicians",
+            "path": "reference_files/10844d4ba6b1f18120245109db76f403/State of Affairs_STEM_DRUMS.wav",
+            "rendered_characters": 146,
+            "size_bytes": 58752102,
+            "task_id": "4b894ae3-1f23-4560-b13d-07ed1132074e"
+          },
+          {
+            "occupation": "Audio and Video Technicians",
+            "path": "reference_files/2adacf89b84661aadd0c80d91a81fb73/State of Affairs_ROUGHMIX.wav",
+            "rendered_characters": 144,
+            "size_bytes": 58752102,
+            "task_id": "4b894ae3-1f23-4560-b13d-07ed1132074e"
+          },
+          {
+            "occupation": "Audio and Video Technicians",
+            "path": "reference_files/88944520f1ce15927dd5a6a08d3ee9b2/State of Affairs_STEM_ORGAN.wav",
+            "rendered_characters": 146,
+            "size_bytes": 58752102,
+            "task_id": "4b894ae3-1f23-4560-b13d-07ed1132074e"
+          },
+          {
+            "occupation": "Audio and Video Technicians",
+            "path": "reference_files/073946a18125717bdad58178466039fd/State of Affairs_STEM_BASS.wav",
+            "rendered_characters": 145,
+            "size_bytes": 33554432,
+            "task_id": "4b894ae3-1f23-4560-b13d-07ed1132074e"
+          },
+          {
+            "occupation": "Audio and Video Technicians",
+            "path": "reference_files/48836e54ef271e8fd1a301d3e20ea470/State of Affairs_STEM_ACGTRS.wav",
+            "rendered_characters": 147,
+            "size_bytes": 33554432,
+            "task_id": "4b894ae3-1f23-4560-b13d-07ed1132074e"
+          },
+          {
+            "occupation": "First-Line Supervisors of Office and Administrative Support Workers",
+            "path": "reference_files/6940c7b0ba1ffdcbce4266eba053a9e4/Floor Layout for Interviews.png",
+            "rendered_characters": 63,
+            "size_bytes": 1675294,
+            "task_id": "4d1a8410-e9c5-4be5-ab43-cc55563c594c"
+          },
+          {
+            "occupation": "Private Detectives and Investigators",
+            "path": "reference_files/74e9b9b1de3156972930ebb7d4d5321a/Photographs.zip",
+            "rendered_characters": 36,
+            "size_bytes": 9507893,
+            "task_id": "57b2cdf2-ad62-4591-aa91-aad489740320"
+          },
+          {
+            "occupation": "News Analysts, Reporters, and Journalists",
+            "path": "reference_files/c575a5476fac2f921cfd192ca5c48622/TRAPPIST-1 Reporter Draft.docx",
+            "rendered_characters": 4446,
+            "size_bytes": 1913096,
+            "task_id": "5d0feb24-e8b6-4ace-b64f-d5cd1a8b563d"
+          },
+          {
+            "occupation": "Film and Video Editors",
+            "path": "reference_files/04fe2846f45b476d5231b53beeae767a/reel footage.zip",
+            "rendered_characters": 39,
+            "size_bytes": 333716426,
+            "task_id": "75401f7c-396d-406d-b08e-938874ad1045"
+          },
+          {
+            "occupation": "Film and Video Editors",
+            "path": "reference_files/9f47a167476d2ff6ecc485f97e8341c9/action-energetic-rock-music-334316.mp3",
+            "rendered_characters": 145,
+            "size_bytes": 5302229,
+            "task_id": "75401f7c-396d-406d-b08e-938874ad1045"
+          },
+          {
+            "occupation": "Private Detectives and Investigators",
+            "path": "reference_files/f4c7bfae38d21c8ad4f4b624d194aab4/Photographs.zip",
+            "rendered_characters": 36,
+            "size_bytes": 4415094,
+            "task_id": "a46d5cd2-55fe-48fa-a4c6-6aaf6b9991b5"
+          },
+          {
+            "occupation": "Film and Video Editors",
+            "path": "reference_files/67469cf2a7509f149c095cf4f6542f6d/TWT_A001_03.mp4",
+            "rendered_characters": 129,
+            "size_bytes": 689061330,
+            "task_id": "a941b6d8-4289-4500-b45a-f8e4fc94a724"
+          },
+          {
+            "occupation": "Film and Video Editors",
+            "path": "reference_files/d88a33c7e63981a67e899cc8c1347ece/TWT_001_02.mp4",
+            "rendered_characters": 127,
+            "size_bytes": 230703477,
+            "task_id": "a941b6d8-4289-4500-b45a-f8e4fc94a724"
+          },
+          {
+            "occupation": "Pharmacists",
+            "path": "reference_files/8860a54103b6edb9313d04c0f4434980/what are these.jpg",
+            "rendered_characters": 49,
+            "size_bytes": 1800970,
+            "task_id": "f2986c1f-2bbf-4b83-bc93-624a9d617f45"
+          },
+          {
+            "occupation": "Audio and Video Technicians",
+            "path": "reference_files/ca53448cbec7b57b575d9d0e229f08c4/TAVARUA_MUSIC ONLY.wav",
+            "rendered_characters": 137,
+            "size_bytes": 32140902,
+            "task_id": "ff85ee58-bc9f-4aa2-806d-87edeabb1b81"
+          },
+          {
+            "occupation": "Audio and Video Technicians",
+            "path": "reference_files/758a72de9d221d7aa2707e554c20459d/TAVARUA_SAX RAW.wav",
+            "rendered_characters": 133,
+            "size_bytes": 22031470,
+            "task_id": "ff85ee58-bc9f-4aa2-806d-87edeabb1b81"
+          },
+          {
+            "occupation": "Audio and Video Technicians",
+            "path": "reference_files/7b740f4720fe70f8b445fd059e1912f5/TAVARUA_SAX REFERENCE MP3.mp3",
+            "rendered_characters": 135,
+            "size_bytes": 1094950,
+            "task_id": "ff85ee58-bc9f-4aa2-806d-87edeabb1b81"
+          }
+        ],
+        "tasks": 220,
+        "tasks_affected_by_the_workspace_limit": 16,
+        "tasks_naming_reference_files": 125
+      },
+      "trial_30": {
+        "files_named": 21,
+        "files_that_cannot_be_delivered": [],
+        "files_too_large_for_the_workspace": [
+          {
+            "occupation": "Recreation Workers",
+            "path": "reference_files/21f10d79c065e77a3e36c952a0c3b3b8/Recreare Parks & Recreation Summer Fun Facilities.docx",
+            "rendered_characters": 2615,
+            "size_bytes": 2315023,
+            "task_id": "01d7e53e-0513-4109-a242-8ccaf442cd21"
+          },
+          {
+            "occupation": "Audio and Video Technicians",
+            "path": "reference_files/028fb83486152124cfecf2667c3cef37/DRUM REFERENCE TRACK.wav",
+            "rendered_characters": 139,
+            "size_bytes": 33554432,
+            "task_id": "38889c3b-e3d4-49c8-816a-3cc8e5313aba"
+          },
+          {
+            "occupation": "Editors",
+            "path": "reference_files/1389fc5af6430c02dd7bd93c7ce05cc7/Boilerplate.docx",
+            "rendered_characters": 2456,
+            "size_bytes": 2898134,
+            "task_id": "3a4c347c-4aec-43c7-9a54-eb1f816ab1f9"
+          }
+        ],
+        "tasks": 30,
+        "tasks_affected_by_the_workspace_limit": 3,
+        "tasks_naming_reference_files": 14
+      }
+    },
+    "staged_into": "inputs/ inside each task's own workspace, one workspace per attempt, copied from the same revision the prompt text comes from",
+    "text_renderings": {
+      "how_to_check_this": "core.agentic_v2_reference_staging.stage_task_reference_files with render_text=True, and the per-file outcomes it records",
+      "never_a_replacement": "the original stays where it is whenever it can be staged, and a rendering is never presented as the file. Layout, images, styling and anything a picture carries are lost, and a long one is cut to fit the workspace limit and says so at the cut",
+      "this_is_a_difference_from_the_codex_run": "A's model has a real shell and opens these files itself. A V2 result on a task whose work needed what a rendering loses is not comparable to A's result on the same task, and this is the record that says so before either is run",
+      "what_they_are": "a text extraction made by core.file_reader and staged beside the file it came from, under inputs/extracted/. All 261 files extract without error; what comes out is text for spreadsheets, PDFs and documents, and a one-line label for images, recordings and archives"
+    },
+    "what_a_failure_there_does_not_show": "a task that ran without a file it named is not evidence about the model. It is recorded with the missing file's name so the two cannot be read as one. Nor is a task that was handed files it could not open: that one is recorded separately again, because a task holding only unreadable files has nothing refused and would otherwise be indistinguishable from a task given everything",
+    "what_the_model_can_open_by_itself": {
+      "files_named_by_the_tasks": 261,
+      "files_that_decode_as_utf8": 3,
+      "how_that_was_measured": "every one of them decoded as UTF-8 against the pinned revision, which is what workspace_apply(read) does. Two CAD .STEP files and one .txt succeed; the other 258 do not",
+      "why_it_matters": "with exec_run shut there is no shell, no pandas and no PDF library, so a read is the only way in. A model that cannot open its inputs and writes from the prompt alone produces a result that looks exactly like a model that did the work badly"
+    }
+  },
   "manifest": {
     "catalog_sha256": "5f1eca853979b2b4efe6c6ba656545c3a416da920e3faf067d52f5d8ac4ae0eb",
     "dataset_file_sha256": "f8422fab9b21d90c0ee5f0659842ab666d418cb8940842918f9f4b0df7ae0202",
@@ -408,6 +659,13 @@
       "resolved_model": "gpt-5.4",
       "route_profile": "project-ci"
     },
+    "one_failed_tool_call_ends_the_task": {
+      "comes_from": "core/agentic_v2_runner.py dispatch_one",
+      "holds": true,
+      "is_not": "evidence about the model. It is the desk closing on the first mistake, and a task that ends this way says what the call was and what came back",
+      "recorded_as": "stop_reason tool_desk_broke",
+      "the_model_is_told": "nothing, and is not asked for another turn"
+    },
     "per_task_ceilings": {
       "max_input_tokens": 737280,
       "max_model_calls": 9,
@@ -423,7 +681,7 @@
       "task_wording_comes_from": "the pinned dataset revision in `manifest`"
     },
     "read_from": "batch-runner/experiments/execution_envelope/agentic_stage_one_plan.yaml",
-    "read_from_sha256": "c213a96e7e0353b6b29d905a6b5d6b221d93654475ab6ce6436e5c7eeb268e46",
+    "read_from_sha256": "7b0fc8ab0573853adbae491490c01e97fbe506f4952de0509e8d0d6c1396d7ce",
     "retry": {
       "kinds_recorded_separately": [
         "infrastructure",
@@ -456,7 +714,7 @@
     },
     "what_stops_a_task": "any per-task ceiling above, or the per-task budget, whichever comes first. A task stopped by a ceiling is recorded as stopped by that ceiling and is not a model failure"
   },
-  "seal": "6955e0f64bccdfe4138f1edade67a07c7d591c5e865328e43aa1a50ac64dcb87",
+  "seal": "f9a906ab1bcf89cdfdd25a8454c35be17ad2d32e4ae3e0b95782ad236853dcd9",
   "stop_rules": [
     "the deployment or model reported back differs from the pinned one",
     "a run switches model or deployment on its own",
