@@ -913,10 +913,19 @@ jobs:
           cd batch-runner
           bash step1_prepare_tasks.sh "experiments/${EXPERIMENT_YAML_INPUT}.yaml"
 
+      # Reaches `_require_runnable_execution_mode` exactly as step2a does, and
+      # so needs the same gate variable. It ran without one until run
+      # 34596408490: leg 0 (run 34571840967) reached 45 of 220 and uploaded
+      # its checkpoint cleanly, and four minutes later leg 1 died here, before
+      # touching it.
+      # The defect is invisible on leg 0 because this step only runs on a
+      # handover -- so a relay that needs no handover passes, and every relay
+      # long enough to need one could never have completed.
       - name: 'Validate restored checkpoint identity'
         if: inputs.relay_run > 0
         env:
           GDPVAL_RELAY_LINEAGE_ID: ${{ inputs.relay_lineage_id }}
+          CODEX_FOUNDRY_CONNECTION_CONFIRMED: ${{ steps.read_config.outputs.uses_codex_foundry == 'true' && needs.inspect-mode.outputs.codex_confirmed == 'true' && '1' || '' }}
           AZURE_AI_ROUTE_PROFILE: ${{ steps.read_config.outputs.uses_code_interpreter == 'true' && 'project-ci' || 'direct-v1' }}
           FOUNDRY_PROJECT_ENDPOINT: ${{ secrets.FOUNDRY_PROJECT_ENDPOINT }}
           AZURE_AI_REQUIRE_EXPECTED_IDENTITIES: '1'
