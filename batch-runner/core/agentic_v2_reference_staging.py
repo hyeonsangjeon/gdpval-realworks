@@ -303,6 +303,28 @@ class TaskStaging:
             return False
         return not any(one.is_readable for one in self.extractions)
 
+    @property
+    def worked_from_the_prompt_alone(self) -> bool:
+        """The task named files and not one readable character reached it.
+
+        A superset of :attr:`could_open_nothing`, and the reason it exists is
+        that the subset reads as reassurance where it is least deserved.
+        ``could_open_nothing`` asks its question of the files that arrived, so a
+        task whose every file was refused has no files to ask about and comes
+        back ``False`` -- the same answer given by a task that got everything
+        and read it fine. Six of the 220 are in exactly that position: every
+        file refused for size, nothing delivered, and the summary saying no.
+
+        True here means the model had the prompt and nothing else, however it
+        got there. That is the whole question a result needs answering, because
+        a thin answer to a task in this state is the environment's, and reading
+        it as the model's would be reading a fault we introduced as a finding
+        about the thing under test.
+        """
+        if not self.named:
+            return False
+        return not any(one.is_readable for one in self.extractions)
+
     def as_dict(self) -> dict[str, Any]:
         return {
             "task_id": self.task_id,
@@ -314,6 +336,7 @@ class TaskStaging:
             "guide": self.guide,
             "everything_arrived": self.everything_arrived,
             "could_open_nothing": self.could_open_nothing,
+            "worked_from_the_prompt_alone": self.worked_from_the_prompt_alone,
         }
 
 
@@ -980,6 +1003,7 @@ def staging_record(stagings: Sequence[TaskStaging]) -> dict[str, Any]:
     needed = [one for one in stagings if one.named]
     short = [one for one in needed if one.ran_without_its_inputs]
     blind = [one for one in needed if one.could_open_nothing]
+    prompt_only = [one for one in needed if one.worked_from_the_prompt_alone]
     reasons: dict[str, int] = {}
     for one in stagings:
         for refusal in one.refused:
@@ -996,6 +1020,7 @@ def staging_record(stagings: Sequence[TaskStaging]) -> dict[str, Any]:
         "tasks_given_everything_they_named": len(needed) - len(short),
         "tasks_that_ran_without_some_input": len(short),
         "tasks_that_could_open_nothing": len(blind),
+        "tasks_that_worked_from_the_prompt_alone": len(prompt_only),
         "files_delivered": sum(len(one.delivered) for one in stagings),
         "bytes_delivered": sum(
             file.size_bytes for one in stagings for file in one.delivered
@@ -1006,7 +1031,11 @@ def staging_record(stagings: Sequence[TaskStaging]) -> dict[str, Any]:
             f"{len(needed) - len(short)} of {len(needed)} tasks that name "
             "reference files were given all of them. "
             f"{len(short)} were not, and each missing file is named below. A "
-            "failure on one of those is not evidence about the model."
+            "failure on one of those is not evidence about the model. "
+            f"{len(prompt_only)} are further along than that: nothing readable "
+            "reached them at all, so whatever they answered was answered from "
+            "the prompt, and grading them against the inputs they never saw "
+            "would be scoring this environment and calling it the model."
         ),
         "what_a_rendering_is": (
             "a text extraction made by core.file_reader, staged beside the file "

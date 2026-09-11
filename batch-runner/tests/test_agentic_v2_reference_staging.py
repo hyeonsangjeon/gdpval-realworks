@@ -1071,6 +1071,146 @@ def test_the_record_counts_blind_tasks_and_renderings_by_outcome(
     assert [one["could_open_nothing"] for one in record["tasks"]] == [True, False]
 
 
+def test_a_task_whose_every_file_was_refused_is_not_reported_as_fine(
+    snapshot, tmp_path
+):
+    """The state `could_open_nothing` cannot see, and the one that costs most.
+
+    That field asks its question of the files that arrived. Refuse them all and
+    there is nothing to ask about, so it answers False -- the same False a task
+    gets for receiving everything and reading it fine. The worst case and the
+    best case were printing identically.
+
+    Six of the 220 are here: every named file over the workspace limit, nothing
+    delivered, and a `.wav` or an `.mp4` behind the refusal so the rendering
+    carries a description of the file rather than anything in it.
+    """
+    big = snapshot / "reference_files" / "abc123" / "track.wav"
+    big.write_bytes(b"RIFF" + b"\x00" * 4000)
+
+    result = _render(
+        snapshot, tmp_path, "reference_files/abc123/track.wav", limit=512
+    )
+
+    assert result.delivered == ()
+    assert _reasons(result) == [staging.TOO_LARGE_FOR_THE_WORKSPACE]
+    assert result.could_open_nothing is False
+    assert result.worked_from_the_prompt_alone is True
+
+
+def test_a_task_naming_nothing_did_not_work_from_the_prompt_alone(
+    snapshot, tmp_path
+):
+    """It had no inputs to lose, and marking it would drown the six that did.
+
+    95 of the 220 name no reference files. If those counted here the field
+    would report 101 and mean nothing: the number exists to say whose answer
+    was written without inputs it was promised, and a task promised none was
+    not deprived of anything.
+    """
+    result = _render(snapshot, tmp_path)
+
+    assert result.named == 0
+    assert result.worked_from_the_prompt_alone is False
+
+
+def test_one_readable_rendering_is_enough_to_clear_it(snapshot, tmp_path):
+    """Refused bytes are survivable; refused bytes with no text are not.
+
+    The distinction the field turns on. Both files here are over the limit and
+    neither is delivered, so `everything_arrived` is False for the task either
+    way -- but one of them rendered, and a task holding 2,456 characters of its
+    own contract is not working from the prompt alone.
+    """
+    room = snapshot / "reference_files" / "abc123"
+    (room / "track.wav").write_bytes(b"RIFF" + b"\x00" * 4000)
+    (room / "contract.txt").write_text("the agreed rate " * 100, encoding="utf-8")
+
+    result = _render(
+        snapshot,
+        tmp_path,
+        "reference_files/abc123/track.wav",
+        "reference_files/abc123/contract.txt",
+        limit=512,
+    )
+
+    assert result.delivered == ()
+    assert len(result.refused) == 2
+    assert result.worked_from_the_prompt_alone is False
+
+
+def test_the_record_counts_and_names_the_prompt_alone_tasks(snapshot, tmp_path):
+    """A count to skim and, underneath it, which tasks it was.
+
+    The count alone would be the same mistake this field was added to fix: a
+    reader who cannot get from `2` to the two task ids cannot check whether a
+    weak answer came from a model or from an empty directory.
+    """
+    room = snapshot / "reference_files" / "abc123"
+    (room / "track.wav").write_bytes(b"RIFF" + b"\x00" * 4000)
+    (room / "notes.txt").write_text("readable", encoding="utf-8")
+    starved = _render(
+        snapshot, tmp_path / "a", "reference_files/abc123/track.wav", limit=512
+    )
+    fed = _render(snapshot, tmp_path / "b", "reference_files/abc123/notes.txt")
+
+    record = staging_record([starved, fed])
+
+    assert record["tasks_that_worked_from_the_prompt_alone"] == 1
+    assert [
+        one["worked_from_the_prompt_alone"] for one in record["tasks"]
+    ] == [True, False]
+    assert "answered from the prompt" in record["what_that_means"]
+
+
+def test_the_tasks_no_text_reader_can_ever_serve_are_named_from_the_catalogue():
+    """Seven tasks name audio, video or images and nothing else.
+
+    Not a defect and not fixable by raising a limit: a `.wav` has no text in it
+    at any size, so for these seven the rendering is a description of the file
+    and the model works from the prompt. The 220-task rehearsal found nine
+    tasks with no readable input, and these are seven of them -- the other two
+    are a `.docx` the reader could not open and a `.pdf` with no text layer,
+    which are reader gaps rather than a property of the task.
+
+    Derived here rather than written down, because the honest sentence about
+    this environment depends on it: results for these seven measure what a
+    model does with a prompt and a filename, and pooling them with the other
+    213 makes the environment's ceiling look like the model's.
+
+    Only the extensions are used. How large the files are decides whether their
+    bytes arrive, which is a fact about a run and belongs in its record, not in
+    a test that never opens the dataset.
+    """
+    from core.execution_envelope_tasks import full_run_tasks, load_task_catalog
+
+    unreadable_by_any_text_reader = {
+        ".avi", ".bmp", ".gif", ".heic", ".jpeg", ".jpg", ".m4a", ".mov",
+        ".mp3", ".mp4", ".png", ".tif", ".tiff", ".wav", ".webp", ".zip",
+    }
+    catalog = load_task_catalog()
+    by_id = catalog.by_task_id()
+    named = [
+        by_id[task_id]
+        for task_id in full_run_tasks(catalog)
+        if by_id[task_id].reference_file_count
+    ]
+    media_only = [
+        one
+        for one in named
+        if all(
+            extension.lower() in unreadable_by_any_text_reader
+            for extension in one.reference_file_extensions
+        )
+    ]
+
+    assert len(named) == 125
+    assert len(media_only) == 7
+    assert "38889c3b-e3d4-49c8-816a-3cc8e5313aba" in {
+        one.task_id for one in media_only
+    }
+
+
 def test_the_record_says_what_a_rendering_is_and_is_not(snapshot, tmp_path):
     """A reader of the record must not take an extraction for the file.
 
