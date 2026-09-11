@@ -101,7 +101,8 @@
         "files_too_large_for_the_workspace": [],
         "tasks": 5,
         "tasks_affected_by_the_workspace_limit": 0,
-        "tasks_naming_reference_files": 2
+        "tasks_naming_reference_files": 2,
+        "tasks_that_worked_from_the_prompt_alone": []
       },
       "full_220": {
         "files_named": 261,
@@ -286,7 +287,18 @@
         ],
         "tasks": 220,
         "tasks_affected_by_the_workspace_limit": 16,
-        "tasks_naming_reference_files": 125
+        "tasks_naming_reference_files": 125,
+        "tasks_that_worked_from_the_prompt_alone": [
+          "38889c3b-e3d4-49c8-816a-3cc8e5313aba",
+          "46b34f78-6c06-4416-87e2-77b6d8b20ce9",
+          "55ddb773-23a4-454c-8704-d432fe1b99d9",
+          "75401f7c-396d-406d-b08e-938874ad1045",
+          "94925f49-36bc-42da-b45b-61078d329300",
+          "a941b6d8-4289-4500-b45a-f8e4fc94a724",
+          "b9665ca1-4da4-4ff9-86f2-40b9a8683048",
+          "f2986c1f-2bbf-4b83-bc93-624a9d617f45",
+          "ff85ee58-bc9f-4aa2-806d-87edeabb1b81"
+        ]
       },
       "trial_30": {
         "files_named": 21,
@@ -316,17 +328,28 @@
         ],
         "tasks": 30,
         "tasks_affected_by_the_workspace_limit": 3,
-        "tasks_naming_reference_files": 14
+        "tasks_naming_reference_files": 14,
+        "tasks_that_worked_from_the_prompt_alone": [
+          "38889c3b-e3d4-49c8-816a-3cc8e5313aba"
+        ]
       }
     },
     "staged_into": "inputs/ inside each task's own workspace, one workspace per attempt, copied from the same revision the prompt text comes from",
     "text_renderings": {
       "how_to_check_this": "core.agentic_v2_reference_staging.stage_task_reference_files with render_text=True, and the per-file outcomes it records",
       "never_a_replacement": "the original stays where it is whenever it can be staged, and a rendering is never presented as the file. Layout, images, styling and anything a picture carries are lost, and a long one is cut to fit the workspace limit and says so at the cut",
+      "not_all_of_them_open": "2 of 261 the reader cannot open at all, and 5 it opens and finds no text in -- a scanned PDF among them, which is no more use to the model for having opened cleanly. Written down because the sentence here used to say all 261 extract without error, and a record that overstates what reached the model turns an input the model never had into an answer the model got wrong",
       "this_is_a_difference_from_the_codex_run": "A's model has a real shell and opens these files itself. A V2 result on a task whose work needed what a rendering loses is not comparable to A's result on the same task, and this is the record that says so before either is run",
-      "what_they_are": "a text extraction made by core.file_reader and staged beside the file it came from, under inputs/extracted/. All 261 files extract without error; what comes out is text for spreadsheets, PDFs and documents, and a one-line label for images, recordings and archives"
+      "what_the_reader_got_out_of_them": {
+        "text_was_read_out_of_it": 221,
+        "text_was_read_out_of_it_and_cut_to_the_workspace_limit": 1,
+        "the_reader_could_not_open_it": 2,
+        "the_reader_describes_this_kind_rather_than_reading_it": 32,
+        "the_reader_found_no_text_in_it": 5
+      },
+      "what_they_are": "a text extraction made by core.file_reader and staged beside the file it came from, under inputs/extracted/. What comes out is text for spreadsheets, PDFs and documents, and a one-line label for images, recordings and archives"
     },
-    "what_a_failure_there_does_not_show": "a task that ran without a file it named is not evidence about the model. It is recorded with the missing file's name so the two cannot be read as one. Nor is a task that was handed files it could not open: that one is recorded separately again, because a task holding only unreadable files has nothing refused and would otherwise be indistinguishable from a task given everything",
+    "what_a_failure_there_does_not_show": "a task that ran without a file it named is not evidence about the model. It is recorded with the missing file's name so the two cannot be read as one. Nor is a task that was handed files it could not open: that one is recorded separately again, because a task holding only unreadable files has nothing refused and would otherwise be indistinguishable from a task given everything. Nor, third, is a task whose every file was refused -- it has no delivered file to call unreadable either, so it too answered no to both questions and read as fine. The three are gathered under tasks_that_worked_from_the_prompt_alone, which asks the question that actually matters: did one readable character reach it",
     "what_the_model_can_open_by_itself": {
       "files_named_by_the_tasks": 261,
       "files_that_decode_as_utf8": 3,
@@ -714,7 +737,7 @@
     },
     "what_stops_a_task": "any per-task ceiling above, or the per-task budget, whichever comes first. A task stopped by a ceiling is recorded as stopped by that ceiling and is not a model failure"
   },
-  "seal": "f9a906ab1bcf89cdfdd25a8454c35be17ad2d32e4ae3e0b95782ad236853dcd9",
+  "seal": "023bdcbef172a23de10fdbc8648568358c1ee4c83def552389b343cd8db94867",
   "stop_rules": [
     "the deployment or model reported back differs from the pinned one",
     "a run switches model or deployment on its own",
