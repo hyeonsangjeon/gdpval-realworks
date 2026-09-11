@@ -46,6 +46,7 @@ SANDBOX_IMAGE_PATTERN = re.compile(
 RESULT_STATUSES = STEP2_RESULT_STATUSES
 CLEANUP_COMMIT_TITLE_PREFIX = "Clean relay checkpoint "
 CLEANUP_GENERATION_MARKER_PREFIX = "relay-cleanup-generation: "
+LEG_ENTRY_NAME = "relay_leg_entry_pending"
 
 
 def _validate_sandbox_image_digest(value: str) -> str:
@@ -181,9 +182,23 @@ def write_relay_status(
     progress_path: Path,
     exit_code: object,
     github_output: Path,
+    generation_path: Path | None = None,
 ) -> tuple[int, bool]:
-    """Append validated relay outputs for one GitHub Actions step."""
+    """Append validated relay outputs for one GitHub Actions step.
+
+    The relay decision itself lives in :func:`resolve_relay_status`, which can
+    only see the checkpoint in front of it. This is where the leg is compared
+    against the one before it, because this is the step that publishes
+    ``needs_relay``. A leg that finished nothing never gets to publish it.
+    """
     pending_count, needs_relay = resolve_relay_status(progress_path, exit_code)
+    if needs_relay:
+        if generation_path is None:
+            generation_path = LOCAL_GENERATION
+        entry_pending = _read_leg_entry_pending(
+            generation_path, _load_progress(progress_path)["total_tasks"]
+        )
+        _refuse_a_leg_that_finished_nothing(pending_count, entry_pending)
     with github_output.open("a", encoding="utf-8") as output:
         output.write(f"pending_count={pending_count}\n")
         output.write(f"needs_relay={str(needs_relay).lower()}\n")
@@ -318,8 +333,8 @@ def _validate_generation_state_path(path: Path) -> None:
         raise ValueError("relay checkpoint generation state path is not a regular file")
 
 
-def _write_generation_state(path: Path, generation: str) -> None:
-    generation = _generation_value(generation)
+def _write_state_file(path: Path, payload: bytes) -> None:
+    """Replace one small local state file atomically, or leave it untouched."""
     _validate_generation_state_path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     _validate_generation_state_path(path)
@@ -332,7 +347,7 @@ def _write_generation_state(path: Path, generation: str) -> None:
             delete=False,
         ) as output:
             temporary = Path(output.name)
-            output.write(generation.encode("ascii"))
+            output.write(payload)
             output.flush()
             os.fsync(output.fileno())
         _validate_generation_state_path(path)
@@ -341,6 +356,10 @@ def _write_generation_state(path: Path, generation: str) -> None:
     finally:
         if temporary is not None:
             temporary.unlink(missing_ok=True)
+
+
+def _write_generation_state(path: Path, generation: str) -> None:
+    _write_state_file(path, _generation_value(generation).encode("ascii"))
 
 
 def _read_generation_state(path: Path) -> str:
@@ -354,6 +373,76 @@ def _read_generation_state(path: Path) -> str:
     except UnicodeDecodeError as exc:
         raise ValueError("relay checkpoint generation state is invalid") from exc
     return _generation_value(generation)
+
+
+def _leg_entry_path(generation_path: Path) -> Path:
+    """The entry counter always sits beside the generation state.
+
+    The guard below rests on these two files appearing together: one names the
+    checkpoint this leg started from, the other says how much of it was still
+    undone at that moment. Deriving one path from the other means they cannot
+    be pointed at different places, here or in a test.
+    """
+    return generation_path.with_name(LEG_ENTRY_NAME)
+
+
+def _write_leg_entry_pending(generation_path: Path, pending_count: int) -> None:
+    _write_state_file(
+        _leg_entry_path(generation_path), str(pending_count).encode("ascii")
+    )
+
+
+def _read_leg_entry_pending(generation_path: Path, total_tasks: int) -> int:
+    """How many tasks were still undone when this leg picked the work up.
+
+    On the first leg there is no restore and so no counter, and the answer is
+    simply that nothing was done yet. Beyond the first leg the counter is
+    written by :func:`restore_checkpoint` in the same breath as the generation
+    state, so a generation state standing on its own means the pair was broken
+    between the restore and here. That is refused rather than read as a first
+    leg, which would quietly turn a broken relay into an unguarded one.
+
+    Only the shape of the counter is judged here. Whether the number it holds
+    means the leg earned another one is :func:`_refuse_a_leg_that_finished_nothing`.
+    """
+    entry_path = _leg_entry_path(generation_path)
+    _validate_generation_state_path(generation_path)
+    _validate_generation_state_path(entry_path)
+    if not entry_path.is_file():
+        if generation_path.is_file():
+            raise ValueError(
+                "relay leg entry counter is missing beside a restored checkpoint"
+            )
+        return total_tasks
+    try:
+        text = entry_path.read_bytes().decode("ascii")
+    except UnicodeDecodeError as exc:
+        raise ValueError("relay leg entry counter is invalid") from exc
+    if re.fullmatch(r"(?:0|[1-9][0-9]*)", text) is None:
+        raise ValueError("relay leg entry counter is invalid")
+    entry_pending = int(text)
+    if not 0 <= entry_pending <= total_tasks:
+        raise ValueError("relay leg entry counter is outside the task set")
+    return entry_pending
+
+
+def _refuse_a_leg_that_finished_nothing(
+    pending_count: int, entry_pending: int
+) -> None:
+    """Stop a relay chain that is paying full legs for no completed task.
+
+    Nothing is lost by stopping: a leg that finished nothing holds exactly the
+    checkpoint it was given, and that checkpoint is already on the hub. What is
+    lost by *not* stopping is another full leg, and then another, because the
+    decision to relay is taken from the pending count alone and a pending count
+    that never moves says "relay" forever.
+    """
+    if pending_count < entry_pending:
+        return
+    raise ValueError(
+        "relay leg finished no task: "
+        f"{entry_pending} pending on entry, {pending_count} pending on exit"
+    )
 
 
 def _marker(data: bytes) -> dict:
@@ -581,6 +670,10 @@ def restore_checkpoint(
         shutil.copy2(staged_progress, progress_tmp)
         progress_tmp.replace(progress_path)
         _write_generation_state(generation_path, marker["generation"])
+        _write_leg_entry_pending(
+            generation_path,
+            sum(result["status"] == "pending" for result in payload["results"]),
+        )
     print(
         f"Relay checkpoint {marker['generation'][:12]} restored from {repo_id}"
     )

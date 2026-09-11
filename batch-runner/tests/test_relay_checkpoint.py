@@ -493,6 +493,43 @@ def test_restore_uses_exact_repo_revision_and_manifest(tmp_path, monkeypatch):
     assert list_call[1]["revision"] == revision
 
 
+def test_restore_records_how_much_was_left_beside_the_generation_state(
+    tmp_path, monkeypatch
+):
+    """The leg-entry counter is written by the restore, or it is not written.
+
+    ``write_relay_status`` refuses to relay a leg whose pending count did not
+    move, and it needs a number from the start of the leg to say that. Nothing
+    else in the run produces one, so a restore that forgot to leave it would
+    make every later leg unguarded. The count is read back off the restored
+    progress file rather than hard-coded, so this stays true if the fixture
+    checkpoint ever changes shape.
+    """
+    marker, snapshot, revision, remote_paths = _remote_checkpoint(tmp_path)
+    _patch_remote(monkeypatch, marker, snapshot)
+    api = FakeApi()
+    api.files_by_revision[revision] = remote_paths
+    progress = tmp_path / "restored" / "progress.json"
+
+    relay.restore_checkpoint(
+        "openai/gdpval",
+        token="token",
+        source_sha=SOURCE_SHA,
+        lineage_id=LINEAGE_ID,
+        progress_path=progress,
+        upload_root=tmp_path / "restored" / "upload",
+        api=api,
+    )
+
+    restored = json.loads(progress.read_text(encoding="utf-8"))
+    still_to_do = sum(
+        result["status"] == "pending" for result in restored["results"]
+    )
+    entry_path = relay._leg_entry_path(relay.LOCAL_GENERATION)
+    assert entry_path.parent == relay.LOCAL_GENERATION.parent
+    assert entry_path.read_bytes() == str(still_to_do).encode("ascii")
+
+
 def test_restore_commits_outputs_before_generation_state(tmp_path, monkeypatch):
     marker, snapshot, revision, remote_paths = _remote_checkpoint(
         tmp_path, ["deliverable_files/task-1/result.xlsx"]
