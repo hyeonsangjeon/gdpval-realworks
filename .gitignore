@@ -195,6 +195,11 @@ tasks/0822_saturday/*
 # if the thing being read is only on a VM that gets deallocated.
 !tasks/0822_saturday/c2_first_boot.json
 !tasks/0822_saturday/c3_attacks.json
+# The declared-command sweep taken inside a guest, for the same reason: the
+# prose above reads it, and a reading nobody can check is not evidence. Its
+# tests assert against this file directly, so it is also the thing that would
+# fail if the module and the artefact ever stopped agreeing.
+!tasks/0822_saturday/guest_declared_command_sweep.json
 !tasks/0828_friday/
 tasks/0828_friday/*
 !tasks/0828_friday/TASK_PER_TASK_COST_RECEIPTS.md

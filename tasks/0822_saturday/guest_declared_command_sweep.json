@@ -1,0 +1,767 @@
+{
+  "absent": 6,
+  "artifact": "agentic-v2-declared-command-sweep",
+  "artifact_version": "1.0",
+  "declared": {
+    "commands": 20,
+    "font_families": 3,
+    "platform": {
+      "architecture": "amd64",
+      "os": "linux",
+      "python": "3.11"
+    },
+    "python_modules": 13
+  },
+  "driver_changes": [
+    "probe scratch paths go to /work rather than /tmp, because the rootfs is mounted read-only by policy",
+    "HOME and TMPDIR are /work, because a probe with nowhere to write exits non-zero exactly like an absent command"
+  ],
+  "guest": {
+    "command_exit_status": 0,
+    "deadline_seconds": 1200.0,
+    "init_reached_the_end": true,
+    "kernel": "6.1.141",
+    "outcome": "booted",
+    "plan_sha256": "e99a45bf8bd3295419bcfd826bd4a8a3bd3355bb6033b566a47dbde7b8306107",
+    "policy_is_the_required_one": true,
+    "policy_sha256": "6a5e665d3253c80302f001e8fd624b77838c38f92add1af63024277c5215888e",
+    "ran_for_seconds": 11.775,
+    "stopped_by_the_deadline": false,
+    "teardown": {
+      "all_gone": true,
+      "removed": {
+        "/srv/jailer/firecracker/declared-sweep/root": true
+      }
+    },
+    "uid": "0",
+    "uid_note": "root inside the guest is the ordinary arrangement for a microVM: the boundary is the machine, and the host-side process runs as host.jailed_to_uid",
+    "vm_id": "declared-sweep"
+  },
+  "host": {
+    "cgroup_version": 2,
+    "firecracker_version": "Firecracker v1.13.1",
+    "jailed_to_uid": 999,
+    "kernel": "6.17.0-1022-azure",
+    "machine": "x86_64",
+    "system": "Linux"
+  },
+  "image": {
+    "credential_used": "none \u2014 anonymous pull token for a public repository",
+    "layer_count": 10,
+    "layers": [
+      {
+        "digest": "sha256:68629629b516c3cd6f5e71ffbe18e32afb1ae5b4926c92d058c0f11ef1fd58a3",
+        "media_type": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "path": "/var/tmp/gdpval-c2/oci/blobs/sha256/68629629b516c3cd6f5e71ffbe18e32afb1ae5b4926c92d058c0f11ef1fd58a3",
+        "size_bytes": 28237639
+      },
+      {
+        "digest": "sha256:9465a3b5326202cdeda1f1439e4aaadfe4f4527dd8f9d020ef76b8a8432e5816",
+        "media_type": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "path": "/var/tmp/gdpval-c2/oci/blobs/sha256/9465a3b5326202cdeda1f1439e4aaadfe4f4527dd8f9d020ef76b8a8432e5816",
+        "size_bytes": 3520822
+      },
+      {
+        "digest": "sha256:3ea3516015d200ef3f1407147986285b706de588d42b96b2cd33c6380e1ff0f1",
+        "media_type": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "path": "/var/tmp/gdpval-c2/oci/blobs/sha256/3ea3516015d200ef3f1407147986285b706de588d42b96b2cd33c6380e1ff0f1",
+        "size_bytes": 15990074
+      },
+      {
+        "digest": "sha256:c3a88133a8c61d848bb024e0392659b2e45433e836462906b04884dd326a01d2",
+        "media_type": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "path": "/var/tmp/gdpval-c2/oci/blobs/sha256/c3a88133a8c61d848bb024e0392659b2e45433e836462906b04884dd326a01d2",
+        "size_bytes": 249
+      },
+      {
+        "digest": "sha256:e6c539ae3e58fd1b55f481bdfc5fa9f18c77e2bdb29c759b0c86f99195eab661",
+        "media_type": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "path": "/var/tmp/gdpval-c2/oci/blobs/sha256/e6c539ae3e58fd1b55f481bdfc5fa9f18c77e2bdb29c759b0c86f99195eab661",
+        "size_bytes": 828406215
+      },
+      {
+        "digest": "sha256:0b5c91a253a39038b53c1fd4d4b21349beacdbd92bc959687e6fb1d15a2f3d1e",
+        "media_type": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "path": "/var/tmp/gdpval-c2/oci/blobs/sha256/0b5c91a253a39038b53c1fd4d4b21349beacdbd92bc959687e6fb1d15a2f3d1e",
+        "size_bytes": 1370
+      },
+      {
+        "digest": "sha256:aa76a4f5622059cff46430efef5311aa99365d1056fe62cde6268e87abdfdf23",
+        "media_type": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "path": "/var/tmp/gdpval-c2/oci/blobs/sha256/aa76a4f5622059cff46430efef5311aa99365d1056fe62cde6268e87abdfdf23",
+        "size_bytes": 1516991400
+      },
+      {
+        "digest": "sha256:1acaebe50d44b5446d5e3d43480c829386b6453558886cb8e97625a65a390782",
+        "media_type": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "path": "/var/tmp/gdpval-c2/oci/blobs/sha256/1acaebe50d44b5446d5e3d43480c829386b6453558886cb8e97625a65a390782",
+        "size_bytes": 14335
+      },
+      {
+        "digest": "sha256:30c4d4e9cb5bf0c30aa016d634edcbe8ec9880077386e85b2ed3faf17d87e2bf",
+        "media_type": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "path": "/var/tmp/gdpval-c2/oci/blobs/sha256/30c4d4e9cb5bf0c30aa016d634edcbe8ec9880077386e85b2ed3faf17d87e2bf",
+        "size_bytes": 94
+      },
+      {
+        "digest": "sha256:4f4fb700ef54461cfa02571ae0db9a0dc1e0cdb5577484a6d75e68dc38e8acc1",
+        "media_type": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "path": "/var/tmp/gdpval-c2/oci/blobs/sha256/4f4fb700ef54461cfa02571ae0db9a0dc1e0cdb5577484a6d75e68dc38e8acc1",
+        "size_bytes": 32
+      }
+    ],
+    "manifest_digest": "sha256:91b524c7dc8f21d653f829d19a283ea269a36cc85e0569ca38c85bfac92d0fe2",
+    "pinned_digest": "sha256:ee6ef798631d3c3aeaed28658c640e6f5d021677449852bf2e1f18be5bd24edb",
+    "pinned_digest_is_an_index": true,
+    "platform": "linux/amd64",
+    "repository": "ghcr.io/hyeonsangjeon/gdpval-sandbox"
+  },
+  "images_checked": {
+    "kernel": {
+      "path": "/var/tmp/gdpval-c2/vmlinux",
+      "sha256": "b36a4a1b10f33b9cfdcde3d1a787d9c090556a3edb211cd06d1f3f9a6c7e8724"
+    },
+    "rehashed": true,
+    "rootfs": {
+      "path": "/var/tmp/gdpval-c2/rootfs.ext4",
+      "sha256": "489188004ad4eb8a90191b3b5f58eb9fb246d158535d0bc655001f438a7a32ea"
+    }
+  },
+  "is_not": [
+    "a capability receipt",
+    "a signature or provenance verification",
+    "a vulnerability scan",
+    "an isolation or containment measurement"
+  ],
+  "manifest_path": "/var/tmp/gdpval-stage-d/batch-runner/sandbox/agentic_v2_capabilities.json",
+  "manifest_sha256": "fa76625f3fc9bb46c595f7c542132facb91c824bb5e51c7db9ea2d4fcb345a1f",
+  "present": 34,
+  "probes_answered": 40,
+  "probes_declared": 40,
+  "records": [
+    {
+      "answered": true,
+      "argv": [
+        "python",
+        "--version"
+      ],
+      "capability": "runtime",
+      "first_line": "Python 3.11.15",
+      "grounds": "the probe exited 0",
+      "kind": "command",
+      "name": "python",
+      "present": true,
+      "returncode": 0,
+      "stderr": ""
+    },
+    {
+      "answered": true,
+      "argv": [
+        "python3",
+        "--version"
+      ],
+      "capability": "runtime",
+      "first_line": "Python 3.11.15",
+      "grounds": "the probe exited 0",
+      "kind": "command",
+      "name": "python3",
+      "present": true,
+      "returncode": 0,
+      "stderr": ""
+    },
+    {
+      "answered": true,
+      "argv": [
+        "sh",
+        "-c",
+        "echo ok"
+      ],
+      "capability": "runtime",
+      "first_line": "ok",
+      "grounds": "the probe exited 0",
+      "kind": "command",
+      "name": "sh",
+      "present": true,
+      "returncode": 0,
+      "stderr": ""
+    },
+    {
+      "answered": true,
+      "argv": [
+        "uname",
+        "-srm"
+      ],
+      "capability": "runtime",
+      "first_line": "Linux 6.1.141 x86_64",
+      "grounds": "the probe exited 0",
+      "kind": "command",
+      "name": "uname",
+      "present": true,
+      "returncode": 0,
+      "stderr": ""
+    },
+    {
+      "answered": true,
+      "argv": [
+        "Rscript",
+        "--version"
+      ],
+      "capability": "data-science",
+      "first_line": "/work/in/command.sh: 42: Rscript: not found",
+      "grounds": "the probe exited 127",
+      "kind": "command",
+      "name": "Rscript",
+      "present": false,
+      "returncode": 127,
+      "stderr": "/work/in/command.sh: 42: Rscript: not found"
+    },
+    {
+      "answered": true,
+      "argv": [
+        "bash",
+        "--version"
+      ],
+      "capability": "shell",
+      "first_line": "GNU bash, version 5.2.15(1)-release (x86_64-pc-linux-gnu)",
+      "grounds": "the probe exited 0",
+      "kind": "command",
+      "name": "bash",
+      "present": true,
+      "returncode": 0,
+      "stderr": ""
+    },
+    {
+      "answered": true,
+      "argv": [
+        "chromium",
+        "--version"
+      ],
+      "capability": "browser-local",
+      "first_line": "/work/in/command.sh: 60: chromium: not found",
+      "grounds": "the probe exited 127",
+      "kind": "command",
+      "name": "chromium",
+      "present": false,
+      "returncode": 127,
+      "stderr": "/work/in/command.sh: 60: chromium: not found"
+    },
+    {
+      "answered": true,
+      "argv": [
+        "cmake",
+        "--version"
+      ],
+      "capability": "compilers",
+      "first_line": "/work/in/command.sh: 69: cmake: not found",
+      "grounds": "the probe exited 127",
+      "kind": "command",
+      "name": "cmake",
+      "present": false,
+      "returncode": 127,
+      "stderr": "/work/in/command.sh: 69: cmake: not found"
+    },
+    {
+      "answered": true,
+      "argv": [
+        "ffmpeg",
+        "-version"
+      ],
+      "capability": "media",
+      "first_line": "ffmpeg version 5.1.9-0+deb12u1 Copyright (c) 2000-2026 the FFmpeg developers",
+      "grounds": "the probe exited 0",
+      "kind": "command",
+      "name": "ffmpeg",
+      "present": true,
+      "returncode": 0,
+      "stderr": ""
+    },
+    {
+      "answered": true,
+      "argv": [
+        "ffprobe",
+        "-version"
+      ],
+      "capability": "media",
+      "first_line": "ffprobe version 5.1.9-0+deb12u1 Copyright (c) 2007-2026 the FFmpeg developers",
+      "grounds": "the probe exited 0",
+      "kind": "command",
+      "name": "ffprobe",
+      "present": true,
+      "returncode": 0,
+      "stderr": ""
+    },
+    {
+      "answered": true,
+      "argv": [
+        "g++",
+        "--version"
+      ],
+      "capability": "compilers",
+      "first_line": "g++ (Debian 12.2.0-14+deb12u1) 12.2.0",
+      "grounds": "the probe exited 0",
+      "kind": "command",
+      "name": "g++",
+      "present": true,
+      "returncode": 0,
+      "stderr": ""
+    },
+    {
+      "answered": true,
+      "argv": [
+        "gcc",
+        "--version"
+      ],
+      "capability": "compilers",
+      "first_line": "gcc (Debian 12.2.0-14+deb12u1) 12.2.0",
+      "grounds": "the probe exited 0",
+      "kind": "command",
+      "name": "gcc",
+      "present": true,
+      "returncode": 0,
+      "stderr": ""
+    },
+    {
+      "answered": true,
+      "argv": [
+        "gdalinfo",
+        "--version"
+      ],
+      "capability": "gis",
+      "first_line": "GDAL 3.6.2, released 2023/01/02",
+      "grounds": "the probe exited 0",
+      "kind": "command",
+      "name": "gdalinfo",
+      "present": true,
+      "returncode": 0,
+      "stderr": ""
+    },
+    {
+      "answered": true,
+      "argv": [
+        "gfortran",
+        "--version"
+      ],
+      "capability": "compilers",
+      "first_line": "GNU Fortran (Debian 12.2.0-14+deb12u1) 12.2.0",
+      "grounds": "the probe exited 0",
+      "kind": "command",
+      "name": "gfortran",
+      "present": true,
+      "returncode": 0,
+      "stderr": ""
+    },
+    {
+      "answered": true,
+      "argv": [
+        "libreoffice",
+        "--version"
+      ],
+      "capability": "documents",
+      "first_line": "LibreOffice 7.4.7.2 40(Build:2)",
+      "grounds": "the probe exited 0",
+      "kind": "command",
+      "name": "libreoffice",
+      "present": true,
+      "returncode": 0,
+      "stderr": ""
+    },
+    {
+      "answered": true,
+      "argv": [
+        "make",
+        "--version"
+      ],
+      "capability": "compilers",
+      "first_line": "GNU Make 4.3",
+      "grounds": "the probe exited 0",
+      "kind": "command",
+      "name": "make",
+      "present": true,
+      "returncode": 0,
+      "stderr": ""
+    },
+    {
+      "answered": true,
+      "argv": [
+        "node",
+        "--version"
+      ],
+      "capability": "programming",
+      "first_line": "/work/in/command.sh: 150: node: not found",
+      "grounds": "the probe exited 127",
+      "kind": "command",
+      "name": "node",
+      "present": false,
+      "returncode": 127,
+      "stderr": "/work/in/command.sh: 150: node: not found"
+    },
+    {
+      "answered": true,
+      "argv": [
+        "npm",
+        "--version"
+      ],
+      "capability": "programming",
+      "first_line": "/work/in/command.sh: 159: npm: not found",
+      "grounds": "the probe exited 127",
+      "kind": "command",
+      "name": "npm",
+      "present": false,
+      "returncode": 127,
+      "stderr": "/work/in/command.sh: 159: npm: not found"
+    },
+    {
+      "answered": true,
+      "argv": [
+        "ogr2ogr",
+        "--version"
+      ],
+      "capability": "gis",
+      "first_line": "GDAL 3.6.2, released 2023/01/02",
+      "grounds": "the probe exited 0",
+      "kind": "command",
+      "name": "ogr2ogr",
+      "present": true,
+      "returncode": 0,
+      "stderr": ""
+    },
+    {
+      "answered": true,
+      "argv": [
+        "pandoc",
+        "--version"
+      ],
+      "capability": "documents",
+      "first_line": "pandoc 2.17.1.1",
+      "grounds": "the probe exited 0",
+      "kind": "command",
+      "name": "pandoc",
+      "present": true,
+      "returncode": 0,
+      "stderr": ""
+    },
+    {
+      "answered": true,
+      "argv": [
+        "pdftoppm",
+        "-v"
+      ],
+      "capability": "pdf",
+      "first_line": "pdftoppm version 22.12.0",
+      "grounds": "the probe exited 0",
+      "kind": "command",
+      "name": "pdftoppm",
+      "present": true,
+      "returncode": 0,
+      "stderr": "pdftoppm version 22.12.0\nCopyright 2005-2022 The Poppler Developers - http://poppler.freedesktop.org\nCopyright 1996-2011, 2022 Glyph & Cog, LLC"
+    },
+    {
+      "answered": true,
+      "argv": [
+        "pdftotext",
+        "-v"
+      ],
+      "capability": "pdf",
+      "first_line": "pdftotext version 22.12.0",
+      "grounds": "the probe exited 0",
+      "kind": "command",
+      "name": "pdftotext",
+      "present": true,
+      "returncode": 0,
+      "stderr": "pdftotext version 22.12.0\nCopyright 2005-2022 The Poppler Developers - http://poppler.freedesktop.org\nCopyright 1996-2011, 2022 Glyph & Cog, LLC"
+    },
+    {
+      "answered": true,
+      "argv": [
+        "python",
+        "--version"
+      ],
+      "capability": "programming",
+      "first_line": "Python 3.11.15",
+      "grounds": "the probe exited 0",
+      "kind": "command",
+      "name": "python",
+      "present": true,
+      "returncode": 0,
+      "stderr": ""
+    },
+    {
+      "answered": true,
+      "argv": [
+        "tesseract",
+        "--version"
+      ],
+      "capability": "ocr",
+      "first_line": "tesseract 5.3.0",
+      "grounds": "the probe exited 0",
+      "kind": "command",
+      "name": "tesseract",
+      "present": true,
+      "returncode": 0,
+      "stderr": ""
+    },
+    {
+      "answered": true,
+      "argv": [
+        "python3",
+        "-c",
+        "import PIL as m; print(getattr(m, '__version__', 'no __version__'))"
+      ],
+      "capability": "documents",
+      "first_line": "12.3.0",
+      "grounds": "the probe exited 0",
+      "kind": "python_module",
+      "name": "python3:PIL",
+      "present": true,
+      "returncode": 0,
+      "stderr": ""
+    },
+    {
+      "answered": true,
+      "argv": [
+        "python3",
+        "-c",
+        "import av as m; print(getattr(m, '__version__', 'no __version__'))"
+      ],
+      "capability": "media",
+      "first_line": "18.0.0",
+      "grounds": "the probe exited 0",
+      "kind": "python_module",
+      "name": "python3:av",
+      "present": true,
+      "returncode": 0,
+      "stderr": ""
+    },
+    {
+      "answered": true,
+      "argv": [
+        "python3",
+        "-c",
+        "import ezdxf as m; print(getattr(m, '__version__', 'no __version__'))"
+      ],
+      "capability": "cad-dxf",
+      "first_line": "Traceback (most recent call last):",
+      "grounds": "the probe exited 1",
+      "kind": "python_module",
+      "name": "python3:ezdxf",
+      "present": false,
+      "returncode": 1,
+      "stderr": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\nModuleNotFoundError: No module named 'ezdxf'"
+    },
+    {
+      "answered": true,
+      "argv": [
+        "python3",
+        "-c",
+        "import geopandas as m; print(getattr(m, '__version__', 'no __version__'))"
+      ],
+      "capability": "gis",
+      "first_line": "1.1.4",
+      "grounds": "the probe exited 0",
+      "kind": "python_module",
+      "name": "python3:geopandas",
+      "present": true,
+      "returncode": 0,
+      "stderr": ""
+    },
+    {
+      "answered": true,
+      "argv": [
+        "python3",
+        "-c",
+        "import matplotlib as m; print(getattr(m, '__version__', 'no __version__'))"
+      ],
+      "capability": "data-science",
+      "first_line": "3.11.0",
+      "grounds": "the probe exited 0",
+      "kind": "python_module",
+      "name": "python3:matplotlib",
+      "present": true,
+      "returncode": 0,
+      "stderr": ""
+    },
+    {
+      "answered": true,
+      "argv": [
+        "python3",
+        "-c",
+        "import numpy as m; print(getattr(m, '__version__', 'no __version__'))"
+      ],
+      "capability": "data-science",
+      "first_line": "2.4.6",
+      "grounds": "the probe exited 0",
+      "kind": "python_module",
+      "name": "python3:numpy",
+      "present": true,
+      "returncode": 0,
+      "stderr": ""
+    },
+    {
+      "answered": true,
+      "argv": [
+        "python3",
+        "-c",
+        "import openpyxl as m; print(getattr(m, '__version__', 'no __version__'))"
+      ],
+      "capability": "spreadsheets",
+      "first_line": "3.1.5",
+      "grounds": "the probe exited 0",
+      "kind": "python_module",
+      "name": "python3:openpyxl",
+      "present": true,
+      "returncode": 0,
+      "stderr": ""
+    },
+    {
+      "answered": true,
+      "argv": [
+        "python3",
+        "-c",
+        "import pandas as m; print(getattr(m, '__version__', 'no __version__'))"
+      ],
+      "capability": "data-science",
+      "first_line": "3.0.3",
+      "grounds": "the probe exited 0",
+      "kind": "python_module",
+      "name": "python3:pandas",
+      "present": true,
+      "returncode": 0,
+      "stderr": ""
+    },
+    {
+      "answered": true,
+      "argv": [
+        "python3",
+        "-c",
+        "import pptx as m; print(getattr(m, '__version__', 'no __version__'))"
+      ],
+      "capability": "presentations",
+      "first_line": "1.0.2",
+      "grounds": "the probe exited 0",
+      "kind": "python_module",
+      "name": "python3:pptx",
+      "present": true,
+      "returncode": 0,
+      "stderr": ""
+    },
+    {
+      "answered": true,
+      "argv": [
+        "python3",
+        "-c",
+        "import reportlab as m; print(getattr(m, '__version__', 'no __version__'))"
+      ],
+      "capability": "pdf",
+      "first_line": "5.0.0",
+      "grounds": "the probe exited 0",
+      "kind": "python_module",
+      "name": "python3:reportlab",
+      "present": true,
+      "returncode": 0,
+      "stderr": ""
+    },
+    {
+      "answered": true,
+      "argv": [
+        "python3",
+        "-c",
+        "import scipy as m; print(getattr(m, '__version__', 'no __version__'))"
+      ],
+      "capability": "data-science",
+      "first_line": "1.17.1",
+      "grounds": "the probe exited 0",
+      "kind": "python_module",
+      "name": "python3:scipy",
+      "present": true,
+      "returncode": 0,
+      "stderr": ""
+    },
+    {
+      "answered": true,
+      "argv": [
+        "python3",
+        "-c",
+        "import sklearn as m; print(getattr(m, '__version__', 'no __version__'))"
+      ],
+      "capability": "machine-learning",
+      "first_line": "1.9.0",
+      "grounds": "the probe exited 0",
+      "kind": "python_module",
+      "name": "python3:sklearn",
+      "present": true,
+      "returncode": 0,
+      "stderr": "/usr/local/lib/python3.11/site-packages/joblib/_multiprocessing_helpers.py:44: UserWarning: [Errno 2] No such file or directory.  joblib will operate in serial mode\n  warnings.warn(\"%s.  joblib will operate in serial mode\" % (e,))"
+    },
+    {
+      "answered": true,
+      "argv": [
+        "python3",
+        "-c",
+        "import weasyprint as m; print(getattr(m, '__version__', 'no __version__'))"
+      ],
+      "capability": "documents",
+      "first_line": "69.0",
+      "grounds": "the probe exited 0",
+      "kind": "python_module",
+      "name": "python3:weasyprint",
+      "present": true,
+      "returncode": 0,
+      "stderr": ""
+    },
+    {
+      "answered": true,
+      "argv": [
+        "fc-match",
+        "-f",
+        "%{family}|%{file}",
+        "DejaVu Sans"
+      ],
+      "capability": "fonts",
+      "first_line": "DejaVu Sans|/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+      "grounds": "the probe exited 0",
+      "kind": "font_family",
+      "name": "font:DejaVu Sans",
+      "present": true,
+      "returncode": 0,
+      "stderr": ""
+    },
+    {
+      "answered": true,
+      "argv": [
+        "fc-match",
+        "-f",
+        "%{family}|%{file}",
+        "Liberation Sans"
+      ],
+      "capability": "fonts",
+      "first_line": "Liberation Sans|/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+      "grounds": "the probe exited 0",
+      "kind": "font_family",
+      "name": "font:Liberation Sans",
+      "present": true,
+      "returncode": 0,
+      "stderr": ""
+    },
+    {
+      "answered": true,
+      "argv": [
+        "fc-match",
+        "-f",
+        "%{family}|%{file}",
+        "Noto Sans CJK KR"
+      ],
+      "capability": "fonts",
+      "first_line": "Noto Sans CJK KR|/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+      "grounds": "the probe exited 0",
+      "kind": "font_family",
+      "name": "font:Noto Sans CJK KR",
+      "present": true,
+      "returncode": 0,
+      "stderr": ""
+    }
+  ],
+  "supersedes_nothing": "the container sweeps stand as what they are: measurements of the same image somewhere else. This one answers the question they recorded that they could not",
+  "sweep_seconds": 41.41,
+  "taken": "inside a Firecracker guest, on the execution host, under the required microVM policy",
+  "transcript_bytes": 13163
+}
