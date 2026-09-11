@@ -1,0 +1,1368 @@
+{
+  "artifact": "agentic-v2-declared-command-sweep-record",
+  "artifact_version": "1.0",
+  "candidate": {
+    "absent": 0,
+    "artifact": "agentic-v2-declared-command-sweep",
+    "artifact_version": "1.0",
+    "declared": {
+      "commands": 20,
+      "font_families": 3,
+      "platform": {
+        "architecture": "amd64",
+        "os": "linux",
+        "python": "3.11"
+      },
+      "python_modules": 13
+    },
+    "host": {
+      "cgroup_version": 1,
+      "kernel": "3.10.102",
+      "machine": "x86_64",
+      "runtime": "docker",
+      "runtime_version": "20.10.3",
+      "system": "Linux"
+    },
+    "image": "sha256:94ea6cb4379ea2537be7875248dad5dc304bbf17f7c99682570b2844156ba1c7",
+    "is_not": [
+      "a capability receipt",
+      "a signature or provenance verification",
+      "a vulnerability scan",
+      "an isolation or containment measurement"
+    ],
+    "manifest_path": "/tmp/wtB485/batch-runner/sandbox/agentic_v2_capabilities.json",
+    "manifest_sha256": "fa76625f3fc9bb46c595f7c542132facb91c824bb5e51c7db9ea2d4fcb345a1f",
+    "present": 40,
+    "probes_answered": 40,
+    "probes_declared": 40,
+    "records": [
+      {
+        "answered": true,
+        "argv": [
+          "python",
+          "--version"
+        ],
+        "capability": "runtime",
+        "first_line": "Python 3.11.15",
+        "grounds": "the probe exited 0",
+        "kind": "command",
+        "name": "python",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "python3",
+          "--version"
+        ],
+        "capability": "runtime",
+        "first_line": "Python 3.11.15",
+        "grounds": "the probe exited 0",
+        "kind": "command",
+        "name": "python3",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "sh",
+          "-c",
+          "echo ok"
+        ],
+        "capability": "runtime",
+        "first_line": "ok",
+        "grounds": "the probe exited 0",
+        "kind": "command",
+        "name": "sh",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "uname",
+          "-srm"
+        ],
+        "capability": "runtime",
+        "first_line": "Linux 3.10.102 x86_64",
+        "grounds": "the probe exited 0",
+        "kind": "command",
+        "name": "uname",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "Rscript",
+          "--version"
+        ],
+        "capability": "data-science",
+        "first_line": "Rscript (R) version 4.2.2 Patched (2022-11-10 r83330)",
+        "grounds": "the probe exited 0",
+        "kind": "command",
+        "name": "Rscript",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "bash",
+          "--version"
+        ],
+        "capability": "shell",
+        "first_line": "GNU bash, version 5.2.15(1)-release (x86_64-pc-linux-gnu)",
+        "grounds": "the probe exited 0",
+        "kind": "command",
+        "name": "bash",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "chromium",
+          "--version"
+        ],
+        "capability": "browser-local",
+        "first_line": "Chromium 150.0.7871.181 built on Debian GNU/Linux 12 (bookworm)",
+        "grounds": "the probe exited 0",
+        "kind": "command",
+        "name": "chromium",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "cmake",
+          "--version"
+        ],
+        "capability": "compilers",
+        "first_line": "cmake version 3.25.1",
+        "grounds": "the probe exited 0",
+        "kind": "command",
+        "name": "cmake",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "ffmpeg",
+          "-version"
+        ],
+        "capability": "media",
+        "first_line": "ffmpeg version 5.1.9-0+deb12u1 Copyright (c) 2000-2026 the FFmpeg developers",
+        "grounds": "the probe exited 0",
+        "kind": "command",
+        "name": "ffmpeg",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "ffprobe",
+          "-version"
+        ],
+        "capability": "media",
+        "first_line": "ffprobe version 5.1.9-0+deb12u1 Copyright (c) 2007-2026 the FFmpeg developers",
+        "grounds": "the probe exited 0",
+        "kind": "command",
+        "name": "ffprobe",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "g++",
+          "--version"
+        ],
+        "capability": "compilers",
+        "first_line": "g++ (Debian 12.2.0-14+deb12u1) 12.2.0",
+        "grounds": "the probe exited 0",
+        "kind": "command",
+        "name": "g++",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "gcc",
+          "--version"
+        ],
+        "capability": "compilers",
+        "first_line": "gcc (Debian 12.2.0-14+deb12u1) 12.2.0",
+        "grounds": "the probe exited 0",
+        "kind": "command",
+        "name": "gcc",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "gdalinfo",
+          "--version"
+        ],
+        "capability": "gis",
+        "first_line": "GDAL 3.6.2, released 2023/01/02",
+        "grounds": "the probe exited 0",
+        "kind": "command",
+        "name": "gdalinfo",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "gfortran",
+          "--version"
+        ],
+        "capability": "compilers",
+        "first_line": "GNU Fortran (Debian 12.2.0-14+deb12u1) 12.2.0",
+        "grounds": "the probe exited 0",
+        "kind": "command",
+        "name": "gfortran",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "libreoffice",
+          "--version"
+        ],
+        "capability": "documents",
+        "first_line": "LibreOffice 7.4.7.2 40(Build:2)",
+        "grounds": "the probe exited 0",
+        "kind": "command",
+        "name": "libreoffice",
+        "present": true,
+        "returncode": 0,
+        "stderr": "(process:75): dconf-CRITICAL **: 22:32:23.278: unable to create directory '/work/.cache/dconf': Read-only file system.  dconf will not work properly."
+      },
+      {
+        "answered": true,
+        "argv": [
+          "make",
+          "--version"
+        ],
+        "capability": "compilers",
+        "first_line": "GNU Make 4.3",
+        "grounds": "the probe exited 0",
+        "kind": "command",
+        "name": "make",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "node",
+          "--version"
+        ],
+        "capability": "programming",
+        "first_line": "v18.20.4",
+        "grounds": "the probe exited 0",
+        "kind": "command",
+        "name": "node",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "npm",
+          "--version"
+        ],
+        "capability": "programming",
+        "first_line": "9.2.0",
+        "grounds": "the probe exited 0",
+        "kind": "command",
+        "name": "npm",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "ogr2ogr",
+          "--version"
+        ],
+        "capability": "gis",
+        "first_line": "GDAL 3.6.2, released 2023/01/02",
+        "grounds": "the probe exited 0",
+        "kind": "command",
+        "name": "ogr2ogr",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "pandoc",
+          "--version"
+        ],
+        "capability": "documents",
+        "first_line": "pandoc 2.17.1.1",
+        "grounds": "the probe exited 0",
+        "kind": "command",
+        "name": "pandoc",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "pdftoppm",
+          "-v"
+        ],
+        "capability": "pdf",
+        "first_line": "pdftoppm version 22.12.0",
+        "grounds": "the probe exited 0",
+        "kind": "command",
+        "name": "pdftoppm",
+        "present": true,
+        "returncode": 0,
+        "stderr": "pdftoppm version 22.12.0\nCopyright 2005-2022 The Poppler Developers - http://poppler.freedesktop.org\nCopyright 1996-2011, 2022 Glyph & Cog, LLC"
+      },
+      {
+        "answered": true,
+        "argv": [
+          "pdftotext",
+          "-v"
+        ],
+        "capability": "pdf",
+        "first_line": "pdftotext version 22.12.0",
+        "grounds": "the probe exited 0",
+        "kind": "command",
+        "name": "pdftotext",
+        "present": true,
+        "returncode": 0,
+        "stderr": "pdftotext version 22.12.0\nCopyright 2005-2022 The Poppler Developers - http://poppler.freedesktop.org\nCopyright 1996-2011, 2022 Glyph & Cog, LLC"
+      },
+      {
+        "answered": true,
+        "argv": [
+          "python",
+          "--version"
+        ],
+        "capability": "programming",
+        "first_line": "Python 3.11.15",
+        "grounds": "the probe exited 0",
+        "kind": "command",
+        "name": "python",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "tesseract",
+          "--version"
+        ],
+        "capability": "ocr",
+        "first_line": "tesseract 5.3.0",
+        "grounds": "the probe exited 0",
+        "kind": "command",
+        "name": "tesseract",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "python3",
+          "-c",
+          "import PIL as m; print(getattr(m, '__version__', 'no __version__'))"
+        ],
+        "capability": "documents",
+        "first_line": "12.3.0",
+        "grounds": "the probe exited 0",
+        "kind": "python_module",
+        "name": "python3:PIL",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "python3",
+          "-c",
+          "import av as m; print(getattr(m, '__version__', 'no __version__'))"
+        ],
+        "capability": "media",
+        "first_line": "18.0.0",
+        "grounds": "the probe exited 0",
+        "kind": "python_module",
+        "name": "python3:av",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "python3",
+          "-c",
+          "import ezdxf as m; print(getattr(m, '__version__', 'no __version__'))"
+        ],
+        "capability": "cad-dxf",
+        "first_line": "1.4.3",
+        "grounds": "the probe exited 0",
+        "kind": "python_module",
+        "name": "python3:ezdxf",
+        "present": true,
+        "returncode": 0,
+        "stderr": "Cannot create cache home directory: '/work/.cache/ezdxf', cache files will not be saved.\nSee also issue https://github.com/mozman/ezdxf/issues/923."
+      },
+      {
+        "answered": true,
+        "argv": [
+          "python3",
+          "-c",
+          "import geopandas as m; print(getattr(m, '__version__', 'no __version__'))"
+        ],
+        "capability": "gis",
+        "first_line": "1.1.4",
+        "grounds": "the probe exited 0",
+        "kind": "python_module",
+        "name": "python3:geopandas",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "python3",
+          "-c",
+          "import matplotlib as m; print(getattr(m, '__version__', 'no __version__'))"
+        ],
+        "capability": "data-science",
+        "first_line": "3.11.0",
+        "grounds": "the probe exited 0",
+        "kind": "python_module",
+        "name": "python3:matplotlib",
+        "present": true,
+        "returncode": 0,
+        "stderr": "mkdir -p failed for path /work/.cache/matplotlib: [Errno 30] Read-only file system: '/work/.cache/matplotlib'\nMatplotlib created a temporary cache directory at /tmp/matplotlib-g9ot3ayn because there was an issue with the default path ({configdir}); it is highly recommended to set the MPLCONFIGDIR environment variable to a writable directory, in particular to speed up the import of Matplotlib and t"
+      },
+      {
+        "answered": true,
+        "argv": [
+          "python3",
+          "-c",
+          "import numpy as m; print(getattr(m, '__version__', 'no __version__'))"
+        ],
+        "capability": "data-science",
+        "first_line": "2.4.6",
+        "grounds": "the probe exited 0",
+        "kind": "python_module",
+        "name": "python3:numpy",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "python3",
+          "-c",
+          "import openpyxl as m; print(getattr(m, '__version__', 'no __version__'))"
+        ],
+        "capability": "spreadsheets",
+        "first_line": "3.1.5",
+        "grounds": "the probe exited 0",
+        "kind": "python_module",
+        "name": "python3:openpyxl",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "python3",
+          "-c",
+          "import pandas as m; print(getattr(m, '__version__', 'no __version__'))"
+        ],
+        "capability": "data-science",
+        "first_line": "3.0.3",
+        "grounds": "the probe exited 0",
+        "kind": "python_module",
+        "name": "python3:pandas",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "python3",
+          "-c",
+          "import pptx as m; print(getattr(m, '__version__', 'no __version__'))"
+        ],
+        "capability": "presentations",
+        "first_line": "1.0.2",
+        "grounds": "the probe exited 0",
+        "kind": "python_module",
+        "name": "python3:pptx",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "python3",
+          "-c",
+          "import reportlab as m; print(getattr(m, '__version__', 'no __version__'))"
+        ],
+        "capability": "pdf",
+        "first_line": "5.0.0",
+        "grounds": "the probe exited 0",
+        "kind": "python_module",
+        "name": "python3:reportlab",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "python3",
+          "-c",
+          "import scipy as m; print(getattr(m, '__version__', 'no __version__'))"
+        ],
+        "capability": "data-science",
+        "first_line": "1.17.1",
+        "grounds": "the probe exited 0",
+        "kind": "python_module",
+        "name": "python3:scipy",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "python3",
+          "-c",
+          "import sklearn as m; print(getattr(m, '__version__', 'no __version__'))"
+        ],
+        "capability": "machine-learning",
+        "first_line": "1.9.0",
+        "grounds": "the probe exited 0",
+        "kind": "python_module",
+        "name": "python3:sklearn",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "python3",
+          "-c",
+          "import weasyprint as m; print(getattr(m, '__version__', 'no __version__'))"
+        ],
+        "capability": "documents",
+        "first_line": "69.0",
+        "grounds": "the probe exited 0",
+        "kind": "python_module",
+        "name": "python3:weasyprint",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "fc-match",
+          "-f",
+          "%{family}|%{file}",
+          "DejaVu Sans"
+        ],
+        "capability": "fonts",
+        "first_line": "DejaVu Sans|/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "grounds": "the probe exited 0",
+        "kind": "font_family",
+        "name": "font:DejaVu Sans",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "fc-match",
+          "-f",
+          "%{family}|%{file}",
+          "Liberation Sans"
+        ],
+        "capability": "fonts",
+        "first_line": "Liberation Sans|/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        "grounds": "the probe exited 0",
+        "kind": "font_family",
+        "name": "font:Liberation Sans",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "fc-match",
+          "-f",
+          "%{family}|%{file}",
+          "Noto Sans CJK KR"
+        ],
+        "capability": "fonts",
+        "first_line": "Noto Sans CJK KR|/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "grounds": "the probe exited 0",
+        "kind": "font_family",
+        "name": "font:Noto Sans CJK KR",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      }
+    ],
+    "runtime_argv": [
+      "docker",
+      "run",
+      "--rm",
+      "--network",
+      "none",
+      "--read-only",
+      "--tmpfs",
+      "/tmp",
+      "--entrypoint",
+      "/bin/sh",
+      "sha256:94ea6cb4379ea2537be7875248dad5dc304bbf17f7c99682570b2844156ba1c7",
+      "-c",
+      "<driver>"
+    ],
+    "sweep_returncode": 0,
+    "sweep_seconds": 23.89,
+    "sweep_stderr": ""
+  },
+  "capability_receipt_status": "not_run",
+  "host_caveat": "Both sweeps were taken on a cgroup v1, kernel 3.10.102 host. Command presence inside an image does not depend on that, but the isolation policy stage D runs under requires cgroup v2, so nothing here should be read as an isolation or containment result. Re-run on the Azure host before treating these as the numbers stage D executes against.",
+  "is_not": [
+    "a capability receipt",
+    "a signature or provenance verification",
+    "a vulnerability scan",
+    "an isolation or containment measurement"
+  ],
+  "parent": {
+    "absent": 6,
+    "artifact": "agentic-v2-declared-command-sweep",
+    "artifact_version": "1.0",
+    "declared": {
+      "commands": 20,
+      "font_families": 3,
+      "platform": {
+        "architecture": "amd64",
+        "os": "linux",
+        "python": "3.11"
+      },
+      "python_modules": 13
+    },
+    "host": {
+      "cgroup_version": 1,
+      "kernel": "3.10.102",
+      "machine": "x86_64",
+      "runtime": "docker",
+      "runtime_version": "20.10.3",
+      "system": "Linux"
+    },
+    "image": "ghcr.io/hyeonsangjeon/gdpval-sandbox@sha256:ee6ef798631d3c3aeaed28658c640e6f5d021677449852bf2e1f18be5bd24edb",
+    "is_not": [
+      "a capability receipt",
+      "a signature or provenance verification",
+      "a vulnerability scan",
+      "an isolation or containment measurement"
+    ],
+    "manifest_path": "/tmp/wtB485/batch-runner/sandbox/agentic_v2_capabilities.json",
+    "manifest_sha256": "fa76625f3fc9bb46c595f7c542132facb91c824bb5e51c7db9ea2d4fcb345a1f",
+    "present": 34,
+    "probes_answered": 40,
+    "probes_declared": 40,
+    "records": [
+      {
+        "answered": true,
+        "argv": [
+          "python",
+          "--version"
+        ],
+        "capability": "runtime",
+        "first_line": "Python 3.11.15",
+        "grounds": "the probe exited 0",
+        "kind": "command",
+        "name": "python",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "python3",
+          "--version"
+        ],
+        "capability": "runtime",
+        "first_line": "Python 3.11.15",
+        "grounds": "the probe exited 0",
+        "kind": "command",
+        "name": "python3",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "sh",
+          "-c",
+          "echo ok"
+        ],
+        "capability": "runtime",
+        "first_line": "ok",
+        "grounds": "the probe exited 0",
+        "kind": "command",
+        "name": "sh",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "uname",
+          "-srm"
+        ],
+        "capability": "runtime",
+        "first_line": "Linux 3.10.102 x86_64",
+        "grounds": "the probe exited 0",
+        "kind": "command",
+        "name": "uname",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "Rscript",
+          "--version"
+        ],
+        "capability": "data-science",
+        "first_line": "/bin/sh: 39: Rscript: not found",
+        "grounds": "the probe exited 127",
+        "kind": "command",
+        "name": "Rscript",
+        "present": false,
+        "returncode": 127,
+        "stderr": "/bin/sh: 39: Rscript: not found"
+      },
+      {
+        "answered": true,
+        "argv": [
+          "bash",
+          "--version"
+        ],
+        "capability": "shell",
+        "first_line": "GNU bash, version 5.2.15(1)-release (x86_64-pc-linux-gnu)",
+        "grounds": "the probe exited 0",
+        "kind": "command",
+        "name": "bash",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "chromium",
+          "--version"
+        ],
+        "capability": "browser-local",
+        "first_line": "/bin/sh: 57: chromium: not found",
+        "grounds": "the probe exited 127",
+        "kind": "command",
+        "name": "chromium",
+        "present": false,
+        "returncode": 127,
+        "stderr": "/bin/sh: 57: chromium: not found"
+      },
+      {
+        "answered": true,
+        "argv": [
+          "cmake",
+          "--version"
+        ],
+        "capability": "compilers",
+        "first_line": "/bin/sh: 66: cmake: not found",
+        "grounds": "the probe exited 127",
+        "kind": "command",
+        "name": "cmake",
+        "present": false,
+        "returncode": 127,
+        "stderr": "/bin/sh: 66: cmake: not found"
+      },
+      {
+        "answered": true,
+        "argv": [
+          "ffmpeg",
+          "-version"
+        ],
+        "capability": "media",
+        "first_line": "ffmpeg version 5.1.9-0+deb12u1 Copyright (c) 2000-2026 the FFmpeg developers",
+        "grounds": "the probe exited 0",
+        "kind": "command",
+        "name": "ffmpeg",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "ffprobe",
+          "-version"
+        ],
+        "capability": "media",
+        "first_line": "ffprobe version 5.1.9-0+deb12u1 Copyright (c) 2007-2026 the FFmpeg developers",
+        "grounds": "the probe exited 0",
+        "kind": "command",
+        "name": "ffprobe",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "g++",
+          "--version"
+        ],
+        "capability": "compilers",
+        "first_line": "g++ (Debian 12.2.0-14+deb12u1) 12.2.0",
+        "grounds": "the probe exited 0",
+        "kind": "command",
+        "name": "g++",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "gcc",
+          "--version"
+        ],
+        "capability": "compilers",
+        "first_line": "gcc (Debian 12.2.0-14+deb12u1) 12.2.0",
+        "grounds": "the probe exited 0",
+        "kind": "command",
+        "name": "gcc",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "gdalinfo",
+          "--version"
+        ],
+        "capability": "gis",
+        "first_line": "GDAL 3.6.2, released 2023/01/02",
+        "grounds": "the probe exited 0",
+        "kind": "command",
+        "name": "gdalinfo",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "gfortran",
+          "--version"
+        ],
+        "capability": "compilers",
+        "first_line": "GNU Fortran (Debian 12.2.0-14+deb12u1) 12.2.0",
+        "grounds": "the probe exited 0",
+        "kind": "command",
+        "name": "gfortran",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "libreoffice",
+          "--version"
+        ],
+        "capability": "documents",
+        "first_line": "LibreOffice 7.4.7.2 40(Build:2)",
+        "grounds": "the probe exited 0",
+        "kind": "command",
+        "name": "libreoffice",
+        "present": true,
+        "returncode": 0,
+        "stderr": "(process:59): dconf-CRITICAL **: 22:31:15.108: unable to create directory '/root/.cache/dconf': Read-only file system.  dconf will not work properly."
+      },
+      {
+        "answered": true,
+        "argv": [
+          "make",
+          "--version"
+        ],
+        "capability": "compilers",
+        "first_line": "GNU Make 4.3",
+        "grounds": "the probe exited 0",
+        "kind": "command",
+        "name": "make",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "node",
+          "--version"
+        ],
+        "capability": "programming",
+        "first_line": "/bin/sh: 147: node: not found",
+        "grounds": "the probe exited 127",
+        "kind": "command",
+        "name": "node",
+        "present": false,
+        "returncode": 127,
+        "stderr": "/bin/sh: 147: node: not found"
+      },
+      {
+        "answered": true,
+        "argv": [
+          "npm",
+          "--version"
+        ],
+        "capability": "programming",
+        "first_line": "/bin/sh: 156: npm: not found",
+        "grounds": "the probe exited 127",
+        "kind": "command",
+        "name": "npm",
+        "present": false,
+        "returncode": 127,
+        "stderr": "/bin/sh: 156: npm: not found"
+      },
+      {
+        "answered": true,
+        "argv": [
+          "ogr2ogr",
+          "--version"
+        ],
+        "capability": "gis",
+        "first_line": "GDAL 3.6.2, released 2023/01/02",
+        "grounds": "the probe exited 0",
+        "kind": "command",
+        "name": "ogr2ogr",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "pandoc",
+          "--version"
+        ],
+        "capability": "documents",
+        "first_line": "pandoc 2.17.1.1",
+        "grounds": "the probe exited 0",
+        "kind": "command",
+        "name": "pandoc",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "pdftoppm",
+          "-v"
+        ],
+        "capability": "pdf",
+        "first_line": "pdftoppm version 22.12.0",
+        "grounds": "the probe exited 0",
+        "kind": "command",
+        "name": "pdftoppm",
+        "present": true,
+        "returncode": 0,
+        "stderr": "pdftoppm version 22.12.0\nCopyright 2005-2022 The Poppler Developers - http://poppler.freedesktop.org\nCopyright 1996-2011, 2022 Glyph & Cog, LLC"
+      },
+      {
+        "answered": true,
+        "argv": [
+          "pdftotext",
+          "-v"
+        ],
+        "capability": "pdf",
+        "first_line": "pdftotext version 22.12.0",
+        "grounds": "the probe exited 0",
+        "kind": "command",
+        "name": "pdftotext",
+        "present": true,
+        "returncode": 0,
+        "stderr": "pdftotext version 22.12.0\nCopyright 2005-2022 The Poppler Developers - http://poppler.freedesktop.org\nCopyright 1996-2011, 2022 Glyph & Cog, LLC"
+      },
+      {
+        "answered": true,
+        "argv": [
+          "python",
+          "--version"
+        ],
+        "capability": "programming",
+        "first_line": "Python 3.11.15",
+        "grounds": "the probe exited 0",
+        "kind": "command",
+        "name": "python",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "tesseract",
+          "--version"
+        ],
+        "capability": "ocr",
+        "first_line": "tesseract 5.3.0",
+        "grounds": "the probe exited 0",
+        "kind": "command",
+        "name": "tesseract",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "python3",
+          "-c",
+          "import PIL as m; print(getattr(m, '__version__', 'no __version__'))"
+        ],
+        "capability": "documents",
+        "first_line": "12.3.0",
+        "grounds": "the probe exited 0",
+        "kind": "python_module",
+        "name": "python3:PIL",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "python3",
+          "-c",
+          "import av as m; print(getattr(m, '__version__', 'no __version__'))"
+        ],
+        "capability": "media",
+        "first_line": "18.0.0",
+        "grounds": "the probe exited 0",
+        "kind": "python_module",
+        "name": "python3:av",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "python3",
+          "-c",
+          "import ezdxf as m; print(getattr(m, '__version__', 'no __version__'))"
+        ],
+        "capability": "cad-dxf",
+        "first_line": "Traceback (most recent call last):",
+        "grounds": "the probe exited 1",
+        "kind": "python_module",
+        "name": "python3:ezdxf",
+        "present": false,
+        "returncode": 1,
+        "stderr": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\nModuleNotFoundError: No module named 'ezdxf'"
+      },
+      {
+        "answered": true,
+        "argv": [
+          "python3",
+          "-c",
+          "import geopandas as m; print(getattr(m, '__version__', 'no __version__'))"
+        ],
+        "capability": "gis",
+        "first_line": "1.1.4",
+        "grounds": "the probe exited 0",
+        "kind": "python_module",
+        "name": "python3:geopandas",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "python3",
+          "-c",
+          "import matplotlib as m; print(getattr(m, '__version__', 'no __version__'))"
+        ],
+        "capability": "data-science",
+        "first_line": "3.11.0",
+        "grounds": "the probe exited 0",
+        "kind": "python_module",
+        "name": "python3:matplotlib",
+        "present": true,
+        "returncode": 0,
+        "stderr": "mkdir -p failed for path /root/.config/matplotlib: [Errno 30] Read-only file system: '/root/.config'\nMatplotlib created a temporary cache directory at /tmp/matplotlib-tlfun6nv because there was an issue with the default path ({configdir}); it is highly recommended to set the MPLCONFIGDIR environment variable to a writable directory, in particular to speed up the import of Matplotlib and to better "
+      },
+      {
+        "answered": true,
+        "argv": [
+          "python3",
+          "-c",
+          "import numpy as m; print(getattr(m, '__version__', 'no __version__'))"
+        ],
+        "capability": "data-science",
+        "first_line": "2.4.6",
+        "grounds": "the probe exited 0",
+        "kind": "python_module",
+        "name": "python3:numpy",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "python3",
+          "-c",
+          "import openpyxl as m; print(getattr(m, '__version__', 'no __version__'))"
+        ],
+        "capability": "spreadsheets",
+        "first_line": "3.1.5",
+        "grounds": "the probe exited 0",
+        "kind": "python_module",
+        "name": "python3:openpyxl",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "python3",
+          "-c",
+          "import pandas as m; print(getattr(m, '__version__', 'no __version__'))"
+        ],
+        "capability": "data-science",
+        "first_line": "3.0.3",
+        "grounds": "the probe exited 0",
+        "kind": "python_module",
+        "name": "python3:pandas",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "python3",
+          "-c",
+          "import pptx as m; print(getattr(m, '__version__', 'no __version__'))"
+        ],
+        "capability": "presentations",
+        "first_line": "1.0.2",
+        "grounds": "the probe exited 0",
+        "kind": "python_module",
+        "name": "python3:pptx",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "python3",
+          "-c",
+          "import reportlab as m; print(getattr(m, '__version__', 'no __version__'))"
+        ],
+        "capability": "pdf",
+        "first_line": "5.0.0",
+        "grounds": "the probe exited 0",
+        "kind": "python_module",
+        "name": "python3:reportlab",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "python3",
+          "-c",
+          "import scipy as m; print(getattr(m, '__version__', 'no __version__'))"
+        ],
+        "capability": "data-science",
+        "first_line": "1.17.1",
+        "grounds": "the probe exited 0",
+        "kind": "python_module",
+        "name": "python3:scipy",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "python3",
+          "-c",
+          "import sklearn as m; print(getattr(m, '__version__', 'no __version__'))"
+        ],
+        "capability": "machine-learning",
+        "first_line": "1.9.0",
+        "grounds": "the probe exited 0",
+        "kind": "python_module",
+        "name": "python3:sklearn",
+        "present": true,
+        "returncode": 0,
+        "stderr": ""
+      },
+      {
+        "answered": true,
+        "argv": [
+          "python3",
+          "-c",
+          "import weasyprint as m; print(getattr(m, '__version__', 'no __version__'))"
+        ],
+        "capability": "documents",
+        "first_line": "69.0",
+        "grounds": "the probe exited 0",
+        "kind": "python_module",
+        "name": "python3:weasyprint",
+        "present": true,
+        "returncode": 0,
+        "stderr": "Fontconfig error: No writable cache directories\nFontconfig error: No writable cache directories\nFontconfig error: No writable cache directories\nFontconfig error: No writable cache directories\nFontconfig error: No writable cache directories\nFontconfig error: No writable cache directories\nFontconfig error: No writable cache directories\nFontconfig error: No writable cache directories"
+      },
+      {
+        "answered": true,
+        "argv": [
+          "fc-match",
+          "-f",
+          "%{family}|%{file}",
+          "DejaVu Sans"
+        ],
+        "capability": "fonts",
+        "first_line": "DejaVu Sans|/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "grounds": "the probe exited 0",
+        "kind": "font_family",
+        "name": "font:DejaVu Sans",
+        "present": true,
+        "returncode": 0,
+        "stderr": "Fontconfig error: No writable cache directories\nFontconfig error: No writable cache directories\nFontconfig error: No writable cache directories\nFontconfig error: No writable cache directories\nFontconfig error: No writable cache directories\nFontconfig error: No writable cache directories\nFontconfig error: No writable cache directories\nFontconfig error: No writable cache directories"
+      },
+      {
+        "answered": true,
+        "argv": [
+          "fc-match",
+          "-f",
+          "%{family}|%{file}",
+          "Liberation Sans"
+        ],
+        "capability": "fonts",
+        "first_line": "Liberation Sans|/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        "grounds": "the probe exited 0",
+        "kind": "font_family",
+        "name": "font:Liberation Sans",
+        "present": true,
+        "returncode": 0,
+        "stderr": "Fontconfig error: No writable cache directories\nFontconfig error: No writable cache directories\nFontconfig error: No writable cache directories\nFontconfig error: No writable cache directories\nFontconfig error: No writable cache directories\nFontconfig error: No writable cache directories\nFontconfig error: No writable cache directories\nFontconfig error: No writable cache directories"
+      },
+      {
+        "answered": true,
+        "argv": [
+          "fc-match",
+          "-f",
+          "%{family}|%{file}",
+          "Noto Sans CJK KR"
+        ],
+        "capability": "fonts",
+        "first_line": "Noto Sans CJK KR|/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "grounds": "the probe exited 0",
+        "kind": "font_family",
+        "name": "font:Noto Sans CJK KR",
+        "present": true,
+        "returncode": 0,
+        "stderr": "Fontconfig error: No writable cache directories\nFontconfig error: No writable cache directories\nFontconfig error: No writable cache directories\nFontconfig error: No writable cache directories\nFontconfig error: No writable cache directories\nFontconfig error: No writable cache directories\nFontconfig error: No writable cache directories\nFontconfig error: No writable cache directories"
+      }
+    ],
+    "runtime_argv": [
+      "docker",
+      "run",
+      "--rm",
+      "--network",
+      "none",
+      "--read-only",
+      "--tmpfs",
+      "/tmp",
+      "--entrypoint",
+      "/bin/sh",
+      "ghcr.io/hyeonsangjeon/gdpval-sandbox@sha256:ee6ef798631d3c3aeaed28658c640e6f5d021677449852bf2e1f18be5bd24edb",
+      "-c",
+      "<driver>"
+    ],
+    "sweep_returncode": 0,
+    "sweep_seconds": 48.02,
+    "sweep_stderr": ""
+  },
+  "provenance_status": "not_run",
+  "signature_status": "not_run",
+  "taken_on": "2026-09-10",
+  "the_gap_this_measures": "parent is the image parent.lock.json pins and the only one this repository can fetch. candidate is a local build carrying the professional-work layer and exists nowhere else. The difference between their two answer sets is that layer, measured rather than assumed.",
+  "what_this_is": "Two sweeps of the declared substrate manifest against two images that actually exist on this box. Each answers, per declared command, module and font family, whether the probe in the manifest exits 0 inside that image. That is the whole claim.",
+  "why_those_are_not_run": "The capability receipt that reads 'verified' in sandbox/v2/README.md was measured on candidate image sha256:e47537b8..., which was never pushed and is not present on this host. Neither image below has a receipt, a signature or a provenance attestation. A sha256 this repository computed over bytes it fetched is an identity for those bytes; it is not a supplier's assertion about what is in them."
+}

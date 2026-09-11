@@ -156,6 +156,13 @@ batch-runner/scripts/*
 # this box is not, so the host gets it by cloning the repository.
 !batch-runner/scripts/run_agentic_c3_attacks.py
 
+# Stage D's paid run. Both of the reasons above at once: it needs a federated
+# token, which only a workflow job holds, and it needs a host that boots, which
+# only the execution host is. Neither place is a working copy, and both reach
+# the repository by cloning it. Its --dry-run path runs in a pull request and is
+# held by tests/test_run_agentic_stage_d_probe.py.
+!batch-runner/scripts/run_agentic_stage_d_probe.py
+
 # Answers the three questions exp034 registered in its header before it was
 # allowed to spend, against a downloaded run artifact. Committed because those
 # answers have to be checkable by someone who was not in the room: a figure
