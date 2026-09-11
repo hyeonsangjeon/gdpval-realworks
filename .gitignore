@@ -220,6 +220,12 @@ tasks/0822_saturday/*
 # tests assert against this file directly, so it is also the thing that would
 # fail if the module and the artefact ever stopped agreeing.
 !tasks/0822_saturday/guest_declared_command_sweep.json
+# The boot-host survey's answer. This one is a transcription rather than a
+# machine-written artefact -- the survey prints prose and the run's log is the
+# original -- but logs age out, and the named access change it reports is the
+# thing stage D is waiting on. Keeping it in the tree means the block can be
+# read, and re-read, without a run id that still resolves.
+!tasks/0822_saturday/boot_host_survey.json
 !tasks/0828_friday/
 tasks/0828_friday/*
 !tasks/0828_friday/TASK_PER_TASK_COST_RECEIPTS.md

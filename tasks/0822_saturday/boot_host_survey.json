@@ -1,0 +1,69 @@
+{
+  "what_this_is": "The answer to the question stage D was stuck on: could a Firecracker host go in the subscription the GPT deployment already lives in, under permissions that already exist. Five ARM control-plane reads, no writes, no model call, no cost. Transcribed from the public job log of the run named below; the survey withholds the subscription id and machine names by design, so neither appears here either.",
+  "run": {
+    "workflow": ".github/workflows/azure-boot-host-survey.yml",
+    "run_id": "34549220652",
+    "head_sha": "8cce9abbf0d9397cee52680f1a97d7e46c317868",
+    "started_at": "2026-09-11T01:05:16Z",
+    "finished_at": "2026-09-11T01:05:43Z",
+    "conclusion": "success",
+    "asked_about": {
+      "location": "eastus2",
+      "host_size": "Standard_D8as_v5",
+      "sized_from": "infra/dev-host/main.bicep"
+    }
+  },
+  "verdict": "blocked_and_the_change_is_named",
+  "because": "a host could not be created here under the permissions and capacity that exist today",
+  "all_five_reads_completed": true,
+  "why_that_matters": "The survey's first rule is that an unmeasured read must never become an absence. Every finding below is measured: true, so this is a block that was observed, not a block inferred from a read that failed.",
+  "findings": {
+    "session": {
+      "measured": true,
+      "is_the_expected_subscription": true,
+      "state": "Enabled",
+      "subscription_id_was_read": true,
+      "note": "the id is deliberately not reported; only whether it is the one the model credential names"
+    },
+    "provider": {
+      "measured": true,
+      "registered": true,
+      "registration_state": "Registered"
+    },
+    "existing_hosts": {
+      "measured": true,
+      "count": 0,
+      "note": "names withheld; the count is what the verdict turns on"
+    },
+    "quota": {
+      "measured": true,
+      "family": "standardDASv5Family",
+      "limit_vcpus": 100,
+      "in_use_vcpus": 0,
+      "free_vcpus": 100,
+      "enough_for_one_host": true
+    },
+    "permissions": {
+      "measured": true,
+      "assignments_held": 2,
+      "permits": {
+        "Microsoft.Compute/virtualMachines/write": false,
+        "Microsoft.Network/networkInterfaces/write": false,
+        "Microsoft.Resources/subscriptions/resourceGroups/write": false
+      },
+      "permits_all_three": false
+    }
+  },
+  "the_shape_of_the_block": "Permissions only. Four of the five reads came back favourable -- it is the right subscription, Microsoft.Compute is registered, and eastus2 has 100 free vCPUs against an 8-vCPU host, which is room for one many times over. The single thing missing is that the run identity holds two role assignments and neither grants any of the three writes a host needs. No quota increase, no provider registration and no region change would help, because none of those is what is stopping it.",
+  "what_would_have_to_change": [
+    "this identity's roles do not permit: Microsoft.Compute/virtualMachines/write, Microsoft.Network/networkInterfaces/write, Microsoft.Resources/subscriptions/resourceGroups/write"
+  ],
+  "and_note": "this is a report, not a request. Each item above is an access change and belongs to whoever owns the subscription, so it is named here and left undone.",
+  "what_this_is_not": [
+    "not a request for a role assignment, and not a step toward one",
+    "not a claim that a host in this subscription would boot a guest -- that is C2's question, already answered on a different machine in a different subscription, and it would have to be answered again here",
+    "not a reason to fall back to Docker, V1, or a host subprocess",
+    "not a reason to re-open the GitHub-runner-as-host route, which is closed on documented support status rather than on hardware"
+  ],
+  "what_is_unblocked_regardless": "Everything on the code side. The second verification standard the microVM backend needs (D4/D5) and the stage E ledger and retry wiring require no access change and no host, so they continue while this sits with the owner."
+}

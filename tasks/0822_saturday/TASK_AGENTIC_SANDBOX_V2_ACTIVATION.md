@@ -2042,6 +2042,54 @@ workflow, five ARM control-plane reads, creating nothing and requesting
 nothing. Its answer decides whether stage D needs an access change at all. If
 it does, the exact change gets **named and reported**, not performed.
 
+##### It was asked, and the answer is permissions
+
+Run `34549220652` on `8cce9ab`, 2026-09-11T01:05:16Z, twenty-seven seconds,
+`success`. All five reads completed, so this is a block that was **observed**
+rather than one inferred from a read that failed — the distinction the survey's
+own first test exists to protect. Transcribed to
+`tasks/0822_saturday/boot_host_survey.json`, since the job log will age out and
+the block will not.
+
+| read | answer |
+|---|---|
+| session | the expected subscription, `Enabled` |
+| provider | `Microsoft.Compute` **registered** |
+| existing hosts | **0** |
+| quota | `standardDASv5Family`, **100 free vCPUs** of 100, 0 in use |
+| permissions | **2 assignments**, and **none** of the three writes permitted |
+
+Verdict `blocked_and_the_change_is_named`.
+
+**Four of the five came back favourable.** It is the right subscription, the
+provider is registered, and eastus2 has room for an 8-vCPU host more than ten
+times over. Exactly one thing is missing: the run identity holds two role
+assignments, and neither grants `Microsoft.Compute/virtualMachines/write`,
+`Microsoft.Network/networkInterfaces/write`, or
+`Microsoft.Resources/subscriptions/resourceGroups/write`.
+
+That narrowness is the useful part. A quota increase would not help, a region
+change would not help, and registering the provider would not help, because
+none of those is what is stopping it — and each would have been a plausible
+thing to go and ask for. The survey's value was in ruling them out, not in
+finding the block.
+
+So the named change is a role assignment on this identity in the model's
+subscription, and per the standing instruction that access expansion is
+separate from cost approval, it is **named here and left undone**. It is not
+requested, and nothing in this repository moves toward it.
+
+Two things it is not. It is not a claim that a host placed here would boot a
+guest — that is C2's question, answered on a different machine in a different
+subscription, and it would have to be answered again. And it is not a reason to
+fall back to Docker, V1 or a host subprocess, which would answer a question
+nobody asked.
+
+What it does not block is the code. The second verification standard the
+microVM backend needs, and the stage E ledger and retry wiring, need no host and
+no access change, so they are where the work continues while this sits with
+whoever owns the subscription.
+
 ### Stage E — not yet run
 
 Before any of it is written, what the repository already has. Two searches this
