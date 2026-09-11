@@ -320,3 +320,51 @@ def test_the_figure_is_a_floor_for_a_second_reason_the_ledger_cannot_settle():
     cheap = load_receipt_price_table(SHIPPED_PRICE_TABLE).lookup("azure", "gpt-5.4")
     assert cheap.input_usd_per_million == Decimal("2.50")
     assert cheap.output_usd_per_million == Decimal("15.00")
+
+
+def test_the_fix_makes_the_price_of_the_discarded_work_computable():
+    """What the empty column was costing: a number nobody could state.
+
+    `test_the_refusals_were_not_the_pace_we_set` establishes that twenty-nine
+    of this run's fifty-three turns ended in a rate-limit retry, and that every
+    one of them settled with real token counts — 3,817,205 tokens, 39.3% of the
+    run, spent on work that was then thrown away and started over. Its closing
+    warning is that a run's token total is not its progress.
+
+    The same sentence in dollars could not be written, because every one of
+    those turns settled with a null cost. It can now, and it is worse than the
+    token share suggests: **45.0%** of the money, $5.5262 of $12.2683, bought
+    nothing. Retried turns skew toward output, and output is six times the
+    input rate, so the share of the bill exceeds the share of the tokens.
+
+    That gap is the argument for the change in one line. The run already knew
+    how many tokens it wasted; what it could not say was how much that cost,
+    and cost is the thing the question gets asked in. Pinned here so the
+    finding survives, and pinned against the shipped table so it moves if the
+    rates move.
+    """
+    price = load_receipt_price_table(SHIPPED_PRICE_TABLE).lookup("azure", "gpt-5.4")
+    turns = _settled_turns()
+
+    def usd(row):
+        return price_call(price, _usage_of(row)).cost_usd
+
+    discarded = [row for row in turns if row["retry_kind"] == "infrastructure"]
+    wasted = sum((usd(row) for row in discarded), Decimal("0"))
+    total = sum((usd(row) for row in turns), Decimal("0"))
+
+    assert len(discarded) == 29
+    assert total.quantize(Decimal("0.0001")) == Decimal("12.2683")
+    assert wasted.quantize(Decimal("0.0001")) == Decimal("5.5262")
+
+    share_of_tokens = Decimal(
+        sum(row["input_tokens"] + row["output_tokens"] for row in discarded)
+    ) / Decimal(sum(row["input_tokens"] + row["output_tokens"] for row in turns))
+    share_of_money = wasted / total
+
+    assert round(share_of_tokens * 100, 1) == Decimal("39.3")
+    assert round(share_of_money * 100, 1) == Decimal("45.0")
+    assert share_of_money > share_of_tokens, (
+        "if these ever converge the output-rate premium has gone, and the "
+        "sentence above needs rewriting rather than the number updating"
+    )
