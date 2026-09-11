@@ -574,6 +574,97 @@ def test_the_script_the_workflow_runs_is_committed_and_not_ignored():
 
 
 # -------------------------------------------------------------------------
+# Making an empty answer diagnosable
+# -------------------------------------------------------------------------
+
+
+def test_an_empty_limits_read_says_which_properties_were_there():
+    """Two different facts otherwise look identical.
+
+    A deployment that genuinely declares no limits and a payload that declares
+    them under a name this tool does not look for both produce an empty report.
+    Telling them apart afterwards would mean reading the payload again, in CI,
+    because CI is the only place the account is visible -- so the names it did
+    carry are recorded the first time.
+    """
+    code, body = _run(
+        ["--deployment", DEPLOYMENT], runner=_runner([_deployment(rate_limits=None)])
+    )
+    assert code == 0
+    assert "model" in body
+    assert "the deployment's properties carried" in body
+
+
+def test_the_property_names_are_not_repeated_when_the_limits_were_read():
+    code, body = _run(["--deployment", DEPLOYMENT])
+    assert code == 0
+    assert "properties carried" not in body
+
+
+def test_only_names_shaped_like_azure_schema_are_repeated_back():
+    """The filter is cheap and the promise it protects is not.
+
+    These are Azure's own property names rather than anything a person chose,
+    so nothing here is expected to be withheld. The report's whole claim is
+    that no chosen string survives into it, and a claim that holds only while
+    an upstream schema stays boring is not the claim being made.
+    """
+    entry = _deployment(rate_limits=None)
+    entry["properties"]["contoso-foundry-eastus"] = "surprise"
+    report = _measure(_runner([entry]))
+    assert report["properties_seen"] == ["model"]
+    assert ACCOUNT not in report["properties_seen"]
+
+
+# -------------------------------------------------------------------------
+# What else was already binding to the module this change moved things out of
+# -------------------------------------------------------------------------
+
+DIAGNOSTIC = BATCH_RUNNER / "scripts" / "azure_rbac_diagnostic.py"
+SURVEY = BATCH_RUNNER / "scripts" / "azure_boot_host_survey.py"
+BOUND_OFF_THE_DIAGNOSTIC = re.compile(r"\brbac\.([A-Za-z_][A-Za-z0-9_]*)")
+
+
+def _diagnostic_module():
+    # Loaded under a name of its own. The boot-host survey loads the same file
+    # under its own key, and stamping on that entry would make this check the
+    # reason another test file fails.
+    name = "azure_rbac_diagnostic_binding_check"
+    spec = importlib.util.spec_from_file_location(name, DIAGNOSTIC)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_every_name_the_boot_host_survey_binds_off_the_diagnostic_still_exists():
+    """Private by name, public by use.
+
+    The boot-host survey loads the diagnostic by path and reaches into it for
+    helpers that were written as local functions with leading underscores. The
+    underscore recorded nothing about who depended on them, so moving those
+    implementations into ``core.azure_control_plane`` renamed them out from under
+    a caller whose own file had not changed -- and its tests, not the
+    diagnostic's, were the ones that went red.
+
+    Read out of the survey's source rather than listed here, so a name added
+    there later is covered without anybody remembering to come back.
+    """
+    if not SURVEY.exists():
+        pytest.skip("the boot host survey is not in this checkout")
+    module = _diagnostic_module()
+    used = set(BOUND_OFF_THE_DIAGNOSTIC.findall(SURVEY.read_text(encoding="utf-8")))
+    assert used, "nothing was found to bind, so this proves nothing"
+    missing = sorted(name for name in used if not hasattr(module, name))
+    assert not missing, (
+        "the boot host survey binds names the diagnostic no longer has: "
+        f"{missing}. Keep them as aliases rather than editing a file this "
+        "change does not own."
+    )
+
+
+# -------------------------------------------------------------------------
 # The workflow that is the only place this can be asked
 # -------------------------------------------------------------------------
 

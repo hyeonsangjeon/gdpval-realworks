@@ -84,6 +84,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
@@ -124,6 +125,10 @@ REQUEST_LIMIT_PREFIX = "request"
 # "GlobalStandard", "GlobalBatch", "DataZoneStandard" and more, and the property
 # they share is the one that matters here.
 SHARED_CAPACITY_MARKERS: tuple[str, ...] = ("global", "datazone", "shared")
+
+# What a property name has to look like before it is repeated back. Azure's own
+# schema names all pass; anything else is withheld rather than printed.
+SCHEMA_KEY_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
 
 VERDICT_CAPACITY_RECORDED = "capacity_recorded"
 VERDICT_LIMITS_NOT_STATED = "limits_not_stated"
@@ -225,6 +230,29 @@ def draws_on_shared_capacity(sku_name: Any) -> bool | None:
         return None
     lowered = sku_name.strip().lower()
     return any(marker in lowered for marker in SHARED_CAPACITY_MARKERS)
+
+
+def schema_keys(payload: Any) -> list[str]:
+    """The property names Azure returned, so an empty answer is diagnosable.
+
+    "This deployment declares no limits" and "the limits are under a name this
+    tool does not look for" produce the same empty report, and telling them
+    apart afterwards would otherwise mean reading the payload -- which means
+    another run, in CI, because that is the only place the account is visible.
+    Recording the names it did carry settles it from the first run.
+
+    Names only, sorted, and only ones shaped like schema identifiers. These are
+    Azure's own property names rather than anything anybody chose, but the
+    filter is cheap and this report's whole promise is that nothing chosen by a
+    person survives into it.
+    """
+    if not isinstance(payload, Mapping):
+        return []
+    return sorted(
+        key
+        for key in payload
+        if isinstance(key, str) and SCHEMA_KEY_PATTERN.match(key)
+    )
 
 
 def read_deployments(
@@ -332,6 +360,7 @@ def measure(
         "tokens_per_minute": None,
         "requests_per_minute": None,
         "rate_limits": [],
+        "properties_seen": [],
         "deployments_seen": None,
         "read_failures": problems,
         "verdict": VERDICT_UNMEASURED,
@@ -404,6 +433,7 @@ def measure(
     model = model if isinstance(model, Mapping) else {}
     sku = entry.get("sku")
     sku = sku if isinstance(sku, Mapping) else {}
+    report["properties_seen"] = schema_keys(properties)
 
     name = model.get("name")
     version = model.get("version")
@@ -489,6 +519,20 @@ def render(report: Mapping[str, Any]) -> str:
                 f"  - {limit.get('key') or 'unnamed'}: {limit.get('count')} "
                 f"per {limit.get('renewal_period_seconds')}s  ->  {shown}"
             )
+
+    # Only when there is nothing to show instead. A reader who got their
+    # denominator does not need the schema; a reader who did not has one
+    # question, and this is the answer to it.
+    properties_seen = list(report.get("properties_seen") or ())
+    if properties_seen and not limits:
+        lines.append("")
+        lines.append("no limits were stated. the deployment's properties carried:")
+        lines.append(f"  {', '.join(properties_seen)}")
+        lines.append(
+            "  (listed because a deployment that declares no limits and a "
+            "payload that declares them under a name this tool does not look "
+            "for read identically)"
+        )
 
     lines.append("")
     lines.append("the denominator this run recorded:")

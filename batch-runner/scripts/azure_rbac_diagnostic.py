@@ -120,6 +120,18 @@ __all__ = [
     "sensitive_values",
 ]
 
+# Private by name, public by use.
+#
+# `scripts/azure_boot_host_survey.py` loads this file by path and binds these
+# two off the loaded module. They were local functions with leading underscores
+# when it was written, so the underscore recorded nothing about who depends on
+# them -- and moving the implementations into core.azure_control_plane renamed
+# them out from under a caller whose own file did not change. Keeping the names
+# costs one line each. Dropping them cost twenty-two tests in a file this change
+# never touched.
+_as_mappings = as_mappings
+_default_runner = default_runner
+
 
 @dataclass(frozen=True)
 class RoleCandidate:
