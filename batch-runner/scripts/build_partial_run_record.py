@@ -16,9 +16,20 @@ Usage
 -----
 
     python scripts/build_partial_run_record.py <artifact-dir> \
-        --run-id <id> --output-dir docs/run_records/<name> [--log <job-log>]
+        --run-id <id> --output-dir docs/run_records/<name> [--log <job-log>] \
+        [--ledger <earlier-leg-ledger>]...
 
 ``<artifact-dir>`` is the unpacked ``batch-results-<run-id>`` artifact.
+
+A leg that resumed needs ``--ledger``
+-------------------------------------
+The relay restores its predecessor's **progress** and starts an **empty
+ledger**. So a resumed leg's artifact holds the whole lineage's outcomes and
+only its own calls, and every task it inherited looks, to its ledger, like a
+task nobody ever called. Naming that ``no_call_made`` would print $0.00 over
+work an earlier leg paid for -- which is the one direction a cost record must
+never round. Those rows are recorded as ``absent_from_supplied_ledgers`` with
+no amount instead, and passing the earlier legs' ledgers prices them properly.
 
 What each output is
 -------------------
@@ -56,7 +67,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from derive_run_cost import derive, uncalled_row  # noqa: E402
+from derive_run_cost import (  # noqa: E402
+    BASIS_ABSENT,
+    derive,
+    uncalled_row,
+    unledgered_row,
+)
 
 #: Failure categories the pipeline records, split by whose result they are.
 #: `benchmark_failure` means the model was asked a real question and what it
@@ -117,8 +133,8 @@ def _read_json(path: Path):
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def _ledger_by_task(ledger: Path) -> dict[str, dict]:
-    """Per-task call counts and token totals, straight from the ledger.
+def _ledger_by_task(ledgers: list[Path]) -> dict[str, dict]:
+    """Per-task call counts and token totals, straight from the ledgers.
 
     ``resolved_model`` is taken from **settled** calls only. A reservation that
     was never concluded has no model on it, and letting one of those decide the
@@ -126,9 +142,11 @@ def _ledger_by_task(ledger: Path) -> dict[str, dict]:
     `gpt-5.4` and carries six figures of tokens. Which model answered and how
     many calls went unmeasured are separate questions, and the second already
     has its own fields.
+
+    Several ledgers accumulate into one total per task, which is what a relayed
+    run needs: a task's calls can straddle a handover, and a leg that resumes
+    starts an empty ledger while carrying the whole lineage's progress.
     """
-    conn = sqlite3.connect(f"file:{ledger}?mode=ro", uri=True)
-    conn.row_factory = sqlite3.Row
     out: dict[str, dict] = defaultdict(
         lambda: {
             "calls": 0,
@@ -144,30 +162,33 @@ def _ledger_by_task(ledger: Path) -> dict[str, dict]:
             "price_table_sha256": None,
         }
     )
-    for row in conn.execute("SELECT * FROM cost_calls"):
-        agg = out[row["task_id"]]
-        agg["calls"] += 1
-        settled = row["state"] == "settled"
-        if settled:
-            agg["calls_settled"] += 1
-        else:
-            agg["calls_reserved"] += 1
-        if row["retry_kind"] and row["retry_kind"] != "none":
-            agg["retries_infrastructure"] += 1
-        for field in (
-            "input_tokens",
-            "cached_input_tokens",
-            "output_tokens",
-            "reasoning_tokens",
-        ):
-            agg[field] += row[field] or 0
-        if agg["deployment"] is None and row["deployment"]:
-            agg["deployment"] = row["deployment"]
-        if settled:
-            for field in ("resolved_model", "price_table_sha256"):
-                if agg[field] is None and row[field]:
-                    agg[field] = row[field]
-    conn.close()
+    for ledger in ledgers:
+        conn = sqlite3.connect(f"file:{ledger}?mode=ro", uri=True)
+        conn.row_factory = sqlite3.Row
+        for row in conn.execute("SELECT * FROM cost_calls"):
+            agg = out[row["task_id"]]
+            agg["calls"] += 1
+            settled = row["state"] == "settled"
+            if settled:
+                agg["calls_settled"] += 1
+            else:
+                agg["calls_reserved"] += 1
+            if row["retry_kind"] and row["retry_kind"] != "none":
+                agg["retries_infrastructure"] += 1
+            for field in (
+                "input_tokens",
+                "cached_input_tokens",
+                "output_tokens",
+                "reasoning_tokens",
+            ):
+                agg[field] += row[field] or 0
+            if agg["deployment"] is None and row["deployment"]:
+                agg["deployment"] = row["deployment"]
+            if settled:
+                for field in ("resolved_model", "price_table_sha256"):
+                    if agg[field] is None and row[field]:
+                        agg[field] = row[field]
+        conn.close()
     return dict(out)
 
 
@@ -233,17 +254,18 @@ def _deliverables(artifact: Path) -> dict[str, list[dict]]:
 
 
 def build(
-    artifact: Path, log: Path | None
+    artifact: Path, log: Path | None, extra_ledgers: list[Path] | None = None
 ) -> tuple[list[dict], dict[str, list[dict]], dict]:
     workspace = artifact / "workspace"
     prepared = _read_json(workspace / "step1_tasks_prepared.json")
     progress = _read_json(workspace / "step2_inference_progress_condition_a.json")
-    ledger_path = workspace / "cost_ledger_condition_a.sqlite3"
+    ledgers = [workspace / "cost_ledger_condition_a.sqlite3"]
+    ledgers.extend(extra_ledgers or [])
 
-    derived = derive([ledger_path])
+    derived = derive(ledgers)
     per_task = derived["per_task"]
     method = derived["method"]
-    ledger = _ledger_by_task(ledger_path)
+    ledger = _ledger_by_task(ledgers)
     messages = _messages_from_log(log)
     files = _deliverables(artifact)
 
@@ -340,7 +362,13 @@ def build(
         if log is None and status == "error":
             row["message_source"] = "not_available"
 
-        row.update(per_task.get(task_id, uncalled_row(method)))
+        # An attempted task missing from every supplied ledger is not free.
+        # A leg that resumes restores its predecessor's progress and starts an
+        # empty ledger, so without that predecessor's ledger this task's calls
+        # are simply somewhere this caller cannot see. `uncalled_row` would say
+        # $0.00 and `no_call_made`, which is the answer for a task that was
+        # never reached -- the opposite of this one.
+        row.update(per_task.get(task_id, unledgered_row(method)))
         row["codex_items_seen"] = (
             (result.get("observability") or {}).get("codex") or {}
         ).get("items_seen")
@@ -360,9 +388,22 @@ def main() -> None:
         default=None,
         help="job log with ANSI stripped; without it no failure message is recorded",
     )
+    parser.add_argument(
+        "--ledger",
+        action="append",
+        type=Path,
+        default=[],
+        dest="extra_ledgers",
+        help=(
+            "an earlier leg's cost_ledger_*.sqlite3 (repeatable). The "
+            "artifact's own ledger is always read; give the rest of the "
+            "lineage's or every task this leg only inherited is recorded as "
+            "absent_from_supplied_ledgers rather than priced"
+        ),
+    )
     args = parser.parse_args()
 
-    rows, files, derived = build(args.artifact, args.log)
+    rows, files, derived = build(args.artifact, args.log, args.extra_ledgers)
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
     (args.output_dir / "outcomes.json").write_text(
@@ -377,8 +418,15 @@ def main() -> None:
 
     attempted = [r for r in rows if r["attempted"]]
     ok = [r for r in attempted if r["outcome"] == "ok"]
+    # Two different reasons a row carries no amount, kept apart because only
+    # one of them is fixable: `absent` is answered by another --ledger, while
+    # `unpriced` is a task whose sends never reported usage and never will.
+    absent = [r["n"] for r in attempted if r["derived_cost_basis"] == BASIS_ABSENT]
     unpriced = [
-        r["n"] for r in attempted if r["derived_cost_usd_from_measured_tokens"] is None
+        r["n"]
+        for r in attempted
+        if r["derived_cost_usd_from_measured_tokens"] is None
+        and r["derived_cost_basis"] != BASIS_ABSENT
     ]
     print(f"run {args.run_id}: {len(rows)} tasks in the fixed set")
     print(f"  attempted     {len(attempted)}")
@@ -397,6 +445,12 @@ def main() -> None:
     )
     if unpriced:
         print(f"  unpriced rows {unpriced} -- attempted, no amount derivable")
+    if absent:
+        print(
+            f"  NOT PRICED    {len(absent)} attempted task(s) appear in no "
+            "supplied ledger. These are not free -- an earlier leg paid for "
+            "them. Pass that leg's ledger with --ledger."
+        )
     if args.log is None:
         print("  no --log: no failure message recorded for any failed task")
 
