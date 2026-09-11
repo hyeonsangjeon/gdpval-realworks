@@ -64,12 +64,18 @@ def build(root: Path, spec: list[tuple]) -> Path:
     and the pair agreed with each other while both disagreed with every real
     artifact. The measurement the run was dispatched to take would have been
     reported as never taken, and this suite would have stayed green.
+
+    A row may carry a seventh element, the HTTP status the turn was refused
+    with. Rows without one are unchanged, because a status is a thing most
+    outcomes do not have.
     """
     workspace = root / "workspace"
     workspace.mkdir(parents=True, exist_ok=True)
 
     tasks, results, ledger = [], [], []
-    for task_id, status, category, attempts, chars, items_seen in spec:
+    for row in spec:
+        task_id, status, category, attempts, chars, items_seen = row[:6]
+        http_status = row[6] if len(row) > 6 else None
         task = {"task_id": task_id, "sector": "Finance"}
         if chars:
             task["instruction"] = "x" * chars
@@ -83,7 +89,10 @@ def build(root: Path, spec: list[tuple]) -> Path:
             "latency_ms": 1000,
         }
         if items_seen is not None:
-            result["observability"]["codex"] = {"items_seen": items_seen}
+            codex = {"items_seen": items_seen}
+            if http_status is not None:
+                codex["http_status_code"] = http_status
+            result["observability"]["codex"] = codex
         results.append(result)
 
         for index in range(attempts):
@@ -270,6 +279,71 @@ def test_items_seen_present_is_measured(tmp_path, capsys):
     assert "carried on 2/2 tasks" in out
     assert "min 0" in out
     assert "Not a measurement of zero" not in out
+
+
+def test_a_turn_that_never_started_is_not_a_count_of_zero(tmp_path, capsys):
+    """The four pre-stream failures return ``items_seen`` at its default.
+
+    ``core/codex_runner.py`` builds ``codex_diagnostics`` from the outcome
+    unconditionally, so a task that died before the stream opened still
+    arrives carrying ``items_seen: 0`` -- a field nobody set, indistinguishable
+    in the JSON from a turn that opened and streamed nothing.
+
+    Counting those zeros would answer the registered question with a dataclass
+    default, and would do it in the direction that flatters the convenient
+    reading: a median dragged toward zero is evidence that a turn is refused
+    before it spends anything, which is exactly the claim this field exists to
+    test rather than to assume.
+    """
+    build(tmp_path, [
+        ("aaaa1111", "success", None, 1, 900, 40),
+        ("bbbb2222", "error", "session_start_failed", 2, 1200, 0),
+        ("cccc3333", "error", "runtime_unavailable", 1, 1500, 0),
+    ])
+    out = run(tmp_path, capsys)
+    assert "NOT MEASURED    : 2/3 tasks failed before the turn started" in out
+    assert "session_start_failed" in out
+    assert "runtime_unavailable" in out
+    # One task measured, and its 40 is not averaged against two unset zeros.
+    assert "carried on 1/3 tasks" in out
+    assert "min 40  max 40" in out
+
+
+def test_where_a_refusal_lands_in_the_turn_is_reported_beside_the_count(
+    tmp_path, capsys
+):
+    """The cross-tab priority 1 actually turns on.
+
+    A 429 says the provider refused. How far the turn got before being
+    refused is the part that distinguishes "this turn consumed too much" from
+    "something was decided before this turn spent anything". The analyzer
+    prints both numbers together and declines to name the limit, because a
+    table of item counts cannot settle that on its own.
+    """
+    build(tmp_path, [
+        ("aaaa1111", "success", None, 1, 900, 37),
+        ("dddd4444", "error", "rate_limited", 3, 1500, 0, 429),
+        ("eeee5555", "error", "rate_limited", 2, 2400, 22, 429),
+    ])
+    out = run(tmp_path, capsys)
+    assert "refused with HTTP 429 : 2" in out
+    assert "dddd4444  items_seen=0" in out
+    assert "eeee5555  items_seen=22" in out
+    assert "refused before any item : 1/2 = 50.0%" in out
+
+
+def test_a_run_with_no_refusals_says_so_rather_than_printing_an_empty_table(
+    tmp_path, capsys
+):
+    """No 429 is a result. It must not read as a table that failed to print."""
+    build(tmp_path, [
+        ("aaaa1111", "success", None, 1, 900, 37),
+        ("bbbb2222", "error", "turn_failed", 2, 1500, 9, 500),
+    ])
+    out = run(tmp_path, capsys)
+    assert "no task carried HTTP 429 alongside a measured item count" in out
+    assert "statuses seen: 500" in out
+    assert "refused before any item" not in out
 
 
 # --- cost ----------------------------------------------------------------

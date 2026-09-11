@@ -74,6 +74,43 @@ SHORT_STATEMENT_CHARS = 2000
 #: rather than quietly scoring a different population.
 REGISTERED_SHORT_SHARE_PCT = 36.7
 
+#: Outcomes where the turn never started, so ``items_seen`` was never set and
+#: the zero in the record is the dataclass default standing in for a value
+#: nobody took. ``core/codex_runner.py`` returns these four without passing
+#: ``items_seen`` at all -- ``runtime_unavailable``, ``runtime_start_failed``,
+#: ``session_start_failed``, ``turn_start_failed`` -- while the timeout, turn
+#: failure, and success paths all pass ``observed.items_seen``.
+#:
+#: The distinction is the whole point of the field. A refusal after forty
+#: items and a refusal after two are different claims about which limit was
+#: reached; a refusal before the stream opened is not a claim about item
+#: count at all, and averaging its zero in would drag the measurement toward
+#: "the turn spends nothing" for reasons that have nothing to do with
+#: spending.
+#:
+#: Only these four are listed because only these four are enumerable. What a
+#: started turn reports comes from ``classify_execution_error``, whose
+#: vocabulary is open, so an allow-list of post-stream categories cannot be
+#: written down. A category outside every set below is flagged rather than
+#: assumed into either one.
+PRE_STREAM_FAILURE_CATEGORIES = frozenset(
+    {
+        "runtime_unavailable",
+        "runtime_start_failed",
+        "session_start_failed",
+        "turn_start_failed",
+    }
+)
+
+
+def _items_seen_is_measured(task: dict) -> bool:
+    """Whether this task's ``items_seen`` is a count or an unset default."""
+    if not isinstance(task.get("items_seen"), int):
+        return False
+    if task.get("status") == "success":
+        return True
+    return str(task.get("error_category")) not in PRE_STREAM_FAILURE_CATEGORIES
+
 
 def _load_json(path: Path):
     with path.open(encoding="utf-8") as handle:
@@ -308,7 +345,18 @@ def report(data: dict) -> None:
 
     # --- Registered question 3: items_seen, first real reading ---
     print("=== 3. items_seen ===")
-    seen = [t for t in tasks if isinstance(t["items_seen"], int)]
+    seen = [t for t in tasks if _items_seen_is_measured(t)]
+    unset = [
+        t
+        for t in tasks
+        if isinstance(t["items_seen"], int) and not _items_seen_is_measured(t)
+    ]
+    if unset:
+        # Reporting these as zeros would answer the registered question with
+        # the dataclass default of a field the run never reached.
+        print(f"  NOT MEASURED    : {len(unset)}/{len(tasks)} tasks failed before "
+              f"the turn started, so their 0 is the field's default, not a count "
+              f"({', '.join(sorted(str(t['error_category']) for t in unset))})")
     if not seen:
         print("  absent from every task -- this artifact predates the producer, "
               "or no turn reported one. Not a measurement of zero.")
@@ -316,6 +364,31 @@ def report(data: dict) -> None:
         values = [t["items_seen"] for t in seen]
         print(f"  carried on {len(seen)}/{len(tasks)} tasks   "
               f"min {min(values)}  max {max(values)}  median {statistics.median(values)}")
+
+        # The discriminator this field was added for. A 429 is the provider
+        # saying no; where in the turn it arrives is the part that says what
+        # it was refusing. Refused after many items points at what one turn
+        # consumes; refused at zero or near it points at something decided
+        # before the turn spent anything -- arrival rate, concurrency, or a
+        # reservation that was already full. This prints the two numbers side
+        # by side and stops there: which limit it is, is not a thing a table
+        # of item counts can settle on its own.
+        refused = [t for t in seen if t["http_status_code"] == 429]
+        if refused:
+            print()
+            print(f"  of those, refused with HTTP 429 : {len(refused)}")
+            for t in sorted(refused, key=lambda x: x["items_seen"]):
+                print(f"    {t['task_id'][:8]}  items_seen={t['items_seen']:<5} "
+                      f"attempts={t['attempts']}")
+            at_zero = sum(1 for t in refused if t["items_seen"] == 0)
+            print(f"    refused before any item : "
+                  f"{_pct(at_zero, len(refused), '429 tasks')}")
+        else:
+            statuses = sorted(
+                {str(t["http_status_code"]) for t in seen if t["http_status_code"]}
+            )
+            print(f"  no task carried HTTP 429 alongside a measured item count"
+                  f"{'   (statuses seen: ' + ', '.join(statuses) + ')' if statuses else ''}")
     print()
 
     # --- Cost: reported, never repaired, never added to grading ---
