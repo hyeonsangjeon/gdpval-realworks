@@ -36,7 +36,7 @@
   "derived_cost_usd_from_measured_tokens": 0.075693,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 2,
@@ -75,7 +75,7 @@
   "derived_cost_usd_from_measured_tokens": 0.450355,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 3,
@@ -114,7 +114,7 @@
   "derived_cost_usd_from_measured_tokens": 0.281889,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 4,
@@ -155,7 +155,7 @@
   "derived_cost_usd_from_measured_tokens": 0.297674,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 5,
@@ -196,7 +196,7 @@
   "derived_cost_usd_from_measured_tokens": 0.223286,
   "derived_cost_basis": "floor_unmeasured_sends_excluded",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 6,
@@ -235,7 +235,7 @@
   "derived_cost_usd_from_measured_tokens": 0.197839,
   "derived_cost_basis": "floor_unmeasured_sends_excluded",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 7,
@@ -276,7 +276,7 @@
   "derived_cost_usd_from_measured_tokens": 0.259405,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 8,
@@ -315,7 +315,7 @@
   "derived_cost_usd_from_measured_tokens": 0.305296,
   "derived_cost_basis": "floor_unmeasured_sends_excluded",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 9,
@@ -356,7 +356,7 @@
   "derived_cost_usd_from_measured_tokens": 0.067473,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 10,
@@ -395,7 +395,7 @@
   "derived_cost_usd_from_measured_tokens": 1.223594,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 11,
@@ -436,7 +436,7 @@
   "derived_cost_usd_from_measured_tokens": 0.342845,
   "derived_cost_basis": "floor_unmeasured_sends_excluded",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 12,
@@ -475,7 +475,7 @@
   "derived_cost_usd_from_measured_tokens": 0.407472,
   "derived_cost_basis": "floor_unmeasured_sends_excluded",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 13,
@@ -514,7 +514,7 @@
   "derived_cost_usd_from_measured_tokens": 0.171624,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 14,
@@ -553,7 +553,7 @@
   "derived_cost_usd_from_measured_tokens": 0.201498,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 15,
@@ -594,7 +594,7 @@
   "derived_cost_usd_from_measured_tokens": 0.374266,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 16,
@@ -633,7 +633,7 @@
   "derived_cost_usd_from_measured_tokens": 0.254993,
   "derived_cost_basis": "floor_unmeasured_sends_excluded",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 17,
@@ -674,7 +674,7 @@
   "derived_cost_usd_from_measured_tokens": 0.565384,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 18,
@@ -713,7 +713,7 @@
   "derived_cost_usd_from_measured_tokens": 0.209382,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 19,
@@ -752,7 +752,7 @@
   "derived_cost_usd_from_measured_tokens": 0.132989,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 20,
@@ -793,7 +793,7 @@
   "derived_cost_usd_from_measured_tokens": 0.03668,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 21,
@@ -832,7 +832,7 @@
   "derived_cost_usd_from_measured_tokens": 0.262434,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 22,
@@ -871,7 +871,7 @@
   "derived_cost_usd_from_measured_tokens": 0.185617,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 23,
@@ -910,7 +910,7 @@
   "derived_cost_usd_from_measured_tokens": 0.176919,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 24,
@@ -949,7 +949,7 @@
   "derived_cost_usd_from_measured_tokens": 0.342907,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 25,
@@ -988,7 +988,7 @@
   "derived_cost_usd_from_measured_tokens": 0.270873,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 26,
@@ -1029,7 +1029,7 @@
   "derived_cost_usd_from_measured_tokens": 0.167897,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 27,
@@ -1068,7 +1068,7 @@
   "derived_cost_usd_from_measured_tokens": 0.305049,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 28,
@@ -1107,7 +1107,7 @@
   "derived_cost_usd_from_measured_tokens": 0.113523,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 29,
@@ -1146,7 +1146,7 @@
   "derived_cost_usd_from_measured_tokens": 1.307947,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 30,
@@ -1187,7 +1187,7 @@
   "derived_cost_usd_from_measured_tokens": null,
   "derived_cost_basis": "no_measured_call",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 31,
@@ -1228,7 +1228,7 @@
   "derived_cost_usd_from_measured_tokens": 0.339052,
   "derived_cost_basis": "floor_unmeasured_sends_excluded",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 32,
@@ -1267,7 +1267,7 @@
   "derived_cost_usd_from_measured_tokens": 0.139454,
   "derived_cost_basis": "floor_unmeasured_sends_excluded",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 33,
@@ -1306,7 +1306,7 @@
   "derived_cost_usd_from_measured_tokens": 0.332657,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 34,
@@ -1347,7 +1347,7 @@
   "derived_cost_usd_from_measured_tokens": 0.089143,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 35,
@@ -1386,7 +1386,7 @@
   "derived_cost_usd_from_measured_tokens": 0.291995,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 36,
@@ -1427,7 +1427,7 @@
   "derived_cost_usd_from_measured_tokens": 0.197363,
   "derived_cost_basis": "floor_unmeasured_sends_excluded",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 37,
@@ -1466,7 +1466,7 @@
   "derived_cost_usd_from_measured_tokens": 0.57022,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 38,
@@ -1505,7 +1505,7 @@
   "derived_cost_usd_from_measured_tokens": 0.218077,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 39,
@@ -1546,7 +1546,7 @@
   "derived_cost_usd_from_measured_tokens": null,
   "derived_cost_basis": "no_measured_call",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 40,
@@ -1585,7 +1585,7 @@
   "derived_cost_usd_from_measured_tokens": 0.260309,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 41,
@@ -1626,7 +1626,7 @@
   "derived_cost_usd_from_measured_tokens": 0.263434,
   "derived_cost_basis": "floor_unmeasured_sends_excluded",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 42,
@@ -1665,7 +1665,7 @@
   "derived_cost_usd_from_measured_tokens": 0.539052,
   "derived_cost_basis": "floor_unmeasured_sends_excluded",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 43,
@@ -1704,7 +1704,7 @@
   "derived_cost_usd_from_measured_tokens": 0.454261,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 44,
@@ -1743,7 +1743,7 @@
   "derived_cost_usd_from_measured_tokens": 0.32882,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 45,
@@ -1782,7 +1782,7 @@
   "derived_cost_usd_from_measured_tokens": 1.149946,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 46,
@@ -1804,7 +1804,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 47,
@@ -1826,7 +1826,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 48,
@@ -1848,7 +1848,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 49,
@@ -1870,7 +1870,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 50,
@@ -1892,7 +1892,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 51,
@@ -1914,7 +1914,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 52,
@@ -1936,7 +1936,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 53,
@@ -1958,7 +1958,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 54,
@@ -1980,7 +1980,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 55,
@@ -2002,7 +2002,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 56,
@@ -2024,7 +2024,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 57,
@@ -2046,7 +2046,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 58,
@@ -2068,7 +2068,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 59,
@@ -2090,7 +2090,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 60,
@@ -2112,7 +2112,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 61,
@@ -2134,7 +2134,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 62,
@@ -2156,7 +2156,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 63,
@@ -2178,7 +2178,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 64,
@@ -2200,7 +2200,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 65,
@@ -2222,7 +2222,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 66,
@@ -2244,7 +2244,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 67,
@@ -2266,7 +2266,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 68,
@@ -2288,7 +2288,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 69,
@@ -2310,7 +2310,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 70,
@@ -2332,7 +2332,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 71,
@@ -2354,7 +2354,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 72,
@@ -2376,7 +2376,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 73,
@@ -2398,7 +2398,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 74,
@@ -2420,7 +2420,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 75,
@@ -2442,7 +2442,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 76,
@@ -2464,7 +2464,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 77,
@@ -2486,7 +2486,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 78,
@@ -2508,7 +2508,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 79,
@@ -2530,7 +2530,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 80,
@@ -2552,7 +2552,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 81,
@@ -2574,7 +2574,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 82,
@@ -2596,7 +2596,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 83,
@@ -2618,7 +2618,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 84,
@@ -2640,7 +2640,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 85,
@@ -2662,7 +2662,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 86,
@@ -2684,7 +2684,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 87,
@@ -2706,7 +2706,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 88,
@@ -2728,7 +2728,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 89,
@@ -2750,7 +2750,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 90,
@@ -2772,7 +2772,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 91,
@@ -2794,7 +2794,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 92,
@@ -2816,7 +2816,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 93,
@@ -2838,7 +2838,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 94,
@@ -2860,7 +2860,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 95,
@@ -2882,7 +2882,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 96,
@@ -2904,7 +2904,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 97,
@@ -2926,7 +2926,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 98,
@@ -2948,7 +2948,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 99,
@@ -2970,7 +2970,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 100,
@@ -2992,7 +2992,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 101,
@@ -3014,7 +3014,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 102,
@@ -3036,7 +3036,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 103,
@@ -3058,7 +3058,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 104,
@@ -3080,7 +3080,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 105,
@@ -3102,7 +3102,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 106,
@@ -3124,7 +3124,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 107,
@@ -3146,7 +3146,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 108,
@@ -3168,7 +3168,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 109,
@@ -3190,7 +3190,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 110,
@@ -3212,7 +3212,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 111,
@@ -3234,7 +3234,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 112,
@@ -3256,7 +3256,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 113,
@@ -3278,7 +3278,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 114,
@@ -3300,7 +3300,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 115,
@@ -3322,7 +3322,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 116,
@@ -3344,7 +3344,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 117,
@@ -3366,7 +3366,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 118,
@@ -3388,7 +3388,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 119,
@@ -3410,7 +3410,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 120,
@@ -3432,7 +3432,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 121,
@@ -3454,7 +3454,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 122,
@@ -3476,7 +3476,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 123,
@@ -3498,7 +3498,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 124,
@@ -3520,7 +3520,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 125,
@@ -3542,7 +3542,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 126,
@@ -3564,7 +3564,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 127,
@@ -3586,7 +3586,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 128,
@@ -3608,7 +3608,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 129,
@@ -3630,7 +3630,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 130,
@@ -3652,7 +3652,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 131,
@@ -3674,7 +3674,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 132,
@@ -3696,7 +3696,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 133,
@@ -3718,7 +3718,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 134,
@@ -3740,7 +3740,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 135,
@@ -3762,7 +3762,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 136,
@@ -3784,7 +3784,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 137,
@@ -3806,7 +3806,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 138,
@@ -3828,7 +3828,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 139,
@@ -3850,7 +3850,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 140,
@@ -3872,7 +3872,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 141,
@@ -3894,7 +3894,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 142,
@@ -3916,7 +3916,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 143,
@@ -3938,7 +3938,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 144,
@@ -3960,7 +3960,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 145,
@@ -3982,7 +3982,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 146,
@@ -4004,7 +4004,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 147,
@@ -4026,7 +4026,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 148,
@@ -4048,7 +4048,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 149,
@@ -4070,7 +4070,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 150,
@@ -4092,7 +4092,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 151,
@@ -4114,7 +4114,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 152,
@@ -4136,7 +4136,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 153,
@@ -4158,7 +4158,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 154,
@@ -4180,7 +4180,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 155,
@@ -4202,7 +4202,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 156,
@@ -4224,7 +4224,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 157,
@@ -4246,7 +4246,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 158,
@@ -4268,7 +4268,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 159,
@@ -4290,7 +4290,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 160,
@@ -4312,7 +4312,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 161,
@@ -4334,7 +4334,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 162,
@@ -4356,7 +4356,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 163,
@@ -4378,7 +4378,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 164,
@@ -4400,7 +4400,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 165,
@@ -4422,7 +4422,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 166,
@@ -4444,7 +4444,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 167,
@@ -4466,7 +4466,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 168,
@@ -4488,7 +4488,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 169,
@@ -4510,7 +4510,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 170,
@@ -4532,7 +4532,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 171,
@@ -4554,7 +4554,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 172,
@@ -4576,7 +4576,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 173,
@@ -4598,7 +4598,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 174,
@@ -4620,7 +4620,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 175,
@@ -4642,7 +4642,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 176,
@@ -4664,7 +4664,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 177,
@@ -4686,7 +4686,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 178,
@@ -4708,7 +4708,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 179,
@@ -4730,7 +4730,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 180,
@@ -4752,7 +4752,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 181,
@@ -4774,7 +4774,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 182,
@@ -4796,7 +4796,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 183,
@@ -4818,7 +4818,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 184,
@@ -4840,7 +4840,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 185,
@@ -4862,7 +4862,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 186,
@@ -4884,7 +4884,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 187,
@@ -4906,7 +4906,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 188,
@@ -4928,7 +4928,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 189,
@@ -4950,7 +4950,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 190,
@@ -4972,7 +4972,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 191,
@@ -4994,7 +4994,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 192,
@@ -5016,7 +5016,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 193,
@@ -5038,7 +5038,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 194,
@@ -5060,7 +5060,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 195,
@@ -5082,7 +5082,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 196,
@@ -5104,7 +5104,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 197,
@@ -5126,7 +5126,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 198,
@@ -5148,7 +5148,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 199,
@@ -5170,7 +5170,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 200,
@@ -5192,7 +5192,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 201,
@@ -5214,7 +5214,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 202,
@@ -5236,7 +5236,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 203,
@@ -5258,7 +5258,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 204,
@@ -5280,7 +5280,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 205,
@@ -5302,7 +5302,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 206,
@@ -5324,7 +5324,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 207,
@@ -5346,7 +5346,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 208,
@@ -5368,7 +5368,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 209,
@@ -5390,7 +5390,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 210,
@@ -5412,7 +5412,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 211,
@@ -5434,7 +5434,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 212,
@@ -5456,7 +5456,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 213,
@@ -5478,7 +5478,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 214,
@@ -5500,7 +5500,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 215,
@@ -5522,7 +5522,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 216,
@@ -5544,7 +5544,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 217,
@@ -5566,7 +5566,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 218,
@@ -5588,7 +5588,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 219,
@@ -5610,7 +5610,7 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  },
  {
   "n": 220,
@@ -5632,6 +5632,6 @@
   "derived_cost_calls_measured": 0,
   "derived_cost_calls_unmeasured": 0,
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
  }
 ]
