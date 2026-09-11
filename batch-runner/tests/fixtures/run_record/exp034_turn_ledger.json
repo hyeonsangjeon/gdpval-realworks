@@ -1,0 +1,1072 @@
+{
+  "_note": "Verbatim rows from the cost ledger run 34540053904 uploaded as an artifact (exp034, 30 tasks, 59 Codex turns). Only the fields the test reads are kept; no value here is constructed or recomputed.",
+  "_run_id": "exp034_codex_foundry_trial30:34540053904:1",
+  "_fields_kept": [
+    "task_id",
+    "call_id",
+    "state",
+    "retry_kind",
+    "stage",
+    "input_tokens",
+    "output_tokens",
+    "cached_input_tokens",
+    "reasoning_tokens",
+    "model_cost_usd",
+    "missing_reasons",
+    "note",
+    "deployment",
+    "resolved_model"
+  ],
+  "rows": [
+    {
+      "task_id": "1d4672c8-b0a7-488f-905f-9ab4e25a19f7",
+      "call_id": "00476fc0611743cc1733db38e59e6b41aae97ed72e512026c1935f1b2820db88",
+      "state": "settled",
+      "retry_kind": "infrastructure",
+      "stage": "generation",
+      "input_tokens": 45667,
+      "output_tokens": 2205,
+      "cached_input_tokens": 12160,
+      "reasoning_tokens": 1351,
+      "model_cost_usd": null,
+      "missing_reasons": [
+        "call_reachability_unknown"
+      ],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": "gpt-5.4"
+    },
+    {
+      "task_id": "02314fc6-a24e-42f4-a8cd-362cae0f0ec1",
+      "call_id": "05c4fd94fc23c8cbfc47558501ddf1f90469444038bac799e9163d4e14d8dfc2",
+      "state": "reserved",
+      "retry_kind": "none",
+      "stage": "generation",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cached_input_tokens": null,
+      "reasoning_tokens": null,
+      "model_cost_usd": null,
+      "missing_reasons": [],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": null
+    },
+    {
+      "task_id": "1bff4551-1d54-4e37-b2e0-d5c3f2ea4a45",
+      "call_id": "06e8123defb2c5f205d230dacd54d101ec122b126439eff84312012cbf58a453",
+      "state": "settled",
+      "retry_kind": "none",
+      "stage": "generation",
+      "input_tokens": 11722,
+      "output_tokens": 635,
+      "cached_input_tokens": 0,
+      "reasoning_tokens": 358,
+      "model_cost_usd": null,
+      "missing_reasons": [
+        "call_reachability_unknown"
+      ],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": "gpt-5.4"
+    },
+    {
+      "task_id": "116e791e-890c-42b1-ba90-1db02e8bfd45",
+      "call_id": "081aaab59babe02b4164004385887097506ad48b14eec6642a1ee8abe0c162b5",
+      "state": "settled",
+      "retry_kind": "none",
+      "stage": "generation",
+      "input_tokens": 194937,
+      "output_tokens": 7030,
+      "cached_input_tokens": 119552,
+      "reasoning_tokens": 2999,
+      "model_cost_usd": null,
+      "missing_reasons": [
+        "call_reachability_unknown"
+      ],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": "gpt-5.4"
+    },
+    {
+      "task_id": "0fad6023-767b-42c1-a1b3-027cd4f583cb",
+      "call_id": "09092aaf9afcc602438ed273fc894a35177702d0fcc10f7d4c1b7553e88050cf",
+      "state": "settled",
+      "retry_kind": "none",
+      "stage": "generation",
+      "input_tokens": 304835,
+      "output_tokens": 12288,
+      "cached_input_tokens": 260864,
+      "reasoning_tokens": 4431,
+      "model_cost_usd": null,
+      "missing_reasons": [
+        "call_reachability_unknown"
+      ],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": "gpt-5.4"
+    },
+    {
+      "task_id": "3a4c347c-4aec-43c7-9a54-eb1f816ab1f9",
+      "call_id": "0a01300b5c22beca0f79409d7f15eaa23581c4492cecc44ede211fc3fac52599",
+      "state": "reserved",
+      "retry_kind": "none",
+      "stage": "generation",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cached_input_tokens": null,
+      "reasoning_tokens": null,
+      "model_cost_usd": null,
+      "missing_reasons": [],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": null
+    },
+    {
+      "task_id": "045aba2e-4093-42aa-ab7f-159cc538278c",
+      "call_id": "0aa7d6c847081643dda4d90320b5feb04f349777f58b6e9546c561cb2147e876",
+      "state": "settled",
+      "retry_kind": "none",
+      "stage": "generation",
+      "input_tokens": 603263,
+      "output_tokens": 20838,
+      "cached_input_tokens": 496896,
+      "reasoning_tokens": 6743,
+      "model_cost_usd": null,
+      "missing_reasons": [
+        "call_reachability_unknown"
+      ],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": "gpt-5.4"
+    },
+    {
+      "task_id": "11e1b169-5fb6-4d79-8a83-82ddf4987a85",
+      "call_id": "0cefafc78a3560d35389192a0de5c893baafde24ebc768077b17ebace8d7e3ce",
+      "state": "settled",
+      "retry_kind": "infrastructure",
+      "stage": "generation",
+      "input_tokens": 11780,
+      "output_tokens": 555,
+      "cached_input_tokens": 9216,
+      "reasoning_tokens": 192,
+      "model_cost_usd": null,
+      "missing_reasons": [
+        "call_reachability_unknown"
+      ],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": "gpt-5.4"
+    },
+    {
+      "task_id": "1d4672c8-b0a7-488f-905f-9ab4e25a19f7",
+      "call_id": "1d21fa351b9ab8d5532bb4a5fbda595401a8324c780c4748121b2164ebb63bee",
+      "state": "settled",
+      "retry_kind": "infrastructure",
+      "stage": "generation",
+      "input_tokens": 39046,
+      "output_tokens": 2166,
+      "cached_input_tokens": 9216,
+      "reasoning_tokens": 1354,
+      "model_cost_usd": null,
+      "missing_reasons": [
+        "call_reachability_unknown"
+      ],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": "gpt-5.4"
+    },
+    {
+      "task_id": "1d4672c8-b0a7-488f-905f-9ab4e25a19f7",
+      "call_id": "1ebf5fd5941c8318d21ff9f07dcc1b340a62263642ae7401f7195226d856a1d1",
+      "state": "settled",
+      "retry_kind": "infrastructure",
+      "stage": "generation",
+      "input_tokens": 45562,
+      "output_tokens": 2269,
+      "cached_input_tokens": 12032,
+      "reasoning_tokens": 1653,
+      "model_cost_usd": null,
+      "missing_reasons": [
+        "call_reachability_unknown"
+      ],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": "gpt-5.4"
+    },
+    {
+      "task_id": "105f8ad0-8dd2-422f-9e88-2be5fbd2b215",
+      "call_id": "231e986dfe636a1455f67610c2b87ace2a84055a3a1513c009100540add67cad",
+      "state": "settled",
+      "retry_kind": "infrastructure",
+      "stage": "generation",
+      "input_tokens": 48391,
+      "output_tokens": 2514,
+      "cached_input_tokens": 29056,
+      "reasoning_tokens": 1564,
+      "model_cost_usd": null,
+      "missing_reasons": [
+        "call_reachability_unknown"
+      ],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": "gpt-5.4"
+    },
+    {
+      "task_id": "3a4c347c-4aec-43c7-9a54-eb1f816ab1f9",
+      "call_id": "29409711df7d49d8e4c70b687ee828e72e3b9ca694121bbca717a0f44c76e1ea",
+      "state": "settled",
+      "retry_kind": "infrastructure",
+      "stage": "generation",
+      "input_tokens": 55511,
+      "output_tokens": 2921,
+      "cached_input_tokens": 34432,
+      "reasoning_tokens": 2027,
+      "model_cost_usd": null,
+      "missing_reasons": [
+        "call_reachability_unknown"
+      ],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": "gpt-5.4"
+    },
+    {
+      "task_id": "3baa0009-5a60-4ae8-ae99-4955cb328ff3",
+      "call_id": "2fd2334435e56d8f0f76f17649691868fcbcd0eaaf9a8dfc718f7629f109d397",
+      "state": "settled",
+      "retry_kind": "infrastructure",
+      "stage": "generation",
+      "input_tokens": 213147,
+      "output_tokens": 7675,
+      "cached_input_tokens": 113024,
+      "reasoning_tokens": 4878,
+      "model_cost_usd": null,
+      "missing_reasons": [
+        "call_reachability_unknown"
+      ],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": "gpt-5.4"
+    },
+    {
+      "task_id": "1d4672c8-b0a7-488f-905f-9ab4e25a19f7",
+      "call_id": "2fe25a057109fa328e74baaffb6e5534d664ce8d3e8dcfff7c0e91a6769c01a7",
+      "state": "settled",
+      "retry_kind": "none",
+      "stage": "generation",
+      "input_tokens": 29392,
+      "output_tokens": 1272,
+      "cached_input_tokens": 0,
+      "reasoning_tokens": 491,
+      "model_cost_usd": null,
+      "missing_reasons": [
+        "call_reachability_unknown"
+      ],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": "gpt-5.4"
+    },
+    {
+      "task_id": "0353ee0c-18b5-4ad3-88e8-e001d223e1d7",
+      "call_id": "3a348fea2e1327a527d02f3cdcd490e834f225d572b2aada7b10636141f95a51",
+      "state": "settled",
+      "retry_kind": "infrastructure",
+      "stage": "generation",
+      "input_tokens": 64235,
+      "output_tokens": 1576,
+      "cached_input_tokens": 60672,
+      "reasoning_tokens": 386,
+      "model_cost_usd": null,
+      "missing_reasons": [
+        "call_reachability_unknown"
+      ],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": "gpt-5.4"
+    },
+    {
+      "task_id": "0ec25916-1b5c-4bfe-93d3-4e103d860f3a",
+      "call_id": "409bd0bba14caee94b3b8226681ae160ecb53c4697c50849104f8c1a9cb1c921",
+      "state": "settled",
+      "retry_kind": "none",
+      "stage": "generation",
+      "input_tokens": 280780,
+      "output_tokens": 9747,
+      "cached_input_tokens": 224640,
+      "reasoning_tokens": 2662,
+      "model_cost_usd": null,
+      "missing_reasons": [
+        "call_reachability_unknown"
+      ],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": "gpt-5.4"
+    },
+    {
+      "task_id": "0353ee0c-18b5-4ad3-88e8-e001d223e1d7",
+      "call_id": "40bc9de0e2982f4d904395505b2b02eb41bfe8d6ff1adf167722a8425a08ccbe",
+      "state": "settled",
+      "retry_kind": "infrastructure",
+      "stage": "generation",
+      "input_tokens": 64153,
+      "output_tokens": 3103,
+      "cached_input_tokens": 49280,
+      "reasoning_tokens": 1820,
+      "model_cost_usd": null,
+      "missing_reasons": [
+        "call_reachability_unknown"
+      ],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": "gpt-5.4"
+    },
+    {
+      "task_id": "4520f882-715a-482d-8e87-1cb3cbdfe975",
+      "call_id": "4131acfea7064350cf94863c0bb953b2cce884065bc7d54468740e4602e039e4",
+      "state": "settled",
+      "retry_kind": "none",
+      "stage": "generation",
+      "input_tokens": 819968,
+      "output_tokens": 27849,
+      "cached_input_tokens": 779136,
+      "reasoning_tokens": 7452,
+      "model_cost_usd": null,
+      "missing_reasons": [
+        "call_reachability_unknown"
+      ],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": "gpt-5.4"
+    },
+    {
+      "task_id": "02aa1805-c658-4069-8a6a-02dec146063a",
+      "call_id": "41f7f25c92fea740c4ff11d30513b5fc172b45d96583c1120b501f31cc417073",
+      "state": "settled",
+      "retry_kind": "infrastructure",
+      "stage": "generation",
+      "input_tokens": 34685,
+      "output_tokens": 1607,
+      "cached_input_tokens": 21120,
+      "reasoning_tokens": 1164,
+      "model_cost_usd": null,
+      "missing_reasons": [
+        "call_reachability_unknown"
+      ],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": "gpt-5.4"
+    },
+    {
+      "task_id": "0419f1c3-d669-45d0-81cd-f4d5923b06a5",
+      "call_id": "43fffe5a0b99b4c760bd4f2bba3b7403e14acef51df5c7ac2b5fcb4b5eae69ca",
+      "state": "settled",
+      "retry_kind": "none",
+      "stage": "generation",
+      "input_tokens": 153962,
+      "output_tokens": 8209,
+      "cached_input_tokens": 116096,
+      "reasoning_tokens": 2401,
+      "model_cost_usd": null,
+      "missing_reasons": [
+        "call_reachability_unknown"
+      ],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": "gpt-5.4"
+    },
+    {
+      "task_id": "01d7e53e-0513-4109-a242-8ccaf442cd21",
+      "call_id": "47cc7c4692fb7f8d0e9b006e0cba995d24b44b61397ea02b2d9ce65cedf47021",
+      "state": "settled",
+      "retry_kind": "none",
+      "stage": "generation",
+      "input_tokens": 311505,
+      "output_tokens": 15523,
+      "cached_input_tokens": 254336,
+      "reasoning_tokens": 4692,
+      "model_cost_usd": null,
+      "missing_reasons": [
+        "call_reachability_unknown"
+      ],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": "gpt-5.4"
+    },
+    {
+      "task_id": "0353ee0c-18b5-4ad3-88e8-e001d223e1d7",
+      "call_id": "5e0a8b7e9e68b44255cd5f143e63802363a9d9bac5de88358c969cc3e4606154",
+      "state": "settled",
+      "retry_kind": "infrastructure",
+      "stage": "generation",
+      "input_tokens": 50923,
+      "output_tokens": 1728,
+      "cached_input_tokens": 38400,
+      "reasoning_tokens": 250,
+      "model_cost_usd": null,
+      "missing_reasons": [
+        "call_reachability_unknown"
+      ],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": "gpt-5.4"
+    },
+    {
+      "task_id": "38889c3b-e3d4-49c8-816a-3cc8e5313aba",
+      "call_id": "629ff16ca99f8aff9c165011a3dd6670aa6469c09654c4409b73283e3b0a6e7e",
+      "state": "settled",
+      "retry_kind": "none",
+      "stage": "generation",
+      "input_tokens": 739370,
+      "output_tokens": 22193,
+      "cached_input_tokens": 683008,
+      "reasoning_tokens": 9482,
+      "model_cost_usd": null,
+      "missing_reasons": [
+        "call_reachability_unknown"
+      ],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": "gpt-5.4"
+    },
+    {
+      "task_id": "17111c03-aac7-45c2-857d-c06d8223d6ad",
+      "call_id": "64fd3179cb34eea190701021fcf6df57650d0ab0fb4d461e9729f0ff8ba22b20",
+      "state": "settled",
+      "retry_kind": "none",
+      "stage": "generation",
+      "input_tokens": 199736,
+      "output_tokens": 9717,
+      "cached_input_tokens": 180608,
+      "reasoning_tokens": 2947,
+      "model_cost_usd": null,
+      "missing_reasons": [
+        "call_reachability_unknown"
+      ],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": "gpt-5.4"
+    },
+    {
+      "task_id": "15d37511-75c5-4c7f-81f1-16e00c0d95f3",
+      "call_id": "6ad556786f3ccfc4957dac5577bfbd8f3799ae85802bd18ea9da0800265fdc57",
+      "state": "reserved",
+      "retry_kind": "none",
+      "stage": "generation",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cached_input_tokens": null,
+      "reasoning_tokens": null,
+      "model_cost_usd": null,
+      "missing_reasons": [],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": null
+    },
+    {
+      "task_id": "38889c3b-e3d4-49c8-816a-3cc8e5313aba",
+      "call_id": "77962df9fd76f33e06db652bfd45a1e1ffbb1ed17ba7ef4751baaf850b1f2a74",
+      "state": "settled",
+      "retry_kind": "infrastructure",
+      "stage": "generation",
+      "input_tokens": 706831,
+      "output_tokens": 19251,
+      "cached_input_tokens": 658432,
+      "reasoning_tokens": 6504,
+      "model_cost_usd": null,
+      "missing_reasons": [
+        "call_reachability_unknown"
+      ],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": "gpt-5.4"
+    },
+    {
+      "task_id": "02aa1805-c658-4069-8a6a-02dec146063a",
+      "call_id": "78a740c85f1c30756481719e03733ff442742bdc45cde1c7730d99077d970c26",
+      "state": "settled",
+      "retry_kind": "infrastructure",
+      "stage": "generation",
+      "input_tokens": 35085,
+      "output_tokens": 1706,
+      "cached_input_tokens": 11904,
+      "reasoning_tokens": 1250,
+      "model_cost_usd": null,
+      "missing_reasons": [
+        "call_reachability_unknown"
+      ],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": "gpt-5.4"
+    },
+    {
+      "task_id": "02314fc6-a24e-42f4-a8cd-362cae0f0ec1",
+      "call_id": "7a62b8ca6abf70f48b30c6650d2f3abcf565b63507ebd93c253502fca75ff3ed",
+      "state": "settled",
+      "retry_kind": "infrastructure",
+      "stage": "generation",
+      "input_tokens": 276291,
+      "output_tokens": 12690,
+      "cached_input_tokens": 271872,
+      "reasoning_tokens": 997,
+      "model_cost_usd": null,
+      "missing_reasons": [
+        "call_reachability_unknown"
+      ],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": "gpt-5.4"
+    },
+    {
+      "task_id": "15ddd28d-8445-4baa-ac7f-f41372e1344e",
+      "call_id": "81377e860153eecb5d5fcfb276d2db617bfe7a952a570582cf4d296af843e801",
+      "state": "settled",
+      "retry_kind": "none",
+      "stage": "generation",
+      "input_tokens": 135785,
+      "output_tokens": 9251,
+      "cached_input_tokens": 122368,
+      "reasoning_tokens": 1733,
+      "model_cost_usd": null,
+      "missing_reasons": [
+        "call_reachability_unknown"
+      ],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": "gpt-5.4"
+    },
+    {
+      "task_id": "3600de06-3f71-4e48-9480-e4828c579924",
+      "call_id": "84249f3e0e09f2c6f00f125386ead9cedd0c505d533f75b6edd5347b204a3e2f",
+      "state": "settled",
+      "retry_kind": "none",
+      "stage": "generation",
+      "input_tokens": 12017,
+      "output_tokens": 533,
+      "cached_input_tokens": 0,
+      "reasoning_tokens": 261,
+      "model_cost_usd": null,
+      "missing_reasons": [
+        "call_reachability_unknown"
+      ],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": "gpt-5.4"
+    },
+    {
+      "task_id": "0e386e32-df20-4d1f-b536-7159bc409ad5",
+      "call_id": "8468b438f71b1716a9c698226ebd76681542a528e2949827434ba5d98a4d62c0",
+      "state": "settled",
+      "retry_kind": "none",
+      "stage": "generation",
+      "input_tokens": 548477,
+      "output_tokens": 31536,
+      "cached_input_tokens": 516224,
+      "reasoning_tokens": 8147,
+      "model_cost_usd": null,
+      "missing_reasons": [
+        "call_reachability_unknown"
+      ],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": "gpt-5.4"
+    },
+    {
+      "task_id": "0818571f-5ff7-4d39-9d2c-ced5ae44299e",
+      "call_id": "868c246088fee928e4e0b885e6b4eac9540d8cf2f73d2ec5bef2c98fe2f1d856",
+      "state": "settled",
+      "retry_kind": "none",
+      "stage": "generation",
+      "input_tokens": 50294,
+      "output_tokens": 1563,
+      "cached_input_tokens": 38144,
+      "reasoning_tokens": 616,
+      "model_cost_usd": null,
+      "missing_reasons": [
+        "call_reachability_unknown"
+      ],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": "gpt-5.4"
+    },
+    {
+      "task_id": "0818571f-5ff7-4d39-9d2c-ced5ae44299e",
+      "call_id": "8782856fb1ac5e8f33643087fd41f271a070d3aa1f28b7df8b8d4d66f7c1a0ce",
+      "state": "settled",
+      "retry_kind": "infrastructure",
+      "stage": "generation",
+      "input_tokens": 63527,
+      "output_tokens": 1557,
+      "cached_input_tokens": 51200,
+      "reasoning_tokens": 370,
+      "model_cost_usd": null,
+      "missing_reasons": [
+        "call_reachability_unknown"
+      ],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": "gpt-5.4"
+    },
+    {
+      "task_id": "3baa0009-5a60-4ae8-ae99-4955cb328ff3",
+      "call_id": "8b12201657536b8035bd97570353641da316ddd3de1bcae6ce8a006f85c071be",
+      "state": "settled",
+      "retry_kind": "infrastructure",
+      "stage": "generation",
+      "input_tokens": 11488,
+      "output_tokens": 387,
+      "cached_input_tokens": 0,
+      "reasoning_tokens": 160,
+      "model_cost_usd": null,
+      "missing_reasons": [
+        "call_reachability_unknown"
+      ],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": "gpt-5.4"
+    },
+    {
+      "task_id": "3a4c347c-4aec-43c7-9a54-eb1f816ab1f9",
+      "call_id": "8efa667ad35d8f55fa87f044770c9b418bd9754b09acc65c67883cc3542b91c3",
+      "state": "settled",
+      "retry_kind": "infrastructure",
+      "stage": "generation",
+      "input_tokens": 206033,
+      "output_tokens": 15211,
+      "cached_input_tokens": 128256,
+      "reasoning_tokens": 8640,
+      "model_cost_usd": null,
+      "missing_reasons": [
+        "call_reachability_unknown"
+      ],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": "gpt-5.4"
+    },
+    {
+      "task_id": "0e4fe8cd-16d0-4f41-8247-6385b4762582",
+      "call_id": "9b5b3ec8ceb3853906e7ec15ad337b1b9201c2f02d08bfe318016b417021ee17",
+      "state": "settled",
+      "retry_kind": "none",
+      "stage": "generation",
+      "input_tokens": 55940,
+      "output_tokens": 3337,
+      "cached_input_tokens": 13056,
+      "reasoning_tokens": 2823,
+      "model_cost_usd": null,
+      "missing_reasons": [
+        "call_reachability_unknown"
+      ],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": "gpt-5.4"
+    },
+    {
+      "task_id": "2c249e0f-4a8c-4f8e-b4f4-6508ba29b34f",
+      "call_id": "a5b167225f9a7205b877cc5f7d176b13f08d818f3ccd2375c70d8416ee719534",
+      "state": "settled",
+      "retry_kind": "none",
+      "stage": "generation",
+      "input_tokens": 128926,
+      "output_tokens": 11367,
+      "cached_input_tokens": 101888,
+      "reasoning_tokens": 562,
+      "model_cost_usd": null,
+      "missing_reasons": [
+        "call_reachability_unknown"
+      ],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": "gpt-5.4"
+    },
+    {
+      "task_id": "3600de06-3f71-4e48-9480-e4828c579924",
+      "call_id": "aa2e2512b8121a1a471d36be64a5215c8a36292e9a8038ac0eaddc31f2d9db1d",
+      "state": "settled",
+      "retry_kind": "infrastructure",
+      "stage": "generation",
+      "input_tokens": 43284,
+      "output_tokens": 2093,
+      "cached_input_tokens": 11776,
+      "reasoning_tokens": 1649,
+      "model_cost_usd": null,
+      "missing_reasons": [
+        "call_reachability_unknown"
+      ],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": "gpt-5.4"
+    },
+    {
+      "task_id": "0e4fe8cd-16d0-4f41-8247-6385b4762582",
+      "call_id": "acaf8a3494e0c222998bd1b080bf565a5cd47875d18b6ec92aa930017184e4e3",
+      "state": "settled",
+      "retry_kind": "infrastructure",
+      "stage": "generation",
+      "input_tokens": 55959,
+      "output_tokens": 3370,
+      "cached_input_tokens": 12800,
+      "reasoning_tokens": 2806,
+      "model_cost_usd": null,
+      "missing_reasons": [
+        "call_reachability_unknown"
+      ],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": "gpt-5.4"
+    },
+    {
+      "task_id": "15d37511-75c5-4c7f-81f1-16e00c0d95f3",
+      "call_id": "acbbf39164bdf36ccf7b6a40839bd2edd3e321f04a7fd960a17e72d89377bea5",
+      "state": "settled",
+      "retry_kind": "infrastructure",
+      "stage": "generation",
+      "input_tokens": 329812,
+      "output_tokens": 9401,
+      "cached_input_tokens": 286848,
+      "reasoning_tokens": 3193,
+      "model_cost_usd": null,
+      "missing_reasons": [
+        "call_reachability_unknown"
+      ],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": "gpt-5.4"
+    },
+    {
+      "task_id": "105f8ad0-8dd2-422f-9e88-2be5fbd2b215",
+      "call_id": "adb1cc5f76cf045501ef343003433cd5a22e2e4215f0501bdff8ffea25f5d205",
+      "state": "settled",
+      "retry_kind": "infrastructure",
+      "stage": "generation",
+      "input_tokens": 24699,
+      "output_tokens": 1074,
+      "cached_input_tokens": 21632,
+      "reasoning_tokens": 302,
+      "model_cost_usd": null,
+      "missing_reasons": [
+        "call_reachability_unknown"
+      ],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": "gpt-5.4"
+    },
+    {
+      "task_id": "0e4fe8cd-16d0-4f41-8247-6385b4762582",
+      "call_id": "b3b047b47d6073acdc766fd03e244872e4eca652aad9a610cbb9e0bb79055c20",
+      "state": "settled",
+      "retry_kind": "infrastructure",
+      "stage": "generation",
+      "input_tokens": 56246,
+      "output_tokens": 3510,
+      "cached_input_tokens": 22144,
+      "reasoning_tokens": 3133,
+      "model_cost_usd": null,
+      "missing_reasons": [
+        "call_reachability_unknown"
+      ],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": "gpt-5.4"
+    },
+    {
+      "task_id": "11dcc268-cb07-4d3a-a184-c6d7a19349bc",
+      "call_id": "b8e7ffc1a49ba508faa1d177773d7bb1ba8ab7d06ad92ca07278b4aabf8e6244",
+      "state": "settled",
+      "retry_kind": "none",
+      "stage": "generation",
+      "input_tokens": 202274,
+      "output_tokens": 5415,
+      "cached_input_tokens": 183168,
+      "reasoning_tokens": 2302,
+      "model_cost_usd": null,
+      "missing_reasons": [
+        "call_reachability_unknown"
+      ],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": "gpt-5.4"
+    },
+    {
+      "task_id": "0353ee0c-18b5-4ad3-88e8-e001d223e1d7",
+      "call_id": "bac20839eb7902900d111e5377f5b7edae9176d3acfbd16f4a3f222f79385cf3",
+      "state": "settled",
+      "retry_kind": "none",
+      "stage": "generation",
+      "input_tokens": 51192,
+      "output_tokens": 1720,
+      "cached_input_tokens": 38656,
+      "reasoning_tokens": 298,
+      "model_cost_usd": null,
+      "missing_reasons": [
+        "call_reachability_unknown"
+      ],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": "gpt-5.4"
+    },
+    {
+      "task_id": "0112fc9b-c3b2-4084-8993-5a4abb1f54f1",
+      "call_id": "c282e42710fef74dd4f3a16da13e1c45f496cf0c74a811d171583cb4ad7d9e6c",
+      "state": "settled",
+      "retry_kind": "none",
+      "stage": "generation",
+      "input_tokens": 53004,
+      "output_tokens": 1971,
+      "cached_input_tokens": 39552,
+      "reasoning_tokens": 270,
+      "model_cost_usd": null,
+      "missing_reasons": [
+        "call_reachability_unknown"
+      ],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": "gpt-5.4"
+    },
+    {
+      "task_id": "3baa0009-5a60-4ae8-ae99-4955cb328ff3",
+      "call_id": "c50738138f4b850a6483e90c161838f03968ffd677853f3b7d86a750296fef9d",
+      "state": "reserved",
+      "retry_kind": "none",
+      "stage": "generation",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cached_input_tokens": null,
+      "reasoning_tokens": null,
+      "model_cost_usd": null,
+      "missing_reasons": [],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": null
+    },
+    {
+      "task_id": "3a4c347c-4aec-43c7-9a54-eb1f816ab1f9",
+      "call_id": "c685ccebca987969ffa3afcc59ac9bf8cb2aaed0b9eef50103dab195c2a6757a",
+      "state": "settled",
+      "retry_kind": "infrastructure",
+      "stage": "generation",
+      "input_tokens": 110936,
+      "output_tokens": 6179,
+      "cached_input_tokens": 38656,
+      "reasoning_tokens": 4996,
+      "model_cost_usd": null,
+      "missing_reasons": [
+        "call_reachability_unknown"
+      ],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": "gpt-5.4"
+    },
+    {
+      "task_id": "105f8ad0-8dd2-422f-9e88-2be5fbd2b215",
+      "call_id": "ccb89116ba10879a9a633a80a4beba83e904dfc7945efa272e2b8947afec227d",
+      "state": "settled",
+      "retry_kind": "infrastructure",
+      "stage": "generation",
+      "input_tokens": 67846,
+      "output_tokens": 7156,
+      "cached_input_tokens": 25472,
+      "reasoning_tokens": 6240,
+      "model_cost_usd": null,
+      "missing_reasons": [
+        "call_reachability_unknown"
+      ],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": "gpt-5.4"
+    },
+    {
+      "task_id": "0e4fe8cd-16d0-4f41-8247-6385b4762582",
+      "call_id": "d1070306810bd057a14b8aba9b2c6a49a1a649176e55fec69ad43e22be724582",
+      "state": "settled",
+      "retry_kind": "infrastructure",
+      "stage": "generation",
+      "input_tokens": 56139,
+      "output_tokens": 3001,
+      "cached_input_tokens": 13056,
+      "reasoning_tokens": 2500,
+      "model_cost_usd": null,
+      "missing_reasons": [
+        "call_reachability_unknown"
+      ],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": "gpt-5.4"
+    },
+    {
+      "task_id": "02aa1805-c658-4069-8a6a-02dec146063a",
+      "call_id": "d22d46b3eb52c627e6aa22604a4d5cad4d5353846ce9c34e1bed297ec4a05a9a",
+      "state": "settled",
+      "retry_kind": "infrastructure",
+      "stage": "generation",
+      "input_tokens": 48365,
+      "output_tokens": 2509,
+      "cached_input_tokens": 33408,
+      "reasoning_tokens": 1796,
+      "model_cost_usd": null,
+      "missing_reasons": [
+        "call_reachability_unknown"
+      ],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": "gpt-5.4"
+    },
+    {
+      "task_id": "1137e2bb-bdf9-4876-b572-f29b7de5e595",
+      "call_id": "d2b91d34e9cb27163b2737d3878e6d6dfff073fd2bade721df101a2d8fd52b20",
+      "state": "settled",
+      "retry_kind": "none",
+      "stage": "generation",
+      "input_tokens": 260680,
+      "output_tokens": 8567,
+      "cached_input_tokens": 244864,
+      "reasoning_tokens": 951,
+      "model_cost_usd": null,
+      "missing_reasons": [
+        "call_reachability_unknown"
+      ],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": "gpt-5.4"
+    },
+    {
+      "task_id": "3600de06-3f71-4e48-9480-e4828c579924",
+      "call_id": "da9a8a6df4637de42377d02d202736144badd06383872c35210e9462ea7d9406",
+      "state": "settled",
+      "retry_kind": "infrastructure",
+      "stage": "generation",
+      "input_tokens": 201705,
+      "output_tokens": 17135,
+      "cached_input_tokens": 132480,
+      "reasoning_tokens": 5869,
+      "model_cost_usd": null,
+      "missing_reasons": [
+        "call_reachability_unknown"
+      ],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": "gpt-5.4"
+    },
+    {
+      "task_id": "05389f78-589a-473c-a4ae-67c61050bfca",
+      "call_id": "db2ee11adb9d9c6dda26a6dc255ea497c85508ee178772dd87f74f31eb4f7df8",
+      "state": "settled",
+      "retry_kind": "none",
+      "stage": "generation",
+      "input_tokens": 332560,
+      "output_tokens": 10445,
+      "cached_input_tokens": 256384,
+      "reasoning_tokens": 3307,
+      "model_cost_usd": null,
+      "missing_reasons": [
+        "call_reachability_unknown"
+      ],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": "gpt-5.4"
+    },
+    {
+      "task_id": "02aa1805-c658-4069-8a6a-02dec146063a",
+      "call_id": "dbaa7e24189452980018e1572bb9be673f54376c90d6df996e8b97fd2f544479",
+      "state": "reserved",
+      "retry_kind": "none",
+      "stage": "generation",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cached_input_tokens": null,
+      "reasoning_tokens": null,
+      "model_cost_usd": null,
+      "missing_reasons": [],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": null
+    },
+    {
+      "task_id": "105f8ad0-8dd2-422f-9e88-2be5fbd2b215",
+      "call_id": "e00ed806f761b37b53f33ddb283332bb9e281e1ed89095fe70291dbe2bef007f",
+      "state": "settled",
+      "retry_kind": "none",
+      "stage": "generation",
+      "input_tokens": 24560,
+      "output_tokens": 870,
+      "cached_input_tokens": 12160,
+      "reasoning_tokens": 138,
+      "model_cost_usd": null,
+      "missing_reasons": [
+        "call_reachability_unknown"
+      ],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": "gpt-5.4"
+    },
+    {
+      "task_id": "3baa0009-5a60-4ae8-ae99-4955cb328ff3",
+      "call_id": "f34aa9afb16f84225edc79584b6749a05a983b6b0bac5fa74b3ed5ad4e7674c0",
+      "state": "settled",
+      "retry_kind": "infrastructure",
+      "stage": "generation",
+      "input_tokens": 11500,
+      "output_tokens": 374,
+      "cached_input_tokens": 0,
+      "reasoning_tokens": 136,
+      "model_cost_usd": null,
+      "missing_reasons": [
+        "call_reachability_unknown"
+      ],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": "gpt-5.4"
+    },
+    {
+      "task_id": "11e1b169-5fb6-4d79-8a83-82ddf4987a85",
+      "call_id": "f6c092a499213df716edb31c1a9c26770aa62c0de3b2b46cbf82826e413e2d88",
+      "state": "reserved",
+      "retry_kind": "none",
+      "stage": "generation",
+      "input_tokens": null,
+      "output_tokens": null,
+      "cached_input_tokens": null,
+      "reasoning_tokens": null,
+      "model_cost_usd": null,
+      "missing_reasons": [],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": null
+    },
+    {
+      "task_id": "0e386e32-df20-4d1f-b536-7159bc409ad5",
+      "call_id": "f7087d7feed226f2138dcfccd286f6721e4e942a685357c4c9c1bc1b23a10fa8",
+      "state": "settled",
+      "retry_kind": "infrastructure",
+      "stage": "generation",
+      "input_tokens": 670568,
+      "output_tokens": 32868,
+      "cached_input_tokens": 608896,
+      "reasoning_tokens": 6429,
+      "model_cost_usd": null,
+      "missing_reasons": [
+        "call_reachability_unknown"
+      ],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": "gpt-5.4"
+    },
+    {
+      "task_id": "0ed38524-a4ad-405f-9dee-7b2252659aad",
+      "call_id": "fc79cf952df29f694b0d56cb50e0413b2588ae61b7a3caa94cfa42e61fd547a3",
+      "state": "settled",
+      "retry_kind": "none",
+      "stage": "generation",
+      "input_tokens": 153476,
+      "output_tokens": 7464,
+      "cached_input_tokens": 138240,
+      "reasoning_tokens": 1666,
+      "model_cost_usd": null,
+      "missing_reasons": [
+        "call_reachability_unknown"
+      ],
+      "note": "one Codex turn; the model requests inside it are not individually reported",
+      "deployment": "gpt-5.4",
+      "resolved_model": "gpt-5.4"
+    }
+  ]
+}
