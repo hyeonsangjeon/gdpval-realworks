@@ -388,6 +388,18 @@ export interface ReportData {
    * about which one the run stands behind.
    */
   derived_cost?: DerivedCost
+  /**
+   * Set by the build when it wrote this report's full payload to
+   * `public/generated/reports/<short_id>.json`, which it does only for a run
+   * whose report is not on HuggingFace — a dry run skips step 7, so no dataset
+   * is ever created for it and the hub answers 404.
+   *
+   * The detail page picks its fetch URL from this rather than trying the local
+   * path and falling back, because a static SPA host answers a missing file
+   * with 200 and `text/html`: a probe cannot tell an absent payload from the
+   * index page.
+   */
+  served_locally?: boolean
 }
 
 export interface ExperimentEntry {

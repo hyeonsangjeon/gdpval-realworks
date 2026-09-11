@@ -360,6 +360,12 @@ async function loadAllReports(deps = {}) {
 
   const reports = [];
   const failures = [];
+  // Full payloads for reports that exist only here. The detail page fetches
+  // `task_results` from HuggingFace, which a run with `publish_to_hf: false`
+  // never reaches; without a copy served from this build, its page is a 404
+  // and an error panel. Keyed by short_id because that is what the route
+  // carries.
+  const localPayloads = new Map();
 
   for (const { dirName, shortId } of candidates) {
     const reportPath = join(RESULTS_DIR, dirName, 'report', 'report_data.json');
@@ -405,6 +411,21 @@ async function loadAllReports(deps = {}) {
     // the other is what someone priced afterwards from the tokens it left.
     if (derived) indexEntry.derived_cost = derived;
 
+    // Only for `local`. A report fetched from the hub is already served from
+    // the URL the page asks for, and copying it here would put a second,
+    // silently divergent copy of the same run on the site.
+    //
+    // `served_locally` is what the page reads to pick a route, rather than
+    // trying the local path and falling back on a 404. A static host answers a
+    // missing file under an SPA fallback with **200 and text/html** — `vite
+    // preview` does exactly this — so a probe cannot tell "no local copy" from
+    // "here is the index page", and every published report would break on the
+    // JSON parse. The build knows which file it wrote; it says so here.
+    if (source === 'local') {
+      localPayloads.set(shortId, data);
+      indexEntry.served_locally = true;
+    }
+
     reports.push(indexEntry);
   }
 
@@ -431,7 +452,7 @@ async function loadAllReports(deps = {}) {
     return dateB - dateA;
   });
 
-  return reports;
+  return { reports, localPayloads };
 }
 
 // Generate cross-experiment analysis
@@ -494,7 +515,7 @@ async function main() {
     await mkdir(OUTPUT_DIR, { recursive: true });
 
     // Load reports
-    const reports = await loadAllReports();
+    const { reports, localPayloads } = await loadAllReports();
     console.log(`✓ Found ${reports.length} reports`);
 
     if (reports.length === 0) {
@@ -516,6 +537,24 @@ async function main() {
     const outputPath = join(OUTPUT_DIR, 'reports-index.json');
     await writeFile(outputPath, JSON.stringify(index, null, 2));
     console.log(`✓ Created: ${outputPath}`);
+
+    // Serve the full payload for every report that exists only in this repo.
+    // The index deliberately drops `task_results`, and the detail page asks
+    // HuggingFace for it — a route that does not exist for a run published
+    // with `publish_to_hf: false`. Written after the index so a failure here
+    // cannot leave the index unwritten.
+    if (localPayloads.size > 0) {
+      const payloadDir = join(OUTPUT_DIR, 'reports');
+      await mkdir(payloadDir, { recursive: true });
+      for (const [shortId, data] of localPayloads) {
+        await writeFile(join(payloadDir, `${shortId}.json`), JSON.stringify(data));
+      }
+      console.log(
+        `✓ Served locally: ${[...localPayloads.keys()].join(', ')}`
+          + ` (${localPayloads.size} report(s) with no HuggingFace copy)`,
+      );
+    }
+
     console.log(`  Experiments: ${cross_experiment.experiments.length}`);
     console.log(`  Sectors: ${Object.keys(cross_experiment.sector_matrix).length}`);
   } catch (err) {
