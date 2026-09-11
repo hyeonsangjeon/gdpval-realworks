@@ -3511,3 +3511,153 @@ def _append_trace_pair_tool_event(metadata, request, envelope):
     metadata["trace_pair_sha256"] = trace_pair_fingerprint(
         metadata["private_audit"], metadata["public_trace"]
     )
+
+# ---------------------------------------------------------------------------
+# The run record describes the backend that ran
+#
+# Two fields in the success envelope used to be written as constants next to a
+# backend_identity that carries the same facts from the backend itself:
+# ``foundation_only`` as the literal ``True``, and the runtime fingerprint's
+# implementation digest as the value the guard compared *against* rather than
+# the value the backend *reported*. Nothing made the pairs agree; the startup
+# guard did, one screen earlier, and so both constants were right by
+# consequence rather than by construction.
+#
+# The tests below pin the constructed version. They pass against the constants
+# too -- there is one admitted backend, so the two readings cannot differ
+# today. That is the reason to do it while they cannot: the moment a second
+# identity is admitted, a constant here would start describing the wrong run,
+# and it would do it silently, in the field a reader would use to tell which
+# run they were looking at.
+# ---------------------------------------------------------------------------
+
+
+_SUCCESSFUL_CALLS = [
+    {
+        "call_id": "write-1",
+        "name": "workspace_apply",
+        "arguments": {
+            "operation": "write",
+            "path": "draft.txt",
+            "content": "hello",
+        },
+    },
+    {
+        "call_id": "exec-1",
+        "name": "exec_run",
+        "arguments": {
+            "argv": ["fixture-upper", "draft.txt", "report.txt"],
+            "cwd": ".",
+            "timeout_seconds": 30,
+        },
+    },
+    {
+        "call_id": "final-1",
+        "name": "finalize",
+        "arguments": {"deliverables": ["report.txt"], "summary": "done"},
+    },
+]
+
+
+def _successful_run(tmp_path, backend_class=AgenticV2FixtureBackend):
+    return AgenticV2ScriptedRunner(
+        backend_factory=lambda **kwargs: backend_class(root=tmp_path, **kwargs),
+        scripted_calls=deepcopy(_SUCCESSFUL_CALLS),
+        profile=PROFILE,
+    ).run("Create report", task_id="task-1")
+
+
+def test_reported_foundation_only_comes_from_the_backend_not_the_runner(
+    tmp_path,
+):
+    result = _successful_run(tmp_path)
+    metadata = result["agentic_v2"]
+    started = metadata["private_audit"]["events"][0]["payload"]
+
+    assert result["success"] is True
+    # The envelope's claim and the backend's claim are the same object's
+    # value, not two independently-written Trues that happen to match.
+    assert (
+        metadata["foundation_only"]
+        == started["backend_identity"]["foundation_only"]
+        == metadata["backend_identity"]["foundation_only"]
+    )
+    verify_agentic_v2_result(result)
+
+
+def test_runtime_fingerprint_is_taken_over_the_identity_that_was_recorded(
+    tmp_path,
+):
+    result = _successful_run(tmp_path)
+    metadata = result["agentic_v2"]
+    runtime = metadata["private_audit"]["events"][0]["payload"]["runtime"]
+
+    recomputed = runtime_fingerprint(
+        policy_profile_id=metadata["policy_profile_id"],
+        substrate_manifest_sha256=runtime["substrate_manifest_sha256"],
+        package_snapshot_sha256=runtime["package_snapshot_sha256"],
+        browser_build_sha256=runtime["browser_build_sha256"],
+        # The recorded identity's own digest. If the runner ever fingerprints
+        # a run with the digest it *expected* while recording an identity
+        # carrying a different one, this is the assertion that says so.
+        backend_implementation_sha256=metadata["backend_identity"][
+            "implementation_sha256"
+        ],
+        capabilities_sha256=metadata["capabilities_sha256"],
+        budget_caps=runtime["budget_caps"],
+    )
+
+    assert metadata["runtime_fingerprint"] == recomputed
+
+
+class _ClaimsItIsNotFoundationOnly(AgenticV2FixtureBackend):
+    """The fixture, reporting one field differently, and nothing else.
+
+    A backend that lied about its whole identity would be caught by the
+    implementation digest, which is computed over the foundation's source and
+    cannot be produced by anything that is not it. This one does not lie about
+    that: its digest is correct, its backend id is correct, and the single
+    field it changes is the one the runner used to supply from a constant. It
+    exists to show that the guard reads all three fields rather than the two
+    that are hashes.
+    """
+
+    def start(self, timeout_seconds: float):
+        startup = dict(super().start(timeout_seconds))
+        data = dict(startup["data"])
+        identity = dict(data["backend_identity"])
+        identity["foundation_only"] = False
+        data["backend_identity"] = identity
+        startup["data"] = data
+        return startup
+
+
+def test_an_identity_differing_only_in_foundation_only_is_refused(tmp_path):
+    result = _successful_run(tmp_path, _ClaimsItIsNotFoundationOnly)
+
+    assert result["success"] is False
+    assert result["error"] == "compute_start_failed"
+    verify_agentic_v2_failure_result(result)
+
+
+def test_the_admitted_set_holds_exactly_one_identity_and_names_the_fixture():
+    """The seam, asserted as a set of one.
+
+    There is a second backend in this repository -- the microVM one, which
+    boots a real guest -- and admitting it is a change somebody will want to
+    make. This asserts the shape that makes such a change legible: a named
+    tuple of complete identities, so an addition appears in a diff as a new
+    entry rather than as a comparison that quietly got weaker.
+
+    It is deliberately not a test that the microVM backend is *excluded by
+    name*. Excluding one thing by name would pass while admitting anything
+    else; requiring the set to be exactly one entry, and that entry to be the
+    foundation's, does not.
+    """
+    source = inspect.getsource(agentic_v2_runner)
+    start = source.index("admitted_identities = (")
+    body = source[start:source.index("if identity not in admitted_identities:")]
+
+    assert body.count('"backend_id":') == 1
+    assert "FOUNDATION_BACKEND_ID" in body
+    assert "agentic-v2-microvm-v1" not in source

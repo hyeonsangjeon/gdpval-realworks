@@ -1970,6 +1970,78 @@ box** — the local `az` tenant is not the one that bills these workflows — so
 window is recorded as `partial` and **not** as zero. **Zero model calls were
 made in this window; the only spend is the host.**
 
+##### The guard, measured: it is eight places, not one
+
+Earlier notes in this document, and the project card, described the remaining
+code gate as one comparison — `core/agentic_v2_runner.py`, the startup check
+that a backend's identity is exactly the foundation fixture's. That was
+counted, and it is wrong. The foundation identity is pinned in **eight**
+places across two modules:
+
+| module | what it pins |
+|---|---|
+| `agentic_v2_runner.py` ×4 | the worker's profile, the startup guard, and two constants in the success envelope |
+| `agentic_v2_provenance.py` ×6 | `foundation_fixture_identity`, and five callers that reconstruct a whole expected startup payload from it |
+
+That is not sprawl to be tidied up. It is the property that no single edit can
+turn a fixture run into a claimed real one, and it should stay that way.
+
+**What it means for the shape of the change.** The provenance module does not
+merely compare an identity. `foundation_fixture_identity()` *manufactures* the
+startup payload a run must match — capabilities `["fixture-upper"]`, runtimes
+`["fixture"]`, a fixed package record set, a fixed browser-build digest — and
+`_verify_fixture_result_semantics()` goes further and **re-simulates every
+executed tool call** against the fixture's known behaviour, comparing the
+result envelope and the state digest either side of it.
+
+A command run in a real guest cannot be re-simulated. Its output is not a
+function of anything the verifier holds. So admitting a second identity is not
+a matter of loosening a comparison: it requires a **second verification
+standard** — structure, digests, chain integrity, budget accounting and state
+continuity, but not output equality — and that standard has to be recorded in
+the run, by name, so a reader can tell which one was applied. Admitting the
+identity without that would produce runs this code calls verified while
+checking strictly less than the word implies. That is the failure this whole
+stage is arranged to avoid, and it is why the gate is still shut.
+
+**What was done now, and why only this.** Two constants in the success
+envelope were replaced by the values the backend reported:
+
+- the runtime fingerprint's implementation digest, which read the digest the
+  guard compared *against* rather than the one the backend *reported*
+- `foundation_only`, which was the literal `True` two lines above a
+  `backend_identity` carrying its own `foundation_only`, read from a substrate
+  manifest, with nothing making the two agree
+
+Both were right today, by consequence: there is one admitted backend, so the
+readings cannot differ. Doing it while they cannot differ is the point — the
+moment a second identity is admitted, a constant there would describe the
+wrong run, silently, in the field a reader would use to tell the runs apart.
+
+The startup guard's inline dict also became a named tuple of complete
+identities, `admitted_identities`, holding exactly one entry. Nothing is
+admitted that was not admitted before. What the shape buys is that admitting
+something later is an addition to a named list rather than a comparison that
+got weaker, so it appears in a diff as what it is. A test asserts the set has
+exactly one entry and that it is the foundation's — not that the microVM
+backend is excluded *by name*, which would pass while admitting anything else.
+
+**What is still shut, deliberately:** the admitted set has one member, the
+second verification standard is not written, and `exec_run` on a real guest
+reaches nothing through this path. None of that changed here.
+
+##### And the other half of it is not code
+
+Even with the gate open, there is nowhere to run: the GPT deployment and the
+machine that boots a guest are in different subscriptions in different
+tenants, and the runner-as-host route is closed on support status rather than
+hardware. Whether a host could go in the model's own subscription under
+permissions that already exist is a question that can be asked for free and
+read-only — `batch-runner/scripts/azure_boot_host_survey.py`, run from its own
+workflow, five ARM control-plane reads, creating nothing and requesting
+nothing. Its answer decides whether stage D needs an access change at all. If
+it does, the exact change gets **named and reported**, not performed.
+
 ### Stage E — not yet run
 
 Before any of it is written, what the repository already has. Two searches this

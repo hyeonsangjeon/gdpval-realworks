@@ -465,11 +465,31 @@ class AgenticV2ScriptedRunner:
             startup_data = startup.get("data") or {}
             identity = startup_data.get("backend_identity") or {}
             expected_implementation_sha = foundation_implementation_fingerprint()
-            if identity != {
-                "backend_id": FOUNDATION_BACKEND_ID,
-                "foundation_only": True,
-                "implementation_sha256": expected_implementation_sha,
-            }:
+            # The admitted set, written as a set of one.
+            #
+            # There is a second backend in this repository --
+            # core/agentic_v2_microvm_backend.py, which boots a real guest and
+            # reports an identity derived from the image rather than from its
+            # own source text. It does not appear here, and this change does
+            # not put it here.
+            #
+            # What the shape buys is that admitting it later is an edit to a
+            # named list rather than a loosened comparison, so it shows up in a
+            # diff as what it is. It is also not the only thing that would have
+            # to change: the semantic verifier in agentic_v2_provenance.py
+            # re-simulates every executed tool call against the fixture's known
+            # behaviour, and a command run in a real guest cannot be
+            # re-simulated. Admitting a second identity without answering that
+            # would produce runs this code calls verified while checking
+            # strictly less than the word implies.
+            admitted_identities = (
+                {
+                    "backend_id": FOUNDATION_BACKEND_ID,
+                    "foundation_only": True,
+                    "implementation_sha256": expected_implementation_sha,
+                },
+            )
+            if identity not in admitted_identities:
                 lifecycle.transition(LifecycleState.FAILED)
                 return finish(_failure(
                     "compute_start_failed", lifecycle, audit_chain, public_chain,
@@ -634,7 +654,14 @@ class AgenticV2ScriptedRunner:
                 substrate_manifest_sha256=substrate_sha,
                 package_snapshot_sha256=package_snapshot_sha,
                 browser_build_sha256=browser_build_sha,
-                backend_implementation_sha256=expected_implementation_sha,
+                # The identity's own digest, not the one it was checked
+                # against. The guard above has already established they are
+                # equal, so this changes nothing today -- which is the point of
+                # doing it now rather than later. A run record should describe
+                # the backend that ran, and reading the expected value here is
+                # only incidentally right: it is right because a second backend
+                # cannot get this far, not because the field means "expected".
+                backend_implementation_sha256=identity["implementation_sha256"],
                 capabilities_sha256=canonical_sha256(capabilities),
                 budget_caps=self.budget_caps,
             )
@@ -644,7 +671,14 @@ class AgenticV2ScriptedRunner:
                 "schema_version": "2.0",
                 "tool_contract_version": self.profile.tool_contract_version,
                 "policy_profile_id": self.profile.policy_profile_id,
-                "foundation_only": True,
+                # Reported by the backend, not asserted by this line. The same
+                # reasoning, and here it mattered more: the literal that stood
+                # here sat two lines above a real backend_identity carrying its
+                # own foundation_only, read from a substrate manifest. Nothing
+                # made the two agree. Today the guard does, so the value is
+                # unchanged; the difference is that a disagreement would now be
+                # impossible rather than silent.
+                "foundation_only": identity["foundation_only"],
                 "lifecycle_state": lifecycle.state.value,
                 "backend_identity": deepcopy(identity),
                 "capabilities_sha256": canonical_sha256(capabilities),
