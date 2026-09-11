@@ -36,7 +36,8 @@
   "derived_cost_usd_from_measured_tokens": 0.075693,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded",
+  "codex_items_seen": 13
  },
  {
   "n": 2,
@@ -75,7 +76,8 @@
   "derived_cost_usd_from_measured_tokens": 0.450355,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded",
+  "codex_items_seen": 34
  },
  {
   "n": 3,
@@ -114,7 +116,8 @@
   "derived_cost_usd_from_measured_tokens": 0.281889,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded",
+  "codex_items_seen": 31
  },
  {
   "n": 4,
@@ -155,7 +158,8 @@
   "derived_cost_usd_from_measured_tokens": 0.297674,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded",
+  "codex_items_seen": 34
  },
  {
   "n": 5,
@@ -196,7 +200,8 @@
   "derived_cost_usd_from_measured_tokens": 0.223286,
   "derived_cost_basis": "floor_unmeasured_sends_excluded",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded",
+  "codex_items_seen": 36
  },
  {
   "n": 6,
@@ -235,7 +240,8 @@
   "derived_cost_usd_from_measured_tokens": 0.197839,
   "derived_cost_basis": "floor_unmeasured_sends_excluded",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded",
+  "codex_items_seen": 32
  },
  {
   "n": 7,
@@ -276,7 +282,8 @@
   "derived_cost_usd_from_measured_tokens": 0.259405,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded",
+  "codex_items_seen": 55
  },
  {
   "n": 8,
@@ -315,7 +322,8 @@
   "derived_cost_usd_from_measured_tokens": 0.305296,
   "derived_cost_basis": "floor_unmeasured_sends_excluded",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded",
+  "codex_items_seen": 35
  },
  {
   "n": 9,
@@ -356,7 +364,8 @@
   "derived_cost_usd_from_measured_tokens": 0.067473,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded",
+  "codex_items_seen": 21
  },
  {
   "n": 10,
@@ -395,7 +404,8 @@
   "derived_cost_usd_from_measured_tokens": 1.223594,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded",
+  "codex_items_seen": 54
  },
  {
   "n": 11,
@@ -436,7 +446,8 @@
   "derived_cost_usd_from_measured_tokens": 0.342845,
   "derived_cost_basis": "floor_unmeasured_sends_excluded",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded",
+  "codex_items_seen": 25
  },
  {
   "n": 12,
@@ -475,7 +486,8 @@
   "derived_cost_usd_from_measured_tokens": 0.407472,
   "derived_cost_basis": "floor_unmeasured_sends_excluded",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded",
+  "codex_items_seen": 59
  },
  {
   "n": 13,
@@ -514,7 +526,8 @@
   "derived_cost_usd_from_measured_tokens": 0.171624,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded",
+  "codex_items_seen": 28
  },
  {
   "n": 14,
@@ -553,7 +566,8 @@
   "derived_cost_usd_from_measured_tokens": 0.201498,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded",
+  "codex_items_seen": 24
  },
  {
   "n": 15,
@@ -594,7 +608,8 @@
   "derived_cost_usd_from_measured_tokens": 0.374266,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded",
+  "codex_items_seen": 40
  },
  {
   "n": 16,
@@ -633,7 +648,8 @@
   "derived_cost_usd_from_measured_tokens": 0.254993,
   "derived_cost_basis": "floor_unmeasured_sends_excluded",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded",
+  "codex_items_seen": 40
  },
  {
   "n": 17,
@@ -674,7 +690,8 @@
   "derived_cost_usd_from_measured_tokens": 0.565384,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded",
+  "codex_items_seen": 40
  },
  {
   "n": 18,
@@ -713,7 +730,8 @@
   "derived_cost_usd_from_measured_tokens": 0.209382,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded",
+  "codex_items_seen": 27
  },
  {
   "n": 19,
@@ -752,7 +770,8 @@
   "derived_cost_usd_from_measured_tokens": 0.132989,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded",
+  "codex_items_seen": 24
  },
  {
   "n": 20,
@@ -793,7 +812,8 @@
   "derived_cost_usd_from_measured_tokens": 0.03668,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded",
+  "codex_items_seen": 14
  },
  {
   "n": 21,
@@ -832,7 +852,8 @@
   "derived_cost_usd_from_measured_tokens": 0.262434,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded",
+  "codex_items_seen": 38
  },
  {
   "n": 22,
@@ -871,7 +892,8 @@
   "derived_cost_usd_from_measured_tokens": 0.185617,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded",
+  "codex_items_seen": 27
  },
  {
   "n": 23,
@@ -910,7 +932,8 @@
   "derived_cost_usd_from_measured_tokens": 0.176919,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded",
+  "codex_items_seen": 36
  },
  {
   "n": 24,
@@ -949,7 +972,8 @@
   "derived_cost_usd_from_measured_tokens": 0.342907,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded",
+  "codex_items_seen": 29
  },
  {
   "n": 25,
@@ -988,7 +1012,8 @@
   "derived_cost_usd_from_measured_tokens": 0.270873,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded",
+  "codex_items_seen": 39
  },
  {
   "n": 26,
@@ -1029,7 +1054,8 @@
   "derived_cost_usd_from_measured_tokens": 0.167897,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded",
+  "codex_items_seen": 23
  },
  {
   "n": 27,
@@ -1068,7 +1094,8 @@
   "derived_cost_usd_from_measured_tokens": 0.305049,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded",
+  "codex_items_seen": 39
  },
  {
   "n": 28,
@@ -1107,7 +1134,8 @@
   "derived_cost_usd_from_measured_tokens": 0.113523,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded",
+  "codex_items_seen": 22
  },
  {
   "n": 29,
@@ -1146,7 +1174,8 @@
   "derived_cost_usd_from_measured_tokens": 1.307947,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded",
+  "codex_items_seen": 74
  },
  {
   "n": 30,
@@ -1187,7 +1216,8 @@
   "derived_cost_usd_from_measured_tokens": null,
   "derived_cost_basis": "no_measured_call",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded",
+  "codex_items_seen": 16
  },
  {
   "n": 31,
@@ -1228,7 +1258,8 @@
   "derived_cost_usd_from_measured_tokens": 0.339052,
   "derived_cost_basis": "floor_unmeasured_sends_excluded",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded",
+  "codex_items_seen": 69
  },
  {
   "n": 32,
@@ -1267,7 +1298,8 @@
   "derived_cost_usd_from_measured_tokens": 0.139454,
   "derived_cost_basis": "floor_unmeasured_sends_excluded",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded",
+  "codex_items_seen": 24
  },
  {
   "n": 33,
@@ -1306,7 +1338,8 @@
   "derived_cost_usd_from_measured_tokens": 0.332657,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded",
+  "codex_items_seen": 57
  },
  {
   "n": 34,
@@ -1347,7 +1380,8 @@
   "derived_cost_usd_from_measured_tokens": 0.089143,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded",
+  "codex_items_seen": 22
  },
  {
   "n": 35,
@@ -1386,7 +1420,8 @@
   "derived_cost_usd_from_measured_tokens": 0.291995,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded",
+  "codex_items_seen": 27
  },
  {
   "n": 36,
@@ -1427,7 +1462,8 @@
   "derived_cost_usd_from_measured_tokens": 0.197363,
   "derived_cost_basis": "floor_unmeasured_sends_excluded",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded",
+  "codex_items_seen": 23
  },
  {
   "n": 37,
@@ -1466,7 +1502,8 @@
   "derived_cost_usd_from_measured_tokens": 0.57022,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded",
+  "codex_items_seen": 60
  },
  {
   "n": 38,
@@ -1505,7 +1542,8 @@
   "derived_cost_usd_from_measured_tokens": 0.218077,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded",
+  "codex_items_seen": 20
  },
  {
   "n": 39,
@@ -1546,7 +1584,8 @@
   "derived_cost_usd_from_measured_tokens": null,
   "derived_cost_basis": "no_measured_call",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded",
+  "codex_items_seen": 5
  },
  {
   "n": 40,
@@ -1585,7 +1624,8 @@
   "derived_cost_usd_from_measured_tokens": 0.260309,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded",
+  "codex_items_seen": 34
  },
  {
   "n": 41,
@@ -1626,7 +1666,8 @@
   "derived_cost_usd_from_measured_tokens": 0.263434,
   "derived_cost_basis": "floor_unmeasured_sends_excluded",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded",
+  "codex_items_seen": 25
  },
  {
   "n": 42,
@@ -1665,7 +1706,8 @@
   "derived_cost_usd_from_measured_tokens": 0.539052,
   "derived_cost_basis": "floor_unmeasured_sends_excluded",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded",
+  "codex_items_seen": 54
  },
  {
   "n": 43,
@@ -1704,7 +1746,8 @@
   "derived_cost_usd_from_measured_tokens": 0.454261,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded",
+  "codex_items_seen": 47
  },
  {
   "n": 44,
@@ -1743,7 +1786,8 @@
   "derived_cost_usd_from_measured_tokens": 0.32882,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded",
+  "codex_items_seen": 47
  },
  {
   "n": 45,
@@ -1782,7 +1826,8 @@
   "derived_cost_usd_from_measured_tokens": 1.149946,
   "derived_cost_basis": "all_calls_measured",
   "derived_cost_is_provider_billed": false,
-  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded"
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with the committed receipt price table (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e); the same fingerprint the run itself recorded",
+  "codex_items_seen": 61
  },
  {
   "n": 46,
