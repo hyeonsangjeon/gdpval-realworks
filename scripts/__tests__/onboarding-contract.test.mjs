@@ -344,6 +344,22 @@ test('workflow input tables mirror defaults and watchdog delegation', async () =
       SANDBOX_IMAGE_DIGEST: `ghcr.io/hyeonsangjeon/gdpval-sandbox@sha256:${'c'.repeat(64)}`,
     },
   })
+  // A relay leg whose source is no longer main's tip, which is the ordinary
+  // case rather than an attack: the retrigger is `gh workflow run --ref main`
+  // and it resolves main again at every handover, so any commit landing during
+  // a multi-hour run puts the leg here. This used to be asserted as a
+  // rejection. It is not one, and the guarantee it stood for -- that a leg runs
+  // the pipeline its first leg ran -- now comes from `Pin pipeline source to
+  // the first leg`, with the two residues a checkout cannot cover asserted in
+  // `Verify relay source lineage` below.
+  await execFileAsync('bash', ['-c', dispatchStep.run], {
+    env: {
+      ...validEnv,
+      RELAY_RUN: '1',
+      RELAY_LINEAGE_ID: 'experiment:run:attempt',
+      SOURCE_SHA: 'b'.repeat(40),
+    },
+  })
   for (const invalid of [
     { EVENT_NAME: 'push' },
     { EVENT_REF: 'refs/heads/feature' },
@@ -357,7 +373,14 @@ test('workflow input tables mirror defaults and watchdog delegation', async () =
     { RELAY_RUN: '-1' },
     { RELAY_RUN: '11' },
     { RELAY_RUN: '999999999999999999999999999999' },
-    { RELAY_RUN: '1', SOURCE_SHA: 'b'.repeat(40) },
+    // Not `SOURCE_SHA: 'b'.repeat(40)`, which is now accepted above. What is
+    // still refused is a sha that cannot address a checkpoint: `_lineage_root`
+    // hashes this value to find the run's uploaded work, so a malformed one
+    // does not degrade to a slow path, it points at nothing. The lineage id is
+    // spelled out on these two so they fail for the reason they are named
+    // after rather than incidentally on the empty one inherited from validEnv.
+    { RELAY_RUN: '1', SOURCE_SHA: 'Z'.repeat(40), RELAY_LINEAGE_ID: 'lineage' },
+    { RELAY_RUN: '1', SOURCE_SHA: 'b'.repeat(39), RELAY_LINEAGE_ID: 'lineage' },
     { RELAY_RUN: '1', SOURCE_SHA: '' },
     { RELAY_RUN: '0', SOURCE_SHA: sha },
     { RELAY_RUN: '0', RELAY_LINEAGE_ID: 'injected-lineage' },
@@ -378,10 +401,33 @@ test('workflow input tables mirror defaults and watchdog delegation', async () =
   assert.match(configCheckout.run, /"\$\(git rev-parse HEAD\)" == "\$GITHUB_SHA"/)
   const inspectSteps = workflow.jobs['inspect-mode'].steps
   assert.ok(inspectSteps.indexOf(dispatchStep) < inspectSteps.findIndex((step) => step.name === 'Checkout config only'))
+  // The two steps that took over from the deleted equality assertion. Ordering
+  // only here -- what they do is executed against real commits in
+  // batch-runner/tests/test_a_relay_leg_runs_the_source_it_started_with.py.
+  // Both read git history, so both have to come after a checkout that fetched
+  // some, and both are meaningless on a first leg.
+  const lineage = inspectSteps.find((step) => step.name === 'Verify relay source lineage')
+  assert.ok(lineage, 'missing workflow step: Verify relay source lineage')
+  assert.equal(lineage.if, 'inputs.relay_run > 0')
+  assert.ok(inspectSteps.indexOf(lineage) > inspectSteps.findIndex((step) => step.name === 'Checkout config only'))
   const exactCheckout = findStep(workflow, 'Verify exact checkout')
   assert.match(exactCheckout.run, /"\$\(git rev-parse HEAD\)" == "\$GITHUB_SHA"/)
   const batchSteps = workflow.jobs['batch-run'].steps
   assert.ok(batchSteps.indexOf(exactCheckout) < batchSteps.findIndex((step) => step.name === 'Setup Python'))
+  const pin = findStep(workflow, 'Pin pipeline source to the first leg')
+  assert.equal(pin.if, 'inputs.relay_run > 0')
+  assert.ok(batchSteps.indexOf(pin) < batchSteps.findIndex((step) => step.name === 'Setup Python'))
+  // `fetch-depth: 0` as a literal zero. The conditional form of this line,
+  // `${{ inputs.relay_run > 0 && 0 || 1 }}`, always renders 1 -- Actions'
+  // `a && b || c` yields `c` whenever `b` is falsy, and 0 is falsy -- which
+  // would give every relay leg a shallow clone and kill it at `merge-base
+  // --is-ancestor`, hours into a paid run.
+  for (const step of [
+    inspectSteps.find((candidate) => candidate.name === 'Checkout config only'),
+    findStep(workflow, 'Checkout'),
+  ]) {
+    assert.equal(step.with['fetch-depth'], 0)
+  }
   const relayStep = findStep(workflow, 'Retrigger relay run')
   assert.match(relayStep.run, /gh workflow run batch-run\.yml --ref main/)
   assert.match(relayStep.run, /-f source_sha="\$SOURCE_SHA"/)
