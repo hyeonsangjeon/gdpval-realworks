@@ -7,20 +7,30 @@
 # exec_run still shut. It answers one question — does asking the model again
 # after each tool result help at all? — and nothing else.
 #
-# TWO AMOUNTS ARE APPROVED HERE, FOR THE FIVE TASKS BELOW AND NOTHING ELSE.
+# RUNNING IS APPROVED FOR ALL THREE STAGES. MARKING, FOR THE FIVE ONLY.
 #
-# This header used to read "NOTHING HERE IS APPROVED AND NOTHING HERE RUNS",
-# and it went on reading that way after the amounts were filled in on
-# 2026-09-11 — four lines above the block that holds them. Corrected rather
-# than quietly deleted, because the first sentence of a file is the one a
-# reader trusts, and a file that contradicts itself is believed at the top.
+# This header has now been wrong twice, and both times in the same direction —
+# it went on describing a narrower approval than the file below it carried. It
+# first read "NOTHING HERE IS APPROVED AND NOTHING HERE RUNS", and kept reading
+# that after two amounts were filled in four lines further down. It was then
+# corrected to say two amounts covered the five tasks and nothing else, and kept
+# reading that after the `stages` block priced all three. Corrected again rather
+# than quietly deleted, because the first sentence of a file is the one a reader
+# trusts, and a file that contradicts itself is believed at the top.
 #
-# What is approved: running the five task_ids below (50.00) and marking their
-# answers (2600.00), under the standing approval for Foundry model calls and
-# experiments within the already authorised scope. Both are whole-run figures
-# for those five tasks. Neither is a per-task rate, so neither prices a larger
-# cohort: scripts/run_agentic_v2_stage.py refuses any stage this file has not
-# priced and says by what multiple it would have overrun.
+# What is approved, in the `stages` block below:
+#
+#   - running all three cohorts — five tasks, thirty, and all two hundred and
+#     twenty — under the standing approval for Foundry model calls and
+#     experiments within the already authorised scope.
+#   - marking the five answers, and only those five. Marking thirty or two
+#     hundred and twenty is a five- and six-figure decision that nobody has
+#     made; each is written as a refusal carrying its reason, not left blank.
+#
+# Every amount is a whole-run figure for the cohort it names. None of them is a
+# per-task rate, so none of them prices any other cohort, and
+# scripts/run_agentic_v2_stage.py refuses a stage this file has not priced by
+# name and says by what multiple it would have overrun.
 #
 # Read this file with:
 #     cd batch-runner
@@ -49,7 +59,8 @@
 # the amounts are the thing that mattered, and because a run that finds itself
 # refused for want of a budget is being refused by those two mechanisms.
 #
-# Written: 2026-08-26. Amounts approved and this header corrected: 2026-09-11.
+# Written: 2026-08-26. Five-task amounts approved: 2026-09-11. All three stages
+# priced for running, and this header corrected a second time: 2026-09-11.
 
 plan_version: "agentic-stage-one-v1"
 
@@ -173,14 +184,14 @@ cost:
   # correct plan into a refused one without anybody having changed their mind.
   # Nothing spends up to it: the per-task budgets under chosen_settings are
   # what actually stop a run, and they are worked out from the same arithmetic.
-  running_approved_maximum_usd: 50.00
+  running_approved_maximum_usd: &five_task_running 50.00
 
   # Marking the five answers. Approved here because the plan is where the whole
   # of stage one is priced and a half-approved stage is not an approved one.
   # Nothing in scripts/run_agentic_v2_stage.py can spend it — that script binds
   # every call to the problem-solving bucket, and core.agentic_v2_cost_binding
   # raises on a grading stage. Marking is a separate run against this figure.
-  grading_approved_maximum_usd: 2600.00
+  grading_approved_maximum_usd: &five_task_grading 2600.00
 
   # ── The settings ─────────────────────────────────────────────────────────
   #
@@ -270,6 +281,77 @@ cost:
   # enforce it when something runs. A number written down here could disagree
   # with the code; a number read from the code cannot.
   tool_result_size_comes_from: "core/agentic_v2_tools.py AgenticV2ToolDispatcher"
+
+# ── What each of the three stages may spend ───────────────────────────────
+#
+# The escalation is five tasks, then thirty, then two hundred and twenty, fixed
+# in core/agentic_v2_preregistration.py. The block above prices the first of
+# those and nothing else: its figures are whole-run figures, so running thirty
+# tasks under them would go out against an approval worked out for a run six
+# times smaller, and the printed line would say it was within budget because
+# the arithmetic behind it never saw the larger cohort.
+#
+# So each stage is priced by name here. The task ids are NOT repeated — they
+# come from the sealed catalogue through cohorts(), and a second copy in this
+# file would be a second thing to keep correct. What is written here is only
+# the part a person has to decide: the amount.
+#
+# No estimated figure is written down either, for the reason the note about
+# assumptions_come_from gives at length. The estimate has moved three times
+# already, and each move changed the answer. Run
+#     python scripts/check_agentic_stage_one_ceiling.py
+# to see what each stage costs against what it may spend, worked out live.
+#
+# Running is approved for all three, under the standing approval for Foundry
+# model calls and experiments within the already authorised scope. The whole
+# point of the work is that the two hundred and twenty tasks are actually run.
+#
+# Marking is NOT approved beyond the five, and that is a real difference rather
+# than an oversight, so it is written as a refusal with its reason rather than
+# left blank. Marking is not a share of the running cost — it is roughly fifty
+# times it, because the grader asks about five hundred questions per task
+# against the model's answer. A figure for marking two hundred and twenty tasks
+# is a six-figure decision and belongs to whoever is paying, not to the file
+# that happens to need it. Nothing here can spend it by accident in the
+# meantime: scripts/run_agentic_v2_stage.py binds every call it makes to the
+# problem-solving bucket and core.agentic_v2_cost_binding raises on a grading
+# stage.
+#
+# Written 2026-09-11, when the escalation stopped being hypothetical.
+stages:
+  advance_check_5:
+    # The same two figures as the block above, by reference rather than by
+    # copy. An alias cannot drift from what it points at; a second literal can,
+    # and would be found only by whoever next compared them.
+    running_approved_maximum_usd: *five_task_running
+    grading_approved_maximum_usd: *five_task_grading
+
+  trial_30:
+    # Roughly six times the five-task run, and the margin over the computed
+    # ceiling is deliberately narrower than the five-task one. Margin is
+    # insurance against the shared assumptions moving, and that movement is
+    # proportional — the three corrections to the standing-instruction length
+    # moved the cheapest row by about four per cent each time. At eighteen
+    # dollars a wide margin costs nothing, so the five-task figure is generous.
+    # Here it would be real money, so it is not.
+    running_approved_maximum_usd: 200.00
+    grading_approved_maximum_usd: null
+    grading_not_approved_because: >-
+      Marking thirty answers is a five-figure amount, and nothing in the goal
+      this stage serves needs it. Running thirty tasks answers whether the loop
+      holds up past five; how well the answers scored is a separate question
+      with a separate bill, asked after there are answers to ask it about.
+
+  full_220:
+    # Every task in the benchmark, run once.
+    running_approved_maximum_usd: 1400.00
+    grading_approved_maximum_usd: null
+    grading_not_approved_because: >-
+      Marking all two hundred and twenty answers is a six-figure amount — far
+      more than running them, and more than every other cost in this project
+      put together. It is approved separately or not at all. Finishing the two
+      hundred and twenty runs is one milestone; marking them is another, and
+      the second does not follow from the first having been paid for.
 
 # ── What happens after stage one ──────────────────────────────────────────
 #

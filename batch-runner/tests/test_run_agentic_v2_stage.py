@@ -33,6 +33,7 @@ import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
 BATCH_RUNNER_ROOT = Path(__file__).resolve().parents[1]
 if str(BATCH_RUNNER_ROOT) not in sys.path:
@@ -71,83 +72,75 @@ needs_dataset = pytest.mark.skipif(
 )
 
 
-class _Bound:
-    """Just enough of a bound cohort to ask the guard about."""
-
-    def __init__(self, task_ids):
-        self._task_ids = tuple(task_ids)
-
-    @property
-    def task_ids(self):
-        return self._task_ids
-
-
 # ── The pricing guard ─────────────────────────────────────────────────────
+#
+# The guard used to live here as arithmetic over two counts, and these tests
+# pinned that arithmetic. It now prices the cohort that is really about to run
+# against the amount the plan approved for that stage by name, which is a
+# stronger check in both directions: it lets a correctly priced larger stage
+# through, and it would catch a cohort of the approved size whose tasks had
+# grown more expensive. The arithmetic moved to
+# ``core.agentic_v2_stage_one_budget.price_one_stage`` and is tested there,
+# against synthetic plans that need no dataset. What is left here is the thing
+# only this script can be asked: that the guard is wired into the path a real
+# run takes, with a real bound cohort and a real catalogue.
 
 
-def test_a_cohort_the_plan_priced_is_allowed_through():
-    plan = {"task_ids": ["a", "b", "c"]}
+@needs_dataset
+@pytest.mark.parametrize("stage", ["advance_check_5", "trial_30", "full_220"])
+def test_every_registered_stage_is_priced_and_dry_runs_to_zero(stage):
+    """All three, because an escalation with an unpriced rung cannot be climbed.
 
-    assert runner.check_the_plan_priced_this_stage(plan, _Bound(["a", "b", "c"])) == []
+    This test used to assert the opposite for two of the three — that the thirty
+    and the two hundred and twenty were *refused* as unpriced. They were, and
+    the refusal was correct while it was true. Approving them is what changed,
+    not the guard.
+    """
+    finished = _run("--stage", stage, "--dry-run")
+
+    assert finished.returncode == 0, finished.stdout + finished.stderr
+    assert "Every condition for the paid run is met" in finished.stdout
+    assert "nothing was spent" in finished.stdout
 
 
-def test_a_cohort_larger_than_the_one_priced_is_refused_with_the_multiple():
+@needs_dataset
+def test_a_stage_the_plan_does_not_name_is_still_refused(tmp_path):
+    """The guard is a guard, not a formality that happens to pass now.
+
+    Checked by taking the entry away rather than by trusting that it would be
+    caught if it were missing. A plan with the block deleted is the state the
+    repository was in this morning.
+    """
+    plan = yaml.safe_load(runner.STAGE_ONE_PLAN_PATH.read_text(encoding="utf-8"))
+    del plan["stages"]["full_220"]
+    narrowed = tmp_path / "plan.yaml"
+    narrowed.write_text(yaml.safe_dump(plan), encoding="utf-8")
+
+    finished = _run("--stage", "full_220", "--plan", str(narrowed), "--dry-run")
+
+    assert finished.returncode == 1, finished.stdout + finished.stderr
+    assert "this stage is not priced" in finished.stdout
+    assert "'full_220'" in finished.stdout
+    assert "whole-run figure" in finished.stdout
+
+
+@needs_dataset
+def test_a_stage_priced_too_low_is_refused_with_the_shortfall(tmp_path):
     """The number is the point. "Not priced" invites someone to wave it through.
 
-    Forty-four times an approved amount is a different conversation from a
-    mismatch, and the person reading the refusal is the person who would have
-    had it.
+    A shortfall in dollars is a different conversation from a mismatch, and the
+    person reading the refusal is the person who would have had it.
     """
-    plan = {"task_ids": [f"t{n}" for n in range(5)]}
+    plan = yaml.safe_load(runner.STAGE_ONE_PLAN_PATH.read_text(encoding="utf-8"))
+    plan["stages"]["full_220"]["running_approved_maximum_usd"] = 50.00
+    narrowed = tmp_path / "plan.yaml"
+    narrowed.write_text(yaml.safe_dump(plan), encoding="utf-8")
 
-    problems = runner.check_the_plan_priced_this_stage(
-        plan, _Bound([f"t{n}" for n in range(220)])
-    )
+    finished = _run("--stage", "full_220", "--plan", str(narrowed), "--dry-run")
 
-    assert len(problems) == 1
-    assert "roughly 44 times what was approved" in problems[0]
-    assert "whole-run figures, not per-task ones" in problems[0]
-
-
-def test_a_cohort_of_the_same_size_but_different_tasks_is_refused():
-    """Same count, different work. Five tasks are not five tasks.
-
-    The amounts were worked out over particular prompts with particular
-    reference files. A cohort that merely matched on size would be a different
-    run wearing the approved run's number.
-    """
-    plan = {"task_ids": ["a", "b"]}
-
-    problems = runner.check_the_plan_priced_this_stage(plan, _Bound(["a", "c"]))
-
-    assert len(problems) == 1
-    assert "do not describe this run" in problems[0]
-
-
-def test_a_plan_that_prices_nothing_does_not_divide_by_zero():
-    """An empty plan is a refusal, not a crash inside the refusal."""
-    problems = runner.check_the_plan_priced_this_stage({}, _Bound(["a"]))
-
-    assert len(problems) == 1
-    assert "roughly 1 times what was approved" in problems[0]
-
-
-def test_the_guard_reads_the_cohort_rather_than_calling_it():
-    """A regression test for a real one-character bug.
-
-    ``BoundManifest.task_ids`` is a property. Calling it raised ``TypeError``
-    from inside the guard — which is to say the guard that stops an unpriced run
-    was itself broken, on every stage including the priced one. It failed loudly
-    and cost nothing, but it would have failed the same way on the run that was
-    allowed. Held here with an object that refuses to be called.
-    """
-
-    class RefusesToBeCalled:
-        @property
-        def task_ids(self):
-            return ("a",)
-
-    assert runner.check_the_plan_priced_this_stage({"task_ids": ["a"]}, RefusesToBeCalled()) == []
+    assert finished.returncode == 1, finished.stdout + finished.stderr
+    assert "short by $" in finished.stdout
+    assert "nothing here may scale an approved amount on its own" in finished.stdout
 
 
 # ── The free path is free ─────────────────────────────────────────────────
@@ -183,16 +176,6 @@ def test_the_priced_stage_dry_runs_to_zero_without_any_azure_environment():
 
 
 @needs_dataset
-@pytest.mark.parametrize("stage", ["trial_30", "full_220"])
-def test_an_unpriced_stage_is_refused_before_anything_is_reached(stage):
-    finished = _run("--stage", stage, "--dry-run")
-
-    assert finished.returncode == 1, finished.stdout + finished.stderr
-    assert "Refused before spending anything" in finished.stdout
-    assert "this stage is not priced" in finished.stdout
-
-
-@needs_dataset
 def test_the_dry_run_reports_both_amounts_against_their_own_ceilings():
     """Running and marking are two purchases and print as two lines.
 
@@ -206,8 +189,84 @@ def test_the_dry_run_reports_both_amounts_against_their_own_ceilings():
     marking = next(line for line in printed.splitlines() if "marking" in line)
 
     assert "against $50.00 approved" in running
-    assert "against $2600.00 approved" in marking
+    assert "$2600.00 approved" in marking
     assert "not spent by this script" in marking
+
+
+@needs_dataset
+def test_a_stage_whose_marking_is_not_approved_prints_the_reason():
+    """A blank is read as an oversight; a refusal with a reason is read as one.
+
+    Running the two hundred and twenty is approved and marking them is not, and
+    those are different facts about the same run. The dry run has to make the
+    second one as visible as the first, or the milestone that has not been paid
+    for is the one nobody notices is missing.
+    """
+    printed = _run("--stage", "full_220", "--dry-run").stdout
+
+    assert "marking        not approved for this stage" in printed
+    assert "six-figure amount" in printed
+    assert "another" in printed  # running them is one milestone, marking another
+
+
+@needs_dataset
+def test_the_stage_figure_is_the_stage_s_own_and_not_the_five_task_one():
+    """The two are the same number only for the smallest stage.
+
+    Printing the five-task figure beside a two-hundred-task run is exactly how a
+    stage gets described as affordable by a line that was never about it.
+    """
+    printed = _run("--stage", "full_220", "--dry-run").stdout
+    running = next(line for line in printed.splitlines() if "running" in line)
+
+    assert "$18.47" not in running
+    assert "$884.62" in running
+    assert "against $1400.00 approved for the whole stage" in running
+
+
+# ── Shards ────────────────────────────────────────────────────────────────
+
+
+@needs_dataset
+def test_a_shard_runs_part_of_the_stage_and_says_so():
+    printed = _run("--stage", "full_220", "--shard", "3/17", "--dry-run").stdout
+
+    assert "tasks          220" in printed
+    assert "shard          3 of 17" in printed
+    assert "the stage has not run until every shard has" in printed
+
+
+@needs_dataset
+def test_a_shard_is_priced_against_the_whole_stage_and_not_against_itself():
+    """Seventeen runs that are each "within budget" must not spend seventeen
+    times the approval. A shard is where the work happens, not what was bought.
+    """
+    whole = _run("--stage", "full_220", "--dry-run").stdout
+    piece = _run("--stage", "full_220", "--shard", "3/17", "--dry-run").stdout
+
+    line_of = lambda text: next(
+        one for one in text.splitlines() if "running        at most" in one
+    )
+    assert line_of(whole) == line_of(piece)
+
+
+@needs_dataset
+def test_a_shard_that_does_not_exist_is_refused_rather_than_run_empty():
+    finished = _run("--stage", "full_220", "--shard", "25/17", "--dry-run")
+
+    assert finished.returncode == 1, finished.stdout
+    assert "does not exist; shards are numbered 1 to 17" in finished.stdout
+
+
+@needs_dataset
+def test_one_shard_of_one_is_the_unsharded_run():
+    """So that a workflow may always pass --shard without changing behaviour."""
+    plain = _run("--stage", "trial_30", "--dry-run").stdout
+    trivial = _run("--stage", "trial_30", "--shard", "1/1", "--dry-run").stdout
+
+    assert plain == trivial
+    assert "shard" not in trivial
+
 
 
 @needs_dataset

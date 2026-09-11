@@ -28,29 +28,48 @@ name: Agentic Sandbox V2 — Stage Run
 # be paid for out of it by accident.
 #
 # What it does NOT do:
-#   * It does not decide what a bigger cohort costs. The two approved amounts in
-#     the plan are whole-run figures for the five tasks the plan pins. The
-#     runner refuses any stage the plan has not priced, for free, in the job
-#     below — `trial_30` and `full_220` are refused today and will stay refused
-#     until somebody writes their task ids and their own two amounts down.
+#   * It does not decide what any cohort costs. Every amount lives in the plan,
+#     one per stage, and every one of them is a whole-run figure for the cohort
+#     it names — none is a rate and none prices another stage. The runner
+#     refuses a stage the plan has not priced by name, and refuses a priced
+#     stage whose cohort has grown past its amount, for free, in the job below.
 #   * It does not open anything. `exec_run` stays shut and no file in the
 #     repository is changed by a run.
 #   * It does not publish. The record and the deliverables leave as artifacts,
 #     not as a commit. Nothing here reaches data/grades or the dashboard.
+#   * It does not pay for marking. Running the thirty and the two hundred and
+#     twenty is approved; marking them is not, and the plan says why rather
+#     than leaving a blank. Finishing a cohort is one milestone and marking it
+#     is another, and the second does not follow from the first.
 #
-# A note for whoever prices `full_220`: it will not fit here. The plan fixes
-# `per_task_timeout_seconds: 1200`, so 220 tasks is up to 73 hours against a
-# GitHub job ceiling of six. The cohort needs splitting across jobs, and the
-# runner already takes `--run-id` and resumes on it. Worth settling before the
-# spend rather than after four hours of one.
+# Two sentences that used to be here were wrong by the time anybody read them,
+# and both in the same direction — they described the file as narrower than it
+# had become. One said `trial_30` and `full_220` "are refused today and will
+# stay refused until somebody writes their task ids and their own two amounts
+# down"; the amounts were written down and the sentence stayed. The other said
+# the two hundred and twenty "will not fit here" and left splitting it as a
+# note for somebody else; the split is below. Corrected in place rather than
+# deleted, because a comment that has gone stale twice is worth a reader
+# knowing about.
+#
+# How the bigger stages fit. The plan fixes `per_task_timeout_seconds: 1200`
+# and a GitHub job is killed at six hours, so at worst thirteen tasks fit in
+# one job. `scripts/plan_agentic_v2_shards.py` works out how many jobs a stage
+# needs from those two numbers -- one for the five, three for the thirty,
+# seventeen for the two hundred and twenty -- and the paid job runs them as a
+# matrix. A shard is a piece of the run, never a smaller stage: it is priced
+# against the whole cohort, so seventeen jobs that are each "within budget"
+# cannot spend seventeen times the approval, and the stage has not run until
+# every shard has and their coverage has been checked.
 
 on:
   workflow_dispatch:
     inputs:
       stage:
         description: >-
-          Which pre-registered cohort to run. Only the one the plan has priced
-          can start; the others are refused for free by the dry run.
+          Which pre-registered cohort to run. All three are priced for running.
+          A stage whose cohort costs more than its own approved amount is
+          refused for free by the dry run, before anything is reached.
         type: choice
         options:
           - advance_check_5
@@ -71,7 +90,9 @@ on:
       run_id:
         description: >-
           Names the journal's run and namespaces every ledger call id. Leave
-          empty for a fresh run; reuse an earlier one to resume it.
+          empty for a fresh run; reuse an earlier one to resume it. Each shard
+          appends its own number, so resuming a stage resumes every piece of it
+          without two jobs writing to one journal.
         type: string
         default: ''
         required: false
@@ -101,6 +122,12 @@ jobs:
     name: Dry run
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    outputs:
+      # The matrix the paid job fans out over. Worked out here rather than
+      # written into the matrix by hand, so it cannot disagree with the timeout
+      # the run is actually using: move `per_task_timeout_seconds` in the plan
+      # and the number of jobs moves with it.
+      shards: ${{ steps.shards.outputs.matrix }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
@@ -143,6 +170,20 @@ jobs:
           hf download openai/gdpval --repo-type dataset \
             --revision 11e7900cdcac61bc4daf59e65feb238acda98fbf
 
+      # Printed as well as captured. The one-line JSON is for `fromJSON`; the
+      # object beside it is for whoever has to decide whether a run that has
+      # been going for five hours is late or stuck.
+      - name: Work out how many jobs this stage needs
+        id: shards
+        env:
+          STAGE: ${{ inputs.stage }}
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          python scripts/plan_agentic_v2_shards.py --stage "$STAGE" --explain
+          MATRIX="$(python scripts/plan_agentic_v2_shards.py --stage "$STAGE")"
+          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+
       - name: Dry run
         run: |
           set -euo pipefail
@@ -152,20 +193,50 @@ jobs:
 
   # ── The run that spends ─────────────────────────────────────────────────
   paid:
-    name: Run the cohort
+    name: Run the cohort — shard ${{ matrix.shard }}
     needs: free
     if: ${{ inputs.mode == 'paid' }}
     runs-on: ubuntu-latest
-    # Five tasks at the plan's 1200s ceiling each, plus setup, plus room for
-    # the retry the plan allows. Deliberately not "the maximum a job can have":
-    # a stage that has run past this has hit something the ceilings did not
-    # catch, and stopping to look is the right outcome.
-    timeout-minutes: 150
+    strategy:
+      # One job per piece of the cohort. For `advance_check_5` this is a matrix
+      # of one, and `--shard 1/1` is the unsharded run rather than a new code
+      # path, so the smallest stage runs exactly as it did before the matrix
+      # existed.
+      matrix:
+        shard: ${{ fromJSON(needs.free.outputs.shards) }}
+      # Never. Each of these jobs has already been charged for the turns it
+      # made, and cancelling its siblings would throw away work that was paid
+      # for because one of them hit something. A failed shard is a finding; the
+      # other sixteen are still results.
+      fail-fast: false
+      # Not about how many runners are free. It is about one deployment: the
+      # whole matrix talks to the same endpoint, and a throttled call is a call
+      # that was made. Four at a time leaves the stage finishing in five waves
+      # at worst rather than one long one, without asking the deployment for
+      # four hundred thousand tokens a minute.
+      max-parallel: 4
+    # Above the step timeout below, not equal to it. The step has to be the
+    # thing that stops first: a step that fails leaves the rest of the job to
+    # run, and the rest of the job is where the record gets uploaded. A job
+    # killed at its own limit -- or worse, at GitHub's six hour one -- can lose
+    # the artifact for a run that has already been charged for.
+    timeout-minutes: 330
     permissions:
       contents: read
       id-token: write
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      # `3/17` cannot be an artifact name and `strategy.job-index` counts from
+      # zero, which is the one thing the shard numbering deliberately does not
+      # do. Turned into `3-of-17` here so that every name a person reads --
+      # the job, the artifact, the resumed run id -- uses the same numbers.
+      - name: Name this shard
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: |
+          set -euo pipefail
+          echo "SHARD_SLUG=${SHARD//\//-of-}" >> "$GITHUB_ENV"
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
@@ -241,6 +312,13 @@ jobs:
       # anything, so a misconfigured dispatch costs nothing.
       - name: Run
         id: run
+        # Thirteen tasks is the most any shard holds, and the plan stops each
+        # one at 1200s, so the worst case inside this step is about four and a
+        # half hours. Five leaves slack for setup and the retry the plan allows
+        # while still tripping well before GitHub's own six hour kill -- which
+        # is the point, because this failing is a step failing, and the upload
+        # below still runs.
+        timeout-minutes: 300
         env:
           AZURE_AI_ROUTE_PROFILE: project-ci
           FOUNDRY_PROJECT_ENDPOINT: ${{ secrets.FOUNDRY_PROJECT_ENDPOINT }}
@@ -250,12 +328,17 @@ jobs:
           AZURE_AI_EXPECTED_PROJECT_NAME: ${{ vars.AZURE_AI_EXPECTED_PROJECT_NAME }}
           STAGE: ${{ inputs.stage }}
           RUN_ID: ${{ inputs.run_id }}
+          SHARD: ${{ matrix.shard }}
         run: |
           set -euo pipefail
           cd batch-runner
-          ARGS=(--stage "$STAGE" --into "$GITHUB_WORKSPACE/agentic-v2-run")
+          ARGS=(--stage "$STAGE" --shard "$SHARD" \
+                --into "$GITHUB_WORKSPACE/agentic-v2-run")
           if [ -n "$RUN_ID" ]; then
-            ARGS+=(--run-id "$RUN_ID")
+            # Namespaced per shard even when a run id was given. The shards are
+            # separate journals of separate tasks, and two jobs resuming the
+            # same journal name would be two writers on one file.
+            ARGS+=(--run-id "$RUN_ID-shard-$SHARD_SLUG")
           fi
           # `set +e` on purpose. A cohort where the model failed some tasks, or
           # stopped at a ceiling, is a finding this run exists to collect --
@@ -268,23 +351,36 @@ jobs:
 
       # Before the report, and `always()`, because an unrecorded spend is the
       # one outcome with no way back. Cost missing is partial, never zero.
+      #
+      # Named per shard because artifact names have to be unique within a run,
+      # and because a directory of seventeen indistinguishable `-run` archives
+      # is not a record of anything. The name says which piece it is and of
+      # what, so a missing one is visible from the list alone.
       - name: Keep the record, the journal and what was written
         if: ${{ always() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: agentic-v2-${{ inputs.stage }}-run
+          name: agentic-v2-${{ inputs.stage }}-shard-${{ env.SHARD_SLUG }}
           path: agentic-v2-run/
           if-no-files-found: warn
 
+      # This reports on one shard, and says so. A green job here means this
+      # piece finished, not that the stage ran: that sentence is only earned
+      # once every shard has reported and `coverage_problems` has been shown
+      # nothing was run twice and nothing was missed.
       - name: Report what happened
         if: ${{ always() }}
+        env:
+          SHARD: ${{ matrix.shard }}
         run: |
           set -euo pipefail
           STAGE_EXIT="${{ steps.run.outputs.stage_exit }}"
           if [ -z "$STAGE_EXIT" ]; then
-            echo "The run never recorded an exit code, so nothing here can say" \
-                 "what it did. Read the artifact, and treat the run as possibly" \
-                 "charged until it says otherwise."
+            echo "Shard $SHARD never recorded an exit code, so nothing here" \
+                 "can say what it did. Read the artifact, and treat the run as" \
+                 "possibly charged until it says otherwise."
             exit 1
           fi
+          echo "Shard $SHARD finished with $STAGE_EXIT. The stage is not" \
+               "finished until every shard has reported."
           exit "$STAGE_EXIT"

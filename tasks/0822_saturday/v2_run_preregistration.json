@@ -423,7 +423,7 @@
       "task_wording_comes_from": "the pinned dataset revision in `manifest`"
     },
     "read_from": "batch-runner/experiments/execution_envelope/agentic_stage_one_plan.yaml",
-    "read_from_sha256": "1bdd87afc76bb6122737400b5351d5b5de061ccea0edc25d7762fa280996dc38",
+    "read_from_sha256": "c213a96e7e0353b6b29d905a6b5d6b221d93654475ab6ce6436e5c7eeb268e46",
     "retry": {
       "kinds_recorded_separately": [
         "infrastructure",
@@ -456,7 +456,7 @@
     },
     "what_stops_a_task": "any per-task ceiling above, or the per-task budget, whichever comes first. A task stopped by a ceiling is recorded as stopped by that ceiling and is not a model failure"
   },
-  "seal": "54fa669216c22c9b50cae265a42c4d4eb9371b8e1dbfa8c9034f782a20e076af",
+  "seal": "6955e0f64bccdfe4138f1edade67a07c7d591c5e865328e43aa1a50ac64dcb87",
   "stop_rules": [
     "the deployment or model reported back differs from the pinned one",
     "a run switches model or deployment on its own",

@@ -2658,6 +2658,10 @@ because the arithmetic it came from never saw the larger cohort. The runner
 refuses any stage the plan has not priced and names the multiple. `trial_30`
 and `full_220` are refused today and stay refused until somebody writes their
 task ids and their own two amounts down.
+> **Superseded on 2026-09-11 by stage G below.** All three stages are now
+> priced for running, so this paragraph's last sentence no longer describes the
+> repository. The guard it describes was also replaced: it compared counts, and
+> now prices the cohort that is actually bound.
 
 **The conditions are now recorded before the run, not reconstructed after it.**
 `run_conditions` in the pre-registration holds the model, deployment, account,
@@ -2668,6 +2672,10 @@ record, and the ceilings come from `agentic_v2_conversation_runner.ceilings_from
 the same function that enforces them. Writing the arithmetic twice would let the
 promise and the enforcement drift apart with nothing to say so. Seal:
 `54fa669216c22c9b50cae265a42c4d4eb9371b8e1dbfa8c9034f782a20e076af`.
+> **That seal is no longer current** — pricing the two larger stages changed the
+> record it is taken over. It is left here because it is what stage F was
+> registered under. The current one is in stage G below, and the committed
+> artefact is the only thing worth verifying against.
 
 Writing it down caught one error in this document's own claims. The record said
 seven tools were offered, on the reasoning that `exec_run` is shut. Nothing in
@@ -2683,6 +2691,8 @@ so 220 tasks is up to 73 hours against a ceiling of six. The cohort has to be
 split across jobs. The runner already takes `--run-id` and resumes on it, so the
 mechanism exists, but the sharding and its pricing are not written down and the
 guard will keep refusing until they are.
+> **Done on 2026-09-11 — see stage G.** Seventeen shards, priced against the
+> whole stage.
 
 **What this stage does *not* mean.** No V2 task has run — this is the
 environment being made startable, which is not the tasks running, which is not
@@ -2697,3 +2707,166 @@ gap is closed before the larger cohorts; `advance_check_5` runs first anyway,
 because it is what proves route → model → tools → files → ceilings → receipts →
 deliverables → record end to end, and a printed handicap keeps model failure
 distinguishable from environment defect.
+
+### Stage G — the two larger cohorts made runnable, 2026-09-11. Not run.
+
+Stage F's exit condition is "5, then 30, then 220". At the end of stage F
+neither of the last two could start, for two separate reasons that had nothing
+to do with the model: nobody had priced them, and neither fits in a job. Both
+are now settled, before the spend rather than four hours into one. Nothing in
+this section has been run and nothing has been charged.
+
+**What the three stages actually cost.** Priced with the repository's own
+arithmetic (`price_the_options`, eight tool calls and 8192 output tokens per
+turn, every figure a worst case where every task runs to every ceiling):
+
+| stage | tasks | running, at most | approved for running | marking, at most |
+|---|---|---|---|---|
+| `advance_check_5` | 5 | $18.47 | $50.00 | $2,504.67 |
+| `trial_30` | 30 | $114.61 | $200.00 | $13,770.99 |
+| `full_220` | 220 | $884.62 | $1,400.00 | $98,057.32 |
+
+The finding is the last column. Running all 220 tasks costs at most **$884.62**,
+which is an ordinary amount and sits inside the standing approval for running
+this work. Marking the same 220 answers costs at most **$98,057.32** — 111 times
+more than producing them, and more than every other cost in this project put
+together, because the grader asks on the order of 115,000 model questions to
+score 220 deliverables.
+
+So running and marking were separated in the plan rather than carried as one
+figure. `advance_check_5` keeps both of its approved amounts. `trial_30` and
+`full_220` have a running amount and an explicit **null** for marking, each with
+a `grading_not_approved_because` beside it. A null with no reason is
+indistinguishable from a figure somebody forgot to fill in, and the two want
+opposite responses from whoever reads it next; the runner refuses a stage block
+that gives a null without a reason, and refuses one that is silent about marking
+altogether. Finishing 220 runs is one milestone. Marking them is another, and
+the second does not follow from the first having been paid for.
+
+**The guard was replaced, not extended.** It used to compare two counts: the
+cohort about to run against the five the plan pins, refusing anything larger and
+naming the multiple. That was right while only the five were priced and wrong in
+both directions afterwards — it would refuse a correctly priced larger stage, and
+it would pass a cohort of the approved *size* whose tasks had grown more
+expensive. `price_one_stage` now prices the cohort that is actually bound against
+the amount the plan approved for that stage by name, and a shortfall is reported
+in dollars: *"short by $X ... nothing here may scale an approved amount on its
+own."* Task ids are deliberately **not** repeated in the pricing block — they
+come from the sealed catalogue, and a second copy is a second thing that can
+drift.
+
+**Why the cohorts have to be split, and how.** The plan fixes
+`per_task_timeout_seconds: 1200` and a GitHub job is killed at six hours, so at
+worst thirteen tasks fit in one job. 30 tasks is ten hours run as one job; 220 is
+seventy-three. `core/agentic_v2_sharding.py` deals the cohort out by stride
+(`task_ids[i::n]`) rather than in blocks. Both lose the same number of tasks when
+a piece is lost; only the stride split leaves a remainder that can still be
+described, because the cohort is ordered by a selection rule that groups related
+work together and a block shard is therefore a run of one kind of task.
+
+`scripts/plan_agentic_v2_shards.py` works the count out from the plan's timeout
+and GitHub's limit rather than from a number typed into the workflow: one shard
+for the five, three for the thirty, seventeen for the two hundred and twenty,
+each at most 4.3 hours of worst case. `advance_check_5` gets a matrix of one and
+`--shard 1/1` is the unsharded run rather than a new code path, so the smallest
+stage — the one whose results will be quoted most, because it is the only one
+approved for marking — runs exactly as it did before any of this existed.
+
+**A shard is not a smaller stage,** and three things enforce that rather than
+one. It is priced against the whole cohort, so seventeen jobs that are each
+"within budget" cannot spend seventeen times the approval. Its record carries
+`cohort_size` and the sentence *"the stage has not run until all 17 shards have"*,
+because twelve task ids with no denominator is indistinguishable from a
+twelve-task experiment. And `coverage_problems` is what earns the sentence "the
+stage ran": every task covered exactly once, checked by identity rather than by
+adding up counts — two overlapping shards can report the right total between them
+while one task ran twice and another never ran at all.
+
+In the workflow, `fail-fast` is off because each job has already been charged for
+the turns it made and cancelling its siblings would throw away paid work;
+`max-parallel` is 4 because the whole matrix talks to one deployment and a
+throttled call is still a call that was made; and the three time limits are
+ordered — step 300 minutes, job 330, GitHub 360 — so that the thing which stops
+first is a *step*, since a failed step leaves the rest of the job to run and the
+rest of the job is where the record gets uploaded.
+
+**Current pre-registration seal:**
+`6955e0f64bccdfe4138f1edade67a07c7d591c5e865328e43aa1a50ac64dcb87`.
+
+**What this stage does *not* mean.** No task has run. This is the two larger
+cohorts becoming *startable*, which is not the tasks running, which is not the
+answers being marked — the same three milestones, still deliberately not merged.
+`exec_run` is still shut and no guest boots, so the isolation remains
+unexercised and `environment_note` still writes that weaker true sentence into
+every record. The reference-file handicap is unchanged and grows with the
+cohort: 2 of 5, 14 of 30, **125 of 220** tasks name files that are not staged
+into the workspace. Closing that gap is a precondition for reading `trial_30` or
+`full_220` as a measurement of the model rather than of the environment, and it
+is not closed by anything above.
+
+### Stage H — the reference-file gap, measured, 2026-09-11. Nothing staged yet.
+
+The sentence directly above has appeared in every V2 record for a week, in the
+same shape each time: *125 of 220 tasks name files that are not staged*. It is
+true and it is useless, because it does not say whether closing the gap is an
+afternoon's copying or a redesign. So it was measured rather than restated.
+`batch-runner/scripts/measure_agentic_reference_files.py` reads the pinned
+snapshot and prints the shape; it makes no network call and spends nothing.
+
+| | |
+|---|---|
+| Tasks naming reference files | 125 of 220 |
+| Named files missing from the pinned snapshot | **0** |
+| All of it together | 1,656.7 MB |
+| Per task | median 53.6 KB, p90 2.4 MB, max 919.8 MB |
+| Files per task | 1 to 17, 261 in total |
+| Of those files | 86 xlsx + 74 pdf + 67 docx = 227 |
+
+Three findings, in the order they change the plan.
+
+**The bytes are already here.** Zero named files are missing from the snapshot.
+They sit at `reference_files/<folder>/<name>` and resolve directly against the
+snapshot root the workflow already downloads. Nothing has to be fetched,
+reconstructed or asked for. This had been an open question — the paths could
+have been names for files held somewhere else — and it is now answered.
+
+*A caution about that folder name.* It is a 32-character hex string and it is
+**not** reliably a digest of the file: an earlier check found it matches
+`sha256[:32]` for about 61% of reference files and for none of the deliverable
+files, while the repository's own wording claims it always does. It is treated
+here as an opaque identifier and never verified as a hash, because presenting a
+self-computed match as provenance would be exactly the overclaim this task is
+under standing instruction to avoid.
+
+**It is not one problem 125 times.** The median task needs about fifty
+kilobytes. Take out the three heaviest tasks and the remaining 122 come to
+**154.5 MB between them** — less than a tenth of the total. For the large
+majority of affected tasks, staging is a file copy of a few office documents,
+bounded well under every limit `core/agentic_compute.py` sets
+(`MAX_INPUT_FILES = 256`, `MAX_INPUT_TOTAL = 2 GiB`). The p90 of 2.4 MB is the
+number to design against, not the 1.66 GB total.
+
+**One file cannot be delivered at all.** `TWT_A001_03.mp4`, 689.1 MB, in task
+`a941b6d8-4289-4500-b45a-f8e4fc94a724`, is larger than the compute contract's
+own `MAX_INPUT_SINGLE` of 536.9 MB. That limit is not a staging bug to be raised
+out of the way. A file that size is not something a model reads; delivering it
+would mean choosing what the model gets *instead* — a transcript, sampled
+frames, a summary — and that choice changes what the task measures. It will be
+recorded per task as an unmet need, with the substitution named if one is ever
+made, rather than silently truncated. Two further tasks carry 339.0 MB and
+243.4 MB of media that fit the single-file limit but will dominate their own
+run.
+
+**What this stage does *not* mean.** Not one byte has been staged. This is a
+measurement, and the code that would copy these files into a task's workspace
+does not exist yet; `core/agentic_v2_manifest_binding.py` still says in as many
+words that a bound task is one whose reference files are *named and not
+present*. What has changed is that the fix is now designable: a copy for 122
+tasks, a size decision for 3, and one file that needs a recorded judgement
+before `full_220` can be read as a measurement of the model. It is deliberately
+not in this PR — one open PR at a time, and this one is about sharding.
+
+Noted alongside it, unfixed: the workflow's `hf download` has no `--include`, so
+the `free` job pulls all 1.66 GB when it needs only the parquet, and each of up
+to seventeen paid shards pulls it again. That is runner minutes rather than
+model spend, but it is seventeen times a gigabyte and a half for no reason.

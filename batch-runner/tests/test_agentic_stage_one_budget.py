@@ -39,6 +39,7 @@ from core.agentic_v2_stage_one_budget import (  # noqa: E402
     budget_for_one_task,
     check_stage_one_cannot_reach_a_model,
     load_stage_one_plan,
+    price_one_stage,
     price_the_options,
     read_dispatcher_limits,
     run_stage_one_preflight,
@@ -1622,3 +1623,196 @@ def test_the_tool_can_report_itself_as_json():
     assert written["grading_approved_maximum_usd"] == "2600.00"
     assert written["chosen"] is not None
     assert len(written["options"]) > 0
+
+
+# ── Pricing a stage by name ────────────────────────────────────────────────
+#
+# The guard these cover replaced one that compared two task counts. The
+# counting version had the failure mode that matters here backwards: it refused
+# a larger stage even when that stage had been priced, and it would have passed
+# a cohort of the approved *size* whose tasks had grown more expensive. These
+# ask the only question worth asking — does the amount approved for this stage
+# cover the cohort that is about to run.
+
+
+def _priced_plan(**stage_overrides) -> dict:
+    """The committed plan, with its `stages` block swapped for a given one."""
+    plan = dict(load_stage_one_plan(STAGE_ONE_PLAN_PATH))
+    plan["stages"] = dict(stage_overrides)
+    return plan
+
+
+def test_every_registered_stage_in_the_committed_plan_is_priced_for_running(
+    catalog, assumptions, stage_one_plan
+):
+    """All three rungs, priced. An escalation with a gap cannot be climbed.
+
+    Read from the committed plan rather than a fixture, because the thing being
+    checked is that the real file carries the approvals — a fixture would pass
+    happily while the file that actually gates the run did not.
+    """
+    from core.agentic_v2_preregistration import ESCALATION, cohorts
+
+    groups = cohorts(catalog)
+    for stage in ESCALATION:
+        pricing = price_one_stage(
+            stage_one_plan,
+            stage=stage,
+            task_ids=groups[stage],
+            tasks_by_id=catalog.by_task_id(),
+            assumptions=assumptions,
+        )
+        assert pricing.may_run, (stage, pricing.problems)
+        assert pricing.approved_running_usd is not None
+        assert pricing.most_running_could_cost_usd <= pricing.approved_running_usd
+        assert pricing.headroom_usd >= 0
+
+
+def test_marking_is_approved_for_the_five_and_refused_with_a_reason_beyond_them(
+    catalog, assumptions, stage_one_plan
+):
+    """The asymmetry is the finding, so it is asserted rather than assumed.
+
+    Running two hundred and twenty tasks costs a few hundred dollars. Marking
+    them costs six figures, because the grader asks hundreds of questions per
+    answer. Those are two decisions and only one of them has been made.
+    """
+    from core.agentic_v2_preregistration import cohorts
+
+    groups = cohorts(catalog)
+
+    five = price_one_stage(
+        stage_one_plan, stage="advance_check_5", task_ids=groups["advance_check_5"],
+        tasks_by_id=catalog.by_task_id(), assumptions=assumptions,
+    )
+    assert five.approved_grading_usd is not None
+    assert five.grading_not_approved_because is None
+
+    for stage in ("trial_30", "full_220"):
+        bigger = price_one_stage(
+            stage_one_plan, stage=stage, task_ids=groups[stage],
+            tasks_by_id=catalog.by_task_id(), assumptions=assumptions,
+        )
+        assert bigger.approved_grading_usd is None, stage
+        # Refused *and* explained. A null with no reason is indistinguishable
+        # from a figure somebody forgot to write, and the two want opposite
+        # responses from whoever reads it next.
+        assert bigger.grading_not_approved_because, stage
+        assert bigger.may_run, (stage, bigger.problems)
+
+
+def test_the_five_task_amounts_are_one_figure_and_not_two_copies(stage_one_plan):
+    """``cost`` and ``stages.advance_check_5`` must not be able to disagree.
+
+    They are written as a YAML anchor and an alias, so they cannot. This holds
+    that property against somebody later replacing the alias with a literal
+    that looks identical on the day it is written.
+    """
+    cost = stage_one_plan["cost"]
+    entry = stage_one_plan["stages"]["advance_check_5"]
+
+    assert entry["running_approved_maximum_usd"] == cost["running_approved_maximum_usd"]
+    assert entry["grading_approved_maximum_usd"] == cost["grading_approved_maximum_usd"]
+
+
+def test_a_cohort_larger_than_its_approval_is_refused_with_the_shortfall(
+    catalog, assumptions
+):
+    """The number is the point. "Not priced" invites someone to wave it through."""
+    from core.agentic_v2_preregistration import cohorts
+
+    plan = _priced_plan(
+        full_220={
+            "running_approved_maximum_usd": 50.00,
+            "grading_approved_maximum_usd": None,
+            "grading_not_approved_because": "not asked for",
+        }
+    )
+
+    pricing = price_one_stage(
+        plan, stage="full_220", task_ids=cohorts(catalog)["full_220"],
+        tasks_by_id=catalog.by_task_id(), assumptions=assumptions,
+    )
+
+    assert not pricing.may_run
+    trouble = " ".join(pricing.problems)
+    assert "short by $" in trouble
+    assert "nothing here may scale an approved amount on its own" in trouble
+
+
+def test_a_stage_the_plan_never_mentions_is_refused_by_name(catalog, assumptions):
+    plan = _priced_plan(advance_check_5={"running_approved_maximum_usd": 50.00,
+                                         "grading_approved_maximum_usd": 2600.00})
+
+    pricing = price_one_stage(
+        plan, stage="trial_30", task_ids=("a", "b"),
+        tasks_by_id=catalog.by_task_id(), assumptions=assumptions,
+    )
+
+    assert not pricing.may_run
+    trouble = " ".join(pricing.problems)
+    assert "'trial_30'" in trouble
+    assert "whatever their relative sizes" in trouble
+
+
+def test_silence_about_marking_is_refused_but_a_reasoned_refusal_is_not(
+    catalog, assumptions
+):
+    """Absent and null are different answers, and only one is a mistake.
+
+    Marking costs many times what running does, so a stage block that simply
+    never mentions it is the one shape this may not take: it reads as approved
+    to anybody who does not already know the number.
+    """
+    from core.agentic_v2_preregistration import cohorts
+
+    ids = cohorts(catalog)["advance_check_5"]
+    silent = price_one_stage(
+        _priced_plan(advance_check_5={"running_approved_maximum_usd": 50.00}),
+        stage="advance_check_5", task_ids=ids,
+        tasks_by_id=catalog.by_task_id(), assumptions=assumptions,
+    )
+    assert not silent.may_run
+    assert "says nothing about marking" in " ".join(silent.problems)
+
+    unexplained = price_one_stage(
+        _priced_plan(advance_check_5={
+            "running_approved_maximum_usd": 50.00,
+            "grading_approved_maximum_usd": None,
+        }),
+        stage="advance_check_5", task_ids=ids,
+        tasks_by_id=catalog.by_task_id(), assumptions=assumptions,
+    )
+    assert not unexplained.may_run
+    assert "gives no reason" in " ".join(unexplained.problems)
+
+    explained = price_one_stage(
+        _priced_plan(advance_check_5={
+            "running_approved_maximum_usd": 50.00,
+            "grading_approved_maximum_usd": None,
+            "grading_not_approved_because": "nobody has asked for the answers "
+                                            "to be marked yet",
+        }),
+        stage="advance_check_5", task_ids=ids,
+        tasks_by_id=catalog.by_task_id(), assumptions=assumptions,
+    )
+    assert explained.may_run, explained.problems
+
+
+def test_a_plan_with_no_stages_block_refuses_rather_than_passing_by_default(
+    catalog, assumptions
+):
+    """The state the file was in before any stage was priced by name.
+
+    A guard whose absent configuration means "allow" is not a guard.
+    """
+    plan = dict(load_stage_one_plan(STAGE_ONE_PLAN_PATH))
+    plan.pop("stages", None)
+
+    pricing = price_one_stage(
+        plan, stage="advance_check_5", task_ids=("a",),
+        tasks_by_id=catalog.by_task_id(), assumptions=assumptions,
+    )
+
+    assert not pricing.may_run
+    assert "no `stages` block" in " ".join(pricing.problems)

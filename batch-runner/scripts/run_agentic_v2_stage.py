@@ -78,9 +78,12 @@ from core.agentic_v2_route_check import (  # noqa: E402
     check_route_is_the_one_the_plan_fixed,
 )
 from core.agentic_v2_run_driver import DriverRefused, run_manifest  # noqa: E402
+from core.agentic_v2_sharding import ShardRefused  # noqa: E402
+from core.agentic_v2_sharding import parse as parse_shard  # noqa: E402
 from core.agentic_v2_stage_one_budget import (  # noqa: E402
     STAGE_ONE_PLAN_PATH,
     load_stage_one_plan,
+    price_one_stage,
     run_stage_one_preflight,
 )
 from core.execution_envelope_cost import (  # noqa: E402
@@ -229,33 +232,37 @@ def verdict_for(plan_path: Path):
     return plan, result, catalog
 
 
-def check_the_plan_priced_this_stage(plan: dict, bound) -> list[str]:
+def check_the_plan_priced_this_stage(plan: dict, stage: str, bound, catalog) -> list[str]:
     """Whether the amounts approved describe the run about to happen.
 
-    The free check prices the tasks the plan pins, which is the five-task
-    cohort. Its figures are per-run, not per-task, so a thirty-task or
-    two-hundred-and-twenty-task stage run under them would go out against an
-    approval worked out for a run forty-four times smaller — and the printed
-    line would say it was within budget, because the arithmetic it came from
-    never saw the larger cohort.
+    The plan prices each stage by name, and the figures are per-run rather than
+    per-task. So a thirty-task or two-hundred-and-twenty-task stage run under
+    the five-task stage's approval would go out against a figure worked out for
+    a run forty-four times smaller — and the printed line would say it was
+    within budget, because the arithmetic it came from never saw the larger
+    cohort.
 
-    Caught here rather than by scaling the figure, because scaling would be
-    this script deciding what a bigger run costs. Prices come from the plan.
-    When stage thirty and stage two-twenty are to be run, the plan gains their
-    task ids and their two approved amounts, and this stops refusing them.
+    Caught by pricing the cohort that is actually bound, rather than by
+    comparing counts. Counting was the earlier version of this check and it was
+    weaker in both directions: it refused a correctly priced larger stage, and
+    it would have waved through a same-sized cohort whose tasks had grown more
+    expensive. Prices come from the plan; nothing here scales an approved
+    amount on its own.
     """
-    priced = {str(task_id) for task_id in (plan.get("task_ids") or ())}
-    binding = set(bound.task_ids)
-    if priced == binding:
-        return []
-    return [
-        f"the plan prices {len(priced)} tasks and this stage binds "
-        f"{len(binding)}, so the approved amounts do not describe this run. "
-        "They are whole-run figures, not per-task ones, and running "
-        f"{len(binding)} tasks under them would spend roughly "
-        f"{len(binding) / max(len(priced), 1):.0f} times what was approved. "
-        "Price this cohort in the plan first."
-    ]
+    shared_plan_path = BATCH_RUNNER_ROOT / str(
+        plan.get("cost", {}).get("assumptions_come_from")
+        or "experiments/execution_envelope/advance_check_plan.yaml"
+    )
+    pricing = price_one_stage(
+        plan,
+        stage=stage,
+        task_ids=bound.task_ids,
+        tasks_by_id=catalog.by_task_id(),
+        assumptions=CostAssumptions.from_mapping(
+            load_plan(shared_plan_path)["cost"]["assumptions"]
+        ),
+    )
+    return pricing, list(pricing.problems)
 
 
 def main() -> int:
@@ -288,6 +295,16 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "--shard",
+        default=None,
+        help=(
+            "Run one piece of the stage, written index/total like 3/17. The "
+            "cohort is dealt out one task at a time, so every shard holds a "
+            "slice of the whole rather than a run of neighbours. Left out, or "
+            "given as 1/1, the whole stage runs in this one process."
+        ),
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help=(
@@ -305,12 +322,26 @@ def main() -> int:
             catalog=catalog,
             catalog_digest=catalog_sha256(),
         )
-        unpriced = check_the_plan_priced_this_stage(plan, bound)
+        # Priced over the whole stage, never over the shard. A shard is a way of
+        # fitting the run into the place it has to happen, not a smaller
+        # purchase — pricing each piece separately would let seventeen runs that
+        # are each "within budget" spend seventeen times the approval.
+        pricing, unpriced = check_the_plan_priced_this_stage(
+            plan, args.stage, bound, catalog
+        )
         if unpriced:
             raise StageRefused("\n  - ".join(["this stage is not priced:", *unpriced]))
-    except (StageRefused, ManifestRefused) as refusal:
+        shard = parse_shard(args.shard, bound.task_ids)
+    except (StageRefused, ManifestRefused, ShardRefused) as refusal:
         print(f"Refused before spending anything.\n\n{refusal}")
         return 1
+
+    tasks_to_run = bound.tasks
+    if shard is not None:
+        wanted = set(shard.task_ids)
+        tasks_to_run = tuple(
+            task for task in bound.tasks if task.task_id in wanted
+        )
 
     chosen = verdict.chosen
     ceilings = ceilings_from(plan, chosen)
@@ -329,22 +360,34 @@ def main() -> int:
     print(f"Agentic Sandbox V2 — stage {args.stage}")
     print("=" * 74)
     print(f"  tasks          {len(bound.tasks)}, sealed as {bound.binding_seal()[:16]}")
+    if shard is not None:
+        print(
+            f"  shard          {shard.index} of {shard.of} — this run does "
+            f"{len(tasks_to_run)} of them, and the stage has not run until "
+            "every shard has"
+        )
     print(f"  dataset        revision {DATASET_REVISION[:12]}")
     print(f"  deployment     {deployment} at {resource}")
     print(
         f"  settings       {chosen.tool_calls_per_attempt} tool calls, "
         f"{chosen.max_output_tokens_per_turn} tokens per turn"
     )
-    priced = chosen.as_dict()
+    # The stage's own figures, not the five-task plan's. Those two are the same
+    # number only for advance_check_5, and printing the wrong one beside a
+    # two-hundred-task run is how a stage gets described as affordable.
+    money = pricing.as_dict()
     print(
-        f"  running        at most ${priced['most_running_could_cost_usd']} "
-        f"against ${verdict.as_dict()['running_approved_maximum_usd']} approved"
+        f"  running        at most ${money['most_running_could_cost_usd']} "
+        f"against ${money['approved_running_usd']} approved for the whole stage"
     )
-    print(
-        f"  marking        at most ${priced['most_grading_could_cost_usd']} "
-        f"against ${verdict.as_dict()['grading_approved_maximum_usd']} "
-        "approved, and not spent by this script"
-    )
+    if money["approved_grading_usd"] is not None:
+        print(
+            f"  marking        at most ${money['approved_grading_usd']} "
+            "approved, and not spent by this script"
+        )
+    else:
+        print("  marking        not approved for this stage, and not spent here")
+        print(f"                 {money['grading_not_approved_because']}")
     print(f"  isolation      none — fixture backend, exec_run shut")
     print(
         f"  handicap       {needs['tasks_needing_reference_files_count']} of "
@@ -457,7 +500,7 @@ def main() -> int:
             )
 
         outcome = run_manifest(
-            bound.tasks,
+            tasks_to_run,
             run_id=run_id,
             runner_factory=factory,
             journal_path=into / "journal.jsonl",
@@ -478,6 +521,22 @@ def main() -> int:
         "run_id": run_id,
         "dataset_revision": DATASET_REVISION,
         "binding": binding_record(bound),
+        # Present even when the run is not sharded, so that a reader never has
+        # to infer from silence whether a record covers the whole stage.
+        "shard": (
+            shard.as_dict()
+            if shard is not None
+            else {
+                "index": 1,
+                "of": 1,
+                "task_count": len(tasks_to_run),
+                "cohort_size": len(bound.tasks),
+                "task_ids": list(bound.task_ids),
+                "covers_whole_stage": True,
+                "what_this_run_is": "the whole stage, in one run",
+            }
+        ),
+        "approved_amounts": pricing.as_dict(),
         "environment": environment_note(profile),
         "route_fingerprint": managed.runtime_fingerprint,
         "chosen_settings": chosen.as_dict(),
@@ -490,8 +549,13 @@ def main() -> int:
     summary = outcome.summary
     print()
     print(f"  record         {into / 'run_record.json'}")
-    print(f"  finished       {summary.get('succeeded', 0)} of {len(bound.tasks)}")
+    print(f"  finished       {summary.get('succeeded', 0)} of {len(tasks_to_run)}")
     print(f"  spent          {held.spent}")
+    if shard is not None:
+        print(
+            f"\nThis was shard {shard.index} of {shard.of}. The stage has not "
+            "run until the others have and their coverage has been checked."
+        )
     if outcome.stopped is not None:
         print(f"\nStopped early: {outcome.stopped.detail}")
         return 1

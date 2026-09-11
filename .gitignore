@@ -213,6 +213,23 @@ batch-runner/scripts/*
 # needs no credential.
 !batch-runner/scripts/run_agentic_v2_stage.py
 
+# Works out how many jobs a stage has to be split across, from the plan's
+# per-task timeout and GitHub's six-hour job limit, and prints the matrix the
+# stage-run workflow fans out over. Committed because that number decides
+# whether a paid run finishes or is killed with four hours of charged
+# conversation in it, and because a matrix nobody can re-derive is a matrix
+# nobody can check. Reads two files and makes no network call.
+!batch-runner/scripts/plan_agentic_v2_shards.py
+
+# Measures the one thing standing between a stage that runs and a stage whose
+# results mean something: the reference files a task names are not yet present
+# where the model can open them. Committed because the shape of that gap -- how
+# many tasks, how many bytes, and the one file no staging can deliver under the
+# compute contract's own limits -- is what the fix gets designed against, and
+# because every figure in it has a cheap wrong answer. Reads the pinned
+# snapshot, makes no network call and spends nothing.
+!batch-runner/scripts/measure_agentic_reference_files.py
+
 
 # Experiment report HTML (skews GitHub language stats)
 batch-runner/results/*/report/report.html
