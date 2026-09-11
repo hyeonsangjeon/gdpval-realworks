@@ -177,6 +177,36 @@ RETRYABLE_INFRA_ERROR_CATEGORIES = frozenset({
     "turn_start_failed",
 })
 
+#: The failures a resume round must not pick up.
+#:
+#: Resume rounds are a second mechanism, further out than the infra retries
+#: above: after a whole pass, `_get_failed_task_ids` gathers the tasks that
+#: did not end on `success` and runs them again. It gathered them by *status*
+#: alone -- `RETRIABLE_STATUSES` -- and never looked at why the task failed,
+#: which meant it did not honour the one rule stated next to
+#: `RETRYABLE_INFRA_ERROR_CATEGORIES`: that `content_filtered` must never be
+#: retried. Run `34540053904` has the shape of what that gathers -- task
+#: `11e1b169` ended `{"status": "error", "error_category": "content_filtered"}`
+#: and matches `RETRIABLE_STATUSES` exactly.
+#:
+#: Retrying that task does not recover a lost result. The provider read the
+#: answer and stopped it, which is an outcome the benchmark is asking for, so
+#: asking again until something gets through replaces one benchmark outcome
+#: with a different one and raises the score by the difference.
+#:
+#: `execution.resume_max_rounds` defaults to 3 in `core/experiment_config.py`,
+#: so before this set existed the protection was that every experiment file
+#: remembered to write `resume_max_rounds: 0`. exp034 and exp035 both do, and
+#: exp035 writes out why at length rather than omitting the key. That is a
+#: real precaution and it is also one an author has to know to take; a file
+#: that simply leaves the key out retries filtered tasks quietly.
+#:
+#: Only this one category is here. Every other failure is mechanical -- the
+#: connection broke, the runtime died, the deadline passed -- and asking again
+#: is an attempt at the same question. This one is the provider deciding about
+#: the content, and that decision *is* the result.
+NON_RESUMABLE_ERROR_CATEGORIES = frozenset({"content_filtered"})
+
 #: How long to wait before each infrastructure retry, by attempt.
 #:
 #: The first is sixty seconds because an Azure OpenAI rate limit is counted
@@ -2877,16 +2907,51 @@ def validate_restored_checkpoint(condition_key: str = "condition_a") -> dict:
 # ── Progress helpers ───────────────────────────────────────────────────────
 
 
+def _resume_refusal_category(result: dict) -> Optional[str]:
+    """The reason this result must not be run again, or ``None``.
+
+    Reads the same place `infra_retry_category` reads, so the two mechanisms
+    agree about what a task's failure was even though they disagree about what
+    to do with most of them.
+
+    A result that says nothing about why it failed is resumable. Unknown is
+    not treated as filtered here: `classify_execution_error` returns ``None``
+    for text it does not recognise, and a `pending` task never ran at all, so
+    refusing on absence would quietly turn resume off for the ordinary
+    failures it exists to recover.
+    """
+    if not isinstance(result, dict):
+        return None
+    observability = result.get("observability")
+    if not isinstance(observability, dict):
+        return None
+    category = observability.get("error_category")
+    if category in NON_RESUMABLE_ERROR_CATEGORIES:
+        return str(category)
+    return None
+
+
 def _get_failed_task_ids(progress: dict) -> list:
-    """progress.json에서 retriable status 태스크 추출."""
+    """progress.json에서 retriable status 태스크 추출.
+
+    A retriable status is necessary but not sufficient: a task the provider
+    stopped for content carries `status: "error"` and is skipped here, because
+    running it again would replace a benchmark outcome rather than recover a
+    lost one. See `NON_RESUMABLE_ERROR_CATEGORIES`.
+    """
     failed = []
     for r in progress.get("results", []):
-        if r.get("status") in RETRIABLE_STATUSES:
-            failed.append({
-                "task_id": r["task_id"],
-                "status": r["status"],
-                "error": r.get("error", ""),
-            })
+        if r.get("status") not in RETRIABLE_STATUSES:
+            continue
+        refused = _resume_refusal_category(r)
+        if refused is not None:
+            print(f"   ⏭️  {r['task_id']}: not resumed ({refused})")
+            continue
+        failed.append({
+            "task_id": r["task_id"],
+            "status": r["status"],
+            "error": r.get("error", ""),
+        })
     return failed
 
 
