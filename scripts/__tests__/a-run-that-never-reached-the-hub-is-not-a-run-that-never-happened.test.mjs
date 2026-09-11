@@ -175,6 +175,12 @@ test('an unpriced run publishes no dollar figure rather than a zero', async () =
   // model_price_table.json`, so the receipt comes back `partial`. What must
   // not happen is the absence being rounded into a number: a $0.00 beside
   // nine million real tokens reads as a free run.
+  //
+  // The raw report does carry `known_cost_usd: 0` here, and that is not a bug
+  // to fix in the file — step 6 fills every money field on every status, and
+  // `measuredAmount` in cost-receipt.mjs drops a zero under any status but
+  // `complete` precisely so it never reaches a reader as $0.0000. What is
+  // checked below is the part the read layer cannot rescue.
   const reports = await publishedReports();
 
   for (const report of neverPublished(reports)) {
