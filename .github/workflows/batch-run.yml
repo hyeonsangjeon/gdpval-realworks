@@ -98,7 +98,32 @@ jobs:
             [[ -z "$SANDBOX_IMAGE_DIGEST" ]]
           else
             [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
-            [[ "$SOURCE_SHA" == "$EVENT_SHA" ]]
+            # What used to stand here was `SOURCE_SHA == EVENT_SHA`, and it is
+            # gone on purpose. The two are only equal while nothing has landed
+            # on main since the first leg started, and `gh workflow run
+            # --ref main` resolves main afresh at every handover, so a single
+            # unrelated commit -- a README line -- ended the run. That is not
+            # theoretical: run 34540053904 started at a21eec3 and main had
+            # moved twice before its first leg was over.
+            #
+            # The assertion was protecting something real, which is that a
+            # relay leg must run the same pipeline as the leg it is continuing.
+            # Commit identity was a proxy for that, and a coarse one: it fails
+            # on every commit, including the ones that change nothing this run
+            # can reach. The guarantee now comes from `Pin pipeline source to
+            # the first leg` in the batch-run job, which checks out this exact
+            # `SOURCE_SHA`'s `batch-runner/` tree instead of main's. That is
+            # stronger than what commit equality bought -- equality let the leg
+            # run main's newer code as long as nobody had pushed yet, which was
+            # luck rather than a guarantee.
+            #
+            # Two things the pin cannot cover are checked in `Verify relay
+            # source lineage` below, immediately after the checkout that gives
+            # it a git history to read: that `SOURCE_SHA` is an ancestor of
+            # this event (so a leg cannot be pointed at a commit that was never
+            # on main), and that the workflow file itself has not changed
+            # between them (GitHub runs the dispatch ref's copy of this file,
+            # so it is the one thing a checkout cannot pin).
             [[ "$RELAY_LINEAGE_ID" =~ ^[A-Za-z0-9._:-]{1,256}$ ]]
             if [[ -n "$SANDBOX_IMAGE_DIGEST" ]]; then
               [[ "$SANDBOX_IMAGE_DIGEST" =~ ^ghcr\.io/hyeonsangjeon/gdpval-sandbox@sha256:[0-9a-f]{64}$ ]]
@@ -109,11 +134,57 @@ jobs:
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           persist-credentials: false
+          # A relay leg needs history: the two things checked below are both
+          # comparisons against a commit that is no longer the tip.
+          #
+          # Unconditional rather than conditional on `relay_run`, because the
+          # obvious conditional is wrong in a way that is hard to see.
+          # `${{ inputs.relay_run > 0 && 0 || 1 }}` always renders 1: Actions'
+          # `a && b || c` returns `c` whenever `b` is falsy, and 0 is falsy. A
+          # relay leg would then get the shallow clone, fail `merge-base
+          # --is-ancestor`, and die -- safely, but hours into a paid run. The
+          # whole history is a few seconds against a leg that runs for hours.
+          fetch-depth: 0
 
       - name: Verify exact config checkout
         run: |
           set -euo pipefail
           [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]]
+
+      - name: Verify relay source lineage
+        if: inputs.relay_run > 0
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          # An ancestor, not merely a commit that exists. The checkpoint is
+          # addressed by `sha256(source_sha, lineage_id)`, so a caller who
+          # could name any commit could also name one that was never reviewed
+          # onto main and have the leg run it. `main` only moves forward here
+          # -- no force-push, no rewritten history -- so leg zero's sha is an
+          # ancestor of every later tip, and anything that is not is either a
+          # mistake or somebody else's branch.
+          git merge-base --is-ancestor "$SOURCE_SHA" "$GITHUB_SHA"
+          # The one file the pin below cannot reach. GitHub runs the copy of
+          # this workflow that lives at the dispatch ref, and the dispatch ref
+          # has to be main -- checked above, and not something to relax. So if
+          # this file changed between the first leg and now, the leg would be
+          # orchestrated by steps the first leg never ran, and no amount of
+          # checking out `batch-runner/` fixes that. Blob ids rather than
+          # hashing the bytes: git has already hashed them.
+          source_workflow="$(git rev-parse "$SOURCE_SHA:.github/workflows/batch-run.yml")"
+          event_workflow="$(git rev-parse "$GITHUB_SHA:.github/workflows/batch-run.yml")"
+          if [[ "$source_workflow" != "$event_workflow" ]]; then
+            echo "::error::batch-run.yml changed since the first leg" \
+                 "($SOURCE_SHA -> $GITHUB_SHA). A relay leg runs main's copy of" \
+                 "this file, so it cannot be pinned; the run stops here rather" \
+                 "than continue under different orchestration. The completed" \
+                 "work is in the checkpoint. Revert the workflow change, or" \
+                 "start the experiment again."
+            exit 1
+          fi
+          echo "Relay source $SOURCE_SHA is an ancestor of $GITHUB_SHA" \
+               "and batch-run.yml is unchanged between them."
 
       - name: Inspect execution mode without credentials
         id: mode
@@ -256,11 +327,53 @@ jobs:
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           persist-credentials: false
+          # History, so the pin below has a `SOURCE_SHA` to read. Unconditional
+          # for the reason spelled out on the inspect-mode checkout: the
+          # conditional form of this line is silently always-shallow.
+          fetch-depth: 0
 
       - name: Verify exact checkout
         run: |
           set -euo pipefail
           [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]]
+
+      - name: Pin pipeline source to the first leg
+        if: inputs.relay_run > 0
+        run: |
+          set -euo pipefail
+          # HEAD stays on main's tip -- the step above has already asserted
+          # that, and the result pull request created at the end of the final
+          # leg is branched from it. Only the *contents* of `batch-runner/` are
+          # rolled back, to exactly what the first leg ran.
+          #
+          # Why this is not paranoia about other people's merges: the relay
+          # hands a half-finished run from one runner to the next. Before this
+          # step the next leg picked up main's current `batch-runner/`, so a
+          # merge landing mid-run silently changed the pipeline between task 40
+          # and task 41 of the same experiment, and the record would have said
+          # one experiment ran one way. Nothing announced it.
+          #
+          # Deleting the files added since matters as much as restoring the
+          # ones that changed. `git checkout <sha> -- <path>` writes and
+          # overwrites but never removes, so without this a module that did not
+          # exist in the first leg would still be importable in the next one.
+          added="$(git diff --name-only --diff-filter=A \
+                     "$SOURCE_SHA_INPUT" "$GITHUB_SHA" -- batch-runner)"
+          if [[ -n "$added" ]]; then
+            while IFS= read -r path; do
+              rm -f -- "$path"
+            done <<< "$added"
+          fi
+          git checkout "$SOURCE_SHA_INPUT" -- batch-runner
+          # Unstage. `git checkout <sha> -- <path>` stages what it wrote, and
+          # create-pull-request commits the index it finds. Leaving these
+          # staged would put a rollback of everyone else's `batch-runner/`
+          # work into the results pull request. The working tree keeps the
+          # first leg's files; the index goes back to matching HEAD.
+          git reset -q HEAD -- batch-runner
+          changed="$(git diff --name-only -- batch-runner | wc -l)"
+          echo "Pinned batch-runner/ to $SOURCE_SHA_INPUT:" \
+               "$changed file(s) differ from $GITHUB_SHA."
 
       - name: Setup Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
