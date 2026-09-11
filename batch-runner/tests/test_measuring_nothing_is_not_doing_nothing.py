@@ -439,16 +439,54 @@ def test_the_published_receipts_are_the_shape_that_used_to_disappear():
     assert moved, "expected the published receipts to include the shape this fixes"
 
 
-def test_no_payload_on_disk_carries_a_summary_this_function_wrote():
+def _carries_a_run_summary(doc) -> bool:
+    """True if any node is a summary ``summarize_cost_receipts`` wrote."""
+    stack = [doc]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, dict):
+            if "receipt_tasks" in node and "coverage_pct" in node:
+                return True
+            stack.extend(node.values())
+        elif isinstance(node, list):
+            stack.extend(node)
+    return False
+
+
+def _is_frozen_run_report(name: str) -> bool:
+    """A step 6 report committed because its run never published one.
+
+    A ``dry_run`` dispatch makes the paid calls and writes the whole report,
+    then skips step 7, so no HuggingFace dataset is ever created for it. With
+    the run artifact expiring after 30 days the committed file is the only
+    record left, which is why ``.gitignore`` names one and only one of these.
+    """
+    return name.startswith("batch-runner/results/") and name.endswith(
+        "/report/report_data.json"
+    )
+
+
+def test_no_live_payload_carries_a_summary_this_function_wrote():
     """So no published file changes what it says.
 
     ``summarize_cost_receipts`` is reached only from ``step3_format_results``
-    and ``step6_report``, both on the inference side, and their output lands in
-    ``results/`` on the runner rather than in this repository. The grade
-    payloads that *are* committed carry a summary written by
+    and ``step6_report``, both on the inference side. Their output lands in
+    ``results/`` on the runner, and for every run that reached step 7 it stays
+    there: the hub holds the copy and ``.gitignore`` keeps the local one out.
+    The grade payloads that *are* committed carry a summary written by
     ``core.cost_receipts.summarise_receipts``, which has always applied the
     rule this change ports. The receipts above are therefore real evidence of
-    the shape, and the blast radius on committed files is still zero.
+    the shape.
+
+    The blast radius on committed files is no longer zero, and the exception is
+    deliberate. A run dispatched ``dry_run: true`` never reaches step 7, so it
+    has no copy on the hub and its report is committed instead. That file is a
+    frozen record of one run rather than a live payload, and freezing is the
+    point: if this function's rules change afterwards, what exp034 measured in
+    September must not change with them. The summary says under which rules it
+    was written -- ``schema_version`` and ``price_table_sha256`` both travel
+    inside it -- so a reader is not left guessing, and that is the condition
+    the exemption is checked against below.
 
     Committed means tracked, not present. This walked the directory tree, which
     also reaches build output: ``public/generated/reports-index.json`` carries
@@ -463,6 +501,7 @@ def test_no_payload_on_disk_carries_a_summary_this_function_wrote():
     ).stdout.split("\0")
 
     found = []
+    frozen_with_summary = []
     for name in tracked:
         if not name:
             continue
@@ -471,14 +510,27 @@ def test_no_payload_on_disk_carries_a_summary_this_function_wrote():
             doc = json.loads(path.read_text("utf-8"))
         except (ValueError, UnicodeDecodeError, OSError):
             continue
-        stack = [doc]
-        while stack:
-            node = stack.pop()
-            if isinstance(node, dict):
-                if "receipt_tasks" in node and "coverage_pct" in node:
-                    found.append(path)
-                    break
-                stack.extend(node.values())
-            elif isinstance(node, list):
-                stack.extend(node)
+        if not _carries_a_run_summary(doc):
+            continue
+        if _is_frozen_run_report(name):
+            frozen_with_summary.append((name, doc))
+        else:
+            found.append(path)
+
     assert found == [], f"a committed payload now carries a run-level summary: {found}"
+
+    # Teeth. If no frozen report carries one, the exemption above is covering
+    # nothing and the assertion would have passed without it -- which is the
+    # state this test was in before a dry run's report was ever committed.
+    assert frozen_with_summary, (
+        "no committed run record carries a summary; the exemption is now dead "
+        "and should be removed rather than left reading as coverage"
+    )
+
+    # And the exemption only holds while the frozen figure says under which
+    # rules it was computed. Without that a stale number is unreadable rather
+    # than merely old.
+    for name, doc in frozen_with_summary:
+        summary = doc["cost_summary"]["problem_solving_cost"]
+        assert summary["schema_version"], f"{name} froze a summary with no schema version"
+        assert summary["price_table_sha256"], f"{name} froze a summary with no price table"
