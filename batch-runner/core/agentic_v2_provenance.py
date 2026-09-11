@@ -102,6 +102,86 @@ def canonical_sha256(value: Any) -> str:
     ).hexdigest()
 
 
+# ── which standard a result was verified under ────────────────────────────
+#
+# The foundation backend is a fixture, so a result it reports can be checked
+# the strongest way there is: run the same tool call again against a known
+# simulation and require the entire envelope to match, byte for byte. That is
+# `_verify_fixture_result_semantics`, and it is why a foundation run can be
+# called verified without qualification.
+#
+# It does not generalise. `core/agentic_v2_microvm_backend.py` boots a real
+# guest, and three parts of a real result cannot be predicted by anything in
+# this process: the bytes a command actually wrote, the time it actually took,
+# and the state of a filesystem that is not a dict in memory. Re-simulation is
+# not merely expensive there -- it is not defined.
+#
+# So a second backend needs a second standard, and the important property is
+# that the standard is *named in the run record* rather than assumed by the
+# reader. A run that says "verified" is making a claim, and the claim is
+# different for a fixture than for a guest. Writing the name down is what keeps
+# the weaker claim from being read as the stronger one.
+RESULT_STANDARD_FIXTURE_REPLAY = "fixture-replay-v1"
+RESULT_STANDARD_ATTESTED_EXECUTION = "attested-execution-v1"
+
+# What each standard actually checks, in the record's own words, so that the
+# answer to "verified how?" does not live only in a reviewer's memory.
+RESULT_STANDARD_COVERAGE: dict[str, dict[str, tuple[str, ...]]] = {
+    RESULT_STANDARD_FIXTURE_REPLAY: {
+        "checks": (
+            "the whole result envelope equals a re-simulation of the same call",
+            "every field below, as a consequence of that equality",
+        ),
+        "does_not_check": (),
+    },
+    RESULT_STANDARD_ATTESTED_EXECUTION: {
+        "checks": (
+            "the envelope's shape and its declared schema version",
+            "request_sha256 recomputed from the committed request",
+            "result_sha256 recomputed over the envelope's own fields",
+            "the result data against the tool contract's schema",
+            "output_bytes equals the encoded length of the data reported",
+            "the state chain: state_before continues the run, state_after is "
+            "what the event records",
+            "the tool-call budget, counted the same way for every backend",
+            "the 64 KiB result ceiling and the error it must produce",
+        ),
+        "does_not_check": (
+            "that the data is what the command should have produced -- no "
+            "party to this process knows that",
+            "wall_ms against any particular value, because a real command "
+            "takes real time",
+            "the state digest against a re-simulation, because the state is a "
+            "real filesystem rather than a ledger in memory",
+        ),
+    },
+}
+
+# The standard is chosen by backend id, explicitly, with no default. An
+# unmapped backend raises rather than falling through to the weaker standard:
+# silently verifying a new backend less than its author intended is exactly the
+# failure this whole arrangement exists to prevent, and a KeyError at startup
+# is a much better outcome than a run record that overclaims.
+_RESULT_STANDARD_BY_BACKEND: dict[str, str] = {
+    FOUNDATION_BACKEND_ID: RESULT_STANDARD_FIXTURE_REPLAY,
+}
+
+
+def result_verification_standard(backend_id: Any) -> str:
+    """Name the standard a backend's results are verified under.
+
+    Raises for a backend nobody has assigned a standard to -- see the comment
+    on `_RESULT_STANDARD_BY_BACKEND` for why that is the desired behaviour
+    rather than an inconvenience.
+    """
+    try:
+        return _RESULT_STANDARD_BY_BACKEND[backend_id]
+    except (KeyError, TypeError):
+        raise ValueError(
+            "agentic v2 backend has no declared result verification standard"
+        ) from None
+
+
 def validate_failure_stage(error_type: Any, stage: Any) -> tuple[str, str]:
     if (
         not isinstance(error_type, str)
@@ -843,7 +923,7 @@ def _verify_private_result_semantics(
             )
         except ValueError as exc:
             raise ValueError("agentic v2 result data mismatch") from exc
-        _verify_fixture_result_semantics(
+        _verify_result_semantics_under_standard(
             request_name,
             validated_arguments,
             result,
@@ -861,16 +941,9 @@ def _verify_private_result_semantics(
 
     usage = result.get("usage_delta") or {}
     executed = usage.get("tool_calls") == 1
-    if executed and usage != {
-        "tool_calls": 1,
-        "wall_ms": 0,
-        "output_bytes": len(json.dumps(
-            result.get("data"),
-            sort_keys=True,
-            separators=(",", ":"),
-            allow_nan=False,
-        ).encode("utf-8")),
-    }:
+    if executed and not _valid_executed_usage(
+        usage, result.get("data"), _standard_for(started_payload)
+    ):
         raise ValueError("agentic v2 result usage mismatch")
     state_before = result.get("state_before_sha256")
     state_after = result.get("state_after_sha256")
@@ -970,6 +1043,104 @@ def _valid_budget_capabilities(value: Any, budget_caps: Any) -> bool:
         f"tool_calls={budget_caps['tool_calls']}",
         f"wall_seconds={budget_caps['wall_seconds']}",
     ]
+
+
+def _standard_for(started_payload: Any) -> str:
+    if not isinstance(started_payload, dict):
+        raise ValueError("agentic v2 result semantics lack startup identity")
+    identity = started_payload.get("backend_identity")
+    if not isinstance(identity, dict):
+        raise ValueError("agentic v2 result semantics lack startup identity")
+    return result_verification_standard(identity.get("backend_id"))
+
+
+def _encoded_output_bytes(data: Any) -> int:
+    return len(json.dumps(
+        data,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8"))
+
+
+def _valid_executed_usage(usage: Mapping[str, Any], data: Any, standard: str) -> bool:
+    """Check an executed call's usage, as strictly as the standard allows.
+
+    `output_bytes` is checked identically either way: it is a statement about
+    bytes this process is holding, so nothing about a real guest makes it any
+    less checkable.
+
+    `wall_ms` is the field that has to give. The fixture takes no time and says
+    so, and requiring exactly zero is the strongest possible check *of a
+    fixture*. A real command takes real time, and there is no second source to
+    compare the number against -- so the check becomes the one that still means
+    something: it must be a plain non-negative integer. Not a float, not a
+    bool, not negative. That rules out a backend reporting nonsense, and does
+    not pretend to rule out a backend reporting a plausible lie.
+    """
+    if set(usage) != {"tool_calls", "wall_ms", "output_bytes"}:
+        return False
+    if usage.get("output_bytes") != _encoded_output_bytes(data):
+        return False
+    wall_ms = usage.get("wall_ms")
+    if standard == RESULT_STANDARD_FIXTURE_REPLAY:
+        return wall_ms == 0
+    return (
+        isinstance(wall_ms, int)
+        and not isinstance(wall_ms, bool)
+        and wall_ms >= 0
+    )
+
+
+def _verify_result_semantics_under_standard(
+    name: str,
+    arguments: Mapping[str, Any],
+    result: Mapping[str, Any],
+    *,
+    previous_state: Any,
+    semantic_ledger: dict[str, Any],
+    started_payload: Any,
+) -> None:
+    standard = _standard_for(started_payload)
+    if standard == RESULT_STANDARD_FIXTURE_REPLAY:
+        _verify_fixture_result_semantics(
+            name,
+            arguments,
+            result,
+            previous_state=previous_state,
+            semantic_ledger=semantic_ledger,
+            started_payload=started_payload,
+        )
+        return
+    _verify_attested_result_semantics(result, previous_state=previous_state)
+
+
+def _verify_attested_result_semantics(
+    result: Mapping[str, Any],
+    *,
+    previous_state: Any,
+) -> None:
+    """Verify a result that cannot be re-simulated.
+
+    Everything this standard claims in `RESULT_STANDARD_COVERAGE` is checked
+    either by the caller -- envelope schema, `result_sha256`, `request_sha256`,
+    the data against the tool contract, the budget, the state chain -- or here.
+    What is left for here is the one rule the fixture path enforces inside its
+    equality comparison and which would otherwise be lost: the size ceiling.
+
+    A backend must not return an oversized result, and must not claim the
+    oversize error when the result is not oversized. Both halves matter. The
+    first is the actual limit; the second stops `tool_result_too_large` from
+    becoming a way to report an ordinary failure without saying what it was.
+    """
+    encoded = _encoded_output_bytes(dict(result))
+    oversized = encoded > 65536
+    if oversized and result.get("error_type") != "tool_result_too_large":
+        raise ValueError("agentic v2 result exceeds the size ceiling")
+    if not oversized and result.get("error_type") == "tool_result_too_large":
+        raise ValueError("agentic v2 result size error is unsupported")
+    if result.get("state_before_sha256") != previous_state:
+        raise ValueError("agentic v2 attested state-before mismatch")
 
 
 def _verify_fixture_result_semantics(

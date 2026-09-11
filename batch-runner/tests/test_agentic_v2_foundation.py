@@ -22,6 +22,8 @@ import core.agentic_v2_provenance as agentic_v2_provenance
 import core.agentic_v2_runner as agentic_v2_runner
 from core.agentic_v2_contract import (
     EVENT_SCHEMA,
+    FOUNDATION_BACKEND_ID,
+    TOOL_CONTRACT_VERSION,
     TOOL_RESULT_SCHEMA,
     AgenticV2Lifecycle,
     AgenticV2Profile,
@@ -3661,3 +3663,204 @@ def test_the_admitted_set_holds_exactly_one_identity_and_names_the_fixture():
     assert body.count('"backend_id":') == 1
     assert "FOUNDATION_BACKEND_ID" in body
     assert "agentic-v2-microvm-v1" not in source
+
+
+# ── the second verification standard ──────────────────────────────────────
+#
+# A fixture result can be checked by re-running the same call and demanding the
+# whole envelope match. A real guest's result cannot: nothing in this process
+# knows what bytes a command should have written, how long it should have
+# taken, or what a real filesystem should hash to. So there are two standards,
+# and the thing these tests protect is that the weaker one is *named*, is
+# *bounded*, and is *not reachable by accident*.
+
+
+def _attested_result(**overrides):
+    """An executed result envelope, shaped as the contract requires."""
+    value = {
+        "schema_version": TOOL_CONTRACT_VERSION,
+        "call_id": "call-1",
+        "tool_name": "exec_run",
+        "request_sha256": "a" * 64,
+        "ok": True,
+        "error_type": None,
+        "data": {"stdout": "whatever a real command happened to print"},
+        "usage_delta": {"tool_calls": 1, "wall_ms": 812, "output_bytes": 0},
+        "state_before_sha256": "b" * 64,
+        "state_after_sha256": "c" * 64,
+    }
+    value.update(overrides)
+    value["usage_delta"] = {
+        **value["usage_delta"],
+        "output_bytes": agentic_v2_provenance._encoded_output_bytes(value["data"]),
+    }
+    value["result_sha256"] = canonical_sha256(value)
+    return value
+
+
+class TestTheStandardIsNamedAndChosenDeliberately:
+    def test_the_two_standards_are_distinct(self):
+        assert (
+            agentic_v2_provenance.RESULT_STANDARD_FIXTURE_REPLAY
+            != agentic_v2_provenance.RESULT_STANDARD_ATTESTED_EXECUTION
+        )
+
+    def test_the_fixture_backend_is_verified_by_replay(self):
+        assert agentic_v2_provenance.result_verification_standard(
+            FOUNDATION_BACKEND_ID
+        ) == agentic_v2_provenance.RESULT_STANDARD_FIXTURE_REPLAY
+
+    @pytest.mark.parametrize(
+        "backend_id", ["agentic-v2-microvm-v1", "", None, 0, object()]
+    )
+    def test_a_backend_with_no_declared_standard_raises_rather_than_defaulting(
+        self, backend_id
+    ):
+        # The failure this guards against is silent, not loud: a new backend
+        # falling through to the weaker standard would produce runs that say
+        # "verified" while checking less than the author of that backend
+        # intended, and nothing would say so.
+        with pytest.raises(ValueError, match="declared result verification standard"):
+            agentic_v2_provenance.result_verification_standard(backend_id)
+
+    def test_exactly_one_backend_has_a_standard_today(self):
+        # The microVM backend exists in this repository and is still not here.
+        # Admitting it is an edit to this mapping, which is a line in a diff.
+        assert list(agentic_v2_provenance._RESULT_STANDARD_BY_BACKEND) == [
+            FOUNDATION_BACKEND_ID
+        ]
+
+    def test_the_run_can_say_which_standard_verified_it(self):
+        # The point of naming them. "Verified" is a different claim for a
+        # fixture than for a guest, and a reader must be able to tell which.
+        coverage = agentic_v2_provenance.RESULT_STANDARD_COVERAGE
+        assert set(coverage) == {
+            agentic_v2_provenance.RESULT_STANDARD_FIXTURE_REPLAY,
+            agentic_v2_provenance.RESULT_STANDARD_ATTESTED_EXECUTION,
+        }
+        for entry in coverage.values():
+            assert entry["checks"], "a standard that checks nothing is not a standard"
+
+    def test_only_the_weaker_standard_admits_to_giving_something_up(self):
+        coverage = agentic_v2_provenance.RESULT_STANDARD_COVERAGE
+        assert coverage[
+            agentic_v2_provenance.RESULT_STANDARD_FIXTURE_REPLAY
+        ]["does_not_check"] == ()
+        assert coverage[
+            agentic_v2_provenance.RESULT_STANDARD_ATTESTED_EXECUTION
+        ]["does_not_check"]
+
+
+class TestWhatTheAttestedStandardGivesUpIsWhatItSaysItGivesUp:
+    """The `does_not_check` list is a claim. These make it a tested one."""
+
+    def test_it_does_not_check_the_data_against_anything(self):
+        # Two different outputs, both accepted. This is the concession, stated
+        # as a passing test so nobody has to take the docstring's word for it.
+        for payload in ({"stdout": "42"}, {"stdout": "not 42 at all"}):
+            agentic_v2_provenance._verify_attested_result_semantics(
+                _attested_result(data=payload), previous_state="b" * 64
+            )
+
+    def test_it_does_not_pin_wall_ms_to_any_value(self):
+        for wall_ms in (0, 1, 812, 10**9):
+            assert agentic_v2_provenance._valid_executed_usage(
+                {"tool_calls": 1, "wall_ms": wall_ms, "output_bytes": 2},
+                {},
+                agentic_v2_provenance.RESULT_STANDARD_ATTESTED_EXECUTION,
+            )
+
+    def test_the_fixture_standard_still_pins_wall_ms_to_zero(self):
+        # The weakening must not leak backwards into the standard that does not
+        # need it.
+        assert not agentic_v2_provenance._valid_executed_usage(
+            {"tool_calls": 1, "wall_ms": 1, "output_bytes": 2},
+            {},
+            agentic_v2_provenance.RESULT_STANDARD_FIXTURE_REPLAY,
+        )
+
+
+class TestWhatTheAttestedStandardStillHolds:
+    @pytest.mark.parametrize("wall_ms", [-1, 1.5, True, "812", None])
+    def test_a_wall_ms_that_is_not_a_plain_non_negative_integer_is_refused(
+        self, wall_ms
+    ):
+        # Giving up the exact value is not giving up the field. A bool is the
+        # interesting one: `True == 1` in Python, so a check written the
+        # obvious way would have let it through.
+        assert not agentic_v2_provenance._valid_executed_usage(
+            {"tool_calls": 1, "wall_ms": wall_ms, "output_bytes": 2},
+            {},
+            agentic_v2_provenance.RESULT_STANDARD_ATTESTED_EXECUTION,
+        )
+
+    def test_output_bytes_is_checked_exactly_as_it_is_for_the_fixture(self):
+        # Nothing about a real guest makes this less checkable: it is a
+        # statement about bytes already in hand.
+        data = {"stdout": "x" * 100}
+        for standard in (
+            agentic_v2_provenance.RESULT_STANDARD_FIXTURE_REPLAY,
+            agentic_v2_provenance.RESULT_STANDARD_ATTESTED_EXECUTION,
+        ):
+            assert not agentic_v2_provenance._valid_executed_usage(
+                {"tool_calls": 1, "wall_ms": 0, "output_bytes": 3}, data, standard
+            )
+
+    def test_an_extra_usage_field_is_refused_under_both_standards(self):
+        for standard in (
+            agentic_v2_provenance.RESULT_STANDARD_FIXTURE_REPLAY,
+            agentic_v2_provenance.RESULT_STANDARD_ATTESTED_EXECUTION,
+        ):
+            assert not agentic_v2_provenance._valid_executed_usage(
+                {"tool_calls": 1, "wall_ms": 0, "output_bytes": 2, "cost_usd": 0},
+                {},
+                standard,
+            )
+
+    def test_an_oversized_result_must_carry_the_oversize_error(self):
+        huge = _attested_result(data={"stdout": "x" * 70000})
+        with pytest.raises(ValueError, match="size ceiling"):
+            agentic_v2_provenance._verify_attested_result_semantics(
+                huge, previous_state="b" * 64
+            )
+
+    def test_the_oversize_error_cannot_be_borrowed_for_an_ordinary_failure(self):
+        # Otherwise `tool_result_too_large` becomes a way to report that
+        # something went wrong without saying what.
+        small = _attested_result(ok=False, error_type="tool_result_too_large")
+        with pytest.raises(ValueError, match="size error is unsupported"):
+            agentic_v2_provenance._verify_attested_result_semantics(
+                small, previous_state="b" * 64
+            )
+
+    def test_the_state_chain_is_still_continuous(self):
+        with pytest.raises(ValueError, match="attested state-before"):
+            agentic_v2_provenance._verify_attested_result_semantics(
+                _attested_result(), previous_state="d" * 64
+            )
+
+
+class TestTheDispatchDoesNotWeakenTheFixturePath:
+    def test_a_foundation_run_is_routed_to_replay_not_to_attestation(self, tmp_path):
+        seen = []
+        original = agentic_v2_provenance._verify_fixture_result_semantics
+
+        def watching(*args, **kwargs):
+            seen.append(args[0])
+            return original(*args, **kwargs)
+
+        with pytest.MonkeyPatch.context() as patch:
+            patch.setattr(
+                agentic_v2_provenance,
+                "_verify_fixture_result_semantics",
+                watching,
+            )
+            result = _successful_run(tmp_path)
+
+        assert result["success"] is True
+        assert seen, "the fixture run stopped being re-simulated"
+
+    def test_a_startup_payload_without_an_identity_cannot_pick_a_standard(self):
+        for payload in (None, {}, {"backend_identity": None}, "x"):
+            with pytest.raises(ValueError):
+                agentic_v2_provenance._standard_for(payload)
