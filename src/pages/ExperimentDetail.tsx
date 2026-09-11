@@ -20,6 +20,17 @@ import { useGrades, GradeResult } from '../hooks/useGrades'
 import PromptArchitectureView, { PromptArchitectureNotice } from '../components/dashboard/PromptArchitectureView'
 import { readPromptArchitecture } from '../components/dashboard/promptArchitectureReading'
 import { readFileGenerationCount, readFileGenerationRate, recoveredNote, resolveFileGeneration } from '../components/dashboard/fileGenerationReading'
+import {
+  CONTENT_FILTERED_NOTE,
+  NO_REASON_RECORDED,
+  RATE_LIMITED,
+  RATE_LIMIT_KIND_LABELS,
+  REASON_IS_VERBATIM_NOTE,
+  isBenchmarkOutcome,
+  readFailureCategory,
+  readRateLimitKind,
+  summariseFailures,
+} from '../lib/failureReason'
 import type { TaskResult } from '../types/report'
 import type { ReportMeta } from '../types/report'
 import type { CostReceipt, CostSummary, DerivedCost } from '../types/cost'
@@ -204,6 +215,13 @@ function ExperimentDetail() {
   }, [gradeRow])
   const problemSolvingSummary = report?.cost_summary?.problem_solving_cost ?? null
   const gradingSummary = gradeRow?.cost_summary?.grading_cost ?? null
+
+  // Over the whole run, not the filtered view: it answers "what did this run
+  // fail on", which a sector filter must not change the answer to.
+  const failureBreakdown = useMemo(
+    () => summariseFailures(report?.task_results),
+    [report?.task_results],
+  )
 
   const filteredTasks = useMemo(() => {
     let tasks = report?.task_results || []
@@ -1105,6 +1123,51 @@ function ExperimentDetail() {
             </div>
           </div>
 
+          {/*
+            What this run failed on, in the run's own words.
+
+            Only `content_filtered` is tinted, because it is the only category
+            this page is entitled to characterise. The rest are the same neutral
+            chip whatever they say — a second colour would imply a bucket, and
+            `classify_execution_error` has an open vocabulary to bucket over.
+          */}
+          {failureBreakdown && failureBreakdown.failed > 0 && (
+            <div
+              className="mt-3 pt-2.5 border-t border-dash-border-subtle flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]"
+              data-testid="failure-breakdown"
+            >
+              <span className="text-dash-text-muted">
+                실패 {failureBreakdown.failed}건 · 기록된 원인
+              </span>
+              {failureBreakdown.byCategory.map(({ category, count }) => (
+                <span
+                  key={category}
+                  className={`font-mono px-1.5 py-0.5 rounded ${
+                    isBenchmarkOutcome(category)
+                      ? 'text-amber-300/90 bg-amber-400/10 border border-amber-400/20'
+                      : 'text-dash-text-secondary bg-dash-card-hover'
+                  }`}
+                  data-failure-category={category}
+                  data-failure-count={count}
+                  title={
+                    isBenchmarkOutcome(category) ? CONTENT_FILTERED_NOTE : REASON_IS_VERBATIM_NOTE
+                  }
+                >
+                  {category} {count}
+                </span>
+              ))}
+              {failureBreakdown.uncategorised > 0 && (
+                <span
+                  className="font-mono px-1.5 py-0.5 rounded text-dash-text-faint bg-dash-card-hover"
+                  data-failure-uncategorised={failureBreakdown.uncategorised}
+                  title={NO_REASON_RECORDED}
+                >
+                  원인 미기록 {failureBreakdown.uncategorised}
+                </span>
+              )}
+            </div>
+          )}
+
           {/* Scrollable table */}
           <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
             <table className="w-full text-xs">
@@ -1653,15 +1716,96 @@ function TaskDetailModal({
             <p className="text-[10px] text-dash-text-faint mt-2">{COST_ESTIMATE_NOTE}</p>
           </div>
 
-          {/* ★ Error Message (for error tasks) ★ */}
-          {task.status === 'error' && task.error && (
-            <div className="bg-red-500/[0.08] border border-red-500/20 rounded-lg p-3">
-              <div className="text-[10px] text-red-400 uppercase font-semibold mb-1.5 flex items-center gap-1.5">
-                <XCircle className="h-3 w-3" /> Execution Error
+          {/*
+            ★ Why this task did not finish ★
+
+            Was gated on `task.error` — free text filled from
+            `error_tasks[].error`, a key exp034's eight failed tasks do not
+            carry. They record `error_code` and `error_type`, which name the
+            exception class, so the gate was false and every failure rendered a
+            red cross, zero files and no reason. The cause the run actually
+            wrote down is `observability.error_category`, and five of those
+            eight say `rate_limited` while three say `content_filtered` — a
+            defect in the run place and a benchmark result, painted alike.
+
+            So the panel is no longer conditional on the free text: a failed
+            task always says something, even if what it says is that nothing
+            was recorded.
+          */}
+          {task.status === 'error' && (() => {
+            const category = readFailureCategory(task)
+            const benchmarkOutcome = isBenchmarkOutcome(category)
+            const rateLimitKind = readRateLimitKind(task)
+            return (
+              <div
+                className={`rounded-lg p-3 border ${
+                  benchmarkOutcome
+                    ? 'bg-amber-400/[0.06] border-amber-400/25'
+                    : 'bg-red-500/[0.08] border-red-500/20'
+                }`}
+                data-testid="failure-reason"
+                data-failure-category={category ?? ''}
+              >
+                <div
+                  className={`text-[10px] uppercase font-semibold mb-1.5 flex items-center gap-1.5 ${
+                    benchmarkOutcome ? 'text-amber-300' : 'text-red-400'
+                  }`}
+                >
+                  <XCircle className="h-3 w-3" /> 실패 원인
+                </div>
+                {category ? (
+                  <div className="font-mono text-xs text-dash-text break-all">{category}</div>
+                ) : (
+                  <div
+                    className="text-xs text-dash-text-muted"
+                    data-testid="failure-reason-unrecorded"
+                  >
+                    {NO_REASON_RECORDED}
+                  </div>
+                )}
+                {benchmarkOutcome ? (
+                  <p
+                    className="text-[10px] text-amber-300/80 mt-1.5 leading-relaxed"
+                    data-testid="failure-is-benchmark-outcome"
+                  >
+                    {CONTENT_FILTERED_NOTE}
+                  </p>
+                ) : (
+                  category && (
+                    <p className="text-[10px] text-dash-text-faint mt-1.5">
+                      {REASON_IS_VERBATIM_NOTE}
+                    </p>
+                  )
+                )}
+                {/*
+                  Which of the two rate refusals this was. Azure returns the
+                  same 429 for a turn that reserved too many tokens and for
+                  turns that arrived too often, and the two have opposite fixes
+                  — ask for less at once, or ask less often. Without this the
+                  page shows `rate_limited` and the reader still cannot tell
+                  which knob to turn.
+
+                  Absent on exp034: its five refusals predate the field, so the
+                  sentence that would have settled them was never retained.
+                  Nothing is rendered in that case rather than a guess.
+                */}
+                {category === RATE_LIMITED && rateLimitKind && (
+                  <p
+                    className="text-[10px] text-dash-text-secondary mt-1.5 leading-relaxed"
+                    data-testid="rate-limit-kind"
+                    data-rate-limit-kind={rateLimitKind}
+                  >
+                    <span className="font-mono text-dash-text">{rateLimitKind}</span>
+                    {' · '}
+                    {RATE_LIMIT_KIND_LABELS[rateLimitKind]}
+                  </p>
+                )}
+                {task.error && (
+                  <pre className="text-[11px] text-red-300/90 dark:text-red-300/90 text-red-700 font-mono whitespace-pre-wrap break-all leading-relaxed max-h-[200px] overflow-y-auto mt-2">{task.error}</pre>
+                )}
               </div>
-              <pre className="text-[11px] text-red-300/90 dark:text-red-300/90 text-red-700 font-mono whitespace-pre-wrap break-all leading-relaxed max-h-[200px] overflow-y-auto">{task.error}</pre>
-            </div>
-          )}
+            )
+          })()}
 
           {/* ★ Two Score Cards Side by Side ★ */}
           <div className="grid grid-cols-2 gap-3">
