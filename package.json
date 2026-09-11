@@ -27,6 +27,8 @@
     "test:cost-data": "node --test scripts/__tests__/cost-read-layer.test.mjs scripts/__tests__/cost-receipt.test.mjs scripts/__tests__/aggregate-grades.test.mjs",
     "test:cost-browser:dist": "node scripts/__tests__/cost-receipts.browser.mjs",
     "test:cost-browser": "npm run build && npm run test:cost-browser:dist",
+    "test:deliverable-links-browser:dist": "node scripts/__tests__/a-file-that-never-published-is-not-a-broken-link.browser.mjs",
+    "test:deliverable-links-browser": "npm run build && npm run test:deliverable-links-browser:dist",
     "test:official-filter": "node --test scripts/__tests__/official-filter.test.mjs",
     "test:grade-provenance": "node --test scripts/__tests__/grade-provenance.test.mjs",
     "test:selection-outcome": "node --test scripts/__tests__/selection-outcome.test.mjs",
