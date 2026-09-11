@@ -20,17 +20,21 @@
 //     (0.0%) |`. Not one of them generated a file badly; none was asked for a
 //     file at all.
 //   * **1 run publishes `needs_files_total: null`** — `exp026c`, a 1-task
-//     smoke whose `validate_stats.json` was never read. It carries no record
-//     of a denominator, which is not the same as recording that there was
-//     none, and `src/types/report.ts` declared the field non-null so no reader
-//     had to consider it.
+//     smoke whose `validate_stats.json` was never written, because the
+//     workflow skips step 5 for any run with `sample_size <= 3`. It looks like
+//     a counterexample and is not one: its report is served from the Hub
+//     rather than committed here, so step 7 ran and it was no dry run — a
+//     second, independent gate fired. It carries no record of a denominator,
+//     which is not the same as recording that there was none, and
+//     `src/types/report.ts` declared the field non-null so no reader had to
+//     consider it.
 //   * **21 runs publish a positive denominator**, from `exp003`'s 185 down to
 //     `exp030`'s 4. Those rates are measurements and must keep printing —
 //     including any genuine `0.0%`.
 //
 // `src/components/dashboard/fileGenerationReading.ts` is where the reading now
 // happens, and it is import-free so esbuild — already installed, as vite
-// depends on it — can hand the real decision to node. This file holds six
+// depends on it — can hand the real decision to node. This file holds seven
 // things in place:
 //
 //   A. the producer's field names and the reader's lookups are the same names,
@@ -41,7 +45,9 @@
 //      the four affected runs are named by the test rather than by a comment;
 //   D. a figure that stands on nothing is not comparable to one that does;
 //   E. no surface under `src/` divides by `needs_files_total` itself;
-//   F. the TypeScript contract admits the `null` `exp026c` actually contains.
+//   F. the TypeScript contract admits the `null` `exp026c` actually contains;
+//   G. the workflow conditions that skip step 5 are all named and counted,
+//      since they alone decide which runs carry a roll-up at all.
 //
 // (E) is the guard that fails on the code this replaces.
 //
@@ -60,6 +66,7 @@ const SRC_DIR = join(ROOT, 'src');
 const READING_FILE = join(SRC_DIR, 'components', 'dashboard', 'fileGenerationReading.ts');
 const REPORT_TYPES = join(SRC_DIR, 'types', 'report.ts');
 const STEP5_PY = join(ROOT, 'batch-runner', 'step5_validate.py');
+const BATCH_RUN_WORKFLOW = join(ROOT, '.github', 'workflows', 'batch-run.yml');
 const REPORTS_INDEX = join(ROOT, 'public', 'generated', 'reports-index.json');
 
 /** Everything `step5_validate` writes into `validate_stats.json`. */
@@ -463,4 +470,91 @@ test('FileGeneration declares the null exp026c actually publishes', async () => 
   const reports = await publishedReports();
   const nulls = reports.filter((r) => r.file_generation && r.file_generation.needs_files_total === null);
   assert.ok(nulls.length >= 1, 'no published report carries a null denominator any more');
+});
+
+// ── G. Why a roll-up is missing is a property of the workflow ──────────────
+
+test('every condition that skips step 5 is named, and there are no others', async () => {
+  // `not-recorded` is not one condition wearing four names. Step 6 reads the
+  // roll-up from workspace/validate_stats.json, which only step 5 writes, and
+  // batch-run.yml skips step 5 on four independent conditions:
+  //
+  //   dry run         — exp034; and exp035, the 220-task run dispatched
+  //                     2026-09-11 with dry_run=true, which will land here too
+  //   smoke test      — exp026c, whose sample_size is 1
+  //   relay handover  — every leg of a relayed run except the last
+  //   step 2a failed  — inference never finished, so there is nothing to count
+  //
+  // These four decide, by themselves, which runs carry a roll-up. If one is
+  // removed or renamed that set changes with nothing failing, and the runs
+  // named in section C above quietly become wrong. A *fifth* would do the same
+  // damage from the other direction, so the count is asserted too: this test
+  // claims the list is complete, not merely that these four are on it.
+  const wf = await readFile(BATCH_RUN_WORKFLOW, 'utf8');
+  const at = wf.indexOf("- name: 'Step 5: Validate dataset'");
+  assert.ok(at >= 0, 'Step 5 is gone from batch-run.yml, or was renamed');
+  const ifAt = wf.indexOf('if:', at);
+  const gate = wf.slice(ifAt, wf.indexOf('\n', ifAt));
+
+  const conditions = {
+    'dry run': 'inputs.dry_run != true',
+    'smoke test': "steps.check_smoke_test.outputs.is_smoke_test != 'true'",
+    'relay handover': "steps.check_relay.outputs.needs_relay != 'true'",
+    'failed inference': "steps.step2a.outcome == 'success'",
+  };
+  for (const [name, expr] of Object.entries(conditions)) {
+    assert.ok(gate.includes(expr), `the ${name} gate on step 5 is gone: ${gate}`);
+  }
+  assert.equal(
+    gate.replace(/^if:\s*/, '').split('&&').length,
+    Object.keys(conditions).length,
+    `step 5 gained or lost a condition, so a run can now miss its roll-up for a `
+      + `reason this file does not name: ${gate}`,
+  );
+
+  // The threshold itself, since exp026c sits one under it and exp035's 220
+  // sits far above it. Without this the smoke gate could be widened to swallow
+  // a real run and the assertions above would all still pass.
+  assert.match(wf, /IS_SMOKE_TEST=\$\(\[ "\$SAMPLE_SIZE" -le 3 \]/);
+});
+
+test('exp026c asked for the upload, so its null is not the dry-run gate', async () => {
+  // The evidence that exp026c needs a second gate to explain it, kept as an
+  // assertion rather than a claim in a comment. The run says so itself: its
+  // `publication_plan` is `step7_upload_requested`, where a dry run publishes
+  // `dry_run_no_step7` — exp034 does. The tree agrees, in the other direction:
+  // a dry run has no copy on the Hub, so its report_data.json has to be
+  // committed here (that rule is
+  // a-run-that-never-reached-the-hub-is-not-a-run-that-never-happened.test.mjs),
+  // and exp026c's is not committed and still reads. All checked offline.
+  const reports = await publishedReports();
+  const exp026c = reports.find((r) => r.short_id === 'exp026c');
+  assert.ok(exp026c, 'exp026c is not in the index');
+  assert.equal(exp026c.file_generation.needs_files_total, null);
+  assert.equal(
+    exp026c.meta.publication_plan,
+    'step7_upload_requested',
+    'exp026c is a dry run after all, and the comment above it is wrong',
+  );
+  // The distinction has to be one the corpus actually draws, or the line above
+  // is a constant compared against itself.
+  const plans = new Set(reports.map((r) => r.meta?.publication_plan));
+  assert.ok(
+    plans.has('dry_run_no_step7'),
+    'no published run is a dry run any more, so this no longer separates anything',
+  );
+
+  const committed = join(
+    ROOT,
+    'batch-runner',
+    'results',
+    'exp026c_cost_receipt_smoke',
+    'report',
+    'report_data.json',
+  );
+  await assert.rejects(
+    () => readFile(committed, 'utf8'),
+    /ENOENT/,
+    'exp026c now commits its report, so the Hub is no longer what proves step 7 ran',
+  );
 });
