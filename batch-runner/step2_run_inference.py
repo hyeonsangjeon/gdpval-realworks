@@ -53,6 +53,7 @@ from core.config import (
     DEFAULT_TOKENS,
 )
 from core.agentic_authorization import task_request_sha256
+from core.codex_runner import RATE_LIMIT_KINDS
 from core.executor import TaskExecutor
 from core.agentic_experiments import (
     AGENTIC_BASELINE_ID,
@@ -1236,7 +1237,7 @@ def _build_execution_observability(
 
 
 def _bounded_codex_diagnostics(raw: Optional[dict]) -> Optional[dict]:
-    """Allow only the two bounded numbers a Codex turn reports about itself.
+    """Allow only the bounded facts a Codex turn reports about itself.
 
     How far the turn got before it ended, and what answered it. A turn refused
     after forty completed items is a different fact from one refused after two,
@@ -1251,6 +1252,15 @@ def _bounded_codex_diagnostics(raw: Optional[dict]) -> Optional[dict]:
     A status is only published when it is one a server can send. ``None`` for
     an out-of-range value says nothing rather than saying something wrong,
     which is the same choice ``bounded_count`` makes beside it.
+
+    ``rate_limit_kind`` passes the same way, and only as one of
+    :data:`core.codex_runner.RATE_LIMIT_KINDS`. The word is read from a
+    provider sentence that names the deployment, and this allow-list is the
+    reason that sentence cannot follow it: membership of a closed set is
+    checked here, so no string the provider chose can reach an artifact through
+    this field. An unrecognised value is dropped rather than truncated --
+    truncating it would publish a prefix of exactly the sentence the projection
+    exists to withhold.
     """
     if not isinstance(raw, dict):
         return None
@@ -1261,6 +1271,9 @@ def _bounded_codex_diagnostics(raw: Optional[dict]) -> Optional[dict]:
     status = raw.get("http_status_code")
     if type(status) is int and 100 <= status <= 599:
         output["http_status_code"] = status
+    kind = raw.get("rate_limit_kind")
+    if type(kind) is str and kind in RATE_LIMIT_KINDS:
+        output["rate_limit_kind"] = kind
     return output or None
 
 

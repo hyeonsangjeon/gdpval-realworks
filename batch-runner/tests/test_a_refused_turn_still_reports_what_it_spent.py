@@ -679,7 +679,7 @@ def test_the_counts_satisfy_the_field_the_run_record_requires():
 # which backend ran cannot find it.
 
 
-def test_the_two_numbers_leave_the_runner_on_the_result(
+def test_what_the_runner_measured_leaves_the_runner_on_the_result(
     ledger: CostReceiptLedger,
 ):
     """Measured is not reported. This is the step between them."""
@@ -692,9 +692,14 @@ def test_the_two_numbers_leave_the_runner_on_the_result(
     )
     result = _run_the_task(_runner_over(handle, ledger))
 
+    # `unattributed` is the exp034 shape exactly: refused by a status, in
+    # prose that names neither of the provider's two rate limits. It is a
+    # reading of the message, not an absence of one -- see
+    # `test_one_429_is_two_different_problems`.
     assert result["codex_diagnostics"] == {
         "items_seen": 2,
         "http_status_code": 429,
+        "rate_limit_kind": "unattributed",
     }
 
 
@@ -707,6 +712,31 @@ def test_step_two_publishes_how_far_the_turn_got_and_what_refused_it():
     assert observability["codex"] == {
         "items_seen": 41,
         "http_status_code": 429,
+    }
+
+
+def test_step_two_publishes_which_of_the_two_rate_limits_refused_it():
+    """The last step of the chain: a kind read at the turn reaches the record.
+
+    Everything before this was measured and then discarded at one boundary or
+    another. A field that stops at the allow-list is as unreadable from a
+    downloaded run as one that was never read.
+    """
+    observability = step2._build_execution_observability(
+        {
+            "codex_diagnostics": {
+                "items_seen": 41,
+                "http_status_code": 429,
+                "rate_limit_kind": "token",
+            }
+        },
+        [],
+    )
+
+    assert observability["codex"] == {
+        "items_seen": 41,
+        "http_status_code": 429,
+        "rate_limit_kind": "token",
     }
 
 

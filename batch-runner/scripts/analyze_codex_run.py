@@ -225,6 +225,13 @@ def collect(root: Path) -> dict:
                 "http_status_code": codex.get(
                     "http_status_code", result.get("http_status_code")
                 ),
+                # Which of the provider's two rate limits refused it, when the
+                # refusal said. `None` here means it was not a rate refusal;
+                # `unattributed` means it was one in wording the markers in
+                # `codex_runner` do not cover, which is a finding about the
+                # markers rather than about the deployment. Runs made before
+                # the field existed carry neither, and read as `None`.
+                "rate_limit_kind": codex.get("rate_limit_kind"),
                 "latency_ms": result.get("latency_ms"),
                 "chars": len(statements.get(tid, "")),
                 "sector": sectors.get(tid, ""),
@@ -365,30 +372,71 @@ def report(data: dict) -> None:
         print(f"  carried on {len(seen)}/{len(tasks)} tasks   "
               f"min {min(values)}  max {max(values)}  median {statistics.median(values)}")
 
-        # The discriminator this field was added for. A 429 is the provider
-        # saying no; where in the turn it arrives is the part that says what
-        # it was refusing. Refused after many items points at what one turn
-        # consumes; refused at zero or near it points at something decided
-        # before the turn spent anything -- arrival rate, concurrency, or a
-        # reservation that was already full. This prints the two numbers side
-        # by side and stops there: which limit it is, is not a thing a table
-        # of item counts can settle on its own.
-        refused = [t for t in seen if t["http_status_code"] == 429]
-        if refused:
-            print()
-            print(f"  of those, refused with HTTP 429 : {len(refused)}")
-            for t in sorted(refused, key=lambda x: x["items_seen"]):
-                print(f"    {t['task_id'][:8]}  items_seen={t['items_seen']:<5} "
-                      f"attempts={t['attempts']}")
-            at_zero = sum(1 for t in refused if t["items_seen"] == 0)
+    # The discriminator this field was added for. A 429 is the provider saying
+    # no; where in the turn it arrives is the part that says what it was
+    # refusing. Refused after many items points at what one turn consumes;
+    # refused at zero or near it points at something decided before the turn
+    # spent anything -- arrival rate, concurrency, or a reservation that was
+    # already full.
+    #
+    # Selected by category as well as by status, because exp034 carried
+    # neither: all eight of its failures recorded `items_seen` and nothing
+    # else, so a filter on `http_status_code == 429` printed that run's five
+    # rate refusals as "no task carried HTTP 429" -- true, and read by nobody
+    # as "five tasks were refused for rate".
+    #
+    # Drawn from every task rather than from `seen`, so that a refusal which
+    # recorded no item count is still counted as a refusal. It is listed apart
+    # instead: its position in the turn is the one thing it cannot say, and
+    # that is exactly what the rest of this block is reading.
+    refused = [
+        t
+        for t in tasks
+        if t["http_status_code"] == 429 or t["error_category"] == "rate_limited"
+    ]
+    if refused:
+        print()
+        located = [t for t in refused if _items_seen_is_measured(t)]
+        adrift = [t for t in refused if t not in located]
+        print(f"  of those, refused for rate : {len(refused)}")
+        for t in sorted(located, key=lambda x: x["items_seen"]):
+            status = t["http_status_code"] or "-"
+            kind = t["rate_limit_kind"] or "not recorded"
+            print(f"    {t['task_id'][:8]}  items_seen={t['items_seen']:<5} "
+                  f"attempts={t['attempts']:<3} status={status:<5} {kind}")
+        for t in adrift:
+            status = t["http_status_code"] or "-"
+            kind = t["rate_limit_kind"] or "not recorded"
+            print(f"    {t['task_id'][:8]}  items_seen=NOT MEASURED  "
+                  f"attempts={t['attempts']:<3} status={status:<5} {kind}")
+        if located:
+            at_zero = sum(1 for t in located if t["items_seen"] == 0)
             print(f"    refused before any item : "
-                  f"{_pct(at_zero, len(refused), '429 tasks')}")
-        else:
-            statuses = sorted(
-                {str(t["http_status_code"]) for t in seen if t["http_status_code"]}
-            )
-            print(f"  no task carried HTTP 429 alongside a measured item count"
-                  f"{'   (statuses seen: ' + ', '.join(statuses) + ')' if statuses else ''}")
+                  f"{_pct(at_zero, len(located), 'rate refusals with a count')}")
+
+        # Which of the provider's two limits was reached. `token` and
+        # `request` have opposite fixes, so a run that cannot say which one
+        # cannot say what to change -- and a run made before the field existed
+        # says nothing at all, which must not be read as "neither".
+        kinds = Counter(t["rate_limit_kind"] for t in refused)
+        named = {k: v for k, v in kinds.items() if k in ("token", "request")}
+        if named:
+            print(f"    which limit : {named}")
+        unread = kinds.get(None, 0) + kinds.get("unattributed", 0)
+        if unread:
+            print(f"    which limit : UNDETERMINED for {unread} of "
+                  f"{len(refused)} -- no kind was recorded for them. Not "
+                  f"evidence for either limit.")
+            print("      -> `rate_limit_kind` in core/codex_runner.py reads it "
+                  "where the message still exists. Runs predating it say "
+                  "nothing; `unattributed` means the wording escaped the "
+                  "markers, which is a finding about the markers.")
+    else:
+        statuses = sorted(
+            {str(t["http_status_code"]) for t in tasks if t["http_status_code"]}
+        )
+        print(f"  no task was refused for rate"
+              f"{'   (statuses seen: ' + ', '.join(statuses) + ')' if statuses else ''}")
     print()
 
     # --- Cost: reported, never repaired, never added to grading ---

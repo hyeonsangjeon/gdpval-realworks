@@ -461,6 +461,77 @@ def _turn_failure_category(
     return category
 
 
+#: What the provider says when it refused for the tokens a turn reserved, and
+#: what it says when it refused for how often turns arrived. Azure returns the
+#: same ``429`` for both and separates them in one word of prose -- yet they
+#: have opposite fixes. A token refusal is answered by asking for less in a
+#: turn; a call refusal by asking less often. Acting on the wrong one costs a
+#: run and changes nothing.
+#:
+#: Kept apart from :data:`core.execution_errors._RATE_LIMIT_MARKERS`, which
+#: matches the bare substring ``rate limit`` and so folds both into
+#: ``rate_limited``. That fold is right about *what to do* -- both are retried
+#: the same way -- and says nothing about *what to change*.
+#:
+#: Not yet confirmed against this project's own logs: ``exp034``'s eight
+#: failures were recorded through :func:`core.public_error.public_task_error`,
+#: which is documented to return a message-free error identity, so the
+#: sentences that would settle these strings did not survive to the artifact.
+#: That is why an unmatched refusal is reported as ``unattributed`` rather than
+#: as nothing -- see :func:`_rate_limit_kind`.
+_TOKEN_RATE_MARKERS = (
+    "token rate limit",
+    "tokens per min",
+    "tokens per minute",
+)
+_REQUEST_RATE_MARKERS = (
+    "call rate limit",
+    "requests per min",
+    "requests per minute",
+)
+
+#: The only words :func:`_rate_limit_kind` may publish. A closed set, because
+#: the sentence these are read out of names the deployment, and the whole point
+#: of ``public_task_error`` is that such a sentence does not reach an artifact.
+#: One word from a fixed vocabulary carries the distinction without carrying
+#: the endpoint.
+RATE_LIMIT_KINDS = ("token", "request", "unattributed")
+
+
+def _rate_limit_kind(
+    failure: Any, *, http_status_code: int | None = None
+) -> str | None:
+    """Which of the provider's two rate refusals this was, in one word.
+
+    ``None`` means this failure was not a rate refusal at all. It is not a
+    quieter way of saying "a rate refusal we could not read" -- that is
+    ``unattributed``, and the difference is the whole value of the field. A run
+    that reports ``unattributed`` eight times has been refused eight times in
+    wording these markers do not cover, which is a finding about the markers.
+    A run that reports ``None`` eight times was not refused for rate.
+
+    Whether it was a rate refusal is not decided again here:
+    :func:`_turn_failure_category` already answers that, and a second rule for
+    the same question is a second rule to disagree with the first.
+
+    Matching both kinds is reported as ``unattributed``. Two contradictory
+    names are no more attributable than none, and picking the first would make
+    the answer depend on the order of a tuple.
+    """
+    if _turn_failure_category(failure, http_status_code=http_status_code) != (
+        "rate_limited"
+    ):
+        return None
+    text = str(failure).lower()
+    token = any(marker in text for marker in _TOKEN_RATE_MARKERS)
+    request = any(marker in text for marker in _REQUEST_RATE_MARKERS)
+    if token and not request:
+        return "token"
+    if request and not token:
+        return "request"
+    return "unattributed"
+
+
 #: Notification methods the turn stream is read for. Matched as strings
 #: because this module does not import the SDK -- see :func:`read_breakdown`.
 _NOTIFY_TOKEN_USAGE = "thread/tokenUsage/updated"
@@ -576,6 +647,9 @@ class CodexRunOutcome:
     usage_delta: CodexTokenTotals = field(default_factory=CodexTokenTotals)
     items_seen: int = 0
     http_status_code: int | None = None
+    #: One of :data:`RATE_LIMIT_KINDS`, or ``None`` when this was not a rate
+    #: refusal. Read here, where the provider's sentence still exists.
+    rate_limit_kind: str | None = None
     thread_id: str | None = None
     turn_id: str | None = None
     swept_pids: tuple[int, ...] = ()
@@ -1010,6 +1084,7 @@ class CodexAgentRunner(RecordsItsFirstRequest):
             # turns arrive.
             "items_seen": outcome.items_seen,
             "http_status_code": outcome.http_status_code,
+            "rate_limit_kind": outcome.rate_limit_kind,
             "usage_delta": {
                 "input_tokens": outcome.usage_delta.input_tokens,
                 "cached_input_tokens": outcome.usage_delta.cached_input_tokens,
@@ -1032,9 +1107,15 @@ class CodexAgentRunner(RecordsItsFirstRequest):
             # left behind here. What the turn spent is deliberately not
             # repeated: the cost ledger already carries it under this task id,
             # and a second copy is a second thing to disagree with the first.
+            #
+            # `rate_limit_kind` is here for the opposite reason: the sentence
+            # it is read from is deliberately not carried anywhere, so one word
+            # from a closed set is the only form in which the distinction can
+            # reach an artifact at all.
             "codex_diagnostics": {
                 "items_seen": outcome.items_seen,
                 "http_status_code": outcome.http_status_code,
+                "rate_limit_kind": outcome.rate_limit_kind,
             },
         }
         if outcome.error:
@@ -1177,6 +1258,9 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                     usage_delta=measured,
                     items_seen=observed.items_seen,
                     http_status_code=status_code,
+                    rate_limit_kind=_rate_limit_kind(
+                        failure, http_status_code=status_code
+                    ),
                     thread_id=getattr(thread, "id", None),
                     turn_id=getattr(turn_handle, "id", None),
                 )
