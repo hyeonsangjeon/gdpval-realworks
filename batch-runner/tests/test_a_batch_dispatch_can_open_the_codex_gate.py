@@ -346,12 +346,13 @@ def test_the_step_that_only_runs_on_a_handover_carries_it_too(workflow):
     ``Validate restored checkpoint identity`` is guarded by ``relay_run > 0``,
     so a run short enough to finish in one leg never executes it and a suite
     that only ever watched leg 0 never saw it. Run ``34596408490`` is what it
-    costs: leg 1 of the 220 reached 45 tasks over five hours and uploaded its
-    checkpoint, and leg 2 raised ``codex_foundry has not been shown to reach
-    its Foundry deployment`` four minutes later, before reading a byte of it.
-    Every retry fails identically, so that lineage cannot be resumed at all.
+    costs: leg 0 (run ``34571840967``) reached 45 tasks over five hours and
+    uploaded its checkpoint, and leg 1 raised ``codex_foundry has not been
+    shown to reach its Foundry deployment`` four minutes later, before reading
+    a byte of it. Every retry fails identically, so that lineage cannot be
+    resumed at all.
 
-    At leg 1's rate -- 45 tasks in 301 minutes -- 220 tasks need roughly five
+    At leg 0's rate -- 45 tasks in 301 minutes -- 220 tasks need roughly five
     legs. This step is therefore not on the path of a long run as an extra
     check on it; it is on the only path a long run has.
     """

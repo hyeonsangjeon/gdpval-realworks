@@ -915,8 +915,9 @@ jobs:
 
       # Reaches `_require_runnable_execution_mode` exactly as step2a does, and
       # so needs the same gate variable. It ran without one until run
-      # 34596408490: leg 1 reached 45 of 220 and uploaded its checkpoint
-      # cleanly, and four minutes later leg 2 died here, before touching it.
+      # 34596408490: leg 0 (run 34571840967) reached 45 of 220 and uploaded
+      # its checkpoint cleanly, and four minutes later leg 1 died here, before
+      # touching it.
       # The defect is invisible on leg 0 because this step only runs on a
       # handover -- so a relay that needs no handover passes, and every relay
       # long enough to need one could never have completed.
