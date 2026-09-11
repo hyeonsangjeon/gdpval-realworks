@@ -2438,3 +2438,74 @@ Regenerate with `python batch-runner/scripts/write_v2_preregistration.py`;
 before regenerating: this repository's own inputs moving and A's experiment
 file moving produce the same failure but mean different things, and the second
 one means someone has to decide whether the runs are still comparable at all.
+
+### Stage E — a run that can be resumed, collected and reported, 2026-09-11.
+
+Three modules, 91 tests, no model call and no Azure spend. They are the parts
+of step 4 that were still missing: per-task isolation and resume, file
+collection, and the connection to the report. The retry distinction and the
+cost ledger binding were already built and are unchanged here.
+
+**V2 had no resume at all.** Not a weak one — none. A grep across the 26 V2
+modules finds the word only in docstrings. V1 has one, but it cannot carry V2:
+`workspace/step2_inference_progress.json`, written by `step2_run_inference.py`,
+appends a result only once a task has *finished*, as `success` or `error`. A
+task that started, cost money and was killed half way through leaves no record
+in it at all, and so on resume is indistinguishable from a task that never
+began.
+
+`core/agentic_v2_task_journal.py` writes **two** records per attempt for that
+reason. An `opened` record is fsync'd *before* `open_task` returns, so a torn
+`opened` at the end of the file means the process died before any model call —
+which is the fact that makes dropping a torn tail safe rather than convenient. A
+torn line anywhere *earlier* is `JournalCorrupt` and stops the run. The journal
+also owns `attempt_index`, which nothing owned before and which `make_call_id`
+already needed: without it a retry's ledger rows collide with the dead
+attempt's, and the two attempts' spend becomes one number.
+
+**An abandoned attempt lowers the run's receipt permanently.** Once a task has
+an `opened` with no `closed`, `receipt_ceiling()` returns `partial` and keeps
+returning it however well the retry goes — `test_a_later_success_does_not_undo_an_abandoned_attempt`
+is the test that pins this. The spend that vanished stays vanished. This is the
+same rule as everywhere else in the repository: unpriced is `partial`, and it is
+not `$0`.
+
+**A half-written deliverable directory is indistinguishable from a short
+answer.** That is the failure `core/agentic_v2_deliverable_collection.py`
+exists against. Five files, three written, then a full disk, and what is left on
+disk looks exactly like a finished task with three deliverables: `fill_parquet`
+reads the paths, `step5_validate` checks they exist, and the submission goes out
+short with nothing anywhere saying so. So files are written into
+`deliverable_files/.collecting-<attempt>/`, every one is read back and
+re-hashed, and only then is the directory `os.replace`d into place. Any
+exception — including `KeyboardInterrupt` — removes the staging directory.
+
+The bytes are hashed twice on purpose. The guest's digests answer *did the guest
+produce this*; re-reading answers *is this what is on the host's disk now*, and
+a short write, a silently truncating filesystem and a disk that filled between
+two files all produce a file that exists and is wrong.
+
+**The report will show zeros for seven of V2's eight tools, and that is stated
+rather than left to be discovered.** `step6_report._compute_agentic_metrics`
+buckets tool calls under V1's names — `inspect_workspace`, `run_python` and the
+rest. V2's are `exec_run`, `environment_resolve` and the rest. The two
+vocabularies share exactly one name, `finalize`, and
+`core/agentic_v2_run_report.py` asserts that overlap at import so it cannot
+quietly become half-true. A reader who saw one non-zero `finalize` beside five
+zeros would reasonably conclude the model used one tool. The counts are
+therefore written under V2's own names as well, where they can be found.
+Teaching the report V2's vocabulary is a change to a shared file and is not made
+from here.
+
+**`conservative_cost_usd` is absent, never zero, when the cost is unknown.** The
+report sums that field as a plain float, so a zero would put a wrong number in a
+headline; an absent key contributes nothing and claims nothing. It is written
+only when the receipt is `complete` *and* the journal says every attempt was
+accounted for. `summarise_v2_run` reports `graded: None` with a stated reason
+rather than `graded: 0`, because zero graded and grading-not-attempted look
+identical as a number and are not the same fact.
+
+**What this does not mean.** No V2 task has run. Nothing here boots a guest,
+asks a model, or prices a call — all three modules are handed facts established
+elsewhere and arrange them. The blocker is still the single role assignment
+named in stage D, which remains reported and not requested.
