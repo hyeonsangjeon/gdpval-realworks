@@ -1,0 +1,102 @@
+{
+  "the_correspondence": {
+    "absent_and_not_explained": [],
+    "absent_in_the_guest": [
+      "Rscript",
+      "chromium",
+      "cmake",
+      "node",
+      "npm",
+      "python3:ezdxf"
+    ],
+    "accounts_for_every_absence": true,
+    "expected_absent_but_found_present": [],
+    "expected_absent_if_the_guest_is_the_parent": [
+      "Rscript",
+      "chromium",
+      "cmake",
+      "node",
+      "npm",
+      "python3:ezdxf"
+    ],
+    "explained_by_the_missing_layer": [
+      "Rscript",
+      "chromium",
+      "cmake",
+      "node",
+      "npm",
+      "python3:ezdxf"
+    ]
+  },
+  "the_image_that_was_measured": {
+    "how_that_is_known": "the pinned digest equals parent.lock.json's manifest_digest, and the sweep's layer digests equal the boot's layer by layer",
+    "is_the_parent": true,
+    "is_the_professional_work_candidate": false,
+    "pinned_digest": "sha256:ee6ef798631d3c3aeaed28658c640e6f5d021677449852bf2e1f18be5bd24edb",
+    "repository": "ghcr.io/hyeonsangjeon/gdpval-sandbox",
+    "the_sweep_and_the_boot_are_the_same_image": true
+  },
+  "the_layer_was_measured_not_inferred": {
+    "candidate_absent": 0,
+    "candidate_absent_commands": [],
+    "candidate_present": 40,
+    "parent_absent": 6,
+    "parent_absent_commands": [
+      "Rscript",
+      "chromium",
+      "cmake",
+      "node",
+      "npm",
+      "python3:ezdxf"
+    ],
+    "parent_present": 34,
+    "runtime": "docker",
+    "source": "batch-runner/sandbox/v2/declared-command-sweep.json",
+    "taken_on": "2026-09-10",
+    "the_container_parent_is_the_booted_image": true,
+    "two_runtimes_name_the_same_six": true,
+    "what_that_settles": "the six are supplied by the professional-work layer, observed rather than deduced: the candidate answered every probe and the parent missed exactly these six, under docker on kernel 3.10.102 and again under Firecracker on kernel 6.1.141"
+  },
+  "therefore": "the six absences are the signature of booting the parent rather than the candidate, and the layer that supplies them has been measured to supply them. They are not a limit of the sandbox design and not a model failure: they are an unpublished image. A 220-task run must not count a task that needed R, a browser, cmake, Node or ezdxf against the environment's capability on this evidence -- though on this evidence those tasks will still fail, for a reason that is recorded and correctable.",
+  "what_the_candidate_adds_on_top": {
+    "packages": [
+      "chromium",
+      "cmake",
+      "ezdxf",
+      "fonts-noto-color-emoji",
+      "fonts-noto-core",
+      "nodejs",
+      "npm",
+      "r-base-core"
+    ],
+    "provide_a_command": {
+      "chromium": "chromium",
+      "cmake": "cmake",
+      "ezdxf": "python3:ezdxf",
+      "nodejs": "node",
+      "npm": "npm",
+      "r-base-core": "Rscript"
+    },
+    "provide_no_command": {
+      "fonts-noto-color-emoji": "a font, not an executable",
+      "fonts-noto-core": "a font, not an executable"
+    },
+    "unclassified": []
+  },
+  "what_this_is": "the reason D3's six absent commands are not a gap in the sandbox. Derived from the committed lock files, the container A/B sweep and the two guest artefacts, so that editing a lock without rebuilding the guest cannot leave this claim stale.",
+  "what_this_is_not": [
+    "not a claim that the candidate is reachable -- it was built locally and never pushed, and nothing here can fetch it",
+    "not a claim that the candidate would boot as a microVM guest, or that its added packages work under this isolation policy; the A/B above was taken under docker, and neither has been measured",
+    "not a re-run of C2 or D3, and nothing here booted anything",
+    "not a statement about the other 34 commands, which were present in the parent and are not in question"
+  ],
+  "where_the_candidate_actually_is": {
+    "is_pullable_from_here": false,
+    "recorded_digests": {
+      "image_id": "sha256:e47537b8f7ac7c595b3a055dea4d16283efaa9c9a67c0f8a3e0fc2d65e834e29",
+      "oci_manifest": "sha256:0064ce70a26d6df58353a2e305a69d1d03e1db4525eee9870841fe10c6b3d02a"
+    },
+    "the_digest_the_container_sweep_ran": "sha256:94ea6cb4379ea2537be7875248dad5dc304bbf17f7c99682570b2844156ba1c7",
+    "why_not": "it was built locally and never pushed, so what is recorded is a local image ID and an OCI manifest digest for bytes that exist on no registry this repository can reach. An image ID is not a pullable reference."
+  }
+}

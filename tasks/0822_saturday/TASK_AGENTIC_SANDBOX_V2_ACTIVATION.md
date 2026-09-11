@@ -1901,6 +1901,69 @@ and never pushed, so it is not reachable from here; the reachable parent is what
 stage D executes against. This is written down before execution so no post-hoc
 reading can convert those failures into a claim about the model.
 
+###### The same six, now checked rather than stated — and C2's open item closed
+
+`scripts/explain_guest_command_absences.py`,
+`tests/test_explain_guest_command_absences.py` (**23 tests**), artefact
+`tasks/0822_saturday/guest_command_absences_explained.json`.
+
+The paragraph above is right, and it was also the kind of thing that rots. It
+names a digest, a count and a cause in prose; add one line to
+`debian-extra.lock` and every number in it is wrong while still reading as
+confidently as before. So the claim is now derived on every test run from the
+files it depends on, and fails when they and it diverge.
+
+**What the derivation finds.** The candidate is the parent plus eight locked
+packages — `chromium`, `cmake`, `fonts-noto-color-emoji`, `fonts-noto-core`,
+`nodejs`, `npm`, `r-base-core`, and `ezdxf==1.4.3`. Six provide a command; the
+two fonts provide none, which is stated in the script rather than derived,
+because it is a fact about the packages and leaving it implicit would make the
+arithmetic look as though it had dropped two rows. The six commands those
+packages provide are `Rscript`, `chromium`, `cmake`, `node`, `npm` and
+`python3:ezdxf` — **exactly** the six the guest was missing, with nothing left
+over in either direction. The test that matters most is the one nobody would
+think to write: a candidate-added command found *present* would falsify the
+explanation just as thoroughly as an unexplained absence, because it would mean
+the guest was not purely the parent and the tidy correspondence was a
+coincidence.
+
+**And it did not need to be inferred at all.** `sandbox/v2/declared-command-sweep.json`
+ran the same forty probes against **both** images under docker on 2026-09-10,
+before any of this booted: the candidate answered **40 of 40**, the parent **34
+of 40**, and the six it missed are the six. Its parent digest is the digest C2
+booted. So the six are named identically by two runtimes on two kernels —
+docker on 3.10.102 and Firecracker on 6.1.141 — and the layer's contribution is
+*measured*, not deduced from a lock file. The lock derivation corroborates that;
+it was never the primary evidence, and the record should not have implied
+otherwise.
+
+**C2's open item, closed.** The pre-C2 note asked that C2 either build the
+candidate or pin the parent and **say which it booted**, and not let it be
+implicit. C2 pinned the parent and did not say so. It is said now, and checked:
+the boot's `pinned_digest` equals `parent.lock.json`'s `manifest_digest`, and
+the D3 sweep's layer digests equal the boot's layer for layer, so the sweep
+measured the image C2 booted and not a directory sharing its paths.
+
+**One correction to make in my own record.** The first draft of the script
+disclaimed that "no digest for the candidate is recorded anywhere in this
+repository." That is false three times over: `sandbox/v2/README.md` records an
+image ID `sha256:e47537b8…` *and* an OCI manifest `sha256:0064ce70…`, and the
+container sweep ran a third, `sha256:94ea6cb4…` — evidently a different local
+build, which the artefact reports side by side without claiming they are the
+same bytes. The true statement is narrower and is what the artefact now says:
+none of the three can be pulled from here, because an image ID is not a
+reference and the manifest was never pushed. The overstatement was caught before
+it was committed, by reading the files the claim was about.
+
+**What this does and does not change for stage F.** Not a model failure —
+unchanged. Not a limit of the sandbox design either, which is the part the
+prose above leaves implicit: the layer has been *observed* to supply all six, so
+what stands between the run and those capabilities is an unpublished image
+rather than anything about microVMs, the policy or the guest. And — the reading
+that would be wrong in the other direction — those tasks will still fail. The
+artefact says so in the same sentence as the exoneration, deliberately, so that
+"not an environment defect" cannot be read as "so those tasks are fine."
+
 ##### The block stage D cannot clear from inside the repository
 
 Stage D needs two things at once, and they live in different Azure tenants.

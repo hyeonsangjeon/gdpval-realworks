@@ -73,6 +73,13 @@ batch-runner/scripts/*
 !batch-runner/scripts/build_speech_verification_set.py
 !batch-runner/scripts/check_dev_host_migration_triggers.py
 !batch-runner/scripts/analyze_required_item_definition.py
+# Derives, rather than restates, why D3's guest was missing six commands: the
+# guest was the parent image and the six are exactly what the professional-work
+# candidate adds on top. Committed because the claim has to be re-runnable --
+# editing a lock file without rebuilding the guest would otherwise leave it
+# quietly stale, and the difference between "setup error" and "environment
+# defect" is what a 220-task run counts a failure against.
+!batch-runner/scripts/explain_guest_command_absences.py
 # Run by .github/workflows/execution-envelope-preflight.yml. Without this line
 # the directory rule above hides it, `git add -A` skips it in silence, and the
 # workflow calls a file that is not in the repository -- so the job dies at the
@@ -226,6 +233,11 @@ tasks/0822_saturday/*
 # thing stage D is waiting on. Keeping it in the tree means the block can be
 # read, and re-read, without a run id that still resolves.
 !tasks/0822_saturday/boot_host_survey.json
+# The derivation's output, committed next to the sweep it explains. The sweep
+# says six commands were absent; without this beside it, the next reader has to
+# rediscover that all six are candidate-added packages, and until they do, the
+# sweep reads as six holes in the sandbox.
+!tasks/0822_saturday/guest_command_absences_explained.json
 !tasks/0828_friday/
 tasks/0828_friday/*
 !tasks/0828_friday/TASK_PER_TASK_COST_RECEIPTS.md
