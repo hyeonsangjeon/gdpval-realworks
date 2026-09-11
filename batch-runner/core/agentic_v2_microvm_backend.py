@@ -28,13 +28,16 @@ added to the fixture years from now would silently become a production
 capability, and nothing would fail.
 
 **What this deliberately does not do.** ``core/agentic_v2_runner.py`` checks at
-startup that the backend's identity is exactly the foundation fixture's, and
-fails anything else with ``compute_start_failed``. This backend does not satisfy
-that check and this module does not change it. That is not an oversight — the
-guard is the thing that has to be opened as its own reviewable change, once the
-pieces underneath it have evidence, and opening it quietly from here would be
-the one move that makes every other honest thing in this file worthless. So the
-backend is proven directly by its tests, and the runner still refuses it.
+startup that the backend's identity is the one the runner was told to admit, and
+fails anything else with ``compute_start_failed``. Nothing admits this backend:
+the declaration defaults to the foundation fixture's identity, no caller in this
+repository passes anything else, and the substrate manifests still carry
+``production_activation: "disabled"``. The admission is deliberately a value a
+caller has to supply rather than a comparison someone can loosen, so that the
+day this backend does run, a diff says which identity was let in and who let it
+in. Opening it quietly from here would be the one move that makes every other
+honest thing in this file worthless. So the backend is proven directly by its
+tests, and no run admits it yet.
 
 **The capability gaps are gaps, and are reported as such.** ``environment_*``
 cannot work: the machine has no route off itself, which is stage C's fourth
@@ -54,7 +57,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Callable, Mapping
 
-from core.agentic_v2_contract import AgenticV2Profile
+from core.agentic_v2_contract import AgenticV2Profile, MICROVM_BACKEND_ID
 from core.agentic_v2_exec_boot import (
     EXEC_RECORD_DIR,
     INTERPRETERS,
@@ -69,7 +72,9 @@ from core.agentic_v2_substrate import AgenticV2SubstrateManifest
 from core.agentic_v2_provenance import canonical_sha256
 
 
-BACKEND_ID = "agentic-v2-microvm-v1"
+#: Re-exported so that the many uses below read as they always did, while the
+#: value itself lives beside the foundation's id in the contract.
+BACKEND_ID = MICROVM_BACKEND_ID
 
 MANIFEST_COMMAND_FOR_INTERPRETER = {
     "python": "python",

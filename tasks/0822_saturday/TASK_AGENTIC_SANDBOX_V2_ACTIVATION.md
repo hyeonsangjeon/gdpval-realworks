@@ -2153,6 +2153,133 @@ microVM backend needs, and the stage E ledger and retry wiring, need no host and
 no access change, so they are where the work continues while this sits with
 whoever owns the subscription.
 
+##### The second standard, written: what "verified" means when nothing can be re-simulated
+
+That is where the work went. `core/agentic_v2_provenance.py` now names two
+standards instead of assuming one:
+
+| standard | for |
+|---|---|
+| `fixture-replay-v1` | the foundation fixture, every result of which can be produced again from a known simulation and compared in full |
+| `attested-execution-v1` | a backend whose output nothing in this process can predict |
+
+**Naming it is the change; the contents follow from the name.** A run that says
+*verified* is making a claim, and the claim is not the same for a fixture as for
+a guest. Three parts of a real result cannot be predicted by anything in the
+verifying process — the bytes a command actually wrote, the time it actually
+took, and the state of a filesystem that is not a dictionary in memory — so
+re-simulation there is not expensive, it is undefined. Letting both kinds of run
+say the same word would let the weaker claim be read as the stronger one, and
+nothing in the record would show which had been made.
+
+`RESULT_STANDARD_COVERAGE` writes out both halves in the record's own words. The
+attested standard **checks eight things**: the envelope's shape and its declared
+schema version, `request_sha256` recomputed from the committed request,
+`result_sha256` recomputed over the envelope's own fields, the result data
+against the tool contract's schema, `output_bytes` against the encoded length of
+the data reported, the state chain either side of the call, the tool-call budget
+counted the same way for every backend, and the 64 KiB result ceiling together
+with the error it must produce. It **declines three**: whether the data is what
+the command *should* have produced, which no party to this process knows;
+`wall_ms` against any particular value, because a real command takes real time;
+and the state digest against a re-simulation, because the state is a real
+filesystem rather than a ledger in memory. The fixture standard's
+`does_not_check` is empty, and that emptiness is a fact about it rather than a
+section nobody filled in.
+
+The three declines are the useful half. "Verified" with nothing after it reads
+as the strongest thing the word can mean; this standard is genuinely weaker, and
+a reader who cannot see *where* it is weaker will assume it is not.
+
+**The standard is chosen by backend id with no default.**
+`result_verification_standard()` raises for a backend nobody has mapped rather
+than falling through to the looser of the two. A new backend quietly receiving
+the weakest available verification is the failure this whole arrangement exists
+to prevent, and a `ValueError` at startup is a much better outcome than a run
+record that overclaims.
+
+##### D4 — the guest identity becomes admissible, and nothing admits it
+
+With the standard written, the remaining barrier turned out not to be about
+results at all. It is at startup. `_valid_started_payload` did not merely check
+that a startup event was well formed: it reconstructed the fixture's **entire**
+payload — `commands == ["fixture-upper"]`, `runtimes == ["fixture"]`, the fixed
+package records, the fixed browser digest — and required equality. A real guest
+reports its own capabilities out of its substrate manifest, so its startup could
+never have matched, whatever standard its results were later judged under.
+
+**What changed, exactly.** Four things, each smaller than it sounds:
+
+- `MICROVM_BACKEND_ID` moved into `core/agentic_v2_contract.py` beside the
+  foundation's, and the backend module re-exports it. Two files spelling the
+  same identity is one file spelling it differently later, and the difference
+  would surface as a run silently refused at startup rather than as anything a
+  reader could name.
+- `_RESULT_STANDARD_BY_BACKEND` gained its second entry. That table is what
+  makes the guest admissible at all, because admission refuses any backend it
+  cannot look up in it.
+- `_valid_started_payload` split in three: a backend-agnostic structural chain
+  both standards share, then the fixture's exact-equality block **unchanged**,
+  then a shape-only check for the attested standard. What the attested branch
+  adds beyond shape is one rule — a payload whose commands are exactly
+  `["fixture-upper"]` and whose runtimes are exactly `["fixture"]` is refused —
+  so a guest identity cannot be worn by the fixture.
+- the runner's hard-coded admitted set became `admitted_identity`, a constructor
+  argument that defaults to the fixture.
+
+**`foundation_only` was not relaxed, and did not need to be.** The microVM
+backend reads that flag from its substrate manifest, and under the manifests in
+this repository it reports `True`. So both standards still require it, and this
+change is about *which* backend may start, never about how far one may go.
+`production_activation: "disabled"` is untouched and stays an independent brake.
+The same reading turned `_failure()`'s hard-coded `"foundation_only": True` from
+accidentally correct into correct on purpose, and a test now pins the two
+together.
+
+**A declaration is refused where it is made, not where it runs.**
+`_validate_admitted_identity` raises at construction for an identity that is
+malformed, that is not foundation-only, or whose implementation hash is not a
+hash. The alternative — failing the run — would surface a configuration mistake
+as `compute_start_failed` on every task, which reads as an infrastructure fault
+and, by the disposition map below, would be counted as one.
+
+**And it found an ordering fault that predates it.** A startup no standard
+accepts used to be caught only at final verification, by which point the failure
+envelope being written *contained* the bad started event and could not be
+verified either. A run that failed cleanly, for a nameable reason, produced a
+record nothing downstream would accept — and the reason was lost.
+`startup_is_admissible()` asks the same question before the event is appended,
+so the run stops with an ordinary `compute_start_failed` that verifies like any
+other failure. Its test asserts the chain contains no `started` event at all.
+
+**What is still shut.** Nothing in this repository declares a non-default
+identity, and a test globs `core/*.py` to establish that rather than asserting
+it. `production_activation` is `"disabled"`. `exec_run` on a real guest reaches
+nothing through the product path, and the two guards in `step2_run_inference.py`
+and `core/executor.py` are where they were. What changed is that admitting a
+guest is now an argument someone passes — which a diff shows as an addition —
+instead of a comparison someone loosens, which a diff shows as the deletion of a
+line that used to say the fixture's name.
+
+**Checked.** 264 tests across the foundation, microVM and contract modules;
+2,851 passed and 4 skipped across the wider agentic subset. Nine new tests.
+`mypy` on the four changed modules reports 29 errors against a 34-error baseline
+taken from `origin/main` in a throwaway worktree — five fewer, none introduced.
+
+The evidence that the fixture path is untouched is the *absence* of behavioural
+failures. Three tests failed on the first run and all three asserted the old
+one-backend world: that the admitted set had exactly one member, that exactly
+one backend had a standard, and that the microVM id appeared nowhere in the
+runner's source. They were rewritten to assert the new invariants, which are
+still narrow. No test was relaxed to pass.
+
+And the attested branch is exercised rather than merely present: the guest
+double declares `commands == ["fixture-upper", "python3"]`, which the fixture
+branch rejects outright, and its run verifies — so the attested branch is the
+one that ran. That is a proof by consequence rather than by mutation, which is
+deliberate: rewriting the source in place would have corrupted the suite running
+beside it.
+
 ### Stage E — not yet run
 
 Before any of it is written, what the repository already has. Two searches this
@@ -2197,6 +2324,40 @@ status, not the hardware, so a job that measured `/dev/kvm` on a runner would
 answer a true but different question — and presenting that measurement as
 reopening the route would be the same overclaim as reading a self-computed
 digest as a supplier signature.
+
+#### The cost and blame wiring, built. Nothing has run through it.
+
+`core/agentic_v2_cost_binding.py` is the V2 caller `core/cost_receipts.py` did
+not have. It is a separate module on purpose: the ledger is shared with other
+work, and binding a backend to it should not mean editing it.
+
+**All 27 error types are mapped onto 8 dispositions, and two of the eight are
+neither the model's fault nor the environment's.** Ten are `semantic` — the
+model did something the contract refuses — five are `infrastructure`, one is
+internal recovery, and four are terminal. The two that matter are the ones an
+easier map would not have:
+
+- **`runner_defect`, seven error types.** They can only be produced by this code
+  misbehaving. Filing them under infrastructure would inflate the one retry
+  count the 220-task run exists to measure, and would make the sandbox look
+  unreliable on occasions when it was fine.
+- **`ambiguous_not_attributable`, one.** `task_wall_time_exhausted` cannot be
+  attributed from the error alone: a model looping and a host crawling produce
+  the same symbol. It is recorded as undecidable rather than assigned to
+  whichever side is convenient.
+
+The map is total in both directions and the check is at import — a contract
+error nobody classified, or a classification invented for an error that does not
+exist, stops the build rather than defaulting to somebody's fault.
+
+**The guest's own time is recorded unpriced rather than free.**
+`RUNTIME_KIND_MICROVM_GUEST` is not in the price table, so its seconds go into
+the ledger with no amount and a `runtime_cost_unpriced` reason, which holds the
+task's receipt at `partial`. That is the same rule the host windows above
+follow, for the same reason: a bill this repository cannot read must not be
+allowed to look like zero.
+
+Built and tested. Nothing has run through it, because nothing has run.
 
 ### Stage F — pre-registered on 2026-09-11, not yet run
 
