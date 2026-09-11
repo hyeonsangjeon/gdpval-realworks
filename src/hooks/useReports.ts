@@ -60,8 +60,26 @@ export function useReports(enabled = true) {
 }
 
 /**
- * Fetch a single full report (with task_results) from HuggingFace by short_id.
- * The index entry provides the experiment_id needed for the HF URL.
+ * Fetch a single full report (with task_results) by short_id.
+ *
+ * Two routes, and the index entry says which one applies:
+ *
+ *   - `served_locally` — `generated/reports/<short_id>.json`, written by
+ *     aggregate-reports.mjs for a report that exists only in this repo.
+ *   - otherwise — HuggingFace, the same URL the build itself read.
+ *
+ * The local route is not an optimisation. A run with `publish_to_hf: false`
+ * — every dry run, and so every relay — has no `self_report.json` on the hub
+ * at all, and the hub answers 404. Before this route existed, such a run
+ * appeared in the leaderboard and the sector matrix (both read the index) and
+ * its own page was an error panel: the one place its per-task results were
+ * meant to be read.
+ *
+ * The flag is read rather than the local path being tried first and the hub
+ * used on failure. A static host serving an SPA answers a missing file with
+ * **200 and `text/html`**, not 404, so a probe cannot distinguish "no local
+ * copy" from "here is index.html" and every published report would die on the
+ * JSON parse. The build recorded what it wrote; this follows it.
  */
 export function useReport(shortId: string | undefined) {
   const { reports: indexReports, loading: indexLoading } = useReports()
@@ -82,13 +100,17 @@ export function useReport(shortId: string | undefined) {
     setLoading(true)
     setError(null)
 
-    const url = `${HF_BASE}/${entry.meta.experiment_id}/resolve/main/self_report.json`
+    const url = entry.served_locally
+      ? `${import.meta.env.BASE_URL}generated/reports/${shortId}.json`
+      : `${HF_BASE}/${entry.meta.experiment_id}/resolve/main/self_report.json`
+
     fetch(url)
       .then((res) => {
         if (!res.ok) throw new Error(`Failed to load report: ${res.status}`)
         return res.json() as Promise<ReportData>
       })
       .then((data) => {
+
         const reportWithIndexSnapshot = applyReportIndexSnapshot(data, entry, shortId)
         // Merge error messages from error_tasks into task_results
         if (reportWithIndexSnapshot.error_tasks?.length && reportWithIndexSnapshot.task_results) {
