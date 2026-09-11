@@ -222,6 +222,16 @@ batch-runner/scripts/*
 # nobody can check. Reads two files and makes no network call.
 !batch-runner/scripts/plan_agentic_v2_shards.py
 
+# Refuses a dispatch that gives half a resume. Resuming a stage needs the
+# journal's run id and the GitHub run id whose artifact holds that journal;
+# either one alone runs the whole cohort again at full price without raising
+# anything, because an absent or foreign journal has no completed tasks in it.
+# Committed because it is the last thing between a mistyped form and a second
+# full charge, and because a guard nobody can read is a guard nobody can check.
+# Imports only the standard library, so it runs before pip install; compares
+# two strings and makes no network call.
+!batch-runner/scripts/check_agentic_v2_resume_inputs.py
+
 # Measures the one thing standing between a stage that runs and a stage whose
 # results mean something: the reference files a task names are not yet present
 # where the model can open them. Committed because the shape of that gap -- how

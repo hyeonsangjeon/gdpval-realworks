@@ -203,13 +203,16 @@ def test_the_priced_stage_dry_runs_to_zero_without_any_azure_environment():
     deployment and the conversation are out of its reach by design.
 
     What it can reach it now reaches, so the narrower claim is worth more than
-    the broad one was.
+    the broad one was. It reached further again on 2026-09-11, after the next
+    paid run died one line past the ledger -- handing the report a binding
+    where a receipt was wanted -- so the rehearsal, and this assertion, now run
+    a fabricated task all the way to a report row.
     """
     finished = _run("--stage", "advance_check_5", "--dry-run")
 
     assert finished.returncode == 0, finished.stdout + finished.stderr
     assert "Every condition this job can reach is met" in finished.stdout
-    assert "the ledger the paid run settles into" in finished.stdout
+    assert "ledger, binding, receipt, metrics, report row" in finished.stdout
     assert "It cannot reach the model" in finished.stdout
     assert "nothing was spent" in finished.stdout
 
