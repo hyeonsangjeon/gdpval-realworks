@@ -33,6 +33,7 @@ import re
 import subprocess
 import sys
 import tempfile
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -692,3 +693,422 @@ def test_a_rehearsal_collects_a_deliverable_for_every_task_onto_disk(tmp_path):
     assert len(collected) == 5
     for one in collected:
         assert "must not be scored as one" in one.read_text("utf-8")
+
+
+# ── Which model answered ──────────────────────────────────────────────────
+#
+# A deployment is an alias. What answers behind it carries its own name, the
+# voice reads that name out of every reply, and the run used to drop it along
+# with the voice at the end of each task. The receipt was then priced against
+# the alias, which is the right amount only if the two strings agree -- and
+# nothing kept was capable of showing whether they did.
+
+
+class _Spoke:
+    """A voice that has finished speaking, with only what the record reads.
+
+    The method names are the real voice's, and
+    :func:`test_the_stand_in_has_the_same_shape_as_the_voice_it_stands_in_for`
+    is what holds them to it. The first draft of this class invented
+    ``ledger_rows``; every test here passed, and the real
+    :class:`~core.agentic_v2_model_voice.AzureFoundryVoice` has ``ledger``.
+    The record would have raised ``AttributeError`` while being assembled --
+    on the first paid run, after the money was spent, in the one place that
+    writes down what it was spent on.
+    """
+
+    def __init__(self, resolved_model, rows, spent):
+        self.resolved_model = resolved_model
+        self._rows = rows
+        self._spent = spent
+
+    def ledger(self):
+        return [dict(row) for row in self._rows]
+
+    def spent_usd(self):
+        return self._spent
+
+
+def _call(*, price="0.40", model="gpt-5.4"):
+    return {
+        "turn": 1,
+        "requested_deployment": "gpt-5.4",
+        "resolved_model": model,
+        "input_tokens": 1000,
+        "output_tokens": 200,
+        "history_entries_sent": 0,
+        "price_usd": price,
+        "price_missing": price is None,
+    }
+
+
+def test_the_stand_in_has_the_same_shape_as_the_voice_it_stands_in_for():
+    """A stub shaped to the code proves the code agrees with the stub.
+
+    Every test below builds ``_Spoke`` rather than a real voice, because
+    reaching a real one needs a paid call. That trade is only safe while the
+    two have the same surface, and nothing else in this file checks it: the
+    stub is written by the same hand as the code it stands in for, so a
+    misremembered method name is invisible from both sides.
+
+    Checked against the real class rather than an instance, which needs no
+    client, no budget and no network.
+    """
+    from core.agentic_v2_model_voice import AzureFoundryVoice
+
+    for name in ("ledger", "spent_usd"):
+        assert callable(getattr(AzureFoundryVoice, name, None)), (
+            f"the record calls {name}() on a voice and the real voice has no "
+            "such method"
+        )
+    assert "resolved_model" in AzureFoundryVoice.__dataclass_fields__
+
+    invented = set(vars(_Spoke)) - {"__init__", "__module__", "__qualname__"}
+    invented -= {"__doc__", "__dict__", "__weakref__"}
+    for name in invented:
+        assert hasattr(AzureFoundryVoice, name), (
+            f"_Spoke exposes {name}(), which the real voice does not -- so a "
+            "test using it is testing something that cannot happen"
+        )
+
+
+def test_the_record_names_the_model_that_answered_and_not_the_one_asked_for():
+    """The whole point. The alias is already in chosen_settings."""
+    written = runner.model_calls_record(
+        {
+            ("task-1", 1): _Spoke(
+                "gpt-5.4-2026-08-01", [_call(model="gpt-5.4-2026-08-01")], None
+            )
+        },
+        pinned_model="gpt-5.4",
+    )
+
+    assert written["models_that_answered"] == ["gpt-5.4-2026-08-01"]
+    assert written["per_attempt"][0]["resolved_model"] == "gpt-5.4-2026-08-01"
+
+
+def test_one_run_answered_by_two_models_is_visible_rather_than_averaged():
+    """Recorded per attempt, because a single field could not show this.
+
+    The voice refuses a run whose replies change model mid-conversation, but
+    that guard is per voice and there is one voice per task. Two tasks in the
+    same stage answered by different models would pass every check inside the
+    conversation and still be two experiments reported as one.
+    """
+    written = runner.model_calls_record(
+        {
+            ("task-1", 1): _Spoke("gpt-5.4-2026-08-01", [_call()], None),
+            ("task-2", 1): _Spoke("gpt-5.4-2026-09-01", [_call()], None),
+        },
+        pinned_model="gpt-5.4",
+    )
+
+    assert written["models_that_answered"] == [
+        "gpt-5.4-2026-08-01",
+        "gpt-5.4-2026-09-01",
+    ]
+    assert len(written["per_attempt"]) == 2
+
+
+def test_an_attempt_with_an_unpriced_call_totals_nothing_rather_than_zero():
+    """Missing is partial. A zero would be averaged with real amounts."""
+    written = runner.model_calls_record(
+        {("task-1", 1): _Spoke("something-new", [_call(price=None)], None)},
+        pinned_model="gpt-5.4",
+    )
+
+    assert written["per_attempt"][0]["spent_usd"] is None
+    assert written["calls_with_no_price"] == 1
+    assert "is not zero" in written["what_no_price_means"]
+
+
+def test_the_calls_that_could_not_be_priced_are_counted_not_left_to_be_noticed():
+    """Across every attempt, so one bad call in 220 tasks is not buried."""
+    written = runner.model_calls_record(
+        {
+            ("task-1", 1): _Spoke("m", [_call(), _call(price=None)], None),
+            ("task-2", 1): _Spoke("m", [_call()], Decimal("0.40")),
+        },
+        pinned_model="gpt-5.4",
+    )
+
+    assert written["calls_with_no_price"] == 1
+    assert written["per_attempt"][1]["spent_usd"] == "0.40"
+
+
+def test_an_attempt_no_voice_spoke_for_is_left_out_rather_than_priced_at_zero():
+    """A refused attempt made no call. An empty row would read as a free one."""
+    written = runner.model_calls_record(
+        {("task-1", 1): None}, pinned_model="gpt-5.4"
+    )
+
+    assert written["per_attempt"] == []
+    assert written["models_that_answered"] == []
+
+
+def test_it_keeps_no_prompt_and_no_reply():
+    """Same rule as the rest of the script: names, counts and amounts only."""
+    written = runner.model_calls_record(
+        {("task-1", 1): _Spoke("gpt-5.4", [_call()], Decimal("0.40"))},
+        pinned_model="gpt-5.4",
+    )
+
+    allowed = {
+        "turn",
+        "requested_deployment",
+        "resolved_model",
+        "input_tokens",
+        "output_tokens",
+        "history_entries_sent",
+        "price_usd",
+        "price_missing",
+    }
+    for row in written["per_attempt"][0]["calls"]:
+        assert set(row) <= allowed, f"unexpected field: {set(row) - allowed}"
+
+
+def test_the_receipt_is_settled_against_what_the_reply_named():
+    """Read from the source, because reaching this needs a paid call.
+
+    Checked as text rather than behaviour on purpose, and narrowly: the
+    binding used to pass a literal ``resolved_model=None`` beside a deployment
+    it had every reason to believe was the answer. The ledger then filled its
+    own column from the alias and the receipt read as complete.
+    """
+    source = RUNNER_PATH.read_text("utf-8")
+    binding = source.split("def receipt_for(")[1].split("def ")[0]
+
+    assert "resolved_model=None" not in binding
+    assert "spoke.resolved_model" in binding
+
+
+def test_the_voice_that_spoke_for_an_attempt_is_still_reachable_afterwards():
+    """The voices are kept. Dropping them is what lost the name."""
+    source = RUNNER_PATH.read_text("utf-8")
+
+    assert "voices_by_budget[id(budget)] = voice" in source
+    assert "def voice_of(" in source
+
+
+@needs_dataset
+def test_a_rehearsal_names_no_model_because_none_answered(tmp_path):
+    """The section is present and empty, rather than absent.
+
+    Absent would have to be read as "not recorded"; empty says no model was
+    asked, which is the true state of a rehearsal and the one thing it must
+    never be mistaken for.
+    """
+    into = tmp_path / "rehearsal"
+
+    _run("--stage", "advance_check_5", "--rehearse", "--into", str(into))
+    record = json.loads((into / "rehearsal_record.json").read_text("utf-8"))
+
+    assert record["model_calls"]["models_that_answered"] == []
+    assert record["model_calls"]["per_attempt"] == []
+    assert record["model_calls"]["calls_with_no_price"] == 0
+    assert record["model_calls"]["answered_by_something_else"] == []
+    assert record["model_calls"]["attempts_that_reported_no_model"] == 0
+    # Present even here, so a reader of an empty section knows what the
+    # comparison would have been against rather than having to infer that
+    # there was one.
+    assert record["model_calls"]["pinned_model"] == "gpt-5.4"
+
+
+# ── The plan's first stop condition ───────────────────────────────────────
+#
+# "Stop at once if the model name or deployment name reported back differs
+# from the one fixed above."
+#
+# Written into the plan and implemented nowhere. The plan's `resolved_model`
+# was read in two places -- copied into the pre-registration record, and used
+# to price the estimate -- and compared against a reply in neither. Because
+# the estimate is priced from the same pinned name, an entirely different
+# model answering every call would have produced an estimate and a receipt
+# that agreed exactly: two numbers matching, neither touching the fact.
+
+
+def _voices(*names):
+    return [_Spoke(name, [_call()], Decimal("0.40")) for name in names]
+
+
+def test_the_pinned_model_answering_is_not_a_mismatch():
+    assert (
+        runner.answered_by_something_else(
+            _voices("gpt-5.4"), pinned_model="gpt-5.4"
+        )
+        == ()
+    )
+
+
+def test_a_different_name_coming_back_is_the_mismatch():
+    assert runner.answered_by_something_else(
+        _voices("gpt-5.4", "gpt-5.4-turbo"), pinned_model="gpt-5.4"
+    ) == ("gpt-5.4-turbo",)
+
+
+def test_a_reply_that_named_nothing_does_not_halt_the_run():
+    """Three states, and only one of them is a switch.
+
+    ``resolved_model`` is ``""`` when the reply carried no model field. The
+    rule is written about a name that *differs*; a provider omitting a header
+    is not a model switch, and ending a paid stage over one would be this code
+    inventing a stop condition rather than enforcing the written one. Counted
+    in the record instead — see the test below.
+    """
+    assert (
+        runner.answered_by_something_else(_voices(""), pinned_model="gpt-5.4")
+        == ()
+    )
+
+
+def test_a_voice_that_never_spoke_is_not_a_mismatch():
+    assert (
+        runner.answered_by_something_else([None], pinned_model="gpt-5.4")
+        == ()
+    )
+
+
+def test_a_plan_that_pins_no_model_has_no_claim_to_check():
+    """Deciding here what the run was allowed to be would be the wrong fix.
+
+    A plan with no pinned name is a gap in the plan. Inventing a comparison
+    against the deployment alias would hide it behind a check that passes.
+    """
+    assert (
+        runner.answered_by_something_else(
+            _voices("anything-at-all"), pinned_model=""
+        )
+        == ()
+    )
+
+
+def test_the_record_carries_the_pinned_name_beside_the_one_that_answered():
+    written = runner.model_calls_record(
+        {("task-1", 1): _Spoke("gpt-5.4-turbo", [_call()], Decimal("0.40"))},
+        pinned_model="gpt-5.4",
+    )
+
+    assert written["pinned_model"] == "gpt-5.4"
+    assert written["models_that_answered"] == ["gpt-5.4-turbo"]
+    assert written["answered_by_something_else"] == ["gpt-5.4-turbo"]
+
+
+def test_a_matching_run_says_so_rather_than_leaving_the_field_out():
+    written = runner.model_calls_record(
+        {("task-1", 1): _Spoke("gpt-5.4", [_call()], Decimal("0.40"))},
+        pinned_model="gpt-5.4",
+    )
+
+    assert written["answered_by_something_else"] == []
+    assert written["attempts_that_reported_no_model"] == 0
+
+
+def test_replies_that_named_no_model_are_counted_even_though_they_do_not_halt():
+    """Recorded, not enforced -- and the record says which.
+
+    Not halting is a decision, and a decision that leaves no trace reads
+    afterwards as a case nobody thought about.
+    """
+    written = runner.model_calls_record(
+        {
+            ("task-1", 1): _Spoke("", [_call()], Decimal("0.40")),
+            ("task-2", 1): _Spoke("gpt-5.4", [_call()], Decimal("0.40")),
+        },
+        pinned_model="gpt-5.4",
+    )
+
+    assert written["attempts_that_reported_no_model"] == 1
+    assert written["models_that_answered"] == ["gpt-5.4"]
+    assert written["answered_by_something_else"] == []
+    assert "not a model switch" in written["what_no_model_reported_means"]
+
+
+def test_the_halt_and_the_record_are_the_same_computation():
+    """So a run cannot stop for a reason its own record disagrees with.
+
+    Both read ``answered_by_something_else``. Two implementations of "did the
+    name differ" would be two chances to disagree, and the disagreement would
+    only ever show up in a run that had already stopped.
+    """
+    source = RUNNER_PATH.read_text("utf-8")
+    block = source.split("def wrong_model_answered(")[1].split("factory =")[0]
+
+    assert block.count("answered_by_something_else") == 1
+    assert "def cancel_requested()" in block
+    assert "def stop_when(" in block
+    assert "wrong_model_answered()" in block
+
+
+def test_both_seams_are_wired_because_they_stop_different_things():
+    """Read from the source: reaching either needs a paid call.
+
+    ``cancel_requested`` is read before every model turn and every tool call,
+    so the task that saw the wrong name does not take another turn -- that is
+    the one that saves money. ``stop_when`` is read between tasks, so the run
+    ends with the rule named instead of quietly finishing a manifest of
+    cancelled tasks -- that is the one that saves the record. Either alone is
+    wrong in a way that matters.
+    """
+    source = RUNNER_PATH.read_text("utf-8")
+    factory = source.split("factory = build_runner_factory(")[1].split(")")[0]
+    driving = source.split("outcome = run_manifest(")[1].split("except ")[0]
+
+    assert "cancel_requested=cancel_requested" in factory
+    assert "stop_when=stop_when" in driving
+
+
+def test_the_stop_names_the_rule_the_plan_wrote_rather_than_a_new_one():
+    """Rule 0 by index, out of STOP_RULES, not retyped.
+
+    A halt that quoted its own sentence would be a rule this code invented,
+    and the pre-registration would not contain it.
+    """
+    source = RUNNER_PATH.read_text("utf-8")
+    block = source.split("def stop_when(")[1].split("\n\n")[0]
+
+    assert "rule_index=0" in block
+    assert "STOP_RULES[0]" in block
+
+
+def test_it_enforces_the_reported_back_rule_and_not_its_neighbour():
+    """Rule 0 and rule 1 are adjacent and different, and the first draft of
+    this work implemented 0 while naming 1.
+
+    Rule 0 compares a reply against the name the plan pinned, which nothing
+    held. Rule 1 is a run switching on its own mid-conversation, which the
+    voice does hold -- it raises when two replies in one conversation name two
+    different models. Claiming 1 here would have moved a rule that already had
+    an enforcer and left the one with none still uncovered, while every test
+    went green.
+    """
+    from core.agentic_v2_preregistration import STOP_RULES
+
+    assert "reported back" in STOP_RULES[0]
+    assert "pinned" in STOP_RULES[0]
+    assert "on its own" in STOP_RULES[1]
+
+
+def test_the_plan_still_pins_a_model_for_the_comparison_to_use():
+    """The check is only as good as the name it compares against.
+
+    If the plan stopped pinning one, ``answered_by_something_else`` would
+    return nothing for every run and the stop condition would silently become
+    unenforced again -- passing, quietly, forever.
+    """
+    plan = yaml.safe_load(
+        runner.STAGE_ONE_PLAN_PATH.read_text(encoding="utf-8")
+    )
+
+    assert str(plan["model"]["resolved_model"]).strip()
+
+
+def test_the_written_rule_is_about_a_name_that_differs():
+    """Pinned because the implementation reads it narrowly on purpose.
+
+    An omitted name does not halt the run. That is defensible only while the
+    rule says *differs*; if it is ever rewritten to cover a missing name, this
+    fails and the narrow reading has to be revisited.
+    """
+    from core.agentic_v2_preregistration import STOP_RULES
+
+    assert "differs" in STOP_RULES[0].lower()

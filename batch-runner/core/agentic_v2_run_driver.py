@@ -32,9 +32,11 @@ in prose, and it would be easy to claim all eight by naming them. Four of them
 are about the run's own record — the seal, a pinned deployment, a gate, an
 approved amount — and are checked before anything starts, by code that is not
 this. :data:`RULES_THIS_DRIVER_WATCHES` names by index the ones a loop can
-observe while it runs, and :data:`RULES_THIS_DRIVER_CANNOT_SEE` names the rest.
-Both are derived from :data:`~core.agentic_v2_preregistration.STOP_RULES` rather
-than retyped, so a rule added there without a decision here fails a test.
+observe while it runs, :data:`RULES_A_CALLER_CAN_HAND_THIS_DRIVER` names the
+one it watches only when the caller passes ``stop_when``, and
+:data:`RULES_THIS_DRIVER_CANNOT_SEE` names the rest. All three are derived from
+:data:`~core.agentic_v2_preregistration.STOP_RULES` rather than retyped, so a
+rule added there without a decision here fails a test.
 
 Nothing here asks a model. The model is behind ``runner_factory``, which is the
 seam the caller supplies and the one thing still blocked.
@@ -90,7 +92,6 @@ RULES_THIS_DRIVER_WATCHES: dict[int, str] = {
 #: Written down because a driver that silently enforced two of eight would read
 #: as a driver that enforced eight.
 RULES_THIS_DRIVER_CANNOT_SEE: dict[int, str] = {
-    0: "the deployment is pinned and compared where the model client is built",
     1: "a model or deployment switch is visible to the voice, not to this loop",
     2: "the seal is verified before a run starts",
     3: "gate state is checked by the gate's own free check",
@@ -98,9 +99,30 @@ RULES_THIS_DRIVER_CANNOT_SEE: dict[int, str] = {
     5: "the ledger's writability is the ledger's own refusal",
 }
 
-if set(RULES_THIS_DRIVER_WATCHES) | set(RULES_THIS_DRIVER_CANNOT_SEE) != set(
-    range(len(STOP_RULES))
-):  # pragma: no cover - import guard
+#: Rules this loop enforces only if the caller hands it the comparison.
+#:
+#: Separate from the two dicts above because the difference is real and the
+#: honest thing is to say so: these are watched when ``stop_when`` is passed
+#: and by nobody at all when it is not. Listing them beside the unconditional
+#: ones would be the same overclaim this file exists to avoid, and leaving them
+#: in "cannot see" would hide that the seam is there.
+RULES_A_CALLER_CAN_HAND_THIS_DRIVER: dict[int, str] = {
+    0: "what a reply named can only be compared against what the plan pinned "
+    "by something holding both. The plan belongs to the caller and the "
+    "replies to the voice, and the voice's own guard is per conversation -- "
+    "so two tasks answered by two different models pass every check inside "
+    "both. Neither half is this loop's to hold, so the comparison arrives "
+    "through stop_when. This entry used to read that the deployment was "
+    "'compared where the model client is built', which is before any reply "
+    "exists: the half of the rule that says *reported back* had no reader "
+    "anywhere in the run",
+}
+
+if (
+    set(RULES_THIS_DRIVER_WATCHES)
+    | set(RULES_THIS_DRIVER_CANNOT_SEE)
+    | set(RULES_A_CALLER_CAN_HAND_THIS_DRIVER)
+) != set(range(len(STOP_RULES))):  # pragma: no cover - import guard
     raise RuntimeError(
         "a stop rule was added or removed without deciding whether this driver "
         "can see it"
@@ -227,6 +249,7 @@ def run_manifest(
     condition_name: str = "condition_a",
     clock: Callable[[], float] = time.monotonic,
     on_task: Callable[[str, Mapping[str, Any]], None] | None = None,
+    stop_when: Callable[[str], "StoppedEarly | None"] | None = None,
 ) -> RunOutcome:
     """Run a fixed manifest, resuming what a previous run left.
 
@@ -234,6 +257,19 @@ def run_manifest(
     task's cost receipt, or ``None`` when this run kept no ledger. ``None`` is
     not free — it becomes a ``not_run`` receipt status and keeps the run's
     ceiling below ``complete``.
+
+    ``stop_when`` is asked, after each task, whether a rule this loop cannot
+    check for itself has been broken; it is handed the task that just finished
+    and returns a :class:`StoppedEarly` or ``None``. It exists for rule 0 —
+    see :data:`RULES_A_CALLER_CAN_HAND_THIS_DRIVER` — where the comparison
+    needs the plan on one side and the model's replies on the other, and this
+    loop holds neither.
+
+    A caller enforcing such a rule should wire the runner's ``cancel_requested``
+    to the same condition. The two stop different things: cancelling ends the
+    task that is running, and this ends the run with the rule named. Without
+    the second, a run that halted finishes a manifest of cancelled tasks and
+    reports ``stopped_early`` as nothing.
     """
     manifest = list(tasks)
     if not manifest:
@@ -357,6 +393,16 @@ def run_manifest(
             outcome.rows.append(row)
             if on_task is not None:
                 on_task(task_id, row)
+
+        # Asked after the row is kept, so the task that tripped the rule is in
+        # the record rather than dropped by the halt. Asked even when there is
+        # no row, because a task the journal had already decided is not a
+        # reason to stop checking.
+        if stop_when is not None:
+            asked = stop_when(task_id)
+            if asked is not None:
+                outcome.stopped = asked
+                break
 
         if consecutive_defects >= CONSECUTIVE_RUNNER_DEFECTS_THAT_STOP_A_RUN:
             outcome.stopped = StoppedEarly(
