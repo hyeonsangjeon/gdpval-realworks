@@ -1,0 +1,137 @@
+# Ask whether a Firecracker host could go in the subscription the model is in,
+# and do nothing about the answer.
+#
+# Stage D needs a GPT deployment and a machine that can boot a guest in one
+# place, and this repository has them in two: the model is a Foundry deployment
+# in one subscription and tenant, and the only host shown to boot a guest is a
+# VM in a different subscription in a different tenant. Booting the guest on the
+# runner that already holds the model credential is recorded as closed --
+# RECORDED_FINDINGS[0] in core/agentic_v2_containment_readiness.py, citing
+# GitHub's own documentation calling nested virtualisation on hosted runners
+# technically possible but not officially supported. That leaves one route: put
+# a host where the model already is. This measures whether that is possible
+# under permissions that already exist.
+#
+# Every call is an ARM control-plane READ. It creates no resource, registers no
+# provider, requests no role, and calls no model endpoint, so running it changes
+# nothing and spends nothing. That is the point rather than a detail: creating a
+# machine and granting a role are access changes, and those get reported
+# exactly, not performed quietly. A survey that fixed what it found would be the
+# failure mode.
+#
+# This is also the only place the question can be asked. The script reads
+# whatever subscription the `az` session holds, and a login taken on a
+# development box is a different one: the Foundry subscription is not the one
+# such a login reaches. The survey then reports `not_measured` and says nothing
+# was learned -- which is the truth, and is not evidence that anything is
+# absent. Run it here, or do not run it.
+name: Azure Boot Host Survey
+
+on:
+  workflow_dispatch:
+    inputs:
+      location:
+        description: Azure region to ask about (defaults to the model's region)
+        required: false
+        default: eastus2
+        type: string
+      emit_json:
+        description: Emit the redacted report as JSON instead of prose
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: azure-boot-host-survey
+  cancel-in-progress: false
+
+jobs:
+  survey:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+
+      # The same pinned action, client id, tenant and subscription the paid runs
+      # authenticate with. Surveying a different identity's reach would answer a
+      # question nobody asked: what matters is what *this* identity can do.
+      - name: Azure Login (OIDC)
+        uses: azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca # v3.0.1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Verify Azure OIDC session identity
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          AZURE_AI_EXPECTED_CLIENT_ID: ${{ vars.AZURE_AI_EXPECTED_CLIENT_ID }}
+          AZURE_AI_EXPECTED_TENANT_ID: ${{ vars.AZURE_AI_EXPECTED_TENANT_ID }}
+          AZURE_AI_EXPECTED_SUBSCRIPTION_ID: ${{ vars.AZURE_AI_EXPECTED_SUBSCRIPTION_ID }}
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          python3 scripts/azure_oidc_identity_preflight.py --verify-session
+
+      # No model credential is passed in, and no Foundry account or project name
+      # either. GitHub does not mask a repository variable the way it masks a
+      # secret -- whatever a step lists under env: is reprinted verbatim in the
+      # step header, and this repository's logs are public. The survey does not
+      # need those names: it asks about the subscription, not the account.
+      - name: Survey the subscription for a host
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          SURVEY_LOCATION: ${{ inputs.location }}
+          EMIT_JSON: ${{ inputs.emit_json }}
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          ARGS=(--location "${SURVEY_LOCATION:-eastus2}")
+          if [ "${EMIT_JSON}" = "true" ]; then
+            ARGS+=(--json)
+          fi
+          # No --require flag of any kind. Reporting that a host cannot go here
+          # is the point of the run, not a failure of it, and a red job would
+          # invite somebody to make it green by granting something.
+          python3 scripts/azure_boot_host_survey.py "${ARGS[@]}"
+
+      - name: Confirm nothing was created, granted, or called
+        if: always()
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          # A grep, not a promise. If a future edit reaches for a write or for
+          # the inference path from this survey, this step is what says so. The
+          # unit tests assert the same properties; this catches the edit that
+          # lands without them.
+          if grep -nE 'vm create|group create|provider register|role assignment create|deployment group create' \
+              scripts/azure_boot_host_survey.py; then
+            echo "FATAL: the survey references a control-plane write"
+            exit 1
+          fi
+          if grep -nE 'responses\.create|chat\.completions|AzureOpenAI|llm_client|code_interpreter' \
+              scripts/azure_boot_host_survey.py; then
+            echo "FATAL: the survey references a model call path"
+            exit 1
+          fi
+          echo "reads-only=confirmed"

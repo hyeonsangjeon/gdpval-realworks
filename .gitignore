@@ -172,6 +172,17 @@ batch-runner/scripts/*
 # fails collection loudly instead of skipping the tests in silence.
 !batch-runner/scripts/analyze_codex_run.py
 
+# Asks whether a Firecracker host could go in the subscription the model
+# deployment is already in, under permissions that already exist. Committed
+# because the question cannot be asked from a checkout: a local `az` session
+# reaches a different subscription entirely, so run here it reports that
+# nothing was measured, which is true and useless. The only place it answers is
+# a workflow job holding the federated token -- and that job runs what the
+# repository contains. Every call it makes is a control-plane read; it creates
+# nothing and grants nothing, and both the workflow and
+# tests/test_azure_boot_host_survey.py hold it to that.
+!batch-runner/scripts/azure_boot_host_survey.py
+
 
 # Experiment report HTML (skews GitHub language stats)
 batch-runner/results/*/report/report.html
