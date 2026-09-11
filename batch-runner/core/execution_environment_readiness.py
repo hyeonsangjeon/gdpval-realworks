@@ -931,10 +931,47 @@ def _agentic_sandbox_v2_blockers() -> list[str]:
 
     blockers.extend(_why_a_real_model_is_out_of_reach())
 
-    blockers.append(
-        "no approval exists to use this environment in a real experiment"
-    )
+    blockers.append(_what_this_environment_is_not_approved_for())
     return blockers
+
+
+def _what_this_environment_is_not_approved_for() -> str:
+    """The approval blocker, narrowed on 2026-09-11 to what is still true.
+
+    This used to read "no approval exists to use this environment in a real
+    experiment". That was right until stage one was approved, and then it was a
+    sentence outliving its fact — the exact failure this module's tests were
+    written about, in the same list, two lines below the blocker that had
+    already been fixed for it.
+
+    Two different approvals were hiding behind the one sentence. Stage one's
+    five-task run is approved, on its own two figures, in the stage-one plan.
+    What is not approved — and what the two blocks in the paid pipeline enforce
+    — is reaching this environment the ordinary way, through an experiment
+    YAML. So the blocker now names the second and points at the first, and it
+    is read from the plan rather than stated, so it goes back to the blunter
+    wording by itself if the approval is ever withdrawn.
+    """
+    try:
+        establish = _import_attribute(
+            "core.agentic_v2_stage_one_budget", "stage_one_amount_note"
+        )
+        unapproved = list(establish())
+    except Exception:  # pragma: no cover - defensive
+        # Unreadable is treated as unapproved, which is the safe direction: the
+        # blunter sentence overstates what is blocked, and this one understates.
+        unapproved = ["the stage-one plan could not be read"]
+
+    if unapproved:
+        return "no approval exists to use this environment in a real experiment"
+    return (
+        "this environment is not approved for the ordinary experiment "
+        "pipeline: step2_run_inference refuses the mode and core.executor "
+        "refuses to build a runner for a paid run. Stage one's five-task run "
+        "is approved separately, on its own two amounts in "
+        "agentic_stage_one_plan.yaml, and goes through "
+        "scripts/run_agentic_v2_stage.py rather than through here"
+    )
 
 
 def inspect_environment_support(

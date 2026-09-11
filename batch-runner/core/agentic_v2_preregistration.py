@@ -445,6 +445,185 @@ NOT_STOP_RULES: tuple[str, ...] = (
 )
 
 
+def _what_this_is_not() -> list[str]:
+    """The disclaimers, worked out rather than typed out.
+
+    Both of the first two used to be sentences, and both went stale within a
+    day of being written. One said the blocker was a role assignment in the
+    subscription holding the model: that was the reading of a 401 which later
+    turned out to have come from *past* the authentication gate, and stage A
+    has since reached a real deployment and been charged for it. The other said
+    the amount was the owner's to fill in, and on 2026-09-11 they filled in two.
+
+    A disclaimer that outlives its fact is worse than no disclaimer, because it
+    is read as current. The one about readiness names what is still not real
+    rather than guessing at a cause, and the one about money asks
+    :func:`~core.agentic_v2_stage_one_budget.stage_one_amount_note`, so it
+    changes back by itself if the approval is ever withdrawn.
+
+    Both feed the seal, so a change here is visible as a changed seal rather
+    than as a quietly different record.
+    """
+    # Imported here rather than at module scope. The budget module reaches the
+    # readiness report, which reaches back into this area of the code; the same
+    # reason that module imports its own dependencies lazily.
+    from core.agentic_v2_stage_one_budget import stage_one_amount_note
+
+    unapproved = list(stage_one_amount_note())
+    if unapproved:
+        money = (
+            "not an approval to spend. "
+            + unapproved[0]
+            + ". The amounts live in "
+            "experiments/execution_envelope/agentic_stage_one_plan.yaml"
+        )
+    else:
+        money = (
+            "not an approval to spend more than the five-task cohort. Two "
+            "amounts are approved in "
+            "experiments/execution_envelope/agentic_stage_one_plan.yaml -- one "
+            "for running the five tasks and one for marking their answers -- "
+            "and they are whole-run figures for those five. The thirty and the "
+            "two hundred and twenty are not priced, and "
+            "scripts/run_agentic_v2_stage.py refuses them until they are"
+        )
+
+    return [
+        # Named rather than diagnosed. What is missing is the isolation, which
+        # this pre-registration itself fixes shut for stage one: a run that
+        # opened exec_run would be a different experiment from the registered
+        # one. Whether a guest could be booted at all is stage B's question and
+        # is answered there.
+        "not a statement that the environment is ready. No V2 task has run. "
+        "What stage one registers is a run with exec_run shut and no guest "
+        "booted, so the isolation is not exercised by it and no result from it "
+        "is evidence that the sandbox contains anything",
+        money,
+        "not a prediction of how the run will go",
+    ]
+
+
+def _run_conditions() -> dict[str, Any]:
+    """The conditions the run is held to, recorded before it starts.
+
+    Model, deployment and resource; the prompt's source; the tools on offer;
+    the token, time and retry ceilings. The point of pre-registering them is
+    that a run which later turns out disappointing cannot be re-described as
+    having been configured some other way.
+
+    Almost none of it is written here. It is read out of
+    ``agentic_stage_one_plan.yaml``, and that file is fingerprinted below, so a
+    settings change after this record was sealed shows up as a mismatch rather
+    than as a record quietly describing the wrong run. The one part the plan
+    does not contain is the per-task ceilings, which are arithmetic on it — and
+    those come from :func:`~core.agentic_v2_conversation_runner.ceilings_from`,
+    the same function the runner enforces them with, for the same reason.
+
+    What is deliberately *not* here: how the run is expected to go. That
+    belongs to the results, and a pre-registration that carried a prediction
+    would be an invitation to read the outcome against it.
+    """
+    # Lazily, like the money note above: the budget module reaches the
+    # readiness report, which reaches back into this module.
+    from core.agentic_v2_conversation_runner import ceilings_from
+    from core.agentic_v2_stage_one_budget import (
+        STAGE_ONE_PLAN_PATH,
+        load_stage_one_plan,
+    )
+
+    plan = load_stage_one_plan()
+    fixed = dict(plan.get("fixed_settings") or {})
+    chosen_settings = dict(plan.get("cost", {}).get("chosen_settings") or {})
+
+    class _Chosen:
+        tool_calls_per_attempt = int(chosen_settings["tool_calls_per_attempt"])
+        max_output_tokens_per_turn = int(
+            chosen_settings["max_output_tokens_per_turn"]
+        )
+
+    ceilings = ceilings_from(plan, _Chosen)
+    connection = dict(plan.get("azure_connection") or {})
+
+    return {
+        "read_from": str(STAGE_ONE_PLAN_PATH.relative_to(REPOSITORY_ROOT)),
+        # The whole settings file, fingerprinted. Every field below is a copy
+        # of something inside it, and this is what catches a copy going stale.
+        "read_from_sha256": _digest_of(STAGE_ONE_PLAN_PATH),
+        "model": {
+            "deployment": plan["model"]["deployment"],
+            "resolved_model": plan["model"]["resolved_model"],
+            # A deployment name alone does not name a model. The same name in
+            # another resource is another deployment, so the resource is part
+            # of the condition rather than context for it.
+            "account": connection.get("account"),
+            "project": connection.get("project"),
+            "route_profile": connection.get("route_profile"),
+            "automatic_model_switch_allowed": fixed.get(
+                "automatic_model_switch_allowed"
+            ),
+        },
+        "prompt": {
+            # Not reproduced. The wording is the benchmark's own, it is long,
+            # and a copy here would be a second thing to keep in step. The
+            # manifest above seals the dataset revision and the wording hash.
+            "task_wording_comes_from": "the pinned dataset revision in `manifest`",
+            "standing_instruction_length_assumed_from": (
+                plan.get("cost", {}).get("assumptions_come_from")
+            ),
+            "self_review_enabled": fixed.get("self_review_enabled"),
+        },
+        "tools": {
+            # All eight, which is what the model really sees: nothing in the
+            # stage run narrows `tools_available`, and its default is the whole
+            # contract. Listing seven here would have been a nicer-sounding
+            # description of a run that does not happen.
+            "offered": list(TOOL_NAMES),
+            # Offered and shut are not the same thing, and the difference is
+            # the point. exec_run is in the list above, the model may choose
+            # it, and what comes back is `capability_unavailable`. How a model
+            # reacts to a refused capability is a finding this run can collect;
+            # a model that never saw the tool could produce no such finding.
+            "offered_but_refuses_everything": ["exec_run"],
+            "exec_run_open": fixed.get("exec_run_open"),
+            "comes_from": "core/agentic_v2_contract.py TOOL_NAMES",
+            "narrowed_by_the_run": False,
+        },
+        "per_task_ceilings": ceilings.as_dict(),
+        "how_the_ceilings_were_derived": {
+            "chosen_settings": chosen_settings,
+            "turns": "one model call per tool call, plus the turn that finalises",
+            "input_tokens": (
+                "quadratic in the number of turns, because the loop re-sends "
+                "the whole conversation every turn"
+            ),
+            "seconds": "per_task_timeout_seconds, straight from the plan",
+            "comes_from": "core/agentic_v2_conversation_runner.py ceilings_from",
+        },
+        "retry": {
+            "max_attempts": fixed.get("retry_max_attempts"),
+            "reasons_allowed": list(fixed.get("retry_reasons_allowed") or []),
+            # Three kinds, kept apart in the record. An infrastructure retry is
+            # the environment's fault and a task that needed several says
+            # something about the environment rather than about the model; a
+            # semantic one is the model changing its mind, which is the thing
+            # being measured; an internal one is the client library's own,
+            # below the level either of those is about. Collapsed into one
+            # count, a flaky endpoint reads as an indecisive model.
+            "kinds_recorded_separately": [
+                "infrastructure",
+                "semantic",
+                "internal",
+            ],
+            "max_repeats_of_one_request": ceilings.max_repeats_of_one_request,
+        },
+        "what_stops_a_task": (
+            "any per-task ceiling above, or the per-task budget, whichever "
+            "comes first. A task stopped by a ceiling is recorded as stopped "
+            "by that ceiling and is not a model failure"
+        ),
+    }
+
+
 def record(catalog: TaskCatalog | None = None) -> dict[str, Any]:
     """The whole pre-registration, as it is committed before anything runs."""
     comparisons = compare_with_codex_run()
@@ -457,6 +636,7 @@ def record(catalog: TaskCatalog | None = None) -> dict[str, Any]:
         ),
         "escalation": list(ESCALATION),
         "manifest": manifest(catalog),
+        "run_conditions": _run_conditions(),
         "comparison_with_codex": {
             "source": str(CODEX_TRIAL_PLAN.relative_to(REPOSITORY_ROOT)),
             # The basis of the comparison, fingerprinted. If A's file moves, the
@@ -479,15 +659,7 @@ def record(catalog: TaskCatalog | None = None) -> dict[str, Any]:
         },
         "stop_rules": list(STOP_RULES),
         "not_stop_rules": list(NOT_STOP_RULES),
-        "what_this_is_not": [
-            "not a statement that the environment is ready -- at the time of "
-            "writing no V2 task has run, and the blocker is a role assignment "
-            "in the subscription that holds the model",
-            "not an approval to spend; the amount lives in "
-            "experiments/execution_envelope/agentic_stage_one_plan.yaml and is "
-            "the owner's to fill in",
-            "not a prediction of how the run will go",
-        ],
+        "what_this_is_not": _what_this_is_not(),
     }
     body["seal"] = seal(body)
     return body

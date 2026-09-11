@@ -38,6 +38,7 @@ from core.agentic_v2_cost_binding import bind_run_to_ledger
 from core.agentic_v2_fixture_backend import AgenticV2FixtureBackend
 from core.agentic_v2_provenance import verify_agentic_v2_result
 from core.agentic_v2_runner import AgenticV2ScriptedRunner
+from core.agentic_v2_stage_one_budget import StageOneBudget
 from core.cost_receipts import (
     BUCKET_PROBLEM_SOLVING,
     CostReceiptLedger,
@@ -440,15 +441,81 @@ class TestTheRunnerFactory:
         assert held.outcome_of("task-1", 1).stop_reason is StopReason.FINISHED_NORMALLY
         assert held.attempts_of("task-1") == (1,)
 
-    def test_a_factory_without_a_voice_is_refused(self, tmp_path):
-        with pytest.raises(ConversationRunnerRefused, match="needs a voice"):
+    def test_a_factory_with_neither_voice_is_refused(self, tmp_path):
+        with pytest.raises(ConversationRunnerRefused, match="exactly one"):
             build_runner_factory(
                 backend_factory=_backend_factory(tmp_path),
                 profile=PROFILE,
-                voice=None,
                 conversations=TaskConversations(CEILINGS),
                 attempt_of=lambda task_id: 1,
             )
+
+    def test_a_factory_with_both_voices_is_refused(self, tmp_path):
+        """Not a style objection. The two disagree about which budget is real.
+
+        ``voice`` carries whatever budget it was built with and ``voice_for``
+        is handed the task's own; a factory holding both would use one and
+        quietly drop the other, and which one it dropped would only show up in
+        the bill.
+        """
+        with pytest.raises(ConversationRunnerRefused, match="exactly one"):
+            build_runner_factory(
+                backend_factory=_backend_factory(tmp_path),
+                profile=PROFILE,
+                voice=ScriptedVoice(replies=[_finalize()]),
+                voice_for=lambda budget: ScriptedVoice(replies=[_finalize()]),
+                conversations=TaskConversations(CEILINGS),
+                attempt_of=lambda task_id: 1,
+            )
+
+    def test_each_task_gets_a_voice_built_on_its_own_budget(self, tmp_path):
+        """The reason ``voice_for`` exists, stated as an assertion.
+
+        A paid voice holds a budget and refuses before the call that would pass
+        it. If the run built one voice and reused it, task 220 would be refused
+        by task 1's spending. Here each task's voice must receive *that task's*
+        budget object — the same one the loop charges — so the two ceilings are
+        one number rather than two that drift.
+        """
+        held = TaskConversations(CEILINGS)
+        handed: list[StageOneBudget] = []
+
+        def voice_for(budget):
+            handed.append(budget)
+            return ScriptedVoice(replies=[_write(), _finalize()])
+
+        factory = build_runner_factory(
+            backend_factory=_backend_factory(tmp_path),
+            profile=PROFILE,
+            voice_for=voice_for,
+            conversations=held,
+            attempt_of=lambda task_id: 1,
+        )
+        for task_id in ("task-1", "task-2", "task-3"):
+            factory(self._task(task_id)).run("Write the report", task_id=task_id)
+
+        assert len(handed) == 3
+        assert len({id(budget) for budget in handed}) == 3, (
+            "three tasks were handed the same budget object, which is the "
+            "sharing this argument exists to prevent"
+        )
+        for task_id, budget in zip(("task-1", "task-2", "task-3"), handed):
+            assert held.budgets[(task_id, 1)] is budget, (
+                "the voice was built on a budget the loop does not charge, so "
+                "the voice's ceiling and the run's accounting are two "
+                "different numbers"
+            )
+
+    def test_a_voice_for_that_returns_nothing_is_refused(self, tmp_path):
+        factory = build_runner_factory(
+            backend_factory=_backend_factory(tmp_path),
+            profile=PROFILE,
+            voice_for=lambda budget: None,
+            conversations=TaskConversations(CEILINGS),
+            attempt_of=lambda task_id: 1,
+        )
+        with pytest.raises(ConversationRunnerRefused, match="no way to ask a model"):
+            factory(self._task())
 
     def test_a_spent_run_refuses_before_a_guest_is_booted(self, tmp_path):
         held = TaskConversations(CEILINGS, RunWideCeilings(max_model_calls=1))

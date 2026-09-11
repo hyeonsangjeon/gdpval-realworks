@@ -45,6 +45,9 @@ BATCH_RUNNER_ROOT = Path(__file__).resolve().parents[1]
 if str(BATCH_RUNNER_ROOT) not in sys.path:
     sys.path.insert(0, str(BATCH_RUNNER_ROOT))
 
+from core.agentic_v2_route_check import (  # noqa: E402
+    check_route_is_the_one_the_plan_fixed as _check_route,
+)
 from core.agentic_v2_stage_a_probe import (  # noqa: E402
     PROBE_TOOLS,
     run_stage_a_probe,
@@ -152,55 +155,11 @@ def _verdict(plan_path: Path):
 def check_route_is_the_one_the_plan_fixed(route, connection, *, settings=None):
     """Every way the resolved route could differ from what was approved.
 
-    The plan fixes an account, a project and a route profile. A run that
-    reached a real model over some other route would have proved something
-    about a different environment than the one stage one is being priced for,
-    and it would have cost the same to prove it. Checked after the client is
-    built, because until then the route is a request rather than a fact.
-
-    All three collected rather than the first returned, so a reader fixing a
-    misconfigured dispatch sees the whole of it at once.
-
-    The project needs its own paragraph, because the route selected for
-    inference under ``project-ci`` does not carry one. That profile derives an
-    account-scoped ``direct-v1`` URL from the configured project endpoint and
-    sends inference over it, so the selected endpoint has an account and a
-    ``project`` of ``None`` — while the project it was derived from is still
-    the fact being checked. Where it is, the project endpoint says so, and that
-    is read here rather than assumed away. If neither the selection nor the
-    settings names a project, the run is refused: an unconfirmable project is
-    the case a silent skip would hide.
+    The body moved to :mod:`core.agentic_v2_route_check` when the stage runner
+    needed the same check; this stays as the name, because the tests that pin
+    stage A's behaviour call it here and what they are pinning has not changed.
     """
-    problems: list[str] = []
-    account = str(connection.get("account") or "")
-    project = connection.get("project")
-    profile = connection.get("route_profile")
-
-    if account and route.endpoint.account != account:
-        problems.append(
-            f"the route resolves to account {route.endpoint.account!r}, but "
-            f"the plan fixes {account!r}"
-        )
-    if project:
-        configured = getattr(getattr(settings, "project", None), "project", None)
-        found = route.endpoint.project or configured
-        if found is None:
-            problems.append(
-                f"the plan fixes project {project!r}, but neither the route "
-                "that was selected nor the endpoints it was built from names "
-                "a project, so there is nothing to check it against"
-            )
-        elif found != project:
-            problems.append(
-                f"the route resolves to project {found!r}, but the plan "
-                f"fixes {project!r}"
-            )
-    if profile and str(route.profile.value) != str(profile):
-        problems.append(
-            f"the route profile is {route.profile.value!r}, but the plan "
-            f"fixes {profile!r}"
-        )
-    return problems
+    return _check_route(route, connection, settings=settings)
 
 
 def exit_condition_met(outcome) -> bool:

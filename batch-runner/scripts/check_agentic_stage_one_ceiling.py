@@ -14,10 +14,16 @@ Usage:
     python scripts/check_agentic_stage_one_ceiling.py --probe
     python scripts/check_agentic_stage_one_ceiling.py --plan other.yaml
 
-The exit code follows the five-task run's verdict, which today is never zero:
-no amount has been approved for stage one, and no settings have been chosen.
-A real model *can* now be reached, so the amount is the thing standing in the
-way rather than missing code.
+The exit code follows the five-task run's verdict. As of 2026-09-11 that is
+zero: two amounts have been approved — one for running the five tasks, one for
+marking the five answers — and a settings row has been chosen, so the gate
+passes. It passed by the arithmetic below rather than by anybody deciding it
+should, and removing either amount from the plan makes it refuse again.
+
+A zero here is not a start signal. It says the money question and the safety
+questions have both been answered; what actually runs the five tasks is
+``scripts/run_agentic_v2_stage.py``, and the three blocks that keep this mode
+out of the paid pipeline are still shut.
 
 ``--probe`` follows stage A's verdict instead — one task, no marking, its own
 amount, and a narrower tool list read from the probe's own code. It is a second

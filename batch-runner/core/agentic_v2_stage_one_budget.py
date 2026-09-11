@@ -481,6 +481,45 @@ def _money(value: Decimal) -> str:
     return str(value.quantize(Decimal("0.01"), rounding=ROUND_CEILING))
 
 
+def _approved_amount(
+    raw: Any,
+    problems: list[str],
+    *,
+    what: str,
+    key: str,
+) -> Decimal | None:
+    """One written-down amount, or every reason it is not one.
+
+    Returns ``None`` both when nobody wrote a figure and when what they wrote
+    is not usable. That is deliberate: a caller that compared a ceiling against
+    an unusable amount would either wave the run through or refuse it for the
+    wrong reason, and the reason is already in ``problems`` either way.
+    """
+    if raw is None:
+        problems.append(
+            f"nobody has written down the largest amount that may be spent on "
+            f"{what}. The 32.23 United States dollars approved for the "
+            "three-place comparison was for that comparison and does not "
+            f"extend here. Write it in {key}"
+        )
+        return None
+    try:
+        amount = Decimal(str(raw))
+    except Exception:
+        problems.append(
+            f"the largest amount that may be spent on {what}, {raw!r}, is not "
+            "a number"
+        )
+        return None
+    if amount <= 0:
+        problems.append(
+            f"the largest amount that may be spent on {what} must be greater "
+            "than zero"
+        )
+        return None
+    return amount
+
+
 def price_the_options(
     *,
     base: StageOneConditions,
@@ -569,7 +608,32 @@ class StageOnePreflight:
     that would actually stop a run, rather than only the amount.
     """
 
-    approved_maximum_usd: Decimal | None = None
+    running_approved_maximum_usd: Decimal | None = None
+    """The largest amount that may be spent *running* the five tasks.
+
+    Separate from the marking figure below, and the separation is not
+    bookkeeping tidiness. At the committed assumptions, marking is a flat
+    2,504.67 United States dollars whatever the settings are, while running
+    ranges from 3.37 to 493.70 across the candidate rows. Held as one number,
+    the decision an approver is actually making — which settings buy an answer
+    worth having — is under one per cent of the figure they sign, and a
+    hundredfold change in it moves the total by a rounding error. Two numbers,
+    each compared against its own ceiling, put the figure that moves in front
+    of the person deciding.
+
+    It is also what step four of the run instructions requires: marking cost is
+    kept apart from problem-solving cost, and an approval that silently covered
+    both would be the place that stopped being true first.
+    """
+
+    grading_approved_maximum_usd: Decimal | None = None
+    """The largest amount that may be spent *marking* the five answers.
+
+    Written down here rather than left to the marking run, because the plan is
+    where the whole of stage one is priced, and a stage whose marking cost
+    nobody approved is a stage that is half-approved.
+    """
+
     dispatcher_limits: DispatcherLimits | None = None
     probe: "StageAProbePreflight | None" = None
     """Stage A's separate verdict, on the one paid question that comes first.
@@ -590,9 +654,14 @@ class StageOnePreflight:
                 task_id: budget.as_dict()
                 for task_id, budget in self.chosen_budget.items()
             },
-            "approved_maximum_usd": (
-                _money(self.approved_maximum_usd)
-                if self.approved_maximum_usd is not None
+            "running_approved_maximum_usd": (
+                _money(self.running_approved_maximum_usd)
+                if self.running_approved_maximum_usd is not None
+                else None
+            ),
+            "grading_approved_maximum_usd": (
+                _money(self.grading_approved_maximum_usd)
+                if self.grading_approved_maximum_usd is not None
                 else None
             ),
             "dispatcher_limits": (
@@ -684,8 +753,9 @@ def load_stage_one_plan(path: Any = None) -> dict:
     return raw
 
 
-#: What a clean safety check reports when nobody has approved anything for the
-#: five-task run: not a finding, a standing fact about where stage one stands.
+#: What the safety check reports while nobody has approved anything for the
+#: five-task run. Whether that is the case today is read from the plan by
+#: :func:`stage_one_amount_note`; this is only the wording.
 STAGE_ONE_HAS_NO_APPROVED_AMOUNT = (
     "stage one cannot start because no amount has been approved for it. A "
     "real model can now be reached — core.agentic_v2_model_voice."
@@ -725,13 +795,15 @@ def check_stage_one_cannot_reach_a_model(
 
     A comment could claim either refusal and be wrong, so both are exercised.
 
-    ``include_amount_note`` decides whether a clean result is reported as a
-    problem. It is one by default, because a caller asking this on its own is
-    asking "may stage one go", and the answer is no while no amount is on
-    record. A caller that decides about amounts itself — the preflight, which
-    reaches a separate verdict for stage A on a separate amount — asks for the
-    safety findings alone, so that stage one's missing amount is not made into
-    a reason stage A cannot proceed.
+    ``include_amount_note`` decides whether the amount question is answered at
+    all. It is by default, because a caller asking this on its own is asking
+    "may stage one go", and until an amount is on record the answer is no
+    whatever the code does. Whether one *is* on record is read from the plan by
+    :func:`stage_one_amount_note` rather than assumed, so this stopped saying
+    no the day the amounts were written down. A caller that decides about
+    amounts itself — the preflight, which reaches a separate verdict for stage
+    A on a separate amount — asks for the safety findings alone, so that stage
+    one's money question is not made into a reason stage A cannot proceed.
     """
     import inspect
 
@@ -859,7 +931,51 @@ def check_stage_one_cannot_reach_a_model(
 
     if problems:
         return problems
-    return [STAGE_ONE_HAS_NO_APPROVED_AMOUNT] if include_amount_note else []
+    if not include_amount_note:
+        return []
+    return stage_one_amount_note()
+
+
+#: The two figures that together approve stage one. Both, or neither: an
+#: approval for the running half is not an approval to mark the answers, and
+#: marking is where nearly all of the money is.
+STAGE_ONE_APPROVAL_KEYS = (
+    "running_approved_maximum_usd",
+    "grading_approved_maximum_usd",
+)
+
+
+def stage_one_amount_note(plan_path: Any = None) -> list[str]:
+    """Whether an amount is on record for the five-task run.
+
+    Read from the plan rather than stated, which is the whole of the change
+    made here on 2026-09-11. This used to return a constant sentence saying no
+    amount had been approved — true when it was written, and it would have gone
+    on being printed as a blocker by
+    :mod:`core.execution_environment_readiness` for as long as nobody noticed,
+    including after the amounts were written down.
+
+    Deliberately narrow. This answers *is a figure on record*, not *does it
+    cover the settings chosen*. The second question is
+    :func:`run_stage_one_preflight`, which cannot be asked from here without
+    circling back into this function, and which is the thing a caller should
+    ask if it wants a verdict rather than a blocker.
+    """
+    try:
+        cost = load_stage_one_plan(plan_path).get("cost") or {}
+    except Exception as error:
+        return [
+            "whether an amount has been approved for stage one could not be "
+            "read from the plan, so it has to be treated as unapproved: "
+            f"{type(error).__name__}: {error}"
+        ]
+    missing = [key for key in STAGE_ONE_APPROVAL_KEYS if cost.get(key) is None]
+    if not missing:
+        return []
+    return [
+        f"{STAGE_ONE_HAS_NO_APPROVED_AMOUNT}. Missing: "
+        + ", ".join(f"cost.{key}" for key in missing)
+    ]
 
 
 def check_stage_a_probe(
@@ -1209,35 +1325,52 @@ def run_stage_one_preflight(
                 for task_id in task_ids
             }
 
-    approved_raw = cost.get("approved_maximum_usd")
-    approved: Decimal | None = None
-    if approved_raw is None:
+    # Running and marking are approved separately, and a plan naming one figure
+    # for both is refused rather than reinterpreted. The old key meant "the
+    # total", so silently reading it as either half would take an approval
+    # somebody gave for 2,543 dollars and apply it to a number that is not the
+    # one they were shown.
+    if "approved_maximum_usd" in cost:
         problems.append(
-            "nobody has written down the largest amount that may be spent on "
-            "stage one. The 32.23 United States dollars approved for the "
-            "three-place comparison was for that comparison and does not "
-            "extend here"
+            "cost.approved_maximum_usd is one figure covering both running "
+            "and marking. Stage one now approves them separately, because "
+            "marking is a flat amount the settings do not change and running "
+            "is the part the decision is about. Replace it with "
+            "cost.running_approved_maximum_usd and "
+            "cost.grading_approved_maximum_usd"
         )
-    else:
-        try:
-            approved = Decimal(str(approved_raw))
-        except Exception:
-            problems.append(
-                f"the largest amount that may be spent, {approved_raw!r}, is "
-                "not a number"
-            )
-        else:
-            if approved <= 0:
+
+    running_approved = _approved_amount(
+        cost.get("running_approved_maximum_usd"),
+        problems,
+        what="running stage one's five tasks",
+        key="cost.running_approved_maximum_usd",
+    )
+    grading_approved = _approved_amount(
+        cost.get("grading_approved_maximum_usd"),
+        problems,
+        what="marking stage one's five answers",
+        key="cost.grading_approved_maximum_usd",
+    )
+
+    if chosen is not None:
+        for amount, ceiling, what in (
+            (
+                running_approved,
+                chosen.most_running_could_cost_usd,
+                "running the five tasks",
+            ),
+            (
+                grading_approved,
+                chosen.most_grading_could_cost_usd,
+                "marking the five answers",
+            ),
+        ):
+            if amount is not None and ceiling > amount:
                 problems.append(
-                    "the largest amount that may be spent must be greater "
-                    "than zero"
-                )
-            elif chosen is not None and chosen.most_it_could_cost_usd > approved:
-                problems.append(
-                    "the most the chosen settings could cost, "
-                    f"{_money(chosen.most_it_could_cost_usd)} United States "
-                    f"dollars, is above the {_money(approved)} that was "
-                    "approved"
+                    f"the most {what} could cost, {_money(ceiling)} United "
+                    f"States dollars, is above the {_money(amount)} that was "
+                    "approved for it"
                 )
 
     probe = check_stage_a_probe(
@@ -1255,7 +1388,8 @@ def run_stage_one_preflight(
         options=options,
         chosen=chosen,
         chosen_budget=chosen_budget,
-        approved_maximum_usd=approved,
+        running_approved_maximum_usd=running_approved,
+        grading_approved_maximum_usd=grading_approved,
         dispatcher_limits=dispatcher_limits,
         probe=probe,
     )
@@ -1301,8 +1435,29 @@ def describe_stage_one_preflight(result: StageOnePreflight) -> list[str]:
         lines.append(
             f"Chosen: {result.chosen.tool_calls_per_attempt} tool calls, "
             f"{result.chosen.max_output_tokens_per_turn} tokens per turn, at "
-            f"most ${written['most_it_could_cost_usd']} in total"
+            f"most ${written['most_running_could_cost_usd']} to run and "
+            f"${written['most_grading_could_cost_usd']} to mark"
         )
+        for label, amount, ceiling in (
+            (
+                "running",
+                result.running_approved_maximum_usd,
+                result.chosen.most_running_could_cost_usd,
+            ),
+            (
+                "marking",
+                result.grading_approved_maximum_usd,
+                result.chosen.most_grading_could_cost_usd,
+            ),
+        ):
+            lines.append(
+                f"  {label}: at most ${_money(ceiling)} against "
+                + (
+                    f"${_money(amount)} approved"
+                    if amount is not None
+                    else "nothing approved"
+                )
+            )
         if result.chosen_budget:
             lines.append("")
             lines.append(
@@ -1381,3 +1536,221 @@ def describe_stage_a_probe(probe: StageAProbePreflight) -> list[str]:
             "one, which is a separate purchase held to its own amount."
         )
     return lines
+
+
+# ── Pricing a stage other than the five ────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class StagePricing:
+    """Whether one named stage may run, and against what amount.
+
+    Separate from :class:`StageOnePreflight` because it asks a different
+    question. The preflight asks whether stage one is *safe* to start — the
+    blocks, the model, the settings, the figures for the five tasks the plan
+    pins. This asks only whether the cohort actually about to run has an
+    approved amount that covers it. A stage can pass every safety check and
+    still be unpriced, which is exactly the state the thirty- and
+    two-hundred-and-twenty-task stages were in until they were priced by name.
+    """
+
+    stage: str
+    task_count: int
+    approved_running_usd: Decimal | None
+    approved_grading_usd: Decimal | None
+    grading_not_approved_because: str | None
+    most_running_could_cost_usd: Decimal | None
+    problems: tuple[str, ...]
+
+    @property
+    def may_run(self) -> bool:
+        return not self.problems
+
+    @property
+    def headroom_usd(self) -> Decimal | None:
+        if self.approved_running_usd is None or self.most_running_could_cost_usd is None:
+            return None
+        return self.approved_running_usd - self.most_running_could_cost_usd
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "stage": self.stage,
+            "task_count": self.task_count,
+            "approved_running_usd": (
+                _money(self.approved_running_usd)
+                if self.approved_running_usd is not None
+                else None
+            ),
+            "approved_grading_usd": (
+                _money(self.approved_grading_usd)
+                if self.approved_grading_usd is not None
+                else None
+            ),
+            "grading_not_approved_because": self.grading_not_approved_because,
+            "most_running_could_cost_usd": (
+                _money(self.most_running_could_cost_usd)
+                if self.most_running_could_cost_usd is not None
+                else None
+            ),
+            "may_run": self.may_run,
+            "problems": list(self.problems),
+        }
+
+
+def price_one_stage(
+    plan: Mapping[str, Any],
+    *,
+    stage: str,
+    task_ids: Sequence[str],
+    tasks_by_id: Mapping[str, CatalogTask],
+    assumptions: CostAssumptions,
+    limits: DispatcherLimits | None = None,
+    prices: Mapping[str, ModelPrice] | None = None,
+) -> StagePricing:
+    """What this cohort could cost, against what this stage may spend.
+
+    ``task_ids`` comes from the caller rather than from the plan, and that is
+    the point. The plan holds amounts; the sealed catalogue holds tasks. Pricing
+    the amounts against the cohort that is really about to run is what catches
+    the mistake this function exists for — an approval worked out for five tasks
+    being spent on two hundred and twenty, with the printed line saying it was
+    within budget because the arithmetic behind that line never saw the larger
+    cohort.
+
+    The figure compared is the same one ``scripts/check_agentic_stage_one_ceiling``
+    prints, safety multiplier included, worked out through
+    :func:`price_the_options` rather than beside it. A second route to the same
+    number is a second number waiting to disagree.
+    """
+    problems: list[str] = []
+    table = dict(plan.get("stages") or {})
+    if not table:
+        return StagePricing(
+            stage=stage,
+            task_count=len(task_ids),
+            approved_running_usd=None,
+            approved_grading_usd=None,
+            grading_not_approved_because=None,
+            most_running_could_cost_usd=None,
+            problems=(
+                "the plan has no `stages` block, so no stage is priced by name "
+                "and there is nothing to check this run against",
+            ),
+        )
+
+    block = table.get(stage)
+    if block is None:
+        return StagePricing(
+            stage=stage,
+            task_count=len(task_ids),
+            approved_running_usd=None,
+            approved_grading_usd=None,
+            grading_not_approved_because=None,
+            most_running_could_cost_usd=None,
+            problems=(
+                f"the plan prices {sorted(table)} and says nothing about "
+                f"{stage!r}. An amount approved for one cohort is not an "
+                "amount approved for another, whatever their relative sizes: "
+                "every figure in this plan is a whole-run figure, not a rate. "
+                f"Add a `stages.{stage}` entry before running it",
+            ),
+        )
+
+    approved_running = _approved_amount(
+        block.get("running_approved_maximum_usd"),
+        problems,
+        what=f"running the {stage} stage",
+        key=f"stages.{stage}.running_approved_maximum_usd",
+    )
+
+    # Absent and null are different answers, and only one of them is a mistake.
+    # A stage that has thought about marking and decided against it says so with
+    # a reason; a stage that never considered it has neither key.
+    raw_grading = block.get("grading_approved_maximum_usd")
+    refusal = block.get("grading_not_approved_because")
+    approved_grading: Decimal | None = None
+    if raw_grading is not None:
+        approved_grading = _approved_amount(
+            raw_grading,
+            problems,
+            what=f"marking the {stage} answers",
+            key=f"stages.{stage}.grading_approved_maximum_usd",
+        )
+    elif "grading_approved_maximum_usd" not in block:
+        problems.append(
+            f"stages.{stage} says nothing about marking, one way or the other. "
+            "Marking costs many times what running does, so silence about it "
+            "is the one thing this block may not contain: write an amount, or "
+            "write null with grading_not_approved_because"
+        )
+    elif not str(refusal or "").strip():
+        problems.append(
+            f"stages.{stage} declines to approve marking and gives no reason. "
+            "A refusal without a reason is indistinguishable from a figure "
+            "somebody forgot to fill in, and the two want opposite responses"
+        )
+
+    chosen = dict(plan.get("cost", {}).get("chosen_settings") or {})
+    fixed = dict(plan.get("fixed_settings") or {})
+    most_running: Decimal | None = None
+    if not task_ids:
+        problems.append(f"stage {stage!r} binds no task, so there is nothing to price")
+    elif chosen.get("tool_calls_per_attempt") and chosen.get(
+        "max_output_tokens_per_turn"
+    ):
+        conditions = StageOneConditions(
+            resource=str((plan.get("azure_connection") or {}).get("account") or ""),
+            deployment=str((plan.get("model") or {}).get("deployment") or ""),
+            resolved_model=str((plan.get("model") or {}).get("resolved_model") or ""),
+            task_ids=tuple(str(one) for one in task_ids),
+            tool_calls_per_attempt=int(chosen["tool_calls_per_attempt"]),
+            max_output_tokens_per_turn=int(chosen["max_output_tokens_per_turn"]),
+            retry_max_attempts=int(fixed.get("retry_max_attempts") or 0),
+            per_task_timeout_seconds=int(fixed.get("per_task_timeout_seconds") or 0),
+        )
+        missing = [one for one in conditions.task_ids if one not in tasks_by_id]
+        if missing:
+            problems.append(
+                f"{len(missing)} of the {len(task_ids)} tasks this stage binds "
+                f"are not in the catalogue, so their cost cannot be worked out: "
+                + ", ".join(missing[:3])
+            )
+        else:
+            options = price_the_options(
+                base=conditions,
+                tasks_by_id=tasks_by_id,
+                assumptions=assumptions,
+                tool_call_choices=(conditions.tool_calls_per_attempt,),
+                output_token_choices=(conditions.max_output_tokens_per_turn,),
+                limits=limits,
+                prices=prices,
+            )
+            if options:
+                most_running = options[0].most_running_could_cost_usd
+    else:
+        problems.append(
+            "the plan names no chosen settings, so what this stage would cost "
+            "cannot be worked out"
+        )
+
+    if approved_running is not None and most_running is not None:
+        if most_running > approved_running:
+            problems.append(
+                f"running {stage} over its {len(task_ids)} tasks could cost "
+                f"${_money(most_running)}, and ${_money(approved_running)} is "
+                f"approved for it — short by ${_money(most_running - approved_running)}. "
+                "Approve the larger figure or run a smaller stage; nothing here "
+                "may scale an approved amount on its own"
+            )
+
+    return StagePricing(
+        stage=stage,
+        task_count=len(task_ids),
+        approved_running_usd=approved_running,
+        approved_grading_usd=approved_grading,
+        grading_not_approved_because=(
+            str(refusal).strip() if approved_grading is None and refusal else None
+        ),
+        most_running_could_cost_usd=most_running,
+        problems=tuple(problems),
+    )

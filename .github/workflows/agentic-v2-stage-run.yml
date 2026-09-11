@@ -1,0 +1,386 @@
+name: Agentic Sandbox V2 — Stage Run
+
+# The only place a pre-registered V2 stage can actually be run.
+#
+# `scripts/run_agentic_v2_stage.py` puts the parts in a line and turns the
+# handle: the free check, the cohort binding, the per-task ceilings, the
+# conversation loop against a real deployment, the collected deliverables and a
+# cost receipt per task. It cannot run anywhere else. `core/azure_ai_clients.py`
+# calls `_reject_static_azure_credential_env` before it builds anything, so the
+# identity has to come from a federated OIDC session and the only place one
+# exists is a job holding `id-token: write`. A checkout has no route
+# environment at all: asked on this repository's own dev box, every one of the
+# thirteen variables the route reads is unset.
+#
+# What this is, before anyone reads a number off it. The backend is
+# `AgenticV2FixtureBackend`. The model is real, the tool choices are real, the
+# files it writes are real, and the deliverables kept at the end are the ones it
+# wrote. The isolation is not real: no guest boots and `exec_run` answers
+# `capability_unavailable` to everything. That is what the pre-registration
+# fixes for stage one, so a run that opened it would be a different experiment
+# from the one registered. `environment_note` in the runner writes the weaker
+# true sentence into the record, so it travels with the results.
+#
+# Three milestones, deliberately not merged. *The environment is ready* is not
+# *the tasks ran* is not *the results are marked*. This workflow can only reach
+# the middle one. It writes no grade, offers no `finalize` to a grader, and the
+# ledger it fills buckets everything as problem-solving cost, so marking cannot
+# be paid for out of it by accident.
+#
+# What it does NOT do:
+#   * It does not decide what any cohort costs. Every amount lives in the plan,
+#     one per stage, and every one of them is a whole-run figure for the cohort
+#     it names — none is a rate and none prices another stage. The runner
+#     refuses a stage the plan has not priced by name, and refuses a priced
+#     stage whose cohort has grown past its amount, for free, in the job below.
+#   * It does not open anything. `exec_run` stays shut and no file in the
+#     repository is changed by a run.
+#   * It does not publish. The record and the deliverables leave as artifacts,
+#     not as a commit. Nothing here reaches data/grades or the dashboard.
+#   * It does not pay for marking. Running the thirty and the two hundred and
+#     twenty is approved; marking them is not, and the plan says why rather
+#     than leaving a blank. Finishing a cohort is one milestone and marking it
+#     is another, and the second does not follow from the first.
+#
+# Two sentences that used to be here were wrong by the time anybody read them,
+# and both in the same direction — they described the file as narrower than it
+# had become. One said `trial_30` and `full_220` "are refused today and will
+# stay refused until somebody writes their task ids and their own two amounts
+# down"; the amounts were written down and the sentence stayed. The other said
+# the two hundred and twenty "will not fit here" and left splitting it as a
+# note for somebody else; the split is below. Corrected in place rather than
+# deleted, because a comment that has gone stale twice is worth a reader
+# knowing about.
+#
+# How the bigger stages fit. The plan fixes `per_task_timeout_seconds: 1200`
+# and a GitHub job is killed at six hours, so at worst thirteen tasks fit in
+# one job. `scripts/plan_agentic_v2_shards.py` works out how many jobs a stage
+# needs from those two numbers -- one for the five, three for the thirty,
+# seventeen for the two hundred and twenty -- and the paid job runs them as a
+# matrix. A shard is a piece of the run, never a smaller stage: it is priced
+# against the whole cohort, so seventeen jobs that are each "within budget"
+# cannot spend seventeen times the approval, and the stage has not run until
+# every shard has and their coverage has been checked.
+
+on:
+  workflow_dispatch:
+    inputs:
+      stage:
+        description: >-
+          Which pre-registered cohort to run. All three are priced for running.
+          A stage whose cohort costs more than its own approved amount is
+          refused for free by the dry run, before anything is reached.
+        type: choice
+        options:
+          - advance_check_5
+          - trial_30
+          - full_220
+        default: advance_check_5
+        required: true
+      mode:
+        description: >-
+          dry-run does everything except reach the network. paid runs the
+          cohort, for at most the running amount the plan approves.
+        type: choice
+        options:
+          - dry-run
+          - paid
+        default: dry-run
+        required: true
+      run_id:
+        description: >-
+          Names the journal's run and namespaces every ledger call id. Leave
+          empty for a fresh run; reuse an earlier one to resume it. Each shard
+          appends its own number, so resuming a stage resumes every piece of it
+          without two jobs writing to one journal.
+        type: string
+        default: ''
+        required: false
+
+# A push must never be able to spend. There is no push, pull_request or
+# schedule trigger above, and adding one would be the change that let this
+# charge without anybody asking it to.
+
+permissions:
+  contents: read
+
+concurrency:
+  # One at a time, and never cancelled part-way. A run killed mid-conversation
+  # has already been charged for the turns it made and would leave no record of
+  # them, which is worse than an expensive run. Resuming is what `--run-id` is
+  # for; cancelling is not.
+  group: agentic-v2-stage-run
+  cancel-in-progress: false
+
+jobs:
+  # ── Everything except the network ───────────────────────────────────────
+  #
+  # Runs on both modes and gates the paid job. It is the whole path: the free
+  # check, the two approved amounts, the plan, the pinned dataset, the cohort
+  # seal, the pricing guard. If any of it is wrong it is wrong for free here.
+  free:
+    name: Dry run
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    outputs:
+      # The matrix the paid job fans out over. Worked out here rather than
+      # written into the matrix by hand, so it cannot disagree with the timeout
+      # the run is actually using: move `per_task_timeout_seconds` in the plan
+      # and the number of jobs moves with it.
+      shards: ${{ steps.shards.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+          cache-dependency-path: batch-runner/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          pip install -r requirements.txt
+
+      # The tests that hold what a paid run rests on: that the money question
+      # is answered from the plan rather than from a sentence, that the cohort
+      # binds to the seal it was priced under, that a task stops at its own
+      # ceiling, and that the tool list cannot reach the grader. Run before the
+      # dataset is fetched, so a broken runner fails in a minute.
+      - name: Test the runner
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          python -m pytest -q \
+            tests/test_agentic_stage_one_budget.py \
+            tests/test_agentic_v2_manifest_binding.py \
+            tests/test_agentic_v2_conversation_runner.py \
+            tests/test_agentic_v2_run_driver.py \
+            tests/test_free_checks_agree_on_the_loop.py
+
+      # No charge. The revision is the one the catalogue was built from and the
+      # one every figure in the plan rests on; the binding hashes the wording it
+      # reads and refuses a prompt that drifted from what was sealed.
+      - name: Fetch the pinned dataset
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          set -euo pipefail
+          hf download openai/gdpval --repo-type dataset \
+            --revision 11e7900cdcac61bc4daf59e65feb238acda98fbf
+
+      # Printed as well as captured. The one-line JSON is for `fromJSON`; the
+      # object beside it is for whoever has to decide whether a run that has
+      # been going for five hours is late or stuck.
+      - name: Work out how many jobs this stage needs
+        id: shards
+        env:
+          STAGE: ${{ inputs.stage }}
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          python scripts/plan_agentic_v2_shards.py --stage "$STAGE" --explain
+          MATRIX="$(python scripts/plan_agentic_v2_shards.py --stage "$STAGE")"
+          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+
+      - name: Dry run
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          python scripts/run_agentic_v2_stage.py \
+            --stage '${{ inputs.stage }}' --dry-run
+
+  # ── The run that spends ─────────────────────────────────────────────────
+  paid:
+    name: Run the cohort — shard ${{ matrix.shard }}
+    needs: free
+    if: ${{ inputs.mode == 'paid' }}
+    runs-on: ubuntu-latest
+    strategy:
+      # One job per piece of the cohort. For `advance_check_5` this is a matrix
+      # of one, and `--shard 1/1` is the unsharded run rather than a new code
+      # path, so the smallest stage runs exactly as it did before the matrix
+      # existed.
+      matrix:
+        shard: ${{ fromJSON(needs.free.outputs.shards) }}
+      # Never. Each of these jobs has already been charged for the turns it
+      # made, and cancelling its siblings would throw away work that was paid
+      # for because one of them hit something. A failed shard is a finding; the
+      # other sixteen are still results.
+      fail-fast: false
+      # Not about how many runners are free. It is about one deployment: the
+      # whole matrix talks to the same endpoint, and a throttled call is a call
+      # that was made. Four at a time leaves the stage finishing in five waves
+      # at worst rather than one long one, without asking the deployment for
+      # four hundred thousand tokens a minute.
+      max-parallel: 4
+    # Above the step timeout below, not equal to it. The step has to be the
+    # thing that stops first: a step that fails leaves the rest of the job to
+    # run, and the rest of the job is where the record gets uploaded. A job
+    # killed at its own limit -- or worse, at GitHub's six hour one -- can lose
+    # the artifact for a run that has already been charged for.
+    timeout-minutes: 330
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      # `3/17` cannot be an artifact name and `strategy.job-index` counts from
+      # zero, which is the one thing the shard numbering deliberately does not
+      # do. Turned into `3-of-17` here so that every name a person reads --
+      # the job, the artifact, the resumed run id -- uses the same numbers.
+      - name: Name this shard
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: |
+          set -euo pipefail
+          echo "SHARD_SLUG=${SHARD//\//-of-}" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+          cache-dependency-path: batch-runner/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          pip install -r requirements.txt
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca # v3.0.1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Verify Azure OIDC session identity
+        env:
+          AZURE_AI_EXPECTED_CLIENT_ID: ${{ vars.AZURE_AI_EXPECTED_CLIENT_ID }}
+          AZURE_AI_EXPECTED_TENANT_ID: ${{ vars.AZURE_AI_EXPECTED_TENANT_ID }}
+          AZURE_AI_EXPECTED_SUBSCRIPTION_ID: ${{ vars.AZURE_AI_EXPECTED_SUBSCRIPTION_ID }}
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          python scripts/azure_oidc_identity_preflight.py --verify-session
+
+      - name: Fetch the pinned dataset
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          set -euo pipefail
+          hf download openai/gdpval --repo-type dataset \
+            --revision 11e7900cdcac61bc4daf59e65feb238acda98fbf
+
+      # Read from the plan rather than written here. The deployment appears in
+      # exactly one place in the repository, so a workflow cannot come to
+      # validate a route for one model while the runner asks another.
+      - name: Read the deployment the plan fixes
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          python - <<'PY' >> "$GITHUB_ENV"
+          import json
+          from core.agentic_v2_stage_one_budget import load_stage_one_plan
+
+          deployment = load_stage_one_plan()["model"]["deployment"]
+          print("AZURE_AI_WORKLOADS_JSON=" + json.dumps([f"inference={deployment}"]))
+          PY
+
+      # The repository's own route check, run before the runner's. A
+      # misconfigured route is caught by the code that owns routes rather than
+      # by the one script that spends money.
+      - name: Validate the Azure AI route
+        env:
+          AZURE_AI_ROUTE_PROFILE: project-ci
+          FOUNDRY_PROJECT_ENDPOINT: ${{ secrets.FOUNDRY_PROJECT_ENDPOINT }}
+          AZURE_AI_REQUIRE_EXPECTED_IDENTITIES: '1'
+          AZURE_AI_EXPECTED_DIRECT_ACCOUNT: ${{ vars.AZURE_AI_EXPECTED_DIRECT_ACCOUNT }}
+          AZURE_AI_EXPECTED_PROJECT_ACCOUNT: ${{ vars.AZURE_AI_EXPECTED_PROJECT_ACCOUNT }}
+          AZURE_AI_EXPECTED_PROJECT_NAME: ${{ vars.AZURE_AI_EXPECTED_PROJECT_NAME }}
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          python scripts/azure_ai_route_preflight.py
+
+      # `project-ci` because that is what the plan fixes, along with the account
+      # and the project. The runner checks all three against the route it was
+      # given and refuses after building the client and before asking it
+      # anything, so a misconfigured dispatch costs nothing.
+      - name: Run
+        id: run
+        # Thirteen tasks is the most any shard holds, and the plan stops each
+        # one at 1200s, so the worst case inside this step is about four and a
+        # half hours. Five leaves slack for setup and the retry the plan allows
+        # while still tripping well before GitHub's own six hour kill -- which
+        # is the point, because this failing is a step failing, and the upload
+        # below still runs.
+        timeout-minutes: 300
+        env:
+          AZURE_AI_ROUTE_PROFILE: project-ci
+          FOUNDRY_PROJECT_ENDPOINT: ${{ secrets.FOUNDRY_PROJECT_ENDPOINT }}
+          AZURE_AI_REQUIRE_EXPECTED_IDENTITIES: '1'
+          AZURE_AI_EXPECTED_DIRECT_ACCOUNT: ${{ vars.AZURE_AI_EXPECTED_DIRECT_ACCOUNT }}
+          AZURE_AI_EXPECTED_PROJECT_ACCOUNT: ${{ vars.AZURE_AI_EXPECTED_PROJECT_ACCOUNT }}
+          AZURE_AI_EXPECTED_PROJECT_NAME: ${{ vars.AZURE_AI_EXPECTED_PROJECT_NAME }}
+          STAGE: ${{ inputs.stage }}
+          RUN_ID: ${{ inputs.run_id }}
+          SHARD: ${{ matrix.shard }}
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          ARGS=(--stage "$STAGE" --shard "$SHARD" \
+                --into "$GITHUB_WORKSPACE/agentic-v2-run")
+          if [ -n "$RUN_ID" ]; then
+            # Namespaced per shard even when a run id was given. The shards are
+            # separate journals of separate tasks, and two jobs resuming the
+            # same journal name would be two writers on one file.
+            ARGS+=(--run-id "$RUN_ID-shard-$SHARD_SLUG")
+          fi
+          # `set +e` on purpose. A cohort where the model failed some tasks, or
+          # stopped at a ceiling, is a finding this run exists to collect --
+          # and money was spent reaching it either way. The record has to be
+          # uploaded before the exit code is allowed to end the job, so it is
+          # captured here and re-raised at the end.
+          set +e
+          python scripts/run_agentic_v2_stage.py "${ARGS[@]}"
+          echo "stage_exit=$?" >> "$GITHUB_OUTPUT"
+
+      # Before the report, and `always()`, because an unrecorded spend is the
+      # one outcome with no way back. Cost missing is partial, never zero.
+      #
+      # Named per shard because artifact names have to be unique within a run,
+      # and because a directory of seventeen indistinguishable `-run` archives
+      # is not a record of anything. The name says which piece it is and of
+      # what, so a missing one is visible from the list alone.
+      - name: Keep the record, the journal and what was written
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: agentic-v2-${{ inputs.stage }}-shard-${{ env.SHARD_SLUG }}
+          path: agentic-v2-run/
+          if-no-files-found: warn
+
+      # This reports on one shard, and says so. A green job here means this
+      # piece finished, not that the stage ran: that sentence is only earned
+      # once every shard has reported and `coverage_problems` has been shown
+      # nothing was run twice and nothing was missed.
+      - name: Report what happened
+        if: ${{ always() }}
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: |
+          set -euo pipefail
+          STAGE_EXIT="${{ steps.run.outputs.stage_exit }}"
+          if [ -z "$STAGE_EXIT" ]; then
+            echo "Shard $SHARD never recorded an exit code, so nothing here" \
+                 "can say what it did. Read the artifact, and treat the run as" \
+                 "possibly charged until it says otherwise."
+            exit 1
+          fi
+          echo "Shard $SHARD finished with $STAGE_EXIT. The stage is not" \
+               "finished until every shard has reported."
+          exit "$STAGE_EXIT"

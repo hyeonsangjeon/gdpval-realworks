@@ -19,11 +19,14 @@ name: Agentic Sandbox V2 — Stage A Probe
 #
 # What it does NOT do, deliberately:
 #   * It does not grade. `finalize` is not among the offered tools, so nothing
-#     here can reach the grader. Marking is about $2,504 of stage one's $2,543,
-#     and a probe that could reach it would be the stage-one run wearing a
-#     smaller name.
+#     here can reach the grader. Marking the five stage-one answers is about
+#     $2,504 against its own approved $2,600, and a probe that could reach it
+#     would be the stage-one run wearing a smaller name.
 #   * It does not run stage one. One task, not five. Stage one is a separate
-#     purchase held to its own amount, and that amount is still `null`.
+#     purchase held to its own two amounts — $50 for running and $2,600 for
+#     marking, approved on 2026-09-11 — and it goes out through
+#     `agentic-v2-stage-run.yml`, not through here. Stage A's own amount is $1
+#     and passing here grants nothing to that.
 #   * It does not open anything. `exec_run` stays shut, the V2 activation flags
 #     stay as they are, and this workflow changes no file in the repository.
 #   * It does not publish. The record leaves as an artifact, not a commit. It
