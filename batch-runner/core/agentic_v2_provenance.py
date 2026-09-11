@@ -16,6 +16,7 @@ from core.agentic_v2_contract import (
     ERROR_TYPES,
     EVENT_SCHEMA,
     FOUNDATION_BACKEND_ID,
+    MICROVM_BACKEND_ID,
     POLICY_PROFILE_IDS,
     PUBLIC_RESULT_COMMITMENT_SCHEMA,
     TOOL_CONTRACT_VERSION,
@@ -162,8 +163,22 @@ RESULT_STANDARD_COVERAGE: dict[str, dict[str, tuple[str, ...]]] = {
 # silently verifying a new backend less than its author intended is exactly the
 # failure this whole arrangement exists to prevent, and a KeyError at startup
 # is a much better outcome than a run record that overclaims.
+#
+# The microVM backend is mapped here, which is what makes it admissible at all
+# -- `core/agentic_v2_runner.py` refuses to admit an identity whose backend has
+# no entry in this table. Mapping it is not the same as running it: nothing in
+# this repository declares it as the identity to admit, and the substrate
+# manifests still say `production_activation: "disabled"`.
+#
+# One thing deliberately not done here: the name of the standard is *not* added
+# to the run metadata's key set. It is already determined by
+# `backend_identity.backend_id`, which every record carries and which the
+# runtime fingerprint covers, so a reader loses nothing; and widening an
+# exact-set schema is a change with a much larger blast radius than admitting
+# an identity, which is what this is for.
 _RESULT_STANDARD_BY_BACKEND: dict[str, str] = {
     FOUNDATION_BACKEND_ID: RESULT_STANDARD_FIXTURE_REPLAY,
+    MICROVM_BACKEND_ID: RESULT_STANDARD_ATTESTED_EXECUTION,
 }
 
 
@@ -180,6 +195,20 @@ def result_verification_standard(backend_id: Any) -> str:
         raise ValueError(
             "agentic v2 backend has no declared result verification standard"
         ) from None
+
+
+def startup_is_admissible(payload: Any) -> bool:
+    """Would a run record built on this startup event verify afterwards?
+
+    The same question `verify_event_chain` asks, asked early. Without it a
+    startup that no standard accepts is discovered at the end, by which point
+    the failure envelope being written *contains* the bad event and cannot be
+    verified either -- so a run that failed cleanly for a nameable reason
+    produces a record nothing downstream will accept, and the reason is lost.
+    Asking here lets the runner refuse before the event is appended and emit an
+    ordinary ``compute_start_failed`` that verifies like any other failure.
+    """
+    return _valid_started_payload(payload)
 
 
 def validate_failure_stage(error_type: Any, stage: Any) -> tuple[str, str]:
@@ -597,23 +626,33 @@ def verify_agentic_v2_metadata(value: Any) -> None:
     ):
         raise ValueError("agentic v2 metadata startup identity mismatch")
     runtime = started["runtime"]
-    canonical = foundation_fixture_identity(
-        started["policy_profile_id"], runtime["budget_caps"]
-    )
-    if (
-        started["backend_identity"] != canonical["backend_identity"]
-        or started["capabilities"] != canonical["capabilities"]
-        or runtime["substrate_manifest_sha256"] != canonical[
-            "substrate_manifest_sha256"
-        ]
-        or runtime["package_snapshot_sha256"] != canonical[
-            "package_snapshot_sha256"
-        ]
-        or runtime["browser_build_sha256"] != canonical[
-            "browser_build_sha256"
-        ]
-    ):
-        raise ValueError("agentic v2 canonical fixture identity mismatch")
+    # The canonical comparison belongs only to the standard that can make it.
+    # `verify_trace_pair` above has already run `_valid_started_payload`, which
+    # applies whichever standard the backend declares; repeating the fixture's
+    # re-derivation here for a guest would fail every honest run.
+    if result_verification_standard(
+        started["backend_identity"]["backend_id"]
+    ) == RESULT_STANDARD_FIXTURE_REPLAY:
+        canonical = foundation_fixture_identity(
+            started["policy_profile_id"], runtime["budget_caps"]
+        )
+        if (
+            started["backend_identity"] != canonical["backend_identity"]
+            or started["capabilities"] != canonical["capabilities"]
+            or runtime["substrate_manifest_sha256"] != canonical[
+                "substrate_manifest_sha256"
+            ]
+            or runtime["package_snapshot_sha256"] != canonical[
+                "package_snapshot_sha256"
+            ]
+            or runtime["browser_build_sha256"] != canonical[
+                "browser_build_sha256"
+            ]
+        ):
+            raise ValueError("agentic v2 canonical fixture identity mismatch")
+    # This part is arithmetic over what the record itself reports, so it holds
+    # for both standards: the fingerprint has to be the one its own inputs
+    # produce, whoever produced the inputs.
     actual_runtime = runtime_fingerprint(
         policy_profile_id=started["policy_profile_id"],
         substrate_manifest_sha256=runtime["substrate_manifest_sha256"],
@@ -740,6 +779,24 @@ def _terminal_finalize_event(private_trace: Mapping[str, Any]) -> dict:
 
 
 def _valid_started_payload(value: Any) -> bool:
+    """Is this a startup event a run record may be built on?
+
+    Two standards, and the split is not a relaxation dressed up as a branch.
+
+    Under ``fixture-replay-v1`` the whole identity is *re-derived* here and
+    compared for equality, because everything the fixture reports is a function
+    of code in this repository. Under ``attested-execution-v1`` it cannot be:
+    the commands a guest offers come from a substrate manifest, the
+    implementation hash covers an image rather than this file's source text, and
+    re-deriving any of it would mean this process inventing the answer it then
+    congratulates itself for matching. So the attested branch checks shape,
+    self-consistency, and the one thing equality was really buying -- that a
+    fixture run cannot be relabelled as a guest run to get the lighter check.
+
+    What does *not* differ between the two: the run must still be foundation
+    only. Admitting a second backend is not the same as lifting that brake, and
+    this is the line that keeps the two apart.
+    """
     if not isinstance(value, dict) or set(value) != {
         "run_id", "condition", "task_id", "backend_identity", "capabilities",
         "policy_profile_id", "runtime",
@@ -748,51 +805,80 @@ def _valid_started_payload(value: Any) -> bool:
     identity = value.get("backend_identity")
     capabilities = value.get("capabilities")
     runtime = value.get("runtime")
-    budget_caps = runtime.get("budget_caps") if isinstance(runtime, dict) else None
+    if not (
+        isinstance(identity, dict)
+        and isinstance(capabilities, dict)
+        and isinstance(runtime, dict)
+    ):
+        return False
+    budget_caps = runtime.get("budget_caps")
     structurally_valid = (
         all(
             isinstance(value.get(name), str) and bool(value[name])
             for name in ("run_id", "condition", "task_id", "policy_profile_id")
         )
-        and isinstance(identity, dict)
         and set(identity) == {
             "backend_id", "foundation_only", "implementation_sha256"
         }
-        and identity.get("backend_id") == FOUNDATION_BACKEND_ID
         and identity.get("foundation_only") is True
-        and identity.get("implementation_sha256") == (
-            foundation_implementation_fingerprint()
-        )
+        and isinstance(identity.get("implementation_sha256"), str)
+        and is_sha256(identity["implementation_sha256"])
         and value.get("policy_profile_id") in POLICY_PROFILE_IDS
-        and isinstance(capabilities, dict)
         and set(capabilities) == {
             "commands", "runtimes", "packages", "formats", "budgets"
         }
-        and capabilities.get("commands") == ["fixture-upper"]
-        and capabilities.get("runtimes") == ["fixture"]
-        and capabilities.get("formats") == ["html", "txt"]
-        and _valid_package_capabilities(
-            capabilities.get("packages"), value.get("policy_profile_id")
-        )
         and _valid_budget_capabilities(capabilities.get("budgets"), budget_caps)
-        and isinstance(runtime, dict)
         and set(runtime) == {
             "substrate_manifest_sha256",
             "package_snapshot_sha256",
             "browser_build_sha256",
             "budget_caps",
         }
-        and all(is_sha256(runtime.get(name)) for name in (
-            "substrate_manifest_sha256",
-            "package_snapshot_sha256",
-            "browser_build_sha256",
-        ))
+        and all(
+            isinstance(runtime.get(name), str) and is_sha256(runtime[name])
+            for name in (
+                "substrate_manifest_sha256",
+                "package_snapshot_sha256",
+                "browser_build_sha256",
+            )
+        )
     )
     if not structurally_valid:
         return False
     try:
+        standard = result_verification_standard(identity["backend_id"])
+    except ValueError:
+        # A backend nobody has assigned a standard to. Refusing is the point of
+        # the table: an unknown backend gets no verification, not the weakest.
+        return False
+    if standard == RESULT_STANDARD_FIXTURE_REPLAY:
+        return _valid_fixture_started_payload(value, identity, capabilities, runtime)
+    return _valid_attested_started_payload(capabilities, value["policy_profile_id"])
+
+
+def _valid_fixture_started_payload(
+    value: Mapping[str, Any],
+    identity: Any,
+    capabilities: Any,
+    runtime: Any,
+) -> bool:
+    """Everything the fixture reports, re-derived here and compared."""
+    if not (
+        identity.get("backend_id") == FOUNDATION_BACKEND_ID
+        and identity.get("implementation_sha256") == (
+            foundation_implementation_fingerprint()
+        )
+        and capabilities.get("commands") == ["fixture-upper"]
+        and capabilities.get("runtimes") == ["fixture"]
+        and capabilities.get("formats") == ["html", "txt"]
+        and _valid_package_capabilities(
+            capabilities.get("packages"), value.get("policy_profile_id")
+        )
+    ):
+        return False
+    try:
         canonical = foundation_fixture_identity(
-            value["policy_profile_id"], budget_caps
+            value["policy_profile_id"], runtime["budget_caps"]
         )
     except ValueError:
         return False
@@ -808,6 +894,39 @@ def _valid_started_payload(value: Any) -> bool:
         and runtime["browser_build_sha256"] == canonical[
             "browser_build_sha256"
         ]
+    )
+
+
+def _valid_attested_started_payload(
+    capabilities: Any,
+    policy_profile_id: str,
+) -> bool:
+    """What can be checked about a guest's declared capabilities from here.
+
+    Not much, honestly, and saying so is better than manufacturing more. The
+    lists have to be lists of real names in a stable order, ``commands`` has to
+    contain something -- a backend that can execute nothing has no business
+    claiming a standard with "execution" in its name -- and the pair that
+    identifies the fixture is refused outright, because the only way for a
+    startup event to carry it under this standard is for a fixture run to have
+    been relabelled into the lighter branch.
+
+    ``packages`` is checked for shape but not against the foundation's
+    catalogue: a guest's inventory is whatever its image holds, and today the
+    microVM backend reports an empty one for a stated reason.
+    """
+    del policy_profile_id
+    for name in ("commands", "runtimes", "packages", "formats"):
+        declared = capabilities.get(name)
+        if not isinstance(declared, list) or declared != sorted(set(declared)):
+            return False
+        if not all(isinstance(item, str) and item for item in declared):
+            return False
+    if not capabilities["commands"] or not capabilities["formats"]:
+        return False
+    return not (
+        capabilities["commands"] == ["fixture-upper"]
+        and capabilities["runtimes"] == ["fixture"]
     )
 
 
