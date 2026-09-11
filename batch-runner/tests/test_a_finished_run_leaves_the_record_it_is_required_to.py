@@ -51,6 +51,13 @@ FIXTURE = Path(__file__).parent / "fixtures" / "run_record"
 #: instrumentation, not outcome. Two of the three absences are expected to
 #: outlive this file -- see the individual tests -- and one is expected to go
 #: away on its own.
+#:
+#: It has. Run 34540053904 (exp034) records seventeen: its thirty tasks all
+#: carry ``items_seen``. That run also found the reason this number is worth
+#: pinning -- the count was being read from the task's top level, where no run
+#: has ever written it, so the record called it absent on a run that had it on
+#: every task. A number that only ever goes up because nothing reads the data
+#: is the failure this file exists to catch.
 RECORDED_FOR_THIS_RUN = 16
 UNRECORDED_FOR_THIS_RUN = [
     "executed_code_version",
@@ -366,7 +373,57 @@ def test_retries_are_counted_by_reason_and_match_the_ledger(record, artifact):
 def test_this_run_predates_items_seen_and_says_so_rather_than_reporting_zero(record):
     seen = record["tool_run_count"]
     assert is_recorded(seen) is False
-    assert "absent rather than zero" in seen["reason"]
+    assert "missing from the artifact rather than measured at zero" in seen["reason"]
+
+
+def test_the_count_is_read_from_where_runs_actually_write_it(artifact):
+    """``observability.codex.items_seen`` -- not the task's top level.
+
+    This was read from the top level first. Nothing has ever been written
+    there, so every run reported the field absent, and "absent" is
+    indistinguishable from a pipeline that genuinely does not forward it.
+    exp034's thirty tasks all carry a count and the record said it had none.
+
+    The rows below are verbatim from run 34540053904: a success, a refusal,
+    and a content filter, each with the count its turn actually reached.
+    """
+    excerpt = _load("exp034_observability_excerpt.json")
+    results = dict(artifact["results"])
+    results["results"] = excerpt["results"]
+    artifact["results"] = results
+
+    seen = build_run_record(**artifact)["tool_run_count"]
+    assert is_recorded(seen)
+    assert seen["by_task"] == {
+        "0ed38524-a4ad-405f-9dee-7b2252659aad": 28,
+        "02aa1805-c658-4069-8a6a-02dec146063a": 42,
+        "11e1b169-5fb6-4d79-8a83-82ddf4987a85": 10,
+    }
+    assert seen["total"] == 80
+    assert seen["tasks_whose_turn_never_opened"] == []
+
+
+def test_a_failed_turn_that_did_reach_the_stream_still_counts(artifact):
+    """A refusal after forty-two items is not a turn that produced nothing.
+
+    Only the four pre-stream categories carry an unmeasured zero. Dropping
+    every failure instead would lose the one number that says how far into a
+    turn the provider's limit is reached.
+    """
+    excerpt = _load("exp034_observability_excerpt.json")
+    refused = [
+        row
+        for row in excerpt["results"]
+        if row["observability"].get("error_category") == "rate_limited"
+    ]
+    assert refused, "the excerpt no longer holds a refused turn"
+    results = dict(artifact["results"])
+    results["results"] = refused
+    artifact["results"] = results
+
+    seen = build_run_record(**artifact)["tool_run_count"]
+    assert seen["total"] == 42
+    assert seen["tasks_whose_turn_never_opened"] == []
 
 
 def test_a_turn_that_never_opened_is_not_counted_as_having_produced_nothing(artifact):
@@ -376,14 +433,20 @@ def test_a_turn_that_never_opened_is_not_counted_as_having_produced_nothing(arti
     the field defaults to 0. Summing those zeroes in would drag the total
     toward "these turns produced nothing" on the strength of a value nobody
     took.
+
+    No run observed so far has produced one of these four, so this row is
+    assembled -- from the shape exp034 writes, with the zero the dataclass
+    would supply.
     """
     results = dict(artifact["results"])
     tasks = [dict(task) for task in results["results"]]
-    tasks[0]["items_seen"] = 0
     tasks[0]["status"] = "error"
-    tasks[0]["observability"] = {"error_category": "runtime_unavailable"}
-    tasks[1]["items_seen"] = 42
+    tasks[0]["observability"] = {
+        "error_category": "runtime_unavailable",
+        "codex": {"items_seen": 0},
+    }
     tasks[1]["status"] = "success"
+    tasks[1]["observability"] = {"codex": {"items_seen": 42}}
     results["results"] = tasks
     artifact["results"] = results
 
@@ -398,9 +461,11 @@ def test_a_run_where_no_turn_ever_opened_records_nothing_rather_than_zero(artifa
     results["results"] = [
         dict(
             task,
-            items_seen=0,
             status="error",
-            observability={"error_category": "session_start_failed"},
+            observability={
+                "error_category": "session_start_failed",
+                "codex": {"items_seen": 0},
+            },
         )
         for task in results["results"]
     ]
@@ -504,6 +569,48 @@ def test_the_isolation_field_claims_only_what_the_artifact_proves(record):
     assert isolation["route_profiles"] == ["direct-v1"]
     assert isolation["per_turn_timeout_seconds"] == 1800
     assert "not written into any artifact" in isolation["evidence_note"]
+
+
+def test_the_retry_setting_is_not_reported_as_a_number_of_attempts(artifact):
+    """``max_retries`` counts retries; ``max_retries + 1`` is the attempts.
+
+    step2_run_inference computes ``infra_max_attempts = max_retries + 1``.
+    Reporting the raw setting under the name "attempts" is off by one in the
+    direction that matters: exp034 declares ``max_retries: 3`` and its ledger
+    holds four rows for one task, so the record read as a run that had gone
+    past its own limit when it was inside it.
+    """
+    execution = dict(artifact["prepared"]["execution"])
+    execution["max_retries"] = 3
+    artifact["prepared"] = dict(artifact["prepared"], execution=execution)
+
+    isolation = build_run_record(**artifact)["isolation_and_security"]
+    assert isolation["retries_allowed_per_task"] == 3
+    assert isolation["attempts_allowed_per_task"] == 4
+
+
+def test_a_config_that_declares_no_retries_is_not_a_config_of_zero(artifact):
+    """Absent is not ``0``, and one attempt is not no attempts."""
+    execution = {
+        key: value
+        for key, value in artifact["prepared"]["execution"].items()
+        if key != "max_retries"
+    }
+    artifact["prepared"] = dict(artifact["prepared"], execution=execution)
+
+    isolation = build_run_record(**artifact)["isolation_and_security"]
+    assert isolation["retries_allowed_per_task"] is None
+    assert isolation["attempts_allowed_per_task"] is None
+
+
+def test_no_retries_allowed_still_allows_one_attempt(artifact):
+    """The hardened profile fixes ``max_retries: 0``; that is one try, not none."""
+    execution = dict(artifact["prepared"]["execution"], max_retries=0)
+    artifact["prepared"] = dict(artifact["prepared"], execution=execution)
+
+    isolation = build_run_record(**artifact)["isolation_and_security"]
+    assert isolation["retries_allowed_per_task"] == 0
+    assert isolation["attempts_allowed_per_task"] == 1
 
 
 # ── shape ──────────────────────────────────────────────────────────────────

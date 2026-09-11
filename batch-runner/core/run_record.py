@@ -353,6 +353,18 @@ def _failure_stage_and_reason(
     return {"by_task": by_task, "unfinished_task_count": len(by_task)}
 
 
+def _attempts_from_retries(max_retries: Any) -> int | None:
+    """Attempts a task was allowed, from the retry count the config declares.
+
+    ``None`` when the config declares nothing. A missing setting is not a
+    config of zero retries, and the difference decides whether a task that
+    made four attempts was inside its limit or past it.
+    """
+    if isinstance(max_retries, bool) or not isinstance(max_retries, int):
+        return None
+    return max(0, max_retries) + 1
+
+
 def _isolation_and_security(prepared: Mapping[str, Any], results: Mapping[str, Any]):
     """What the artifacts prove about where the work ran.
 
@@ -377,7 +389,17 @@ def _isolation_and_security(prepared: Mapping[str, Any], results: Mapping[str, A
             }
         ),
         "per_turn_timeout_seconds": execution.get("timeout"),
-        "attempts_allowed_per_task": execution.get("max_retries"),
+        # `max_retries` counts retries, not attempts: step2_run_inference
+        # computes `infra_max_attempts = max_retries + 1`. Reporting the raw
+        # number under a name that says "attempts" is off by one in the
+        # direction that matters -- exp034 declared `max_retries: 3` and its
+        # ledger holds four rows for a single task, which reads as the run
+        # exceeding its own limit. Both numbers are stated so neither has to
+        # be inferred from the other.
+        "retries_allowed_per_task": execution.get("max_retries"),
+        "attempts_allowed_per_task": _attempts_from_retries(
+            execution.get("max_retries")
+        ),
         "resume_rounds_allowed": execution.get("resume_max_rounds"),
         "evidence_note": (
             "declared configuration and route profile only; the run place's "
@@ -395,6 +417,12 @@ def _tool_run_count(results: Mapping[str, Any]) -> Any:
     ``PRE_STREAM_FAILURE_CATEGORIES``. Those tasks are listed rather than
     summed, so the total is a count of items actually observed and the reader
     can still see how many turns never got that far.
+
+    The count sits at ``observability.codex.items_seen``. Reading it from the
+    task's top level instead finds nothing on every run ever written and
+    reports the field as absent, which is indistinguishable from a run whose
+    pipeline genuinely did not forward it -- exactly what this said about
+    exp034, whose thirty tasks all carry a count.
     """
     measured: dict[str, int] = {}
     never_opened: list[str] = []
@@ -402,15 +430,14 @@ def _tool_run_count(results: Mapping[str, Any]) -> Any:
         if not isinstance(task, Mapping):
             continue
         task_id = task.get("task_id")
-        seen = task.get("items_seen")
-        if not isinstance(task_id, str) or not isinstance(seen, int):
-            continue
         observability = task.get("observability")
-        category = (
-            observability.get("error_category")
-            if isinstance(observability, Mapping)
-            else None
-        )
+        observability = observability if isinstance(observability, Mapping) else {}
+        codex = observability.get("codex")
+        codex = codex if isinstance(codex, Mapping) else {}
+        seen = codex.get("items_seen")
+        if not isinstance(task_id, str) or isinstance(seen, bool) or not isinstance(seen, int):
+            continue
+        category = observability.get("error_category")
         if task.get("status") != "success" and str(category) in PRE_STREAM_FAILURE_CATEGORIES:
             never_opened.append(task_id)
         else:
@@ -418,9 +445,9 @@ def _tool_run_count(results: Mapping[str, Any]) -> Any:
 
     if not measured and not never_opened:
         return not_recorded(
-            "no task in this run carries items_seen; CodexRunner counts the "
-            "items a turn produces but step2_run_inference began forwarding "
-            "the count only after this run, so it is absent rather than zero"
+            "no task in this run carries observability.codex.items_seen; "
+            "CodexRunner counts the items a turn produces, so the count is "
+            "missing from the artifact rather than measured at zero"
         )
     if not measured:
         return not_recorded(
