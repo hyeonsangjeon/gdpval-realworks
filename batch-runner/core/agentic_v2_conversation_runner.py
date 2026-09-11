@@ -124,11 +124,45 @@ class PerTaskCeilings:
         }
 
 
+def ceilings_from(plan: Mapping[str, Any], chosen: Any) -> PerTaskCeilings:
+    """What one task may spend, read off the plan and the chosen settings row.
+
+    Every field comes from something somebody wrote down. :class:`PerTaskCeilings`
+    has no defaults for exactly that reason — a ceiling nobody set is not a
+    ceiling — so a plan missing ``per_task_timeout_seconds`` raises here rather
+    than running under an invented one.
+
+    It lives beside the type rather than in the entry-point script because two
+    things need the same answer and must not be able to give different ones: the
+    runner, which enforces these ceilings, and the pre-registration, which
+    promises them before the run starts. Written twice, a correction to one is a
+    record describing a run that did not happen.
+
+    ``chosen`` is anything carrying ``tool_calls_per_attempt`` and
+    ``max_output_tokens_per_turn`` — the plan's chosen settings row, or the
+    option the free check picked.
+    """
+    fixed = dict(plan.get("fixed_settings") or {})
+    per_turn = int(chosen.max_output_tokens_per_turn)
+    calls = int(chosen.tool_calls_per_attempt)
+    return PerTaskCeilings(
+        # One model call per tool call, plus the turn that finalises.
+        max_model_turns=calls + 1,
+        max_written_tokens_per_turn=per_turn,
+        max_seconds=float(fixed["per_task_timeout_seconds"]),
+        max_model_calls=calls + 1,
+        # The loop re-sends the whole conversation every turn, so the input a
+        # run may read is quadratic in its length. Priced that way in
+        # price_the_options; bounded the same way here.
+        max_input_tokens=per_turn * (calls + 1) * (calls + 2),
+        max_output_tokens=per_turn * (calls + 1),
+        max_repeats_of_one_request=2,
+    )
+
+
 @dataclass(frozen=True)
 class RunWideCeilings:
     """What a whole run may spend, across every task and every attempt.
-
-    Separate from :class:`PerTaskCeilings` because the two answer different
     questions. A per-task ceiling stops one task from running away; this stops
     the run. ``None`` on a field means nobody set that one, and — unlike the
     per-task case — that is allowed here, because a run may legitimately be
@@ -262,9 +296,10 @@ def build_runner_factory(
     *,
     backend_factory: Callable[..., Any],
     profile: Mapping[str, Any],
-    voice: Any,
     conversations: TaskConversations,
     attempt_of: Callable[[str], int],
+    voice: Any = None,
+    voice_for: Optional[Callable[[StageOneBudget], Any]] = None,
     budget_caps: Optional[Mapping[str, Any]] = None,
     required_backend_type: type | None = None,
     cancel_requested: Optional[Callable[[], bool]] = None,
@@ -280,11 +315,30 @@ def build_runner_factory(
     The run-wide ceiling is checked here rather than inside the runner. Refusing
     at the factory means the task is never started and no guest is booted for a
     run that has already spent what it had.
+
+    **Give ``voice_for`` a real model, and ``voice`` only a scripted one.** The
+    two are not interchangeable and the difference is money. A paid voice such
+    as :class:`~core.agentic_v2_model_voice.AzureFoundryVoice` carries a
+    :class:`~core.agentic_v2_stage_one_budget.StageOneBudget` of its own and
+    refuses before the call that would pass it. This factory hands every task a
+    *fresh* budget, so one paid voice built once and reused would hold the first
+    task's budget for all 220: the early tasks would spend the whole run's
+    allowance and every later task would be refused by a ceiling that has
+    nothing to do with it. ``voice_for`` is handed each task's budget and builds
+    a voice against it, so the two limits are one object and the arithmetic is
+    the same one the ledger will settle.
+
+    A scripted voice spends nothing and has no budget to get wrong, which is why
+    ``voice`` still exists. Exactly one of the two is required — defaulting
+    either way would mean guessing, and the wrong guess is the expensive one.
     """
-    if voice is None:
+    if (voice is None) == (voice_for is None):
         raise ConversationRunnerRefused(
-            "a conversation needs a voice; there is no default model and "
-            "choosing one here would be this module deciding what a run costs"
+            "a conversation needs exactly one of voice or voice_for: there is "
+            "no default model, and choosing one here would be this module "
+            "deciding what a run costs. Pass voice_for for a paid voice, so "
+            "each task's voice is built against that task's own budget, and "
+            "voice for a scripted one, which has no budget to share"
         )
 
     def build(task: Any) -> AgenticV2ScriptedRunner:
@@ -294,10 +348,20 @@ def build_runner_factory(
         task_id = str(getattr(task, "task_id", "unknown-task"))
         attempt = int(attempt_of(task_id))
         limits = conversations.limits_for(task_id, attempt)
+        if voice_for is not None:
+            assert limits.budget is not None  # limits_for always builds one
+            speaking = voice_for(limits.budget)
+            if speaking is None:
+                raise ConversationRunnerRefused(
+                    f"voice_for returned nothing for {task_id!r}, so this task "
+                    "would have run with no way to ask a model"
+                )
+        else:
+            speaking = voice
         return AgenticV2ScriptedRunner(
             backend_factory=backend_factory,
             conversation=conversation_seam(
-                voice=voice,
+                voice=speaking,
                 limits=limits,
                 tools_available=tools_available,
                 cancel_requested=cancel_requested,

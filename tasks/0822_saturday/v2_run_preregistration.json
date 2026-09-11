@@ -389,7 +389,74 @@
     "the first five tasks not all succeeding; there is no target pass rate anywhere in this record, and a stage does not have to look good to proceed",
     "results disagreeing with A's Codex run"
   ],
-  "seal": "fa74921bdfcb9368c4f9140a1f990b6a60d2059963d2abb76e06d6d8eb9115ea",
+  "run_conditions": {
+    "how_the_ceilings_were_derived": {
+      "chosen_settings": {
+        "max_output_tokens_per_turn": 8192,
+        "tool_calls_per_attempt": 8
+      },
+      "comes_from": "core/agentic_v2_conversation_runner.py ceilings_from",
+      "input_tokens": "quadratic in the number of turns, because the loop re-sends the whole conversation every turn",
+      "seconds": "per_task_timeout_seconds, straight from the plan",
+      "turns": "one model call per tool call, plus the turn that finalises"
+    },
+    "model": {
+      "account": "hjeon-fdpo-foundry-eus2",
+      "automatic_model_switch_allowed": false,
+      "deployment": "gpt-5.4",
+      "project": "gdpval-realworks",
+      "resolved_model": "gpt-5.4",
+      "route_profile": "project-ci"
+    },
+    "per_task_ceilings": {
+      "max_input_tokens": 737280,
+      "max_model_calls": 9,
+      "max_model_turns": 9,
+      "max_output_tokens": 73728,
+      "max_repeats_of_one_request": 2,
+      "max_seconds": 1200.0,
+      "max_written_tokens_per_turn": 8192
+    },
+    "prompt": {
+      "self_review_enabled": false,
+      "standing_instruction_length_assumed_from": "experiments/execution_envelope/advance_check_plan.yaml",
+      "task_wording_comes_from": "the pinned dataset revision in `manifest`"
+    },
+    "read_from": "batch-runner/experiments/execution_envelope/agentic_stage_one_plan.yaml",
+    "read_from_sha256": "1bdd87afc76bb6122737400b5351d5b5de061ccea0edc25d7762fa280996dc38",
+    "retry": {
+      "kinds_recorded_separately": [
+        "infrastructure",
+        "semantic",
+        "internal"
+      ],
+      "max_attempts": 1,
+      "max_repeats_of_one_request": 2,
+      "reasons_allowed": [
+        "infrastructure_error"
+      ]
+    },
+    "tools": {
+      "comes_from": "core/agentic_v2_contract.py TOOL_NAMES",
+      "exec_run_open": false,
+      "narrowed_by_the_run": false,
+      "offered": [
+        "capabilities_query",
+        "workspace_apply",
+        "exec_run",
+        "environment_resolve",
+        "environment_activate",
+        "browser_run",
+        "verify_public",
+        "finalize"
+      ],
+      "offered_but_refuses_everything": [
+        "exec_run"
+      ]
+    },
+    "what_stops_a_task": "any per-task ceiling above, or the per-task budget, whichever comes first. A task stopped by a ceiling is recorded as stopped by that ceiling and is not a model failure"
+  },
+  "seal": "54fa669216c22c9b50cae265a42c4d4eb9371b8e1dbfa8c9034f782a20e076af",
   "stop_rules": [
     "the deployment or model reported back differs from the pinned one",
     "a run switches model or deployment on its own",
@@ -402,8 +469,8 @@
   ],
   "what_this_is": "what a V2 run is committed to before it starts. Committed ahead of execution so that a later result cannot be described as having been planned this way when it was not.",
   "what_this_is_not": [
-    "not a statement that the environment is ready -- at the time of writing no V2 task has run, and the blocker is a role assignment in the subscription that holds the model",
-    "not an approval to spend; the amount lives in experiments/execution_envelope/agentic_stage_one_plan.yaml and is the owner's to fill in",
+    "not a statement that the environment is ready. No V2 task has run. What stage one registers is a run with exec_run shut and no guest booted, so the isolation is not exercised by it and no result from it is evidence that the sandbox contains anything",
+    "not an approval to spend more than the five-task cohort. Two amounts are approved in experiments/execution_envelope/agentic_stage_one_plan.yaml -- one for running the five tasks and one for marking their answers -- and they are whole-run figures for those five. The thirty and the two hundred and twenty are not priced, and scripts/run_agentic_v2_stage.py refuses them until they are",
     "not a prediction of how the run will go"
   ]
 }

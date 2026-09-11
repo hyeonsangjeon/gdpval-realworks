@@ -7,40 +7,49 @@
 # exec_run still shut. It answers one question — does asking the model again
 # after each tool result help at all? — and nothing else.
 #
-# NOTHING HERE IS APPROVED AND NOTHING HERE RUNS.
+# TWO AMOUNTS ARE APPROVED HERE, FOR THE FIVE TASKS BELOW AND NOTHING ELSE.
 #
-# The amount that may be spent is deliberately left empty below. The free check
-# at batch-runner/scripts/check_agentic_stage_one_ceiling.py reads this file,
-# works out what each candidate setting could cost, and refuses to let anything
-# start while that amount is empty. Filling it in is a decision for the owner
-# of the repository, and this file exists to put the numbers in front of that
-# decision rather than to make it.
+# This header used to read "NOTHING HERE IS APPROVED AND NOTHING HERE RUNS",
+# and it went on reading that way after the amounts were filled in on
+# 2026-09-11 — four lines above the block that holds them. Corrected rather
+# than quietly deleted, because the first sentence of a file is the one a
+# reader trusts, and a file that contradicts itself is believed at the top.
 #
-# Beyond the money, two things still block stage one even if the money is
-# approved, and neither is removed here:
-#
-#   - the guards that keep the mode out of the paid pipeline. Two of them: the
-#     check in step2_run_inference._require_runnable_execution_mode, and the
-#     refusal in core/executor.py to build a runner unless the caller states
-#     the run makes no paid model calls. Both stay exactly as they are.
-#   - exec_run is still shut, so nothing stage one does runs a command.
-#
-# One thing that used to be on this list has moved, and is written down here so
-# the change is not silent. Until 2026-09-10 nothing in the repository could
-# reach a real model at all. Now it can:
-# core/agentic_v2_model_voice.AzureFoundryVoice asks a Foundry deployment
-# through the Responses API. What replaced that blocker is narrower and is the
-# amount below — real_model_voice refuses when it is handed no budget, and the
-# loop refuses a paid voice on a run that carries none. Both refusals are run,
-# not read, by the free check. So filling in the amount below is now what lets
-# stage one start, which is exactly why it is the owner's decision and not this
-# file's.
+# What is approved: running the five task_ids below (50.00) and marking their
+# answers (2600.00), under the standing approval for Foundry model calls and
+# experiments within the already authorised scope. Both are whole-run figures
+# for those five tasks. Neither is a per-task rate, so neither prices a larger
+# cohort: scripts/run_agentic_v2_stage.py refuses any stage this file has not
+# priced and says by what multiple it would have overrun.
 #
 # Read this file with:
 #     cd batch-runner
 #     python scripts/check_agentic_stage_one_ceiling.py
 #
-# Written: 2026-08-26.
+# Beyond the money, two things still block stage one, and approving an amount
+# did not move either of them:
+#
+#   - the guards that keep the mode out of the paid pipeline. Two of them: the
+#     check in step2_run_inference._require_runnable_execution_mode, and the
+#     refusal in core/executor.py to build a runner unless the caller states
+#     the run makes no paid model calls. Both stay exactly as they are.
+#   - exec_run is still shut, so nothing stage one does runs a command. No
+#     guest boots either, so stage one exercises the loop and not the
+#     isolation, and no result from it is evidence about the isolation.
+#
+# One thing that used to be on this list has moved, and is written down here so
+# the change is not silent. Until 2026-09-10 nothing in the repository could
+# reach a real model at all. Now it can:
+# core/agentic_v2_model_voice.AzureFoundryVoice asks a Foundry deployment
+# through the Responses API. What replaced that blocker was narrower — the
+# amount below, since real_model_voice refuses when it is handed no budget and
+# the loop refuses a paid voice on a run that carries none, both of which the
+# free check runs rather than reads. That blocker was cleared on 2026-09-11
+# when the two amounts were approved. It is kept here because it explains why
+# the amounts are the thing that mattered, and because a run that finds itself
+# refused for want of a budget is being refused by those two mechanisms.
+#
+# Written: 2026-08-26. Amounts approved and this header corrected: 2026-09-11.
 
 plan_version: "agentic-stage-one-v1"
 
@@ -143,22 +152,57 @@ safety_blocks_must_stay_closed: true
 
 # ── What may be spent ─────────────────────────────────────────────────────
 cost:
-  # Empty on purpose. Nothing has been approved for stage one.
+  # ── Two amounts, because they are two decisions ─────────────────────────
   #
-  # The 32.23 United States dollars approved on 2026-08-25 was for the
-  # three-place comparison of five tasks and nothing else. It does not extend
-  # here, and stage one must not be started under it.
+  # There used to be one key here, approved_maximum_usd, holding the total. The
+  # free check now refuses a plan that still carries it, rather than reading it
+  # as either half — an approval given for a total is not an approval of a part
+  # of it.
   #
-  # To approve stage one, choose one row from the table the free check prints,
-  # write the two settings into chosen_settings below, and write the amount
-  # from that row here.
-  approved_maximum_usd: null
+  # The reason for the split is in the table the free check prints. Marking is
+  # a flat 2504.67 whatever the settings are; running moves from 3.37 to 493.70
+  # across the candidate rows. Held as one figure, the decision actually being
+  # made — which settings buy an answer worth having — is under one per cent of
+  # the number being signed, and could change a hundredfold without moving it.
+  #
+  # Approved 2026-09-11 under the standing approval for Foundry model calls and
+  # experiments in the existing authorised scope.
 
-  # Empty until a row is chosen. The free check refuses while either is empty,
-  # and refuses if the pair is not one of the candidates above.
+  # Running the five tasks. The chosen row below prices at 18.47 at most; 50 is
+  # written here so a modest move in the shared assumptions does not turn a
+  # correct plan into a refused one without anybody having changed their mind.
+  # Nothing spends up to it: the per-task budgets under chosen_settings are
+  # what actually stop a run, and they are worked out from the same arithmetic.
+  running_approved_maximum_usd: 50.00
+
+  # Marking the five answers. Approved here because the plan is where the whole
+  # of stage one is priced and a half-approved stage is not an approved one.
+  # Nothing in scripts/run_agentic_v2_stage.py can spend it — that script binds
+  # every call to the problem-solving bucket, and core.agentic_v2_cost_binding
+  # raises on a grading stage. Marking is a separate run against this figure.
+  grading_approved_maximum_usd: 2600.00
+
+  # ── The settings ─────────────────────────────────────────────────────────
+  #
+  # Eight tool calls and 8192 tokens a turn, from the table the free check
+  # prints. Chosen 2026-09-11, and the reasoning is worth keeping because the
+  # cheapest row is not obviously wrong:
+  #
+  #   4 / 2048   3.37   what stage A asked one question with. Four tool calls
+  #                     is enough to read, write and finalise, and little else;
+  #                     a task needing to look at two inputs first has spent
+  #                     them before it starts.
+  #   8 / 8192  18.46   chosen. Double the calls, quadruple the write cap, at
+  #                     an amount that is still small.
+  #  16 / 32768 137.62  the write cap is past what these deliverables need, and
+  #                     the loop re-sends the whole conversation every turn, so
+  #                     the input cost grows with the square of the length.
+  #
+  # This is a choice about what the model is given room to do, and it will show
+  # up in the results either way. Recorded before the run, not after it.
   chosen_settings:
-    tool_calls_per_attempt: null
-    max_output_tokens_per_turn: null
+    tool_calls_per_attempt: 8
+    max_output_tokens_per_turn: 8192
 
   # ── Stage A: the one paid question that comes before the run above ──────
   #

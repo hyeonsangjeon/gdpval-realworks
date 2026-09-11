@@ -11,13 +11,18 @@ Nothing here runs a task, calls a model, boots a guest or spends.
 from __future__ import annotations
 
 import hashlib
+import inspect
 import json
 from pathlib import Path
+from unittest import mock
 
 import pytest
 import yaml
 
 from core.agentic_v2_contract import TOOL_NAMES
+from core.agentic_v2_conversation import run_model_conversation
+from core.agentic_v2_conversation_runner import build_runner_factory, ceilings_from
+from core.agentic_v2_stage_one_budget import load_stage_one_plan
 from core.agentic_v2_preregistration import (
     CODEX_TRIAL_PLAN,
     Comparison,
@@ -26,6 +31,7 @@ from core.agentic_v2_preregistration import (
     MATCHES,
     NOT_STOP_RULES,
     PREREGISTRATION_ARTEFACT as ARTEFACT,
+    REPOSITORY_ROOT,
     STAGE_FIVE,
     STAGE_THIRTY,
     STAGE_TWO_TWENTY,
@@ -246,15 +252,188 @@ class TestThereIsNoSuccessQuota:
         assert all(isinstance(rule, str) and rule for rule in STOP_RULES)
 
 
+class TestTheConditionsAreRecordedBeforeTheRun:
+    """Model, prompt, tools, ceilings, retries — written down ahead of time.
+
+    A pre-registration whose conditions are written by hand is a description of
+    a run somebody intended. Each test below asks the thing that would actually
+    execute, and fails if the record and the executable disagree — which is the
+    only way the record stays worth reading a month after it was sealed.
+    """
+
+    def test_the_conditions_are_read_from_the_plan_and_the_plan_is_sealed(self):
+        conditions = record()["run_conditions"]
+
+        plan_path = REPOSITORY_ROOT / conditions["read_from"]
+        assert plan_path.is_file()
+        assert (
+            conditions["read_from_sha256"]
+            == hashlib.sha256(plan_path.read_bytes()).hexdigest()
+        )
+
+    def test_the_model_and_the_resource_both_appear(self):
+        """A deployment name alone does not identify a model.
+
+        The same name in another Foundry resource is another deployment, so a
+        record naming only ``gpt-5.4`` would not distinguish this run from one
+        against a different account's deployment of the same name.
+        """
+        model = record()["run_conditions"]["model"]
+        plan = load_stage_one_plan()
+
+        assert model["deployment"] == plan["model"]["deployment"]
+        assert model["resolved_model"] == plan["model"]["resolved_model"]
+        assert model["account"] == plan["azure_connection"]["account"]
+        assert model["project"] == plan["azure_connection"]["project"]
+        assert model["route_profile"] == plan["azure_connection"]["route_profile"]
+        assert model["automatic_model_switch_allowed"] is False
+
+    def test_the_recorded_tool_list_is_the_one_the_model_will_be_offered(self):
+        """The record said seven tools before this test was written.
+
+        It excluded ``exec_run`` on the reasoning that a shut tool is not
+        offered. Nothing in the run narrows the list: ``tools_available``
+        defaults to the whole contract and no caller overrides it, so the model
+        is offered all eight and ``exec_run`` answers ``capability_unavailable``
+        when it is chosen. Which is the more interesting run — how a model
+        reacts to a refused capability is a finding — but either way the record
+        has to say what happens rather than what sounds tidier.
+        """
+        tools = record()["run_conditions"]["tools"]
+
+        # Both ends of the path the stage run takes: the factory it builds
+        # its runner with, and the loop that loop actually runs.
+        for built in (build_runner_factory, run_model_conversation):
+            offered = inspect.signature(built).parameters["tools_available"].default
+            assert tuple(tools["offered"]) == tuple(offered), built.__name__
+
+        assert tools["offered"] == list(TOOL_NAMES)
+        assert tools["offered_but_refuses_everything"] == ["exec_run"]
+        assert tools["exec_run_open"] is False
+        assert tools["narrowed_by_the_run"] is False
+
+    def test_the_recorded_ceilings_are_the_ones_that_will_be_enforced(self):
+        """Derived by the runner's own function, not by a second copy of it.
+
+        The ceilings are the one part of the conditions the plan does not
+        contain — they are arithmetic on it. Worked out twice, a correction to
+        the enforcing copy would leave the promised copy describing a run that
+        did not happen, and nothing would say so.
+        """
+        conditions = record()["run_conditions"]
+        plan = load_stage_one_plan()
+        chosen = plan["cost"]["chosen_settings"]
+
+        class _Chosen:
+            tool_calls_per_attempt = chosen["tool_calls_per_attempt"]
+            max_output_tokens_per_turn = chosen["max_output_tokens_per_turn"]
+
+        assert conditions["per_task_ceilings"] == ceilings_from(plan, _Chosen).as_dict()
+        assert conditions["how_the_ceilings_were_derived"]["chosen_settings"] == chosen
+
+    def test_no_ceiling_is_left_unset(self):
+        """A ceiling nobody set is not a ceiling, and nulls read as "no limit"."""
+        ceilings = record()["run_conditions"]["per_task_ceilings"]
+
+        assert ceilings
+        assert all(value is not None for value in ceilings.values())
+        assert all(
+            value > 0 for value in ceilings.values() if isinstance(value, (int, float))
+        )
+
+    def test_the_three_kinds_of_retry_stay_apart(self):
+        """Collapsed into one count, a flaky endpoint reads as an unsure model.
+
+        The distinction is the fourth ordered step's, and it has to be fixed
+        before the run rather than reconstructed from logs afterwards.
+        """
+        retry = record()["run_conditions"]["retry"]
+
+        assert retry["kinds_recorded_separately"] == [
+            "infrastructure",
+            "semantic",
+            "internal",
+        ]
+        assert retry["reasons_allowed"] == ["infrastructure_error"]
+        assert retry["max_attempts"] == 1
+
+    def test_the_conditions_carry_no_prediction_of_the_outcome(self):
+        """Pre-registering an expectation invites reading the result against it.
+
+        What a good result would be is in ``after_stage_one.success_criteria``
+        in the plan, which is a criterion. A guess at the outcome is not, and
+        the words below are the ones such a guess arrives wearing.
+        """
+        written = json.dumps(record()["run_conditions"]).lower()
+
+        for guess in ("we expect", "should succeed", "likely", "probably"):
+            assert guess not in written
+
+    def test_a_changed_setting_changes_the_seal(self):
+        """The record is only a commitment if editing the plan invalidates it."""
+        before = record()["seal"]
+        plan = load_stage_one_plan()
+        moved = json.loads(json.dumps(plan))
+        moved["cost"]["chosen_settings"]["tool_calls_per_attempt"] = 4
+
+        with mock.patch(
+            "core.agentic_v2_stage_one_budget.load_stage_one_plan",
+            return_value=moved,
+        ):
+            after = record()["seal"]
+
+        assert after != before
+
+
 class TestTheRecordSaysWhatItIsNot:
     def test_it_does_not_claim_the_environment_is_ready(self):
+        """Named, not diagnosed — and the diagnosis it used to carry is barred.
+
+        This assertion used to be ``"role assignment" in disclaimed``, which
+        pinned a *cause*: that the run was blocked by a missing role in the
+        subscription holding the model. That reading came from a 401 which was
+        later shown to have arrived from past the authentication gate, and
+        stage A has since reached a real deployment and been charged for it. A
+        disclaimer naming a cause that has been disproved is worse than none,
+        because it sends the next reader to ask for permission nobody needs.
+
+        So the assertion is inverted. What is still missing is named — the
+        isolation, which the pre-registration itself fixes shut — and the
+        retired cause is held out, so bringing the sentence back fails here.
+        """
         disclaimed = " ".join(record()["what_this_is_not"])
+
         assert "not a statement that the environment is ready" in disclaimed
-        assert "role assignment" in disclaimed
+        assert "No V2 task has run" in disclaimed
+        assert "exec_run shut and no guest booted" in disclaimed
+        assert "no result from it is evidence that the sandbox contains anything" in disclaimed
+        assert "role assignment" not in disclaimed
 
     def test_it_does_not_approve_any_spending(self):
         disclaimed = " ".join(record()["what_this_is_not"])
         assert "not an approval to spend" in disclaimed
+
+    def test_the_money_disclaimer_is_read_from_the_plan_rather_than_stated(self):
+        """The other sentence that went stale, and why it cannot again.
+
+        It used to say the amount was the owner's to fill in. On 2026-09-11
+        they filled in two, and the sentence carried on saying otherwise. It
+        now asks :func:`stage_one_amount_note`, so the record follows the plan
+        in both directions: an approval that is withdrawn turns the disclaimer
+        back by itself.
+
+        The assertions are about *scope*, not about the figures. The two
+        amounts are whole-run ones for the five tasks the plan pins, so a
+        record that read as a general approval would be read as pricing 220.
+        """
+        disclaimed = " ".join(record()["what_this_is_not"])
+
+        assert "five-task cohort" in disclaimed
+        assert "whole-run figures for those five" in disclaimed
+        assert "thirty and the two hundred and twenty are not priced" in disclaimed
+        assert "scripts/run_agentic_v2_stage.py refuses them until they are" in disclaimed
+        # The stale shape: an amount nobody has approved yet.
+        assert "the owner's to fill in" not in disclaimed
 
     def test_the_committed_comparison_is_carried_in_the_record(self):
         carried = record()["comparison_with_codex"]

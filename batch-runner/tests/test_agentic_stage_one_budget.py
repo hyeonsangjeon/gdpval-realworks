@@ -42,6 +42,7 @@ from core.agentic_v2_stage_one_budget import (  # noqa: E402
     price_the_options,
     read_dispatcher_limits,
     run_stage_one_preflight,
+    stage_one_amount_note,
     stage_one_ceiling,
     tool_result_tokens_ceiling,
 )
@@ -600,36 +601,102 @@ def _preflight(plan, catalog, assumptions):
     )
 
 
-def test_stage_one_is_refused_today_and_says_the_amount_is_what_is_missing(
+def test_the_committed_stage_one_plan_may_start(
     stage_one_plan, catalog, assumptions
 ):
-    """The honest first answer names which of the two things is missing.
+    """Stage one is approved, and the shipped file is what says so.
 
-    A real model can now be reached: ``AzureFoundryVoice`` asks a Foundry
-    deployment. What has not happened is anybody writing down an amount for
-    stage one, and the refusal says so rather than letting a stale "no model
-    exists" stand in for it.
+    This test used to assert the opposite, and the change is worth naming
+    rather than quietly rewriting. Until 2026-09-11 nobody had written down an
+    amount, so the honest answer was a refusal that said which figure was
+    missing. Two amounts have since been written into the plan under the
+    standing approval, and the gate now passes.
 
-    Said in the preflight's own words rather than the safety check's standing
-    line. Since stage A reaches a separate verdict on a separate amount, that
-    line is no longer a fact about every purchase, so the sentence a reader
-    gets here is the one about stage one's own missing amount.
+    What did not change is where the answer comes from. This reads the
+    committed plan, not a copy with something helpful added, so if either
+    amount is removed or a ceiling grows past it, this fails.
     """
     result = _preflight(stage_one_plan, catalog, assumptions)
 
+    assert result.problems == []
+    assert result.may_start is True
+
+
+@pytest.mark.parametrize(
+    "key, names",
+    [
+        ("running_approved_maximum_usd", "running stage one's five tasks"),
+        ("grading_approved_maximum_usd", "marking stage one's five answers"),
+    ],
+)
+def test_removing_either_approved_amount_refuses_and_names_that_one(
+    stage_one_plan, catalog, assumptions, key, names
+):
+    """Half an approval is not an approval, and the refusal says which half.
+
+    The machinery that refuses a missing amount can no longer be seen through
+    the shipped plan, because the shipped plan now has both. So it is
+    established by taking one away at a time. A reader who gets this refusal
+    must be able to tell which of the two decisions has not been made, since
+    they are made by different reasoning and one is a hundred times the other.
+    """
+    plan = copy.deepcopy(stage_one_plan)
+    plan["cost"].pop(key)
+
+    result = _preflight(plan, catalog, assumptions)
+
     assert result.may_start is False
     assert any(
-        "largest amount that may be spent on stage one" in note
+        f"largest amount that may be spent on {names}" in note
+        and f"cost.{key}" in note
         for note in result.problems
     )
+    # And the other half is not dragged down with it.
+    assert not any("largest amount" in note and names not in note
+                   for note in result.problems)
 
 
-def test_the_missing_amount_is_established_by_running_the_code():
-    """Established by calling the refusing seam, not by reading a comment."""
-    problems = check_stage_one_cannot_reach_a_model()
+def test_the_amount_note_follows_the_plan_rather_than_a_constant(tmp_path):
+    """The sentence that used to be unconditional, now read from the file.
+
+    It said "no amount has been approved" for as long as it existed, and would
+    have gone on saying it after the amounts were written down — printed as a
+    blocker by the readiness report, where somebody deciding what to do next
+    would read it. Both directions are checked here: silence on the committed
+    plan, and the full sentence on a plan with the figures taken out.
+    """
+    assert check_stage_one_cannot_reach_a_model() == []
+    assert stage_one_amount_note() == []
+
+    raw = yaml.safe_load(STAGE_ONE_PLAN_PATH.read_text(encoding="utf-8"))
+    raw["cost"].pop("running_approved_maximum_usd")
+    stripped = tmp_path / "one_amount_missing.yaml"
+    stripped.write_text(yaml.safe_dump(raw, sort_keys=False), encoding="utf-8")
+
+    problems = stage_one_amount_note(stripped)
+
     assert len(problems) == 1
     assert "no amount has been approved" in problems[0]
     assert "core.agentic_v2_model_voice.AzureFoundryVoice" in problems[0]
+    # And it names the half that is missing rather than both.
+    assert "cost.running_approved_maximum_usd" in problems[0]
+    assert "cost.grading_approved_maximum_usd" not in problems[0]
+
+
+def test_an_unreadable_plan_counts_as_unapproved(tmp_path):
+    """The safe direction when the question cannot be answered.
+
+    Treating a plan nobody can read as approved would turn a corrupted file
+    into permission. It reports the failure instead, which is a blocker either
+    way, and names what went wrong so it can be fixed rather than puzzled over.
+    """
+    broken = tmp_path / "not_a_plan.yaml"
+    broken.write_text("plan_version: something-else\n", encoding="utf-8")
+
+    problems = stage_one_amount_note(broken)
+
+    assert len(problems) == 1
+    assert "has to be treated as unapproved" in problems[0]
 
 
 def test_the_check_reports_it_if_the_seam_stops_asking_for_an_amount(
@@ -738,19 +805,47 @@ def test_the_check_reports_it_if_the_runner_gains_a_model_client(monkeypatch):
     assert any("now accepts a model client" in note for note in problems)
 
 
-def test_the_committed_stage_one_plan_approves_nothing(stage_one_plan):
-    """Nothing has been approved for stage one, and the file must say so."""
+def test_the_committed_stage_one_plan_approves_two_amounts_and_settings(
+    stage_one_plan,
+):
+    """The exact figures in the file, read back, and the old key gone.
+
+    Pinned rather than left to the gate because these four numbers are the
+    decision. A change to any of them is somebody deciding something different
+    about what stage one may cost or what the model is given room to do, and
+    that should have to edit this test and say why.
+
+    The absence of ``approved_maximum_usd`` is asserted too. A plan carrying
+    both the old total and the two parts would be read one way by the gate and
+    another way by a person, and the person would be reading a number that
+    nothing enforces.
+    """
     cost = stage_one_plan["cost"]
-    assert cost["approved_maximum_usd"] is None
-    assert cost["chosen_settings"]["tool_calls_per_attempt"] is None
-    assert cost["chosen_settings"]["max_output_tokens_per_turn"] is None
+
+    assert "approved_maximum_usd" not in cost
+    assert Decimal(str(cost["running_approved_maximum_usd"])) == Decimal("50.00")
+    assert Decimal(str(cost["grading_approved_maximum_usd"])) == Decimal("2600.00")
+    assert cost["chosen_settings"]["tool_calls_per_attempt"] == 8
+    assert cost["chosen_settings"]["max_output_tokens_per_turn"] == 8_192
 
 
 def test_the_three_place_approval_does_not_extend_to_stage_one(
     stage_one_plan, catalog, assumptions
 ):
-    """The 32.23 approved on 2026-08-25 was for that comparison and no other."""
-    result = _preflight(stage_one_plan, catalog, assumptions)
+    """The 32.23 approved on 2026-08-25 was for that comparison and no other.
+
+    Seen by removing stage one's own amounts, which is the only state in which
+    the question arises. Stage one was approved separately and on its own
+    figures; the point being kept alive here is that it had to be, and that a
+    plan with nothing written down is not quietly covered by the older, smaller
+    approval sitting next to it in the same repository.
+    """
+    plan = copy.deepcopy(stage_one_plan)
+    plan["cost"].pop("running_approved_maximum_usd")
+    plan["cost"].pop("grading_approved_maximum_usd")
+
+    result = _preflight(plan, catalog, assumptions)
+
     assert any("does not extend here" in note for note in result.problems)
 
 
@@ -772,11 +867,16 @@ def test_choosing_a_row_reports_the_limit_each_task_would_be_stopped_by(
     refusing it. Nothing about stage one had changed; a number written down by
     hand had simply stopped describing the thing it was chosen to clear.
 
-    So it is derived instead: price the row, approve exactly that, and the
-    money question is settled by construction however the assumptions move
-    next. Exactly the price is enough because the refusal is written ``>``,
-    not ``>=`` — an approver who signs off the quoted figure has signed off
-    the run.
+    So they are derived instead: price the row, approve exactly what it prices
+    at, and the money question is settled by construction however the
+    assumptions move next. Exactly the price is enough because the refusal is
+    written ``>``, not ``>=`` — an approver who signs off the quoted figure has
+    signed off the run.
+
+    Two amounts are derived, not one, because the two halves move for
+    unrelated reasons. Running follows the row; marking is the same flat figure
+    on every row. Approving the total would let a change in one be absorbed by
+    headroom in the other.
     """
     plan = copy.deepcopy(stage_one_plan)
     plan["cost"]["chosen_settings"] = {
@@ -786,7 +886,12 @@ def test_choosing_a_row_reports_the_limit_each_task_would_be_stopped_by(
 
     priced = _preflight(plan, catalog, assumptions)
     assert priced.chosen is not None
-    plan["cost"]["approved_maximum_usd"] = priced.chosen.most_it_could_cost_usd
+    plan["cost"]["running_approved_maximum_usd"] = (
+        priced.chosen.most_running_could_cost_usd
+    )
+    plan["cost"]["grading_approved_maximum_usd"] = (
+        priced.chosen.most_grading_could_cost_usd
+    )
 
     result = _preflight(plan, catalog, assumptions)
 
@@ -798,23 +903,56 @@ def test_choosing_a_row_reports_the_limit_each_task_would_be_stopped_by(
         assert budget.max_input_tokens > 0
         assert budget.refusal_before_next_call() is None
 
-    # And with the row chosen and exactly its price approved, nothing is left
-    # standing. That is the whole shape of this gate: the amount is the last
-    # thing, so supplying it here empties the list rather than shortening it.
+    # And with the row chosen and exactly its price approved for each half,
+    # nothing is left standing. That is the whole shape of this gate: the
+    # amounts are the last thing, so supplying them here empties the list
+    # rather than shortening it.
     #
     # Nothing starts because of this. The check is a verdict, not a switch —
-    # the safety blocks it just confirmed are separate code and are still shut,
-    # and this ran against a copy of the plan. The shipped file still carries
-    # no amount and is still refused, which the tool test below runs to see.
+    # the safety blocks it just confirmed are separate code and are still shut.
+    # The shipped plan clears the same gate on different figures, which the
+    # test above runs to see; this one shows the gate would still be passable
+    # at a row nobody chose, so what passed up there was the arithmetic and not
+    # a number picked to be comfortable.
     assert result.problems == []
     assert result.may_start is True
 
 
-def test_nothing_is_chosen_so_no_limit_is_reported(
+def test_nothing_chosen_means_no_limit_is_reported(
     stage_one_plan, catalog, assumptions
 ):
-    result = _preflight(stage_one_plan, catalog, assumptions)
+    """No settings, no per-task limit — and nothing invented to stand in.
+
+    The plan now names a chosen row, so this is seen by taking it away. What
+    matters is the empty dictionary rather than a refusal: a gate that helpfully
+    supplied a default limit here would be choosing the settings itself, and
+    the settings are the thing stage one exists to decide.
+    """
+    plan = copy.deepcopy(stage_one_plan)
+    plan["cost"]["chosen_settings"] = {
+        "tool_calls_per_attempt": None,
+        "max_output_tokens_per_turn": None,
+    }
+
+    result = _preflight(plan, catalog, assumptions)
+
+    assert result.chosen is None
     assert result.chosen_budget == {}
+    assert result.may_start is False
+
+
+def test_the_committed_plan_reports_a_limit_for_every_task(
+    stage_one_plan, catalog, assumptions
+):
+    """The other side of the same coin, on the figures that will really run."""
+    result = _preflight(stage_one_plan, catalog, assumptions)
+
+    assert set(result.chosen_budget) == set(stage_one_plan["task_ids"])
+    for budget in result.chosen_budget.values():
+        # Nine turns — eight tool calls and the turn that finishes — across a
+        # first attempt and one retry.
+        assert budget.max_model_calls == 8 * 2
+        assert budget.max_output_tokens == 8_192 * 8 * 2
 
 
 def test_the_reported_limit_stops_a_run_that_reaches_it(
@@ -826,7 +964,8 @@ def test_the_reported_limit_stops_a_run_that_reaches_it(
         "tool_calls_per_attempt": 4,
         "max_output_tokens_per_turn": 2_048,
     }
-    plan["cost"]["approved_maximum_usd"] = 1_000
+    plan["cost"]["running_approved_maximum_usd"] = 1_000
+    plan["cost"]["grading_approved_maximum_usd"] = 10_000
 
     result = _preflight(plan, catalog, assumptions)
     budget = result.chosen_budget[plan["task_ids"][0]]
@@ -846,7 +985,6 @@ def test_choosing_settings_nobody_priced_is_refused(
         "tool_calls_per_attempt": 5,
         "max_output_tokens_per_turn": 3_000,
     }
-    plan["cost"]["approved_maximum_usd"] = 1_000
 
     result = _preflight(plan, catalog, assumptions)
 
@@ -854,20 +992,60 @@ def test_choosing_settings_nobody_priced_is_refused(
     assert any("not one of the candidates" in note for note in result.problems)
 
 
-def test_an_approved_amount_below_the_chosen_setting_is_refused(
+def test_a_plan_still_carrying_the_old_single_amount_is_refused(
     stage_one_plan, catalog, assumptions
 ):
+    """The retired key is refused out loud, not read as either half.
+
+    An approval given for a total is not an approval of a part of it. The
+    danger being closed is the quiet reading: a gate that saw 2,600 under the
+    old name and took it as the running ceiling would wave through a run
+    seventy times larger than the one the approver had in mind, and would print
+    a line saying it was within budget.
+    """
+    plan = copy.deepcopy(stage_one_plan)
+    plan["cost"]["approved_maximum_usd"] = 2_600
+
+    result = _preflight(plan, catalog, assumptions)
+
+    assert result.may_start is False
+    assert any(
+        "one figure covering both running and marking" in note
+        for note in result.problems
+    )
+
+
+@pytest.mark.parametrize(
+    "key, half",
+    [
+        ("running_approved_maximum_usd", "running the five tasks"),
+        ("grading_approved_maximum_usd", "marking the five answers"),
+    ],
+)
+def test_an_approved_amount_below_the_chosen_setting_is_refused(
+    stage_one_plan, catalog, assumptions, key, half
+):
+    """Either half being too small refuses the whole, and says which half.
+
+    Run against both because they fail differently. Running is what the chosen
+    row moves, so it is the half an ambitious setting breaks. Marking is flat,
+    so it is the half that breaks when the marking assumptions are corrected
+    and nobody revisits the amount — which has already happened once.
+    """
     plan = copy.deepcopy(stage_one_plan)
     plan["cost"]["chosen_settings"] = {
         "tool_calls_per_attempt": 32,
         "max_output_tokens_per_turn": 32_768,
     }
-    plan["cost"]["approved_maximum_usd"] = "1.00"
+    plan["cost"][key] = "1.00"
 
     result = _preflight(plan, catalog, assumptions)
 
     assert result.may_start is False
-    assert any("is above the" in note for note in result.problems)
+    assert any(
+        f"the most {half} could cost" in note and "is above the" in note
+        for note in result.problems
+    )
     assert result.chosen is not None
 
 
@@ -1003,21 +1181,49 @@ def test_the_stage_one_plan_uses_the_same_five_tasks(stage_one_plan):
 # amount must never be the reason stage A cannot go.
 
 
-def test_the_probe_may_go_today_while_stage_one_still_may_not(
+def test_both_verdicts_pass_on_the_shipped_plan(
     stage_one_plan, catalog, assumptions
 ):
-    """The two verdicts as the shipped plan leaves them, and why they differ.
+    """The two verdicts as the shipped plan now leaves them: both green.
 
-    Stage A has an amount and settings written down; stage one has neither.
-    Nothing else separates them, which is the point — the same safety checks
-    were run for both, and only the money question came out differently.
+    They used to disagree, and that disagreement was doing the work of showing
+    they were reached separately. It no longer can, so the separation is shown
+    by the test below instead, which takes stage one's amounts away and watches
+    stage A carry on unaffected.
     """
     result = _preflight(stage_one_plan, catalog, assumptions)
 
-    assert result.may_start is False
+    assert result.may_start is True
     assert result.probe is not None
     assert result.probe.may_start is True
     assert result.probe.problems == []
+
+
+def test_stage_ones_money_question_does_not_reach_the_probe(
+    stage_one_plan, catalog, assumptions
+):
+    """Stage one losing its approval must not stop stage A, or vice versa.
+
+    Each is held to its own amount. Stage A's is one dollar for a single
+    unmarked task; stage one's is two figures covering five tasks and their
+    marking. A gate that let one answer the other would either block the cheap
+    question over the expensive one's paperwork, or — far worse in the other
+    direction — let the expensive one ride on the cheap one's approval.
+    """
+    without_stage_one = copy.deepcopy(stage_one_plan)
+    without_stage_one["cost"].pop("running_approved_maximum_usd")
+    without_stage_one["cost"].pop("grading_approved_maximum_usd")
+
+    result = _preflight(without_stage_one, catalog, assumptions)
+    assert result.may_start is False
+    assert result.probe is not None and result.probe.may_start is True
+
+    without_the_probe = copy.deepcopy(stage_one_plan)
+    without_the_probe["cost"]["stage_a_probe"]["approved_maximum_usd"] = None
+
+    other = _preflight(without_the_probe, catalog, assumptions)
+    assert other.probe is not None and other.probe.may_start is False
+    assert other.may_start is True
 
 
 def test_a_safety_block_opening_refuses_the_probe_as_well(
@@ -1101,7 +1307,8 @@ def test_no_amount_for_the_probe_is_refused_rather_than_borrowed(
     """Approval for one purchase is not approval for the other, either way."""
     plan = copy.deepcopy(stage_one_plan)
     plan["cost"]["stage_a_probe"]["approved_maximum_usd"] = None
-    plan["cost"]["approved_maximum_usd"] = Decimal("10000")
+    plan["cost"]["running_approved_maximum_usd"] = Decimal("10000")
+    plan["cost"]["grading_approved_maximum_usd"] = Decimal("10000")
 
     result = _preflight(plan, catalog, assumptions)
 
@@ -1213,8 +1420,14 @@ def test_the_probe_verdict_survives_being_written_down(
     assert Decimal(probe["most_it_could_cost_usd"]) <= Decimal(
         probe["approved_maximum_usd"]
     )
-    # The two verdicts are reported side by side and disagree.
-    assert written["may_start"] is False
+
+    # Stage one's own verdict is written alongside, against two amounts rather
+    # than one. The probe keeps a single figure on purpose: it marks nothing,
+    # so a second amount there would be an approval for work it does not do.
+    assert written["may_start"] is True
+    assert written["running_approved_maximum_usd"] == "50.00"
+    assert written["grading_approved_maximum_usd"] == "2600.00"
+    assert "approved_maximum_usd" not in written
 
 
 # ── The tool a person actually runs ────────────────────────────────────────
@@ -1251,8 +1464,29 @@ def test_the_new_files_are_in_the_repository(relative):
     )
 
 
-def test_running_the_tool_refuses_and_prints_the_table():
-    """Run it exactly as a person would, and require a refusal with the numbers."""
+def _plan_without_stage_ones_amounts(tmp_path: Path) -> Path:
+    """The committed plan with only the two approved figures taken out.
+
+    Written for the command-line tests, which need a plan the tool refuses now
+    that the shipped one passes. Everything else is copied through untouched,
+    so what the tool is reacting to is the missing money and nothing else.
+    """
+    raw = yaml.safe_load(STAGE_ONE_PLAN_PATH.read_text(encoding="utf-8"))
+    raw["cost"].pop("running_approved_maximum_usd")
+    raw["cost"].pop("grading_approved_maximum_usd")
+    written = tmp_path / "plan_without_amounts.yaml"
+    written.write_text(yaml.safe_dump(raw, sort_keys=False), encoding="utf-8")
+    return written
+
+
+def test_running_the_tool_passes_and_prints_the_table():
+    """Run it exactly as a person would, and require the numbers with the verdict.
+
+    The table matters more now than when this refused. A zero exit is the point
+    at which somebody could stop reading, so the figures the approval rests on
+    have to be in the same output rather than only in the refusal that used to
+    carry them.
+    """
     finished = subprocess.run(
         [sys.executable, str(STAGE_ONE_SCRIPT)],
         cwd=BATCH_RUNNER_ROOT,
@@ -1261,39 +1495,79 @@ def test_running_the_tool_refuses_and_prints_the_table():
         timeout=300,
     )
 
-    assert finished.returncode == 1, finished.stdout + finished.stderr
+    assert finished.returncode == 0, finished.stdout + finished.stderr
     assert "What each candidate setting could cost at most" in finished.stdout
-    assert (
-        "nobody has written down the largest amount that may be spent on "
-        "stage one" in finished.stdout
-    )
+    # Both halves of the approval, each against its own ceiling.
+    assert "50.00" in finished.stdout
+    assert "2600.00" in finished.stdout
     # The dispatcher's real ceiling, read from code, must reach the report.
     assert str(read_dispatcher_limits().max_total_calls) in finished.stdout
 
 
-def test_the_probe_flag_follows_the_probe_s_verdict_and_says_so():
-    """A green light for stage A, printed in the same report that refuses stage one.
+def test_the_tool_still_refuses_a_plan_with_no_amounts(tmp_path):
+    """The refusal path, kept alive on a plan that has had its figures removed.
 
-    Two verdicts in one place is the risk this covers: a reader who sees a zero
-    exit could take it for permission to run the five tasks. The report says
-    plainly that it is not, and the default form of the same command still
-    refuses.
+    This is the state the repository was in until stage one was approved, and
+    it is the state any future stage starts in. Losing the test with the
+    approval would mean the next stage's gate was never seen to refuse.
     """
     finished = subprocess.run(
-        [sys.executable, str(STAGE_ONE_SCRIPT), "--probe"],
+        [
+            sys.executable,
+            str(STAGE_ONE_SCRIPT),
+            "--plan",
+            str(_plan_without_stage_ones_amounts(tmp_path)),
+        ],
         cwd=BATCH_RUNNER_ROOT,
         capture_output=True,
         text=True,
         timeout=300,
     )
 
-    assert finished.returncode == 0, finished.stdout + finished.stderr
-    assert "Every stage A condition is met" in finished.stdout
-    assert "separate purchase" in finished.stdout
+    assert finished.returncode == 1, finished.stdout + finished.stderr
+    assert (
+        "nobody has written down the largest amount that may be spent on "
+        "running stage one's five tasks" in finished.stdout
+    )
+    assert (
+        "nobody has written down the largest amount that may be spent on "
+        "marking stage one's five answers" in finished.stdout
+    )
+
+
+def test_the_probe_flag_follows_the_probe_and_not_stage_one(tmp_path):
+    """``--probe`` answers about stage A even when stage one is refused.
+
+    Two verdicts in one place is the risk this covers, and the direction of the
+    risk has flipped. It used to be that a zero exit from ``--probe`` might be
+    read as permission to run the five tasks. Now that the default form also
+    exits zero, the thing worth holding is that ``--probe`` is still *not*
+    reading stage one's verdict — shown on a plan where the two disagree.
+    """
+    without_amounts = str(_plan_without_stage_ones_amounts(tmp_path))
+    probed = subprocess.run(
+        [sys.executable, str(STAGE_ONE_SCRIPT), "--probe", "--plan", without_amounts],
+        cwd=BATCH_RUNNER_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+    default = subprocess.run(
+        [sys.executable, str(STAGE_ONE_SCRIPT), "--plan", without_amounts],
+        cwd=BATCH_RUNNER_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+
+    assert probed.returncode == 0, probed.stdout + probed.stderr
+    assert default.returncode == 1
+    assert "Every stage A condition is met" in probed.stdout
+    assert "separate purchase" in probed.stdout
     # The refusal of the larger purchase is printed by the same run.
     assert (
         "nobody has written down the largest amount that may be spent on "
-        "stage one" in finished.stdout
+        "running stage one's five tasks" in probed.stdout
     )
 
 
@@ -1314,7 +1588,10 @@ def test_the_probe_is_reported_whichever_form_of_the_command_is_run():
         timeout=300,
     )
 
-    assert default.returncode == 1
+    # Both pass on the shipped plan, so this no longer shows the exit codes
+    # coming from different places. That is the test above. What it does show
+    # is that the report itself does not change with the flag.
+    assert default.returncode == 0
     assert probed.returncode == 0
     assert default.stdout == probed.stdout
 
@@ -1336,11 +1613,12 @@ def test_the_tool_can_report_itself_as_json():
         timeout=300,
     )
 
-    assert finished.returncode == 1
+    assert finished.returncode == 0
     import json
 
     written = json.loads(finished.stdout)
-    assert written["may_start"] is False
-    assert written["approved_maximum_usd"] is None
-    assert written["chosen"] is None
+    assert written["may_start"] is True
+    assert written["running_approved_maximum_usd"] == "50.00"
+    assert written["grading_approved_maximum_usd"] == "2600.00"
+    assert written["chosen"] is not None
     assert len(written["options"]) > 0

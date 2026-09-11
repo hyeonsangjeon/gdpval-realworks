@@ -2592,3 +2592,108 @@ identical as a number and are not the same fact.
 asks a model, or prices a call — all three modules are handed facts established
 elsewhere and arrange them. The blocker is still the single role assignment
 named in stage D, which remains reported and not requested.
+
+### Stage F — the entry point, and what is allowed to start it, 2026-09-11. Still not run.
+
+**First, retiring the sentence this document ended on.** Stage E closed with
+"the blocker is still the single role assignment named in stage D, which remains
+reported and not requested." That is no longer true and is left above rather
+than edited, because the dated sections are history and rewriting them would
+hide that the claim was ever made. What happened to it: the 401 that reading
+rested on was later shown to have arrived from *past* the authentication gate —
+a minted bearer token got 400 where a deliberately invalid one got 401 — so it
+was never evidence of a missing role. Stage A has since reached a real
+deployment and been charged for it. The blocker that actually stood after that
+was money, and on 2026-09-11 the owner approved two amounts.
+
+A disclaimer that outlives its fact is worse than none, because it is read as
+current: this one would have sent the next reader to request a permission
+nobody needs. Three more of the same kind were found and fixed in code rather
+than prose, so they cannot go stale again:
+
+* `core/agentic_v2_preregistration.py` stated both the role-assignment blocker
+  and "the amount is the owner's to fill in" as literal strings. They now come
+  from `_what_this_is_not()`, which asks
+  `stage_one_budget.stage_one_amount_note()` — so if an approval is ever
+  withdrawn the disclaimer turns back by itself. A test bars the retired
+  wording from returning.
+* `agentic_stage_one_plan.yaml` opened with "NOTHING HERE IS APPROVED AND
+  NOTHING HERE RUNS", four lines above the block holding two approved amounts.
+  Corrected in place, with what it used to say recorded, because the first
+  sentence of a file is the one a reader trusts.
+* `agentic-v2-stage-a-probe.yml` described marking as a share of a single
+  stage-one figure that no longer exists.
+
+**One approved amount became two, and the reason is in the arithmetic.** There
+used to be one `approved_maximum_usd` covering the whole of stage one. Marking
+the five answers is a flat $2504.67 whichever settings are chosen; running them
+moves from $3.37 to $493.70 across the candidate rows. Held as one number, the
+decision actually being made — what the model is given room to do — was under
+one per cent of the figure being signed and could have changed a hundredfold
+without moving it. The plan now carries `running_approved_maximum_usd: 50.00`
+and `grading_approved_maximum_usd: 2600.00`, the free check refuses a plan
+still carrying the old combined key, and the dry run prints the two on separate
+lines against their own ceilings. Chosen settings: 8 tool calls and 8192 output
+tokens per turn, $18.46 at most — the middle of three rows, recorded before the
+run with the reasoning, not after it.
+
+**The entry point.** `scripts/run_agentic_v2_stage.py` is the only route by
+which a V2 stage can run: free check, cohort binding, per-task ceilings, the
+conversation loop against a real deployment, collected deliverables, a cost
+receipt per task. It cannot run from a checkout — `core/azure_ai_clients.py`
+calls `_reject_static_azure_credential_env` before building anything, so the
+identity has to come from a federated OIDC session, and the only place one
+exists is a job holding `id-token: write`. Asked on this repository's own dev
+box, all thirteen route variables are unset. `.github/workflows/agentic-v2-stage-run.yml`
+is therefore the whole of how a stage starts: `workflow_dispatch` only, dry-run
+gating paid, the record uploaded under `always()` before the exit code is
+allowed to end the job.
+
+**The guard that refuses the cohorts nobody has priced.** The two approved
+amounts are whole-run figures for the five tasks the plan pins. Nothing about
+them is per-task. A 220-task stage run under them would go out against an
+approval for a run roughly 44 times smaller, and — this is the part worth
+stating — the line printed beside it would have said it was within budget,
+because the arithmetic it came from never saw the larger cohort. The runner
+refuses any stage the plan has not priced and names the multiple. `trial_30`
+and `full_220` are refused today and stay refused until somebody writes their
+task ids and their own two amounts down.
+
+**The conditions are now recorded before the run, not reconstructed after it.**
+`run_conditions` in the pre-registration holds the model, deployment, account,
+project and route profile; where the prompt wording comes from; the eight tools
+on offer; the per-task ceilings; and the retry rules. Almost none of it is
+written there — it is read from the plan, which is fingerprinted in the same
+record, and the ceilings come from `agentic_v2_conversation_runner.ceilings_from`,
+the same function that enforces them. Writing the arithmetic twice would let the
+promise and the enforcement drift apart with nothing to say so. Seal:
+`54fa669216c22c9b50cae265a42c4d4eb9371b8e1dbfa8c9034f782a20e076af`.
+
+Writing it down caught one error in this document's own claims. The record said
+seven tools were offered, on the reasoning that `exec_run` is shut. Nothing in
+the run narrows `tools_available`, whose default is the whole contract, so the
+model is offered all eight and `exec_run` answers `capability_unavailable` when
+chosen. That is the more interesting run — how a model reacts to a refused
+capability is a finding this stage can collect — but the record has to say what
+happens rather than what sounds tidier.
+
+**A structural finding about `full_220`, before rather than after the spend.**
+It will not fit in a GitHub job. The plan fixes `per_task_timeout_seconds: 1200`,
+so 220 tasks is up to 73 hours against a ceiling of six. The cohort has to be
+split across jobs. The runner already takes `--run-id` and resumes on it, so the
+mechanism exists, but the sharding and its pricing are not written down and the
+guard will keep refusing until they are.
+
+**What this stage does *not* mean.** No V2 task has run — this is the
+environment being made startable, which is not the tasks running, which is not
+the answers being marked. Three milestones, deliberately not merged. `exec_run`
+stays shut and no guest boots, so stage one exercises the loop and not the
+isolation, and `environment_note` writes that weaker true sentence into every
+record so it travels with the results. And the handicap is stated on the way in
+rather than discovered in the output: two of the five tasks in `advance_check_5`
+reference files that are not staged into the workspace, so the model will be
+answering without inputs an expert had. For `full_220` that is 125 of 220. The
+gap is closed before the larger cohorts; `advance_check_5` runs first anyway,
+because it is what proves route → model → tools → files → ceilings → receipts →
+deliverables → record end to end, and a printed handicap keeps model failure
+distinguishable from environment defect.
