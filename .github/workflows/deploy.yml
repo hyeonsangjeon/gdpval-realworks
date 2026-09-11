@@ -169,6 +169,10 @@ jobs:
         timeout-minutes: 8
         run: npm run test:cost-browser:dist
 
+      - name: Verify deliverable file links in browser
+        timeout-minutes: 8
+        run: npm run test:deliverable-links-browser:dist
+
       - name: Verify dashboard build provenance in browser
         timeout-minutes: 8
         run: npm run test:build-provenance-browser:dist

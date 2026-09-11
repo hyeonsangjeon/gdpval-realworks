@@ -251,6 +251,17 @@ export interface ReportMeta {
   date: string
   duration: string
   report_scope: 'self_assessed_pre_grading' | 'graded'
+  /**
+   * What step6 recorded about step 7, written by `batch-runner/step6_report.py`
+   * as exactly one of two strings. `dry_run_no_step7` means the
+   * `HyeonSang/<experiment_id>` dataset was never created, so every URL under
+   * it — the self-report and every deliverable file — is a 404.
+   *
+   * Optional because the v1 reports fetched from the hub predate the field.
+   * Absent means "this report does not say", which must not be read as "it did
+   * not publish".
+   */
+  publication_plan?: 'dry_run_no_step7' | 'step7_upload_requested'
   narrative_model?: string | null
   narrative_reasoning_effort?: string | null
   narrative_runtime_fingerprint?: string | null

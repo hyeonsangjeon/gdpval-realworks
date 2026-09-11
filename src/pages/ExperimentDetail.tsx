@@ -48,6 +48,29 @@ import {
 import { fmtScore } from '../lib/format'
 import { getJournalLinksForExperiment, lensLabels } from '../data/journalLinks'
 
+/**
+ * Shown instead of download links on a run that never uploaded.
+ *
+ * Mirrored in scripts/__tests__/a-file-that-never-published-is-not-a-broken-link.browser.mjs.
+ */
+const DELIVERABLES_NOT_PUBLISHED_NOTE =
+  '이 실행은 허브에 올리지 않았습니다 — 파일은 실행 아티팩트에 있고 내려받을 주소가 없습니다'
+
+/**
+ * Whether `HyeonSang/<experiment_id>` exists to link file paths into.
+ *
+ * `dry_run_no_step7` is the one value that means it does not: step 7 is
+ * skipped, the dataset is never created, and every deliverable URL under it is
+ * a 404. Every other value — including an absent one, which is what the v1
+ * reports fetched from the hub carry — keeps the link, because "the report
+ * predates this field" is not "nothing was uploaded". `step7_upload_requested`
+ * means requested, not verified; that is the best the report knows and it is
+ * what the markdown report has always said too.
+ */
+function deliverablesAreOnHub(meta: ReportMeta | undefined) {
+  return meta?.publication_plan !== 'dry_run_no_step7'
+}
+
 // ── Color helpers ──
 function rateColor(rate: number) {
   if (rate >= 96) return '#10b981'
@@ -1209,6 +1232,7 @@ function ExperimentDetail() {
             <TaskDetailModal
               task={selectedTask}
               experimentId={meta?.experiment_id}
+              deliverablesOnHub={deliverablesAreOnHub(meta)}
               gradingCost={gradingCosts.receipts.get(selectedTask.task_id) ?? null}
               gradingRan={gradingCosts.attempted.has(selectedTask.task_id)}
               onClose={() => setSelectedTask(null)}
@@ -1392,12 +1416,14 @@ function CostSummaryCard({
 function TaskDetailModal({
   task,
   experimentId,
+  deliverablesOnHub,
   gradingCost,
   gradingRan,
   onClose,
 }: {
   task: TaskResult
   experimentId?: string
+  deliverablesOnHub: boolean
   gradingCost: CostReceipt | null
   gradingRan: boolean
   onClose: () => void
@@ -1433,7 +1459,12 @@ function TaskDetailModal({
             <span className="text-sm font-semibold text-dash-heading font-mono break-all">{task.task_id}</span>
           </div>
 
-          <button onClick={onClose} className="text-dash-text-muted hover:text-dash-heading p-1 rounded hover:bg-dash-card-hover">
+          <button
+            onClick={onClose}
+            aria-label="Close task details"
+            data-testid="task-modal-close"
+            className="text-dash-text-muted hover:text-dash-heading p-1 rounded hover:bg-dash-card-hover"
+          >
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -1724,15 +1755,44 @@ function TaskDetailModal({
           )}
 
           {/* Deliverable Files */}
-          {task.deliverable_files && task.deliverable_files.length > 0 && experimentId && (
-            <div>
+          {task.deliverable_files && task.deliverable_files.length > 0 && (
+            <div data-testid="deliverable-files">
               <div className="text-[10px] text-dash-text-muted uppercase mb-1.5">
                 📦 Deliverable Files ({task.deliverable_files.length})
               </div>
+              {!deliverablesOnHub && (
+                <div
+                  className="text-[10px] text-amber-400/90 bg-amber-400/5 border border-amber-400/20 rounded px-2 py-1.5 mb-1.5"
+                  data-testid="deliverables-not-published"
+                >
+                  {DELIVERABLES_NOT_PUBLISHED_NOTE}
+                </div>
+              )}
               <div className="space-y-1">
                 {task.deliverable_files.map((relPath, i) => {
-                  const hfUrl = `${HF_BASE}/${experimentId}/resolve/main/${relPath}`
                   const filename = relPath.split('/').pop() || relPath
+                  // A link is only offered when the dataset it points into was
+                  // actually asked for. A `dry_run` skips step 7, so
+                  // `HyeonSang/<experiment_id>` is never created and every one
+                  // of these URLs is a measured 404 — exp034's 107 file links
+                  // all were. A dead green "↓ Open" reads as "the run produced
+                  // nothing"; the file exists, the site just has no route to
+                  // it. `publication_plan` is absent on the v1 reports fetched
+                  // from the hub, and absent must keep the link: it means the
+                  // report predates the field, not that nothing was uploaded.
+                  if (!deliverablesOnHub || !experimentId) {
+                    return (
+                      <div
+                        key={i}
+                        className="flex items-center justify-between text-xs text-dash-text-muted bg-dash-card-hover rounded px-2 py-1.5"
+                        data-deliverable-unlinked={filename}
+                      >
+                        <span className="truncate">{filename}</span>
+                        <span className="text-[10px] ml-2 shrink-0">기록됨</span>
+                      </div>
+                    )
+                  }
+                  const hfUrl = `${HF_BASE}/${experimentId}/resolve/main/${relPath}`
                   return (
                     <a
                       key={i}
