@@ -80,6 +80,12 @@ batch-runner/scripts/*
 # quietly stale, and the difference between "setup error" and "environment
 # defect" is what a 220-task run counts a failure against.
 !batch-runner/scripts/explain_guest_command_absences.py
+# Writes the pre-registration artefact, and with --check reports that the
+# committed copy has drifted from what the code derives. Committed because the
+# artefact beside it is only worth having if regenerating it is one documented
+# command -- otherwise the first time the derivation moves, the tempting fix is
+# to hand-edit the JSON, which is precisely the edit the seal exists to catch.
+!batch-runner/scripts/write_v2_preregistration.py
 # Run by .github/workflows/execution-envelope-preflight.yml. Without this line
 # the directory rule above hides it, `git add -A` skips it in silence, and the
 # workflow calls a file that is not in the repository -- so the job dies at the
@@ -238,6 +244,12 @@ tasks/0822_saturday/*
 # rediscover that all six are candidate-added packages, and until they do, the
 # sweep reads as six holes in the sandbox.
 !tasks/0822_saturday/guest_command_absences_explained.json
+# What the run promises before it starts. A pre-registration that lives only in
+# code is not pre-registered: the code moves. This is the copy that has to be
+# committed ahead of the run, and its seal is what a later result is checked
+# against -- so a cohort quietly edited after seeing a score fails here rather
+# than passing unnoticed.
+!tasks/0822_saturday/v2_run_preregistration.json
 !tasks/0828_friday/
 tasks/0828_friday/*
 !tasks/0828_friday/TASK_PER_TASK_COST_RECEIPTS.md
