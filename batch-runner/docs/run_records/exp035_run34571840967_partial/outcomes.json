@@ -30,7 +30,13 @@
   "price_table_sha256": "b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e",
   "latency_ms": 41888.73,
   "deliverable_file_count": 1,
-  "deliverable_bytes": 4821
+  "deliverable_bytes": 4821,
+  "derived_cost_calls_measured": 1,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_usd_from_measured_tokens": 0.075693,
+  "derived_cost_basis": "all_calls_measured",
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 2,
@@ -63,7 +69,13 @@
   "price_table_sha256": "b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e",
   "latency_ms": 251924.62,
   "deliverable_file_count": 2,
-  "deliverable_bytes": 76296
+  "deliverable_bytes": 76296,
+  "derived_cost_calls_measured": 1,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_usd_from_measured_tokens": 0.450355,
+  "derived_cost_basis": "all_calls_measured",
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 3,
@@ -96,7 +108,13 @@
   "price_table_sha256": "b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e",
   "latency_ms": 233178.09,
   "deliverable_file_count": 2,
-  "deliverable_bytes": 74857
+  "deliverable_bytes": 74857,
+  "derived_cost_calls_measured": 1,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_usd_from_measured_tokens": 0.281889,
+  "derived_cost_basis": "all_calls_measured",
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 4,
@@ -131,7 +149,13 @@
   "deliverable_file_count": 0,
   "deliverable_bytes": 0,
   "failure_class": "execution_environment",
-  "failure_class_note": "요청이 배포에 닿지 못했습니다. 모델의 오답이 아니며 성공률 계산에 실패로 넣으면 안 됩니다."
+  "failure_class_note": "요청이 배포에 닿지 못했습니다. 모델의 오답이 아니며 성공률 계산에 실패로 넣으면 안 됩니다.",
+  "derived_cost_calls_measured": 4,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_usd_from_measured_tokens": 0.297674,
+  "derived_cost_basis": "all_calls_measured",
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 5,
@@ -166,7 +190,13 @@
   "deliverable_file_count": 0,
   "deliverable_bytes": 0,
   "failure_class": "execution_environment",
-  "failure_class_note": "요청이 배포에 닿지 못했습니다. 모델의 오답이 아니며 성공률 계산에 실패로 넣으면 안 됩니다."
+  "failure_class_note": "요청이 배포에 닿지 못했습니다. 모델의 오답이 아니며 성공률 계산에 실패로 넣으면 안 됩니다.",
+  "derived_cost_calls_measured": 3,
+  "derived_cost_calls_unmeasured": 1,
+  "derived_cost_usd_from_measured_tokens": 0.223286,
+  "derived_cost_basis": "floor_unmeasured_sends_excluded",
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 6,
@@ -199,7 +229,13 @@
   "price_table_sha256": "b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e",
   "latency_ms": 112253.16,
   "deliverable_file_count": 1,
-  "deliverable_bytes": 40360
+  "deliverable_bytes": 40360,
+  "derived_cost_calls_measured": 1,
+  "derived_cost_calls_unmeasured": 1,
+  "derived_cost_usd_from_measured_tokens": 0.197839,
+  "derived_cost_basis": "floor_unmeasured_sends_excluded",
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 7,
@@ -234,7 +270,13 @@
   "deliverable_file_count": 0,
   "deliverable_bytes": 0,
   "failure_class": "execution_environment",
-  "failure_class_note": "요청이 배포에 닿지 못했습니다. 모델의 오답이 아니며 성공률 계산에 실패로 넣으면 안 됩니다."
+  "failure_class_note": "요청이 배포에 닿지 못했습니다. 모델의 오답이 아니며 성공률 계산에 실패로 넣으면 안 됩니다.",
+  "derived_cost_calls_measured": 4,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_usd_from_measured_tokens": 0.259405,
+  "derived_cost_basis": "all_calls_measured",
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 8,
@@ -267,7 +309,13 @@
   "price_table_sha256": "b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e",
   "latency_ms": 252415.23,
   "deliverable_file_count": 3,
-  "deliverable_bytes": 93122
+  "deliverable_bytes": 93122,
+  "derived_cost_calls_measured": 1,
+  "derived_cost_calls_unmeasured": 1,
+  "derived_cost_usd_from_measured_tokens": 0.305296,
+  "derived_cost_basis": "floor_unmeasured_sends_excluded",
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 9,
@@ -302,7 +350,13 @@
   "deliverable_file_count": 0,
   "deliverable_bytes": 0,
   "failure_class": "benchmark_failure",
-  "failure_class_note": "모델이 응답을 거부했습니다. 이 벤치마크가 재려는 것의 일부이므로 우회하지 않고 그대로 둡니다."
+  "failure_class_note": "모델이 응답을 거부했습니다. 이 벤치마크가 재려는 것의 일부이므로 우회하지 않고 그대로 둡니다.",
+  "derived_cost_calls_measured": 1,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_usd_from_measured_tokens": 0.067473,
+  "derived_cost_basis": "all_calls_measured",
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 10,
@@ -335,7 +389,13 @@
   "price_table_sha256": "b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e",
   "latency_ms": 337010.38,
   "deliverable_file_count": 44,
-  "deliverable_bytes": 88506
+  "deliverable_bytes": 88506,
+  "derived_cost_calls_measured": 2,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_usd_from_measured_tokens": 1.223594,
+  "derived_cost_basis": "all_calls_measured",
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 11,
@@ -370,7 +430,13 @@
   "deliverable_file_count": 0,
   "deliverable_bytes": 0,
   "failure_class": "execution_environment",
-  "failure_class_note": "요청이 배포에 닿지 못했습니다. 모델의 오답이 아니며 성공률 계산에 실패로 넣으면 안 됩니다."
+  "failure_class_note": "요청이 배포에 닿지 못했습니다. 모델의 오답이 아니며 성공률 계산에 실패로 넣으면 안 됩니다.",
+  "derived_cost_calls_measured": 3,
+  "derived_cost_calls_unmeasured": 1,
+  "derived_cost_usd_from_measured_tokens": 0.342845,
+  "derived_cost_basis": "floor_unmeasured_sends_excluded",
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 12,
@@ -403,7 +469,13 @@
   "price_table_sha256": "b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e",
   "latency_ms": 236489.27,
   "deliverable_file_count": 4,
-  "deliverable_bytes": 248745
+  "deliverable_bytes": 248745,
+  "derived_cost_calls_measured": 1,
+  "derived_cost_calls_unmeasured": 1,
+  "derived_cost_usd_from_measured_tokens": 0.407472,
+  "derived_cost_basis": "floor_unmeasured_sends_excluded",
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 13,
@@ -436,7 +508,13 @@
   "price_table_sha256": "b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e",
   "latency_ms": 113595.46,
   "deliverable_file_count": 3,
-  "deliverable_bytes": 24037
+  "deliverable_bytes": 24037,
+  "derived_cost_calls_measured": 1,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_usd_from_measured_tokens": 0.171624,
+  "derived_cost_basis": "all_calls_measured",
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 14,
@@ -469,7 +547,13 @@
   "price_table_sha256": "b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e",
   "latency_ms": 161128.39,
   "deliverable_file_count": 2,
-  "deliverable_bytes": 31343
+  "deliverable_bytes": 31343,
+  "derived_cost_calls_measured": 1,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_usd_from_measured_tokens": 0.201498,
+  "derived_cost_basis": "all_calls_measured",
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 15,
@@ -504,7 +588,13 @@
   "deliverable_file_count": 0,
   "deliverable_bytes": 0,
   "failure_class": "execution_environment",
-  "failure_class_note": "요청이 배포에 닿지 못했습니다. 모델의 오답이 아니며 성공률 계산에 실패로 넣으면 안 됩니다."
+  "failure_class_note": "요청이 배포에 닿지 못했습니다. 모델의 오답이 아니며 성공률 계산에 실패로 넣으면 안 됩니다.",
+  "derived_cost_calls_measured": 4,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_usd_from_measured_tokens": 0.374266,
+  "derived_cost_basis": "all_calls_measured",
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 16,
@@ -537,7 +627,13 @@
   "price_table_sha256": "b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e",
   "latency_ms": 190818.4,
   "deliverable_file_count": 3,
-  "deliverable_bytes": 62251
+  "deliverable_bytes": 62251,
+  "derived_cost_calls_measured": 1,
+  "derived_cost_calls_unmeasured": 1,
+  "derived_cost_usd_from_measured_tokens": 0.254993,
+  "derived_cost_basis": "floor_unmeasured_sends_excluded",
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 17,
@@ -572,7 +668,13 @@
   "deliverable_file_count": 0,
   "deliverable_bytes": 0,
   "failure_class": "execution_environment",
-  "failure_class_note": "요청이 배포에 닿지 못했습니다. 모델의 오답이 아니며 성공률 계산에 실패로 넣으면 안 됩니다."
+  "failure_class_note": "요청이 배포에 닿지 못했습니다. 모델의 오답이 아니며 성공률 계산에 실패로 넣으면 안 됩니다.",
+  "derived_cost_calls_measured": 4,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_usd_from_measured_tokens": 0.565384,
+  "derived_cost_basis": "all_calls_measured",
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 18,
@@ -605,7 +707,13 @@
   "price_table_sha256": "b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e",
   "latency_ms": 102065.29,
   "deliverable_file_count": 2,
-  "deliverable_bytes": 23930
+  "deliverable_bytes": 23930,
+  "derived_cost_calls_measured": 2,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_usd_from_measured_tokens": 0.209382,
+  "derived_cost_basis": "all_calls_measured",
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 19,
@@ -638,7 +746,13 @@
   "price_table_sha256": "b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e",
   "latency_ms": 89903.74,
   "deliverable_file_count": 1,
-  "deliverable_bytes": 7015
+  "deliverable_bytes": 7015,
+  "derived_cost_calls_measured": 1,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_usd_from_measured_tokens": 0.132989,
+  "derived_cost_basis": "all_calls_measured",
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 20,
@@ -673,7 +787,13 @@
   "deliverable_file_count": 0,
   "deliverable_bytes": 0,
   "failure_class": "benchmark_failure",
-  "failure_class_note": "모델이 응답을 거부했습니다. 이 벤치마크가 재려는 것의 일부이므로 우회하지 않고 그대로 둡니다."
+  "failure_class_note": "모델이 응답을 거부했습니다. 이 벤치마크가 재려는 것의 일부이므로 우회하지 않고 그대로 둡니다.",
+  "derived_cost_calls_measured": 1,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_usd_from_measured_tokens": 0.03668,
+  "derived_cost_basis": "all_calls_measured",
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 21,
@@ -706,7 +826,13 @@
   "price_table_sha256": "b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e",
   "latency_ms": 116037.01,
   "deliverable_file_count": 3,
-  "deliverable_bytes": 14999
+  "deliverable_bytes": 14999,
+  "derived_cost_calls_measured": 1,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_usd_from_measured_tokens": 0.262434,
+  "derived_cost_basis": "all_calls_measured",
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 22,
@@ -739,7 +865,13 @@
   "price_table_sha256": "b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e",
   "latency_ms": 149308.91,
   "deliverable_file_count": 3,
-  "deliverable_bytes": 68608
+  "deliverable_bytes": 68608,
+  "derived_cost_calls_measured": 1,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_usd_from_measured_tokens": 0.185617,
+  "derived_cost_basis": "all_calls_measured",
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 23,
@@ -772,7 +904,13 @@
   "price_table_sha256": "b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e",
   "latency_ms": 105688.62,
   "deliverable_file_count": 3,
-  "deliverable_bytes": 19182
+  "deliverable_bytes": 19182,
+  "derived_cost_calls_measured": 1,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_usd_from_measured_tokens": 0.176919,
+  "derived_cost_basis": "all_calls_measured",
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 24,
@@ -805,7 +943,13 @@
   "price_table_sha256": "b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e",
   "latency_ms": 225527.41,
   "deliverable_file_count": 3,
-  "deliverable_bytes": 15755
+  "deliverable_bytes": 15755,
+  "derived_cost_calls_measured": 1,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_usd_from_measured_tokens": 0.342907,
+  "derived_cost_basis": "all_calls_measured",
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 25,
@@ -838,7 +982,13 @@
   "price_table_sha256": "b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e",
   "latency_ms": 193247.11,
   "deliverable_file_count": 2,
-  "deliverable_bytes": 19933
+  "deliverable_bytes": 19933,
+  "derived_cost_calls_measured": 1,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_usd_from_measured_tokens": 0.270873,
+  "derived_cost_basis": "all_calls_measured",
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 26,
@@ -873,7 +1023,13 @@
   "deliverable_file_count": 0,
   "deliverable_bytes": 0,
   "failure_class": "execution_environment",
-  "failure_class_note": "요청이 배포에 닿지 못했습니다. 모델의 오답이 아니며 성공률 계산에 실패로 넣으면 안 됩니다."
+  "failure_class_note": "요청이 배포에 닿지 못했습니다. 모델의 오답이 아니며 성공률 계산에 실패로 넣으면 안 됩니다.",
+  "derived_cost_calls_measured": 4,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_usd_from_measured_tokens": 0.167897,
+  "derived_cost_basis": "all_calls_measured",
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 27,
@@ -906,7 +1062,13 @@
   "price_table_sha256": "b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e",
   "latency_ms": 155811.55,
   "deliverable_file_count": 3,
-  "deliverable_bytes": 114487
+  "deliverable_bytes": 114487,
+  "derived_cost_calls_measured": 1,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_usd_from_measured_tokens": 0.305049,
+  "derived_cost_basis": "all_calls_measured",
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 28,
@@ -939,7 +1101,13 @@
   "price_table_sha256": "b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e",
   "latency_ms": 103922.51,
   "deliverable_file_count": 3,
-  "deliverable_bytes": 57409
+  "deliverable_bytes": 57409,
+  "derived_cost_calls_measured": 1,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_usd_from_measured_tokens": 0.113523,
+  "derived_cost_basis": "all_calls_measured",
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 29,
@@ -972,7 +1140,13 @@
   "price_table_sha256": "b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e",
   "latency_ms": 832299.5,
   "deliverable_file_count": 3,
-  "deliverable_bytes": 250350
+  "deliverable_bytes": 250350,
+  "derived_cost_calls_measured": 4,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_usd_from_measured_tokens": 1.307947,
+  "derived_cost_basis": "all_calls_measured",
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 30,
@@ -1007,7 +1181,13 @@
   "deliverable_file_count": 0,
   "deliverable_bytes": 0,
   "failure_class": "benchmark_failure",
-  "failure_class_note": "모델이 응답을 거부했습니다. 이 벤치마크가 재려는 것의 일부이므로 우회하지 않고 그대로 둡니다."
+  "failure_class_note": "모델이 응답을 거부했습니다. 이 벤치마크가 재려는 것의 일부이므로 우회하지 않고 그대로 둡니다.",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 1,
+  "derived_cost_usd_from_measured_tokens": null,
+  "derived_cost_basis": "no_measured_call",
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 31,
@@ -1042,7 +1222,13 @@
   "deliverable_file_count": 0,
   "deliverable_bytes": 0,
   "failure_class": "execution_environment",
-  "failure_class_note": "요청이 배포에 닿지 못했습니다. 모델의 오답이 아니며 성공률 계산에 실패로 넣으면 안 됩니다."
+  "failure_class_note": "요청이 배포에 닿지 못했습니다. 모델의 오답이 아니며 성공률 계산에 실패로 넣으면 안 됩니다.",
+  "derived_cost_calls_measured": 3,
+  "derived_cost_calls_unmeasured": 1,
+  "derived_cost_usd_from_measured_tokens": 0.339052,
+  "derived_cost_basis": "floor_unmeasured_sends_excluded",
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 32,
@@ -1075,7 +1261,13 @@
   "price_table_sha256": "b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e",
   "latency_ms": 69025.31,
   "deliverable_file_count": 1,
-  "deliverable_bytes": 38635
+  "deliverable_bytes": 38635,
+  "derived_cost_calls_measured": 1,
+  "derived_cost_calls_unmeasured": 1,
+  "derived_cost_usd_from_measured_tokens": 0.139454,
+  "derived_cost_basis": "floor_unmeasured_sends_excluded",
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 33,
@@ -1108,7 +1300,13 @@
   "price_table_sha256": "b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e",
   "latency_ms": 121011.66,
   "deliverable_file_count": 2,
-  "deliverable_bytes": 13615
+  "deliverable_bytes": 13615,
+  "derived_cost_calls_measured": 1,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_usd_from_measured_tokens": 0.332657,
+  "derived_cost_basis": "all_calls_measured",
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 34,
@@ -1143,7 +1341,13 @@
   "deliverable_file_count": 0,
   "deliverable_bytes": 0,
   "failure_class": "benchmark_failure",
-  "failure_class_note": "모델이 응답을 거부했습니다. 이 벤치마크가 재려는 것의 일부이므로 우회하지 않고 그대로 둡니다."
+  "failure_class_note": "모델이 응답을 거부했습니다. 이 벤치마크가 재려는 것의 일부이므로 우회하지 않고 그대로 둡니다.",
+  "derived_cost_calls_measured": 1,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_usd_from_measured_tokens": 0.089143,
+  "derived_cost_basis": "all_calls_measured",
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 35,
@@ -1176,7 +1380,13 @@
   "price_table_sha256": "b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e",
   "latency_ms": 498247.2,
   "deliverable_file_count": 2,
-  "deliverable_bytes": 31811
+  "deliverable_bytes": 31811,
+  "derived_cost_calls_measured": 1,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_usd_from_measured_tokens": 0.291995,
+  "derived_cost_basis": "all_calls_measured",
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 36,
@@ -1211,7 +1421,13 @@
   "deliverable_file_count": 0,
   "deliverable_bytes": 0,
   "failure_class": "execution_environment",
-  "failure_class_note": "요청이 배포에 닿지 못했습니다. 모델의 오답이 아니며 성공률 계산에 실패로 넣으면 안 됩니다."
+  "failure_class_note": "요청이 배포에 닿지 못했습니다. 모델의 오답이 아니며 성공률 계산에 실패로 넣으면 안 됩니다.",
+  "derived_cost_calls_measured": 3,
+  "derived_cost_calls_unmeasured": 1,
+  "derived_cost_usd_from_measured_tokens": 0.197363,
+  "derived_cost_basis": "floor_unmeasured_sends_excluded",
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 37,
@@ -1244,7 +1460,13 @@
   "price_table_sha256": "b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e",
   "latency_ms": 281622.14,
   "deliverable_file_count": 11,
-  "deliverable_bytes": 648847
+  "deliverable_bytes": 648847,
+  "derived_cost_calls_measured": 2,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_usd_from_measured_tokens": 0.57022,
+  "derived_cost_basis": "all_calls_measured",
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 38,
@@ -1277,7 +1499,13 @@
   "price_table_sha256": "b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e",
   "latency_ms": 134629.75,
   "deliverable_file_count": 2,
-  "deliverable_bytes": 30286
+  "deliverable_bytes": 30286,
+  "derived_cost_calls_measured": 1,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_usd_from_measured_tokens": 0.218077,
+  "derived_cost_basis": "all_calls_measured",
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 39,
@@ -1312,7 +1540,13 @@
   "deliverable_file_count": 0,
   "deliverable_bytes": 0,
   "failure_class": "benchmark_failure",
-  "failure_class_note": "모델이 응답을 거부했습니다. 이 벤치마크가 재려는 것의 일부이므로 우회하지 않고 그대로 둡니다."
+  "failure_class_note": "모델이 응답을 거부했습니다. 이 벤치마크가 재려는 것의 일부이므로 우회하지 않고 그대로 둡니다.",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 1,
+  "derived_cost_usd_from_measured_tokens": null,
+  "derived_cost_basis": "no_measured_call",
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 40,
@@ -1345,7 +1579,13 @@
   "price_table_sha256": "b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e",
   "latency_ms": 115950.78,
   "deliverable_file_count": 2,
-  "deliverable_bytes": 77759
+  "deliverable_bytes": 77759,
+  "derived_cost_calls_measured": 1,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_usd_from_measured_tokens": 0.260309,
+  "derived_cost_basis": "all_calls_measured",
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 41,
@@ -1380,7 +1620,13 @@
   "deliverable_file_count": 0,
   "deliverable_bytes": 0,
   "failure_class": "execution_environment",
-  "failure_class_note": "요청이 배포에 닿지 못했습니다. 모델의 오답이 아니며 성공률 계산에 실패로 넣으면 안 됩니다."
+  "failure_class_note": "요청이 배포에 닿지 못했습니다. 모델의 오답이 아니며 성공률 계산에 실패로 넣으면 안 됩니다.",
+  "derived_cost_calls_measured": 3,
+  "derived_cost_calls_unmeasured": 1,
+  "derived_cost_usd_from_measured_tokens": 0.263434,
+  "derived_cost_basis": "floor_unmeasured_sends_excluded",
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 42,
@@ -1413,7 +1659,13 @@
   "price_table_sha256": "b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e",
   "latency_ms": 267929.98,
   "deliverable_file_count": 3,
-  "deliverable_bytes": 31327
+  "deliverable_bytes": 31327,
+  "derived_cost_calls_measured": 1,
+  "derived_cost_calls_unmeasured": 1,
+  "derived_cost_usd_from_measured_tokens": 0.539052,
+  "derived_cost_basis": "floor_unmeasured_sends_excluded",
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 43,
@@ -1446,7 +1698,13 @@
   "price_table_sha256": "b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e",
   "latency_ms": 232715.76,
   "deliverable_file_count": 4,
-  "deliverable_bytes": 288541
+  "deliverable_bytes": 288541,
+  "derived_cost_calls_measured": 1,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_usd_from_measured_tokens": 0.454261,
+  "derived_cost_basis": "all_calls_measured",
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 44,
@@ -1479,7 +1737,13 @@
   "price_table_sha256": "b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e",
   "latency_ms": 127528.75,
   "deliverable_file_count": 2,
-  "deliverable_bytes": 43833
+  "deliverable_bytes": 43833,
+  "derived_cost_calls_measured": 1,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_usd_from_measured_tokens": 0.32882,
+  "derived_cost_basis": "all_calls_measured",
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 45,
@@ -1512,7 +1776,13 @@
   "price_table_sha256": "b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e",
   "latency_ms": 695182.66,
   "deliverable_file_count": 8,
-  "deliverable_bytes": 446593862
+  "deliverable_bytes": 446593862,
+  "derived_cost_calls_measured": 2,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_usd_from_measured_tokens": 1.149946,
+  "derived_cost_basis": "all_calls_measured",
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 46,
@@ -1528,7 +1798,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 47,
@@ -1544,7 +1820,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 48,
@@ -1560,7 +1842,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 49,
@@ -1576,7 +1864,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 50,
@@ -1592,7 +1886,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 51,
@@ -1608,7 +1908,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 52,
@@ -1624,7 +1930,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 53,
@@ -1640,7 +1952,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 54,
@@ -1656,7 +1974,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 55,
@@ -1672,7 +1996,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 56,
@@ -1688,7 +2018,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 57,
@@ -1704,7 +2040,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 58,
@@ -1720,7 +2062,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 59,
@@ -1736,7 +2084,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 60,
@@ -1752,7 +2106,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 61,
@@ -1768,7 +2128,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 62,
@@ -1784,7 +2150,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 63,
@@ -1800,7 +2172,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 64,
@@ -1816,7 +2194,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 65,
@@ -1832,7 +2216,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 66,
@@ -1848,7 +2238,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 67,
@@ -1864,7 +2260,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 68,
@@ -1880,7 +2282,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 69,
@@ -1896,7 +2304,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 70,
@@ -1912,7 +2326,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 71,
@@ -1928,7 +2348,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 72,
@@ -1944,7 +2370,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 73,
@@ -1960,7 +2392,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 74,
@@ -1976,7 +2414,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 75,
@@ -1992,7 +2436,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 76,
@@ -2008,7 +2458,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 77,
@@ -2024,7 +2480,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 78,
@@ -2040,7 +2502,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 79,
@@ -2056,7 +2524,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 80,
@@ -2072,7 +2546,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 81,
@@ -2088,7 +2568,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 82,
@@ -2104,7 +2590,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 83,
@@ -2120,7 +2612,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 84,
@@ -2136,7 +2634,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 85,
@@ -2152,7 +2656,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 86,
@@ -2168,7 +2678,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 87,
@@ -2184,7 +2700,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 88,
@@ -2200,7 +2722,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 89,
@@ -2216,7 +2744,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 90,
@@ -2232,7 +2766,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 91,
@@ -2248,7 +2788,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 92,
@@ -2264,7 +2810,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 93,
@@ -2280,7 +2832,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 94,
@@ -2296,7 +2854,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 95,
@@ -2312,7 +2876,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 96,
@@ -2328,7 +2898,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 97,
@@ -2344,7 +2920,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 98,
@@ -2360,7 +2942,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 99,
@@ -2376,7 +2964,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 100,
@@ -2392,7 +2986,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 101,
@@ -2408,7 +3008,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 102,
@@ -2424,7 +3030,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 103,
@@ -2440,7 +3052,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 104,
@@ -2456,7 +3074,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 105,
@@ -2472,7 +3096,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 106,
@@ -2488,7 +3118,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 107,
@@ -2504,7 +3140,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 108,
@@ -2520,7 +3162,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 109,
@@ -2536,7 +3184,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 110,
@@ -2552,7 +3206,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 111,
@@ -2568,7 +3228,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 112,
@@ -2584,7 +3250,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 113,
@@ -2600,7 +3272,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 114,
@@ -2616,7 +3294,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 115,
@@ -2632,7 +3316,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 116,
@@ -2648,7 +3338,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 117,
@@ -2664,7 +3360,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 118,
@@ -2680,7 +3382,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 119,
@@ -2696,7 +3404,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 120,
@@ -2712,7 +3426,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 121,
@@ -2728,7 +3448,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 122,
@@ -2744,7 +3470,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 123,
@@ -2760,7 +3492,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 124,
@@ -2776,7 +3514,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 125,
@@ -2792,7 +3536,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 126,
@@ -2808,7 +3558,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 127,
@@ -2824,7 +3580,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 128,
@@ -2840,7 +3602,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 129,
@@ -2856,7 +3624,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 130,
@@ -2872,7 +3646,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 131,
@@ -2888,7 +3668,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 132,
@@ -2904,7 +3690,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 133,
@@ -2920,7 +3712,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 134,
@@ -2936,7 +3734,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 135,
@@ -2952,7 +3756,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 136,
@@ -2968,7 +3778,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 137,
@@ -2984,7 +3800,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 138,
@@ -3000,7 +3822,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 139,
@@ -3016,7 +3844,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 140,
@@ -3032,7 +3866,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 141,
@@ -3048,7 +3888,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 142,
@@ -3064,7 +3910,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 143,
@@ -3080,7 +3932,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 144,
@@ -3096,7 +3954,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 145,
@@ -3112,7 +3976,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 146,
@@ -3128,7 +3998,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 147,
@@ -3144,7 +4020,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 148,
@@ -3160,7 +4042,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 149,
@@ -3176,7 +4064,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 150,
@@ -3192,7 +4086,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 151,
@@ -3208,7 +4108,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 152,
@@ -3224,7 +4130,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 153,
@@ -3240,7 +4152,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 154,
@@ -3256,7 +4174,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 155,
@@ -3272,7 +4196,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 156,
@@ -3288,7 +4218,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 157,
@@ -3304,7 +4240,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 158,
@@ -3320,7 +4262,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 159,
@@ -3336,7 +4284,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 160,
@@ -3352,7 +4306,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 161,
@@ -3368,7 +4328,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 162,
@@ -3384,7 +4350,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 163,
@@ -3400,7 +4372,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 164,
@@ -3416,7 +4394,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 165,
@@ -3432,7 +4416,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 166,
@@ -3448,7 +4438,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 167,
@@ -3464,7 +4460,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 168,
@@ -3480,7 +4482,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 169,
@@ -3496,7 +4504,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 170,
@@ -3512,7 +4526,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 171,
@@ -3528,7 +4548,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 172,
@@ -3544,7 +4570,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 173,
@@ -3560,7 +4592,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 174,
@@ -3576,7 +4614,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 175,
@@ -3592,7 +4636,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 176,
@@ -3608,7 +4658,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 177,
@@ -3624,7 +4680,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 178,
@@ -3640,7 +4702,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 179,
@@ -3656,7 +4724,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 180,
@@ -3672,7 +4746,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 181,
@@ -3688,7 +4768,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 182,
@@ -3704,7 +4790,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 183,
@@ -3720,7 +4812,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 184,
@@ -3736,7 +4834,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 185,
@@ -3752,7 +4856,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 186,
@@ -3768,7 +4878,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 187,
@@ -3784,7 +4900,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 188,
@@ -3800,7 +4922,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 189,
@@ -3816,7 +4944,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 190,
@@ -3832,7 +4966,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 191,
@@ -3848,7 +4988,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 192,
@@ -3864,7 +5010,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 193,
@@ -3880,7 +5032,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 194,
@@ -3896,7 +5054,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 195,
@@ -3912,7 +5076,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 196,
@@ -3928,7 +5098,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 197,
@@ -3944,7 +5120,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 198,
@@ -3960,7 +5142,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 199,
@@ -3976,7 +5164,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 200,
@@ -3992,7 +5186,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 201,
@@ -4008,7 +5208,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 202,
@@ -4024,7 +5230,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 203,
@@ -4040,7 +5252,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 204,
@@ -4056,7 +5274,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 205,
@@ -4072,7 +5296,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 206,
@@ -4088,7 +5318,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 207,
@@ -4104,7 +5340,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 208,
@@ -4120,7 +5362,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 209,
@@ -4136,7 +5384,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 210,
@@ -4152,7 +5406,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 211,
@@ -4168,7 +5428,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 212,
@@ -4184,7 +5450,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 213,
@@ -4200,7 +5472,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 214,
@@ -4216,7 +5494,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 215,
@@ -4232,7 +5516,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 216,
@@ -4248,7 +5538,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 217,
@@ -4264,7 +5560,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 218,
@@ -4280,7 +5582,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 219,
@@ -4296,7 +5604,13 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  },
  {
   "n": 220,
@@ -4312,6 +5626,12 @@
   "checkpoint_error_field_is_placeholder": true,
   "calls": 0,
   "cost_state": "not_incurred",
-  "model_cost_usd": 0.0
+  "model_cost_usd": 0.0,
+  "derived_cost_usd_from_measured_tokens": 0.0,
+  "derived_cost_basis": "no_call_made",
+  "derived_cost_calls_measured": 0,
+  "derived_cost_calls_unmeasured": 0,
+  "derived_cost_is_provider_billed": false,
+  "derived_cost_method": "core.cost_receipts.price_call over the run ledger cost_calls table, priced with providers[azure:gpt-5.4] of experiments/execution_envelope/model_price_table.json (sha256 b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e, the same fingerprint the run itself recorded)"
  }
 ]
