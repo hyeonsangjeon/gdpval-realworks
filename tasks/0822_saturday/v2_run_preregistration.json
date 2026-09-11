@@ -737,7 +737,7 @@
     },
     "what_stops_a_task": "any per-task ceiling above, or the per-task budget, whichever comes first. A task stopped by a ceiling is recorded as stopped by that ceiling and is not a model failure"
   },
-  "seal": "023bdcbef172a23de10fdbc8648568358c1ee4c83def552389b343cd8db94867",
+  "seal": "7da8cc9ebdf94ca75f826fe15acf698d5f47deb41c06bd04aa949b71912f33c5",
   "stop_rules": [
     "the deployment or model reported back differs from the pinned one",
     "a run switches model or deployment on its own",
@@ -748,6 +748,18 @@
     "the runner-defect disposition is returned for three consecutive tasks, which means this code and not the work under test is producing the record",
     "the guest cannot be cleaned up between tasks, so one task's state could reach the next"
   ],
+  "stop_rules_about_the_whole_run": {
+    "a gate that this record says is shut reports itself open, without a reviewed change having opened it": "the gates are in the checked-out source, identical in every job, so a gate found open is open in all of them",
+    "a paid call is about to happen with no recorded budget, or recorded spending passes the approved amount": "the approved amount is for the whole cohort and never per shard -- which is the point of pricing a stage rather than a job. Sixteen shards that are each 'within budget' are how the approval gets spent several times over",
+    "a run switches model or deployment on its own": "the switch is in the thing all the shards are talking to",
+    "the deployment or model reported back differs from the pinned one": "every shard is asked through the same deployment, so a reply that named something other than the pinned model is not one shard's bad luck",
+    "the pre-registration seal no longer verifies against the recorded one": "there is one pre-registration and one seal over it; a seal that no longer verifies did not stop verifying for one shard only"
+  },
+  "stop_rules_that_are_one_shards_own": {
+    "the cost ledger cannot be written, so spend would go unattributed": "one runner failing to write its ledger says nothing about another runner's disk; if the cause is shared, each shard finds it unaided",
+    "the guest cannot be cleaned up between tasks, so one task's state could reach the next": "the guest is this job's, and so is its failure to come clean",
+    "the runner-defect disposition is returned for three consecutive tasks, which means this code and not the work under test is producing the record": "three consecutive runner defects is a fact about this code on this shard's tasks, and the next shard's tasks are different ones"
+  },
   "what_this_is": "what a V2 run is committed to before it starts. Committed ahead of execution so that a later result cannot be described as having been planned this way when it was not.",
   "what_this_is_not": [
     "not a statement that the environment is ready. No V2 task has run. What stage one registers is a run with exec_run shut and no guest booted, so the isolation is not exercised by it and no result from it is evidence that the sandbox contains anything",

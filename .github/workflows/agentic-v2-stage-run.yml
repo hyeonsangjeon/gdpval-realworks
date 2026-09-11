@@ -252,6 +252,10 @@ jobs:
     permissions:
       contents: read
       id-token: write
+      # Listing this run's own artifacts, so a shard can see whether a sibling
+      # already halted the run. Read-only and scoped to Actions; it grants no
+      # ability to write an artifact, a check or a commit.
+      actions: read
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
@@ -339,6 +343,52 @@ jobs:
           cd batch-runner
           python scripts/azure_ai_route_preflight.py
 
+      # ── Has a sibling already found out this run is not what it says? ──
+      #
+      # `fail-fast: false` above is right about most failures and wrong about
+      # five of the eight stop rules, and the difference is not severity. Those
+      # five trip on something every shard shares -- one deployment, one seal,
+      # one set of gates, one approved amount for the whole cohort. A sibling
+      # that halted on one of them has found out something about *this* shard
+      # too, and the tasks this job would add are tasks attributed to a run
+      # that cannot support them. Which five, and why each, is written down in
+      # `RULES_ABOUT_THE_WHOLE_RUN` beside the rules themselves.
+      #
+      # What this cannot do, said plainly so nobody reads it as more: it does
+      # not stop a shard that is already running. Jobs cannot cancel their
+      # siblings, and a job that is mid-conversation has already been charged.
+      # It stops the *next wave*. At `max-parallel: 4` a rule-0 halt in the two
+      # hundred and twenty costs about four shards instead of seventeen, which
+      # is a great deal better than seventeen and is not zero.
+      #
+      # `continue-on-error: true` below is load-bearing and it is also the soft
+      # spot. It has to be there: on the genuine first wave no artifact matches
+      # the pattern, the action treats that as an error, and without the flag
+      # the first shard of every stage would fail before it started. The cost
+      # is that a real failure -- `actions: read` dropped from the permissions
+      # block, a rate-limited API, a renamed artifact -- looks exactly the same
+      # from the next step. Nothing is downloaded, `sibling-records` is never
+      # created, and a missing directory is precisely how the first wave is
+      # meant to be allowed through. The refusal does not report a problem in
+      # that case; it silently becomes a no-op and every shard starts. The
+      # permission is pinned by a test for that reason, not for tidiness.
+      - name: Fetch what the other shards have reported
+        id: siblings
+        continue-on-error: true
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          pattern: agentic-v2-${{ inputs.stage }}-shard-*
+          path: sibling-records
+
+      - name: Refuse to start if one of them stopped the run
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          python scripts/check_agentic_v2_stage_coverage.py \
+            --records ../sibling-records \
+            --stage "${{ inputs.stage }}" \
+            --before-starting
+
       # `project-ci` because that is what the plan fixes, along with the account
       # and the project. The runner checks all three against the route it was
       # given and refuses after building the client and before asking it
@@ -399,9 +449,11 @@ jobs:
           if-no-files-found: warn
 
       # This reports on one shard, and says so. A green job here means this
-      # piece finished, not that the stage ran: that sentence is only earned
-      # once every shard has reported and `coverage_problems` has been shown
-      # nothing was run twice and nothing was missed.
+      # piece finished, not that the stage ran: that sentence is earned by the
+      # `collect` job below, which is what finally calls `coverage_problems`.
+      # It was named in this comment long before anything invoked it -- the
+      # function existed, was tested, and no step anywhere ran it, so "nothing
+      # was run twice and nothing was missed" was a claim with no checker.
       - name: Report what happened
         if: ${{ always() }}
         env:
@@ -418,3 +470,60 @@ jobs:
           echo "Shard $SHARD finished with $STAGE_EXIT. The stage is not" \
                "finished until every shard has reported."
           exit "$STAGE_EXIT"
+
+  # ── Did the stage run? ──────────────────────────────────────────────────
+  #
+  # The only job entitled to that sentence, and the reason it is a separate one:
+  # no shard can answer it. A shard knows its own tasks finished; whether the
+  # cohort was covered exactly once, and whether anybody halted on something
+  # that puts the rest in question, are facts about the set.
+  #
+  # `always()`, because the interesting case is the one where a shard failed.
+  # A collect step that only ran on success would be silent in exactly the
+  # situation it exists for.
+  #
+  # It writes nothing, charges nothing and fetches no dataset -- the cohort
+  # comes from the committed catalogue, which is the list the run was bound to.
+  collect:
+    name: Did the stage run?
+    needs: paid
+    if: ${{ always() && inputs.mode == 'paid' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      # No `id-token`. This job never reaches Azure and must not be able to:
+      # it is the one that decides whether the stage ran, and a checker that
+      # could also spend is a checker with something to protect.
+      actions: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+          cache-dependency-path: batch-runner/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          pip install -r requirements.txt
+
+      - name: Fetch every shard's record
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          pattern: agentic-v2-${{ inputs.stage }}-shard-*
+          path: shard-records
+
+      # Fails when the stage did not run, which includes the case where every
+      # shard was green and one task was missed. A count would have passed that.
+      - name: Check coverage and halts
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          python scripts/check_agentic_v2_stage_coverage.py \
+            --records ../shard-records \
+            --stage "${{ inputs.stage }}" \
+            --collect
