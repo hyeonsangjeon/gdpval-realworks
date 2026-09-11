@@ -24,7 +24,10 @@ job with no checkout, no credentials and ``exit 1``.
 is false in two unrelated situations -- the box was ticked, and the
 credential-free parser did not think this was a Codex experiment at all. Only
 one of those means somebody decided. Keying the variable off the second would
-set it with nobody having ticked anything.
+set it with nobody having ticked anything. Checked for every step that starts
+the entrypoint, not for the one that was thought of first: naming ``step2a``
+alone is how the checkpoint validation shipped without the variable and stayed
+green, and the first run long enough to need a handover died on it.
 
 **Every relay leg carries it.** The relay forwards inputs one at a time by
 name, so an input that is added and not forwarded is a run that spends on leg 0
@@ -73,6 +76,27 @@ def _named_step(workflow, name):
         if step.get("name") == name:
             return step
     raise AssertionError(f"no step named {name!r} in the batch-run job")
+
+
+def _steps_that_reach_the_gate(workflow):
+    """Every step whose shell starts the entrypoint that holds the gate.
+
+    Enumerated rather than listed by name, because the omission this checks
+    for is precisely an author adding a place that runs it and not knowing
+    there was a variable to carry. Both spellings count: ``step2a`` goes
+    through ``step2_run_inference.sh``, which is four lines ending in
+    ``python3 step2_run_inference.py``, and the checkpoint validation calls the
+    module directly.
+
+    Matching on the ``run`` body is safe here because YAML comments are gone by
+    the time this sees the document -- the long note above step2a's variable
+    names the module and is not a call.
+    """
+    return [
+        step
+        for step in _batch_steps(workflow)
+        if re.search(r"step2_run_inference\.(py|sh)\b", str(step.get("run", "")))
+    ]
 
 
 def _mode_script(workflow):
@@ -287,16 +311,25 @@ def test_the_variable_is_set_from_the_box_and_never_from_the_block(workflow):
     the expression reads ``codex_confirmed``. If the two parsers ever disagree,
     this stays empty -- and empty is what
     ``_require_runnable_execution_mode`` refuses on.
+
+    Asserted over every step that starts the entrypoint rather than over
+    ``step2a`` alone. Pinning one step by name is what let the checkpoint
+    validation ship without the variable for as long as it did: the assertion
+    passed, because the step it named was correct.
     """
-    step2a = next(
-        step for step in _batch_steps(workflow) if step.get("id") == "step2a"
-    )
-    expression = step2a["env"]["CODEX_FOUNDRY_CONNECTION_CONFIRMED"]
-    assert expression == (
-        "${{ steps.read_config.outputs.uses_codex_foundry == 'true' && "
-        "needs.inspect-mode.outputs.codex_confirmed == 'true' && '1' || '' }}"
-    )
-    assert "codex_blocked" not in expression
+    reaching = _steps_that_reach_the_gate(workflow)
+    assert len(reaching) >= 2, [step.get("name") for step in reaching]
+    for step in reaching:
+        where = step.get("name") or step.get("id")
+        expression = (step.get("env") or {}).get(
+            "CODEX_FOUNDRY_CONNECTION_CONFIRMED"
+        )
+        assert expression is not None, f"{where} can reach the gate and cannot open it"
+        assert expression == (
+            "${{ steps.read_config.outputs.uses_codex_foundry == 'true' && "
+            "needs.inspect-mode.outputs.codex_confirmed == 'true' && '1' || '' }}"
+        ), where
+        assert "codex_blocked" not in expression, where
     # '1' is not decoration: the reader compares against exactly that.
     source = (ROOT / "batch-runner" / "step2_run_inference.py").read_text(
         encoding="utf-8"
@@ -305,6 +338,51 @@ def test_the_variable_is_set_from_the_box_and_never_from_the_block(workflow):
         'os.getenv("CODEX_FOUNDRY_CONNECTION_CONFIRMED", "").strip() == "1"'
         in source
     )
+
+
+def test_the_step_that_only_runs_on_a_handover_carries_it_too(workflow):
+    """The omission above, named, because a generic assertion cannot explain it.
+
+    ``Validate restored checkpoint identity`` is guarded by ``relay_run > 0``,
+    so a run short enough to finish in one leg never executes it and a suite
+    that only ever watched leg 0 never saw it. Run ``34596408490`` is what it
+    costs: leg 1 of the 220 reached 45 tasks over five hours and uploaded its
+    checkpoint, and leg 2 raised ``codex_foundry has not been shown to reach
+    its Foundry deployment`` four minutes later, before reading a byte of it.
+    Every retry fails identically, so that lineage cannot be resumed at all.
+
+    At leg 1's rate -- 45 tasks in 301 minutes -- 220 tasks need roughly five
+    legs. This step is therefore not on the path of a long run as an extra
+    check on it; it is on the only path a long run has.
+    """
+    step = _named_step(workflow, "Validate restored checkpoint identity")
+    assert step["if"] == "inputs.relay_run > 0"
+    assert step in _steps_that_reach_the_gate(workflow)
+    assert "--validate-checkpoint-only" in step["run"]
+    assert "CODEX_FOUNDRY_CONNECTION_CONFIRMED" in step["env"]
+    # It validates; it must not also run. A gate variable on a step that spends
+    # is a different risk from one on a step that only reads.
+    assert "--wall-timeout" not in step["run"]
+
+
+def test_validating_a_checkpoint_goes_through_the_same_refusal_as_running_one(
+    workflow,
+):
+    """Why the variable is needed there at all, checked in the code not the YAML.
+
+    ``validate_restored_checkpoint`` is documented as running "without
+    constructing a model client", which reads like a step that could not
+    possibly need permission to spend. It calls the same guard the spending
+    path calls, one line in. That is deliberate -- a leg that may not run
+    should not be told its checkpoint is fine either -- and it is the reason
+    the env block cannot be trimmed to what the step appears to touch.
+    """
+    source = (ROOT / "batch-runner" / "step2_run_inference.py").read_text(
+        encoding="utf-8"
+    )
+    body = source.split("def validate_restored_checkpoint", 1)[1]
+    body = body.split("\ndef ", 1)[0]
+    assert "_require_runnable_execution_mode(execution_mode)" in body
 
 
 def test_the_config_parser_publishes_the_mode_the_expression_reads(workflow):

@@ -169,18 +169,31 @@
 # started by hand. That is the honest bound, written here so that a stall
 # reads as this arithmetic rather than as a fault.
 #
-# One thing the relay does not have
-# ---------------------------------
+# One thing the relay was said not to have, and does
+# -------------------------------------------------
 #
-# There is no no-progress guard. A leg that completes zero tasks still
-# dispatches the next one, and the chain stops only when `relay_run` exceeds
-# `relay_max_runs`. Eleven legs of a deployment refusing everything would
-# spend eleven watchdogs finding that out.
+# This header previously stated that there is no no-progress guard, that a leg
+# completing zero tasks still dispatches the next one, and that eleven legs of
+# a deployment refusing everything would spend eleven watchdogs finding that
+# out. That is wrong, and it is corrected here rather than deleted, because a
+# run planned against it would have been watched by hand for something the
+# workflow already refuses.
 #
-# This is stated rather than fixed, because fixing it means editing
-# `.github/workflows/batch-run.yml`, which is shared and frozen while this
-# stage is in flight. The run is watched instead: if a leg lands with no task
-# advanced, it is stopped by hand rather than by the workflow.
+# `_refuse_a_leg_that_finished_nothing` in `scripts/relay_checkpoint.py` runs
+# on the step that publishes `needs_relay`. It compares the pending count on
+# exit against the count written on entry and raises unless the leg strictly
+# reduced it:
+#
+#   relay leg finished no task: N pending on entry, N pending on exit
+#
+# So the cost of a deployment that refuses everything is one leg, not eleven,
+# and the chain stops red rather than quietly. Leg zero is covered too: with
+# no entry counter on disk the count defaults to the full task set, so a first
+# leg that finished nothing fails the same comparison.
+#
+# What the guard does not cover is a leg that finishes exactly one task, which
+# still reads as progress. Eleven legs at one task each is a possible shape and
+# nothing here stops it; that remains a thing to watch.
 #
 # Resume stays off, for exp034's two reasons
 # ------------------------------------------
@@ -565,9 +578,10 @@ execution:
   # the 290-minute watchdog: 53.2 hours against the 22.8 that exp034's
   # measured rate predicts for 220 tasks. Ten is the ceiling — the workflow's
   # config read refuses anything outside 0..10. This cannot change a result —
-  # a leg picks up the same task list where the last one left it. Note that
-  # the workflow has no no-progress guard, so this number is also the cost of
-  # a deployment that refuses everything.
+  # a leg picks up the same task list where the last one left it. It is not
+  # the cost of a deployment that refuses everything: a leg that completes no
+  # task is refused by `_refuse_a_leg_that_finished_nothing` before it can
+  # dispatch the next one, so that case costs one leg. See the header.
   #
   # Writing this key at all means the dispatch must not pass wall_timeout=0:
   # with the watchdog off nothing ends a leg early enough to hand over, and
