@@ -433,6 +433,10 @@ test('workflow input tables mirror defaults and watchdog delegation', async () =
         ...process.env,
         PYTHONPATH: batchRunnerPath,
         EXPERIMENT_YAML_INPUT: 'fixture',
+        // The job declares this at job level from an input whose default is
+        // 290, so the step never sees it absent. A harness that omits it is
+        // not running the step the workflow runs.
+        WALL_TIMEOUT_INPUT: '290',
         GITHUB_OUTPUT: outputPath,
       },
     })
@@ -451,10 +455,46 @@ test('workflow input tables mirror defaults and watchdog delegation', async () =
           ...process.env,
           PYTHONPATH: batchRunnerPath,
           EXPERIMENT_YAML_INPUT: 'fixture',
+          WALL_TIMEOUT_INPUT: '290',
           GITHUB_OUTPUT: outputPath,
         },
       }),
     )
+    // A relay budget the run could never spend. `wall_timeout` and
+    // `relay_max_runs` are each valid alone; together, with nothing left to
+    // end a leg early enough to hand over, the leg is killed by the 350
+    // minute step cap and uploads no checkpoint, so every task it finished is
+    // lost. Refused here rather than six hours into a run.
+    await writeFile(
+      fixturePath,
+      `${config(0)}  relay_max_runs: 6\n`,
+      'utf8',
+    )
+    await assert.rejects(
+      execFileAsync('python3', ['-c', readConfigPython], {
+        cwd: fixtureRoot,
+        env: {
+          ...process.env,
+          PYTHONPATH: batchRunnerPath,
+          EXPERIMENT_YAML_INPUT: 'fixture',
+          WALL_TIMEOUT_INPUT: '0',
+          GITHUB_OUTPUT: outputPath,
+        },
+      }),
+      /relay_max_runs is 6/,
+    )
+    // The same file with the watchdog armed is accepted, so the refusal above
+    // is about the pair and not about the budget.
+    await execFileAsync('python3', ['-c', readConfigPython], {
+      cwd: fixtureRoot,
+      env: {
+        ...process.env,
+        PYTHONPATH: batchRunnerPath,
+        EXPERIMENT_YAML_INPUT: 'fixture',
+        WALL_TIMEOUT_INPUT: '290',
+        GITHUB_OUTPUT: outputPath,
+      },
+    })
   } finally {
     await rm(fixtureRoot, { recursive: true, force: true })
   }
