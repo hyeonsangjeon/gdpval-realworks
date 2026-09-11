@@ -28,8 +28,10 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -70,6 +72,17 @@ needs_dataset = pytest.mark.skipif(
     not HAVE_DATASET,
     reason=f"the pinned dataset is not at {runner.PINNED_DATASET_PARQUET}",
 )
+
+#: A directory the runner will agree to stage from.
+#:
+#: Made once for the module and left for the OS to clear, because it holds one
+#: five-byte file and exists to satisfy a single check: that the root is a tree
+#: of real files rather than a cache of symlinks. It deliberately does *not*
+#: hold the dataset's reference files — the tests that use it are testing
+#: pricing and sharding, and a dry run copies nothing.
+STAGEABLE_ROOT = Path(tempfile.mkdtemp(prefix="stageable-root-"))
+(STAGEABLE_ROOT / "reference_files" / "placeholder").mkdir(parents=True)
+(STAGEABLE_ROOT / "reference_files" / "placeholder" / "a.txt").write_text("real")
 
 
 # ── The pricing guard ─────────────────────────────────────────────────────
@@ -147,7 +160,16 @@ def test_a_stage_priced_too_low_is_refused_with_the_shortfall(tmp_path):
 
 
 def _run(*args, env=None):
-    """Run the entry point as a subprocess, with no Azure environment at all."""
+    """Run the entry point as a subprocess, with no Azure environment at all.
+
+    ``--dataset-root`` is supplied unless the caller names one, because the
+    runner now refuses a stage whose reference files cannot be staged and the
+    tests below are about pricing, sharding and the dry run being free. The
+    stand-in is a directory of real files, which is the one property the
+    refusal checks; :func:`test_a_dry_run_refuses_a_snapshot_it_cannot_stage_from`
+    covers the other side, and covers it against the shape a real fetch
+    actually produces.
+    """
     clean = {
         key: value
         for key, value in os.environ.items()
@@ -155,6 +177,8 @@ def _run(*args, env=None):
     }
     clean["PYTHONPATH"] = str(BATCH_RUNNER_ROOT)
     clean.update(env or {})
+    if "--dataset-root" not in args:
+        args = (*args, "--dataset-root", str(STAGEABLE_ROOT))
     return subprocess.run(
         [sys.executable, str(RUNNER_PATH), *args],
         cwd=BATCH_RUNNER_ROOT,
@@ -271,11 +295,22 @@ def test_one_shard_of_one_is_the_unsharded_run():
 
 @needs_dataset
 def test_the_dry_run_says_what_is_missing_rather_than_only_what_is_ready():
-    """The handicap is printed on the way in, not discovered in the results."""
+    """What is still not real is printed on the way in, not found in the results.
+
+    This test used to pin the sentence "reference files that are not in the
+    workspace", and it was right to: nothing copied them and the run had to say
+    so. Staging them made that sentence false, and a test asserting a false
+    sentence is worse than no test — it holds the claim in place after the fact
+    it described has gone.
+
+    So it now pins what is *still* missing. The isolation is the fixture
+    backend and ``exec_run`` is shut, which is the thing most likely to be
+    forgotten when a result gets quoted later.
+    """
     printed = _run("--stage", "advance_check_5", "--dry-run").stdout
 
     assert "isolation      none — fixture backend, exec_run shut" in printed
-    assert "reference files that are not in the workspace" in printed
+    assert "reference files that are not in the workspace" not in printed
 
 
 # ── The expert's answer never travels ─────────────────────────────────────
@@ -385,3 +420,199 @@ def test_what_was_real_does_not_quietly_include_the_isolation():
     assert "isolation" not in real
     assert "exec_run" not in real
     assert "the charge for every call" in real
+
+
+# ── The files a task is told to open ──────────────────────────────────────
+#
+# 125 of the 220 tasks name reference files. Until this window nothing copied
+# them anywhere, so a task that needed one failed on its merits and the failure
+# was indistinguishable from the model being unable to do the work. The runner
+# now stages them, and the two tests below are about the moment before that:
+# whether it can tell a directory it can stage from from one it cannot, and
+# whether it says so before any money is spent rather than 261 times during the
+# run.
+
+
+@needs_dataset
+def test_a_dry_run_refuses_a_snapshot_it_cannot_stage_from(tmp_path):
+    """The shape a plain `hf download` really produces, and the real cost of it.
+
+    A huggingface_hub cache is names, not bytes: every file under the snapshot
+    is a symlink into a sibling ``blobs/`` directory outside it. Measured on
+    this repository's own pinned revision, that is 301 of 301 reference files.
+    Nothing that opens with ``O_NOFOLLOW`` will read one, so staging from such a
+    root delivers nothing at all — and a paid stage run against it produces 125
+    tasks that failed holding an empty workspace, which reads afterwards as a
+    model that could not do the work.
+
+    Refusing in the *dry* run is the point. That is the free path, so this
+    particular mistake costs nothing to find.
+    """
+    link_farm = tmp_path / "cache-shaped"
+    blobs = tmp_path / "blobs"
+    blobs.mkdir()
+    (blobs / "deadbeef").write_text("the bytes live here, outside the root")
+    folder = link_farm / "reference_files" / "abc123"
+    folder.mkdir(parents=True)
+    (folder / "sheet.xlsx").symlink_to(os.path.relpath(blobs / "deadbeef", folder))
+
+    finished = _run(
+        "--stage", "advance_check_5", "--dry-run",
+        "--dataset-root", str(link_farm),
+    )
+
+    assert finished.returncode == 1
+    assert "Refused before spending anything" in finished.stdout
+    assert "--local-dir" in finished.stdout
+    # Named, so that the fix is the next thing the reader does rather than
+    # something they work out from a generic "source is a link".
+    assert "huggingface_hub cache" in finished.stdout
+    assert "read as the model's" in finished.stdout
+
+
+@needs_dataset
+def test_a_stage_naming_no_reference_files_is_not_blocked_by_the_root(tmp_path):
+    """A directory a cohort never opens must not be able to stop it.
+
+    The refusal above is worth having because it is cheap and specific. It
+    would stop being worth having if it also refused runs that were never going
+    to read a file — a gate that fires on tasks it does not apply to teaches
+    people to route around it.
+    """
+    empty_root = tmp_path / "nothing-here"
+    empty_root.mkdir()
+
+    printed = _run(
+        "--stage", "advance_check_5", "--dry-run",
+        "--dataset-root", str(empty_root),
+    )
+
+    # advance_check_5 does name files, so this one *is* refused -- and the
+    # assertion worth making is that the refusal names the root rather than
+    # failing somewhere further in.
+    assert "the reference files cannot be staged from" in printed.stdout
+    assert str(empty_root) in printed.stdout
+
+
+@needs_dataset
+def test_the_dry_run_says_where_the_files_would_come_from(tmp_path):
+    """The printed line names the root, because the wrong root is the likely bug.
+
+    It used to print a count of tasks whose files "are not in the workspace",
+    which was true when nothing staged them and became false the moment
+    something did. A line that states a fact outlives the fact; this one states
+    where the bytes come from, which is checkable against the run.
+    """
+    printed = _run("--stage", "advance_check_5", "--dry-run").stdout
+
+    assert "tasks name reference files, staged from" in printed
+    assert str(STAGEABLE_ROOT) in printed
+    assert "handicap" not in printed
+
+
+# ── The workflow and the runner have to agree about the dataset ───────────
+
+STAGE_WORKFLOW = (
+    BATCH_RUNNER_ROOT.parent / ".github" / "workflows" / "agentic-v2-stage-run.yml"
+)
+
+
+def _jobs() -> dict:
+    return yaml.safe_load(STAGE_WORKFLOW.read_text(encoding="utf-8"))["jobs"]
+
+
+def _shell_blocks(job: dict) -> list[str]:
+    return [str(step["run"]) for step in job["steps"] if "run" in step]
+
+
+def _flag_value(script: str, flag: str) -> str | None:
+    """What a `--flag value` in a shell block was given, quotes stripped."""
+    found = re.search(rf"{re.escape(flag)}\s+[\"']?([^\"'\s\\]+)", script)
+    return found.group(1) if found else None
+
+
+#: A block that *runs* the stage, not one that merely says its name. The
+#: difference matters as soon as a job runs the stage's own test file: the
+#: earlier version of this matched on the bare filename, and adding
+#: `tests/test_run_agentic_v2_stage.py` to the free job's pytest step made it
+#: see a step that invoked the stage with no `--parquet`. The test failed
+#: correctly, about the wrong step.
+INVOKES_THE_STAGE = re.compile(r"python\s+scripts/run_agentic_v2_stage\.py")
+
+
+def _stage_invocations(blocks: list[str]) -> list[str]:
+    return [one for one in blocks if INVOKES_THE_STAGE.search(one)]
+
+
+def test_every_job_that_runs_the_stage_fetches_a_dataset_it_can_stage_from():
+    """The gate is in the runner; the only thing that can defeat it is here.
+
+    ``run_agentic_v2_stage.py`` refuses a ``huggingface_hub`` cache, and that
+    refusal is worth having only while the workflow feeding it does not hand it
+    one. Nothing but this test connects them. A `hf download` line edited back
+    to its default passes every other check in the repository, and then refuses
+    a paid cohort on the runner -- after the job has queued, checked out,
+    authenticated and been counted as an attempt.
+    """
+    checked = 0
+    for name, job in _jobs().items():
+        blocks = _shell_blocks(job)
+        if not _stage_invocations(blocks):
+            continue
+        checked += 1
+
+        fetches = [one for one in blocks if "hf download" in one]
+        assert fetches, f"job {name!r} runs the stage but never fetches the dataset"
+        for fetch in fetches:
+            assert "--local-dir" in fetch, (
+                f"job {name!r} fetches into the default cache, which is a tree "
+                "of symlinks into a blob store outside it. Every reference file "
+                "would be refused and every task would run without its inputs."
+            )
+
+    assert checked == 2, "expected the free job and the paid job to both run it"
+
+
+def test_the_stage_is_pointed_at_the_directory_the_workflow_fetched():
+    """Two places naming a path is two places for it to differ.
+
+    Fetching correctly and then reading somewhere else is the same outcome as
+    not fetching at all, and it is harder to see: the download step is green.
+    """
+    for name, job in _jobs().items():
+        blocks = _shell_blocks(job)
+        runs = _stage_invocations(blocks)
+        if not runs:
+            continue
+
+        fetched_into = {
+            _flag_value(one, "--local-dir") for one in blocks if "hf download" in one
+        }
+        assert len(fetched_into) == 1, f"job {name!r} fetches to more than one place"
+        into = fetched_into.pop()
+
+        for one in runs:
+            parquet = _flag_value(one, "--parquet")
+            assert parquet is not None, (
+                f"job {name!r} runs the stage without saying which parquet, so "
+                "it falls back to the cache path the fetch no longer fills"
+            )
+            assert parquet.startswith(f"{into}/"), (
+                f"job {name!r} fetches into {into} and reads {parquet}"
+            )
+
+
+def test_the_reference_answers_are_not_fetched_onto_the_machine_that_runs():
+    """595 MB of expert deliverables, beside a workspace, for no reason.
+
+    They are the answers. No inference step opens one, and the only way they
+    can affect a result is by being on the disk at all. Excluded at the fetch
+    rather than ignored afterwards, because "nothing reads them" is a claim
+    about every future version of the runner, and "they were never downloaded"
+    is a claim about this job.
+    """
+    for name, job in _jobs().items():
+        for fetch in (one for one in _shell_blocks(job) if "hf download" in one):
+            assert "deliverable_files" in fetch and "--exclude" in fetch, (
+                f"job {name!r} fetches the reference answers onto the runner"
+            )

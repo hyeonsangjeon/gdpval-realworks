@@ -56,7 +56,13 @@ from typing import Any, Mapping, Sequence
 
 import yaml
 
+from core.agentic_compute import (
+    MAX_INPUT_FILES,
+    MAX_INPUT_SINGLE,
+    MAX_INPUT_TOTAL,
+)
 from core.agentic_v2_contract import TOOL_NAMES
+from core.agentic_v2_reference_staging import MODEL_INPUT_PREFIX, TOO_LARGE
 from core.execution_envelope_tasks import (
     ADVANCE_CHECK_TASK_COUNT,
     FULL_RUN_TASK_COUNT,
@@ -624,8 +630,181 @@ def _run_conditions() -> dict[str, Any]:
     }
 
 
+#: The files in the pinned dataset that cannot be handed to the task that names
+#: them, with the size that decides it.
+#:
+#: Recorded here rather than measured at generation time, because a
+#: pre-registration has to derive on a machine that has not downloaded the
+#: dataset -- the committed copy is checked against the code in CI, where the
+#: files are absent. A written-down size is normally the thing that goes stale;
+#: this one cannot, because the revision it was measured against is pinned in
+#: the manifest beside it, and :func:`verify_input_disposition` turns it back
+#: into a measurement anywhere the files are present.
+UNDELIVERABLE_INPUTS: tuple[dict[str, Any], ...] = (
+    {
+        "task_id": "a941b6d8-4289-4500-b45a-f8e4fc94a724",
+        "occupation": "Film and Video Editors",
+        "path": "reference_files/67469cf2a7509f149c095cf4f6542f6d/TWT_A001_03.mp4",
+        "size_bytes": 689_061_330,
+        "reason": TOO_LARGE,
+    },
+)
+
+
+def input_disposition(catalog: TaskCatalog | None = None) -> dict[str, Any]:
+    """What each cohort is given to work from, and what it cannot be given.
+
+    Written before the run because the alternative is writing it after, when
+    the only task in the two hundred and twenty that loses a file has already
+    produced a result -- and a shortfall explained afterwards reads as an
+    excuse for it, whatever the record says.
+
+    The shape of the problem is narrow enough to state exactly. Across the
+    three cohorts one file is undeliverable: a 689 MB clip, over the compute
+    contract's own per-file limit by 152 MB. It belongs to a Film and Video
+    Editors task that names two clips, so the task is not left with nothing --
+    it is left with half its footage, which is the more dangerous outcome,
+    because an edit made from half the material looks like a bad edit rather
+    than a missing input. Neither smaller stage contains that task, so the
+    first two stages have nothing refused at all.
+
+    No substitute is made. Subtitles, extracted frames or a summary would each
+    be a different task from the one the dataset states, and swapping one in
+    silently would mean reporting a score for work nobody set.
+    """
+    catalog = catalog or load_task_catalog()
+    chosen = cohorts(catalog)
+    by_id = catalog.by_task_id()
+    by_task: dict[str, list[dict[str, Any]]] = {}
+    for one in UNDELIVERABLE_INPUTS:
+        by_task.setdefault(str(one["task_id"]), []).append(dict(one))
+
+    per_stage: dict[str, Any] = {}
+    for stage in ESCALATION:
+        task_ids = chosen[stage]
+        tasks = [by_id[one] for one in task_ids if one in by_id]
+        naming = [one for one in tasks if one.reference_file_count]
+        refused = [
+            dict(entry, task_id=task_id)
+            for task_id in task_ids
+            for entry in by_task.get(str(task_id), ())
+        ]
+        per_stage[stage] = {
+            "tasks": len(task_ids),
+            "tasks_naming_reference_files": len(naming),
+            "files_named": sum(one.reference_file_count for one in naming),
+            "files_that_cannot_be_delivered": refused,
+        }
+
+    return {
+        "staged_into": (
+            f"{MODEL_INPUT_PREFIX}/ inside each task's own workspace, one "
+            "workspace per attempt, copied from the same revision the prompt "
+            "text comes from"
+        ),
+        "limits": {
+            "max_files_per_task": MAX_INPUT_FILES,
+            "max_bytes_per_file": MAX_INPUT_SINGLE,
+            "max_bytes_per_task": MAX_INPUT_TOTAL,
+            "come_from": "core/agentic_compute.py",
+        },
+        "per_stage": per_stage,
+        "no_substitute_is_made": (
+            "a file that cannot be delivered is recorded as not delivered. "
+            "Nothing is put in its place -- subtitles, frames or a summary "
+            "would each be a different task from the one the dataset sets, and "
+            "a score reported against a task nobody set is worse than a gap"
+        ),
+        "what_a_failure_there_does_not_show": (
+            "a task that ran without a file it named is not evidence about the "
+            "model. It is recorded with the missing file's name so the two "
+            "cannot be read as one"
+        ),
+        "how_to_check_this": (
+            "core.agentic_v2_preregistration.verify_input_disposition, against "
+            "a copy of the pinned revision"
+        ),
+    }
+
+
+def verify_input_disposition(
+    snapshot_root: Path, catalog: TaskCatalog | None = None
+) -> list[str]:
+    """Everything the recorded disposition gets wrong about the files on disk.
+
+    Both directions, and the second is the one worth having. That a recorded
+    size is still the file's size catches an edit; that no *other* file has
+    grown past a limit catches the case nobody would look for -- a cohort
+    quietly losing an input that no record mentions, which is indistinguishable
+    from a model that did the work badly.
+
+    Sizes are read through whatever the name points at, links included. That is
+    the opposite of what staging does, and deliberately: this is measuring the
+    dataset, not handing bytes to a model, and refusing to measure a cache
+    would leave the check unrunnable on the machine most likely to run it.
+    """
+    catalog = catalog or load_task_catalog()
+    by_id = catalog.by_task_id()
+    recorded = {str(one["path"]): one for one in UNDELIVERABLE_INPUTS}
+    wrong: list[str] = []
+
+    for path, entry in recorded.items():
+        full = snapshot_root / path
+        if not full.exists():
+            wrong.append(f"{path} is recorded as undeliverable but is not present")
+            continue
+        size = full.stat().st_size
+        if size != entry["size_bytes"]:
+            wrong.append(
+                f"{path} is recorded as {entry['size_bytes']} bytes and is "
+                f"{size}. The pinned revision is supposed to make that "
+                "impossible, so either the root is a different revision or the "
+                "record was edited"
+            )
+        elif size <= MAX_INPUT_SINGLE:
+            wrong.append(
+                f"{path} is recorded as undeliverable but {size} bytes is "
+                f"within the {MAX_INPUT_SINGLE} byte limit"
+            )
+
+    for task_id in full_run_tasks(catalog):
+        task = by_id.get(str(task_id))
+        if task is None:
+            continue
+        running = 0
+        for path in task.reference_file_paths:
+            full = snapshot_root / path
+            if not full.exists():
+                wrong.append(f"{path}, named by {task_id}, is not in the snapshot")
+                continue
+            size = full.stat().st_size
+            running += size
+            if size > MAX_INPUT_SINGLE and path not in recorded:
+                wrong.append(
+                    f"{path}, named by {task_id}, is {size} bytes and over the "
+                    f"{MAX_INPUT_SINGLE} byte limit, and no record says so. A "
+                    "cohort would lose it without anything having planned for it"
+                )
+        if running > MAX_INPUT_TOTAL:
+            wrong.append(
+                f"{task_id} names {running} bytes in total, over the "
+                f"{MAX_INPUT_TOTAL} byte limit, and no record says so"
+            )
+        if task.reference_file_count > MAX_INPUT_FILES:
+            wrong.append(
+                f"{task_id} names {task.reference_file_count} files, over the "
+                f"{MAX_INPUT_FILES} file limit, and no record says so"
+            )
+
+    return wrong
+
+
 def record(catalog: TaskCatalog | None = None) -> dict[str, Any]:
     """The whole pre-registration, as it is committed before anything runs."""
+    # Loaded once and handed down. Two sections derive from the catalogue and
+    # each would otherwise load its own copy, which is slower and -- worse --
+    # would let one section describe a catalogue the other had not read.
+    catalog = catalog or load_task_catalog()
     comparisons = compare_with_codex_run()
     allowed, blockers = may_attribute_difference_to_environment(comparisons)
     body = {
@@ -637,6 +816,7 @@ def record(catalog: TaskCatalog | None = None) -> dict[str, Any]:
         "escalation": list(ESCALATION),
         "manifest": manifest(catalog),
         "run_conditions": _run_conditions(),
+        "inputs": input_disposition(catalog),
         "comparison_with_codex": {
             "source": str(CODEX_TRIAL_PLAN.relative_to(REPOSITORY_ROOT)),
             # The basis of the comparison, fingerprinted. If A's file moves, the

@@ -23,6 +23,11 @@ from core.agentic_v2_contract import TOOL_NAMES
 from core.agentic_v2_conversation import run_model_conversation
 from core.agentic_v2_conversation_runner import build_runner_factory, ceilings_from
 from core.agentic_v2_stage_one_budget import load_stage_one_plan
+from core.agentic_compute import (
+    MAX_INPUT_FILES,
+    MAX_INPUT_SINGLE,
+    MAX_INPUT_TOTAL,
+)
 from core.agentic_v2_preregistration import (
     CODEX_TRIAL_PLAN,
     Comparison,
@@ -36,17 +41,21 @@ from core.agentic_v2_preregistration import (
     STAGE_THIRTY,
     STAGE_TWO_TWENTY,
     STOP_RULES,
+    UNDELIVERABLE_INPUTS,
     UNKNOWN,
     cohorts,
     compare_with_codex_run,
     escalation_shape,
+    input_disposition,
     manifest,
     may_attribute_difference_to_environment,
     record,
     residual_after_alignment,
     seal,
+    verify_input_disposition,
     verify_seal,
 )
+from core.execution_envelope_tasks import full_run_tasks, load_task_catalog
 
 #: The one task the advance-check rule holds and the trial rule does not. Named
 #: here so that a change to either rule fails loudly with the identifier in the
@@ -383,6 +392,199 @@ class TestTheConditionsAreRecordedBeforeTheRun:
             after = record()["seal"]
 
         assert after != before
+
+
+#: The one file in the pinned revision that no cohort can be handed, and the
+#: task it belongs to. Written out here rather than read from the module under
+#: test, so that a change to the record is a failure with the identifier in the
+#: message instead of a test that agrees with whatever it is shown.
+UNDELIVERABLE_TASK = "a941b6d8-4289-4500-b45a-f8e4fc94a724"
+UNDELIVERABLE_PATH = (
+    "reference_files/67469cf2a7509f149c095cf4f6542f6d/TWT_A001_03.mp4"
+)
+UNDELIVERABLE_SIZE = 689_061_330
+
+
+def _fake_snapshot(root: Path, sizes: dict[str, int] | None = None) -> Path:
+    """A dataset-shaped tree with the right names and made-up sizes.
+
+    Every file the two hundred and twenty name, one byte each unless `sizes`
+    says otherwise, and the undeliverable one at its recorded size. Written
+    sparse: nothing here allocates 689 MB, and `st_size` -- the only thing the
+    check reads -- is the same either way.
+    """
+    sizes = dict(sizes or {})
+    sizes.setdefault(UNDELIVERABLE_PATH, UNDELIVERABLE_SIZE)
+    catalog = load_task_catalog()
+    by_id = catalog.by_task_id()
+    for task_id in full_run_tasks(catalog):
+        for name in by_id[str(task_id)].reference_file_paths:
+            made = root / name
+            made.parent.mkdir(parents=True, exist_ok=True)
+            with made.open("wb") as handle:
+                handle.truncate(sizes.get(name, 1))
+    return root
+
+
+class TestWhatEachCohortCanBeHanded:
+    """The inputs half of the pre-registration.
+
+    A run where the model is not given a file it was told to open produces the
+    same artefact as a run where the model ignored one, and by the time anybody
+    is reading results the difference is unrecoverable. So it is written down
+    first: which cohort loses what, and to which limit.
+    """
+
+    def test_the_first_two_stages_have_nothing_refused(self):
+        """Not a convenience. It decides what the early stages can show.
+
+        Five tasks and then thirty are where a failure gets diagnosed, and a
+        missing input there would be the first explanation to reach for and the
+        hardest to rule out. Neither cohort contains the one task that loses a
+        file, so for those two stages that explanation is closed off in advance
+        rather than argued about afterwards.
+        """
+        disposition = input_disposition()["per_stage"]
+
+        assert disposition[STAGE_FIVE]["files_that_cannot_be_delivered"] == []
+        assert disposition[STAGE_THIRTY]["files_that_cannot_be_delivered"] == []
+
+    def test_the_two_hundred_and_twenty_loses_exactly_one_named_file(self):
+        refused = input_disposition()["per_stage"][STAGE_TWO_TWENTY][
+            "files_that_cannot_be_delivered"
+        ]
+
+        assert [one["path"] for one in refused] == [UNDELIVERABLE_PATH]
+        assert refused[0]["task_id"] == UNDELIVERABLE_TASK
+        assert refused[0]["size_bytes"] == UNDELIVERABLE_SIZE
+        assert refused[0]["size_bytes"] > MAX_INPUT_SINGLE
+
+    def test_the_task_that_loses_it_keeps_its_other_file(self):
+        """Which is the outcome worth recording, not the softer one.
+
+        An empty workspace is obvious in a result. Half the footage is not: the
+        model has something to work from, produces an edit, and the edit is
+        judged as an edit. The record has to carry the shortfall because the
+        deliverable will not show it.
+        """
+        catalog = load_task_catalog()
+        task = catalog.by_task_id()[UNDELIVERABLE_TASK]
+
+        assert task.reference_file_count == 2
+        assert UNDELIVERABLE_PATH in task.reference_file_paths
+        kept = [one for one in task.reference_file_paths if one != UNDELIVERABLE_PATH]
+        assert len(kept) == 1, "the task is supposed to name a second clip"
+
+    def test_the_counts_cover_every_task_in_every_cohort(self):
+        disposition = input_disposition()["per_stage"]
+        chosen = cohorts()
+        for stage in ESCALATION:
+            assert disposition[stage]["tasks"] == len(chosen[stage])
+            assert (
+                disposition[stage]["tasks_naming_reference_files"]
+                <= disposition[stage]["tasks"]
+            )
+
+    def test_the_limits_are_read_from_the_contract_and_not_restated(self):
+        """Two copies of a number is one chance for them to disagree.
+
+        If these were typed into the record, raising a limit in the compute
+        contract would leave the pre-registration describing a narrower run
+        than the one that happened -- and the record is the thing a reader
+        trusts when the results are confusing.
+        """
+        limits = input_disposition()["limits"]
+
+        assert limits["max_files_per_task"] == MAX_INPUT_FILES
+        assert limits["max_bytes_per_file"] == MAX_INPUT_SINGLE
+        assert limits["max_bytes_per_task"] == MAX_INPUT_TOTAL
+        assert limits["come_from"] == "core/agentic_compute.py"
+
+    def test_nothing_is_quietly_put_in_the_missing_file_s_place(self):
+        disposition = input_disposition()
+
+        assert "Nothing is put in its place" in disposition["no_substitute_is_made"]
+        assert "is not evidence about the model" in (
+            disposition["what_a_failure_there_does_not_show"]
+        )
+
+    def test_the_disposition_is_carried_in_the_sealed_record(self):
+        body = record()
+        assert body["inputs"] == input_disposition()
+        recorded_seal = body.pop("seal")
+        assert verify_seal(body, recorded_seal) == []
+
+
+class TestTheDispositionIsCheckedAgainstDiskRatherThanTrusted:
+    """A recorded size is a claim until something measures it.
+
+    The first direction catches an edit to the record. The second is the one
+    worth having: a file nobody wrote down that has grown past a limit, which a
+    cohort would silently lose and which would then read as bad work.
+    """
+
+    def test_a_snapshot_matching_the_record_reports_nothing(self, tmp_path):
+        assert verify_input_disposition(_fake_snapshot(tmp_path)) == []
+
+    def test_a_recorded_size_that_no_longer_matches_is_reported(self, tmp_path):
+        root = _fake_snapshot(tmp_path, {UNDELIVERABLE_PATH: UNDELIVERABLE_SIZE - 1})
+        wrong = verify_input_disposition(root)
+
+        assert any(UNDELIVERABLE_PATH in one for one in wrong)
+        assert any("the record was edited" in one for one in wrong)
+
+    def test_a_recorded_file_that_now_fits_is_reported(self, tmp_path):
+        """The refusal outliving its reason, which is the same bug class.
+
+        Raise the per-file limit past 689 MB and the record would carry on
+        saying a deliverable file cannot be delivered. Nothing else in the
+        repository would notice.
+        """
+        root = _fake_snapshot(tmp_path)
+        with mock.patch(
+            "core.agentic_v2_preregistration.MAX_INPUT_SINGLE", UNDELIVERABLE_SIZE * 2
+        ):
+            wrong = verify_input_disposition(root)
+
+        assert any("within the" in one for one in wrong)
+
+    def test_an_unrecorded_file_over_the_limit_is_reported(self, tmp_path):
+        """The case the record could not have anticipated, which is the point."""
+        catalog = load_task_catalog()
+        by_id = catalog.by_task_id()
+        victim = next(
+            (task_id, by_id[str(task_id)].reference_file_paths[0])
+            for task_id in full_run_tasks(catalog)
+            if by_id[str(task_id)].reference_file_paths
+            and by_id[str(task_id)].reference_file_paths[0] != UNDELIVERABLE_PATH
+        )
+        root = _fake_snapshot(tmp_path, {victim[1]: MAX_INPUT_SINGLE + 1})
+        wrong = verify_input_disposition(root)
+
+        assert any(victim[1] in one and "no record says so" in one for one in wrong)
+
+    def test_a_named_file_missing_from_the_snapshot_is_reported(self, tmp_path):
+        root = _fake_snapshot(tmp_path)
+        catalog = load_task_catalog()
+        by_id = catalog.by_task_id()
+        gone = next(
+            by_id[str(task_id)].reference_file_paths[0]
+            for task_id in full_run_tasks(catalog)
+            if by_id[str(task_id)].reference_file_paths
+        )
+        (root / gone).unlink()
+
+        assert any(
+            gone in one and "not in the snapshot" in one
+            for one in verify_input_disposition(root)
+        )
+
+    def test_an_empty_root_does_not_pass_by_finding_nothing(self, tmp_path):
+        """A check that says nothing when handed nothing is not a check."""
+        wrong = verify_input_disposition(tmp_path)
+
+        assert any("is not present" in one for one in wrong)
+        assert len(wrong) > 1
 
 
 class TestTheRecordSaysWhatItIsNot:

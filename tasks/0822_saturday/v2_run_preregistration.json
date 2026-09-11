@@ -83,6 +83,46 @@
     "trial_30",
     "full_220"
   ],
+  "inputs": {
+    "how_to_check_this": "core.agentic_v2_preregistration.verify_input_disposition, against a copy of the pinned revision",
+    "limits": {
+      "come_from": "core/agentic_compute.py",
+      "max_bytes_per_file": 536870912,
+      "max_bytes_per_task": 2147483648,
+      "max_files_per_task": 256
+    },
+    "no_substitute_is_made": "a file that cannot be delivered is recorded as not delivered. Nothing is put in its place -- subtitles, frames or a summary would each be a different task from the one the dataset sets, and a score reported against a task nobody set is worse than a gap",
+    "per_stage": {
+      "advance_check_5": {
+        "files_named": 2,
+        "files_that_cannot_be_delivered": [],
+        "tasks": 5,
+        "tasks_naming_reference_files": 2
+      },
+      "full_220": {
+        "files_named": 261,
+        "files_that_cannot_be_delivered": [
+          {
+            "occupation": "Film and Video Editors",
+            "path": "reference_files/67469cf2a7509f149c095cf4f6542f6d/TWT_A001_03.mp4",
+            "reason": "larger_than_the_single_file_limit",
+            "size_bytes": 689061330,
+            "task_id": "a941b6d8-4289-4500-b45a-f8e4fc94a724"
+          }
+        ],
+        "tasks": 220,
+        "tasks_naming_reference_files": 125
+      },
+      "trial_30": {
+        "files_named": 21,
+        "files_that_cannot_be_delivered": [],
+        "tasks": 30,
+        "tasks_naming_reference_files": 14
+      }
+    },
+    "staged_into": "inputs/ inside each task's own workspace, one workspace per attempt, copied from the same revision the prompt text comes from",
+    "what_a_failure_there_does_not_show": "a task that ran without a file it named is not evidence about the model. It is recorded with the missing file's name so the two cannot be read as one"
+  },
   "manifest": {
     "catalog_sha256": "5f1eca853979b2b4efe6c6ba656545c3a416da920e3faf067d52f5d8ac4ae0eb",
     "dataset_file_sha256": "f8422fab9b21d90c0ee5f0659842ab666d418cb8940842918f9f4b0df7ae0202",
@@ -456,7 +496,7 @@
     },
     "what_stops_a_task": "any per-task ceiling above, or the per-task budget, whichever comes first. A task stopped by a ceiling is recorded as stopped by that ceiling and is not a model failure"
   },
-  "seal": "6955e0f64bccdfe4138f1edade67a07c7d591c5e865328e43aa1a50ac64dcb87",
+  "seal": "3f42a0f3ed673e07fbfc4d915032ba1bddbd610ba6d13e6f2f0e7b745c3d997e",
   "stop_rules": [
     "the deployment or model reported back differs from the pinned one",
     "a run switches model or deployment on its own",
