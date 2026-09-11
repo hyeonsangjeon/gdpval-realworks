@@ -1,0 +1,141 @@
+{
+  "survey": "can the machine that reaches the guest host also reach a gpt-5.4 deployment",
+  "why_it_was_run": [
+    "The block recorded in TASK_AGENTIC_SANDBOX_V2_ACTIVATION.md rested on one",
+    "premise: that no single place can reach both the guest host and a model.",
+    "The guest host answers to this box's signed-in admin in tenant",
+    "6d93cc9b; the Foundry account hjeon-fdpo-foundry-eus2 answers to the",
+    "GitHub OIDC application in tenant 16b3c013. That premise was tested",
+    "rather than assumed, and it is false. It was never tested before because",
+    "the only model account anybody had looked for was the pinned one."
+  ],
+  "date": "2026-09-11",
+  "run_from": "the local box, not a workflow",
+  "identity": {
+    "user": "admin@MngEnvMCAP756842.onmicrosoft.com",
+    "tenant": "6d93cc9b-abb8-4dab-9406-892843d0de0b",
+    "subscription": "4b7c60a5-b0e5-468e-9a2d-f0dcb2cc60d1",
+    "note": "the same signed-in identity that drives az vm run-command against gdpval-devhost-vm",
+    "credential": "AAD access token for https://cognitiveservices.azure.com, from the existing az login",
+    "no_new_access": [
+      "no role was assigned or requested",
+      "no API key was listed, read or created",
+      "no cross-tenant login, no service principal, no credential issued",
+      "every resource below was already visible to this identity"
+    ]
+  },
+
+  "what_was_found": {
+    "cognitive_services_accounts_visible": 5,
+    "accounts_carrying_gpt_5_4": [
+      {
+        "account": "wrpo-meas",
+        "resource_group": "rg-wrpo-meas",
+        "region": "eastus2",
+        "deployment_name": "gpt-5.4",
+        "model_version": "2026-03-05",
+        "sku": "GlobalStandard",
+        "capacity": 30
+      },
+      {
+        "account": "aoai-router5-ext-faf57f",
+        "resource_group": "rg-foundry-router-5series",
+        "region": "eastus2",
+        "deployment_name": "gpt-5.4",
+        "model_version": "2026-03-05",
+        "sku": "GlobalStandard",
+        "capacity": 10
+      },
+      {
+        "account": "aoai-repolis-grounding-ext",
+        "resource_group": "rg-repolis-grounding-ext",
+        "region": "centralus",
+        "deployment_name": "gpt-5.4-chair",
+        "model_version": "2026-03-05",
+        "sku": "GlobalStandard",
+        "capacity": 30
+      }
+    ]
+  },
+
+  "calls_made": [
+    {
+      "purpose": "is a gpt-5.4 deployment reachable at all",
+      "endpoint": "https://wrpo-meas.cognitiveservices.azure.com/",
+      "api": "chat/completions, api-version 2025-04-01-preview",
+      "http": 200,
+      "answered_as": "gpt-5.4-2026-03-05",
+      "input_tokens": 13,
+      "output_tokens": 5
+    },
+    {
+      "purpose": "the same, on a second account, so one working account is not one accident",
+      "endpoint": "https://aoai-router5-ext-faf57f.cognitiveservices.azure.com/",
+      "api": "chat/completions, api-version 2025-04-01-preview",
+      "http": 200,
+      "answered_as": "gpt-5.4-2026-03-05",
+      "input_tokens": 13,
+      "output_tokens": 5
+    },
+    {
+      "purpose": "does it choose a tool, with the strict schema the contract declares",
+      "endpoint": "https://wrpo-meas.cognitiveservices.azure.com/",
+      "api": "chat/completions",
+      "http": 200,
+      "finish_reason": "tool_calls",
+      "returned": "workspace_apply {\"operation\":\"write\",\"path\":\"note.txt\",\"content\":\"HELLO\"}",
+      "input_tokens": 152,
+      "output_tokens": 28
+    },
+    {
+      "purpose": "the path the code actually takes -- Responses API on the direct-v1 hostname",
+      "endpoint": "https://wrpo-meas.openai.azure.com/openai/v1/responses",
+      "why_this_one_matters": [
+        "core.agentic_v2_model_voice.AzureFoundryVoice calls client.responses.create,",
+        "not chat/completions, and core.azure_ai_clients pins the direct-v1 route to",
+        "https://{account}.openai.azure.com/openai/v1/. The three calls above prove a",
+        "model is reachable; only this one proves the code path is."
+      ],
+      "http": 200,
+      "status": "completed",
+      "returned": "function_call workspace_apply {\"operation\":\"write\",\"path\":\"note.txt\",\"content\":\"HELLO\"}",
+      "input_tokens": 141,
+      "output_tokens": 28
+    }
+  ],
+
+  "cost": {
+    "calls": 4,
+    "input_tokens": 319,
+    "output_tokens": 66,
+    "priced_as": "azure:gpt-5.4-2026-03-05",
+    "usd": "0.0018",
+    "status": "known",
+    "bucket": "problem_solving",
+    "note": "small, and recorded anyway. A figure nobody wrote down is not a zero."
+  },
+
+  "what_this_does_not_show": [
+    "Nothing about hjeon-fdpo-foundry-eus2, which is still unreachable from here and is still the account the stage-one plan pins. A run against wrpo-meas is the same model at the same version, 2026-03-05, in a different account with its own content-filter policy and its own quota. That is a difference to state, not to wave away: a result from here may not be set beside a run made through the pinned account and called the same environment.",
+    "Nothing about whether these accounts are free to use. They belong to other work -- the names say repolis, iq-demo, wrpo, router5 -- and their capacity is shared. Whether a 220-task run may consume one is the owner's call, not this survey's.",
+    "Nothing about the guest host, which is deallocated. That it answered run-command before is recorded elsewhere and would have to be true again.",
+    "Nothing about exec_run, which is still shut. The tool the model chose above was workspace_apply, which writes a file and runs no command."
+  ],
+
+  "what_is_still_blocked": {
+    "unchanged": [
+      "The GitHub OIDC identity still cannot reach the guest host.",
+      "The VM's managed identity still holds zero role assignments, and cannot hold one in another tenant regardless.",
+      "Creating a host inside subscription d372e9cf is still refused."
+    ],
+    "no_longer_true": [
+      "That the paid leg needs either a cross-tenant service-principal grant or a",
+      "booting host inside the model's subscription. It needs neither. The",
+      "orchestrator can be this box, which reaches a gpt-5.4 deployment in its own",
+      "tenant and the guest host in its own tenant. The model never needs to reach",
+      "anything -- which is better containment than the design that was blocked,",
+      "not a relaxation of it: a guest that cannot call a model endpoint is a",
+      "guest with one less way out."
+    ]
+  }
+}

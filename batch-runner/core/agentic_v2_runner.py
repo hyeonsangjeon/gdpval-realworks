@@ -1,4 +1,16 @@
-"""Model-free scripted runner for the Agentic Sandbox V2 foundation."""
+"""The Agentic Sandbox V2 run place, and the two things that can drive it.
+
+A run here is a backend that is admitted, a dispatcher that enforces the tool
+contract, a pair of hash chains that record what happened, and a verifier that
+refuses a record which does not add up. None of that depends on *who* chooses
+the next tool, and this module now takes that choice as a parameter: a list
+written in advance, or a model being asked.
+
+Supplying a model is the caller's job and no caller in this repository does it
+yet, because the deployment it would reach is behind a role assignment nobody
+here may grant. Nothing in this file opens that, changes ``foundation_only`` or
+``production_activation``, or loosens the ``exec_run`` refusal.
+"""
 
 from __future__ import annotations
 
@@ -35,6 +47,50 @@ from core.agentic_v2_provenance import (
     verify_agentic_v2_result,
 )
 from core.agentic_v2_tools import AgenticV2Backend, AgenticV2ToolDispatcher
+
+
+class _EndTheRun(Exception):
+    """The run must stop now, and this is the envelope it stops with.
+
+    Raised only from the per-call bookkeeping, which is shared by every call
+    source. Returning from there is not possible and returning a sentinel would
+    make every caller responsible for noticing it, so the one ending nobody may
+    continue past is the one that cannot be ignored.
+    """
+
+    def __init__(self, envelope: dict):
+        super().__init__(envelope.get("error", "ended"))
+        self.envelope = envelope
+
+
+#: How a conversation that never committed an answer is reported.
+#:
+#: Keyed by :class:`core.agentic_v2_conversation.StopReason` values, by string
+#: rather than by import, so this module stays independent of the loop that
+#: produces them — a run can be driven by anything that ends with a named
+#: reason.
+#:
+#: The mapping is coarser than the reasons are, because
+#: :data:`core.agentic_v2_contract.ERROR_TYPES` has no member for "ran out of
+#: money" or "the model said something unusable". Both of those are true
+#: instances of *the model never handed in an answer*, which is what
+#: ``finalize_not_called`` says and what the default below gives them. The
+#: distinction is not lost: the caller supplying the conversation holds its
+#: record, which names the reason exactly.
+#:
+#: ``paid_call_refused`` is the one worth reading twice. It is the gate that is
+#: still shut, and mapping it to ``capability_unavailable`` puts it in the
+#: ``terminal_capability_absent`` disposition — recorded as a result, attempted
+#: once, and not retried. A run against a model nobody may call yet should
+#: produce 220 honest refusals quickly, not 660 attempts.
+ERROR_TYPE_FOR_A_CONVERSATION_THAT_STOPPED: dict[str, str] = {
+    "cancelled": "cancelled",
+    "paid_call_refused": "capability_unavailable",
+    "time_limit_reached": "task_wall_time_exhausted",
+    "tool_call_limit_reached": "tool_budget_exhausted",
+    "tool_desk_broke": "runner_internal_error",
+    "limit_missing": "runner_internal_error",
+}
 
 
 class AgenticV2IsolatedFixtureRunner:
@@ -353,13 +409,32 @@ def _stop_process(process, process_group: int | None) -> None:
 
 
 class AgenticV2ScriptedRunner:
-    """Exercise the V2 state machine without constructing a model client."""
+    """Exercise the V2 state machine without constructing a model client.
+
+    Two things can decide which tool is called next. ``scripted_calls`` is a
+    list written in advance, which is how every test and every probe in this
+    repository drives a run today. ``conversation`` is a model choosing, and it
+    is the seam the 220-task run needs: a callable handed the task prompt and
+    this run's own dispatch function, returning something that reports how it
+    ended and, if it ended by committing, the finalize result.
+
+    Everything either one passes through is the same — the same backend
+    admission, the same identity check, the same chain appends, the same
+    verification. That is the reason the seam is a parameter here rather than a
+    second runner elsewhere: a run place whose containment is decided in two
+    files has no containment anybody can read.
+
+    The class keeps its name. ``scripted`` is now the narrower of its two
+    modes, but renaming a class this heavily tested would be churn dressed as
+    tidiness.
+    """
 
     def __init__(
         self,
         *,
         backend_factory: Callable[..., AgenticV2Backend],
-        scripted_calls: Iterable[Mapping[str, Any]],
+        scripted_calls: Iterable[Mapping[str, Any]] = (),
+        conversation: Optional[Callable[[str, Callable[..., Any]], Any]] = None,
         profile: Mapping[str, Any],
         budget_caps: Optional[Mapping[str, Any]] = None,
         cancel_requested: Optional[Callable[[], bool]] = None,
@@ -369,8 +444,16 @@ class AgenticV2ScriptedRunner:
     ):
         if not callable(backend_factory):
             raise ValueError("agentic v2 backend_factory is required")
+        if conversation is not None and not callable(conversation):
+            raise ValueError("agentic v2 conversation must be callable")
         self.backend_factory = backend_factory
         self.scripted_calls = tuple(dict(call) for call in scripted_calls)
+        self.conversation = conversation
+        if self.conversation is not None and self.scripted_calls:
+            raise ValueError(
+                "a run is driven by a script or by a model, not both; two call "
+                "sources means no reading of the record says which chose"
+            )
         self.profile = AgenticV2Profile.from_mapping(profile)
         self.budget_caps = _validate_budget_caps(budget_caps)
         self.cancel_requested = cancel_requested or (lambda: False)
@@ -578,31 +661,72 @@ class AgenticV2ScriptedRunner:
                 record_wall_time=False,
             )
             current_state = initial_state
-            for call in self.scripted_calls:
+            #: Set by the bookkeeping when it ends a run, and read afterwards.
+            #:
+            #: Raising is enough for a scripted run, whose loop is right here.
+            #: It is not enough for a conversation: the loop in
+            #: :mod:`core.agentic_v2_conversation` catches anything a tool desk
+            #: throws and reports ``tool_desk_broke``, which is correct when the
+            #: desk really broke and wrong when the desk deliberately ended the
+            #: run. So the ending is written down before it is thrown, and the
+            #: written ending wins -- the reason a model's bad arguments are
+            #: reported as bad arguments rather than as this harness failing.
+            pending_ending: Optional[dict] = None
+
+            def dispatch_one(*, call_id: str, name: str, arguments: Any):
+                """One tool call, with the bookkeeping every call source owes.
+
+                The cancel check, the deadline, the state commitment and the two
+                chain appends happen here rather than once per caller, because a
+                caller that skipped one of them would produce a record that
+                looks like the others and is not.
+
+                Whether a *failed* tool ends the run is not a policy choice made
+                here -- it is what the trace schema already requires.
+                :func:`core.agentic_v2_provenance.verify_agentic_v2_result`
+                refuses any trace in which a tool event follows a tool result
+                with ``ok`` false, so a run that continued past a failure could
+                not produce a verifiable record of itself. Ending inside the
+                shared bookkeeping makes that structurally impossible rather
+                than merely unlikely.
+
+                It matters that the ending carries the *tool's* error. A run
+                that kept going and then failed verification would be caught by
+                the broad handler at the end of :meth:`run` and reported as
+                ``runner_internal_error``, which the ledger buckets as a runner
+                defect -- so a model that passed bad arguments would be recorded
+                as this harness being broken. The cost of the rule is real and
+                belongs where a reader will meet it: under this schema a model
+                gets one tool mistake per task, and the conversation loop's
+                ability to show it an error and let it choose again cannot
+                actually be used. Changing that means changing the trace
+                schema, which is a separate and reviewable thing to do.
+                """
+                nonlocal current_state, pending_ending
                 if self.cancel_requested():
                     lifecycle.transition(LifecycleState.CANCELLED)
-                    return finish(_failure(
+                    pending_ending = _failure(
                         "cancelled", lifecycle, audit_chain, public_chain,
                         stage="control",
-                    ))
+                    )
+                    raise _EndTheRun(pending_ending)
                 if self.clock() >= deadline:
                     lifecycle.transition(LifecycleState.FAILED)
-                    return finish(_failure(
+                    pending_ending = _failure(
                         "task_wall_time_exhausted",
                         lifecycle,
                         audit_chain,
                         public_chain,
                         stage="control",
-                    ))
+                    )
+                    raise _EndTheRun(pending_ending)
                 dispatch = dispatcher.dispatch(
-                    call_id=str(call.get("call_id", "")),
-                    name=str(call.get("name", "")),
-                    arguments=call.get("arguments"),
+                    call_id=call_id, name=name, arguments=arguments
                 )
                 request = {
-                    "call_id": str(call.get("call_id", "")),
-                    "name": str(call.get("name", "")),
-                    "arguments": deepcopy(call.get("arguments")),
+                    "call_id": call_id,
+                    "name": name,
+                    "arguments": deepcopy(arguments),
                 }
                 state_commitment = (
                     dispatch.result.get("state_after_sha256")
@@ -632,31 +756,83 @@ class AgenticV2ScriptedRunner:
                 if dispatch.result.get("ok") is not True:
                     if not lifecycle.terminal:
                         lifecycle.transition(LifecycleState.FAILED)
-                    return finish(_failure(
+                    pending_ending = _failure(
                         str(dispatch.result.get("error_type") or "tool_error"),
                         lifecycle,
                         audit_chain,
                         public_chain,
                         stage="runtime",
-                    ))
-                if self.clock() >= deadline:
-                    failure_lifecycle = lifecycle
-                    if not lifecycle.terminal:
-                        lifecycle.transition(LifecycleState.FAILED)
-                    elif lifecycle.state is not LifecycleState.FAILED:
-                        failure_lifecycle = AgenticV2Lifecycle(
-                            LifecycleState.FAILED
+                    )
+                    raise _EndTheRun(pending_ending)
+                return dispatch
+
+            def deadline_after_call() -> None:
+                """The task's own wall clock, checked once a call has landed.
+
+                Separate from the check inside ``dispatch_one`` because it runs
+                at a different moment: after the call's result has been judged,
+                and before a ``finalize`` is honoured. A task whose answer
+                arrives past its deadline did not finish in time.
+                """
+                if self.clock() < deadline:
+                    return
+                failure_lifecycle = lifecycle
+                if not lifecycle.terminal:
+                    lifecycle.transition(LifecycleState.FAILED)
+                elif lifecycle.state is not LifecycleState.FAILED:
+                    failure_lifecycle = AgenticV2Lifecycle(
+                        LifecycleState.FAILED
+                    )
+                raise _EndTheRun(_failure(
+                    "task_wall_time_exhausted",
+                    failure_lifecycle,
+                    audit_chain,
+                    public_chain,
+                    stage="control",
+                ))
+
+            try:
+                if self.conversation is not None:
+                    conversation = self.conversation(task_prompt, dispatch_one)
+                    # The bookkeeping's own ending outranks the loop's verdict.
+                    # The loop saw an exception come out of the desk and called
+                    # it a broken desk; this is the desk, and it knows why it
+                    # stopped.
+                    if pending_ending is not None:
+                        return finish(pending_ending)
+                    stop_reason = str(
+                        getattr(
+                            getattr(conversation, "stop_reason", ""), "value", ""
                         )
-                    return finish(_failure(
-                        "task_wall_time_exhausted",
-                        failure_lifecycle,
-                        audit_chain,
-                        public_chain,
-                        stage="control",
-                    ))
-                if dispatch.finalized:
-                    result = dict(dispatch.terminal_result or {})
-                    break
+                    )
+                    if getattr(conversation, "produced_an_answer", False):
+                        deadline_after_call()
+                        result = dict(conversation.final_result or {})
+                    else:
+                        if not lifecycle.terminal:
+                            lifecycle.transition(LifecycleState.FAILED)
+                        return finish(_failure(
+                            ERROR_TYPE_FOR_A_CONVERSATION_THAT_STOPPED.get(
+                                stop_reason, "finalize_not_called"
+                            ),
+                            lifecycle,
+                            audit_chain,
+                            public_chain,
+                            stage="runtime",
+                        ))
+                else:
+                    for call in self.scripted_calls:
+                        dispatch = dispatch_one(
+                            call_id=str(call.get("call_id", "")),
+                            name=str(call.get("name", "")),
+                            arguments=call.get("arguments"),
+                        )
+                        deadline_after_call()
+                        if dispatch.finalized:
+                            result = dict(dispatch.terminal_result or {})
+                            break
+            except _EndTheRun as ending:
+                return finish(ending.envelope)
             if result is None:
                 if not lifecycle.terminal:
                     lifecycle.transition(LifecycleState.FAILED)

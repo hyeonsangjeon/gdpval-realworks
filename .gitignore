@@ -256,6 +256,12 @@ tasks/0822_saturday/*
 # against -- so a cohort quietly edited after seeing a score fails here rather
 # than passing unnoticed.
 !tasks/0822_saturday/v2_run_preregistration.json
+# The four probes that overturned the recorded block. A correction is worth less
+# than the thing it was corrected by: the prose says a gpt-5.4 deployment
+# answers in this box's own tenant, and this is the endpoint-by-endpoint record
+# that says so, including the token counts the 0.0018 USD is derived from and
+# the four things it deliberately does not prove.
+!tasks/0822_saturday/model_reachability_survey.json
 !tasks/0828_friday/
 tasks/0828_friday/*
 !tasks/0828_friday/TASK_PER_TASK_COST_RECEIPTS.md

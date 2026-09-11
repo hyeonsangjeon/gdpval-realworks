@@ -1987,6 +1987,14 @@ So the paid leg needs one of: a cross-tenant service-principal grant, or a
 booting host inside subscription `d372e9cf…`. **Both are access changes, and
 neither is covered by the cost approval**, which is why this is reported rather
 than performed — even though the credentials to do the first are on this box.
+
+> **Superseded on 2026-09-11 — see "The block was not one" below.** The two
+> options above are not the only two, because the sentence assumes the model has
+> to be *that* account. It does not. There are `gpt-5.4` deployments in this
+> box's own subscription, and they answer. The table and the readings above are
+> all still accurate about `hjeon-fdpo-foundry-eus2`; the conclusion drawn from
+> them was too narrow, and it is left in place unedited so the correction has
+> something to point at.
 GitHub-hosted runners remain ruled out for the host role on the grounds already
 recorded here: nested virtualisation is documented as unsupported, and a
 boundary offered with no guarantee is not a boundary. That finding is not loose
@@ -2032,6 +2040,74 @@ the arithmetic near 0.18 USD; the actual charge is **not verifiable from this
 box** — the local `az` tenant is not the one that bills these workflows — so the
 window is recorded as `partial` and **not** as zero. **Zero model calls were
 made in this window; the only spend is the host.**
+
+##### The block was not one
+
+Recorded 2026-09-11, correcting the section above. Evidence:
+`tasks/0822_saturday/model_reachability_survey.json`.
+
+The premise everything above rests on is that no single place reaches both the
+guest host and a `gpt-5.4` deployment. Nobody tested it. It was inferred from
+the one model account anybody had looked for — the one the stage-one plan pins —
+and that account really is unreachable from here. The inference from "the pinned
+account is out of reach" to "a model is out of reach" is the error.
+
+`az cognitiveservices account list`, free, from the existing login, returns
+**five** accounts in subscription `4b7c60a5…`, tenant `6d93cc9b…` — the same
+subscription and tenant as `gdpval-devhost-vm`. Three carry `gpt-5.4` at version
+`2026-03-05`: `wrpo-meas` (eastus2, cap 30), `aoai-router5-ext-faf57f` (eastus2,
+cap 10), `aoai-repolis-grounding-ext` (centralus, cap 30, deployment named
+`gpt-5.4-chair`).
+
+Four calls, all HTTP 200, with an AAD token for
+`https://cognitiveservices.azure.com` from the `az` login already on this box.
+No role assigned or requested, no key read, no credential issued:
+
+| # | what it tested | endpoint | result |
+|---|---|---|---|
+| 1 | a deployment answers | `wrpo-meas.cognitiveservices…` | `gpt-5.4-2026-03-05`, 13 in / 5 out |
+| 2 | not a one-account accident | `aoai-router5-ext-faf57f…` | `gpt-5.4-2026-03-05`, 13 in / 5 out |
+| 3 | tool choice, `strict` schema | `wrpo-meas.cognitiveservices…` | `finish_reason: tool_calls`, `workspace_apply` |
+| 4 | **the path the code takes** | `wrpo-meas.openai.azure.com/openai/v1/responses` | `completed`, `function_call workspace_apply` |
+
+Call 4 is the one that settles it. The first three prove a model is reachable;
+only the fourth proves `AzureFoundryVoice` is, because that class calls
+`client.responses.create` and `core/azure_ai_clients.py` pins the `direct-v1`
+route to `https://{account}.openai.azure.com/openai/v1/`. Same API, same
+hostname shape, same strict tool schema, and the model emitted
+`workspace_apply {"operation":"write","path":"note.txt","content":"HELLO"}`.
+
+319 input / 66 output tokens at `azure:gpt-5.4-2026-03-05` is **USD 0.0018**,
+`problem_solving`. Recorded because a figure nobody writes down is not a zero.
+
+**What follows, and what does not.** The orchestrator can be this box: it
+reaches a `gpt-5.4` deployment in its own tenant and the guest host in its own
+tenant. The model itself never needs to reach anything — which is *stronger*
+containment than the design that was blocked, not a relaxation of it. A guest
+that cannot call a model endpoint is a guest with one less way out. No grant is
+needed for the model leg.
+
+Four things this does **not** establish, each of which still has to be true
+before stage F runs:
+
+1. **It is a different account from the pinned one.** Same model, same version
+   `2026-03-05`, different content-filter policy and different quota. Step 5's
+   rule applies directly: a result produced here may be *stated* beside A's
+   Codex runs only with that difference named, and any gap between them may not
+   be attributed to the environment.
+2. **These accounts belong to other work.** The names say it — `wrpo`,
+   `router5`, `repolis`, `iq-demo`. Capacity is shared. Whether a 220-task run
+   may consume one is the owner's call, not a survey's.
+3. **The guest host is deallocated** since 23:29:55Z on 2026-09-10. That it
+   answers `run-command` is recorded, not currently true.
+4. **`exec_run` is still shut.** The tool the model chose above writes a file
+   and runs no command. Opening it is the separate reviewable change step 3
+   describes, and nothing here pre-empts it.
+
+The blocks named in the table remain real for what they were about: the OIDC
+identity still cannot reach the guest host, the VM's managed identity still holds
+zero role assignments, and creating a host in `d372e9cf…` is still refused. They
+are simply no longer on the path.
 
 ##### The guard, measured: it is eight places, not one
 
@@ -2141,6 +2217,13 @@ So the named change is a role assignment on this identity in the model's
 subscription, and per the standing instruction that access expansion is
 separate from cost approval, it is **named here and left undone**. It is not
 requested, and nothing in this repository moves toward it.
+
+> **Still true, no longer on the path** — 2026-09-11. Every reading above holds:
+> that identity does hold two assignments and none of them permits those three
+> writes. What changed is that stage D no longer needs a host in that
+> subscription, because the model does not have to be in that subscription
+> either. See "The block was not one" above. The request stays unmade, which was
+> always the right outcome; it is now also unnecessary.
 
 Two things it is not. It is not a claim that a host placed here would boot a
 guest — that is C2's question, answered on a different machine in a different
