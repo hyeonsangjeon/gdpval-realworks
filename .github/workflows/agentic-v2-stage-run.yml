@@ -90,9 +90,22 @@ on:
       run_id:
         description: >-
           Names the journal's run and namespaces every ledger call id. Leave
-          empty for a fresh run; reuse an earlier one to resume it. Each shard
-          appends its own number, so resuming a stage resumes every piece of it
-          without two jobs writing to one journal.
+          empty for a fresh run. To resume, give this AND
+          resume_from_github_run — this one alone restores nothing, so the
+          journal is absent, no task is found complete and the whole cohort is
+          paid for a second time. Each shard appends its own number, so
+          resuming a stage resumes every piece of it without two jobs writing
+          to one journal.
+        type: string
+        default: ''
+        required: false
+      resume_from_github_run:
+        description: >-
+          The GitHub run id — the number in the run's URL — whose artifacts
+          hold the journal to carry on from. Nothing can infer this: run_id is
+          a journal name somebody chose, not a number GitHub assigned. Give it
+          with run_id or not at all; either one alone is a full re-pay, and the
+          dry run refuses that pairing before the paid job starts.
         type: string
         default: ''
         required: false
@@ -131,6 +144,28 @@ jobs:
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
+      # Before `setup-python` and before `pip install`, because this refuses a
+      # dispatch that was typed wrong and there is no reason to spend two
+      # minutes on dependencies first. `python3` is what the runner ships; the
+      # script imports nothing outside the standard library, and a test holds
+      # it to that so this placement stays safe.
+      #
+      # What it catches: half a resume. Restoring the directory without the
+      # run id, or the run id without the restore, both end as a full second
+      # run of the cohort at full price, and neither raises anything — the
+      # journal is simply empty or written under another name, and a correct
+      # driver reading one runs every task.
+      - name: Check the resume inputs are a pair
+        env:
+          RUN_ID: ${{ inputs.run_id }}
+          RESUME_FROM: ${{ inputs.resume_from_github_run }}
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          python3 scripts/check_agentic_v2_resume_inputs.py \
+            --run-id "$RUN_ID" \
+            --resume-from-github-run "$RESUME_FROM"
+
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.10'
@@ -161,6 +196,12 @@ jobs:
       # was met, because none of them touched the paid branch. It holds the
       # part of the paid setup a free job can reach, and it is the reason the
       # dry run's claim is now narrower than it was.
+      #
+      # The resume pair is held here too, even though the guard for it runs
+      # above this step and needs nothing installed. The guard checks a
+      # dispatch; these check that the guard is still wired to the job and that
+      # the paid job still restores what the guard assumes it restores. The two
+      # defects before this one were both a correct function nobody called.
       - name: Test the runner
         run: |
           set -euo pipefail
@@ -174,7 +215,9 @@ jobs:
             tests/test_agentic_v2_reference_staging.py \
             tests/test_agentic_v2_preregistration.py \
             tests/test_run_agentic_v2_stage.py \
-            tests/test_the_dry_run_certified_a_path_it_never_reached.py
+            tests/test_the_dry_run_certified_a_path_it_never_reached.py \
+            tests/test_a_resume_that_only_half_arrives_pays_twice.py \
+            tests/test_the_report_was_handed_a_binding_not_a_receipt.py
 
       # No charge. The revision is the one the catalogue was built from and the
       # one every figure in the plan rests on; the binding hashes the wording it
@@ -277,6 +320,59 @@ jobs:
         run: |
           set -euo pipefail
           echo "SHARD_SLUG=${SHARD//\//-of-}" >> "$GITHUB_ENV"
+
+      # ── Resuming, when a resume was asked for ──────────────────────────
+      #
+      # The journal and the ledger are written under `agentic-v2-run/`, which
+      # leaves this runner only as the artifact uploaded at the end. Until this
+      # step existed, nothing brought either one back, so a dispatch carrying a
+      # `run_id` started against an empty directory: no task was found
+      # complete, the whole cohort ran, and the whole cohort was charged for a
+      # second time. The run printed the run id it was given while doing it, so
+      # its own log read like a resume.
+      #
+      # `name:` and not `pattern:`, because this shard resumes its own piece
+      # and nobody else's. The slug above is what makes the two names line up
+      # across runs: shard `3/17` was `3-of-17` then and is `3-of-17` now.
+      #
+      # The ledger comes back with it, in the same directory and the same
+      # artifact. That is deliberate — a resumed run that opened a fresh ledger
+      # would leave the earlier spend in a file nothing else reads, and the
+      # stage's cost would have to be added up by hand across runs or, more
+      # likely, quietly under-reported.
+      - name: Restore the run being resumed
+        if: ${{ inputs.resume_from_github_run != '' }}
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: agentic-v2-${{ inputs.stage }}-shard-${{ env.SHARD_SLUG }}
+          path: agentic-v2-run/
+          run-id: ${{ inputs.resume_from_github_run }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # A download that matched nothing does not always fail, and a directory
+      # that arrived empty is indistinguishable from a fresh run once the
+      # driver starts reading it. So the journal is checked for by name. The
+      # run id is `<run_id>-shard-<slug>` below, and the journal is scoped by
+      # it, so a file that arrived under the wrong name is caught here too --
+      # the driver would find no rows in it and run everything.
+      - name: Refuse to carry on from nothing
+        if: ${{ inputs.resume_from_github_run != '' }}
+        env:
+          RESUME_FROM: ${{ inputs.resume_from_github_run }}
+        run: |
+          set -euo pipefail
+          JOURNAL="$GITHUB_WORKSPACE/agentic-v2-run/journal.jsonl"
+          if [ ! -f "$JOURNAL" ]; then
+            echo "refusing: a resume from GitHub run $RESUME_FROM was asked" >&2
+            echo "for, but no journal.jsonl arrived for shard $SHARD_SLUG." >&2
+            echo "Starting anyway would run and pay for the whole cohort a" >&2
+            echo "second time. Check that run $RESUME_FROM has an artifact" >&2
+            echo "named agentic-v2-${{ inputs.stage }}-shard-$SHARD_SLUG," >&2
+            echo "and that it has not passed its retention window." >&2
+            exit 1
+          fi
+          echo "Resuming shard $SHARD_SLUG from run $RESUME_FROM:"
+          echo "  $(wc -l < "$JOURNAL") journal rows restored"
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:

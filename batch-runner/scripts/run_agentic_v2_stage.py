@@ -99,6 +99,10 @@ from core.agentic_v2_stage_one_budget import (  # noqa: E402
     price_one_stage,
     run_stage_one_preflight,
 )
+from core.cost_receipts import (  # noqa: E402
+    BUCKET_PROBLEM_SOLVING,
+    STATUS_UNAVAILABLE,
+)
 from core.execution_envelope_cost import (  # noqa: E402
     CostAssumptions,
     load_price_table,
@@ -431,24 +435,139 @@ def open_the_ledger(into: Path, *, run_id: str):
     return CostReceiptLedger(str(into / "cost_receipts.sqlite3"), run_id=run_id)
 
 
+def settle_into_a_receipt(ledger, *, task_id: str, model_turns) -> dict[str, Any]:
+    """Write one task's calls to the ledger and return that task's receipt.
+
+    Two returns are involved and they are not the same object.
+    :func:`~core.agentic_v2_cost_binding.bind_run_to_ledger` returns a note of
+    what it wrote -- call ids, bucket -- which is useful to a caller that wants
+    to log the write, and is not a receipt. The receipt is built by the ledger,
+    from every row standing against the task, and carries the ``status`` the
+    report row is assembled around.
+
+    The paid run returned the first where the second was wanted, and the run
+    died in the report with ``None is not a receipt status`` -- on task one of
+    five, after the calls had been made and charged for. So this is one function
+    with two call sites, like :func:`open_the_ledger` above it: the dry run puts
+    a fabricated turn through it and hands the result to the same report
+    builder, which makes the shape a free check rather than a paid one.
+
+    ``when_empty`` is ``unavailable`` deliberately. Reaching here means the task
+    ran, so ``not_run`` would be a false sentence; and ``complete`` would state
+    a real ``$0`` for a task whose guest was up and whose host bill this process
+    cannot read. An amount that is not known is not zero.
+    """
+    bind_run_to_ledger(ledger, task_id=task_id, model_turns=model_turns)
+    return ledger.receipt_for(
+        task_id,
+        bucket=BUCKET_PROBLEM_SOLVING,
+        when_empty=STATUS_UNAVAILABLE,
+    ).as_dict()
+
+
 def the_paid_setup_a_dry_run_can_reach(stage: str) -> list[str]:
     """Run the paid path's setup against a throwaway directory.
 
     Returns what broke, empty when nothing did. Called from the dry run, so the
     free job pays for this class of mistake instead of the paid one.
 
-    It is deliberately not much: the ledger is the only part of the paid setup
+    It is deliberately not much: the accounting is the part of the paid setup
     that needs no Azure identity, and the free job holds none. The voice, the
     route, the deployment and the conversation cannot be reached from here and
     are not claimed to be. Saying which is the other half of the fix -- the
     sentence this used to print claimed all of them.
+
+    What it does reach is the whole money path from a finished task to a report
+    row: ledger, binding, receipt, metrics, row. Both paid runs so far died in
+    that stretch -- once opening the ledger, once handing the report a binding
+    where a receipt was wanted -- and the second death came after the calls were
+    made. Every line below runs on fabricated turns, so the shape is settled
+    before a model is asked rather than after.
     """
+    from core.agentic_v2_cost_binding import ModelTurn
+    from core.agentic_v2_run_report import build_agentic_v2_metrics, build_result_row
+    from core.agentic_v2_task_journal import TaskStanding
+    from core.cost_receipts import CallUsage
+
+    # A task that made a call and succeeded, and a task that made none and
+    # ended the way the first paid task actually ended. The second is the
+    # `when_empty` branch, which nothing else exercises; both are row shapes the
+    # report builds different halves of, and it was row-building that killed the
+    # run. The file list goes with the ending on purpose -- a successful row
+    # with no files and a failed row with files are both refused.
+    rehearsals = (
+        (
+            "a-task-that-called-the-model",
+            (
+                ModelTurn(
+                    call_id="dry-run:a-task-that-called-the-model:1:call-1",
+                    usage=CallUsage(input_tokens=100, output_tokens=10),
+                    provider="azure",
+                    requested_model="dry-run-deployment",
+                    deployment="dry-run-deployment",
+                    resolved_model="dry-run-deployment",
+                ),
+            ),
+            {"success": True},
+            ("deliverables/a-task-that-called-the-model/answer.md",),
+        ),
+        (
+            "a-task-that-called-nothing",
+            (),
+            {"success": False, "error": "capability_unavailable"},
+            (),
+        ),
+    )
+
     with tempfile.TemporaryDirectory(prefix=f"agentic-v2-{stage}-dry-") as scratch:
         try:
             ledger = open_the_ledger(Path(scratch), run_id="dry-run")
         except Exception as broke:  # noqa: BLE001 - reported, not handled
             return [f"the paid run's cost ledger cannot be opened: {broke!r}"]
-        ledger.close()
+        try:
+            for task_id, turns, record, files in rehearsals:
+                try:
+                    receipt = settle_into_a_receipt(
+                        ledger, task_id=task_id, model_turns=turns
+                    )
+                except Exception as broke:  # noqa: BLE001 - reported, not handled
+                    return [
+                        f"a finished task cannot be settled into a receipt: {broke!r}"
+                    ]
+                standing = TaskStanding(
+                    task_id=task_id,
+                    attempts=1,
+                    abandoned_attempts=0,
+                    last_closed=None,
+                    decision="dry-run",
+                    reason="rehearsal",
+                )
+                try:
+                    metrics = build_agentic_v2_metrics(
+                        record,
+                        standing=standing,
+                        task_wall_time_ms=1.0,
+                        receipt=receipt,
+                    )
+                    build_result_row(
+                        record,
+                        task_id=task_id,
+                        standing=standing,
+                        sector="dry run",
+                        occupation="dry run",
+                        instruction="dry run",
+                        deliverable_files=files,
+                        latency_ms=1.0,
+                        metrics=metrics,
+                        receipt=receipt,
+                    )
+                except Exception as broke:  # noqa: BLE001 - reported, not handled
+                    return [
+                        "a settled task cannot be turned into a report row: "
+                        f"{broke!r}"
+                    ]
+        finally:
+            ledger.close()
     return []
 
 
@@ -666,8 +785,9 @@ def main() -> int:
         print(
             "Dry run. Nothing was asked and nothing was spent. Every condition "
             "this job can reach is met: the plan, the seal, the cohort, the "
-            "amounts, the staged inputs, and the ledger the paid run settles "
-            "into.\n\n"
+            "amounts, the staged inputs, and the whole accounting path a "
+            "finished task takes -- ledger, binding, receipt, metrics, report "
+            "row -- rehearsed on fabricated turns.\n\n"
             "It cannot reach the model. This job holds no Azure identity, so "
             "the route, the deployment and the conversation itself are checked "
             "in the paid job and nowhere else. A green dry run is not a "
@@ -956,7 +1076,11 @@ def main() -> int:
                         spoke.resolved_model if spoke is not None else None
                     ),
                 )
-                return bind_run_to_ledger(
+                # Through the same helper the dry run puts a fabricated turn
+                # through, for the same reason the ledger is opened through one:
+                # the paid path and the path that certifies it must be the same
+                # line of code.
+                return settle_into_a_receipt(
                     ledger, task_id=task.task_id, model_turns=turns
                 )
 
