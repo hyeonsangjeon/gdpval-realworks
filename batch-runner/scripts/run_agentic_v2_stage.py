@@ -51,7 +51,7 @@ import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable, Mapping
 
 BATCH_RUNNER_ROOT = Path(__file__).resolve().parents[1]
 if str(BATCH_RUNNER_ROOT) not in sys.path:
@@ -75,7 +75,7 @@ from core.agentic_v2_manifest_binding import (  # noqa: E402
     bind_stage,
     binding_record,
 )
-from core.agentic_v2_preregistration import STAGE_SIZES  # noqa: E402
+from core.agentic_v2_preregistration import STAGE_SIZES, STOP_RULES  # noqa: E402
 from core.agentic_v2_reference_staging import (  # noqa: E402
     MODEL_INPUT_PREFIX,
     TaskStaging,
@@ -86,7 +86,11 @@ from core.agentic_v2_reference_staging import (  # noqa: E402
 from core.agentic_v2_route_check import (  # noqa: E402
     check_route_is_the_one_the_plan_fixed,
 )
-from core.agentic_v2_run_driver import DriverRefused, run_manifest  # noqa: E402
+from core.agentic_v2_run_driver import (  # noqa: E402
+    DriverRefused,
+    StoppedEarly,
+    run_manifest,
+)
 from core.agentic_v2_sharding import ShardRefused  # noqa: E402
 from core.agentic_v2_sharding import parse as parse_shard  # noqa: E402
 from core.agentic_v2_stage_one_budget import (  # noqa: E402
@@ -181,6 +185,137 @@ def read_pinned_dataset(parquet: Path) -> list[DatasetRow]:
         )
         for row in frame.itertuples()
     ]
+
+
+def names_that_answered(voices: Iterable[Any]) -> tuple[str, ...]:
+    """Every distinct model name that came back, in sorted order.
+
+    A voice that never spoke holds ``None`` and is not a name. A voice that
+    spoke to a reply which named nothing holds ``""`` -- also not a name, and
+    deliberately not treated as one: see :func:`answered_by_something_else`.
+    """
+    return tuple(
+        sorted(
+            {
+                str(voice.resolved_model)
+                for voice in voices
+                if voice is not None and voice.resolved_model
+            }
+        )
+    )
+
+
+def answered_by_something_else(
+    voices: Iterable[Any], *, pinned_model: str
+) -> tuple[str, ...]:
+    """Names that came back and are not the one the plan pinned.
+
+    The one computation behind both the halt and the record, so the run cannot
+    stop for a reason its own record disagrees with.
+
+    Three states, and only one of them is this:
+
+    ``matched``
+        the reply named the pinned model. Nothing to do.
+    ``differed``
+        the reply named something else. The plan's first stop condition, and
+        the run must not continue: every result after it would belong to a
+        model the pre-registration does not describe.
+    ``not reported``
+        the reply named nothing at all -- ``resolved_model`` is ``""``. Not
+        counted here, so it does not halt the run. The rule is written about a
+        name that *differs*, and a provider omitting a field is not a model
+        switch; halting on it would end a paid stage over a missing header.
+        It is a real gap in the evidence all the same, so it is counted in the
+        record under ``attempts_that_reported_no_model`` rather than passed
+        over. Recorded, not enforced -- and the record says which.
+
+    An empty ``pinned_model`` returns nothing. A plan that pins no name has no
+    claim to check, and inventing one here would make this function the thing
+    that decided what the run was allowed to be.
+    """
+    if not pinned_model:
+        return ()
+    return tuple(
+        name for name in names_that_answered(voices) if name != pinned_model
+    )
+
+
+def model_calls_record(
+    voices: Mapping[tuple[str, int], Any], *, pinned_model: str
+) -> dict:
+    """Every paid call, as the voice that made it recorded it.
+
+    The sqlite ledger beside this is the bill. This is the evidence the bill
+    was made from, and it is kept because the two are computed from different
+    things and disagreement between them is worth being able to see: the
+    ledger prices from the committed price list, and the voice prices from the
+    same list keyed by the name the reply gave.
+
+    ``resolved_model`` is the point of it. A deployment is an alias, and what
+    answers behind it can change without the alias changing -- so "which model
+    produced these 220 results" is not answered by the deployment name, and
+    after the run there is nowhere else to look. Recorded per attempt rather
+    than once for the run because a run that was answered by two different
+    models is exactly the case worth catching, and a single field could not
+    show it.
+
+    ``spent_usd`` is ``None`` when any call in the attempt had no price, and
+    that is deliberate: a total that quietly drops the calls it could not
+    price reads as the whole bill and is not one. Missing is partial, never
+    zero.
+
+    No prompt and no reply text -- token counts, names and amounts only, the
+    same rule the rest of this script follows.
+    """
+    per_attempt: list[dict[str, Any]] = []
+    unpriced = 0
+    unnamed = 0
+    spoke = [voice for voice in voices.values() if voice is not None]
+    for (task_id, attempt), voice in sorted(voices.items()):
+        if voice is None:
+            continue
+        rows = voice.ledger()
+        spent = voice.spent_usd()
+        unpriced += sum(1 for row in rows if row.get("price_missing"))
+        if voice.resolved_model == "":
+            unnamed += 1
+        per_attempt.append(
+            {
+                "task_id": task_id,
+                "attempt": attempt,
+                "resolved_model": voice.resolved_model,
+                "calls": rows,
+                "spent_usd": None if spent is None else str(spent),
+            }
+        )
+    differed = answered_by_something_else(spoke, pinned_model=pinned_model)
+    return {
+        "what_this_is": (
+            "one row per model call, as the voice that made it saw it. The "
+            "bill is the ledger; this is what the bill was made from"
+        ),
+        "per_attempt": per_attempt,
+        "pinned_model": pinned_model,
+        "models_that_answered": list(names_that_answered(spoke)),
+        "answered_by_something_else": list(differed),
+        "attempts_that_reported_no_model": unnamed,
+        "what_no_model_reported_means": (
+            "the reply carried no model name. The call happened and was "
+            "charged for; which model made it is not known and cannot be "
+            "recovered afterwards. This does not stop the run -- the stop "
+            "condition is written about a name that differs, and an omitted "
+            "field is not a model switch -- so it is counted here instead of "
+            "being passed over"
+        ),
+        "calls_with_no_price": unpriced,
+        "what_no_price_means": (
+            "the committed price list has no entry for the model the reply "
+            "named. The call happened and cost something; the amount is not "
+            "known here and is not zero. The tokens and the model name are "
+            "kept above, so it can be worked out once the list covers it"
+        ),
+    }
 
 
 #: What the fixture backend is, in words that survive being quoted.
@@ -410,6 +545,12 @@ def main() -> int:
     ceilings = ceilings_from(plan, chosen)
     connection = plan.get("azure_connection") or {}
     deployment = str((plan.get("model") or {}).get("deployment") or "")
+    # The name the plan says will answer, as opposed to the alias it will be
+    # asked through. The plan pins both and they are not the same fact: the
+    # deployment is the address, and this is the claim about who is behind it.
+    # Read here so the stop condition below has something to compare against;
+    # until now it was read only to print an estimate.
+    pinned_model = str((plan.get("model") or {}).get("resolved_model") or "")
     resource = str(connection.get("account") or "")
     profile = {
         "tool_contract_version": "2.0",
@@ -533,12 +674,24 @@ def main() -> int:
             attempts[task_id] = attempts.get(task_id, 0) + 1
             return attempts[task_id]
 
+        # Kept, rather than built and dropped. Each voice reads the model name
+        # out of every reply it gets, holds it, and refuses the run if a later
+        # reply names a different one -- so the voice is the only thing in the
+        # run that knows which model actually answered. It also prices each
+        # call against that name as it goes. Both were being thrown away with
+        # the voice at the end of the task, which left the receipt unable to
+        # answer the one question it exists to answer: what was this a bill
+        # for. Keyed by the budget's identity because that is the only handle
+        # ``voice_for`` is given, and ``TaskConversations`` files the same
+        # budget object under the task and attempt it belongs to.
+        voices_by_budget: dict[int, Any] = {}
+
         # One voice per task, built on that task's own budget. A single voice
         # reused across the stage would hold task one's ceiling for all of
         # them, and the later tasks would be refused by an ceiling that had
         # nothing to do with them. See build_runner_factory's docstring.
         def voice_for(budget):
-            return AzureFoundryVoice(
+            voice = AzureFoundryVoice(
                 client=managed.client,
                 deployment=deployment,
                 resource=resource,
@@ -547,6 +700,88 @@ def main() -> int:
                 max_output_tokens_per_turn=ceilings.max_written_tokens_per_turn,
                 request_timeout_seconds=ceilings.max_seconds,
                 prices=prices,
+            )
+            voices_by_budget[id(budget)] = voice
+            return voice
+
+        def voice_of(task_id: str, attempt: int):
+            """The voice that spoke for one attempt, or ``None``.
+
+            ``None`` for a rehearsal, and for an attempt refused before a voice
+            was ever built. Both are states where no model answered, so there
+            is no resolved model to report and saying so is correct.
+            """
+            budget = held.budgets.get((str(task_id), int(attempt)))
+            if budget is None:
+                return None
+            return voices_by_budget.get(id(budget))
+
+        # ── the plan's first stop condition ───────────────────────────────
+        #
+        # Rule 0: "the deployment or model reported back differs from the
+        # pinned one", which the plan writes out as "Stop at once if the model
+        # name or deployment name reported back differs from the one fixed
+        # above."
+        #
+        # It was written into the plan and implemented nowhere. The driver's
+        # own table of who enforces what attributed it to the model client,
+        # which is built before any reply exists and can only see the name
+        # being asked for -- so the half of the condition that says *reported
+        # back* had no reader anywhere in the run.
+        #
+        # Not rule 1, which is the neighbouring and different claim that a run
+        # switched on its own mid-conversation. The voice does hold that one:
+        # it raises when two replies in one conversation name two different
+        # models. What no part of the run held is the comparison against the
+        # name the plan pinned.
+        #
+        # That comparison needs two things which meet in this function and
+        # nowhere else: the name the plan pinned, and the names the replies
+        # carried. The voice sees only its own replies, and its guard is per
+        # conversation -- so two tasks answered by two different models pass
+        # every check inside both and arrive here as one experiment reported
+        # as one thing. This is the level the rule is written at, so this is
+        # where it is enforced.
+        #
+        # Wired into both seams on purpose, because they stop different
+        # amounts of spending:
+        #
+        #   cancel_requested  is read at the top of every model turn and
+        #                     before every tool call, so the task that saw the
+        #                     wrong name does not take another turn. This is
+        #                     the one that saves money.
+        #   stop_when         is read by the driver between tasks, so the run
+        #                     ends with `stopped_early` naming the rule
+        #                     instead of quietly finishing a manifest of
+        #                     cancelled tasks. This is the one that saves the
+        #                     record.
+        #
+        # Either alone is wrong in a way that matters. Cancelling without
+        # stopping leaves a run that halted looking like a run that completed;
+        # stopping without cancelling pays for the rest of the current task's
+        # turns before anyone looks.
+        def wrong_model_answered() -> tuple[str, ...]:
+            return answered_by_something_else(
+                voices_by_budget.values(), pinned_model=pinned_model
+            )
+
+        def cancel_requested() -> bool:
+            return bool(wrong_model_answered())
+
+        def stop_when(after_task: str):
+            differed = wrong_model_answered()
+            if not differed:
+                return None
+            return StoppedEarly(
+                rule_index=0,
+                rule=STOP_RULES[0],
+                detail=(
+                    f"the plan pins {pinned_model!r} and a reply came back "
+                    f"named {', '.join(repr(name) for name in differed)}. "
+                    "Every result after this point would belong to a model "
+                    "the pre-registration does not describe"
+                ),
+                after_task=after_task,
             )
 
         workspaces = into / "workspaces"
@@ -605,6 +840,7 @@ def main() -> int:
             profile=profile,
             conversations=held,
             attempt_of=attempt_of,
+            cancel_requested=cancel_requested,
             **(
                 {"voice": rehearsing}
                 if rehearsing is not None
@@ -626,6 +862,7 @@ def main() -> int:
                 outcome = held.outcome_of(task.task_id, attempt)
                 if outcome is None:
                     return None
+                spoke = voice_of(task.task_id, attempt)
                 turns = model_turns_of(
                     outcome,
                     run_id=run_id,
@@ -634,7 +871,25 @@ def main() -> int:
                     provider="azure",
                     requested_model=deployment,
                     deployment=deployment,
-                    resolved_model=None,
+                    # What the reply named, not what was asked for. Passing
+                    # None left the ledger's own column empty and priced the
+                    # call against the deployment alias instead -- which is
+                    # the right amount only if the two strings happen to
+                    # match, and the record kept nothing that would let anyone
+                    # check whether they did.
+                    #
+                    # If they do not match, these calls settle as
+                    # `price_missing`. That is the true state: the committed
+                    # price list has no entry for the model that answered, and
+                    # an amount worked out from a different model's rates is
+                    # not a smaller error than a missing one. It is also the
+                    # recoverable direction -- `model_calls` below keeps the
+                    # tokens and the name, so the amount can be worked out
+                    # later once the price list covers it, whereas a name
+                    # thrown away at the end of the task is gone.
+                    resolved_model=(
+                        spoke.resolved_model if spoke is not None else None
+                    ),
                 )
                 return bind_run_to_ledger(
                     ledger, task_id=task.task_id, model_turns=turns
@@ -647,6 +902,7 @@ def main() -> int:
             journal_path=into / "journal.jsonl",
             collect_into=into / "deliverables",
             receipt_for=receipt_for,
+            stop_when=stop_when,
             on_task=lambda task_id, row: print(
                 # `status`, not a `success` key -- the row is a report row and
                 # has never carried one, so the old `row.get("success")` read
@@ -687,6 +943,16 @@ def main() -> int:
         # record's `unmet_needs` says which tasks *want* files; this says which
         # got them. A result is read against this one.
         "reference_files": staging_record(stagings),
+        # Which model answered, per attempt, and what each call is known to
+        # have cost. The deployment name is in `chosen_settings` already; this
+        # is what came back, which is not the same fact.
+        "model_calls": model_calls_record(
+            {
+                key: voices_by_budget.get(id(budget))
+                for key, budget in held.budgets.items()
+            },
+            pinned_model=pinned_model,
+        ),
         "environment": environment_note(profile),
         "route_fingerprint": (
             rehearsal_is_not_a_run()

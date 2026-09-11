@@ -17,9 +17,11 @@ from core.agentic_v2_deliverable_collection import DELIVERABLE_ROOT
 from core.agentic_v2_preregistration import STOP_RULES
 from core.agentic_v2_run_driver import (
     CONSECUTIVE_RUNNER_DEFECTS_THAT_STOP_A_RUN,
+    RULES_A_CALLER_CAN_HAND_THIS_DRIVER,
     RULES_THIS_DRIVER_CANNOT_SEE,
     RULES_THIS_DRIVER_WATCHES,
     DriverRefused,
+    StoppedEarly,
     TaskToRun,
     run_manifest,
 )
@@ -106,15 +108,37 @@ def _run(tmp_path, tasks, script, **kwargs):
 
 def test_every_stop_rule_is_either_watched_or_accounted_for():
     watched = set(RULES_THIS_DRIVER_WATCHES)
+    handed = set(RULES_A_CALLER_CAN_HAND_THIS_DRIVER)
     unseen = set(RULES_THIS_DRIVER_CANNOT_SEE)
     assert watched & unseen == set()
-    assert watched | unseen == set(range(len(STOP_RULES)))
+    assert watched & handed == set()
+    assert handed & unseen == set()
+    assert watched | handed | unseen == set(range(len(STOP_RULES)))
 
 
-def test_the_driver_watches_only_two_of_the_eight():
+def test_the_driver_watches_only_two_of_the_eight_on_its_own():
     """Claiming all eight would be the easy and wrong thing to do."""
     assert len(RULES_THIS_DRIVER_WATCHES) == 2
     assert len(STOP_RULES) == 8
+
+
+def test_the_rule_a_caller_can_hand_it_is_not_counted_as_watched():
+    """A seam that a caller may decline to use is not the same as enforcement.
+
+    Rule 0 moved out of "cannot see" when ``stop_when`` was added, and the
+    temptation at that moment is to move it into "watches" — which would read
+    as three rules enforced whatever the caller does. It is one rule enforced
+    when the caller wires it, and the two dicts keep those apart.
+
+    Rule 1 stays where it was. It is the neighbouring claim — a run switching
+    model on its own — and the voice really does hold that one, raising when
+    two replies in one conversation name two different models. Rule 0 is the
+    comparison against the pinned name, which nothing held.
+    """
+    assert set(RULES_A_CALLER_CAN_HAND_THIS_DRIVER) == {0}
+    assert 0 not in RULES_THIS_DRIVER_WATCHES
+    assert 0 not in RULES_THIS_DRIVER_CANNOT_SEE
+    assert 1 in RULES_THIS_DRIVER_CANNOT_SEE
 
 
 # ── the ordinary run ─────────────────────────────────────────────────────
@@ -518,3 +542,75 @@ def test_the_callback_sees_each_row_as_it_lands(tmp_path):
     seen = []
     _run(tmp_path, _tasks(3), _success, on_task=lambda tid, row: seen.append(tid))
     assert seen == ["task-0001", "task-0002", "task-0003"]
+
+
+# ── the rule a caller hands it ───────────────────────────────────────────
+
+
+def test_a_caller_can_stop_the_run_after_a_named_task(tmp_path):
+    outcome, _ = _run(
+        tmp_path,
+        _tasks(4),
+        _success,
+        stop_when=lambda task_id: (
+            StoppedEarly(
+                rule_index=0,
+                rule=STOP_RULES[0],
+                detail="a reply named a model the plan did not pin",
+                after_task=task_id,
+            )
+            if task_id == "task-0002"
+            else None
+        ),
+    )
+    assert outcome.stopped is not None
+    assert outcome.stopped.rule_index == 0
+    assert outcome.stopped.after_task == "task-0002"
+    assert outcome.summary["stopped_early"] is not None
+
+
+def test_the_task_that_tripped_it_is_still_in_the_record(tmp_path):
+    """The halt must not swallow the evidence for the halt.
+
+    Asked after the row is kept, so the run that stopped still shows what the
+    last task did. A check placed before the append would leave a record whose
+    final task is missing -- the one a reader would go looking for first.
+    """
+    seen: list[str] = []
+    outcome, _ = _run(
+        tmp_path,
+        _tasks(4),
+        _success,
+        on_task=lambda tid, row: seen.append(tid),
+        stop_when=lambda task_id: (
+            StoppedEarly(
+                rule_index=0,
+                rule=STOP_RULES[0],
+                detail="stopped here",
+                after_task=task_id,
+            )
+            if task_id == "task-0002"
+            else None
+        ),
+    )
+    assert [row["task_id"] for row in outcome.rows] == ["task-0001", "task-0002"]
+    assert seen == ["task-0001", "task-0002"]
+
+
+def test_a_run_with_no_stop_when_behaves_exactly_as_before(tmp_path):
+    outcome, _ = _run(tmp_path, _tasks(3), _success)
+    assert outcome.stopped is None
+    assert len(outcome.rows) == 3
+
+
+def test_a_stop_when_that_never_fires_does_not_shorten_the_run(tmp_path):
+    asked: list[str] = []
+
+    def never(task_id):
+        asked.append(task_id)
+        return None
+
+    outcome, _ = _run(tmp_path, _tasks(3), _success, stop_when=never)
+    assert outcome.stopped is None
+    assert len(outcome.rows) == 3
+    assert asked == ["task-0001", "task-0002", "task-0003"]
