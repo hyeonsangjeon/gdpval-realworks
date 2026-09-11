@@ -33,9 +33,10 @@ import hashlib
 import json
 import sqlite3
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Callable, Iterable, Mapping, Sequence
 
 RECEIPT_SCHEMA_VERSION = "cost-receipt-v1"
 PRICE_TABLE_SCHEMA_VERSION = "cost-receipt-price-table-v1"
@@ -1038,6 +1039,8 @@ CREATE TABLE IF NOT EXISTS cost_calls (
     resolved_model      TEXT,
     api_version         TEXT,
     state               TEXT NOT NULL,
+    reserved_at         TEXT,
+    concluded_at        TEXT,
     input_tokens        INTEGER,
     cached_input_tokens INTEGER,
     output_tokens       INTEGER,
@@ -1078,6 +1081,8 @@ _CALL_COLUMNS = (
     "resolved_model",
     "api_version",
     "state",
+    "reserved_at",
+    "concluded_at",
     "input_tokens",
     "cached_input_tokens",
     "output_tokens",
@@ -1132,6 +1137,56 @@ _TOKEN_COLUMNS = frozenset(
 )
 
 
+#: When each call left and when this process stopped waiting on it. Grouped
+#: because they share the identity columns' one-sided property -- a local row
+#: records ``reserved_at`` before the request goes out, so an export written by
+#: a build from before these columns existed carries nothing there, and letting
+#: that blank win would delete a fact to make room for the absence of one.
+#:
+#: They exist because run ``34540053904`` could not answer the question it was
+#: run to answer. Five of its thirty tasks were refused by the provider, and
+#: separating a token-per-minute ceiling from a deployment's throughput needs
+#: the tokens settled in the window *before* each refusal. Every row held the
+#: tokens; not one held a time, so the window could not be drawn. A count
+#: without a clock cannot be put on one.
+_TIMING_COLUMNS = frozenset({"reserved_at", "concluded_at"})
+
+
+def _utc_now() -> datetime:
+    """The wall clock, in UTC.
+
+    Wall clock rather than :func:`time.monotonic`, which is what the rest of
+    this repository injects. Monotonic is the right choice for measuring a
+    duration inside one process and the wrong one here: shards run as separate
+    processes against the same ledger, and two monotonic readings taken in
+    different processes cannot be ordered against each other at all. The whole
+    use of these stamps is comparing calls that different processes made.
+    """
+    return datetime.now(timezone.utc)
+
+
+def _stamp(clock: Callable[[], datetime]) -> str:
+    """One moment, as text the ledger stores.
+
+    A naive datetime is refused rather than assumed to be UTC. It would be
+    stored as a perfectly well-formed timestamp in an unknown zone, and an hour
+    of error is invisible in the text and fatal to a rolling window -- which is
+    the one thing these columns are for.
+    """
+    moment = clock()
+    if not isinstance(moment, datetime):
+        raise LedgerIntegrityError(
+            "the ledger clock returned something that is not a datetime"
+        )
+    if moment.tzinfo is None or moment.tzinfo.utcoffset(moment) is None:
+        raise LedgerIntegrityError(
+            "the ledger clock returned a datetime with no timezone; a moment "
+            "without one cannot be compared against a moment from another "
+            "process"
+        )
+    return moment.astimezone(timezone.utc).isoformat(timespec="milliseconds")
+
+
 def _token_count(value: Any) -> int | None:
     """A stored token count as a number, keeping "not recorded" as ``None``."""
     if value is None or value == "":
@@ -1169,10 +1224,12 @@ class CostReceiptLedger:
         *,
         run_id: str,
         price_table: ReceiptPriceTable | None = None,
+        clock: Callable[[], datetime] = _utc_now,
     ):
         self.path = Path(path)
         self.run_id = str(run_id)
         self._price_table = price_table
+        self._clock = clock
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._connection = sqlite3.connect(str(self.path), timeout=30.0)
         self._connection.row_factory = sqlite3.Row
@@ -1277,8 +1334,8 @@ class CostReceiptLedger:
         self._connection.execute(
             "INSERT INTO cost_calls (call_id, run_id, task_id, stage, "
             "retry_kind, provider, deployment, requested_model, api_version, "
-            "state, missing_reasons, request_sha256, note) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, ?)",
+            "state, reserved_at, missing_reasons, request_sha256, note) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, ?)",
             (
                 call_id,
                 self.run_id,
@@ -1290,6 +1347,7 @@ class CostReceiptLedger:
                 str(requested_model),
                 None if api_version is None else str(api_version),
                 STATE_RESERVED,
+                _stamp(self._clock),
                 request_sha256,
                 note,
             ),
@@ -1348,6 +1406,7 @@ class CostReceiptLedger:
 
         self._connection.execute(
             "UPDATE cost_calls SET state = ?, resolved_model = ?, "
+            "concluded_at = COALESCE(concluded_at, ?), "
             "input_tokens = ?, cached_input_tokens = ?, output_tokens = ?, "
             "reasoning_tokens = ?, audio_input_tokens = ?, "
             "audio_output_tokens = ?, model_cost_usd = ?, missing_reasons = ?, "
@@ -1355,6 +1414,7 @@ class CostReceiptLedger:
             (
                 STATE_SETTLED,
                 model,
+                _stamp(self._clock),
                 usage.input_tokens,
                 usage.cached_input_tokens,
                 usage.output_tokens,
@@ -1395,9 +1455,11 @@ class CostReceiptLedger:
                 "be recorded as never sent"
             )
         self._connection.execute(
-            "UPDATE cost_calls SET state = ?, note = COALESCE(?, note) "
+            "UPDATE cost_calls SET state = ?, "
+            "concluded_at = COALESCE(concluded_at, ?), "
+            "note = COALESCE(?, note) "
             "WHERE call_id = ?",
-            (STATE_ABANDONED, note, call_id),
+            (STATE_ABANDONED, _stamp(self._clock), note, call_id),
         )
         self._connection.commit()
 
@@ -1452,9 +1514,11 @@ class CostReceiptLedger:
             {*_decode_reasons(row["missing_reasons"]), REASON_CALL_REFUSED_UNPRICED}
         )
         self._connection.execute(
-            "UPDATE cost_calls SET state = ?, missing_reasons = ?, note = ? "
+            "UPDATE cost_calls SET state = ?, "
+            "concluded_at = COALESCE(concluded_at, ?), "
+            "missing_reasons = ?, note = ? "
             "WHERE call_id = ?",
-            (STATE_REFUSED, json.dumps(reasons), note, call_id),
+            (STATE_REFUSED, _stamp(self._clock), json.dumps(reasons), note, call_id),
         )
         self._connection.commit()
 
@@ -1469,6 +1533,14 @@ class CostReceiptLedger:
         What was missing is *which* of them happened. The note carries that and
         nothing else — a fixed word built from the failure's shape, never from
         the provider's message, which can quote a URL, a header or a key.
+
+        ``concluded_at`` is stamped here too, and on this one path it means
+        *when this process stopped waiting*, not when the call was answered.
+        The row stays :data:`STATE_RESERVED` precisely because nobody knows
+        whether it was answered, and a reader taking this stamp for a reply
+        time would be reading a giving-up as an arrival. It is recorded anyway
+        because it bounds the call: whatever happened to the request happened
+        before this moment.
         """
         _require(bool(note), "an unresolved call must say what happened to it")
         row = self._row(call_id)
@@ -1482,8 +1554,9 @@ class CostReceiptLedger:
                 "question and must not be annotated as one"
             )
         self._connection.execute(
-            "UPDATE cost_calls SET note = COALESCE(note, ?) WHERE call_id = ?",
-            (note, call_id),
+            "UPDATE cost_calls SET note = COALESCE(note, ?), "
+            "concluded_at = COALESCE(concluded_at, ?) WHERE call_id = ?",
+            (note, _stamp(self._clock), call_id),
         )
         self._connection.commit()
 
@@ -2183,9 +2256,16 @@ def _promoted_value(
     deployment that an export from a build predating those columns simply does
     not carry. Letting the blank win there would delete a fact to make room for
     the absence of one.
+
+    The timing columns are the same exception for the same reason, with one
+    addition: a local row can hold a ``concluded_at`` from
+    :meth:`CostReceiptLedger.leave_unresolved` — the moment this process
+    stopped waiting. An export that watched the call actually end carries a
+    truer moment and takes precedence, which is the ordinary rule; an export
+    that carries nothing must not erase the bound we do have.
     """
     value = _import_value(record, column)
-    if value is None and column in _IDENTITY_COLUMNS:
+    if value is None and (column in _IDENTITY_COLUMNS or column in _TIMING_COLUMNS):
         return existing[column]
     return value
 
