@@ -210,6 +210,14 @@ batch-runner/results/*/report/report.html
 # report_data.json은 HF Dataset에서 관리 (self_report.json)
 batch-runner/results/*/report/report_data.json
 
+# ...except for a run that never published one. A dispatch with dry_run: true
+# skips step 7, so no HyeonSang/<dir> dataset is ever created and the fetch in
+# aggregate-reports.mjs answers 404. exp034 ran 30 tasks and finished 22 of
+# them; the run artifact holding its only other copy expires 30 days after the
+# run (batch-run.yml, retention-days: 30). Committed here, the dashboard reads
+# it locally and never asks the hub for it.
+!batch-runner/results/exp034_codex_foundry_trial30/report/report_data.json
+
 # step3 intermediate artifacts — CI 산출물, git 불필요 (report/report.md는 유지)
 batch-runner/results/*/*.json
 batch-runner/results/*/*.md
