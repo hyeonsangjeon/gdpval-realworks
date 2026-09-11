@@ -56,6 +56,7 @@ batch-runner/scripts/*
 !batch-runner/scripts/stage3_partial_inventory.py
 !batch-runner/scripts/check_grader_hash_freeze.py
 !batch-runner/scripts/azure_rbac_diagnostic.py
+!batch-runner/scripts/azure_deployment_capacity.py
 !batch-runner/scripts/analyze_repeat_variation.py
 !batch-runner/scripts/analyze_audio_repeat_variation.py
 !batch-runner/scripts/measure_audio_grading_accuracy.py

@@ -1,0 +1,160 @@
+# Read what throughput the deployment is *declared* to have, without naming it.
+#
+# Why a separate workflow: run `34540053904` (exp034, thirty tasks) was
+# dispatched to narrow one question -- of request rate, a token reservation, the
+# deployment's throughput and the interval between calls, which one is refusing
+# our requests. Response evidence ruled out two. Ruling on the other two needs a
+# rate measured against a ceiling, and nothing in this repository had ever
+# recorded the ceiling. The ledger now records when each call happened, which
+# gives the numerator; this gives the denominator to divide it by.
+#
+# Every call this makes is an ARM control-plane READ. It creates nothing,
+# changes nothing, and calls no model endpoint, so running it cannot reproduce
+# the refusal it exists to explain and cannot spend anything.
+#
+# This is also the only place the question can be asked. The script reads
+# whatever subscription and identity the `az` session holds, and a login taken
+# on a development box or in an agent container is a different one of each: the
+# Foundry account this asks about is not in the subscription such a login
+# reaches. `az` then refuses the lookup, the run stops at
+# `control_plane_read_never_completed`, and the note beside it says nothing was
+# measured -- which is the truth, because the account was never looked up. That
+# outcome is kept strictly apart from "Azure answered and the deployment was not
+# there", because the two license opposite conclusions.
+#
+# The read may also simply be refused. The RBAC diagnostic beside this one
+# exists because this identity was already refused at the Foundry project, and a
+# reader role on the account is not implied by anything. A refusal is recorded as
+# "not readable with the permissions we have" and is not a reason to ask for more.
+name: Azure Deployment Capacity
+
+on:
+  workflow_dispatch:
+    inputs:
+      deployment:
+        description: The deployment name, as the experiment YAML records it
+        required: false
+        default: gpt-5.4
+        type: string
+      emit_json:
+        description: Emit the redacted report as JSON instead of prose
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: azure-deployment-capacity
+  cancel-in-progress: false
+
+jobs:
+  measure:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+
+      # The same pinned action, client id, tenant and subscription the paid runs
+      # authenticate with. A capacity read taken as some other identity would
+      # measure a ceiling nobody's calls are being counted against.
+      - name: Azure Login (OIDC)
+        uses: azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca # v3.0.1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Verify Azure OIDC session identity
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          AZURE_AI_EXPECTED_CLIENT_ID: ${{ vars.AZURE_AI_EXPECTED_CLIENT_ID }}
+          AZURE_AI_EXPECTED_TENANT_ID: ${{ vars.AZURE_AI_EXPECTED_TENANT_ID }}
+          AZURE_AI_EXPECTED_SUBSCRIPTION_ID: ${{ vars.AZURE_AI_EXPECTED_SUBSCRIPTION_ID }}
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          python3 scripts/azure_oidc_identity_preflight.py --verify-session
+
+      # No model credential is passed in. If one were, a future edit could turn
+      # this read-only job into one that spends, and nothing here would notice.
+      #
+      # The Foundry account name is a repository VARIABLE, and GitHub does not
+      # mask a variable the way it masks a secret: whatever a step lists under
+      # env: is reprinted verbatim in the step header, and the logs of a public
+      # repository are public. So this step does not ask for
+      # AZURE_AI_EXPECTED_DIRECT_ACCOUNT or AZURE_AI_EXPECTED_PROJECT_ACCOUNT.
+      # It does not need them: the account name lives inside the endpoint, which
+      # is a secret and therefore masked, and the route derives the account from
+      # it. The script pulls it back out for redaction.
+      #
+      # direct-v1 is the profile deliberately, not by omission. A deployment
+      # lives on a Cognitive Services account and never on a project, so this is
+      # the same account either profile ends up calling.
+      - name: Read the limits this deployment declares
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          AZURE_AI_ROUTE_PROFILE: direct-v1
+          FOUNDRY_PROJECT_ENDPOINT: ${{ secrets.FOUNDRY_PROJECT_ENDPOINT }}
+          DEPLOYMENT: ${{ inputs.deployment }}
+          EMIT_JSON: ${{ inputs.emit_json }}
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          ARGS=()
+          if [ "${EMIT_JSON}" = "true" ]; then
+            ARGS+=(--json)
+          fi
+          # Deliberately not --require-limits: reporting that Azure states no
+          # limit this tool can read is a finding about the deployment, not a
+          # failure of the run. Turning it into a red X would push the next
+          # reader toward making the number up.
+          python3 scripts/azure_deployment_capacity.py \
+            --deployment "${DEPLOYMENT}" \
+            --output "${RUNNER_TEMP}/deployment_capacity.json" \
+            "${ARGS[@]}"
+
+      # Kept so a later reader can divide a measured token rate by the ceiling
+      # that was declared on the day it was measured. A deployment's limits can
+      # be changed, and a denominator with no date cannot be told apart from one
+      # that is still true.
+      - name: Keep the redacted record
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: deployment-capacity
+          path: ${{ runner.temp }}/deployment_capacity.json
+          if-no-files-found: warn
+          retention-days: 90
+
+      - name: Confirm no model call was made
+        if: always()
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          # A grep, not a promise. If a future edit reaches for the inference
+          # path from this read, this step is what says so.
+          if grep -nE 'responses\.create|chat\.completions|AzureOpenAI|llm_client|code_interpreter' \
+              scripts/azure_deployment_capacity.py; then
+            echo "FATAL: the capacity read references a model call path"
+            exit 1
+          fi
+          echo "control-plane-reads-only=confirmed"
