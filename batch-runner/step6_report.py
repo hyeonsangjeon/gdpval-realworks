@@ -45,6 +45,9 @@ from core.cost_projection import (  # noqa: E402
     verify_cost_ledger,
 )
 from core.execution_metrics import bounded_count, bounded_duration_ms  # noqa: E402
+from core.agentic_v2_run_report import (  # noqa: E402
+    TOOL_NAMES_THE_REPORT_BUCKETS,
+)
 from core.measurement_display import render_measured  # noqa: E402
 from core.prepared_fingerprint import FINGERPRINT_RE  # noqa: E402
 from core.result_fingerprint import RESULT_FINGERPRINT_RE  # noqa: E402
@@ -360,10 +363,7 @@ def _compute_agentic_metrics(data: dict) -> dict | None:
         if result.get("status") == "success"
         and raw.get("recovered_after_tool_error") is True
     )
-    tool_names = (
-        "inspect_workspace", "inspect_environment", "run_python",
-        "run_ffmpeg", "inspect_artifacts", "finalize",
-    )
+    tool_names = TOOL_NAMES_THE_REPORT_BUCKETS
     calls_by_name = {name: 0 for name in tool_names}
     terminal_categories: dict[str, int] = {}
     conservative_cost = 0.0

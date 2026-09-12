@@ -4,7 +4,8 @@ Most of these tests are about the things that would be easy to state wrongly: a
 zero where a number is unknown, a graded count where nothing was graded, a
 deliverable list that came from the model rather than from the disk. The
 mismatch between V1's tool names and V2's is asserted here rather than merely
-noted, so that fixing the report later breaks this file on purpose.
+noted: the summary now offers a bucket for both vocabularies, and these tests
+are what stops the two lists drifting apart again.
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ from core.agentic_v2_run_report import (
     SHARED_TOOL_NAMES,
     STATUS_ERROR,
     STATUS_SUCCESS,
+    TOOL_NAMES_THE_REPORT_BUCKETS,
     TOOL_NAMES_THE_REPORT_KNOWS,
     ReportRowRefused,
     build_agentic_v2_metrics,
@@ -94,6 +96,48 @@ def test_the_report_s_tool_names_and_v2_s_share_only_finalize():
     overlap = set(TOOL_NAMES) & set(TOOL_NAMES_THE_REPORT_KNOWS)
     assert overlap == {"finalize"}
     assert SHARED_TOOL_NAMES == ("finalize",)
+
+
+def test_the_breakdown_has_a_bucket_for_every_name_either_runner_uses():
+    """Seven of V2's eight had nowhere to land, so they were dropped.
+
+    Including ``browser_run``, which three of the five tasks in the first paid
+    stage ended on. The summary showed a lone non-zero ``finalize``.
+    """
+    assert set(TOOL_NAMES_THE_REPORT_BUCKETS) == set(TOOL_NAMES) | set(
+        TOOL_NAMES_THE_REPORT_KNOWS
+    )
+    assert len(TOOL_NAMES_THE_REPORT_BUCKETS) == len(
+        set(TOOL_NAMES_THE_REPORT_BUCKETS)
+    )
+    # V1's order, unchanged, at the front: an existing report's breakdown gains
+    # keys rather than reordering.
+    assert (
+        TOOL_NAMES_THE_REPORT_BUCKETS[: len(TOOL_NAMES_THE_REPORT_KNOWS)]
+        == TOOL_NAMES_THE_REPORT_KNOWS
+    )
+
+
+def test_the_report_buckets_under_exactly_these_names():
+    """The constant and the summary that reads it, checked against each other.
+
+    ``step6_report`` used to hold its own copy of the list. A copy is how the
+    two came to disagree in the first place.
+    """
+    import step6_report
+
+    row = {
+        "task_wall_time_ms": 1.0,
+        "tool_calls": 2,
+        "tool_calls_by_name": {"browser_run": 1, "finalize": 1},
+    }
+    summary = step6_report._compute_agentic_metrics(
+        {"results": [{"observability": {"agentic_metrics": row}}]}
+    )
+
+    assert set(summary["tool_calls_by_name"]) == set(TOOL_NAMES_THE_REPORT_BUCKETS)
+    assert summary["tool_calls_by_name"]["browser_run"] == 1
+    assert summary["total_tool_calls"] == 2
 
 
 def test_every_v2_tool_gets_a_bucket_even_when_unused():
