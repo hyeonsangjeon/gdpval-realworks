@@ -63,9 +63,10 @@ STATUS_ERROR = "error"
 
 #: The tool names ``step6_report._compute_agentic_metrics`` buckets calls under.
 #:
-#: Copied here so the mismatch with V2 can be asserted rather than described.
-#: If the report ever learns V2's vocabulary this constant stops matching it and
-#: the test that guards it fails, which is the point.
+#: V1's vocabulary, and for a long time the whole of what the report could
+#: name. Kept as its own constant because the V1 names have to stay in the
+#: breakdown and in that order -- a V1 run's report must not change shape
+#: because V2 arrived.
 TOOL_NAMES_THE_REPORT_KNOWS = (
     "inspect_workspace",
     "inspect_environment",
@@ -80,11 +81,9 @@ TOOL_NAMES_V2_USES = TOOL_NAMES
 
 #: The one name both vocabularies share.
 #:
-#: ``finalize`` means the same thing in both, so its count *will* appear in the
-#: report's existing breakdown. Every other V2 tool will not, and a reader who
-#: sees a lone non-zero ``finalize`` beside five zeros would reasonably conclude
-#: the model used one tool. Naming the overlap is what makes that conclusion
-#: checkable instead of surprising.
+#: ``finalize`` means the same thing in both, so a count under it is a sum
+#: across two different runners and cannot be attributed to either. Naming the
+#: overlap is what makes that checkable instead of surprising.
 SHARED_TOOL_NAMES = tuple(
     name for name in TOOL_NAMES_V2_USES if name in TOOL_NAMES_THE_REPORT_KNOWS
 )
@@ -94,6 +93,25 @@ if set(SHARED_TOOL_NAMES) != {"finalize"}:  # pragma: no cover - import guard
         "the report's tool vocabulary and V2's now overlap differently than "
         f"recorded: {sorted(SHARED_TOOL_NAMES)}"
     )
+
+#: Every bucket the report's tool breakdown offers, both vocabularies.
+#:
+#: The report used to offer only the six above. A V2 row carries counts under
+#: all eight of V2's names, seven of which were not in that list, so seven of
+#: them were dropped on the way into the summary and the breakdown showed a
+#: lone non-zero ``finalize`` beside five zeros -- which reads as a model that
+#: used one tool, for a run in which it used several.
+#:
+#: ``browser_run`` is why this is worth the widening rather than a footnote.
+#: Three of the five tasks in the first paid stage ended on it, and it was the
+#: single most informative thing that run produced. It was also one of the
+#: seven names with nowhere to land.
+#:
+#: V1's names come first and keep their order, so an existing report's
+#: breakdown gains keys and does not reorder or lose any.
+TOOL_NAMES_THE_REPORT_BUCKETS = TOOL_NAMES_THE_REPORT_KNOWS + tuple(
+    name for name in TOOL_NAMES_V2_USES if name not in TOOL_NAMES_THE_REPORT_KNOWS
+)
 
 
 class ReportRowRefused(RuntimeError):

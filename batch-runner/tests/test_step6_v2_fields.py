@@ -979,6 +979,9 @@ def test_generate_report_adds_agentic_metrics_only_when_measured(monkeypatch, tm
     assert metrics["usage_complete_tasks"] == 1
     assert metrics["usage_coverage_pct"] == 50.0
     assert metrics["conservative_cost_usd"] == 0.75
+    # V1's six keep their counts. The seven V2-only names are present and zero:
+    # this fixture is a V1 run, and a bucket with nothing in it is the right
+    # answer for a tool that run could not have called.
     assert metrics["tool_calls_by_name"] == {
         "inspect_workspace": 1,
         "inspect_environment": 1,
@@ -986,6 +989,13 @@ def test_generate_report_adds_agentic_metrics_only_when_measured(monkeypatch, tm
         "run_ffmpeg": 1,
         "inspect_artifacts": 1,
         "finalize": 1,
+        "capabilities_query": 0,
+        "workspace_apply": 0,
+        "exec_run": 0,
+        "environment_resolve": 0,
+        "environment_activate": 0,
+        "browser_run": 0,
+        "verify_public": 0,
     }
     assert metrics["terminal_error_categories"] == {"capability_missing": 1}
     assert rd["task_results"][0]["observability"]["agentic_metrics"][

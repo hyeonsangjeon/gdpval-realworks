@@ -59,6 +59,7 @@ from core.agentic_v2_deliverable_collection import (
     collect_deliverables,
 )
 from core.agentic_v2_preregistration import STOP_RULES
+from core.agentic_v2_provenance import EVENT_TOOL_PUBLIC
 from core.agentic_v2_run_report import (
     build_agentic_v2_metrics,
     build_result_row,
@@ -341,11 +342,14 @@ def run_manifest(
             )
 
             standing = journal.standing(task_id)
+            input_tokens, output_tokens = _tokens_of(receipt)
             metrics = build_agentic_v2_metrics(
                 result,
                 standing=standing,
                 tool_calls=_tool_calls_of(result),
-                model_api_calls=_model_calls_of(result),
+                model_api_calls=_model_calls_of(receipt),
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
                 task_wall_time_ms=elapsed_ms,
                 receipt=receipt,
             )
@@ -435,6 +439,21 @@ def _tool_calls_of(result: Mapping[str, Any]) -> Sequence[Mapping[str, Any]]:
 
     The private audit is not read here on purpose: a report is a public
     artefact and should be built from the trace that was redacted for one.
+
+    This used to look for ``tool_name`` on the event itself and always found
+    nothing, so every V2 run reported an empty tool breakdown. The name is two
+    levels in. A public event is ``{"result_commitment": ..., "replayed": ...}``
+    and the commitment is where the redacted fields live --
+    ``core.agentic_v2_provenance`` rejects a public payload with any other key
+    set, so the shape the old filter was looking for is one the verifier could
+    never have admitted. What is returned here is the commitment rather than
+    the event, because the commitment is the part
+    :func:`~core.agentic_v2_run_report._tool_counts` reads a name off.
+
+    A replayed call is counted. The desk answers a repeated identical request
+    from what it stored, but the model still asked, and a model that sends the
+    same oversized request three times is the case this count exists to make
+    visible rather than hide.
     """
     block = result.get("agentic_v2")
     if not isinstance(block, Mapping):
@@ -445,18 +464,60 @@ def _tool_calls_of(result: Mapping[str, Any]) -> Sequence[Mapping[str, Any]]:
     events = trace.get("events")
     if not isinstance(events, Sequence):
         return ()
-    return [
-        event
-        for event in events
-        if isinstance(event, Mapping) and event.get("tool_name")
-    ]
+    calls: list[Mapping[str, Any]] = []
+    for event in events:
+        if not isinstance(event, Mapping) or event.get("kind") != EVENT_TOOL_PUBLIC:
+            continue
+        payload = event.get("payload")
+        if not isinstance(payload, Mapping):
+            continue
+        commitment = payload.get("result_commitment")
+        if isinstance(commitment, Mapping) and commitment.get("tool_name"):
+            calls.append(commitment)
+    return calls
 
 
-def _model_calls_of(result: Mapping[str, Any]) -> int:
-    block = result.get("agentic_v2")
-    if not isinstance(block, Mapping):
+def _model_calls_of(receipt: Mapping[str, Any] | None) -> int:
+    """How many calls to the model this task was billed for.
+
+    Read off the receipt, because the receipt is the only thing that knows. It
+    used to be read off ``result["agentic_v2"]["model_api_calls"]``, which is a
+    key nothing writes and nothing may write: ``verify_agentic_v2_metadata``
+    compares that block against an exact key set, so a run that carried the
+    field would be refused as invalid. The reader was looking for a number the
+    schema forbids, and returned 0 for every task of every run.
+
+    Zero is still returned when there is no receipt, and that is a floor rather
+    than a measurement. The row says so beside it --
+    ``agentic_v2_cost_receipt_status`` reads ``not_run`` and ``usage_complete``
+    reads false -- which is the same pairing the cost fields already use.
+    """
+    if not isinstance(receipt, Mapping):
         return 0
-    count = block.get("model_api_calls")
+    count = receipt.get("model_calls")
     if type(count) is int and count >= 0:
         return count
     return 0
+
+
+def _tokens_of(receipt: Mapping[str, Any] | None) -> tuple[int | None, int | None]:
+    """The task's token counts, or ``None`` where none were recorded.
+
+    ``None`` and ``0`` are different answers and the report treats them
+    differently: ``build_agentic_v2_metrics`` omits the key entirely for
+    ``None``, and an absent key claims nothing, where a zero claims the model
+    read and wrote nothing. No V2 task has ever had a zero-token call -- the
+    task prompt alone is thousands of tokens -- so a zero here would always be
+    the wrong one of the two.
+    """
+    if not isinstance(receipt, Mapping):
+        return (None, None)
+    usage = receipt.get("usage")
+    if not isinstance(usage, Mapping):
+        return (None, None)
+
+    def _count(name: str) -> int | None:
+        value = usage.get(name)
+        return value if type(value) is int and value >= 0 else None
+
+    return (_count("input_tokens"), _count("output_tokens"))

@@ -41,14 +41,40 @@ def _tasks(count=3):
 
 
 def _success(task_id, *, calls=("exec_run", "finalize")):
+    """A result shaped the way the runner shapes one, minus the hashes.
+
+    The nesting is not decoration. A public event's payload is checked against
+    an exact key set, and the tool name lives on the commitment inside it, two
+    levels down -- so a stand-in with the name on the event is a shape no run
+    can produce and no verifier would admit. It was, for a while, and the
+    driver read the trace the same wrong way, which is how V2 came to report
+    zero tool calls for every task of every run without a test going red.
+
+    ``model_api_calls`` is not here for the same reason: the metadata is
+    compared against an exact key set that does not include it. The count comes
+    from the cost receipt, which is the only object that knows it.
+
+    Kept honest by
+    ``test_the_metrics_block_that_always_read_zero.py::test_the_drivers_stand_in_result_is_shaped_like_a_real_one``,
+    which boots the real fixture backend and compares this shape against the
+    record it writes.
+    """
     return {
         "success": True,
         "deliverable_text": f"answer for {task_id}",
         "files": [{"filename": "report.xlsx", "content": b"payload"}],
         "agentic_v2": {
-            "model_api_calls": 2,
             "public_trace": {
-                "events": [{"tool_name": name} for name in calls]
+                "events": [
+                    {
+                        "kind": "tool_result_public",
+                        "payload": {
+                            "result_commitment": {"tool_name": name},
+                            "replayed": False,
+                        },
+                    }
+                    for name in calls
+                ]
             },
         },
     }
@@ -190,10 +216,15 @@ def test_the_files_reach_the_submission_layout(tmp_path):
 
 
 def test_v2_tool_calls_are_counted_from_the_public_trace(tmp_path):
-    outcome, _ = _run(tmp_path, _tasks(1), _success)
+    def receipt_for(task, attempt):
+        return {"status": STATUS_COMPLETE, "model_calls": 2}
+
+    outcome, _ = _run(tmp_path, _tasks(1), _success, receipt_for=receipt_for)
     metrics = outcome.rows[0]["observability"]["agentic_metrics"]
     assert metrics["tool_calls"] == 2
     assert metrics["tool_calls_by_name"]["exec_run"] == 1
+    # From the receipt, not the result: the metadata verifier rejects a record
+    # that carries a call count, so the result cannot be asked for one.
     assert metrics["model_api_calls"] == 2
 
 

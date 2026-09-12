@@ -37,8 +37,17 @@ _FOUNDATION_MODULES = (
     "agentic_v2_runner.py",
     "agentic_v2_tools.py",
 )
+#: The event kind that carries a redacted tool result in the public trace.
+#:
+#: Named because a reader outside this module has to filter on it, and the one
+#: that did filtered on a literal it had got wrong -- it looked for a
+#: ``tool_name`` on the event, which :func:`verify_trace_pair` forbids at that
+#: level, and so read every V2 run as having made no tool calls. A shared
+#: constant means the filter and the validator move together.
+EVENT_TOOL_PUBLIC = "tool_result_public"
+
 _EVENT_KINDS = frozenset({
-    "started", "tool_result", "tool_result_public", "failure"
+    "started", "tool_result", EVENT_TOOL_PUBLIC, "failure"
 })
 _PUBLIC_COMMITMENT_FIELDS = (
     "call_id",
@@ -412,7 +421,7 @@ def verify_event_chain(events: Any, expected_head_sha256: str) -> None:
             tool_event_kind = kind
         elif kind != tool_event_kind:
             raise ValueError("agentic v2 event trace classification is mixed")
-        if kind in {"tool_result", "tool_result_public"} and isinstance(
+        if kind in {"tool_result", EVENT_TOOL_PUBLIC} and isinstance(
             last_tool_result, Mapping
         ) and (
             last_tool_result.get("ok") is False
@@ -472,7 +481,7 @@ def verify_event_chain(events: Any, expected_head_sha256: str) -> None:
                 })
                 if request_sha256 != result.get("request_sha256"):
                     raise ValueError("agentic v2 tool request hash mismatch")
-        if kind == "tool_result_public":
+        if kind == EVENT_TOOL_PUBLIC:
             if not isinstance(payload, dict) or set(payload) != {
                 "result_commitment", "replayed"
             } or not isinstance(payload.get("replayed"), bool):
@@ -557,7 +566,7 @@ def verify_trace_pair(
             continue
         if (
             private_event.get("kind") != "tool_result"
-            or public_event.get("kind") != "tool_result_public"
+            or public_event.get("kind") != EVENT_TOOL_PUBLIC
         ):
             raise ValueError("agentic v2 trace pair kind mismatch")
         private_payload = private_event["payload"]

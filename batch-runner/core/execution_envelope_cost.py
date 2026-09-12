@@ -43,6 +43,19 @@ PRICE_TABLE_SCHEMA_VERSION = "execution-envelope-price-table-v1"
 
 TOKENS_PER_MILLION = Decimal(1_000_000)
 
+#: Whose published rates a voice prices its own calls with.
+#:
+#: Every paid run in this repository speaks to Azure, so this is a statement
+#: about the client that gets built rather than a setting anyone chooses. It is
+#: named because the price list holds two blocks and they disagree: the
+#: ``models`` block understates 5.4 by half on input and two thirds on output
+#: and carries no source, and the ``providers`` block keyed ``azure:`` carries
+#: the retail meter names and the date they were read. The cost ledger has
+#: always used the second. Until this constant existed every voice used the
+#: first, so the same calls were reported at two prices in two files written by
+#: the same run, and nothing said which to believe.
+PAID_VOICE_PRICE_PROVIDER = "azure"
+
 # How much of one reference file may reach the model's prompt. The module that
 # decides this is core/file_preview.py, which every run place goes through —
 # not core/file_reader.py, whose 50,000-character cut is only reachable through
@@ -97,6 +110,96 @@ def load_price_table(path: str | Path | None = None) -> dict[str, ModelPrice]:
         )
     if not prices:
         raise ValueError("the price list names no model")
+    return prices
+
+
+def load_provider_price_table(
+    provider: str, path: str | Path | None = None
+) -> dict[str, ModelPrice]:
+    """One provider's prices, keyed by bare model name.
+
+    The same file holds two price lists and they do not agree. The ``models``
+    block above prices a plan before it runs; the ``providers`` block prices a
+    call after it. For ``gpt-5.4`` the first says $1.25 in and $5.00 out and
+    carries no source, and the second says $2.50 and $15.00 and carries the
+    Azure retail meter names, the API it was read from, and the date it was
+    read. The file's own note records that on 2026-08-29 not one figure in the
+    ``models`` block matched a published meter.
+
+    Anything pricing a call that really happened wants the second, and until
+    this existed the only reader of the ``providers`` block was the cost
+    ledger. The voice priced each call it made from the first, so a run record
+    and the ledger beside it reported roughly half and a whole bill for the
+    same calls, and nothing said which to believe.
+
+    Keyed by bare model name because that is what a caller holds: the model
+    name comes back in the reply, and the provider is a property of the client
+    that was built, not of the answer. ``ModelPrice`` has no cached-input rate
+    and no caller measures cached tokens, so every input token is priced at the
+    full rate. That is the upper bound of the two, and it is the same
+    arithmetic the ledger does on the same token counts, so the two agree
+    exactly rather than approximately.
+
+    A model with no entry for this provider is left out rather than filled in
+    from the ``models`` block. A caller that cannot find a price reports the
+    call unpriced, and the run total goes to ``None`` -- missing is partial,
+    never zero. Silently substituting an unsourced figure would turn that
+    refusal into a number, which is the defect this function exists to close.
+    """
+    wanted = str(provider).strip()
+    if not wanted or ":" in wanted:
+        raise ValueError(
+            f"{provider!r} is not a provider name; it names the client that "
+            "was built, such as 'azure'"
+        )
+    target = Path(path) if path is not None else PRICE_TABLE_PATH
+    if not target.is_file():
+        raise ValueError(f"the price list is missing at {target}")
+    raw = json.loads(target.read_text(encoding="utf-8"))
+    # The ledger's own constant rather than a second copy of the string. The
+    # two blocks in this file are versioned separately and the loader that
+    # reads one must move with it, not with the other.
+    from core.cost_receipts import (
+        PRICE_TABLE_SCHEMA_VERSION as PROVIDER_BLOCK_SCHEMA_VERSION,
+    )
+
+    if raw.get("cost_receipt_schema_version") != PROVIDER_BLOCK_SCHEMA_VERSION:
+        raise ValueError(
+            "the provider price list was written for "
+            f"{raw.get('cost_receipt_schema_version')!r}, but this code reads "
+            f"{PROVIDER_BLOCK_SCHEMA_VERSION!r}"
+        )
+    prices: dict[str, ModelPrice] = {}
+    for key, entry in dict(raw.get("providers") or {}).items():
+        if not isinstance(entry, Mapping):
+            raise ValueError(f"the price entry for {key} is not a block")
+        named, _, model = str(key).partition(":")
+        if not named or not model:
+            raise ValueError(
+                f"the price key {key!r} must name both a provider and a model, "
+                "written as provider:model"
+            )
+        if named != wanted:
+            continue
+        # The same two fields the receipt loader insists on. A rate with no
+        # source and no review date is the thing that went wrong in the block
+        # this function exists to stop reading.
+        for required in ("source", "last_reviewed"):
+            if not str(entry.get(required) or "").strip():
+                raise ValueError(
+                    f"the price entry for {key} has no {required}; a rate "
+                    "nobody can trace is not a price"
+                )
+        for required in ("input_usd_per_million", "output_usd_per_million"):
+            if entry.get(required) in (None, ""):
+                raise ValueError(f"the price entry for {key} has no {required}")
+        prices[model] = ModelPrice(
+            model=model,
+            input_usd_per_million=Decimal(str(entry["input_usd_per_million"])),
+            output_usd_per_million=Decimal(str(entry["output_usd_per_million"])),
+        )
+    if not prices:
+        raise ValueError(f"the price list names no model for {wanted!r}")
     return prices
 
 

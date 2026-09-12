@@ -105,8 +105,9 @@ from core.cost_receipts import (  # noqa: E402
     STATUS_UNAVAILABLE,
 )
 from core.execution_envelope_cost import (  # noqa: E402
+    PAID_VOICE_PRICE_PROVIDER,
     CostAssumptions,
-    load_price_table,
+    load_provider_price_table,
 )
 from core.execution_envelope_preflight import load_plan  # noqa: E402
 from core.execution_envelope_tasks import (  # noqa: E402
@@ -254,8 +255,17 @@ def model_calls_record(
     The sqlite ledger beside this is the bill. This is the evidence the bill
     was made from, and it is kept because the two are computed from different
     things and disagreement between them is worth being able to see: the
-    ledger prices from the committed price list, and the voice prices from the
-    same list keyed by the name the reply gave.
+    ledger prices from the committed list keyed ``provider:model``, and the
+    voice prices from the same provider's entries keyed by the name the reply
+    gave. Same rates, same token counts, two arrivals at the figure.
+
+    That was not true until ``PAID_VOICE_PRICE_PROVIDER`` existed. The voice
+    read the ``models`` block, which prices a plan rather than a call, carries
+    no source, and states $1.25 and $5.00 per million where the meters say
+    $2.50 and $15.00. So the disagreement this record exists to expose was
+    guaranteed instead of diagnostic -- always a factor of two on input and
+    three on output, whatever the run did, which is the one thing a difference
+    meant to be read cannot be.
 
     ``resolved_model`` is the point of it. A deployment is an alias, and what
     answers behind it can change without the alias changing -- so "which model
@@ -441,12 +451,18 @@ def open_the_ledger(into: Path, *, run_id: str):
     2026-08-29, so a run without this argument would have reported the whole
     cohort as unaccounted for while the figures sat in the repository.
 
-    Two loaders read that same file and their names are close enough to swap by
-    accident. ``execution_envelope_cost.load_price_table`` returns prices keyed
-    by bare model name for the pre-run ceiling and for the voice;
-    ``cost_receipts.load_receipt_price_table`` returns the table the ledger
-    takes, keyed ``provider:model``, and fingerprints the file so a receipt can
-    name the exact bytes that priced it. The ledger wants the second.
+    Three loaders read that same file and their names are close enough to swap
+    by accident. ``execution_envelope_cost.load_price_table`` returns the
+    ``models`` block keyed by bare model name, which is the pre-run ceiling and
+    nothing else; ``load_provider_price_table`` returns one provider's entries
+    out of the ``providers`` block, also keyed by bare model name, which is
+    what the voice prices its calls with; ``cost_receipts.load_receipt_price_table``
+    returns the whole ``providers`` block keyed ``provider:model`` and
+    fingerprints the file, so a receipt can name the exact bytes that priced
+    it. The ledger wants the third. The first two read *different blocks* and
+    the blocks disagree -- the voice used to read the ceiling's block, and the
+    run record it wrote reported half of what the ledger beside it reported for
+    the same calls.
     """
     from core.cost_receipts import CostReceiptLedger, load_receipt_price_table
 
@@ -561,7 +577,7 @@ def the_paid_setup_a_dry_run_can_reach(stage: str) -> list[str]:
         # the same file the paid run will, and a price list that has stopped
         # parsing is found here rather than after a deployment has been leased.
         try:
-            load_price_table()
+            load_provider_price_table(PAID_VOICE_PRICE_PROVIDER)
         except Exception as broke:  # noqa: BLE001 - reported, not handled
             return [f"the committed price list cannot be loaded: {broke!r}"]
         try:
@@ -905,7 +921,7 @@ def main() -> int:
             settings=settings,
             timeout=float(plan["fixed_settings"]["per_task_timeout_seconds"]),
         )
-        prices = load_price_table()
+        prices = load_provider_price_table(PAID_VOICE_PRICE_PROVIDER)
 
     try:
         if managed is not None:

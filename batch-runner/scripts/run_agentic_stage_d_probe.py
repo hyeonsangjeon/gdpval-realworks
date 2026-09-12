@@ -77,7 +77,10 @@ from core.agentic_v2_stage_d_probe import (  # noqa: E402
 )
 from core.agentic_v2_stage_one_budget import STAGE_ONE_PLAN_PATH  # noqa: E402
 from core.agentic_v2_substrate import AgenticV2SubstrateManifest  # noqa: E402
-from core.execution_envelope_cost import load_price_table  # noqa: E402
+from core.execution_envelope_cost import (  # noqa: E402
+    PAID_VOICE_PRICE_PROVIDER,
+    load_provider_price_table,
+)
 from core.execution_envelope_tasks import DATASET_REVISION  # noqa: E402
 
 #: Where C2 leaves the artefact this refuses to run without.
@@ -319,7 +322,10 @@ def the_paid_setup_a_dry_run_can_reach() -> list[str]:
     problems: list[str] = []
     for reading, load in (
         ("the substrate manifest", lambda: AgenticV2SubstrateManifest.load(SUBSTRATE_MANIFEST)),
-        ("the price table", load_price_table),
+        (
+            "the price table",
+            lambda: load_provider_price_table(PAID_VOICE_PRICE_PROVIDER),
+        ),
     ):
         try:
             load()
@@ -489,7 +495,7 @@ def main(argv: list[str] | None = None) -> int:
             max_seconds=seconds,
             max_tool_calls=args.max_tool_calls,
             collect_outputs_into=workspace / "collected",
-            prices=load_price_table(),
+            prices=load_provider_price_table(PAID_VOICE_PRICE_PROVIDER),
             tools=PROBE_TOOLS,
         )
         fingerprint = managed.runtime_fingerprint
