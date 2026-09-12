@@ -22,8 +22,10 @@ from core.agentic_v2_conversation import (
     AskForTool,
     GaveUp,
     LoopLimits,
+    ScriptedToolDesk,
     ScriptedVoice,
     StopReason,
+    run_model_conversation,
 )
 from core.agentic_v2_conversation_runner import (
     ConversationRunnerRefused,
@@ -665,6 +667,46 @@ class TestTheConversationReachesTheLedger:
         )
         assert written["bucket"] == BUCKET_PROBLEM_SOLVING
 
-    def test_an_empty_conversation_produces_no_entries(self, tmp_path):
+    def test_a_reply_with_no_counts_is_an_entry_that_cannot_be_priced(
+        self, tmp_path
+    ):
+        """A conversation that did nothing still asked the model once.
+
+        This used to assert no entries at all, on the reading that a model
+        which walked away immediately produced an empty conversation. It did
+        not: the request went out, a reply came back, and the provider bills
+        for that whatever the reply says. ``GaveUp`` with no counts is the real
+        voice's walk-away, whose token fields default to zero — so the entry
+        carries no usage rather than a zero one, and prices as ``usage_absent``.
+        """
         _, outcome, _ = _run(tmp_path, [GaveUp(note="nothing to do")])
+
+        (entry,) = self._turns(outcome)
+        assert entry.usage.is_empty
+        assert entry.call_id == "run-a:task-1:1:turn-1"
+
+    def test_a_conversation_that_never_asked_the_model_produces_no_entries(
+        self, tmp_path
+    ):
+        """The genuinely empty case, which is a refusal and not a walk-away.
+
+        A voice that does not declare whether it costs anything is stopped
+        before the first request. Nothing was asked, so nothing was billed, and
+        the ledger is offered nothing — which is different from being offered a
+        call it cannot price.
+        """
+
+        class AVoiceThatNeverDeclaredItself:
+            def next_turn(self, request):  # pragma: no cover - never reached
+                raise AssertionError("the loop must refuse before asking")
+
+        held = TaskConversations(CEILINGS)
+        outcome = run_model_conversation(
+            task_prompt="Write the report",
+            voice=AVoiceThatNeverDeclaredItself(),
+            desk=ScriptedToolDesk(),
+            limits=held.limits_for("task-1", 1),
+        )
+
+        assert outcome.stop_reason is StopReason.PAID_CALL_REFUSED
         assert self._turns(outcome) == ()

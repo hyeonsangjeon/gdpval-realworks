@@ -585,9 +585,10 @@ class _BilledButUnanswered:
     ending after the tool was chosen still records which tool that was.
 
     Built only for a reply that reported what it used. A reply that did not is
-    left out of ``turns`` entirely and counted in
-    :attr:`ConversationOutcome.model_calls_not_counted`; the comment at the
-    construction site says why a zero would be the worse answer.
+    left out of ``turns`` entirely and listed in
+    :attr:`ConversationOutcome.turns_not_counted`, which reaches the ledger as
+    a row with no usage rather than as a turn with a zero one; the comment at
+    the construction site says why a zero would be the worse answer.
     """
 
     turn: int
@@ -681,25 +682,44 @@ class ConversationOutcome:
         )
 
     @property
-    def model_calls_not_counted(self) -> int:
-        """Replies that arrived without usable token counts, so are unpriced.
+    def turns_not_counted(self) -> tuple[int, ...]:
+        """Which turns were charged for and arrived without usable counts.
 
-        Not a cost and not a zero — a number *about* the account rather than in
-        it. A reply the provider sent with no usage, or with a usage the voice
-        could not read, was still charged for, and this is how many of those a
-        run had. Anything above zero means ``turns`` is short by that much and
-        the receipt built from it is a floor.
+        The turn numbers rather than a bare total, because each of these has to
+        reach the ledger as its own row and a row needs a name. The numbers are
+        the conversation's own and are unique within it;
+        :func:`~core.agentic_v2_conversation_runner.model_turns_of` namespaces
+        them by run, task and attempt on the way out, the same as every other
+        call id, so a resumed round files each one once.
+        """
+        return tuple(
+            event.turn
+            for event in self.events
+            if event.step is LoopStep.MODEL_REPLIED
+            and event.detail.get("counted") is False
+        )
+
+    @property
+    def model_calls_not_counted(self) -> int:
+        """How many replies arrived without usable token counts.
+
+        Not a cost and not a zero. A reply the provider sent with no usage, or
+        with a usage the voice could not read, was still charged for, and this
+        is how many of those a run had.
+
+        This used to be the end of the road: a number kept beside the account
+        rather than in it, which meant a run could make a call it could not
+        price and still publish a receipt reading ``complete``. Each of these
+        now goes to the ledger as a settled row carrying no usage, which prices
+        as ``usage_absent`` and holds the receipt at ``partial``. The count
+        stays because it is the readable form of the same fact, and because a
+        reader asking "how short is this bill" should not have to filter rows.
 
         Kept as a count rather than an estimate on purpose. Guessing what an
         uncounted call would have cost is the one arithmetic this codebase does
         not do.
         """
-        return sum(
-            1
-            for event in self.events
-            if event.step is LoopStep.MODEL_REPLIED
-            and event.detail.get("counted") is False
-        )
+        return len(self.turns_not_counted)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -729,6 +749,7 @@ def run_model_conversation(
     limits: LoopLimits,
     tools_available: Sequence[str] = TOOL_NAMES,
     cancel_requested: Optional[Callable[[], bool]] = None,
+    before_model_call: Optional[Callable[[int], None]] = None,
     clock: Callable[[], float] = time.monotonic,
 ) -> ConversationOutcome:
     """Ask the model, run what it asked for, show it the answer, repeat.
@@ -738,6 +759,21 @@ def run_model_conversation(
     or a different run place on the model's behalf: a run that could not finish
     is reported as one, because a quiet substitution produces a result nobody
     can attribute to anything.
+
+    ``before_model_call`` is handed the turn number and called *immediately
+    before the request goes out*. It exists for one caller and one purpose: the
+    paid stage writes a reservation into the cost ledger there, so that a run
+    which dies between the request leaving and the reply being recorded leaves a
+    row saying *a call went out and we never found out what it cost* rather than
+    leaving nothing at all. Everything this loop records otherwise is written
+    after the fact, and a process killed by its own ``timeout-minutes`` does not
+    get to write anything after the fact.
+
+    If it raises, the call is not made. That is the whole point of it being a
+    hook rather than a notification: a run that cannot write down what it is
+    about to spend must not spend it. The run stops with
+    :attr:`StopReason.PAID_CALL_REFUSED`, which is the same sentence the two
+    checks above it make — a paid call the run was not in a position to make.
     """
     asked_to_stop = cancel_requested or (lambda: False)
     events: list[LoopEvent] = []
@@ -862,6 +898,22 @@ def run_model_conversation(
             history=tuple(history),
             turns_left=max_turns - turn,
         )
+        if before_model_call is not None:
+            # Last line before the request leaves. A reservation written here
+            # survives the run being killed; anything written after the reply
+            # does not, and "killed mid-task" is how a sharded stage ends when
+            # it runs out of wall clock.
+            try:
+                before_model_call(turn)
+            except Exception as error:  # noqa: BLE001 - any failure stops the run
+                return finish(
+                    StopReason.PAID_CALL_REFUSED,
+                    "this call would have been charged for and the run could "
+                    "not write down that it was about to make it "
+                    f"({type(error).__name__}: {error}), so it was not made. A "
+                    "call nobody can account for is the thing this run exists "
+                    "to not do",
+                )
         try:
             reply = voice.next_turn(request)
         except Exception as error:  # noqa: BLE001 - any failure ends the run
@@ -872,6 +924,25 @@ def run_model_conversation(
 
         usage = _usage_of(reply)
         if usage is None:
+            # The reply arrived. Something is in `reply` to read, so the
+            # provider served this request and will bill for it; what is
+            # missing is only the count. Recorded as a reply that happened and
+            # was not counted, for the same reason as the zero-input case
+            # below, and by the same route: `turns_not_counted` carries it to
+            # the ledger as a row with no usage, which prices as `usage_absent`
+            # and holds the receipt at `partial`.
+            events.append(LoopEvent(
+                step=LoopStep.MODEL_REPLIED,
+                turn=turn,
+                detail={
+                    "kind": type(reply).__name__,
+                    # Null rather than zero. Nothing was reported; writing a
+                    # number here would invent one.
+                    "input_tokens": None,
+                    "output_tokens": None,
+                    "counted": False,
+                },
+            ))
             return finish(
                 StopReason.MODEL_REPLY_UNUSABLE,
                 "the model's reply did not say how much it used, or said "
@@ -892,12 +963,17 @@ def run_model_conversation(
         # with a note saying so, and the walk-away's token fields default to
         # zero.
         #
-        # Such a call is not recorded, and that is deliberate. Filing it would
-        # put `0` in the ledger, and a zero settles to `$0.00` on a `complete`
-        # receipt: a measured-looking figure for a call nobody measured. That
-        # is worse than the gap it would paper over, because a gap can be seen.
-        # It is counted in `model_calls_not_counted` instead, which is a number
-        # about the account rather than in it.
+        # Such a call is not recorded *here*, and that is deliberate. Filing it
+        # as a turn would put `0` in the ledger, and a zero settles to `$0.00`
+        # on a `complete` receipt: a measured-looking figure for a call nobody
+        # measured. That is worse than the gap it would paper over, because a
+        # gap can be seen.
+        #
+        # It is listed in `turns_not_counted` instead, and `model_turns_of`
+        # turns each entry into a ledger row carrying no usage at all. An
+        # absent usage is not a zero one: it prices as `usage_absent`, adds
+        # nothing to the total, counts in `model_calls`, and holds the receipt
+        # at `partial`. So the call is in the account as the unknown it is.
         #
         # The same applies to the `usage is None` branch above, for the same
         # reason. Both are the honest edge of a record written after the fact;

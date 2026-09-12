@@ -67,6 +67,7 @@ from core.agentic_v2_conversation_runner import (  # noqa: E402
     # would let the promise and the enforcement drift apart silently.
     ceilings_from,
     model_turns_of,
+    reserve_before_each_call,
 )
 from core.agentic_v2_cost_binding import bind_run_to_ledger  # noqa: E402
 from core.agentic_v2_fixture_backend import AgenticV2FixtureBackend  # noqa: E402
@@ -1127,12 +1128,49 @@ def main() -> int:
                     "failure here is not the model's either"
                 )
             return AgenticV2FixtureBackend(root=task_root, **kwargs)
+
+        # Opened before the factory that writes into it, and before the first
+        # model call rather than after the first finished task. The reservation
+        # below needs it in hand at the moment a request leaves; a ledger opened
+        # at settle time is a ledger that only ever sees calls that came back.
+        if rehearsing is None:
+            # Through the same helper the dry run calls, so this line cannot
+            # drift from the one that is supposed to be checking it.
+            ledger = open_the_ledger(into, run_id=run_id)
+
+        def reserve_for(task_id: str, attempt: int):
+            """The hook that books each call before it is made, per attempt.
+
+            ``None`` for a rehearsal. A rehearsal asks no model, so a reserved
+            row would be the one line in the ledger claiming otherwise.
+
+            ``retry_kind`` is not passed, which means :data:`RETRY_NONE`, and it
+            has to match what ``model_turns_of`` settles under. That call passes
+            no ``preceding_error`` either, so both are ``retry_none`` and they
+            agree. The day one of them learns about retries the other has to
+            learn in the same change: a reservation filed as a first attempt and
+            settled as a retry keeps the reservation's kind, and the ledger's
+            retry counts quietly stop describing the run.
+            """
+            if ledger is None:
+                return None
+            return reserve_before_each_call(
+                ledger,
+                run_id=run_id,
+                task_id=task_id,
+                attempt=attempt,
+                provider="azure",
+                requested_model=deployment,
+                deployment=deployment,
+            )
+
         factory = build_runner_factory(
             backend_factory=backend_factory,
             profile=profile,
             conversations=held,
             attempt_of=attempt_of,
             cancel_requested=cancel_requested,
+            before_model_call_for=reserve_for,
             **(
                 {"voice": rehearsing}
                 if rehearsing is not None
@@ -1146,9 +1184,6 @@ def main() -> int:
             # that reads as a measurement of a model that was never asked.
             receipt_for = lambda task, attempt: None  # noqa: E731
         else:
-            # Through the same helper the dry run calls, so this line cannot
-            # drift from the one that is supposed to be checking it.
-            ledger = open_the_ledger(into, run_id=run_id)
 
             def receipt_for(task, attempt: int):
                 outcome = held.outcome_of(task.task_id, attempt)

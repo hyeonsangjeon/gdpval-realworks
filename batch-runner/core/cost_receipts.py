@@ -1350,8 +1350,27 @@ class CostReceiptLedger:
             )
         existing = self._row(call_id)
         if existing is not None:
-            # A resumed round re-reserving a call it already recorded. Keep the
-            # original row; re-reserving must never reset a settled one.
+            # Two callers arrive here. A resumed round re-reserving a call it
+            # already recorded, and — since the agentic v2 stage began writing
+            # a reservation before each request leaves — the settlement pass
+            # offering the same id again on its way to :meth:`settle`. Keep the
+            # original row either way; re-reserving must never reset a settled
+            # one.
+            #
+            # The one thing a second reservation may add is a note where the
+            # row has none. A call reserved before it left cannot say why it
+            # turned out to be unpriceable, because that is knowable only from
+            # the reply; without this the paid path's rows would carry less
+            # explanation than the same rows written offline, and the
+            # explanation is the whole value of the row. Never an overwrite:
+            # the first note stands, and a row that has one keeps it.
+            if note is not None and existing["note"] is None:
+                self._connection.execute(
+                    "UPDATE cost_calls SET note = ? "
+                    "WHERE call_id = ? AND note IS NULL",
+                    (note, call_id),
+                )
+                self._connection.commit()
             return call_id
         self._connection.execute(
             "INSERT INTO cost_calls (call_id, run_id, task_id, stage, "

@@ -24,9 +24,10 @@ What is pinned here
 * the turn says which tool the money was spent asking for, where the run got
   far enough to know,
 * a turn is filed exactly once, never twice,
-* the calls that genuinely cannot be filed — a reply that never said what it
-  used, and a reply whose counts came back zero — are left out and counted as
-  uncounted, rather than filed as zeros that would settle to ``$0.00``,
+* the calls that genuinely cannot be priced — a reply that never said what it
+  used, and a reply whose counts came back zero — reach the ledger as rows
+  with no usage rather than as turns carrying zeros that would settle to
+  ``$0.00``,
 * what reaches the ledger, through ``model_turns_of``, matches what was asked.
 
 Nothing here spends anything: the model is a stand-in and the tool desk is a
@@ -379,20 +380,28 @@ class AVoiceThatDoesNotSayWhatItUsed:
 
 
 def test_a_reply_that_never_said_what_it_used_is_left_out_not_zeroed():
-    """The honest gap, kept open on purpose.
+    """The honest gap, now open in the ledger instead of outside it.
 
     A reply with no usable counts was charged for like any other, and the run
-    has no figure for it. Filing it with zeros would put the one number in the
-    account that reads as a measurement, so it is left out and the stop reason
-    says why. Closing this properly needs a reservation written before the call
-    rather than a record written after it, which is a different change.
+    has no figure for it. Filing it as a turn with zeros would put the one
+    number in the account that reads as a measurement, so it is not a turn. It
+    is a ledger row with no usage at all, which is a different sentence: *this
+    was charged and cannot be priced*. The receipt built over it says
+    ``partial`` rather than quietly reading ``complete`` for the calls it did
+    manage to price.
     """
     outcome = a_run(AVoiceThatDoesNotSayWhatItUsed(), ScriptedToolDesk())
 
     assert outcome.stop_reason is StopReason.MODEL_REPLY_UNUSABLE
     assert outcome.turns == ()
-    assert calls_the_model_answered(outcome) == 0
+    assert calls_the_model_answered(outcome) == 1
+    assert outcome.model_calls_not_counted == 1
     assert "how much it used" in outcome.detail
+
+    (entry,) = a_ledger_entry_per_turn(outcome)
+    assert entry.usage.is_empty
+    assert entry.usage.input_tokens is None
+    assert entry.usage.output_tokens is None
 
 
 def test_a_reply_reporting_no_input_tokens_is_counted_but_not_priced():
@@ -402,8 +411,10 @@ def test_a_reply_reporting_no_input_tokens_is_counted_but_not_priced():
     walk-away's token fields default to zero. Nothing calls a model for nothing
     on the way in — the task prompt alone is thousands of tokens — so a zero
     input count is a reply that was never counted, not a reply that was free.
-    Filing it would settle to ``$0.00`` on a ``complete`` receipt, which reads
-    as a measurement of a call nobody measured.
+    Filing it as a turn would settle to ``$0.00`` on a ``complete`` receipt,
+    which reads as a measurement of a call nobody measured; so it reaches the
+    ledger with its usage absent instead, and absent does not add up to
+    anything.
     """
     outcome = a_run(
         ScriptedVoice(replies=[GaveUp(note="the model answered without saying "
@@ -413,11 +424,15 @@ def test_a_reply_reporting_no_input_tokens_is_counted_but_not_priced():
 
     assert outcome.stop_reason is StopReason.MODEL_STOPPED_WITHOUT_FINISHING
     assert outcome.turns == ()
-    assert a_ledger_entry_per_turn(outcome) == ()
-    # The reply is not lost, only unpriced: it is visible here and nowhere else.
     assert outcome.model_calls_not_counted == 1
     assert calls_the_model_answered(outcome) == 1
     assert outcome.as_dict()["model_calls_not_counted"] == 1
+
+    # In the account, and in it as an unknown rather than as a zero.
+    (entry,) = a_ledger_entry_per_turn(outcome)
+    assert entry.usage.is_empty
+    assert entry.call_id == "run-1:task-1:1:turn-1"
+    assert "reported no usage" in (entry.note or "")
 
 
 def test_a_counted_reply_does_not_show_up_as_uncounted():
@@ -454,7 +469,11 @@ def test_the_ledger_gets_one_entry_for_every_call_the_model_answered():
     assert len(entries) == calls_the_model_answered(outcome) == 1
     assert entries[0].usage.input_tokens == INPUT_TOKENS
     assert entries[0].usage.output_tokens == OUTPUT_TOKENS
-    assert entries[0].call_id == "run-1:task-1:1:call-1"
+    # Named by the run's own turn counter, not by the id the model chose. The
+    # model's id is still on the turn record beside the run; what the ledger
+    # needs is a key it can write before the reply exists, because that is what
+    # a reservation is.
+    assert entries[0].call_id == "run-1:task-1:1:turn-1"
 
 
 def test_no_two_ledger_entries_from_one_run_share_a_call_id():
