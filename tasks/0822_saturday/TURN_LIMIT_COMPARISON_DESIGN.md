@@ -46,9 +46,9 @@ trial_30 used, whatever the state of the host permissions
 (`HOST_PERMISSIONS.md`) at the time.
 
 **The refusal behaviour must not move either.** `agentic_v2_runner.py:772`
-ends a task on its first tool result that is not `ok: true`. If that is changed
-— and there is a good argument that it should be — it must not be changed in
-the same run as the limit.
+ends a task on its first tool result that is not `ok: true`. Changing that is
+not a setting — it reaches the trace schema (see §4) — but if it is ever
+changed it must not be changed in the same run as the limit.
 
 Everything else is held at trial_30's values: same 30 tasks, same model, same
 `max_output_tokens_per_turn: 8192`, same `retry_max_attempts`, same
@@ -107,12 +107,48 @@ and hashes that string into `browser_build_sha256` where nothing can read it.
 So the instruction text is the only account of which tools refuse, which makes
 the omission load-bearing rather than untidy.
 
-That is a documented-versus-actual mismatch, not a model result, and it is
-cheaper to settle than the limit question. Two candidate fixes, either of
-which is its own intervention with its own run id: name `browser_run` in the
-instructions as refusing for network operations, or make a
-`capability_unavailable` non-terminal so the loop the instructions describe is
-the loop that runs.
+### Which layer is actually out of step
+
+It is tempting to call this a harness bug, and it is not. Both code layers
+document their own behaviour accurately, and they document opposite things.
+
+`agentic_v2_conversation.py:504-511` keeps a table of the tool failures that
+end a run, and says that everything absent from it — `capability_unavailable`
+included — is handed back to the model, because "reading a refusal and choosing
+something else is the one behaviour stage one exists to measure, so a loop that
+gave up at the first refusal would measure nothing". That is the loop the
+instructions describe.
+
+`agentic_v2_runner.py:772` never lets that table be consulted. Any dispatch
+whose result is not `ok: true` raises out of the tool desk. The runner's own
+docstring gives the reason, and the reason is not a preference:
+`verify_agentic_v2_result` raises *"agentic v2 tool event follows terminal
+result"* for any tool event recorded after an `ok: false` one
+(`agentic_v2_provenance.py:423`). A run that continued past a refusal could
+not produce a verifiable record of itself. The docstring then names the cost in
+so many words — "a model gets one tool mistake per task, and the conversation
+loop's ability to show it an error and let it choose again cannot actually be
+used" — and names the change that would lift it: the trace schema.
+
+The plumbing between the two is deliberate too. The runner writes its ending
+down before it throws, so the conversation's `except Exception` labelling it
+`tool_desk_broke` does not become the task's verdict. Checked in the record:
+all fourteen desk breaks carry `detail: "running the tool failed: _EndTheRun"`
+at conversation level, while the twelve `browser_run` tasks carry
+`terminal_error_category: "capability_unavailable"` at task level. The tool's
+own error survives, which is the behaviour the comment claims.
+
+So the only text that is out of step with the build is the one the model reads.
+That narrows the fixes and separates them by an order of magnitude:
+
+| | what changes | size |
+|---|---|---|
+| name `browser_run` in the instructions as refusing for network operations | one pinned string | small, and settles the 12 |
+| make `capability_unavailable` survivable | the trace schema, its verifier, and the conversation table | large, and explicitly flagged in-code as separate and reviewable |
+
+The second is not the cheap one-line change an earlier draft of this file
+implied by listing it beside the first. Either is its own intervention with its
+own run id; only the first is worth doing before the limit question.
 
 ### It gets worse on the backend this is all waiting for
 
@@ -206,8 +242,9 @@ Not ready to run, and the blocker is not money.
 In order:
 
 1. **Settle `browser_run`.** It removes 40% of the cohort for a reason
-   unrelated to the limit, and it is an instruction-versus-harness mismatch
-   rather than a finding. Own run id, own record.
+   unrelated to the limit, and what is wrong is the instruction text rather
+   than the harness — the cheapest thing in the area to correct. Own run id,
+   own record.
 2. **Measure the repeat spread** at the control setting, so a difference has
    something to be compared against.
 3. **Then** run the limit comparison, on the fixture backend, on the fixed set

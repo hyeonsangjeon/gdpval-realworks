@@ -18,8 +18,10 @@ thirty tasks made **zero** calls to the three tools the instructions name --
 the model obeyed exactly -- and twelve of them ended on a single `browser_run`
 that reached the network: eight a `search`, four an `open_url`. Each had used
 2-5 of the 9 calls it was allowed, and none was retried. The runner ends a task
-on any tool result that is not ``ok: True``, so a refusal here is terminal
-rather than something to work around.
+on any tool result that is not ``ok: True`` -- not as a policy choice but
+because the trace schema refuses a record in which a tool event follows a
+failed one -- so a refusal here is terminal rather than something to work
+around.
 
 The half that is open here is shut on the backend this is all waiting for.
 ``AgenticV2MicroVMBackend.browser_run`` refuses every operation including
@@ -43,6 +45,7 @@ from core.agentic_v2_contract import (
     AgenticV2Profile,
     validate_tool_arguments,
 )
+from core.agentic_v2_conversation import _ENDS_THE_RUN, StopReason
 from core.agentic_v2_provenance import foundation_fixture_identity
 from core.agentic_v2_fixture_backend import AgenticV2FixtureBackend
 
@@ -115,6 +118,36 @@ def test_the_refused_operations_are_valid_calls_not_malformed_ones(
     assert validate_tool_arguments(
         "browser_run", {"operation": operation, key: value}
     ) == {"operation": operation, key: value}
+
+
+def test_the_loop_that_would_survive_a_refusal_never_gets_to_run():
+    """The refusal is survivable one layer down, and that layer is never reached.
+
+    `_ENDS_THE_RUN` is the conversation's table of tool failures that stop a
+    run, and `capability_unavailable` is deliberately not in it: everything
+    absent is handed back to the model, because "a loop that gave up at the
+    first refusal would measure nothing". That is the loop the stage one
+    instructions describe.
+
+    `agentic_v2_runner.py:772` raises before the table is consulted, on any
+    result that is not ``ok: True``. Its docstring gives the reason and it is
+    not a preference -- `verify_agentic_v2_result` rejects a trace in which a
+    tool event follows an ``ok: False`` one, so a run that continued past a
+    refusal could not produce a verifiable record of itself. That half is
+    pinned by ``test_trace_pair_rejects_tool_after_exact_error``, which uses
+    this very tool and this very error.
+
+    Neither file is wrong about itself, which is why this is worth a test of
+    its own: the trap is in the join. A reader who deletes the raise to "let
+    the documented loop run" gets an unverifiable trace, and a reader who
+    trusts this table alone mis-predicts what twelve of trial_30's thirty tasks
+    did.
+    """
+    assert "capability_unavailable" not in _ENDS_THE_RUN
+    # What the model meets instead. Both halves of the join have to move
+    # together, so the ceiling errors are named here as the contrast: these
+    # *are* in the table, and they are the ones a task survives into a retry.
+    assert _ENDS_THE_RUN["tool_budget_exhausted"] is StopReason.TOOL_CALL_LIMIT_REACHED
 
 
 def test_the_model_cannot_ask_which_tools_work():
