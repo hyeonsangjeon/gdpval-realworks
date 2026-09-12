@@ -61,8 +61,9 @@ run that moved it alongside the limit could not separate the two. See §4.
 ## 4. What the limit can actually reach
 
 The cohort does not divide the way the disposition labels suggest. Read from
-`run_record.json` — from each attempt's `budget_after` and the `tool_name` on
-each turn, not from the labels:
+`run_record.json`, one row per task across all its attempts, classified by each
+attempt's `stop_reason` — not by the disposition label, and **not** by
+`budget_after`, which is the mistake corrected below the table:
 
 | | tasks | what happened |
 |---|---|---|
@@ -82,7 +83,7 @@ says why the loop stopped — the ceiling group is 7 and the finished group is 7
 The two are in the finished group here, and they are the clearest candidates
 for a higher limit helping, which the old split hid.
 
-Two things follow.
+Three things follow.
 
 **The limit can only act on 18 of the 30 tasks.** The twelve that ended on
 `browser_run` were ended before the ceiling was anywhere near. Of the eighteen
