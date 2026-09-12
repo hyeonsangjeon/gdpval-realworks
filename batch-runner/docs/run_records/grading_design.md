@@ -183,13 +183,109 @@ exp003의 220문제 점수와 **비교 자체가 성립하지 않는다.**
 | `experiment_id` | `exp035_codex_foundry_full220` | 정해짐 |
 | `expected_task_count` | 220 | 정해짐 (§4-1) |
 | `rubric_commit_sha` | exp003과 같은 개정판 사용 | 정해짐 |
-| `task_ids` | 고정 220개, 정본 순서 | 정해짐 |
+| `task_ids` | 고정 220개, **이 실험이 올리는 순서** | 정해짐 (아래) |
 | `allow_legacy_missing_provenance` | **false** | 정해짐 — 살아남은 계보는 `dry_run: false`라 출처 파일이 실제로 만들어진다 |
 | `inference_revision` | **모름** | 마지막 구간의 7단계 이후 |
 
 5단계가 부분만 채워진 parquet을 막지 않는 것은 확인했다. 비어 있는
 `deliverable_text`는 **경고이지 오류가 아니다.** 그러니 150/220이 채워진
 parquet도 7단계까지 간다.
+
+### 「정본 순서」가 하나가 아니다 — 그래서 위 표의 한 줄을 고쳤다
+
+위 표는 원래 `task_ids`를 "고정 220개, 정본 순서"라고 적고 있었다. **틀린
+줄이었다.** 틀린 방향이 고약해서 따로 적어 둔다.
+
+`rerun_identity.task_ids`는 집합이 아니라 **순서 있는 목록**이다.
+`step8_grade`의 `filter_tasks_for_config`가 자기가 받은 결과물을 훑어 고정을
+다시 만들고, 두 순서가 다르면 거부한다.
+
+```python
+if canonical_pinned_ids != pinned_ids:
+    raise ValueError("config pinned task selection must follow canonical source order")
+```
+
+그 거부는 **판정 한 번 하기 전에** 일어나므로 채점 토큰은 한 푼도 안 든다.
+대신 싸게 실패하지도 않는다 — 발송된 워크플로 안에서, 체크아웃·설치·내려받기
+를 다 한 뒤에 터진다. 중계가 일정을 쥐고 있는 동안 발송 한 번과 그 벽시계는
+싸지 않다.
+
+문제는 **그 「정본」이 실험마다 다르다**는 것이다. `fill_parquet.py`의 compact
+분기가 두 갈래다.
+
+```python
+if selected_task_ids is not None:
+    df = parquet_index.loc[selected_task_ids].reset_index(drop=True)   # 재정렬한다
+else:
+    df = df[df["task_id"].isin(filled_task_ids)]                       # 행 순서를 지킨다
+```
+
+실험 YAML이 `data.filter.task_ids`를 고정하면 step1이 그 순서를 그대로
+`task_scope.task_ids`로 넘기고, step4가 `selected_task_ids`로 전달하고,
+`.loc[...]`가 프레임을 거기에 맞춰 **재정렬**한다. 고정하지 않으면 boolean
+mask만 걸려 원본 행 순서가 그대로 남는다. **exp035는 앞쪽이다.**
+
+#### 코드가 아니라 산출물로 쟀다
+
+네 가지가 따로 같은 것을 말한다. 어느 하나도 코드를 읽어 추론한 것이 아니다.
+
+| 무엇을 봤나 | 값 | 무엇을 말하나 |
+|---|---|---|
+| exp033의 step4 출력 parquet (5행) | `23ede7c5...` | 자기 준비 순서와 동일, 원본 순서 아님 |
+| exp034의 step4 출력 parquet (30행) | `82f1d83c...` | 위와 같음 |
+| exp034가 올린 출처 파일의 `ordered_task_ids_sha256` | `82f1d83c...` | 파이프라인 자신이 그 순서를 기록한다 |
+| exp035 0구간의 `step1_tasks_prepared.json` | `fa0e5d32...`, `mode='explicit_ids'` | 이 회차의 준비 범위가 이미 그 순서다 |
+
+지금 id를 고정하는 실험 넷이 **전부** 원본 순서가 아니다.
+
+| 실험 | 고정 수 | 원본 집합의 부분집합 | 원본 순서로 오름차순 |
+|---|---|---|---|
+| exp027 | 50 | 예 | **아니오** |
+| exp033 | 5 | 예 | **아니오** |
+| exp034 | 30 | 예 | **아니오** |
+| exp035 | 220 | 예 | **아니오** |
+
+exp035가 가장 날카롭다. **같은 220개**를, **같은 집합**으로, 중복 없이,
+**0번째부터** 다른 순서로 고정한다 — `fa0e5d32...` 대 원본 `df1fcd64...`.
+개수도 id도 중복도 전부 맞아 보이므로 눈으로는 구별되지 않는다.
+
+#### 채점기 본체로 끝까지 확인했다
+
+exp035가 올릴 순서로 합성 결과물 220행을 만들고 설정 초안을 실제 함수 둘에
+넣었다. 모델 호출 0회다.
+
+```
+corrected draft        filter_tasks_for_config -> 220 tasks, scope='complete'
+corrected draft        _validate_pinned_rerun_identity -> accepted
+
+old draft (base order) filter_tasks_for_config -> REJECTED:
+                       config pinned task selection must follow canonical source order
+```
+
+`scope='complete'`이 같이 확인됐다. 분모 220이 **부분집합이 아니라 말뭉치
+전체**로 잡힌다는 뜻이라, §4-1이 분모를 줄이지 않기로 한 결정과 어긋나지
+않는다.
+
+#### 순서는 채점 기록과 조각 병합에도 남는다
+
+`step8_grade`가 채점 파일에 `expected_ordered_task_ids_sha256`을 적고
+(2392행), 이어받기가 그것을 대조한다(1287행).
+`step9_merge_shards`도 조각을 합치기 전에 같은 해시를 검증한다(766~772행).
+**여기서 고정한 순서가 그대로 조각 나누기의 신원이 된다.** 틀린 순서는
+채점을 막는 데서 끝나지 않는다.
+
+#### 무엇을 고쳤나
+
+- 이 표의 `task_ids` 줄을 "정본 순서"에서 "이 실험이 올리는 순서"로 고쳤다.
+- 검사 파일(#560)이 "항상 원본 행 순서"라고 적고 있던 것을
+  `rerun_identity.experiment_id`로 실험마다 해석하도록 고쳤다(#567). 그대로
+  뒀으면 exp035의 **맞는** 설정이 막히고 **틀린** 설정이 통과했을 것이다.
+- 준비해 둔 설정 초안을 `fa0e5d32...`로 다시 고정했다. 손으로 옮겨 적지 않고
+  실험 YAML에서 읽어 넣었다.
+
+**지금 저장소에 있는 채점 설정 9개는 판정이 하나도 안 바뀐다.** `rerun_identity`
+를 가진 9개가 전부 id를 고정하지 않는 실험을 가리켜 원본 순서 갈래로
+떨어진다. 바뀌는 것은 앞으로 들어올 exp035 설정뿐이다.
 
 ---
 
@@ -719,3 +815,7 @@ sha256은 `99b97bf967c25cc81ea383b2f095ec9b0075357a891fddfa83dd6516c35b1f7e`
 3. 채점을 돌린다
 
 **1번 전에는 2번을 쓸 수 없다.** 지금 쓰면 추측한 개정판을 박게 된다.
+
+2번의 **나머지 칸은 전부 정해져 있다.** `task_ids`는 실험 YAML 순서
+(`fa0e5d32...`)이고 원본 parquet 순서가 **아니다** — §5. 초안은 그 순서로
+고정해 두었고, 채점기 본체의 관문 둘을 통과하는 것까지 확인했다.
