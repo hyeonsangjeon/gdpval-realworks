@@ -260,9 +260,14 @@ class StatefulApi(FakeApi):
                 self.current_files.discard(operation.path_in_repo)
         oid = self._oid()
         self.commit_parents[oid] = parent
+        description = kwargs.get("commit_description", "")
         self.commit_metadata[oid] = (
             kwargs["commit_message"],
-            kwargs.get("commit_description", ""),
+            # A commit is sent as a title and a body, and the Hub hands the body
+            # back with the separator between them still attached. Storing the
+            # description verbatim made this fake the only commit the cleanup
+            # check could accept.
+            f"\n\n{description}" if description else "",
         )
         self.files_by_revision[oid] = sorted(self.current_files)
         return SimpleNamespace(oid=oid)
@@ -1240,6 +1245,16 @@ def test_cleanup_retry_after_success_is_idempotent(tmp_path, monkeypatch):
 
 
 def test_cleanup_retry_after_commit_response_loss_is_idempotent(tmp_path, monkeypatch):
+    """Losing the response to a commit that landed must stay recoverable.
+
+    `_verify_cleanup_commit` is how that recovery decides the commit is the one
+    it meant to make, and it compared the body with `!=` against a marker
+    carrying no separator — the same defect that ended run 34685779030 in
+    `core.hf_publication`. This test passed anyway because `StatefulApi` stored
+    the description verbatim instead of the way the Hub returns it. Now that the
+    fake matches the Hub, a lost response is recoverable for real rather than
+    turning into a hard failure over a blank line.
+    """
     api = _uploaded_stateful_checkpoint(tmp_path, monkeypatch, ResponseLossApi())
     generation = json.loads(api.marker)["generation"]
     api.lose_commit_response = True
