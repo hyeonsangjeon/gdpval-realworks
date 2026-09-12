@@ -175,17 +175,21 @@ exp003의 220문제 점수와 **비교 자체가 성립하지 않는다.**
 
 ## 5. 마지막까지 비어 있던 칸
 
-설정을 **지금 완성할 수 없다.** `rerun_identity.inference_revision`은 마지막
-구간이 7단계를 마치고 허브에 올려야 정해진다. 그 전에 값을 적으면 추측이 된다.
+설정을 **오랫동안 완성할 수 없었다.** `rerun_identity.inference_revision`은
+마지막 구간이 7단계를 마치고 허브에 올려야 정해지고, 그 전에 값을 적으면
+추측이 되기 때문이다. **지금은 채워져 있다** — 실행 34685779030이 43단계를
+끝냈고, 아래 「그 확인을 사람이 옮겨 적지 않는 방법」의 절차로 해결한 값이
+`dc36d683...`이다. 이 절의 나머지는 그 칸이 비어 있던 동안 무엇을 확인해
+두었는지의 기록이다.
 
-| 칸 | 지금 | 언제 정해지나 |
+| 칸 | 값 | 언제 정해졌나 |
 |---|---|---|
-| `experiment_id` | `exp035_codex_foundry_full220` | 정해짐 |
-| `expected_task_count` | 220 | 정해짐 (§4-1) |
-| `rubric_commit_sha` | exp003과 같은 개정판 사용 | 정해짐 |
-| `task_ids` | 고정 220개, **이 실험이 올리는 순서** | 정해짐 (아래) |
-| `allow_legacy_missing_provenance` | **false** | 정해짐 — 살아남은 계보는 `dry_run: false`라 출처 파일이 실제로 만들어진다 |
-| `inference_revision` | **모름** | 마지막 구간의 7단계 이후 |
+| `experiment_id` | `exp035_codex_foundry_full220` | 처음부터 |
+| `expected_task_count` | 220 | 처음부터 (§4-1) |
+| `rubric_commit_sha` | exp003과 같은 개정판 사용 | 처음부터 |
+| `task_ids` | 고정 220개, **이 실험이 올리는 순서** | 처음부터 (아래) |
+| `allow_legacy_missing_provenance` | **false** | 처음부터 — 살아남은 계보는 `dry_run: false`라 출처 파일이 실제로 만들어진다 |
+| `inference_revision` | **`dc36d683...`** | 마지막 구간의 7단계 이후 — **채워졌다** |
 
 5단계가 부분만 채워진 parquet을 막지 않는 것은 확인했다. 비어 있는
 `deliverable_text`는 **경고이지 오류가 아니다.** 그러니 150/220이 채워진
