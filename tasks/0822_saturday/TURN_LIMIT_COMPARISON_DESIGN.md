@@ -522,6 +522,19 @@ produce a number that cannot be told apart from noise, and the fact that it
 came out of a correctly-configured harness would make it more convincing than
 it deserves to be.
 
+Money is not what is stopping it. trial_30 billed **$6.131815** against a
+ceiling of $141.61, because most of its attempts ended early; what a repeat
+would bill is unknown for the same reason its outcome is, which is the point
+of measuring it, but it is bounded by that same $141.61 against the $200 the
+plan approves. So the gate passes a repeat — and would pass a third and a
+fourth, because `agentic_v2_stage_one_budget.py` prices the run in front of it
+and reads no record of what the stage has already spent. The plan's own words
+for the figure are *"a whole-run figure, not a rate"*, which settles that $200
+approved for one cohort cannot be carried to another and says nothing about
+the same cohort run twice. The ceiling is the thing being approved, so two
+repeats draw $283.22 of approval against a number written once. That is a
+question for whoever approves it, not one the gate will ask.
+
 ---
 
 ## Verdict
@@ -532,8 +545,20 @@ In order:
 
 1. **Settle `browser_run`.** It removes 40% of the cohort for a reason
    unrelated to the limit, and what is wrong is the instruction text rather
-   than the harness — the cheapest thing in the area to correct. Own run id,
-   own record.
+   than the harness. It is not, as an earlier revision of this document said,
+   the cheapest thing in the area to correct. **No wording is true of both
+   backends**: the fixture serves `open_local` and refuses the network half,
+   while the microvm refuses the browser outright — `open_local` included —
+   and implements the `exec_run` the text says refuses every time. An edit
+   that fixes the rehearsal breaks the run the rehearsal is for. What holds is
+   to build the refusal list from whichever backend is mounted, which is a
+   change to how the prompt is assembled rather than to a paragraph.
+
+   And the sentence that costs the most is not a list at all. *"the calls are
+   counted against you"* tells the model a refusal is survivable and costs one
+   of its nine; `agentic_v2_runner.py` ends the task on the first one. Own run
+   id, own record — the instruction text is a pinned condition, and trial_30
+   keeps the one it ran under.
 2. **Fix the replay format.** The model is shown a paraphrase of its own
    turns with the arguments stripped, and finishing that paraphrase as text
    ended five more tasks. Unlike everything else here it is a defect rather
