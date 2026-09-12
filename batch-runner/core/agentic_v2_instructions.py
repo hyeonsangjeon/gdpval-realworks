@@ -24,8 +24,12 @@ nobody has checked. :func:`core.agentic_v2_tool_availability.availability_for`
 raises, and that raise is allowed through.
 
 **Empty instructions are refused when the plan meant to have some.** The runner
-reads ``plan.get("instructions") or ""``, an expression that cannot fail. Until
-2026-09-11 it silently sent the empty string on every turn of every task.
+reads ``plan.get("instructions") or ""``, an expression that cannot fail: a plan
+without the key sends the model nothing, at the same price as a full paragraph,
+and no line of output says so. No run has done this. The key was added to the
+stage plan in #534, which landed before the first run that ever reached a model,
+so what is refused here is a hazard that has not fired rather than a repair of
+one that has.
 
 **Text wider than it was priced at is refused.** Every figure under ``cost:``
 was worked out at a character width. A derived list is longer than the

@@ -189,10 +189,12 @@ safety_blocks_must_stay_closed: true
 
 # ── What the model is told before it sees the task ────────────────────────
 #
-# Sent as `instructions=` on every turn, beside the task wording. Until now this
-# key did not exist, so the runner sent the empty string — and the file that
-# describes this run went on saying the standing instructions "describe the V2
-# tool contract", which they did not, because there were none.
+# Sent as `instructions=` on every turn, beside the task wording. The plan this
+# file was copied from says here that the key's absence meant the runner "sent
+# the empty string". That is what `plan.get("instructions") or ""` does, and it
+# is not something any run did: the key landed in #534, before the first run
+# that ever reached a model. The hazard is real and has never fired, so it is
+# refused in core/agentic_v2_instructions.py rather than described in a comment.
 #
 # What goes here is bounded by two things that are not opinions.
 #
