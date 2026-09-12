@@ -16,6 +16,8 @@ task's.
 
 from __future__ import annotations
 
+import pathlib
+
 import pytest
 
 from core.agentic_v2_conversation import (
@@ -402,6 +404,42 @@ class TestCeilings:
                 input_tokens=10_000, output_tokens=1_000
             )
         assert held.run_wide_refusal() is None
+
+    def test_the_stage_script_sets_no_run_wide_ceiling(self):
+        """The three above prove the mechanism. This says it is switched off.
+
+        Everything in this class passes whether the production run is bounded
+        run-wide or not, because every one of them builds its own
+        `TaskConversations`. The stage script builds exactly one, with no
+        arguments, so `run_wide_refusal` never refuses in a paid run and what
+        actually bounds a stage is the cost guard that prices it before it
+        starts.
+
+        That is a defensible choice -- stopping before the money beats stopping
+        during it -- but it was not a stated one, and the module docstring used
+        to claim both limits were enforced. If this test starts failing because
+        someone passed a ceiling, that claim becomes true again and the
+        docstring should say so.
+        """
+        import ast
+
+        script = (
+            pathlib.Path(__file__).resolve().parents[1]
+            / "scripts"
+            / "run_agentic_v2_stage.py"
+        )
+        built = [
+            node
+            for node in ast.walk(ast.parse(script.read_text(encoding="utf-8")))
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "RunWideCeilings"
+        ]
+        assert built, "the stage script no longer builds one at all"
+        for node in built:
+            assert not node.args and not node.keywords, (
+                f"line {node.lineno} now sets a run-wide ceiling"
+            )
 
 
 # ── the factory the driver uses ──────────────────────────────────────────
