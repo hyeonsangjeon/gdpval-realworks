@@ -111,8 +111,12 @@ class ReplayCannotBeFaithful(RuntimeError):
 #: ``faithful`` re-sends the provider's own shape -- a ``function_call`` item
 #: carrying ``call_id``, ``name`` and ``arguments``, followed by the matching
 #: ``function_call_output``. Opt-in, and named in the run record, because it
-#: changes what every turn after the first is charged for: re-sending every
-#: past argument was measured at roughly +29% on the input tokens.
+#: changes what every turn after the first is charged for. How much is an
+#: estimate and not a measurement: re-sending every past argument works out at
+#: about +29% on trial_30's bill, taking the extra input at turn *n* as the
+#: tokens the model emitted on turns 0..*n*-1. That over-counts, output
+#: includes the spoken reason as well as the arguments, and nobody has sent a
+#: faithful replay to this deployment and read the bill yet.
 REPLAY_FORMATS = ("paraphrase", "faithful")
 
 

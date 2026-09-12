@@ -156,12 +156,20 @@ fixed_settings:
   # not named: each earlier call becomes the sentence "I asked for X as call
   # call_N." and its arguments are dropped. This plan asks for the other one.
   #
-  # It costs more and the figure is known: re-sending every past argument was
-  # measured at +719,526 input tokens across the cohort, about +29% on the
-  # bill. It costs nothing on the ceiling, because the ceiling was always
-  # computed as though every past argument were re-sent at full length — the
-  # cheaper format was spending under its own estimate, not the other way
-  # round. So no amount below moves, and none of them is re-derived.
+  # It costs more, and the size of that is estimated rather than measured:
+  # +719,526 input tokens across the cohort, about +29% on the bill. The basis
+  # is written out in tasks/0822_saturday/TURN_LIMIT_COMPARISON_DESIGN.md --
+  # the extra input at turn n is taken as the tokens the model emitted on turns
+  # 0..n-1, which over-counts, because output includes the spoken "why" as well
+  # as the arguments. Nobody has sent a faithful replay to this deployment and
+  # read the bill; this run is the first that would. What is not in doubt is
+  # the direction and the order of magnitude, and that it grows quadratically
+  # with conversation length, being the sum of a running total.
+  #
+  # It costs nothing on the ceiling, because the ceiling was always computed as
+  # though every past argument were re-sent at full length — the cheaper format
+  # was spending under its own estimate, not the other way round. So no amount
+  # below moves, and none of them is re-derived.
   replay_format: "faithful"
 
 # ── The command-running tool stays shut ───────────────────────────────────
