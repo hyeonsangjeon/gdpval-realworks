@@ -23,12 +23,21 @@ that check happened. Writing the recomputation into the run's own column would
 erase the distinction between a figure the run stood behind and one produced
 later, which is the thing that makes the first auditable.
 
-This file makes that promotion fail loudly. It also pins the four-way split
-that keeps the figure honest: a task whose every call reported usage has a
-complete figure, a task with an unmeasured send has a floor, a task with sends
-but no measurement has none at all, and a task never reached has a true zero.
+This file makes that promotion fail loudly. It also pins the split that keeps
+the figure honest: a task whose every call reported usage has a complete
+figure, a task with an unmeasured send has a floor, a task with sends but no
+measurement has none at all, and a task never reached has a true zero.
 Collapsing those into one column is how "we don't know" turns into "it was
 free".
+
+A fifth state exists and this run cannot produce one. ``34571840967`` is leg 0
+of its lineage, so every call it made is in the ledger it uploaded. A leg that
+*resumed* inherits its predecessor's finished tasks without its predecessor's
+ledger, and those rows are ``absent_from_supplied_ledgers`` — attempted, with
+no amount, and emphatically not zero. The dispatch below describes it so a
+record built from such a leg is read rather than rejected; the state is
+exercised on a leg that has it, in
+``test_a_resumed_leg_may_not_price_inherited_work_as_free.py``.
 """
 
 from __future__ import annotations
@@ -83,7 +92,7 @@ def test_no_attempted_task_claims_the_runs_own_figure(rows):
 
 
 def test_a_derived_figure_says_which_kind_it_is(rows):
-    """Complete, floor, absent, and never-spent are four different states."""
+    """Whole, floor, unmeasurable, unledgered and never-spent are five states."""
     seen = {}
     for row in rows:
         basis = row[BASIS]
@@ -95,6 +104,12 @@ def test_a_derived_figure_says_which_kind_it_is(rows):
             assert (measured, unmeasured) == (0, 0)
             # A task that was never reached really did cost nothing.
             assert row[DERIVED] == 0.0
+        elif basis == "absent_from_supplied_ledgers":
+            # Attempted, and its calls are in a ledger nobody passed in. Shaped
+            # like the case above and meaning the opposite of it, so the two
+            # assertions that separate them are the whole point of the branch.
+            assert row.get("attempted")
+            assert row[DERIVED] is None
         elif basis == "no_measured_call":
             # Sends happened; not one of them reported usage. No figure exists.
             assert measured == 0 and unmeasured > 0
@@ -108,6 +123,8 @@ def test_a_derived_figure_says_which_kind_it_is(rows):
         else:  # pragma: no cover - a new basis must be described here first
             raise AssertionError(f"undescribed basis {basis!r}")
 
+    # Leg 0 inherited nothing, so `absent_from_supplied_ledgers` is absent here
+    # and its branch above is unreached by this fixture on purpose.
     assert seen == {
         "all_calls_measured": 32,
         "floor_unmeasured_sends_excluded": 11,

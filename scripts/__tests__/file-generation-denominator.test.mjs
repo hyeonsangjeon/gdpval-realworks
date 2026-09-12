@@ -481,11 +481,18 @@ test('every condition that skips step 5 is named, and there are no others', asyn
   // roll-up from workspace/validate_stats.json, which only step 5 writes, and
   // batch-run.yml skips step 5 on four independent conditions:
   //
-  //   dry run         — exp034; and exp035, the 220-task run dispatched
-  //                     2026-09-11 with dry_run=true, which will land here too
+  //   dry run         — exp034; and exp035's first leg, run 34571840967, whose
+  //                     job log reads `DRY_RUN_INPUT: true`
   //   smoke test      — exp026c, whose sample_size is 1
-  //   relay handover  — every leg of a relayed run except the last
+  //   relay handover  — every leg of a relayed run except the last, which is
+  //                     what skipped step 5 on exp035's later legs: runs
+  //                     34603033098 and 34631861765 both log
+  //                     `DRY_RUN_INPUT: false` and still carry no roll-up
   //   step 2a failed  — inference never finished, so there is nothing to count
+  //
+  // exp035 sits in two of those rows, which is the reason for naming a run's
+  // legs rather than the run. One condition changed between them while another
+  // took over, and a missing roll-up looks identical either way.
   //
   // These four decide, by themselves, which runs carry a roll-up. If one is
   // removed or renamed that set changes with nothing failing, and the runs

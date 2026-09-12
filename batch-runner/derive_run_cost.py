@@ -42,12 +42,22 @@ What it will not do:
     so such a task is marked as carrying a floor, not a total.
 
 The result is therefore a lower bound wherever sends went unmeasured, and
-`derived_cost_basis` says which of four situations each task is in:
+`derived_cost_basis` says which of five situations each task is in:
 
     all_calls_measured               every call reported usage; figure is whole
     floor_unmeasured_sends_excluded  some send unmeasured; figure is a floor
     no_measured_call                 nothing measured; no figure at all
     no_call_made                     never attempted; a true zero
+    absent_from_supplied_ledgers     attempted, but no ledger covering it was
+                                     supplied; unknown, and not a zero
+
+The last two look alike and are opposites. A relay restores its predecessor's
+progress but not its predecessor's ledger, so a leg that resumes holds every
+earlier task's *outcome* and none of their *calls*. Pricing that absence as
+`no_call_made` prints $0.00 over a task whose settled call is sitting in the
+previous leg's ledger, which is how a resumed run reports the work it paid for
+twice as free. Give every leg's ledger and the case does not arise; give one
+and the rows that were not covered say so.
 
 Usage:
     python derive_run_cost.py --ledger workspace/cost_ledger_condition_a.sqlite3
@@ -82,6 +92,7 @@ BASIS_WHOLE = "all_calls_measured"
 BASIS_FLOOR = "floor_unmeasured_sends_excluded"
 BASIS_NONE = "no_measured_call"
 BASIS_UNCALLED = "no_call_made"
+BASIS_ABSENT = "absent_from_supplied_ledgers"
 
 
 class DerivationRefused(RuntimeError):
@@ -210,6 +221,25 @@ def uncalled_row(method: str) -> dict:
     return {
         "derived_cost_usd_from_measured_tokens": 0.0,
         "derived_cost_basis": BASIS_UNCALLED,
+        "derived_cost_calls_measured": 0,
+        "derived_cost_calls_unmeasured": 0,
+        "derived_cost_is_provider_billed": False,
+        "derived_cost_method": method,
+    }
+
+
+def unledgered_row(method: str) -> dict:
+    """The record for an attempted task no supplied ledger covers.
+
+    Shaped like `uncalled_row` and meaning the opposite of it. The amount is
+    `None`, not `0.0`: the task ran, so something was spent, and the only
+    honest report of a figure this caller cannot see is that it cannot see it.
+    The call counts are zero because that is literally how many calls were
+    found, and `derived_cost_basis` is what says where to look for the rest.
+    """
+    return {
+        "derived_cost_usd_from_measured_tokens": None,
+        "derived_cost_basis": BASIS_ABSENT,
         "derived_cost_calls_measured": 0,
         "derived_cost_calls_unmeasured": 0,
         "derived_cost_is_provider_billed": False,

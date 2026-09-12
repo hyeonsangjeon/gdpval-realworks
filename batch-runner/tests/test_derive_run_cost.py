@@ -29,7 +29,12 @@ from core.cost_receipts import (
     CostReceiptLedger,
     load_receipt_price_table,
 )
-from derive_run_cost import DerivationRefused, derive, uncalled_row
+from derive_run_cost import (
+    DerivationRefused,
+    derive,
+    uncalled_row,
+    unledgered_row,
+)
 
 MODEL = "gpt-5.4"
 
@@ -108,6 +113,35 @@ def test_a_task_never_called_is_a_true_zero():
     assert row["derived_cost_basis"] == "no_call_made"
     assert row["derived_cost_usd_from_measured_tokens"] == 0.0
     assert row["derived_cost_calls_unmeasured"] == 0
+
+
+def test_a_task_no_supplied_ledger_covers_is_not_a_zero_at_all():
+    """The look-alike of the case above, and its opposite.
+
+    A relay leg inherits its predecessor's finished tasks and starts an empty
+    ledger, so those tasks reach this module looking exactly like tasks nobody
+    ever called. They were called; the calls are in a ledger this caller was
+    not given. The amount is therefore `None` — unknown — and never `0.0`,
+    because the row above is the only row entitled to that number.
+
+    The two are asserted against each other rather than separately: every
+    other field is identical, and a one-line edit that made the amount `0.0`
+    would leave a test checking only the basis string perfectly green.
+    """
+    unknown = unledgered_row("method")
+    zero = uncalled_row("method")
+
+    assert unknown["derived_cost_basis"] == "absent_from_supplied_ledgers"
+    assert unknown["derived_cost_usd_from_measured_tokens"] is None
+    assert unknown["derived_cost_is_provider_billed"] is False
+    assert unknown["derived_cost_method"] == "method"
+
+    assert unknown != zero
+    differing = {k for k in unknown if unknown[k] != zero[k]}
+    assert differing == {
+        "derived_cost_basis",
+        "derived_cost_usd_from_measured_tokens",
+    }
 
 
 def test_no_output_ever_carries_a_billed_cost_field(one_settled_one_open):
