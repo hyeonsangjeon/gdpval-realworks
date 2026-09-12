@@ -232,6 +232,16 @@ batch-runner/scripts/*
 # two strings and makes no network call.
 !batch-runner/scripts/check_agentic_v2_resume_inputs.py
 
+# Reads the per-call cost ledger every paid shard writes and nothing until now
+# opened. Turns it into what each task cost and what the stage cost, keeping
+# apart the three populations a single number would hide: tasks the ledger has
+# rows for, tasks a shard was given and never reached, and tasks no shard
+# claimed at all. Committed because "문제별 비용" is a deliverable of the run
+# rather than a convenience, and because a stage whose money cannot be split by
+# task has to be reported as one figure or none. Opens sqlite files that are
+# already on disk; calls no model and makes no network call.
+!batch-runner/scripts/roll_up_agentic_v2_cost.py
+
 # Measures the one thing standing between a stage that runs and a stage whose
 # results mean something: the reference files a task names are not yet present
 # where the model can open them. Committed because the shape of that gap -- how

@@ -228,15 +228,18 @@ jobs:
             tests/test_the_dry_run_certified_a_path_it_never_reached.py \
             tests/test_a_resume_that_only_half_arrives_pays_twice.py \
             tests/test_the_report_was_handed_a_binding_not_a_receipt.py \
-            tests/test_the_record_was_written_after_the_client_was_shut.py
+            tests/test_the_record_was_written_after_the_client_was_shut.py \
+            tests/test_nothing_read_the_ledger_the_run_wrote.py
 
-      # mypy, on one file, because on this file it has already earned it: the
-      # constructor keyword that killed the first paid dispatch was reported at
-      # its exact line, and no job read the output. `backend-tests.yml` says in
-      # its own header why it does not gate on mypy -- the repository carries
-      # roughly ninety pre-existing errors and a whole-tree gate would be red
-      # on arrival. This is not that gate. It is one file, and that file is at
-      # zero as of this commit, which is what makes the check answerable.
+      # mypy, on the paid path's own scripts, because on these it has already
+      # earned it: the constructor keyword that killed the first paid dispatch
+      # was reported at its exact line, and no job read the output.
+      # `backend-tests.yml` says in its own header why it does not gate on
+      # mypy -- the repository carries roughly ninety pre-existing errors and a
+      # whole-tree gate would be red on arrival. This is not that gate. It is
+      # the script a paid stage runs and the script that reads its bill
+      # afterwards, and both are at zero as of this commit, which is what
+      # makes the check answerable.
       #
       # `--follow-imports=silent` keeps it that way: without it the imported
       # modules bring their own errors in and the step fails for reasons that
@@ -247,11 +250,12 @@ jobs:
       # typed `Mapping[str, Any] | None`, which is a legal call and a wrong
       # object. That is what the dry run above is for. Neither check replaces
       # the other and the paid path needs both.
-      - name: Type-check the stage runner
+      - name: Type-check the stage runner and the cost roll-up
         run: |
           set -euo pipefail
           cd batch-runner
           python -m mypy scripts/run_agentic_v2_stage.py \
+            scripts/roll_up_agentic_v2_cost.py \
             --ignore-missing-imports --follow-imports=silent
 
       # No charge. The revision is the one the catalogue was built from and the
@@ -673,9 +677,49 @@ jobs:
           pattern: agentic-v2-${{ inputs.stage }}-shard-*
           path: shard-records
 
+      # Before the coverage verdict, not after it. A stage that ran badly is
+      # exactly the stage whose bill someone needs, and the coverage check
+      # below is designed to fail -- putting the reading after it would lose
+      # the account for every run that was worth accounting for. This step
+      # fails only when two shards settle the same call differently, which
+      # makes any total arbitrary; a partial, unpriced or half-finished stage
+      # is written out and says so.
+      - name: Read what the stage spent
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          python scripts/roll_up_agentic_v2_cost.py \
+            --records ../shard-records \
+            --stage "${{ inputs.stage }}" \
+            --out ../cost-rollup/cost_rollup.json | tee ../cost-rollup.txt
+          {
+            echo '### What this stage spent'
+            echo
+            echo '```'
+            cat ../cost-rollup.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # `always()` because the coverage check below fails on purpose and the
+      # bill must outlive that failure.
+      - name: Keep the cost roll-up
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: agentic-v2-${{ inputs.stage }}-cost
+          path: cost-rollup/
+          if-no-files-found: warn
+
       # Fails when the stage did not run, which includes the case where every
       # shard was green and one task was missed. A count would have passed that.
+      #
+      # `always()` because this is the step that decides whether the stage ran
+      # and nothing above it may take that decision away. The roll-up before it
+      # can exit non-zero -- two shards settling the same call differently --
+      # and without this the coverage verdict would silently not be reached on
+      # exactly the runs that most need it.
       - name: Check coverage and halts
+        if: ${{ always() }}
         run: |
           set -euo pipefail
           cd batch-runner
