@@ -153,7 +153,7 @@ def test_an_inherited_task_is_not_priced_as_never_called(relay) -> None:
     """
     artifact, earlier = relay
 
-    alone, _, _ = build(artifact, log=None)
+    alone, _, _ = build(artifact)
     inherited = _by_task(alone)[INHERITED]
     assert inherited["attempted"] is True
     assert inherited["derived_cost_basis"] == "absent_from_supplied_ledgers"
@@ -162,7 +162,7 @@ def test_an_inherited_task_is_not_priced_as_never_called(relay) -> None:
         "support; $0.00 here is the bug this file exists for"
     )
 
-    both, _, _ = build(artifact, log=None, extra_ledgers=[earlier])
+    both, _, _ = build(artifact, extra_ledgers=[earlier])
     inherited = _by_task(both)[INHERITED]
     assert inherited["derived_cost_basis"] == "all_calls_measured"
     assert inherited["derived_cost_usd_from_measured_tokens"] > 0
@@ -180,7 +180,7 @@ def test_no_attempted_task_anywhere_claims_a_true_zero(relay) -> None:
     """
     artifact, earlier = relay
     for extra in ([], [earlier]):
-        rows, _, _ = build(artifact, log=None, extra_ledgers=extra)
+        rows, _, _ = build(artifact, extra_ledgers=extra)
         zeroed = [
             row["task_id"]
             for row in rows
@@ -197,7 +197,7 @@ def test_the_task_the_relay_never_reached_still_reads_as_a_true_zero(relay) -> N
     the other direction.
     """
     artifact, earlier = relay
-    rows, _, _ = build(artifact, log=None, extra_ledgers=[earlier])
+    rows, _, _ = build(artifact, extra_ledgers=[earlier])
     unreached = _by_task(rows)[UNREACHED]
     assert unreached["attempted"] is False
     assert unreached["outcome"] == "never_started"
@@ -209,7 +209,7 @@ def test_the_task_the_relay_never_reached_still_reads_as_a_true_zero(relay) -> N
 def test_the_two_ledgers_are_summed_not_replaced(relay) -> None:
     """Each leg's calls land in the same record, once each."""
     artifact, earlier = relay
-    rows, _, derived = build(artifact, log=None, extra_ledgers=[earlier])
+    rows, _, derived = build(artifact, extra_ledgers=[earlier])
     assert derived["calls_total"] == 2
     assert derived["calls_measured"] == 2
     assert derived["tasks_with_a_call"] == 2

@@ -16,13 +16,13 @@ Usage
 -----
 
     python scripts/build_partial_run_record.py <artifact-dir> \
-        --run-id <id> --output-dir docs/run_records/<name> [--log <job-log>] \
+        --run-id <id> --output-dir docs/run_records/<name> [--log <job-log>]... \
         [--ledger <earlier-leg-ledger>]...
 
 ``<artifact-dir>`` is the unpacked ``batch-results-<run-id>`` artifact.
 
-A leg that resumed needs ``--ledger``
--------------------------------------
+A leg that resumed needs ``--ledger`` and every leg's ``--log``
+--------------------------------------------------------------
 The relay restores its predecessor's **progress** and starts an **empty
 ledger**. So a resumed leg's artifact holds the whole lineage's outcomes and
 only its own calls, and every task it inherited looks, to its ledger, like a
@@ -30,6 +30,12 @@ task nobody ever called. Naming that ``no_call_made`` would print $0.00 over
 work an earlier leg paid for -- which is the one direction a cost record must
 never round. Those rows are recorded as ``absent_from_supplied_ledgers`` with
 no amount instead, and passing the earlier legs' ledgers prices them properly.
+
+The log has the same shape of gap and needs the same answer. A leg only writes
+the tasks it ran, so an inherited failure's sentence is in its own leg's log
+and nowhere else. Both flags are repeatable for that reason. Logs are read in
+the order given; within one lineage the legs partition the tasks between them,
+so no task is described by two of them.
 
 What each output is
 -------------------
@@ -45,12 +51,16 @@ What each output is
 
 The log and what is lost without it
 -----------------------------------
-``--log`` is the job log, ANSI already stripped. It is the **only** place the
+``--log`` is a job log, ANSI already stripped. It is the **only** place the
 provider's own sentence survives: the checkpoint stores
 ``error: "task_execution_error:TaskExecutionError"`` for every failure alike,
-which names the exception class and not the cause. Without the log the record
-still builds, and every row that would have carried a message instead carries
-``message_source: "not_available"``. That is a gap in the record, stated as
+which names the exception class and not the cause.
+
+Without it the record still builds, and every failed row that has no sentence
+carries ``message_source: "not_available"``. That flag is per row, not per run:
+a record built from several logs can still be missing one leg's, and a row left
+empty by a log that simply does not cover it is exactly as unexplained as a row
+from a record built with no log at all. Saying so on the row is a gap stated as
 one. It is never filled with a guess.
 """
 
@@ -192,26 +202,29 @@ def _ledger_by_task(ledgers: list[Path]) -> dict[str, dict]:
     return dict(out)
 
 
-def _messages_from_log(log: Path | None) -> dict[str, str]:
+def _messages_from_logs(logs: list[Path]) -> dict[str, str]:
     """Each task's failure sentence, as the provider worded it.
 
     A task's outcome can land either on its own ``[n/220]`` header line or on a
     later retry-progress line, so the most recent header is carried forward.
     Only the last ✗ for a task is kept: the earlier ones are retries of it.
+
+    Several logs accumulate, which is what a relayed run needs: each leg writes
+    only the tasks it ran, so a lineage's sentences are spread across its legs'
+    logs and no single one of them explains the whole record.
     """
-    if log is None:
-        return {}
     messages: dict[str, str] = {}
-    current: str | None = None
-    for line in log.read_text(encoding="utf-8", errors="replace").splitlines():
-        header = TASK_HEADER.search(line)
-        if header:
-            current = header.group(3)
-        if current is None:
-            continue
-        failed = TASK_FAILED.search(line)
-        if failed:
-            messages[current] = failed.group(1)
+    for log in logs:
+        current: str | None = None
+        for line in log.read_text(encoding="utf-8", errors="replace").splitlines():
+            header = TASK_HEADER.search(line)
+            if header:
+                current = header.group(3)
+            if current is None:
+                continue
+            failed = TASK_FAILED.search(line)
+            if failed:
+                messages[current] = failed.group(1)
     return messages
 
 
@@ -254,7 +267,9 @@ def _deliverables(artifact: Path) -> dict[str, list[dict]]:
 
 
 def build(
-    artifact: Path, log: Path | None, extra_ledgers: list[Path] | None = None
+    artifact: Path,
+    logs: list[Path] | None = None,
+    extra_ledgers: list[Path] | None = None,
 ) -> tuple[list[dict], dict[str, list[dict]], dict]:
     workspace = artifact / "workspace"
     prepared = _read_json(workspace / "step1_tasks_prepared.json")
@@ -266,7 +281,7 @@ def build(
     per_task = derived["per_task"]
     method = derived["method"]
     ledger = _ledger_by_task(ledgers)
-    messages = _messages_from_log(log)
+    messages = _messages_from_logs(logs or [])
     files = _deliverables(artifact)
 
     catalogue = {t["task_id"]: t for t in prepared["tasks"]}
@@ -359,7 +374,12 @@ def build(
             row["failure_class_note"] = FAILURE_NOTES.get(
                 category, "이 실행은 이 실패를 분류할 근거를 남기지 않았습니다."
             )
-        if log is None and status == "error":
+        # A failure with no sentence is unexplained, and the row says so
+        # itself. Keying this off whether *any* log was supplied would leave
+        # the 15 tasks a resumed leg inherited looking explained -- their
+        # sentences are in a leg's log this caller may not have passed -- while
+        # the flag sat on the run instead of on the rows that lack one.
+        if status == "error" and not row["message"]:
             row["message_source"] = "not_available"
 
         # An attempted task missing from every supplied ledger is not free.
@@ -384,9 +404,15 @@ def main() -> None:
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument(
         "--log",
+        action="append",
         type=Path,
-        default=None,
-        help="job log with ANSI stripped; without it no failure message is recorded",
+        default=[],
+        dest="logs",
+        help=(
+            "a job log with ANSI stripped (repeatable). Each leg writes only "
+            "the tasks it ran, so give every leg's log or the failures this "
+            "leg inherited are recorded with message_source=not_available"
+        ),
     )
     parser.add_argument(
         "--ledger",
@@ -403,7 +429,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    rows, files, derived = build(args.artifact, args.log, args.extra_ledgers)
+    rows, files, derived = build(args.artifact, args.logs, args.extra_ledgers)
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
     (args.output_dir / "outcomes.json").write_text(
@@ -451,8 +477,13 @@ def main() -> None:
             "supplied ledger. These are not free -- an earlier leg paid for "
             "them. Pass that leg's ledger with --ledger."
         )
-    if args.log is None:
-        print("  no --log: no failure message recorded for any failed task")
+    unexplained = [r["n"] for r in rows if r.get("message_source") == "not_available"]
+    if unexplained:
+        print(
+            f"  NO MESSAGE    {len(unexplained)} failed task(s) carry no "
+            "provider sentence: no supplied log covers them. Pass the log of "
+            f"the leg that ran them with --log. {unexplained}"
+        )
 
 
 if __name__ == "__main__":
