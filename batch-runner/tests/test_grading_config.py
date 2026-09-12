@@ -16,6 +16,13 @@ from core.inference_manifest import _ordered_task_ids_sha256
 INFERENCE_SHA = "a" * 40
 GRADER_SOURCE_HASH = "b" * 64
 
+# Resolved from ``__file__`` rather than the CWD-relative path the rest of this
+# file uses, because a parametrize argument is built at collection time. A glob
+# that came back empty would turn a sweep into one skipped placeholder instead
+# of a failure, which is easy to miss among the other skips.
+GRADING_CONFIGS = Path(__file__).resolve().parents[1] / "grading_configs"
+SHIPPED_CONFIG_NAMES = sorted(p.name for p in GRADING_CONFIGS.glob("*.yaml"))
+
 
 def _valid_config(tmp_path: Path) -> dict:
     prompt = tmp_path / "prompt.md"
@@ -214,28 +221,62 @@ def test_grade_workflow_defaults_to_v2_sol_max():
     )
 
 
-@pytest.mark.parametrize(
-    "filename",
-    [
-        "default_v2.yaml",
-        "default_v2_sol_max.yaml",
-        "default_v2_mini.yaml",
-        "default_v2_tight.yaml",
-        "regrade_exp003_v2_mini_score_excluded.yaml",
-        "regrade_exp003_v2_sol_max_score_excluded.yaml",
-        "validation_exp003_v2_sol_max_anchor4.yaml",
-        "validation_v2_mini_cohort3.yaml",
-        "validation_v2_mini_cohort10.yaml",
-    ],
-)
-def test_active_configs_declare_safe_precheck_v2(filename: str):
-    path = Path("grading_configs") / filename
+def test_the_shipped_config_sweep_actually_found_configs():
+    """An empty sweep must fail, not quietly collect nothing.
+
+    ``SHIPPED_CONFIG_NAMES`` feeds a parametrize, so an empty list would
+    collapse the sweep below into a single skipped placeholder. That reads as
+    "nothing to check" rather than "the configs were not found".
+    """
+    assert SHIPPED_CONFIG_NAMES, f"no *.yaml configs under {GRADING_CONFIGS}"
+    assert "default_v2_sol_max.yaml" in SHIPPED_CONFIG_NAMES
+
+
+@pytest.mark.parametrize("filename", SHIPPED_CONFIG_NAMES)
+def test_every_shipped_config_declares_the_regime_the_grader_implements(
+    filename: str,
+):
+    """No shipped config may advertise a grading regime the code does not run.
+
+    Neither key is read at runtime — ``precheck_patterns_version`` is recorded
+    "as identity metadata only", and ``grades_per_task: 3`` was dead config
+    that was removed rather than wired. So this guards provenance, not
+    behaviour: ``hash_config`` is a sha256 over the file's raw bytes and lands
+    in the grade filename as ``cfg_{config_hash}``, so a config that declares
+    the wrong regime files a real grade under a false identity.
+
+    Both declarations record decisions that were made after being wrong once.
+    The automatic natural-language prechecks were disabled outright when Stage
+    A attempt 1 produced seven invalid extension-only verdicts; every filename,
+    extension, worksheet, count, page and word criterion now reaches the judge,
+    and ``v1`` names the regime that produced those verdicts. ``grades_per_task``
+    claimed three verdicts per rubric item while the implementation gave one —
+    removing it moved config identities but added no repeat grading and no paid
+    calls, and re-adding it would buy none either. Both are false claims, not
+    expensive ones.
+
+    This sweeps every config rather than naming them. The list it replaced had
+    drifted to 9 of the 14 committed configs, and a new config was covered only
+    if someone remembered to add its name. ``_archive_v1/`` is deliberately out
+    of scope — it keeps the superseded configs for cache-key reproducibility,
+    and 5 of its 6 record ``v1`` on purpose — which the non-recursive glob
+    already excludes; widening it to ``rglob`` would pull in 6 more and fail.
+    """
+    path = GRADING_CONFIGS / filename
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
 
     validate_grading_config(data)
 
-    assert data["grader"]["precheck_patterns_version"] == "v2"
-    assert "grades_per_task" not in data["grader"]
+    assert data["grader"]["precheck_patterns_version"] == "v2", (
+        f"{filename} declares the retired precheck regime. The prechecks it "
+        "names no longer exist in the grader, so the declaration would put a "
+        "regime that scored seven invalid verdicts into this grade's identity."
+    )
+    assert "grades_per_task" not in data["grader"], (
+        f"{filename} declares grades_per_task. The grader produces one final "
+        "verdict per rubric item; nothing reads this key, so it would claim "
+        "repeat grading that does not happen."
+    )
 
 
 @pytest.mark.parametrize(
