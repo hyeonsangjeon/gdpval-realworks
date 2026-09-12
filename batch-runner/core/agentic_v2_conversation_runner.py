@@ -73,7 +73,7 @@ from core.agentic_v2_contract import TOOL_NAMES
 from core.agentic_v2_cost_binding import ModelTurn, retry_kind_for_error
 from core.agentic_v2_runner import AgenticV2ScriptedRunner
 from core.agentic_v2_stage_one_budget import StageOneBudget
-from core.cost_receipts import CallUsage, RETRY_NONE
+from core.cost_receipts import CallUsage, RETRY_NONE, STAGE_GENERATION
 
 
 class ConversationRunnerRefused(RuntimeError):
@@ -265,6 +265,7 @@ def conversation_seam(
     limits: LoopLimits,
     tools_available: Sequence[str] = TOOL_NAMES,
     cancel_requested: Optional[Callable[[], bool]] = None,
+    before_model_call: Optional[Callable[[int], None]] = None,
     on_outcome: Optional[Callable[[Any], None]] = None,
 ) -> Callable[[str, Callable[..., Any]], Any]:
     """A callable the runner can hand its dispatch function to.
@@ -274,6 +275,10 @@ def conversation_seam(
     the cancel check, the deadline, the state commitment and the two chain
     appends that a scripted call gets. A desk that reached past it would produce
     a record that looks the same and proves less.
+
+    ``before_model_call`` is passed straight through to the loop, which calls it
+    with the turn number immediately before each request leaves. See
+    :func:`reserve_before_each_call` for the one thing it is for.
     """
 
     def converse(task_prompt: str, dispatch: Callable[..., Any]) -> Any:
@@ -284,6 +289,7 @@ def conversation_seam(
             limits=limits,
             tools_available=tools_available,
             cancel_requested=cancel_requested,
+            before_model_call=before_model_call,
         )
         if on_outcome is not None:
             on_outcome(outcome)
@@ -303,6 +309,9 @@ def build_runner_factory(
     budget_caps: Optional[Mapping[str, Any]] = None,
     required_backend_type: type | None = None,
     cancel_requested: Optional[Callable[[], bool]] = None,
+    before_model_call_for: Optional[
+        Callable[[str, int], Optional[Callable[[int], None]]]
+    ] = None,
     tools_available: Sequence[str] = TOOL_NAMES,
 ) -> Callable[[Any], AgenticV2ScriptedRunner]:
     """A ``runner_factory`` for :func:`core.agentic_v2_run_driver.run_manifest`.
@@ -331,6 +340,15 @@ def build_runner_factory(
     A scripted voice spends nothing and has no budget to get wrong, which is why
     ``voice`` still exists. Exactly one of the two is required — defaulting
     either way would mean guessing, and the wrong guess is the expensive one.
+
+    ``before_model_call_for`` is asked, per task and attempt, for the hook that
+    writes each call's reservation before it goes out. It is per task and
+    attempt rather than per run because the reservation's id contains both, and
+    this is the one place that knows which attempt a runner is being built for.
+    A caller with no ledger passes nothing and the loop reserves nothing, which
+    is right for a rehearsal: a rehearsal makes no call, so there is nothing to
+    reserve and a reserved row would be the one line in the ledger claiming a
+    model was asked.
     """
     if (voice is None) == (voice_for is None):
         raise ConversationRunnerRefused(
@@ -365,6 +383,11 @@ def build_runner_factory(
                 limits=limits,
                 tools_available=tools_available,
                 cancel_requested=cancel_requested,
+                before_model_call=(
+                    None
+                    if before_model_call_for is None
+                    else before_model_call_for(task_id, attempt)
+                ),
                 on_outcome=lambda outcome: conversations.record(
                     task_id, attempt, outcome
                 ),
@@ -376,6 +399,86 @@ def build_runner_factory(
         )
 
     return build
+
+
+def ledger_call_id(*, run_id: str, task_id: str, attempt: int, turn: int) -> str:
+    """What one model call is called in the cost ledger.
+
+    One function because two callers must never disagree: the reservation
+    written before the request leaves, and the settlement written after the
+    reply arrives. Two spellings of the same id would mean the reservation
+    never settles and the settlement never finds its reservation, so every paid
+    call would appear in the ledger twice — once standing open and once priced —
+    and the total would be double the truth while every individual row looked
+    right.
+
+    Every part is the run's own and every part is known before the request goes
+    out. Nothing in it comes from the model.
+    """
+    return f"{run_id}:{task_id}:{attempt}:turn-{int(turn)}"
+
+
+def reserve_before_each_call(
+    ledger: Any,
+    *,
+    run_id: str,
+    task_id: str,
+    attempt: int,
+    provider: str,
+    requested_model: str,
+    deployment: str | None = None,
+    api_version: str | None = None,
+    stage: str = STAGE_GENERATION,
+    retry_kind: str = RETRY_NONE,
+) -> Callable[[int], None]:
+    """A ``before_model_call`` hook that writes the reservation.
+
+    Handed to :func:`~core.agentic_v2_conversation.run_model_conversation`,
+    which calls it with the turn number as the last thing it does before the
+    request leaves.
+
+    This is the half of the accounting that cannot be reconstructed afterwards.
+    Everything else — what the call used, what it cost, which tool it asked for
+    — is read off a record written once the reply is in hand, and a process that
+    is killed does not get to write one. The three ways that happens are all
+    real here: a shard that exceeds its ``timeout-minutes`` is killed outright,
+    an exception between the request and the reply unwinds past every recorder,
+    and a resumed run starts a fresh journal that knows nothing of the attempt
+    that died. In each case the provider was still asked and will still bill.
+
+    A reservation left standing is exactly the right sentence for that: the
+    receipt reads ``partial`` with
+    :data:`~core.cost_receipts.REASON_CALL_REACHABILITY_UNKNOWN`, which says *a
+    call went out and this run never found out what happened to it*. It does
+    not guess an amount, and it does not let the total read ``complete``.
+
+    ``retry_kind`` must be the same one :func:`model_turns_of` will settle the
+    call under. They are passed separately because the reservation happens
+    before the attempt has an outcome, so nothing can derive one from the other;
+    a caller that lets them drift files a retry as a first attempt.
+
+    No note is written. ``state`` and ``reserved_at`` already say a call was
+    reserved before it left, and leaving the field empty is what lets the
+    settlement fill in *why* a call could not be priced — which is knowable only
+    afterwards, and only :meth:`~core.cost_receipts.CostReceiptLedger.reserve`
+    is in a position to add it without overwriting anything.
+    """
+
+    def reserve(turn: int) -> None:
+        ledger.reserve(
+            call_id=ledger_call_id(
+                run_id=run_id, task_id=task_id, attempt=attempt, turn=turn
+            ),
+            task_id=task_id,
+            stage=stage,
+            retry_kind=retry_kind,
+            provider=provider,
+            requested_model=requested_model,
+            deployment=deployment,
+            api_version=api_version,
+        )
+
+    return reserve
 
 
 def model_turns_of(
@@ -393,11 +496,26 @@ def model_turns_of(
 ) -> tuple[ModelTurn, ...]:
     """One task's conversation, as ledger entries.
 
-    ``call_id`` is namespaced by run, task and attempt. The ids inside a
-    conversation are the model's own and are only unique within it; writing them
-    into a shared ledger unqualified would have task 200's third call settle
-    against task 3's, and the corruption would show up as a total that is wrong
-    by an unknowable amount months later.
+    ``call_id`` is ``run:task:attempt:turn-N``, and every part of that is the
+    run's own. It used to end in the id the *model* chose for its tool call,
+    which was wrong in two ways. A model's id is not unique — nothing stops a
+    reply reusing one, and a ledger whose primary key the model picks is a
+    ledger the model can corrupt. And it does not exist until the reply arrives,
+    which makes it unusable for the thing that matters more: a reservation
+    written *before* the request goes out, so that a run killed mid-call leaves
+    a row rather than silence. The turn number is known before the request and
+    is unique by construction, so reserve and settle can name the same row.
+
+    The model's own id is not lost. It stays on the
+    :class:`~core.agentic_v2_conversation.TurnRecord`, which is kept beside the
+    run, and that is where a reader reconstructing the transcript should look.
+    The ledger holds money, not the transcript.
+
+    The run, task and attempt prefix stays for the reason it was added: ids
+    inside a conversation are only unique within it, and writing them into a
+    shared ledger unqualified would have task 200's third call settle against
+    task 3's, with the corruption showing up as a total that is wrong by an
+    unknowable amount months later.
 
     ``preceding_error`` is the error that caused this attempt to be made, or
     ``None`` for a first attempt. It decides the retry kind, via the same
@@ -416,6 +534,19 @@ def model_turns_of(
     ``resolved_model`` is what the provider said answered, which is not always
     what was asked for. Left ``None`` when the caller does not know — a receipt
     with no resolved model is incomplete, and incomplete is the honest state.
+
+    Entries come out in two groups. The first is the conversation's turns. The
+    second is one entry per reply the provider billed for and did not report a
+    usage for, carrying an empty :class:`CallUsage`, so that the ledger holds a
+    row saying *this was charged and cannot be priced* instead of holding
+    nothing. Without them a run could make twenty-four calls, price eighteen,
+    and publish a ``complete`` receipt for the eighteen — which is what the
+    first paid stage did, to the tune of 20% of the bill.
+
+    The two groups cannot name the same row. A reply is either counted, in
+    which case the loop files a turn for it, or it is not, in which case the
+    loop lists its number — never both, because the one ``model_replied`` event
+    per turn carries the ``counted`` flag that decides which.
     """
     retry_kind = RETRY_NONE
     if preceding_error is not None:
@@ -434,7 +565,12 @@ def model_turns_of(
     for record in turns:
         entries.append(
             ModelTurn(
-                call_id=f"{run_id}:{task_id}:{attempt}:{record.call_id}",
+                call_id=ledger_call_id(
+                    run_id=run_id,
+                    task_id=task_id,
+                    attempt=attempt,
+                    turn=record.turn,
+                ),
                 usage=CallUsage(
                     input_tokens=record.input_tokens,
                     output_tokens=record.output_tokens,
@@ -448,6 +584,35 @@ def model_turns_of(
                 retry_kind=retry_kind,
             )
         )
+    for turn_number in getattr(outcome, "turns_not_counted", ()) or ():
+        entries.append(
+            ModelTurn(
+                call_id=ledger_call_id(
+                    run_id=run_id,
+                    task_id=task_id,
+                    attempt=attempt,
+                    turn=turn_number,
+                ),
+                # Empty, not zero, and the distinction is the whole point. A
+                # `CallUsage()` prices as `usage_absent`: no amount, one more
+                # call in `model_calls`, and a receipt held at `partial`. A
+                # `CallUsage(0, 0)` would price as `$0.00` and let the receipt
+                # read `complete` — a measured-looking figure for a call
+                # nobody measured.
+                usage=CallUsage(),
+                provider=provider,
+                requested_model=requested_model,
+                deployment=deployment,
+                api_version=api_version,
+                resolved_model=resolved_model,
+                request_sha256=None,
+                retry_kind=retry_kind,
+                note=(
+                    "the provider answered and will bill for this call, and "
+                    "reported no usage the run could read"
+                ),
+            )
+        )
     return tuple(entries)
 
 
@@ -458,5 +623,7 @@ __all__ = [
     "TaskConversations",
     "build_runner_factory",
     "conversation_seam",
+    "ledger_call_id",
     "model_turns_of",
+    "reserve_before_each_call",
 ]

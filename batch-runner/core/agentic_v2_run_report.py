@@ -278,10 +278,23 @@ def summarise_v2_run(
     none must not be readable as a run that graded 220, so ``graded`` is
     ``None`` with a stated reason rather than ``0`` — zero graded and grading
     not attempted look identical as a number and are not the same fact.
+
+    ``receipt_ceiling`` is the journal's ceiling: what the run may claim given
+    what was abandoned. It is a ceiling and not a verdict, and it was being
+    read as the verdict. The journal knows about attempts that vanished; it
+    knows nothing about a call the provider billed and did not count, because
+    that is a fact about a ledger row. So a run could hand every task a
+    ``partial`` receipt and still publish ``cost_is_fully_accounted: true`` —
+    which is what the first paid stage did, for a bill that was 20% short.
+
+    The rows are therefore asked as well, and the lower of the two answers
+    wins. A run is fully accounted only where the journal lost nothing *and*
+    every receipt written under it reads ``complete``.
     """
     dispositions: dict[str, int] = {}
     abandoned = 0
     succeeded = 0
+    unsettled: dict[str, int] = {}
     for row in rows:
         metrics = (row.get("observability") or {}).get("agentic_metrics") or {}
         disposition = metrics.get("agentic_v2_disposition")
@@ -290,6 +303,20 @@ def summarise_v2_run(
         abandoned += int(metrics.get("agentic_v2_abandoned_attempts") or 0)
         if row.get("status") == STATUS_SUCCESS:
             succeeded += 1
+        # Read off the receipt the row carries rather than off the metrics
+        # copy, because the receipt is the object the money is on and the
+        # metrics field is derived from it. A row with no receipt says nothing
+        # here: absent is not a complaint, and `receipt_ceiling` above already
+        # covers a task the journal could not close.
+        receipt = row.get("problem_solving_cost")
+        if isinstance(receipt, Mapping):
+            status = str(receipt.get("status") or "")
+            if status and status != STATUS_COMPLETE:
+                unsettled[status] = unsettled.get(status, 0) + 1
+
+    ceiling = str(receipt_ceiling)
+    every_receipt_settled = not unsettled
+    accounted = ceiling == STATUS_COMPLETE and every_receipt_settled
 
     return {
         "schema_version": AGENTIC_V2_METRICS_SCHEMA_VERSION,
@@ -301,8 +328,12 @@ def summarise_v2_run(
         "not_reached": max(0, int(manifest_size) - len(rows)),
         "abandoned_attempts": abandoned,
         "dispositions": dict(sorted(dispositions.items())),
-        "receipt_ceiling": str(receipt_ceiling),
-        "cost_is_fully_accounted": receipt_ceiling == STATUS_COMPLETE,
+        "receipt_ceiling": ceiling,
+        # How many tasks the run could not settle, and under which status.
+        # Empty where every receipt read `complete`; a reader chasing a short
+        # bill starts here rather than by opening 220 receipts.
+        "unsettled_receipts": dict(sorted(unsettled.items())),
+        "cost_is_fully_accounted": accounted,
         "graded": None,
         "graded_reason": "grading is a separate run and has not been made",
     }
