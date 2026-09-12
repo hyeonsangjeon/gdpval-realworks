@@ -257,6 +257,27 @@ ValueError: rerun_identity.inference_revision is invalid
 있는 이유가 이것이다 — 채워 넣기 전에는 적재 자체가 되지 않으므로, 빈 칸을
 들고 실수로 디스패치할 수가 없다.
 
+**막는 것이 디스패치만은 아니다.** `tests/test_grading_config.py`의
+`test_every_shipped_config_declares_the_regime_the_grader_implements`가
+`grading_configs/*.yaml`을 전부 훑으면서 각각에 `validate_grading_config`를
+부른다. 그래서 자리표시자를 넣은 채로 **커밋만 해도** 시험이 빨개진다. 초안을
+저장소 밖에 두는 것은 조심해서가 아니라 넣을 수가 없어서다.
+
+그리고 그 함수를 초안에 직접 두 번 돌려 **남은 칸이 그 하나뿐임**을 확인했다.
+
+| 초안의 `inference_revision` | `validate_grading_config` |
+|---|---|
+| `__PENDING_FINAL_LEG_STEP7__`(지금 값) | `ValueError: rerun_identity.inference_revision is invalid` |
+| `0` 마흔 개(모양만 맞는 가짜) | 통과 |
+
+두 줄의 차이가 그 필드 하나뿐이므로, 나머지 — 실험 id, 220개 목록과 그
+순서, `expected_task_count`, rubric sha, 판정기 설정 — 는 **이미 적재를
+통과하는 상태**다. 마지막 구간의 7단계가 sha를 내놓으면 그 칸만 채워서
+파일로 옮기면 된다. 가짜 sha가 통과한 것은 §위의 "존재 확인이 아니라 자기
+일관성"과 같은 이야기다 — 적재는 모양만 보고, 그 sha가 **실제로 올라간
+개정판인지**는 2539행의 대조와 뒤이은 parquet 내려받기가 본다.
+
+
 이 순서는 **#564가 이미 시험으로 고정해 두었다** —
 `tests/test_a_wrong_pin_is_refused_before_the_judge_exists.py`가 대조와
 `Grader`·`grade_task` 사이의 앞뒤를 문법 트리로 읽는다. 행 번호를 훑지 않으므로
