@@ -58,8 +58,9 @@ from core.agentic_v2_stage_one_budget import (  # noqa: E402
     run_stage_one_preflight,
 )
 from core.execution_envelope_cost import (  # noqa: E402
+    PAID_VOICE_PRICE_PROVIDER,
     CostAssumptions,
-    load_price_table,
+    load_provider_price_table,
 )
 from core.execution_envelope_preflight import load_plan  # noqa: E402
 from core.execution_envelope_tasks import (  # noqa: E402
@@ -331,7 +332,7 @@ def main() -> int:
             max_output_tokens_per_turn=verdict.max_output_tokens_per_turn,
             max_tool_calls=verdict.tool_calls_per_attempt,
             max_seconds=float(plan["fixed_settings"]["per_task_timeout_seconds"]),
-            prices=load_price_table(),
+            prices=load_provider_price_table(PAID_VOICE_PRICE_PROVIDER),
             tools=PROBE_TOOLS,
         )
         fingerprint = managed.runtime_fingerprint

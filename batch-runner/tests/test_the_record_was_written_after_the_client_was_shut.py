@@ -235,7 +235,7 @@ def test_a_price_list_that_will_not_load_is_reported_and_not_raised(monkeypatch)
     def refuse(*_args, **_kwargs):
         raise ValueError("the price list is not yaml any more")
 
-    monkeypatch.setattr(runner, "load_price_table", refuse)
+    monkeypatch.setattr(runner, "load_provider_price_table", refuse)
     problems = runner.the_paid_setup_a_dry_run_can_reach("advance_check_5")
 
     assert len(problems) == 1
