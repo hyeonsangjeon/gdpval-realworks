@@ -349,6 +349,48 @@ entry and its own approved amount, or a new approval. Note the gap between
 ceiling and reality — trial_30 spent 5.4% of its ceiling — so the ceiling is
 what gates the start, not what the run would cost.
 
+### These prices are for the broken replay format
+
+Every figure above assumes the replay described in §4: past turns come back as
+one short line of prose with the arguments dropped. That is why they are cheap.
+Fixing it means re-sending every argument the model ever passed, on every
+subsequent turn, and the cost of that is not small.
+
+Measured against trial_30, from the ledger — which agrees exactly with the
+conversation records, 1,140,544 input and 218,697 output tokens, `gpt-5.4` at
+$2.50 / $15.00 per million:
+
+| | tokens | at the cohort's prices |
+|---|---|---|
+| input actually billed | 1,140,544 | $2.851 |
+| output actually billed | 218,697 | $3.280 |
+| **actual total** | | **$6.131815** |
+| input a faithful replay would add | **+719,526** | **+$1.799** |
+| would-be total | | ~$7.93, **+29%** |
+
+The 719,526 is an estimate with a stated basis, not a measurement: a faithful
+replay re-sends every past argument, so its extra input at turn *n* is taken as
+the tokens the model emitted on turns 0..*n*−1. That over-counts slightly,
+because output tokens include the model's spoken `why` as well as the arguments.
+The magnitude is the point, and the magnitude is tens of percent.
+
+Two consequences.
+
+**The surcharge grows faster than the limit does.** It is the sum of a running
+total, so it is quadratic in conversation length while the priced ceilings above
+are close to linear. Fixing the replay makes the 12-call row further out of
+reach than it already is, not equally so.
+
+**The ceilings must be re-derived after the fix, before the fix's run is
+scheduled.** They are the `may start` column, so a fix that lands without
+re-pricing would let a run start against a ceiling computed for a cheaper
+harness. That is the one ordering constraint this fix carries.
+
+One thing this does not change: the ledger's own `model_cost_usd` column is
+zero on all of trial_30's rows, so $6.131815 is a figure derived by applying
+the shared price table afterwards, not one the run recorded. It reproduces to
+six decimal places, and it is derived rather than read.
+
 Stopping rule: if the effect on the 18 does not exceed the repeat spread, the
 limit stays at 8 and the question is closed.
 
@@ -377,7 +419,11 @@ In order:
    turns with the arguments stripped, and finishing that paraphrase as text
    ended five more tasks. Unlike everything else here it is a defect rather
    than a condition somebody chose, and its likelihood rises with the very
-   axis this experiment wants to move.
+   axis this experiment wants to move. It is the one fix with a price: a
+   faithful replay costs roughly 29% more on this cohort, quadratically more
+   as the limit rises, so **the ceilings in §9 have to be re-derived before
+   its run is scheduled** (§9, "These prices are for the broken replay
+   format").
 
    These two can be fixed in the same run, and probably should be: the goal is
    a platform to measure the limit on, not an effect estimate for either fix.
