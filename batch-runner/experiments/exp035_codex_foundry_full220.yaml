@@ -211,12 +211,24 @@
 # an experiment file that simply omits this key retries filtered tasks
 # quietly. This one does not omit it.
 #
-# The dispatch, and why it is dry
-# -------------------------------
+# The dispatch: planned dry, actually wet
+# ---------------------------------------
 #
-# This run is dispatched with `dry_run: true`, the same as exp034. The name is
-# misleading and the misreading is expensive, so here is exactly what that
-# input does in `.github/workflows/batch-run.yml`:
+# This section was written for a `dry_run: true` dispatch, and leg 0 was
+# dispatched that way. **The lineage actually in flight was not.** The job logs
+# echo the resolved input 28 times per run:
+#
+#   34571840967  leg 0, by hand      dry_run=true   relay_run=0
+#   34603033098  lineage B, by hand  dry_run=false  relay_run=0
+#   34631861765  lineage B, by bot   dry_run=false  relay_run=1
+#
+# One hand-typed dispatch on 2026-09-11 at 13:12:50Z changed both inputs at
+# once: `relay_run` back to 0, which is why lineage B re-solved leg 0's 45
+# tasks for $14.3866, and `dry_run` to false. Neither change came from the
+# relay, which forwards whatever it was given.
+#
+# The name is misleading and the misreading is expensive, so here is exactly
+# what that input does in `.github/workflows/batch-run.yml`:
 #
 #   runs anyway   step 2 inference, step 3 format, step 4 parquet,
 #                 step 6 report (model-free, --dry-run), artifact upload
@@ -224,27 +236,60 @@
 #   skipped       step 5 validate, the results pull request, the HuggingFace
 #                 upload
 #
-# exp034 ran under this input and made real paid calls for 3 hours 6 minutes.
-# `dry_run` has never once meant that inference was skipped.
+# exp034 ran under `dry_run: true` and made real paid calls for 3 hours 6
+# minutes. `dry_run` has never once meant that inference was skipped.
 #
-# The three skipped steps fire only on the final leg and none of them touches
-# a result. Turning them on would mean the first execution of an upload path
-# this three-stage sequence has never exercised, landing at the end of a
-# 23-hour paid run. They can be run afterwards from the artifact for nothing.
-# `output.publish_to_hf` below is `false` and stays consistent with that;
-# nothing in `codex_foundry` mode reads that key to decide an upload, so it is
-# a record of intent rather than a switch.
+# Because the flight lineage carries `false`, those three steps will fire on
+# its final leg -- the outcome this section argued against. It is the first
+# execution of an upload path this three-stage sequence has never exercised,
+# arriving at the end of a multi-day paid run. The exposure is bounded: every
+# result is in the run artifact and all three steps can be re-run from it for
+# nothing, so a failure there costs the run's `conclusion` and not its
+# results. The gain is that grading needs no manual recovery, because step 4
+# fills the parquet and step 7 writes the provenance sidecar that the grader
+# refuses to proceed without.
 #
-# What this run will not produce
-# ------------------------------
+# `output.publish_to_hf` below is `false` and no longer agrees with the
+# dispatch; nothing in `codex_foundry` mode reads that key to decide an
+# upload, so it is a record of intent rather than a switch.
 #
-# A dollar figure. The cost ledger will come back `status: "partial"` with
-# `estimated_cost_usd: null` and `missing_reasons: ["call_reachability_unknown"]`,
-# exactly as exp034's did, because this deployment is absent from
-# `experiments/execution_envelope/model_price_table.json`. What it will record
-# is real and is not a price: exp034 logged 59 model calls, 9,308,069 input
-# tokens of which 7,537,280 were cached, 397,131 output and 141,341 reasoning,
-# summed across all thirty rows.
+# What this run will not produce, and what it produced anyway
+# -----------------------------------------------------------
+#
+# A receipt. The cost receipt came back `status: "partial"` with
+# `estimated_cost_usd: null` and `missing_reasons: ["call_reachability_unknown"]`
+# on every one of the 102 attempted rows, exactly as exp034's did. That much
+# this section called correctly. The reason it gave for it was wrong, and so
+# was the conclusion it drew from that reason.
+#
+# The reason it gave was that the deployment is absent from
+# `experiments/execution_envelope/model_price_table.json`. It is not absent.
+# `condition_a.model.deployment` below is `gpt-5.4`; the table carries
+# `gpt-5.4`; and the run recorded that table's fingerprint
+# `b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e` as it
+# went. The receipt is partial because the Codex harness cannot enumerate the
+# requests it sent, which is a different defect with a different remedy: a
+# price nobody can look up is fixed by adding a row, and a call nobody can
+# count is not.
+#
+# The conclusion — that no dollar figure exists — did not survive the run. A
+# second path reaches one without going through the receipt at all:
+# `core.cost_receipts.price_call` over the ledger's `cost_calls` rows, priced
+# with that same committed table. Across the round's three legs it priced 231
+# of 258 calls, derived $56.164962, and put a figure on 100 of the 102 tasks
+# individually. Four tasks logged an attempt with no token counts behind it --
+# two in each lineage, and not the same two, so two of the four are priced in
+# the surviving record and two are not.
+#
+# Two numbers live here and they are not interchangeable. `model_cost_usd` is
+# what the provider billed, and it is unknown for every task in this round.
+# `derived_cost_usd_from_measured_tokens` is what the measured tokens cost at
+# the committed rates: a floor, counting what was measured and claiming
+# nothing about what was not.
+#
+# What the receipt does record is real and is still not a price: exp034
+# logged 59 model calls, 9,308,069 input tokens of which 7,537,280 were cached,
+# 397,131 output and 141,341 reasoning, summed across all thirty rows.
 #
 # The 59 reconciles independently against the log, which never sees the
 # ledger: 30 first attempts plus the retries, and the retries are fixed by
@@ -252,7 +297,9 @@
 # the same thing, taken from two files, agreeing.
 #
 # An absent number stays absent. It is not zero, and it is not an estimate
-# dressed as a measurement.
+# dressed as a measurement. That holds for the four unpriced tasks and for
+# every `model_cost_usd` in this round. It does not extend to the derived
+# floor, which was measured.
 
 experiment:
   id: "exp035_codex_foundry_full220"
