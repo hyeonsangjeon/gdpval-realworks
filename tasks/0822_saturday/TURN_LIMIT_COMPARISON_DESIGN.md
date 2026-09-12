@@ -393,16 +393,23 @@ entry and its own approved amount, or a new approval. Note the gap between
 ceiling and reality — trial_30 spent 5.4% of its ceiling — so the ceiling is
 what gates the start, not what the run would cost.
 
-### These prices are for the broken replay format
+Every **ceiling** in that table is one turn per attempt short, for a reason that
+has nothing to do with the limit being studied; see "The ceiling does have an
+error" below. The `model calls` column is right — and is the discrepancy sitting
+in the open, since 8 tool calls is priced as 8 turns and recorded here as 9.
+Corrected, the control row is $141.60 rather than $114.60 and trial_30 spent
+4.3% of it. No row's `may start` changes.
 
-Every figure above assumes the replay described in §4: past turns come back as
-one short line of prose with the arguments dropped. That is why they are cheap.
-Fixing it means re-sending every argument the model ever passed, on every
-subsequent turn, and the cost of that is not small.
+### What fixing the replay format would cost
 
-Measured against trial_30, from the ledger — which agrees exactly with the
-conversation records, 1,140,544 input and 218,697 output tokens, `gpt-5.4` at
-$2.50 / $15.00 per million:
+The *bill* rises. The *ceiling* does not, and an earlier draft of this section
+got that the wrong way round; the correction is two subsections down.
+
+Fixing the replay means re-sending every argument the model ever passed, on
+every subsequent turn, where today it gets one short line of prose with the
+arguments dropped (§4). Measured against trial_30, from the ledger — which
+agrees exactly with the conversation records, 1,140,544 input and 218,697
+output tokens, `gpt-5.4` at $2.50 / $15.00 per million:
 
 | | tokens | at the cohort's prices |
 |---|---|---|
@@ -418,17 +425,81 @@ the tokens the model emitted on turns 0..*n*−1. That over-counts slightly,
 because output tokens include the model's spoken `why` as well as the arguments.
 The magnitude is the point, and the magnitude is tens of percent.
 
-Two consequences.
-
 **The surcharge grows faster than the limit does.** It is the sum of a running
-total, so it is quadratic in conversation length while the priced ceilings above
-are close to linear. Fixing the replay makes the 12-call row further out of
-reach than it already is, not equally so.
+total, so it is quadratic in conversation length. Fixing the replay makes the
+12-call row a worse bargain than it already is, not an equally bad one.
 
-**The ceilings must be re-derived after the fix, before the fix's run is
-scheduled.** They are the `may start` column, so a fix that lands without
-re-pricing would let a run start against a ceiling computed for a cheaper
-harness. That is the one ordering constraint this fix carries.
+#### But the ceilings above do not move, and an earlier draft of this section said they did
+
+That draft said the ceilings had to be re-derived before the fix's run could be
+scheduled. Checked against the arithmetic, that is wrong, and wrong in a way
+worth recording because it was an easy mistake to make: the ceiling was never
+computed for the harness that exists.
+
+`stage_one_ceiling` sets `output_tokens_capped_per_attempt` to `False` for this
+environment, which sends `max_input_tokens_per_attempt` down the branch that
+charges turn *k* for *k* full-length answers behind it. That term —
+`earlier_turn_pairs × max_output_tokens_per_turn` — **is** a faithful replay,
+priced at the largest it could ever be. The ceiling has always assumed the
+model is shown every one of its own past turns in full. The harness is what
+departed from it.
+
+The sizes are not close:
+
+| at the control row, 8 tool calls | input tokens |
+|---|---|
+| what the ceiling sets aside for replaying past turns | 17,694,720 |
+| what the whole run actually billed, everything included | 1,140,544 |
+| what a faithful replay would add | +719,526 |
+
+The fix spends **4.07%** of an allowance the gate already made for exactly that
+term. It cannot push a run past its ceiling, and the per-task runtime budget is
+built from the same figure, so it cannot trip that either. **No re-derivation is
+needed and there is no ordering constraint.** The fix costs real money — about
+29% more on this cohort — and that is a fact about the bill, not about the gate.
+
+#### The ceiling does have an error, and it is the other way round
+
+While checking the above, a real one turned up. Two places decide how long one
+attempt may be:
+
+* `ceilings_from` (`agentic_v2_conversation_runner.py`) builds what the run
+  enforces: `calls + 1`, "one model call per tool call, plus the turn that
+  finalises". Three lines down it says the input is "priced that way in
+  price_the_options; bounded the same way here".
+* `stage_one_ceiling` builds the figure the gate compares against the approved
+  amount, and passes `tool_calls_per_attempt` through as the turn count. No
+  `+ 1`.
+
+trial_30 settles which is right: sixteen attempts stopped on
+`turn_limit_reached`, and the record's own words are *"the model has been asked
+9 times, which is all the 9 this run was allowed"* — nine, at
+`tool_calls_per_attempt: 8`. The runner describes the run; the pricer is a turn
+behind it.
+
+One turn is not a twelfth of the bill, because a looping attempt re-reads
+everything before it: nine turns re-read 36 earlier-turn pairs where eight
+re-read 28. Priced through the gate's own arithmetic on the real cohorts:
+
+| stage | as the gate prices it | at the turn count the run takes | approved | verdict |
+|---|---|---|---|---|
+| `advance_check_5` | $18.47 | $22.88 | $50 | unchanged |
+| `trial_30` | $114.60 | $141.60 | $200 | unchanged |
+| `full_220` | $884.61 | $1088.12 | $1400 | unchanged |
+
+**No verdict changes, and nothing here is a reason to revisit an approval.**
+Every stage is inside its approved amount either way, and the closed rows — 12,
+16 and 32 tool calls on thirty tasks — were already over before the correction
+and are further over after it. What is wrong is the number the gate prints, in
+the direction of looking cheaper than the run is. It matters for the next
+approval, not for one already given, and the fix is to the pricer rather than to
+any ceiling.
+
+Both halves are pinned offline by
+`test_the_gate_prices_one_turn_fewer_than_the_run_takes.py`, including the
+assertion that no stage's verdict flips — so if the correction ever does start
+to matter to a decision, that test fails and says the approval needs raising
+rather than the turn count lowering.
 
 One thing this does not change: the ledger's own `model_cost_usd` column is
 zero on all of trial_30's rows, so $6.131815 is a figure derived by applying
@@ -462,11 +533,11 @@ In order:
 2. **Fix the replay format.** The model is shown a paraphrase of its own
    turns with the arguments stripped, and finishing that paraphrase as text
    ended five more tasks. Unlike everything else here it is a defect rather
-   than a condition somebody chose. It is also the one fix with a price: a
-   faithful replay costs roughly 29% more on this cohort, quadratically more
-   as the limit rises, so **the ceilings in §9 have to be re-derived before
-   its run is scheduled** (§9, "These prices are for the broken replay
-   format").
+   than a condition somebody chose. It costs about 29% more on this cohort and
+   quadratically more as the limit rises, but it carries **no ordering
+   constraint**: the ceilings in §9 already price a faithful replay at full
+   length, and the fix spends 4% of the allowance they made for it (§9, "But
+   the ceilings above do not move").
 
    These two can be fixed in the same run, and probably should be: the goal is
    a platform to measure the limit on, not an effect estimate for either fix.
