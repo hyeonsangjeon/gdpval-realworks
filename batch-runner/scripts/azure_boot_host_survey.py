@@ -38,8 +38,8 @@ So the output is one of four answers, and only the first two are good news:
     registered, and the region has quota. A host could be deployed under
     permissions that already exist, with no access change at all.
 ``blocked_and_the_change_is_named``
-    One or more of those three is missing. The report names which, in the exact
-    terms somebody would need to approve it. It does not ask for it.
+    One or more of those preconditions is missing. The report names which, in
+    the exact terms somebody would need to approve it. It does not ask for it.
 ``not_measured``
     ``az`` did not answer. Nothing was learned, and in particular this is *not*
     evidence that anything is absent. A local login reaches a different
@@ -117,18 +117,119 @@ class SurveyRefused(RuntimeError):
 # What a host would need
 # -------------------------------------------------------------------------
 
-#: The three control-plane writes that deploying ``infra/dev-host/main.bicep``
-#: into a subscription would perform. Listed as actions rather than as a role
+SCOPE_RESOURCE_GROUP = "resource_group"
+SCOPE_SUBSCRIPTION = "subscription"
+
+
+@dataclass(frozen=True)
+class NeededAction:
+    """One control-plane action deploying the host definition would perform.
+
+    ``scope`` is the smallest scope an assignment granting it could sit at, and
+    it is the difference between an access change the resource-group owner can
+    make and one that has to be made across the whole subscription.
+
+    ``only_if`` names the condition under which the template performs it at all.
+    An action carrying one is measured like the others but does not block the
+    verdict, because a deployment that never takes that branch never needs it.
+    """
+
+    action: str
+    why: str
+    scope: str = SCOPE_RESOURCE_GROUP
+    only_if: str = ""
+
+    @property
+    def always(self) -> bool:
+        return not self.only_if
+
+
+#: Every control-plane write that deploying ``infra/dev-host/main.bicep``
+#: performs, one entry per resource the template declares, read off the
+#: template rather than chosen here. Listed as actions rather than as a role
 #: name because the question is what the identity *can do*, and two identities
 #: holding different roles can both be able to do this.
-REQUIRED_ACTIONS: tuple[tuple[str, str], ...] = (
-    ("Microsoft.Compute/virtualMachines/write", "create the machine itself"),
-    ("Microsoft.Network/networkInterfaces/write", "give it a network interface"),
-    (
+#:
+#: An earlier version of this list named three actions. That was not the
+#: template's list: it was missing the network security group, the virtual
+#: network, the data disk, the auto-shutdown schedule and the deployment object
+#: itself, so an identity could have passed the survey and still failed the
+#: deployment. The three it did name are still here.
+REQUIRED_ACTIONS: tuple[NeededAction, ...] = (
+    NeededAction(
+        "Microsoft.Resources/deployments/write",
+        "submit the template at all -- a deployment is itself a resource",
+    ),
+    NeededAction(
+        "Microsoft.Network/networkSecurityGroups/write",
+        "create the security group that closes the host to the internet",
+    ),
+    NeededAction(
+        "Microsoft.Network/virtualNetworks/write",
+        "create the network and the subnet the host sits on",
+    ),
+    NeededAction(
+        "Microsoft.Network/networkInterfaces/write",
+        "give it a network interface",
+    ),
+    NeededAction(
+        "Microsoft.Compute/disks/write",
+        "create the data disk the guest images would live on",
+    ),
+    NeededAction(
+        "Microsoft.Compute/virtualMachines/write",
+        "create the machine itself",
+    ),
+    NeededAction(
+        "Microsoft.DevTestLab/schedules/write",
+        "attach the auto-shutdown that stops it billing overnight",
+    ),
+    NeededAction(
+        "Microsoft.Network/publicIPAddresses/write",
+        "give it an address reachable from outside",
+        only_if="attachPublicIp is set, and the template defaults it to false",
+    ),
+    NeededAction(
         "Microsoft.Resources/subscriptions/resourceGroups/write",
-        "put it in a resource group",
+        "create the resource group to put it all in",
+        scope=SCOPE_SUBSCRIPTION,
+        only_if=(
+            "the resource group does not already exist -- deploy.sh creates it "
+            "in a separate step, so an owner who creates it first removes this "
+            "action, and with it the only subscription-scope item on the list"
+        ),
     ),
 )
+
+#: The joins. Creating a resource that attaches to another one needs permission
+#: on *both*, and these are the ones the template's own attachments require.
+#: Kept apart from the writes because they are the reason
+#: ``Virtual Machine Contributor`` alone nearly works: it holds every join here
+#: and only two of the writes above are outside it.
+REQUIRED_JOINS: tuple[NeededAction, ...] = (
+    NeededAction(
+        "Microsoft.Network/virtualNetworks/subnets/join/action",
+        "put the interface on the subnet",
+    ),
+    NeededAction(
+        "Microsoft.Network/networkSecurityGroups/join/action",
+        "apply the security group to that subnet",
+    ),
+    NeededAction(
+        "Microsoft.Network/networkInterfaces/join/action",
+        "attach the interface to the machine",
+    ),
+)
+
+
+def actions_measured() -> tuple[NeededAction, ...]:
+    """Everything the survey asks about, writes first."""
+    return REQUIRED_ACTIONS + REQUIRED_JOINS
+
+
+def actions_that_block() -> tuple[NeededAction, ...]:
+    """The subset a deployment cannot go ahead without, under the defaults."""
+    return tuple(needed for needed in actions_measured() if needed.always)
 
 #: Without this registered, no virtual machine can be created in the
 #: subscription however the roles read. Registering it is itself a write, so it
@@ -363,10 +464,28 @@ def read_quota(
     )
 
 
+def _list_assignments(
+    runner: Callable[[Sequence[str]], Any], rbac: Any, *, principal: str
+) -> tuple[list[Mapping[str, Any]], bool]:
+    """Every assignment this principal holds, group-inherited ones included.
+
+    ``--include-groups`` is asked for first and dropped if the installed CLI
+    will not take it. It matters in one direction only: without it, a grant the
+    identity holds through a group is invisible, and this survey's "no" is about
+    to be quoted as the reason for a role request. A "no" that has not looked at
+    group membership is a weaker "no", so which of the two ran is reported.
+    """
+    base = ["role", "assignment", "list", "--all", "--assignee", principal]
+    try:
+        return rbac._as_mappings(runner([*base, "--include-groups"])), True
+    except rbac.AzureReadFailure:
+        return rbac._as_mappings(runner(base)), False
+
+
 def read_permissions(
     runner: Callable[[Sequence[str]], Any], rbac: Any, *, principal: str
 ) -> Finding:
-    """Which of the three writes this identity's roles already permit."""
+    """Which of the actions a deployment performs this identity's roles permit."""
     question = "can this identity already perform the writes a host needs"
     if not principal:
         return Finding(
@@ -376,8 +495,8 @@ def read_permissions(
             note="no principal id was available to ask about",
         )
     try:
-        assignments = rbac._as_mappings(
-            runner(["role", "assignment", "list", "--all", "--assignee", principal])
+        assignments, groups_included = _list_assignments(
+            runner, rbac, principal=principal
         )
     except rbac.AzureReadFailure as failure:
         return Finding(
@@ -408,16 +527,40 @@ def read_permissions(
             )
 
     permitted = {
-        action: _permits(definitions, action, rbac) for action, _ in REQUIRED_ACTIONS
+        needed.action: _permits(definitions, needed.action, rbac)
+        for needed in actions_measured()
     }
+    blocked = sorted(
+        needed.action
+        for needed in actions_that_block()
+        if not permitted[needed.action]
+    )
     return Finding(
         question,
         measured=True,
         answer={
             "assignments_held": len(assignments),
             "permits": permitted,
-            "permits_all_three": all(permitted.values()),
+            "permits_every_action_a_deployment_would_take": not blocked,
+            "actions_measured": len(permitted),
+            "blocking_actions_not_permitted": blocked,
+            "scopes": {
+                needed.action: needed.scope for needed in actions_measured()
+            },
+            "measured_but_not_blocking": {
+                needed.action: needed.only_if
+                for needed in actions_measured()
+                if not needed.always
+            },
         },
+        note=(
+            ""
+            if groups_included
+            else (
+                "the installed az would not take --include-groups, so a grant "
+                "held through a group membership would not appear here"
+            )
+        ),
     )
 
 
@@ -473,14 +616,21 @@ def decide(findings: Mapping[str, Finding]) -> dict[str, Any]:
             "increase would have to be requested"
         )
     permissions = findings["permissions"].answer or {}
-    denied = sorted(
-        action for action, allowed in (permissions.get("permits") or {}).items()
-        if not allowed
-    )
+    denied = list(permissions.get("blocking_actions_not_permitted") or [])
     if denied:
         missing.append(
             "this identity's roles do not permit: " + ", ".join(denied)
         )
+    # Held apart from ``missing`` on purpose. A deployment under the template's
+    # defaults never reaches these, so they must neither block a verdict on
+    # their own nor pad the list somebody takes to the subscription owner.
+    would_also_be_needed = [
+        f"{action}, but only if {why}"
+        for action, why in sorted(
+            (permissions.get("measured_but_not_blocking") or {}).items()
+        )
+        if not (permissions.get("permits") or {}).get(action, True)
+    ]
 
     if missing:
         return {
@@ -490,6 +640,7 @@ def decide(findings: Mapping[str, Finding]) -> dict[str, Any]:
                 "capacity that exist today"
             ),
             "what_would_have_to_change": missing,
+            "would_also_be_needed_under_other_options": would_also_be_needed,
             "and_note": (
                 "this is a report, not a request. Each item above is an access "
                 "or capacity change and belongs to whoever owns the "
@@ -497,14 +648,17 @@ def decide(findings: Mapping[str, Finding]) -> dict[str, Any]:
             ),
         }
 
+    measured_count = int(permissions.get("actions_measured") or 0)
     return {
         "verdict": VERDICT_WITHIN_PERMISSIONS,
         "because": (
             "the provider is registered, the region has room for one "
-            f"{HOST_VM_SIZE}, and this identity's existing roles permit all "
-            "three writes. No access change is needed to put a host here"
+            f"{HOST_VM_SIZE}, and this identity's existing roles permit every "
+            f"one of the {measured_count} actions a deployment would take. No "
+            "access change is needed to put a host here"
         ),
         "what_would_have_to_change": [],
+        "would_also_be_needed_under_other_options": would_also_be_needed,
     }
 
 
@@ -530,7 +684,9 @@ def survey(
     }
     report: dict[str, Any] = {
         "artifact": "agentic-v2-boot-host-survey",
-        "artifact_version": "1.0",
+        # 1.1 widened the measured action list from three writes to every
+        # action the host definition performs, and split the answer by scope.
+        "artifact_version": "1.1",
         "question": (
             "could the subscription the model deployment lives in host a "
             "Firecracker guest, under permissions that already exist"
@@ -547,6 +703,15 @@ def survey(
             "vm_size": HOST_VM_SIZE,
             "vcpus": HOST_VCPUS,
             "quota_family": HOST_QUOTA_FAMILY,
+            "actions_it_performs": [
+                {
+                    "action": needed.action,
+                    "why": needed.why,
+                    "scope": needed.scope,
+                    "only_if": needed.only_if,
+                }
+                for needed in actions_measured()
+            ],
         },
         "findings": {name: f.as_dict() for name, f in findings.items()},
     }
@@ -583,6 +748,11 @@ def render(report: Mapping[str, Any]) -> str:
         for item in report["what_would_have_to_change"]:
             lines.append(f"  - {item}")
         lines.append(f"  {report.get('and_note', '')}")
+    if report.get("would_also_be_needed_under_other_options"):
+        lines.append("")
+        lines.append("Not needed for this deployment, and not part of the ask:")
+        for item in report["would_also_be_needed_under_other_options"]:
+            lines.append(f"  - {item}")
     return "\n".join(lines)
 
 

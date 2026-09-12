@@ -99,7 +99,12 @@ def az(
                 for i, _ in enumerate(definitions)
             ]
         if head == "role definition":
-            return [definitions[0]] if definitions else []
+            # Keyed on the name asked for, so that an identity holding two
+            # roles is evaluated against both of them and not twice against
+            # the first -- which is the whole shape of "VM Contributor plus
+            # Network Contributor".
+            wanted = arguments[-1]
+            return [definitions[int(wanted)]] if wanted.isdigit() else []
         raise AssertionError(f"the survey asked something unexpected: {head}")
 
     return run
@@ -182,12 +187,12 @@ class TestTheVerdict:
             report["is_not"]
         )
 
-    def test_a_reader_role_is_blocked_and_the_three_writes_are_named(self):
+    def test_a_reader_role_is_blocked_and_the_writes_are_named(self):
         report = surveyed(definitions=(READER,))
         assert report["verdict"] == module.VERDICT_BLOCKED
         named = " ".join(report["what_would_have_to_change"])
-        for action, _ in module.REQUIRED_ACTIONS:
-            assert action in named
+        for needed in module.actions_that_block():
+            assert needed.action in named
 
     def test_an_unregistered_provider_blocks_and_is_not_registered_by_the_survey(self):
         report = surveyed(provider="NotRegistered")
@@ -211,9 +216,10 @@ class TestTheVerdict:
 
 
 class TestReadingTheRoles:
-    def test_a_wildcard_role_permits_all_three_writes(self):
-        report = surveyed()
-        assert report["findings"]["permissions"]["answer"]["permits_all_three"] is True
+    def test_a_wildcard_role_permits_every_action_a_deployment_takes(self):
+        answer = surveyed()["findings"]["permissions"]["answer"]
+        assert answer["permits_every_action_a_deployment_would_take"] is True
+        assert answer["blocking_actions_not_permitted"] == []
 
     def test_a_not_action_takes_a_permission_back(self):
         narrowed = {
@@ -230,6 +236,173 @@ class TestReadingTheRoles:
     def test_no_principal_to_ask_about_is_unmeasured_rather_than_denied(self):
         report = module.survey(runner=az(), rbac=rbac, env={})
         assert report["verdict"] == module.VERDICT_NOT_MEASURED
+
+    def test_a_grant_held_through_a_group_is_asked_for_first(self):
+        asked = []
+
+        def run(arguments):
+            if " ".join(arguments[:2]) == "role assignment":
+                asked.append(list(arguments))
+            return az()(arguments)
+
+        module.survey(runner=run, rbac=rbac, env={"AZURE_CLIENT_ID": "p" * 36})
+        assert asked and "--include-groups" in asked[0]
+
+    def test_a_cli_that_will_not_take_include_groups_still_measures_and_says_so(self):
+        # The fallback exists so that an older CLI degrades to today's
+        # behaviour rather than turning the whole survey into not_measured.
+        # It must not degrade *silently*: this "no" gets quoted in a role
+        # request, and a no that never looked at group membership is weaker.
+        def run(arguments):
+            if "--include-groups" in arguments:
+                raise rbac.AzureReadFailure("role assignment list", exit_code=2)
+            return az(definitions=(READER,))(arguments)
+
+        report = module.survey(
+            runner=run, rbac=rbac, env={"AZURE_CLIENT_ID": "p" * 36}
+        )
+        assert report["findings"]["permissions"]["measured"] is True
+        assert "group membership" in report["findings"]["permissions"]["note"]
+
+    def test_a_group_aware_read_that_worked_adds_no_caveat(self):
+        assert surveyed(definitions=(READER,))["findings"]["permissions"]["note"] == ""
+
+
+# ── the list, held to the template it says it came from ───────────────────
+
+
+#: The two built-in definitions the minimal-change proposal names, transcribed
+#: from ``az role definition list`` output. Built-in definitions are the same
+#: in every tenant, which is why they can be pinned in a test that never calls
+#: Azure -- and why the proposal can be checked here rather than asserted in
+#: prose. Trimmed to the actions this template touches.
+VM_CONTRIBUTOR = {
+    "roleName": "Virtual Machine Contributor",
+    "permissions": [
+        {
+            "actions": [
+                "Microsoft.Compute/disks/write",
+                "Microsoft.Compute/virtualMachines/*",
+                "Microsoft.DevTestLab/schedules/*",
+                "Microsoft.Network/networkInterfaces/*",
+                "Microsoft.Network/networkSecurityGroups/join/action",
+                "Microsoft.Network/networkSecurityGroups/read",
+                "Microsoft.Network/publicIPAddresses/join/action",
+                "Microsoft.Network/publicIPAddresses/read",
+                "Microsoft.Network/virtualNetworks/read",
+                "Microsoft.Network/virtualNetworks/subnets/join/action",
+                "Microsoft.Resources/deployments/*",
+                "Microsoft.Resources/subscriptions/resourceGroups/read",
+            ],
+            "notActions": [],
+        }
+    ],
+}
+
+NETWORK_CONTRIBUTOR = {
+    "roleName": "Network Contributor",
+    "permissions": [
+        {
+            "actions": [
+                "Microsoft.Network/*",
+                "Microsoft.Resources/deployments/*",
+                "Microsoft.Resources/subscriptions/resourceGroups/read",
+            ],
+            "notActions": [],
+        }
+    ],
+}
+
+BICEP = REPOSITORY_ROOT / "infra" / "dev-host" / "main.bicep"
+DECLARATION = re.compile(
+    r"^resource\s+\w+\s+'(?P<type>[^@']+)@[^']*'\s*=\s*(?P<conditional>if\s*\()?",
+    re.MULTILINE,
+)
+
+
+class TestTheListIsTheTemplatesList:
+    """The survey is only worth running if it measures what a deploy performs.
+
+    Its first version named three writes, which was a reading of the template
+    rather than a reading *from* it: the security group, the virtual network,
+    the data disk and the auto-shutdown schedule were all missing, so an
+    identity could have been told it was clear and then failed at the first
+    resource. These tests take the list from the file.
+    """
+
+    @pytest.fixture
+    def declared(self):
+        found = {
+            match.group("type"): bool(match.group("conditional"))
+            for match in DECLARATION.finditer(BICEP.read_text(encoding="utf-8"))
+        }
+        assert found, "the template declares no resources, so this test is blind"
+        return found
+
+    def test_every_resource_the_template_declares_has_its_write_measured(self, declared):
+        measured = {needed.action for needed in module.actions_measured()}
+        for resource_type in declared:
+            assert f"{resource_type}/write" in measured
+
+    def test_a_resource_the_template_only_sometimes_creates_does_not_block(
+        self, declared
+    ):
+        conditional = {t for t, is_conditional in declared.items() if is_conditional}
+        assert conditional, "nothing in the template is conditional any more"
+        blocking = {needed.action for needed in module.actions_that_block()}
+        for resource_type in conditional:
+            assert f"{resource_type}/write" not in blocking
+
+    def test_the_only_subscription_scope_action_is_the_resource_group(self):
+        at_subscription = {
+            needed.action
+            for needed in module.actions_measured()
+            if needed.scope == module.SCOPE_SUBSCRIPTION
+        }
+        assert at_subscription == {
+            "Microsoft.Resources/subscriptions/resourceGroups/write"
+        }
+
+    def test_creating_the_group_first_removes_the_subscription_scope_ask(self):
+        # The whole reason the split is worth carrying: with the group already
+        # there, nothing left on the blocking list needs an assignment above
+        # the resource group.
+        for needed in module.actions_that_block():
+            assert needed.scope == module.SCOPE_RESOURCE_GROUP
+
+    def test_a_denied_conditional_action_is_reported_apart_from_the_ask(self):
+        report = surveyed(definitions=(READER,))
+        apart = " ".join(report["would_also_be_needed_under_other_options"])
+        assert "Microsoft.Network/publicIPAddresses/write" in apart
+        assert "Microsoft.Network/publicIPAddresses/write" not in " ".join(
+            report["what_would_have_to_change"]
+        )
+
+
+class TestTheMinimalChangeIsCheckedNotAsserted:
+    def test_virtual_machine_contributor_alone_is_not_enough(self):
+        answer = surveyed(definitions=(VM_CONTRIBUTOR,))["findings"]["permissions"][
+            "answer"
+        ]
+        assert answer["blocking_actions_not_permitted"] == [
+            "Microsoft.Network/networkSecurityGroups/write",
+            "Microsoft.Network/virtualNetworks/write",
+        ]
+
+    def test_the_two_roles_together_cover_every_blocking_action(self):
+        report = surveyed(definitions=(VM_CONTRIBUTOR, NETWORK_CONTRIBUTOR))
+        answer = report["findings"]["permissions"]["answer"]
+        assert answer["permits_every_action_a_deployment_would_take"] is True
+        assert report["verdict"] == module.VERDICT_WITHIN_PERMISSIONS
+
+    def test_neither_role_grants_the_group_write_so_the_group_comes_first(self):
+        report = surveyed(definitions=(VM_CONTRIBUTOR, NETWORK_CONTRIBUTOR))
+        permits = report["findings"]["permissions"]["answer"]["permits"]
+        assert permits["Microsoft.Resources/subscriptions/resourceGroups/write"] is False
+        assert report["verdict"] == module.VERDICT_WITHIN_PERMISSIONS
+        assert "resourceGroups/write" in " ".join(
+            report["would_also_be_needed_under_other_options"]
+        )
 
 
 # ── what it must not do, or say ───────────────────────────────────────────
