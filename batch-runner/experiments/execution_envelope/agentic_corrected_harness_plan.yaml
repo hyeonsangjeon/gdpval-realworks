@@ -1,0 +1,640 @@
+# Agentic Sandbox V2, trial_30 run twice: the same cohort, two harness defects
+# ============================================================================
+#
+# A copy of agentic_stage_one_plan.yaml with two things changed, and an
+# experiment record at the bottom of the file saying what changing them is
+# supposed to settle. Everything else — the deployment, the thirty task ids,
+# the reference inputs, the retry rule, the per-task timeout, the token and
+# turn ceilings, the approved amount — is the same file it was copied from, and
+# `tests/test_the_corrected_harness_plan_moves_only_two_things.py` compares the
+# two files key by key rather than trusting this paragraph.
+#
+# THIS IS NOT A SECOND APPROVAL. The amounts below are the same amounts, for
+# the same Foundry work, already on record. Nothing here asks for more money or
+# for a new cost ceiling; it asks for the cohort that was already priced to be
+# run with two defects out of the way.
+#
+# ── What moved ─────────────────────────────────────────────────────────────
+#
+# 1. The paragraph telling the model which tools refuse is no longer written by
+#    hand. `instructions` carries {{TOOL_AVAILABILITY}} and
+#    core/agentic_v2_tool_availability.py fills it in for the backend that is
+#    actually mounted. The hand-written one was wrong about both backends in
+#    opposite directions — it named exec_run as refusing when one argv works,
+#    it did not mention browser_run at all when half of browser_run refuses,
+#    and it told the model a refusal cost it a turn when a refusal ends the
+#    task. Twelve of trial_30's thirty tasks ended on the tool the paragraph
+#    did not mention.
+#
+# 2. fixed_settings.replay_format is "faithful". Each earlier tool call is
+#    re-sent as the provider's own function_call item carrying its call_id,
+#    its name and its arguments, instead of as the sentence "I asked for
+#    workspace_apply as call call_3." with the arguments discarded. Nine
+#    attempts in trial_30 ended with the model writing another line of that
+#    format as text rather than asking for a tool.
+#
+# ── What this run can and cannot say ───────────────────────────────────────
+#
+# Two axes move at once, so a difference against trial_30 cannot be attributed
+# to either one. That is deliberate and it is a cost: both are defects in this
+# harness, neither is a treatment worth measuring on its own, and running them
+# separately would be two paid cohorts to separate two things nobody intends to
+# ship apart. What this run produces is a **new baseline**, and the comparison
+# it exists to make possible is the one after it, which moves
+# tool_calls_per_attempt and nothing else.
+#
+# trial_30 (run 34671538199, 2026-09-12) is past reference, not a control. It
+# ran on a different day, against a different harness, and nothing was held
+# constant between the two except the cohort and the settings. A number from it
+# may be quoted beside a number from here; neither difference is an effect.
+#
+# ── What has not changed, and is still not true ────────────────────────────
+#
+# exec_run stays shut. No guest boots. This runs on the fixture backend, so it
+# exercises the loop and not the isolation, and no result from it is evidence
+# about the isolation. The microVM backend is not reachable from here: the host
+# it would boot on has none of the twelve roles it needs
+# (tasks/0822_saturday/HOST_PERMISSIONS.md), and that is unchanged by anything
+# in this file.
+#
+# Read this file with:
+#     cd batch-runner
+#     python scripts/check_agentic_stage_one_ceiling.py
+#
+# Written: 2026-09-12.
+
+plan_version: "agentic-stage-one-v1"
+
+# ── The model, which must be the same one the comparison uses ─────────────
+#
+# Stage one is not itself a scored comparison against the other run places, but
+# its result is only worth anything if it can later be set beside them. That
+# needs the same deployment, in the same Azure account, so the same rules apply
+# here as in advance_check_plan.yaml.
+model:
+  deployment: "gpt-5.4"
+  resolved_model: "gpt-5.4"
+
+azure_connection:
+  account: "hjeon-fdpo-foundry-eus2"
+  project: "gdpval-realworks"
+  route_profile: "project-ci"
+
+# ── The tasks ─────────────────────────────────────────────────────────────
+#
+# The same five tasks the three-place comparison fixed, chosen by the rule in
+# core/execution_envelope_tasks.py from a catalogue that holds no score. Using
+# the same five means a stage-one result can be set beside the other three run
+# places on the same work, rather than on work chosen afterwards.
+task_ids:
+  - "02aa1805-c658-4069-8a6a-02dec146063a"
+  - "0112fc9b-c3b2-4084-8993-5a4abb1f54f1"
+  - "2ea2e5b5-257f-42e6-a7dc-93763f28b19d"
+  - "3baa0009-5a60-4ae8-ae99-4955cb328ff3"
+  - "0818571f-5ff7-4d39-9d2c-ced5ae44299e"
+
+# ── The settings whose price is being asked about ─────────────────────────
+#
+# Two settings decide almost all of the cost, and they are the two the owner
+# has to choose between. They are listed here as candidates rather than fixed,
+# because the point of this file is to price the choice.
+#
+#   tool_calls_per_attempt — how many times the model may be asked again inside
+#     one attempt. The dispatcher in core/agentic_v2_tools.py refuses anything
+#     past its own ceiling, and the free check reads that ceiling from the code
+#     rather than from a number written here, so a candidate above it is left
+#     out instead of being priced.
+#
+#     This is the setting that matters most, and not in the way people expect.
+#     Every turn re-reads the whole conversation before it, so what was written
+#     early is charged again on every later turn. Doubling this number roughly
+#     quadruples what the earlier turns cost to re-read.
+#
+#   max_output_tokens_per_turn — the most the model may write in one turn.
+#
+#     The three-place comparison uses 32768, and there that is nearly free
+#     because one answer is written per task. Here an answer may be written on
+#     every turn, so the same number is multiplied by the number of turns. A
+#     turn that only picks a tool needs very little room, so the smaller
+#     candidates are not a compromise; they match what a turn actually does.
+candidate_settings:
+  tool_calls_per_attempt: [4, 6, 8, 12, 16, 32]
+  max_output_tokens_per_turn: [2048, 4096, 8192, 32768]
+
+# The settings that are fixed whatever is chosen above.
+fixed_settings:
+  # One retry, and only after a network failure, a server error, or a timeout.
+  # The model's own judgement never triggers one.
+  retry_max_attempts: 1
+  retry_reasons_allowed:
+    - "infrastructure_error"
+
+  # Off. Stage one asks whether choosing tools helps. Letting the model take a
+  # second look at its finished answer is a different question, and running
+  # both at once would make it impossible to say which one produced the
+  # difference.
+  self_review_enabled: false
+  self_review_max_attempts: 0
+
+  per_task_timeout_seconds: 1200
+
+  # Never allowed. If a call fails, the run stops rather than quietly asking a
+  # different model or a different deployment.
+  automatic_model_switch_allowed: false
+
+  # exec_run stays shut. Stage one proves the loop works — the model reads a
+  # result and picks a next action — without the capability that carries the
+  # risk. Opening it is stage three and needs its own separate approval.
+  exec_run_open: false
+
+  # How each earlier turn is put back into the request. One of "paraphrase" or
+  # "faithful"; core/agentic_v2_model_voice.REPLAY_FORMATS is the list, and
+  # scripts/run_agentic_v2_stage.py refuses a value outside it before the
+  # ledger is opened rather than on task one of thirty.
+  #
+  # "paraphrase" is what trial_30 ran and is still the default everywhere it is
+  # not named: each earlier call becomes the sentence "I asked for X as call
+  # call_N." and its arguments are dropped. This plan asks for the other one.
+  #
+  # It costs more and the figure is known: re-sending every past argument was
+  # measured at +719,526 input tokens across the cohort, about +29% on the
+  # bill. It costs nothing on the ceiling, because the ceiling was always
+  # computed as though every past argument were re-sent at full length — the
+  # cheaper format was spending under its own estimate, not the other way
+  # round. So no amount below moves, and none of them is re-derived.
+  replay_format: "faithful"
+
+# ── The command-running tool stays shut ───────────────────────────────────
+#
+# Listed separately so it cannot be lost among the settings above. All three
+# blocks described in the specification stay exactly as they are through stage
+# one, and the free check confirms each of them by running it, not by reading
+# text:
+#
+#   1. step2_run_inference._require_runnable_execution_mode refuses the mode.
+#   2. core/executor.py refuses to build a runner for a paid run.
+#   3. exec_run answers that the capability is unavailable for any ordinary
+#      command.
+#
+# If any of the three has opened, the free check refuses regardless of money.
+safety_blocks_must_stay_closed: true
+
+# ── What the model is told before it sees the task ────────────────────────
+#
+# Sent as `instructions=` on every turn, beside the task wording. Until now this
+# key did not exist, so the runner sent the empty string — and the file that
+# describes this run went on saying the standing instructions "describe the V2
+# tool contract", which they did not, because there were none.
+#
+# What goes here is bounded by two things that are not opinions.
+#
+# The money. cost.assumptions_come_from borrows a width of 7307 characters for
+# this text from advance_check_plan.yaml, and every estimate in this file was
+# worked out at that width. Longer wording is not a style question: it is
+# spending against an approval computed for something else, on every turn of
+# every task. test_the_instructions_fit_what_they_were_priced_at reads both
+# numbers and fails if this one passes that one.
+#
+# The task wording. It is dataset-supplied and sealed against edits by
+# core/agentic_v2_manifest_binding.py, so nothing below may restate, summarise
+# or nudge it. Everything here is about the room the model is working in.
+#
+# Three claims below were measured against this repository rather than assumed,
+# and each would be worth re-checking if the backend changes:
+#
+#   - exec_run, environment_resolve and environment_activate answer
+#     `capability_unavailable`. Run against the fixture backend, not read.
+#   - workspace_apply(read) decodes UTF-8, and 258 of the 261 reference files
+#     the 220 tasks name do not decode. Without the text versions this wording
+#     points at, a model can list its inputs and open three of them.
+#   - a file over 1 MiB anywhere in the workspace makes every write fail, so
+#     the size sentence is load-bearing rather than tidy-minded.
+#
+# The first of those three claims is no longer written here. {{TOOL_AVAILABILITY}}
+# below is replaced at request-build time with the list belonging to the backend
+# that is actually mounted, from core/agentic_v2_tool_availability.py, and
+# tests/test_the_declared_refusals_match_what_the_backends_do.py holds that list
+# against the real methods by calling them. A hand-written sentence about which
+# tools refuse is the thing this plan exists to stop carrying.
+instructions: |
+  You are completing a professional work task. Do the work and leave the
+  finished deliverables in your working directory as real files.
+
+  {{TOOL_AVAILABILITY}}
+
+  Anything you would normally do by running code, you may have to do by
+  writing the file yourself.
+
+  YOUR INPUT FILES
+
+  The files the task refers to were copied into your working directory before
+  you started, under inputs/. Read inputs/INPUTS.md first. It names every one
+  of them, gives its size, and says whether a text version exists.
+
+  workspace_apply with operation: read returns text and only text. Reading a
+  spreadsheet, a PDF, a Word document or an image that way fails, because
+  those bytes are not text. That failure is the file's format, not a mistake
+  you made, and trying again will not change it.
+
+  Where a text version exists, INPUTS.md gives its path under
+  inputs/extracted/. A text version was read out of the original by a
+  converter. It is not the file. Layout, styling, images, charts, and anything
+  a picture carries are gone, and a long one may have been cut short — it says
+  so at the end if it was. If the work needed what was lost, say that in your
+  answer.
+
+  Some files the task names may not be in your directory at all. INPUTS.md
+  lists those too, with the reason. Nothing was put in their place. Do the
+  work with what you have and say plainly what you could not see. An answer
+  that admits a gap is worth more than one written as though nothing was
+  missing.
+
+  WRITING YOUR ANSWER
+
+  Write deliverables with workspace_apply, operation: write, into your working
+  directory — not under inputs/, which holds what you were given. Keep every
+  file under 1 MiB. One larger file anywhere in the directory makes every
+  later write fail.
+
+  When the work is done, call finalize with the list of deliverable paths and
+  a short summary. A file you do not list is not collected. An empty file
+  cannot be collected.
+
+  If you cannot do the task, say why in the summary and call finalize anyway.
+  An account of what stopped you is worth more than an empty directory.
+
+# ── What may be spent ─────────────────────────────────────────────────────
+cost:
+  # ── Two amounts, because they are two decisions ─────────────────────────
+  #
+  # There used to be one key here, approved_maximum_usd, holding the total. The
+  # free check now refuses a plan that still carries it, rather than reading it
+  # as either half — an approval given for a total is not an approval of a part
+  # of it.
+  #
+  # The reason for the split is in the table the free check prints. Marking is
+  # a flat 2504.67 whatever the settings are; running moves from 3.37 to 493.70
+  # across the candidate rows. Held as one figure, the decision actually being
+  # made — which settings buy an answer worth having — is under one per cent of
+  # the number being signed, and could change a hundredfold without moving it.
+  #
+  # Approved 2026-09-11 under the standing approval for Foundry model calls and
+  # experiments in the existing authorised scope.
+
+  # Running the five tasks. The chosen row below prices at 18.47 at most; 50 is
+  # written here so a modest move in the shared assumptions does not turn a
+  # correct plan into a refused one without anybody having changed their mind.
+  # Nothing spends up to it: the per-task budgets under chosen_settings are
+  # what actually stop a run, and they are worked out from the same arithmetic.
+  running_approved_maximum_usd: &five_task_running 50.00
+
+  # Marking the five answers. Approved here because the plan is where the whole
+  # of stage one is priced and a half-approved stage is not an approved one.
+  # Nothing in scripts/run_agentic_v2_stage.py can spend it — that script binds
+  # every call to the problem-solving bucket, and core.agentic_v2_cost_binding
+  # raises on a grading stage. Marking is a separate run against this figure.
+  grading_approved_maximum_usd: &five_task_grading 2600.00
+
+  # ── The settings ─────────────────────────────────────────────────────────
+  #
+  # Eight tool calls and 8192 tokens a turn, from the table the free check
+  # prints. Chosen 2026-09-11, and the reasoning is worth keeping because the
+  # cheapest row is not obviously wrong:
+  #
+  #   4 / 2048   3.37   what stage A asked one question with. Four tool calls
+  #                     is enough to read, write and finalise, and little else;
+  #                     a task needing to look at two inputs first has spent
+  #                     them before it starts.
+  #   8 / 8192  18.46   chosen. Double the calls, quadruple the write cap, at
+  #                     an amount that is still small.
+  #  16 / 32768 137.62  the write cap is past what these deliverables need, and
+  #                     the loop re-sends the whole conversation every turn, so
+  #                     the input cost grows with the square of the length.
+  #
+  # This is a choice about what the model is given room to do, and it will show
+  # up in the results either way. Recorded before the run, not after it.
+  chosen_settings:
+    tool_calls_per_attempt: 8
+    max_output_tokens_per_turn: 8192
+
+  # ── Stage A: the one paid question that comes before the run above ──────
+  #
+  # Stage A is not a fifth of stage one and is not priced as one. It asks a
+  # single thing — can a real deployment be reached, does it choose a tool, and
+  # does the turn after that arrive holding the first turn's answer — on one
+  # task, and it marks nothing. Marking is about 2504 of the cheapest stage-one
+  # row's 2543 dollars, so a figure carrying a share of it would be almost
+  # entirely for work this does not do.
+  #
+  # The figure below is not copied from anywhere. The free check works it out
+  # from the same arithmetic as the table above, with two things changed: one
+  # task instead of five, and no marking. At 4 tool calls and 2048 tokens a
+  # turn that is 0.47 to run and 0.59 with the safety multiplier, against the
+  # one dollar written here.
+  #
+  # Which task is not chosen here either. It is the first of the five fixed
+  # above, taken by position in core/agentic_v2_stage_one_budget.py, so the
+  # probe cannot be quietly pointed at whichever one looks easiest.
+  #
+  # The cheapest row is deliberate. Four calls is enough for a model to spend a
+  # turn orienting and still have a second turn that must react to the first
+  # one's answer, which is the whole question. Stage A is not trying to produce
+  # good work, so paying for longer replies would buy nothing it is asking
+  # about.
+  stage_a_probe:
+    approved_maximum_usd: 1.00
+    chosen_settings:
+      tool_calls_per_attempt: 4
+      max_output_tokens_per_turn: 2048
+
+    # Read from core/agentic_v2_stage_a_probe.py rather than declared here. A
+    # list written in a file is a claim; the check compares the tuple the probe
+    # will actually offer, so a probe that gained finalize would fail this even
+    # if nobody updated the document.
+    tools_come_from: "core/agentic_v2_stage_a_probe.py PROBE_TOOLS"
+
+  # The written guesses the figures rest on. These are the same ones the
+  # three-place comparison uses, taken from
+  # experiments/execution_envelope/advance_check_plan.yaml so the two cannot
+  # drift apart. The free check reads them from that file rather than from a
+  # second copy here.
+  #
+  # One of those guesses is borrowed rather than measured here: the length of
+  # the standing instructions. Stage one will have its own wording, which does
+  # not exist yet, so the three-place comparison's figure stands in for it. That
+  # figure is measured rather than written down — the comparison renders the
+  # prompt each of its run places really sends, takes the widest, and adds the
+  # sections its runner builds around it. The wording is sent on every turn, so
+  # if stage one's own instructions turn out longer than the widest of those
+  # three, this must be measured again before the figures are trusted.
+  #
+  # No figure for it is repeated here on purpose. It has already moved twice —
+  # 1068 written down, then 5020 measured, then 7307 once the sections nobody
+  # had counted were counted — and each move changed the cheapest row above
+  # (3.24, then 3.32, then 3.37 to run). A number copied into this sentence is
+  # a number that goes stale the next time that happens without anything
+  # noticing, which is exactly what it did. The live one is in the file named
+  # below, and the free check reads it from there.
+  assumptions_come_from: "experiments/execution_envelope/advance_check_plan.yaml"
+
+  # One thing is NOT taken from that file: how much a single tool result may
+  # add to the conversation. That number is read from the dispatcher's own code
+  # in core/agentic_v2_tools.py, because the dispatcher is what will actually
+  # enforce it when something runs. A number written down here could disagree
+  # with the code; a number read from the code cannot.
+  tool_result_size_comes_from: "core/agentic_v2_tools.py AgenticV2ToolDispatcher"
+
+# ── What each of the three stages may spend ───────────────────────────────
+#
+# The escalation is five tasks, then thirty, then two hundred and twenty, fixed
+# in core/agentic_v2_preregistration.py. The block above prices the first of
+# those and nothing else: its figures are whole-run figures, so running thirty
+# tasks under them would go out against an approval worked out for a run six
+# times smaller, and the printed line would say it was within budget because
+# the arithmetic behind it never saw the larger cohort.
+#
+# So each stage is priced by name here. The task ids are NOT repeated — they
+# come from the sealed catalogue through cohorts(), and a second copy in this
+# file would be a second thing to keep correct. What is written here is only
+# the part a person has to decide: the amount.
+#
+# No estimated figure is written down either, for the reason the note about
+# assumptions_come_from gives at length. The estimate has moved three times
+# already, and each move changed the answer. Run
+#     python scripts/check_agentic_stage_one_ceiling.py
+# to see what each stage costs against what it may spend, worked out live.
+#
+# Running is approved for all three, under the standing approval for Foundry
+# model calls and experiments within the already authorised scope. The whole
+# point of the work is that the two hundred and twenty tasks are actually run.
+#
+# Marking is NOT approved beyond the five, and that is a real difference rather
+# than an oversight, so it is written as a refusal with its reason rather than
+# left blank. Marking is not a share of the running cost — it is roughly fifty
+# times it, because the grader asks about five hundred questions per task
+# against the model's answer. A figure for marking two hundred and twenty tasks
+# is a six-figure decision and belongs to whoever is paying, not to the file
+# that happens to need it. Nothing here can spend it by accident in the
+# meantime: scripts/run_agentic_v2_stage.py binds every call it makes to the
+# problem-solving bucket and core.agentic_v2_cost_binding raises on a grading
+# stage.
+#
+# Written 2026-09-11, when the escalation stopped being hypothetical.
+stages:
+  advance_check_5:
+    # The same two figures as the block above, by reference rather than by
+    # copy. An alias cannot drift from what it points at; a second literal can,
+    # and would be found only by whoever next compared them.
+    running_approved_maximum_usd: *five_task_running
+    grading_approved_maximum_usd: *five_task_grading
+
+  trial_30:
+    # The same figure as agentic_stage_one_plan.yaml, deliberately unchanged.
+    # This plan does not approve anything; it re-runs a cohort that is already
+    # approved with two harness defects out of the way. The gate has no memory
+    # and cannot tell a first run from a second, so the thing that stops this
+    # from being spent twice over is the finite run list in the experiment
+    # record at the bottom of this file, not the number here.
+    #
+    # Roughly six times the five-task run, and the margin over the computed
+    # ceiling is deliberately narrower than the five-task one. Margin is
+    # insurance against the shared assumptions moving, and that movement is
+    # proportional — the three corrections to the standing-instruction length
+    # moved the cheapest row by about four per cent each time. At eighteen
+    # dollars a wide margin costs nothing, so the five-task figure is generous.
+    # Here it would be real money, so it is not.
+    running_approved_maximum_usd: 200.00
+    grading_approved_maximum_usd: null
+    grading_not_approved_because: >-
+      Marking thirty answers is a five-figure amount, and nothing in the goal
+      this stage serves needs it. Running thirty tasks answers whether the loop
+      holds up past five; how well the answers scored is a separate question
+      with a separate bill, asked after there are answers to ask it about.
+
+  full_220:
+    # Every task in the benchmark, run once.
+    running_approved_maximum_usd: 1400.00
+    grading_approved_maximum_usd: null
+    grading_not_approved_because: >-
+      Marking all two hundred and twenty answers is a six-figure amount — far
+      more than running them, and more than every other cost in this project
+      put together. It is approved separately or not at all. Finishing the two
+      hundred and twenty runs is one milestone; marking them is another, and
+      the second does not follow from the first having been paid for.
+
+# ── What happens after stage one ──────────────────────────────────────────
+#
+# Written down now so that a disappointing result cannot lead to the rules
+# being loosened afterwards.
+after_stage_one:
+  success_criteria: >-
+    All five tasks finish without an error, and a test shows the model was
+    asked again with a tool result in front of it and changed what it did
+    because of it. Whether the answers scored well is a separate question and
+    is not part of finishing stage one.
+  stop_conditions: >-
+    Stop at once if the model name or deployment name reported back differs
+    from the one fixed above; if a run switches model or deployment on its own;
+    if any of the three safety blocks shows signs of having been opened; if a
+    paid call is about to happen without an approved amount on record; or if
+    real spending passes the amount approved above.
+  next_stage: >-
+    Stage two writes down what a command may touch and proves each limit with a
+    test that tries to exceed it. It is test-only and switches nothing on.
+    Opening exec_run is stage three and needs its own separate written
+    approval, presented with those test results.
+
+# ── The experiment record ─────────────────────────────────────────────────
+#
+# Written before the run, in the form the experiment-design skill asks for, and
+# kept in this file rather than in a document beside it so that the conditions
+# and the record of the conditions cannot be edited apart. What is here is what
+# was decided in advance; anything worked out afterwards belongs in the report,
+# labelled as such.
+experiment_record:
+  decision: >-
+    Whether the turn-limit comparison is worth running at all, and against
+    what. Two defects in this harness each end tasks for reasons that have
+    nothing to do with the limit: the instruction paragraph that is wrong about
+    which tools refuse, and the paraphrased replay the model imitates instead
+    of calling a tool. Between them they account for 14 of the 19 tasks
+    trial_30 failed — 12 that called browser_run, which the paragraph never
+    mentions and which refuses every network operation, and 2 that answered
+    with another line of the replay format instead of asking for a tool. A
+    limit comparison run over that harness would be measuring those two as much
+    as the limit. If this run clears them, the comparison follows; if it does
+    not, the comparison is not run on this harness and the next thing to fix is
+    whatever is still ending tasks.
+
+  falsification: >-
+    The hypothesis is about the harness, not the model: that the two defects
+    end tasks. It is falsified if the corrected run ends roughly as many tasks
+    on tool refusals and text-only endings as trial_30 did — the two
+    stop_reason values tool_desk_broke and model_stopped_without_finishing,
+    counted over all 30 tasks. That result is publishable and it is useful: it
+    says the endings were not caused by what the design said they were caused
+    by, and the 9 imitation cases were a correlation. No threshold is set for
+    calling it improved, because there is no basis for one — see repeats.
+
+  moving: >-
+    Two axes at once. The derived tool-availability paragraph, and
+    replay_format faithful. Deliberate, and it means this run cannot say which
+    of the two did anything. Neither is a treatment; both are defects, and
+    shipping one without the other is not a configuration anyone wants.
+
+  fixed: >-
+    The backend (AgenticV2FixtureBackend, no guest, exec_run shut), the
+    deployment and pinned resolved model (gpt-5.4 in hjeon-fdpo-foundry-eus2 /
+    gdpval-realworks via project-ci), the dataset revision and the reference
+    files staged from it, retry_max_attempts 1 with only infrastructure_error
+    retryable, per_task_timeout_seconds 1200, tool_calls_per_attempt 8,
+    max_output_tokens_per_turn 8192. The thirty tasks are not listed in this
+    file and are not meant to be: core.agentic_v2_manifest_binding.bind_stage
+    selects the trial_30 cohort from the sealed catalogue and refuses a cohort
+    of the wrong size, and the run record carries the binding seal. trial_30
+    under this plan and trial_30 under the plan it was copied from therefore
+    bind the same thirty by construction, which is checkable by comparing two
+    seals rather than two lists. The run record also carries the sha256 of the
+    instruction bytes actually sent and of this plan file, so "the same
+    conditions" is checkable rather than asserted.
+
+  denominator: >-
+    All 30 tasks, for every headline number. The 18 tasks that a turn-limit
+    change could act on were selected by looking at trial_30's failures, so any
+    figure over them is exploratory and is labelled as such wherever it
+    appears. Successes, failures and tasks that never ran are each reported;
+    none is folded into another.
+
+  adjudication: >-
+    Three different things, reported separately and never summed. (1) finalize
+    was called and the tool desk accepted it. (2) At least one file was
+    collected and it is non-empty and opens as what it claims to be. (3) The
+    work is any good, which nothing in this run measures — marking thirty
+    answers is not approved and no judge is run. A file saying the model could
+    not do the task is a successful (1) and (2) and says nothing about (3);
+    counting it as work done is the specific error this line exists to stop.
+    The reading logic is exercised against hand-made defective records before
+    any model is called —
+    tests/test_reading_a_v2_outcome_is_three_questions.py.
+
+  units: >-
+    Task counts out of 30 for outcomes, attempt counts by stop_reason for
+    causes, USD from the cost ledger for money. Ledger figures and estimates
+    are never mixed in one number: the ledger is what was charged, the estimate
+    is what the gate priced, and a call whose model is not in the price list is
+    recorded as missing rather than as zero. Failed and retried calls are
+    counted; a stopped run is charged for what it spent before it stopped.
+
+  inputs: >-
+    The same 30 GDPVal tasks and their reference files, sealed by
+    core/agentic_v2_manifest_binding.py against the dataset revision. Real, not
+    synthetic. The cohort was fixed before either defect was found, so the
+    inputs were not chosen to suit the fix. The instruction text was written
+    after the inputs and is derived from the backend rather than from the
+    tasks, which is the direction that matters here: nothing in it was tuned to
+    these thirty.
+
+  repeats: undecided
+  repeats_note: >-
+    How many times one condition must be run to know its spread has not been
+    measured, and no honest number can be put here yet. trial_30 ran once.
+    Writing "3" would be a figure with nothing behind it. The consequence is
+    stated rather than hidden: a single corrected run cannot support a causal
+    claim, and the report will say the difference is a difference between two
+    runs. Measuring the spread is its own cohort with its own approval and is
+    not part of this run list.
+
+  run_list:
+    - id: "rehearsal"
+      what: "the whole cohort with no model, to prove the plan resolves"
+      paid: false
+    - id: "corrected_baseline_1"
+      what: "trial_30 under this plan"
+      paid: true
+      stage: "trial_30"
+  run_list_note: >-
+    Two entries, and the list is closed. Anything beyond it — a repeat, a
+    limit comparison, a shard re-run after a failure — is a new entry written
+    here before it is dispatched, not a decision made while a run is in flight.
+
+  stop_rules: >-
+    The eight in core/agentic_v2_preregistration.STOP_RULES apply unchanged. In
+    addition, for this run: stop if the resolved instruction sha256 in the run
+    record differs from the one printed at the start; stop if a shard cannot be
+    resumed without re-paying for tasks already done. Time: the cohort is
+    expected to take under two hours and is abandoned rather than nursed past
+    six. The bill is checked against the voice by
+    core.agentic_v2_call_agreement.the_stop_rule, and the test it applies is
+    not equality: a reply that arrives without usable token counts leaves the
+    voice no row but still reaches the ledger, so the invariant is
+    receipt.model_calls == voice rows + model_calls_not_counted, per task.
+    Plain equality would halt a healthy run at the first unreported usage. This
+    one can only fire after a task settles, because a receipt does not exist
+    before then — it stops the next task, never the next call.
+
+  reporting: >-
+    Two short reports on the same six headings, Korean and English, built by
+    core/agentic_v2_reporting_rules.py. Korean runs experiment-report-ko then
+    humanize-korean in strict mode; English runs experiment-report-en, then
+    humanize-english, then im-not-ai-en. The editors may change a sentence and
+    not a claim. Before the run the report is an outline with empty sections
+    and no figures in it, not even as examples. After the run every figure in
+    the draft has to be in the run record, or a named derivation of two figures
+    that are, and check_every_figure decides it. What that cannot catch is a
+    true figure in a false sentence, so it removes one failure and leaves the
+    rest to reading.
+
+  known_confounds: >-
+    (1) Two axes move together, so neither is separable. (2) trial_30 is a past
+    run on a different harness, not a concurrent control; the two were not
+    randomised and nothing was held constant across the days between them. (3)
+    The model may have changed behind the deployment name; the pinned
+    resolved_model check catches a different name, not a different model behind
+    the same name. (4) The faithful replay sends more input tokens, so any
+    change in behaviour could be the format or could be the extra context —
+    these are the same intervention and cannot be told apart here. (5) The
+    arguments are re-encoded from the parsed mapping rather than replayed as
+    the model's own bytes, so key order and whitespace may differ from what it
+    wrote. (6) The 9 text-only endings are the observation the replay fix came
+    from, which makes this run a test of a hypothesis formed on the same data;
+    it is not independent evidence for it.
