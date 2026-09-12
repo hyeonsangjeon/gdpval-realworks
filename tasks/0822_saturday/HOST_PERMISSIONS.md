@@ -194,6 +194,15 @@ Gates 2 and 3 are intentional and cost nothing to pass when the time comes.
 Gate 4 needs no access change at all and is the one piece of this that can be
 worked on today.
 
+Gate 4 is also larger than its name. The instruction text the model reads
+names three tools as refusing, and that list fits neither backend: on the
+fixture only two tools have no working call, and on the microVM backend
+`exec_run` — one of the three the text says is shut — is the capability the
+whole host exists to provide. Granting the roles and booting a host would
+produce a machine that runs commands and a model that has been told it
+cannot. Correcting the text is therefore on the critical path rather than
+beside it, and it is the only thing on that path that needs no access change.
+
 ## What continues without it
 
 Everything on the code side, which is most of the remaining work: the microVM

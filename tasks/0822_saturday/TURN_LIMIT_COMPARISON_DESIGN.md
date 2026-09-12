@@ -197,6 +197,31 @@ So settling `browser_run` is not tidying ahead of the limit question. It is a
 precondition for the real backend being usable at all, and it is the one item
 on that path that needs no access change.
 
+### The instruction list matches neither backend
+
+Put the two side by side and the list the model is given fits neither the
+backend it ran against nor the one it is waiting for.
+
+| tool | fixture (`offline-full-v1`) | microVM (the destination) | instructions say |
+|---|---|---|---|
+| `exec_run` | one command, `fixture-upper` | **works** — boots a machine per call | refuses |
+| `browser_run` | 3 local ops served, 2 network refused | **refuses all five** | available |
+| `environment_resolve` | refuses | refuses — the guest has only loopback | refuses |
+| `environment_activate` | refuses | refuses — nothing to activate | refuses |
+| no working call at all | **2 tools** | **3 tools** | 3 tools |
+
+The two the text gets right on both backends are the package pair. `exec_run`
+is wrong on both, in opposite directions, and `browser_run` is wrong on both
+by omission — partly on the fixture, entirely on the real one.
+
+That matters for the order of work. When the real backend arrives, the
+instruction text has to change anyway: leaving it as it stands would tell the
+model that the one capability the real backend adds — running commands — is
+shut, which is the mistake this repository already has a name for. So the
+instruction fix is not gate-4 hygiene to be done if there is time. It is on
+the critical path to the real backend, and it is the only thing on that path
+that can be done today.
+
 ## 5. What judges the outcome
 
 Nothing model-shaped. `success` means `finalize` was called and its artifacts
