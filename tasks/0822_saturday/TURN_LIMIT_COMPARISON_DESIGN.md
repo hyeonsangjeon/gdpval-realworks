@@ -375,16 +375,20 @@ limit on generalising to full_220, not a bias toward the intervention.
 ## 9. When to stop — and the wall this hits
 
 Priced against the real 30-task cohort through the plan's own guard, not
-extrapolated:
+extrapolated. Amounts are rounded **up** to the cent, which is what the guard
+itself does (`quantize(Decimal("0.01"), rounding=ROUND_CEILING)`); an earlier
+draft of this section formatted them with Python's default rounding instead and
+so read up to a cent low in four places, which for a ceiling is the wrong
+direction to be wrong in:
 
 | tool calls | model calls | trial_30 ceiling | % of the $200 approval | may start |
 |---|---|---|---|---|
-| 4 | 5 | $34.77 | 17.4% | yes |
+| 4 | 5 | $34.78 | 17.4% | yes |
 | 6 | 7 | $69.06 | 34.5% | yes |
-| **8** | **9** | **$114.60** | **57.3%** | yes — the control; actual spend was $6.13 |
-| 12 | 13 | $239.49 | 119.7% | **no** |
-| 16 | 17 | $409.43 | 204.7% | **no** |
-| 32 | 33 | $1539.78 | 769.9% | **no** |
+| **8** | **9** | **$114.61** | **57.3%** | yes — the control; actual spend was $6.13 |
+| 12 | 13 | $239.50 | 119.7% | **no** |
+| 16 | 17 | $409.44 | 204.7% | **no** |
+| 32 | 33 | $1539.79 | 769.9% | **no** |
 
 **Under the approval that exists, only limits at or below the control may
 start on 30 tasks.** The interesting direction is the one that is closed. An
@@ -397,7 +401,7 @@ Every **ceiling** in that table is one turn per attempt short, for a reason that
 has nothing to do with the limit being studied; see "The ceiling does have an
 error" below. The `model calls` column is right — and is the discrepancy sitting
 in the open, since 8 tool calls is priced as 8 turns and recorded here as 9.
-Corrected, the control row is $141.60 rather than $114.60 and trial_30 spent
+Corrected, the control row is $141.61 rather than $114.61 and trial_30 spent
 4.3% of it. No row's `may start` changes.
 
 ### What fixing the replay format would cost
@@ -483,9 +487,9 @@ re-read 28. Priced through the gate's own arithmetic on the real cohorts:
 
 | stage | as the gate prices it | at the turn count the run takes | approved | verdict |
 |---|---|---|---|---|
-| `advance_check_5` | $18.47 | $22.88 | $50 | unchanged |
-| `trial_30` | $114.60 | $141.60 | $200 | unchanged |
-| `full_220` | $884.61 | $1088.12 | $1400 | unchanged |
+| `advance_check_5` | $18.47 | $22.89 | $50 | unchanged |
+| `trial_30` | $114.61 | $141.61 | $200 | unchanged |
+| `full_220` | $884.62 | $1088.12 | $1400 | unchanged |
 
 **No verdict changes, and nothing here is a reason to revisit an approval.**
 Every stage is inside its approved amount either way, and the closed rows — 12,

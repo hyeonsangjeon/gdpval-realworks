@@ -22,11 +22,12 @@ describing the run. The pricer is a turn behind it.
 It matters more than one turn sounds, because the input of a looping attempt is
 quadratic in its length: each turn re-reads everything before it. Going from
 eight turns to nine adds 8 to the 28 re-read pairs, not 1 to 8. Observed on
-2026-09-12, priced against the real cohorts through the gate's own arithmetic:
+2026-09-12, priced against the real cohorts through the gate's own arithmetic
+and rounded up to the cent the way the gate rounds:
 
-    advance_check_5    $18.47  ->  $22.88   (+24%)   against $50 approved
-    trial_30          $114.60  ->  $141.60  (+24%)   against $200 approved
-    full_220          $884.61  -> $1088.12  (+23%)   against $1400 approved
+    advance_check_5    $18.47  ->  $22.89   (+24%)   against $50 approved
+    trial_30          $114.61  ->  $141.61  (+24%)   against $200 approved
+    full_220          $884.62  -> $1088.12  (+23%)   against $1400 approved
 
 **No stage's verdict changes**, which is the part worth being clear about. Every
 one of those is still inside its approved amount, and the rows the design
@@ -51,6 +52,7 @@ from core.agentic_v2_conversation_runner import ceilings_from
 from core.agentic_v2_stage_one_budget import (
     STAGE_ONE_PLAN_PATH,
     StageOneConditions,
+    _money,
     budget_for_one_task,
     load_stage_one_plan,
     read_dispatcher_limits,
@@ -217,6 +219,27 @@ def test_one_more_turn_costs_far_more_than_one_turn_of_input(
     # Observed 1.236 on 2026-09-12. Bounded well clear of the 1.125 that
     # counting turns alone would give, which is the point being pinned.
     assert Decimal("1.15") < ratio < Decimal("1.35")
+
+
+def test_a_ceiling_is_rounded_up_to_the_cent_not_to_the_nearest_one(
+    plan, chosen, assumptions, catalog
+):
+    """Which is how the figures above are meant to be read, and reported.
+
+    `_money` quantises with `ROUND_CEILING`, so the gate's printed amount is
+    never below the amount it computed. Reporting one of these figures with
+    Python's default formatting instead puts it up to a cent low -- harmless
+    arithmetically, and the wrong direction for a ceiling to be wrong in.
+    """
+    assert _money(Decimal("18.46435")) == "18.47"
+    assert _money(Decimal("114.603375")) == "114.61"
+    assert _money(Decimal("2.000")) == "2.00", "an exact amount must not be nudged"
+
+    task_ids = select_trial_run_tasks(catalog)
+    calls = chosen.tool_calls_per_attempt
+    for turns in (calls, calls + 1):
+        raw = _priced(plan, chosen, assumptions, catalog, task_ids, turns=turns)
+        assert Decimal(_money(raw)) >= raw
 
 
 @pytest.mark.parametrize(
