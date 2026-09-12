@@ -103,6 +103,9 @@ from core.agentic_v2_stage_one_budget import (  # noqa: E402
     price_one_stage,
     run_stage_one_preflight,
 )
+from core.agentic_v2_tool_availability import (  # noqa: E402
+    apply_tool_availability,
+)
 from core.cost_receipts import (  # noqa: E402
     BUCKET_PROBLEM_SOLVING,
     STATUS_UNAVAILABLE,
@@ -997,7 +1000,9 @@ def main() -> int:
                 deployment=deployment,
                 resource=resource,
                 budget=budget,
-                instructions=str(plan.get("instructions") or ""),
+                instructions=apply_tool_availability(
+                    str(plan.get("instructions") or ""), AgenticV2FixtureBackend
+                ),
                 max_output_tokens_per_turn=ceilings.max_written_tokens_per_turn,
                 request_timeout_seconds=ceilings.max_seconds,
                 prices=prices,
