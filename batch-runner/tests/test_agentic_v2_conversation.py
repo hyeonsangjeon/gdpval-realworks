@@ -471,7 +471,12 @@ def test_a_repeat_the_dispatcher_replayed_is_recorded_as_replayed():
 
     outcome = a_run(voice, desk, max_repeats_of_one_request=2)
 
+    # Two turns, not three. The walk-away is a third reply, but the stand-in
+    # sent it with no token counts, and an uncounted reply is left out of the
+    # account rather than filed as a zero -- see
+    # test_the_calls_the_run_was_billed_for_and_never_filed.py.
     assert [record.replayed for record in outcome.turns] == [False, True]
+    assert outcome.model_calls_not_counted == 1
 
 
 # ---------------------------------------------------------------------------

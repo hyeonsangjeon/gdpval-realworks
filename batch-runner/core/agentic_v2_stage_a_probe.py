@@ -279,7 +279,7 @@ def run_stage_a_probe(
         requested_deployment=deployment,
         resource=resource,
         tools_offered=tuple(tools),
-        tools_asked_for=tuple(record.tool_name for record in outcome.turns),
+        tools_asked_for=outcome.tools_asked_for,
         turns_taken=len(voice.calls),
         stop_reason=outcome.stop_reason.value,
         detail=outcome.detail,

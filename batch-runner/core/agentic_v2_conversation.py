@@ -558,6 +558,75 @@ class TurnRecord:
         }
 
 
+@dataclass
+class _BilledButUnanswered:
+    """A model reply that has been charged for and has no tool result yet.
+
+    The loop asks the model, is answered, and only builds a :class:`TurnRecord`
+    once the tool it asked for has run. Everything the ledger later charges for
+    is read out of those records, so every way the run can end in between --
+    and there are ten of them -- used to drop a call the provider had already
+    billed.
+
+    Measured on the first V2 stage that reached the model: 24 calls made, 18 in
+    the ledger. The six that vanished were the last turn of each conversation
+    that ended on a tool failure, and the receipts still read ``complete`` with
+    no missing reason, because a ledger cannot miss a row it was never offered.
+    A bill that is confidently 20% short is worse than one that says it is
+    short.
+
+    The event log already got this right -- ``model_replied`` is appended
+    before the run decides what to do about the reply, and the comment there
+    says why. This is the same rule applied to the record that carries the
+    money.
+
+    Mutable, unlike everything else kept here, and it never leaves the module:
+    it is filled in as the loop learns what the reply asked for, so that a run
+    ending after the tool was chosen still records which tool that was.
+
+    Built only for a reply that reported what it used. A reply that did not is
+    left out of ``turns`` entirely and counted in
+    :attr:`ConversationOutcome.model_calls_not_counted`; the comment at the
+    construction site says why a zero would be the worse answer.
+    """
+
+    turn: int
+    input_tokens: int
+    output_tokens: int
+    call_id: str = ""
+    tool_name: str = ""
+    argument_names: tuple[str, ...] = ()
+    stated_reason: str = ""
+
+    def as_turn(self, stop_reason: str) -> TurnRecord:
+        """The charged call, said as a turn that got no result.
+
+        ``ok`` is false and ``error_type`` is why the run stopped, so a reader
+        cannot mistake this for a tool that answered. The three hashes and the
+        byte count are the empty values because nothing came back -- a zero
+        here is the absence of a result, not a measurement of one.
+        """
+        return TurnRecord(
+            turn=self.turn,
+            # Unique within the conversation either way: the model's own id
+            # when it got far enough to name one, and the turn number when it
+            # did not. `model_turns_of` namespaces both by run, task and
+            # attempt before they reach the ledger.
+            call_id=self.call_id or f"turn-{self.turn}-no-tool-result",
+            tool_name=self.tool_name,
+            argument_names=self.argument_names,
+            stated_reason=self.stated_reason,
+            ok=False,
+            error_type=stop_reason,
+            request_sha256=None,
+            result_sha256=None,
+            result_bytes=0,
+            input_tokens=self.input_tokens,
+            output_tokens=self.output_tokens,
+            replayed=False,
+        )
+
+
 @dataclass(frozen=True)
 class LoopEvent:
     """One point the run passed through."""
@@ -595,12 +664,50 @@ class ConversationOutcome:
             1 for event in self.events if event.step is LoopStep.MODEL_ASKED
         )
 
+    @property
+    def tools_asked_for(self) -> tuple[str, ...]:
+        """Which tool each turn asked for, skipping the turns that asked none.
+
+        Every turn is in ``turns`` now, including the charged ones that ended
+        the run before a tool answered, and some of those stopped before the
+        model had named a tool at all. Those carry an empty name, which is a
+        true statement about the turn and a false entry in a list of tools —
+        so they are left out here rather than reported as a tool called ``""``.
+        A turn that *did* name a tool stays in whether or not the tool ran: the
+        model asked for it, and that is what this list is.
+        """
+        return tuple(
+            record.tool_name for record in self.turns if record.tool_name
+        )
+
+    @property
+    def model_calls_not_counted(self) -> int:
+        """Replies that arrived without usable token counts, so are unpriced.
+
+        Not a cost and not a zero — a number *about* the account rather than in
+        it. A reply the provider sent with no usage, or with a usage the voice
+        could not read, was still charged for, and this is how many of those a
+        run had. Anything above zero means ``turns`` is short by that much and
+        the receipt built from it is a floor.
+
+        Kept as a count rather than an estimate on purpose. Guessing what an
+        uncounted call would have cost is the one arithmetic this codebase does
+        not do.
+        """
+        return sum(
+            1
+            for event in self.events
+            if event.step is LoopStep.MODEL_REPLIED
+            and event.detail.get("counted") is False
+        )
+
     def as_dict(self) -> dict[str, Any]:
         return {
             "stop_reason": self.stop_reason.value,
             "detail": self.detail,
             "produced_an_answer": self.produced_an_answer,
             "model_turns_used": self.model_turns_used,
+            "model_calls_not_counted": self.model_calls_not_counted,
             "turns": [record.as_dict() for record in self.turns],
             "events": [event.as_dict() for event in self.events],
             "budget_after": (
@@ -639,8 +746,19 @@ def run_model_conversation(
     repeats: dict[str, int] = {}
     started_at = clock()
     turn = 0
+    # Set the moment a reply's usage is known, cleared the moment that turn is
+    # recorded. While it holds something, this run owes the ledger a call.
+    billed: Optional[_BilledButUnanswered] = None
 
     def finish(reason: StopReason, detail: str, **extra: Any) -> ConversationOutcome:
+        # Before the outcome is built, not after: a charged call that has no
+        # tool result is still a charged call, and this is the last place it
+        # can be written down. Ten paths between the reply arriving and the
+        # turn being recorded end here, and every one of them used to lose it.
+        nonlocal billed
+        if billed is not None:
+            turns.append(billed.as_turn(reason.value))
+            billed = None
         events.append(LoopEvent(
             step=LoopStep.STOPPED,
             turn=turn,
@@ -761,6 +879,55 @@ def run_model_conversation(
                 "and the run cannot be allowed to continue",
             )
         input_tokens, output_tokens = usage
+        # The provider has answered and will bill for it. From here until the
+        # turn is recorded, this run owes the ledger a call, and `finish` is
+        # what pays it if the run stops first.
+        #
+        # Unless the reply came back uncounted, which is what a zero input
+        # count means. No call to a model costs nothing on the way in: the task
+        # prompt alone is thousands of tokens, and every provider bills for it.
+        # A reply carrying zero input tokens therefore did not report its
+        # usage; something downstream filled the field in. The real voice does
+        # exactly that — when a response arrives with no `usage`, it walks away
+        # with a note saying so, and the walk-away's token fields default to
+        # zero.
+        #
+        # Such a call is not recorded, and that is deliberate. Filing it would
+        # put `0` in the ledger, and a zero settles to `$0.00` on a `complete`
+        # receipt: a measured-looking figure for a call nobody measured. That
+        # is worse than the gap it would paper over, because a gap can be seen.
+        # It is counted in `model_calls_not_counted` instead, which is a number
+        # about the account rather than in it.
+        #
+        # The same applies to the `usage is None` branch above, for the same
+        # reason. Both are the honest edge of a record written after the fact;
+        # closing them needs a reservation written *before* the call, which is
+        # a different change to a different object.
+        counted = input_tokens > 0
+        billed = (
+            _BilledButUnanswered(
+                turn=turn, input_tokens=input_tokens, output_tokens=output_tokens
+            )
+            if counted
+            else None
+        )
+        # What the charged call asked for, read here rather than after the
+        # ceilings below, so a turn stopped by one of them still records which
+        # tool the money was spent asking for. Three of the five tasks in the
+        # first paid stage ended on a tool the backend refuses, and "which
+        # tool" is the whole finding.
+        #
+        # Reading it decides nothing. `_readable_request` only looks at four
+        # attributes and has no side effects, and the refusal for a reply that
+        # is not a usable request stays exactly where it was — below the
+        # walk-away and both ceilings — so which stop wins an argument between
+        # them is unchanged.
+        asked = _readable_request(reply) if isinstance(reply, AskForTool) else None
+        if billed is not None and asked is not None:
+            billed.call_id = asked[0]
+            billed.tool_name = asked[1]
+            billed.argument_names = tuple(sorted(asked[2]))
+            billed.stated_reason = asked[3]
         # Recorded as having happened before the run decides what to do about
         # it, so that a trace read back afterwards shows the reply arriving
         # rather than seeming to vanish between the asking and the stopping.
@@ -771,6 +938,9 @@ def run_model_conversation(
                 "kind": type(reply).__name__,
                 "input_tokens": input_tokens,
                 "output_tokens": output_tokens,
+                # False means this reply is missing from the account below,
+                # and is the only place that says so.
+                "counted": counted,
             },
         ))
         try:
@@ -797,7 +967,8 @@ def run_model_conversation(
                 + _appended_note(reply.note),
             )
 
-        asked = _readable_request(reply)
+        # `asked` was read above, before the ceilings, and this is where it is
+        # acted on. A reply that walked away never reaches here.
         if asked is None:
             return finish(
                 StopReason.MODEL_REPLY_UNUSABLE,
@@ -870,6 +1041,10 @@ def run_model_conversation(
             output_tokens=output_tokens,
             replayed=outcome.replayed,
         ))
+        # Paid for and now recorded, so the debt `finish` would otherwise settle
+        # is cleared. Left set, the next stop would write the same turn twice
+        # and the ledger would be wrong in the other direction.
+        billed = None
         history.append(ToolExchange(
             call_id=call_id,
             tool_name=tool_name,
