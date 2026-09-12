@@ -25,9 +25,16 @@ Two things are held here beyond "it works now":
 * the paid path and the dry run go through **one** function, so the certifying
   path cannot drift from the certified one, and
 * a call this repo has no price for settles ``partial``, never a real ``$0``.
-  The pinned deployment is not in the committed price table, so every call the
-  V2 stage makes is currently unpriced. A receipt that rounded that to zero
-  would be the one number in the record that reads as a measurement.
+  A receipt that rounded an unknown amount to zero would be the one number in
+  the record that reads as a measurement.
+
+The second point was first written here with a wrong premise attached: that the
+pinned deployment was not in the committed price table, so every V2 call was
+unpriced by necessity. It is in the table. The nulls came from
+``open_the_ledger`` building the ledger without handing it that table, which
+marks every call ``price_missing`` whatever the file says. Corrected, with the
+fix and its own test, in the same change that added
+``test_the_pinned_model_is_priced_and_settles_complete`` below.
 
 Nothing here calls a model or reaches the network. The ledger is real and
 sqlite-backed in a temporary directory; the turns are fabricated.
@@ -66,8 +73,12 @@ from core.cost_receipts import (  # noqa: E402
 STAGE_SOURCE = (SCRIPTS / "run_agentic_v2_stage.py").read_text()
 
 
-def _turn(task_id: str, call: str = "call-1", **usage: int) -> ModelTurn:
-    """One model call, named the way the real run names them."""
+def _turn(task_id: str, call: str = "call-1", model: str = "gpt-5.4", **usage: int) -> ModelTurn:
+    """One model call, named the way the real run names them.
+
+    ``model`` defaults to the pinned name, which the committed price list
+    covers. Pass a name it does not cover to build a genuinely unpriced call.
+    """
     return ModelTurn(
         call_id=f"a-run:{task_id}:1:{call}",
         usage=CallUsage(
@@ -75,9 +86,9 @@ def _turn(task_id: str, call: str = "call-1", **usage: int) -> ModelTurn:
             output_tokens=usage.get("output_tokens", 22),
         ),
         provider="azure",
-        requested_model="gpt-5.4",
+        requested_model=model,
         deployment="gpt-5.4",
-        resolved_model="gpt-5.4",
+        resolved_model=model,
     )
 
 
@@ -201,18 +212,23 @@ def test_the_failed_task_the_run_actually_had_also_builds_a_row(tmp_path):
 
 
 def test_an_unpriced_call_is_partial_and_not_a_zero(tmp_path):
-    """The state every V2 call is in today, stated as the record must state it.
+    """An amount that is not known must not be published as a zero.
 
-    ``gpt-5.4`` has no entry in the committed price table, so the tokens are
-    known and the amount is not. ``partial`` with a null estimate is the true
-    sentence. A ``0.0`` here would be indistinguishable from a task that really
-    cost nothing, and the tokens that would let anyone recompute it later are
-    only kept because the status says the amount is missing.
+    Written first in the belief that this was the state of *every* V2 call --
+    that ``gpt-5.4`` had no entry in the committed price table. That was wrong
+    and the correction is in the test below: the entry exists, and the nulls
+    came from the ledger being opened without the table. The rule this test
+    holds is unchanged and still worth holding, so it is exercised here on a
+    model that genuinely has no price: the tokens are known, the amount is not,
+    and ``partial`` with a null estimate is the true sentence. A ``0.0`` would
+    be indistinguishable from a task that really cost nothing.
     """
     ledger = stage.open_the_ledger(tmp_path, run_id="a-run")
     try:
         receipt = stage.settle_into_a_receipt(
-            ledger, task_id="t1", model_turns=(_turn("t1"),)
+            ledger,
+            task_id="t1",
+            model_turns=(_turn("t1", model="a-model-nobody-priced"),),
         )
     finally:
         ledger.close()
@@ -225,6 +241,29 @@ def test_an_unpriced_call_is_partial_and_not_a_zero(tmp_path):
     assert receipt["usage"]["output_tokens"] == 22
 
 
+def test_the_pinned_model_is_priced_and_settles_complete(tmp_path):
+    """The correction, asserted rather than described.
+
+    ``azure:gpt-5.4`` is in the committed price list. Every V2 receipt read
+    ``partial`` anyway because ``open_the_ledger`` built the ledger without
+    handing it that list, and a ledger with no list marks every call
+    ``price_missing`` whatever the file says. Fixed in the same change as this
+    test; without this line the fix is silent and reversible.
+    """
+    ledger = stage.open_the_ledger(tmp_path, run_id="a-run")
+    try:
+        receipt = stage.settle_into_a_receipt(
+            ledger, task_id="t1", model_turns=(_turn("t1"),)
+        )
+    finally:
+        ledger.close()
+
+    assert receipt["status"] == STATUS_COMPLETE
+    assert receipt["missing_reasons"] == []
+    assert receipt["estimated_cost_usd"] is not None
+    assert receipt["estimated_cost_usd"] > 0
+
+
 def test_a_partial_receipt_does_not_mark_the_task_cost_accounted(tmp_path):
     """``usage_complete`` must stay false while the amount is unknown.
 
@@ -234,7 +273,9 @@ def test_a_partial_receipt_does_not_mark_the_task_cost_accounted(tmp_path):
     ledger = stage.open_the_ledger(tmp_path, run_id="a-run")
     try:
         receipt = stage.settle_into_a_receipt(
-            ledger, task_id="t1", model_turns=(_turn("t1"),)
+            ledger,
+            task_id="t1",
+            model_turns=(_turn("t1", model="a-model-nobody-priced"),),
         )
     finally:
         ledger.close()

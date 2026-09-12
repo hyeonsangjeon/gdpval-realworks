@@ -95,6 +95,7 @@ from core.agentic_v2_sharding import ShardRefused  # noqa: E402
 from core.agentic_v2_sharding import parse as parse_shard  # noqa: E402
 from core.agentic_v2_stage_one_budget import (  # noqa: E402
     STAGE_ONE_PLAN_PATH,
+    StagePricing,
     load_stage_one_plan,
     price_one_stage,
     run_stage_one_preflight,
@@ -380,7 +381,9 @@ def verdict_for(plan_path: Path):
     return plan, result, catalog
 
 
-def check_the_plan_priced_this_stage(plan: dict, stage: str, bound, catalog) -> list[str]:
+def check_the_plan_priced_this_stage(
+    plan: dict, stage: str, bound, catalog
+) -> tuple[StagePricing, list[str]]:
     """Whether the amounts approved describe the run about to happen.
 
     The plan prices each stage by name, and the figures are per-run rather than
@@ -429,10 +432,29 @@ def open_the_ledger(into: Path, *, run_id: str):
     executed -- not in CI, not in a test. A ``TypeError`` on a keyword argument
     is the cheapest possible version of that gap. The expensive version is the
     same gap one line further down, after the model has been asked.
-    """
-    from core.cost_receipts import CostReceiptLedger
 
-    return CostReceiptLedger(str(into / "cost_receipts.sqlite3"), run_id=run_id)
+    The ledger is given the price list. Without it every call settles
+    ``price_missing`` and every receipt reads ``partial`` with a null amount --
+    not because the model is unpriced, but because the ledger was never handed
+    the prices. ``azure:gpt-5.4`` is in the committed list at $2.50 and $15.00
+    per million, sourced from the Azure retail price API and last reviewed on
+    2026-08-29, so a run without this argument would have reported the whole
+    cohort as unaccounted for while the figures sat in the repository.
+
+    Two loaders read that same file and their names are close enough to swap by
+    accident. ``execution_envelope_cost.load_price_table`` returns prices keyed
+    by bare model name for the pre-run ceiling and for the voice;
+    ``cost_receipts.load_receipt_price_table`` returns the table the ledger
+    takes, keyed ``provider:model``, and fingerprints the file so a receipt can
+    name the exact bytes that priced it. The ledger wants the second.
+    """
+    from core.cost_receipts import CostReceiptLedger, load_receipt_price_table
+
+    return CostReceiptLedger(
+        str(into / "cost_receipts.sqlite3"),
+        run_id=run_id,
+        price_table=load_receipt_price_table(),
+    )
 
 
 def settle_into_a_receipt(ledger, *, task_id: str, model_turns) -> dict[str, Any]:
@@ -487,7 +509,21 @@ def the_paid_setup_a_dry_run_can_reach(stage: str) -> list[str]:
     from core.agentic_v2_cost_binding import ModelTurn
     from core.agentic_v2_run_report import build_agentic_v2_metrics, build_result_row
     from core.agentic_v2_task_journal import TaskStanding
-    from core.cost_receipts import CallUsage
+    from core.cost_receipts import REASON_PRICE_MISSING, CallUsage
+
+    # The name the plan pins, so the rehearsal prices the model the run will
+    # actually be billed for rather than a placeholder. A made-up name is not
+    # in the price list, settles `price_missing` like anything else unpriced,
+    # and would have let the defect below through: the ledger was being opened
+    # with no price list at all, so every call in every paid run settled
+    # `price_missing` and every receipt read `partial` with a null amount --
+    # for a model the repository prices exactly.
+    pinned_model = str(
+        (load_stage_one_plan(STAGE_ONE_PLAN_PATH).get("model") or {}).get(
+            "resolved_model"
+        )
+        or ""
+    )
 
     # A task that made a call and succeeded, and a task that made none and
     # ended the way the first paid task actually ended. The second is the
@@ -503,9 +539,9 @@ def the_paid_setup_a_dry_run_can_reach(stage: str) -> list[str]:
                     call_id="dry-run:a-task-that-called-the-model:1:call-1",
                     usage=CallUsage(input_tokens=100, output_tokens=10),
                     provider="azure",
-                    requested_model="dry-run-deployment",
+                    requested_model=pinned_model,
                     deployment="dry-run-deployment",
-                    resolved_model="dry-run-deployment",
+                    resolved_model=pinned_model,
                 ),
             ),
             {"success": True},
@@ -520,6 +556,14 @@ def the_paid_setup_a_dry_run_can_reach(stage: str) -> list[str]:
     )
 
     with tempfile.TemporaryDirectory(prefix=f"agentic-v2-{stage}-dry-") as scratch:
+        # Loaded on the paid path only, a few lines after the Azure client is
+        # built, and needing no identity of its own -- so the free job can read
+        # the same file the paid run will, and a price list that has stopped
+        # parsing is found here rather than after a deployment has been leased.
+        try:
+            load_price_table()
+        except Exception as broke:  # noqa: BLE001 - reported, not handled
+            return [f"the committed price list cannot be loaded: {broke!r}"]
         try:
             ledger = open_the_ledger(Path(scratch), run_id="dry-run")
         except Exception as broke:  # noqa: BLE001 - reported, not handled
@@ -565,6 +609,27 @@ def the_paid_setup_a_dry_run_can_reach(stage: str) -> list[str]:
                     return [
                         "a settled task cannot be turned into a report row: "
                         f"{broke!r}"
+                    ]
+
+                # Last, because shape comes before amount: a receipt of the
+                # wrong type has to be reported as that rather than as a
+                # missing price. This is the check the unpriced ledger walked
+                # past -- the receipt was well-formed, the row built, the run
+                # reported, and every amount in it was null. Right shape and
+                # absent amount look identical to everything above.
+                if not turns:
+                    continue
+                if REASON_PRICE_MISSING in (receipt.get("missing_reasons") or ()):
+                    return [
+                        f"a call against the pinned model {pinned_model!r} "
+                        "settles as unpriced; the ledger is not reading the "
+                        "committed price list"
+                    ]
+                if receipt.get("estimated_cost_usd") is None:
+                    return [
+                        "a settled call against the pinned model carries no "
+                        f"amount: {receipt.get('status')!r}, missing "
+                        f"{receipt.get('missing_reasons')!r}"
                     ]
         finally:
             ledger.close()
@@ -829,6 +894,8 @@ def main() -> int:
     # the same reason -- there is no route.
     rehearsing = RehearsalVoice() if args.rehearse else None
     managed = None
+    ledger = None
+    route_fingerprint: str | None = None
     prices: Any = {}
     if rehearsing is None:
         settings = AzureAIRouteSettings.from_env()
@@ -841,7 +908,7 @@ def main() -> int:
         prices = load_price_table()
 
     try:
-        if rehearsing is None:
+        if managed is not None:
             wrong_route = check_route_is_the_one_the_plan_fixed(
                 managed.route, connection, settings=settings
             )
@@ -851,6 +918,30 @@ def main() -> int:
                     "anything.\n\n  - " + "\n  - ".join(wrong_route)
                 )
                 return 1
+
+            # Read here, while the client is open, because the record that
+            # wants it is built after the `finally` below has closed it.
+            # `runtime_fingerprint` asks `_require_open()` first, so reading it
+            # down there raises `RuntimeError: managed Azure AI client is
+            # closed` and no run record is written at all.
+            #
+            # The journal, the deliverables and the ledger are written during
+            # the run and survive, so the outcomes, the files and the amounts
+            # are recoverable. What only the record holds is `reference_files`
+            # -- what each task was actually handed -- and `conversations`.
+            # Those are lost, for a run that had already succeeded.
+            #
+            # Nothing had ever reached that line. A rehearsal substitutes a
+            # disclaimer for it, the dry run returns hundreds of lines earlier,
+            # and both paid runs so far died before the tasks were done. The
+            # first run it would have hit is the first run that *finishes*,
+            # which is the most expensive moment available to fail at.
+            #
+            # Reading it early is not a workaround: the fingerprint is fixed
+            # when the lease is built and cannot change during the run, and it
+            # is read here immediately after the route it describes has been
+            # checked against the plan.
+            route_fingerprint = managed.runtime_fingerprint
 
         held = TaskConversations(ceilings, RunWideCeilings())
         attempts: dict[str, int] = {}
@@ -1106,6 +1197,18 @@ def main() -> int:
     finally:
         if managed is not None:
             managed.close()
+        # The dry run's rehearsal closes its ledger in a `finally` and this,
+        # the path the rehearsal exists to certify, did not close its own at
+        # all. The ledger is sqlite in WAL mode, so committed rows sit in a
+        # sidecar file until something checkpoints them. A process that exits
+        # normally checkpoints on the way out; a shard killed by its own
+        # `timeout-minutes` does not, and then the amounts are only readable by
+        # whoever remembers to carry the `-wal` file along with the database.
+        #
+        # The artifact upload takes the whole directory, so nothing has been
+        # lost so far. That is luck about a glob, not a property of this code.
+        if ledger is not None:
+            ledger.close()
 
     record = {
         "stage": args.stage,
@@ -1146,7 +1249,7 @@ def main() -> int:
         "route_fingerprint": (
             rehearsal_is_not_a_run()
             if rehearsing is not None
-            else managed.runtime_fingerprint
+            else route_fingerprint
         ),
         "chosen_settings": chosen.as_dict(),
         "conversations": held.as_dict(),
