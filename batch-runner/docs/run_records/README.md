@@ -57,6 +57,49 @@ Error: 1 of 28 report(s) could not be loaded:
 46.4%)** 입니다. 비용은 반대로 겹치지 않습니다 — 두 번 풀었으면 두 번
 나갔습니다.
 
+### 기록이 없는 네 번째 구간
+
+위 표는 **기록**의 목록이지 구간의 목록이 아닙니다. 이 회차에는 폴더가 하나도
+남지 않은 구간이 하나 더 있습니다 —
+[34596408490](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/34596408490).
+문제를 하나도 풀지 않았기 때문에 남길 `outcomes.json`이 없습니다. 그래도 이
+구간을 알아야 위 표의 두 번째 줄이 왜 생겼는지 설명이 됩니다.
+
+릴레이는 사람이 미는 것이 아닙니다. `batch-run.yml`의 `Retrigger relay run`이
+다음 구간을 스스로 띄웁니다. 그래서 45문제에서 끊긴 계보 A 다음에 11:56:07Z,
+`github-actions[bot]` 이름으로 **relay run #1이 실제로 떴습니다.** 체크포인트도
+제대로 복원했습니다:
+
+```
+Relay run #1: Restoring checkpoint...
+Relay checkpoint 79310ab6fd04 restored from HyeonSang/exp035_codex_foundry_full220
+```
+
+그리고 35초 뒤 `validate_restored_checkpoint`에서 멈췄습니다:
+
+```
+ValueError: codex_foundry has not been shown to reach its Foundry deployment;
+run the connection check first and set CODEX_FOUNDRY_CONNECTION_CONFIRMED=1
+once a request has been answered.
+```
+
+**이것은 체크포인트가 깨진 것이 아닙니다.** 검증 단계에 코덱스 게이트 변수가
+전달되지 않아서, 이어받기가 성공한 직후에 그 다음 검사가 통과할 수 없었던
+것입니다. 그 결함을 고친 것이 #535이고 제목이 그대로 그 뜻입니다 — "인계
+구간이 처음부터 통과할 수 없었습니다".
+
+이 구간이 남긴 것과 남기지 않은 것을 분명히 적어 둡니다. `Step 2a: Run
+inference`는 **건너뛰어졌습니다.** 모델 호출이 0이므로 비용도 0입니다 —
+여기서의 0은 앞에서 말한 "확정된 하한"과 다릅니다. 하한은 호출이 나갔는데
+얼마였는지를 모른다는 뜻이고, 이 구간의 0은 호출 단계에 닿지도 못했다는
+뜻입니다. 체크포인트 업로드도 건너뛰어졌으니 뒤 구간이 물려받은 상태를 이
+구간이 건드리지도 않았습니다. 3분 32초 만에 **닫히는 쪽으로 실패했습니다.**
+
+그래서 중복된 $14.3866의 출처는 이 방어벽이 아닙니다. #535가 13:12:22Z에
+병합됐고, 28초 뒤인 13:12:50Z에 34603033098이 손으로 떠졌는데 그 디스패치가
+`RELAY_RUN_INPUT: 0`을 달고 있었습니다. 막 고쳐진 이어받기 경로를 타는 대신
+처음부터 다시 돈 이유가 그것입니다.
+
 ## 기록을 만드는 방법
 
 손으로 적지 않습니다. `batch-runner/scripts/build_partial_run_record.py`가
