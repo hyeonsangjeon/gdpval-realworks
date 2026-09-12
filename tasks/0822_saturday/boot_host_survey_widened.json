@@ -1,0 +1,197 @@
+{
+  "and_note": "this is a report, not a request. Each item above is an access or capacity change and belongs to whoever owns the subscription, so it is named here and left undone",
+  "artifact": "agentic-v2-boot-host-survey",
+  "artifact_version": "1.1",
+  "because": "a host could not be created here under the permissions and capacity that exist today",
+  "findings": {
+    "existing_hosts": {
+      "answer": {
+        "count": 0
+      },
+      "measured": true,
+      "note": "names withheld; the count is what the verdict turns on",
+      "question": "are there already virtual machines in this subscription"
+    },
+    "permissions": {
+      "answer": {
+        "actions_measured": 12,
+        "assignments_held": 2,
+        "blocking_actions_not_permitted": [
+          "Microsoft.Compute/disks/write",
+          "Microsoft.Compute/virtualMachines/write",
+          "Microsoft.DevTestLab/schedules/write",
+          "Microsoft.Network/networkInterfaces/join/action",
+          "Microsoft.Network/networkInterfaces/write",
+          "Microsoft.Network/networkSecurityGroups/join/action",
+          "Microsoft.Network/networkSecurityGroups/write",
+          "Microsoft.Network/virtualNetworks/subnets/join/action",
+          "Microsoft.Network/virtualNetworks/write",
+          "Microsoft.Resources/deployments/write"
+        ],
+        "measured_but_not_blocking": {
+          "Microsoft.Network/publicIPAddresses/write": "attachPublicIp is set, and the template defaults it to false",
+          "Microsoft.Resources/subscriptions/resourceGroups/write": "the resource group does not already exist -- deploy.sh creates it in a separate step, so an owner who creates it first removes this action, and with it the only subscription-scope item on the list"
+        },
+        "permits": {
+          "Microsoft.Compute/disks/write": false,
+          "Microsoft.Compute/virtualMachines/write": false,
+          "Microsoft.DevTestLab/schedules/write": false,
+          "Microsoft.Network/networkInterfaces/join/action": false,
+          "Microsoft.Network/networkInterfaces/write": false,
+          "Microsoft.Network/networkSecurityGroups/join/action": false,
+          "Microsoft.Network/networkSecurityGroups/write": false,
+          "Microsoft.Network/publicIPAddresses/write": false,
+          "Microsoft.Network/virtualNetworks/subnets/join/action": false,
+          "Microsoft.Network/virtualNetworks/write": false,
+          "Microsoft.Resources/deployments/write": false,
+          "Microsoft.Resources/subscriptions/resourceGroups/write": false
+        },
+        "permits_every_action_a_deployment_would_take": false,
+        "scopes": {
+          "Microsoft.Compute/disks/write": "resource_group",
+          "Microsoft.Compute/virtualMachines/write": "resource_group",
+          "Microsoft.DevTestLab/schedules/write": "resource_group",
+          "Microsoft.Network/networkInterfaces/join/action": "resource_group",
+          "Microsoft.Network/networkInterfaces/write": "resource_group",
+          "Microsoft.Network/networkSecurityGroups/join/action": "resource_group",
+          "Microsoft.Network/networkSecurityGroups/write": "resource_group",
+          "Microsoft.Network/publicIPAddresses/write": "resource_group",
+          "Microsoft.Network/virtualNetworks/subnets/join/action": "resource_group",
+          "Microsoft.Network/virtualNetworks/write": "resource_group",
+          "Microsoft.Resources/deployments/write": "resource_group",
+          "Microsoft.Resources/subscriptions/resourceGroups/write": "subscription"
+        }
+      },
+      "measured": true,
+      "note": "",
+      "question": "can this identity already perform the writes a host needs"
+    },
+    "provider": {
+      "answer": {
+        "registered": true,
+        "registration_state": "Registered"
+      },
+      "measured": true,
+      "note": "",
+      "question": "is Microsoft.Compute registered here"
+    },
+    "quota": {
+      "answer": {
+        "enough_for_one_host": true,
+        "family": "standardDASv5Family",
+        "free_vcpus": 100,
+        "in_use_vcpus": 0,
+        "limit_vcpus": 100
+      },
+      "measured": true,
+      "note": "",
+      "question": "is there Standard_D8as_v5 quota in eastus2"
+    },
+    "session": {
+      "answer": {
+        "is_the_expected_subscription": true,
+        "state": "Enabled",
+        "subscription_id_was_read": true
+      },
+      "measured": true,
+      "note": "the id is deliberately not reported; only whether it is the one the model credential names",
+      "question": "which subscription is this session in"
+    }
+  },
+  "host_definition": {
+    "actions_it_performs": [
+      {
+        "action": "Microsoft.Resources/deployments/write",
+        "only_if": "",
+        "scope": "resource_group",
+        "why": "submit the template at all -- a deployment is itself a resource"
+      },
+      {
+        "action": "Microsoft.Network/networkSecurityGroups/write",
+        "only_if": "",
+        "scope": "resource_group",
+        "why": "create the security group that closes the host to the internet"
+      },
+      {
+        "action": "Microsoft.Network/virtualNetworks/write",
+        "only_if": "",
+        "scope": "resource_group",
+        "why": "create the network and the subnet the host sits on"
+      },
+      {
+        "action": "Microsoft.Network/networkInterfaces/write",
+        "only_if": "",
+        "scope": "resource_group",
+        "why": "give it a network interface"
+      },
+      {
+        "action": "Microsoft.Compute/disks/write",
+        "only_if": "",
+        "scope": "resource_group",
+        "why": "create the data disk the guest images would live on"
+      },
+      {
+        "action": "Microsoft.Compute/virtualMachines/write",
+        "only_if": "",
+        "scope": "resource_group",
+        "why": "create the machine itself"
+      },
+      {
+        "action": "Microsoft.DevTestLab/schedules/write",
+        "only_if": "",
+        "scope": "resource_group",
+        "why": "attach the auto-shutdown that stops it billing overnight"
+      },
+      {
+        "action": "Microsoft.Network/publicIPAddresses/write",
+        "only_if": "attachPublicIp is set, and the template defaults it to false",
+        "scope": "resource_group",
+        "why": "give it an address reachable from outside"
+      },
+      {
+        "action": "Microsoft.Resources/subscriptions/resourceGroups/write",
+        "only_if": "the resource group does not already exist -- deploy.sh creates it in a separate step, so an owner who creates it first removes this action, and with it the only subscription-scope item on the list",
+        "scope": "subscription",
+        "why": "create the resource group to put it all in"
+      },
+      {
+        "action": "Microsoft.Network/virtualNetworks/subnets/join/action",
+        "only_if": "",
+        "scope": "resource_group",
+        "why": "put the interface on the subnet"
+      },
+      {
+        "action": "Microsoft.Network/networkSecurityGroups/join/action",
+        "only_if": "",
+        "scope": "resource_group",
+        "why": "apply the security group to that subnet"
+      },
+      {
+        "action": "Microsoft.Network/networkInterfaces/join/action",
+        "only_if": "",
+        "scope": "resource_group",
+        "why": "attach the interface to the machine"
+      }
+    ],
+    "from": "infra/dev-host/main.bicep",
+    "quota_family": "standardDASv5Family",
+    "vcpus": 8,
+    "vm_size": "Standard_D8as_v5"
+  },
+  "is_not": [
+    "a deployment",
+    "a role request",
+    "a measurement that any machine here can actually boot a guest"
+  ],
+  "location_asked_about": "eastus2",
+  "question": "could the subscription the model deployment lives in host a Firecracker guest, under permissions that already exist",
+  "reads_only": true,
+  "verdict": "blocked_and_the_change_is_named",
+  "what_would_have_to_change": [
+    "this identity's roles do not permit: Microsoft.Compute/disks/write, Microsoft.Compute/virtualMachines/write, Microsoft.DevTestLab/schedules/write, Microsoft.Network/networkInterfaces/join/action, Microsoft.Network/networkInterfaces/write, Microsoft.Network/networkSecurityGroups/join/action, Microsoft.Network/networkSecurityGroups/write, Microsoft.Network/virtualNetworks/subnets/join/action, Microsoft.Network/virtualNetworks/write, Microsoft.Resources/deployments/write"
+  ],
+  "would_also_be_needed_under_other_options": [
+    "Microsoft.Network/publicIPAddresses/write, but only if attachPublicIp is set, and the template defaults it to false",
+    "Microsoft.Resources/subscriptions/resourceGroups/write, but only if the resource group does not already exist -- deploy.sh creates it in a separate step, so an owner who creates it first removes this action, and with it the only subscription-scope item on the list"
+  ]
+}

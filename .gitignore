@@ -319,6 +319,22 @@ tasks/0822_saturday/*
 # that says so, including the token counts the 0.0018 USD is derived from and
 # the four things it deliberately does not prove.
 !tasks/0822_saturday/model_reachability_survey.json
+# The same survey, widened to ask about every action the template performs
+# rather than the three it was first written around. Kept beside the 1.0
+# artefact instead of replacing it: the earlier write-ups cite the narrow one,
+# and a record that quietly grows twelve rows is a record nobody can date.
+!tasks/0822_saturday/boot_host_survey_widened.json
+# What an owner would have to read to act on the block above -- principal,
+# every action, every scope, and the smallest grant that clears it. The survey
+# reports machine-readable denials; this is the one place they are assembled
+# into a change someone could approve or refuse. It names the change and
+# leaves it undone.
+!tasks/0822_saturday/HOST_PERMISSIONS.md
+# A design worked through to the verdict "not yet". Committing the reasoning
+# for an experiment that was not run is the point: without it, the next person
+# to ask about the turn limit re-derives the same blockers, or does not, and
+# runs it.
+!tasks/0822_saturday/TURN_LIMIT_COMPARISON_DESIGN.md
 !tasks/0828_friday/
 tasks/0828_friday/*
 !tasks/0828_friday/TASK_PER_TASK_COST_RECEIPTS.md

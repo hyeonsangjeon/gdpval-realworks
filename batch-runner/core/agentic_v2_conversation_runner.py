@@ -24,8 +24,17 @@ would report 180 honest results and 40 refusals that say nothing about the
 model. So each task gets its own ceiling. The run-wide total is not thereby
 abandoned — :attr:`TaskConversations.spent` sums what every task actually used,
 and :meth:`TaskConversations.run_wide_refusal` is asked before each task, so an
-overall cap still stops the run. Two different limits, both enforced, neither
-pretending to be the other.
+overall cap can stop the run. Two different limits, neither pretending to be
+the other.
+
+**The run-wide cap is built but not set.** `scripts/run_agentic_v2_stage.py`
+constructs :class:`RunWideCeilings` with no arguments, so all three fields are
+``None`` and :meth:`TaskConversations.run_wide_refusal` never refuses. What
+bounds a stage today is the cost guard, which prices the whole stage against
+its approved amount *before* the run starts. That is a better place to stop —
+it stops before the money — but it is a different mechanism, and this one is
+inert until someone gives it numbers. Said here rather than left implied,
+because an earlier draft of this paragraph claimed both limits were enforced.
 
 **On token counts.** Every :class:`~core.agentic_v2_conversation.TurnRecord`
 that exists carries counts the provider really reported: the loop stops with
@@ -163,10 +172,12 @@ def ceilings_from(plan: Mapping[str, Any], chosen: Any) -> PerTaskCeilings:
 @dataclass(frozen=True)
 class RunWideCeilings:
     """What a whole run may spend, across every task and every attempt.
-    questions. A per-task ceiling stops one task from running away; this stops
-    the run. ``None`` on a field means nobody set that one, and — unlike the
-    per-task case — that is allowed here, because a run may legitimately be
-    bounded by turns and not by tokens.
+
+    A per-task ceiling stops one task from running away; this stops the run.
+    ``None`` on a field means nobody set that one, and — unlike the per-task
+    case — that is allowed here, because a run may legitimately be bounded by
+    turns and not by tokens. All three ``None`` bounds nothing, which is what
+    stage one currently passes; see the module docstring.
     """
 
     max_model_calls: Optional[int] = None

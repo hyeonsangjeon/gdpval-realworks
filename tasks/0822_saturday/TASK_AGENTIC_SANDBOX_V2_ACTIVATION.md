@@ -2200,6 +2200,13 @@ the block will not.
 
 Verdict `blocked_and_the_change_is_named`.
 
+> **Narrower than the current answer, not in conflict with it.** This block
+> describes the first survey, which asked about three actions. The template
+> actually performs twelve, and run `34684908054` (2026-09-12) measured all
+> twelve as `false` — the three here among them, unchanged.
+> `HOST_PERMISSIONS.md` carries the full list, the scopes, the principal and
+> the minimal change.
+
 **Four of the five came back favourable.** It is the right subscription, the
 provider is registered, and eastus2 has room for an 8-vCPU host more than ten
 times over. Exactly one thing is missing: the run identity holds two role
