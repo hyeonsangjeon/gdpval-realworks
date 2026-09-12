@@ -120,6 +120,18 @@ def _cost(row: dict[str, Any]) -> Decimal | None:
     return None if amount is None else Decimal(str(amount))
 
 
+def _outcome(row: dict[str, Any]) -> str:
+    """What one leg concluded about one task, at failure-reason granularity.
+
+    ``status`` alone collapses every failure into ``error``, which hides the
+    thing worth seeing when two lineages solved the same task: a task can keep
+    its status and still change *why* it ended.
+    """
+    if row["status"] == "success":
+        return "success"
+    return row.get("reason") or row["status"]
+
+
 def _check_fixed_task_list(legs: list[Leg]) -> dict[str, Any]:
     digests = {leg.task_list_digest() for leg in legs}
     if len(digests) > 1:
@@ -220,6 +232,101 @@ def _lineage_totals(final: Leg) -> dict[str, Any]:
         "derived_cost_usd": float(priced),
         "tasks_with_no_derivable_cost": unpriced_tasks,
         "derived_cost_is_a_floor": unpriced_tasks > 0,
+    }
+
+
+def _side(leg: Leg, task_ids: list[str]) -> dict[str, Any]:
+    """What one lineage spent on a set of tasks, read off its final leg."""
+    priced = Decimal(0)
+    unpriced = 0
+    turns = 0
+    infra = 0
+    for task_id in task_ids:
+        row = leg.by_task[task_id]
+        turns += row.get("calls") or 0
+        infra += row.get("retries_infrastructure") or 0
+        amount = _cost(row)
+        if amount is None:
+            unpriced += 1
+        else:
+            priced += amount
+    return {
+        "lineage": leg.lineage,
+        "final_leg": leg.label,
+        "turns": turns,
+        "infrastructure_retries": infra,
+        "derived_cost_usd": float(priced),
+        "tasks_with_no_derivable_cost": unpriced,
+        "derived_cost_is_a_floor": unpriced > 0,
+    }
+
+
+def _compare_second_attempts(
+    survivor: Leg, superseded: list[Leg], duplicated: list[str]
+) -> dict[str, Any]:
+    """For every task two lineages both solved, what each one concluded.
+
+    ``_check_inheritance`` already refuses when a later leg changes a result an
+    earlier leg of the *same* lineage settled. It says nothing about a task two
+    *different* lineages each solved from scratch, which is the only place this
+    round holds the same task answered twice.
+    """
+    transitions: dict[str, int] = {}
+    changed: list[dict[str, Any]] = []
+    for other in superseded:
+        for task_id in duplicated:
+            if task_id not in other.attempted:
+                continue
+            before = other.by_task[task_id]
+            after = survivor.by_task[task_id]
+            step = f"{_outcome(before)} -> {_outcome(after)}"
+            transitions[step] = transitions.get(step, 0) + 1
+            if _outcome(before) != _outcome(after):
+                changed.append(
+                    {
+                        "n": after["n"],
+                        "task_id": task_id,
+                        "superseded": {
+                            "lineage": other.lineage,
+                            "run_id": other.run_id,
+                            "outcome": _outcome(before),
+                        },
+                        "surviving": {
+                            "lineage": survivor.lineage,
+                            "run_id": survivor.run_id,
+                            "outcome": _outcome(after),
+                        },
+                    }
+                )
+    compared = sum(transitions.values())
+    sides = [_side(leg, duplicated) for leg in [*superseded, survivor]]
+    paid_twice = sum(
+        (Decimal(str(side["derived_cost_usd"])) for side in sides), Decimal(0)
+    )
+    return {
+        "what_this_is": (
+            "the same task answered twice, once per lineage. Coverage counts "
+            "it once; both answers are real and both were paid for."
+        ),
+        "what_this_is_not": (
+            "a repeat experiment. These tasks were solved twice because a "
+            "dispatch restarted the round, not because a repeat was designed. "
+            "The lineages ran different source revisions of batch-runner; "
+            "whether that changed the conditions of the model calls has to be "
+            "established from those revisions, not assumed from this table."
+        ),
+        "tasks_compared": compared,
+        "same_outcome": compared - len(changed),
+        "changed_outcome": len(changed),
+        "transitions": dict(sorted(transitions.items())),
+        "changed": sorted(changed, key=lambda row: row["n"]),
+        "what_a_turn_is": (
+            "one ledger row. Codex opens its own model requests inside a turn "
+            "and does not report how many, so these are turns, not requests."
+        ),
+        "spent_per_lineage_on_these_tasks": sides,
+        "paid_twice_usd": float(paid_twice),
+        "paid_twice_is_a_floor": any(side["derived_cost_is_a_floor"] for side in sides),
     }
 
 
@@ -391,6 +498,11 @@ def roll_up(
             "why_coverage_does_not_add": (
                 "a task two lineages both solved is one task of coverage and "
                 "two payments of cost"
+            ),
+            "outcome_when_solved_again": _compare_second_attempts(
+                survivor,
+                [final for name, final in finals.items() if name != surviving],
+                duplicated,
             ),
         },
         "deliverables": {

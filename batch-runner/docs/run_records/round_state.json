@@ -62,7 +62,147 @@
   "duplication": {
     "tasks_solved_by_more_than_one_lineage": 45,
     "tasks_reached_only_by_a_superseded_lineage": 0,
-    "why_coverage_does_not_add": "a task two lineages both solved is one task of coverage and two payments of cost"
+    "why_coverage_does_not_add": "a task two lineages both solved is one task of coverage and two payments of cost",
+    "outcome_when_solved_again": {
+      "what_this_is": "the same task answered twice, once per lineage. Coverage counts it once; both answers are real and both were paid for.",
+      "what_this_is_not": "a repeat experiment. These tasks were solved twice because a dispatch restarted the round, not because a repeat was designed. The lineages ran different source revisions of batch-runner; whether that changed the conditions of the model calls has to be established from those revisions, not assumed from this table.",
+      "tasks_compared": 45,
+      "same_outcome": 38,
+      "changed_outcome": 7,
+      "transitions": {
+        "content_filter -> content_filter": 3,
+        "content_filter -> success": 1,
+        "content_filter -> turn_failed": 1,
+        "rate_limit -> content_filter": 2,
+        "rate_limit -> rate_limit": 6,
+        "rate_limit -> success": 2,
+        "success -> success": 29,
+        "success -> transport_error": 1
+      },
+      "changed": [
+        {
+          "n": 4,
+          "task_id": "02aa1805-c658-4069-8a6a-02dec146063a",
+          "superseded": {
+            "lineage": "A",
+            "run_id": "34571840967",
+            "outcome": "rate_limit"
+          },
+          "surviving": {
+            "lineage": "B",
+            "run_id": "34631861765",
+            "outcome": "content_filter"
+          }
+        },
+        {
+          "n": 7,
+          "task_id": "045aba2e-4093-42aa-ab7f-159cc538278c",
+          "superseded": {
+            "lineage": "A",
+            "run_id": "34571840967",
+            "outcome": "rate_limit"
+          },
+          "surviving": {
+            "lineage": "B",
+            "run_id": "34631861765",
+            "outcome": "success"
+          }
+        },
+        {
+          "n": 11,
+          "task_id": "0e4fe8cd-16d0-4f41-8247-6385b4762582",
+          "superseded": {
+            "lineage": "A",
+            "run_id": "34571840967",
+            "outcome": "rate_limit"
+          },
+          "surviving": {
+            "lineage": "B",
+            "run_id": "34631861765",
+            "outcome": "success"
+          }
+        },
+        {
+          "n": 20,
+          "task_id": "11e1b169-5fb6-4d79-8a83-82ddf4987a85",
+          "superseded": {
+            "lineage": "A",
+            "run_id": "34571840967",
+            "outcome": "content_filter"
+          },
+          "surviving": {
+            "lineage": "B",
+            "run_id": "34631861765",
+            "outcome": "turn_failed"
+          }
+        },
+        {
+          "n": 39,
+          "task_id": "2d06bc0a-89c6-4e89-9417-5ffe725c1bc6",
+          "superseded": {
+            "lineage": "A",
+            "run_id": "34571840967",
+            "outcome": "content_filter"
+          },
+          "surviving": {
+            "lineage": "B",
+            "run_id": "34631861765",
+            "outcome": "success"
+          }
+        },
+        {
+          "n": 41,
+          "task_id": "2fa8e956-7b35-4c13-95dc-027f02be318b",
+          "superseded": {
+            "lineage": "A",
+            "run_id": "34571840967",
+            "outcome": "rate_limit"
+          },
+          "surviving": {
+            "lineage": "B",
+            "run_id": "34631861765",
+            "outcome": "content_filter"
+          }
+        },
+        {
+          "n": 44,
+          "task_id": "36d567ba-e205-4313-9756-931c6e4691fe",
+          "superseded": {
+            "lineage": "A",
+            "run_id": "34571840967",
+            "outcome": "success"
+          },
+          "surviving": {
+            "lineage": "B",
+            "run_id": "34631861765",
+            "outcome": "transport_error"
+          }
+        }
+      ],
+      "what_a_turn_is": "one ledger row. Codex opens its own model requests inside a turn and does not report how many, so these are turns, not requests.",
+      "spent_per_lineage_on_these_tasks": [
+        {
+          "lineage": "A",
+          "final_leg": "lineage A run 34571840967",
+          "turns": 88,
+          "infrastructure_retries": 43,
+          "derived_cost_usd": 14.386586,
+          "tasks_with_no_derivable_cost": 2,
+          "derived_cost_is_a_floor": true
+        },
+        {
+          "lineage": "B",
+          "final_leg": "lineage B run 34631861765",
+          "turns": 78,
+          "infrastructure_retries": 33,
+          "derived_cost_usd": 13.990465,
+          "tasks_with_no_derivable_cost": 2,
+          "derived_cost_is_a_floor": true
+        }
+      ],
+      "paid_twice_usd": 28.377051,
+      "paid_twice_is_a_floor": true
+    }
   },
   "deliverables": {
     "files": 269,

@@ -50,7 +50,16 @@ SHARED, SURVIVOR_ONLY, SUPERSEDED_ONLY, UNREACHED = (
 FIXED = [SHARED, SURVIVOR_ONLY, SUPERSEDED_ONLY, UNREACHED]
 
 
-def _row(n: int, task_id: str, *, status: str, cost: float | None, files: int = 0):
+def _row(
+    n: int,
+    task_id: str,
+    *,
+    status: str,
+    cost: float | None,
+    files: int = 0,
+    reason: str | None = None,
+    turns: int = 0,
+):
     if status == "pending":
         return {
             "n": n,
@@ -74,8 +83,9 @@ def _row(n: int, task_id: str, *, status: str, cost: float | None, files: int = 
         "status": status,
         "attempted": True,
         "outcome": "ok" if status == "success" else "failed",
-        "reason": None if status == "success" else "rate_limit",
+        "reason": None if status == "success" else (reason or "rate_limit"),
         "attempts": 1,
+        "calls": turns,
         "deliverable_file_count": files,
         "deliverable_bytes": files * 1000,
         "derived_cost_usd_from_measured_tokens": cost,
@@ -83,12 +93,28 @@ def _row(n: int, task_id: str, *, status: str, cost: float | None, files: int = 
 
 
 def _record(tmp_path: Path, name: str, attempted: dict[str, tuple]) -> Path:
-    """One run record: every task in the fixed list, attempted ones detailed."""
+    """One run record: every task in the fixed list, attempted ones detailed.
+
+    An attempted entry is ``(status, cost, files)``, optionally followed by a
+    failure reason and a turn count.
+    """
     rows = []
     for n, task_id in enumerate(FIXED, start=1):
         if task_id in attempted:
-            status, cost, files = attempted[task_id]
-            rows.append(_row(n, task_id, status=status, cost=cost, files=files))
+            status, cost, files, *rest = attempted[task_id]
+            reason = rest[0] if rest else None
+            turns = rest[1] if len(rest) > 1 else 0
+            rows.append(
+                _row(
+                    n,
+                    task_id,
+                    status=status,
+                    cost=cost,
+                    files=files,
+                    reason=reason,
+                    turns=turns,
+                )
+            )
         else:
             rows.append(_row(n, task_id, status="pending", cost=0.0))
     directory = tmp_path / name
@@ -156,6 +182,81 @@ def test_a_lineages_cost_comes_from_its_final_leg_not_the_sum_of_its_legs(
 
     assert per_lineage["B"]["derived_cost_usd"] == pytest.approx(3.50)
     assert per_lineage["B"]["final_leg"] == "lineage B run 300"
+
+
+def test_a_task_two_lineages_answered_the_same_way_is_not_reported_as_changed(
+    two_lineages,
+):
+    a, b1, b2 = two_lineages
+    again = roll_up([a, b1, b2], surviving="B")["duplication"][
+        "outcome_when_solved_again"
+    ]
+
+    assert (again["tasks_compared"], again["same_outcome"]) == (1, 1)
+    assert again["changed_outcome"] == 0
+    assert again["changed"] == []
+    assert again["transitions"] == {"success -> success": 1}
+
+
+def test_a_second_answer_that_failed_differently_counts_as_changed(tmp_path):
+    """``status`` alone would call both of these ``error`` and see nothing.
+
+    A task the deployment refused on rate the first time and the content filter
+    refused the second time did not fail the same way twice: one is an
+    execution-environment defect and the other is a benchmark result. Comparing
+    at status granularity would report the pair as stable.
+    """
+    a = Leg(
+        "A",
+        "100",
+        _record(tmp_path, "a", {SHARED: ("error", 1.00, 0, "rate_limit")}),
+    )
+    b = Leg(
+        "B",
+        "200",
+        _record(tmp_path, "b", {SHARED: ("error", 2.00, 0, "content_filter")}),
+    )
+    again = roll_up([a, b], surviving="B")["duplication"]["outcome_when_solved_again"]
+
+    assert again["same_outcome"] == 0
+    assert again["changed_outcome"] == 1
+    assert again["transitions"] == {"rate_limit -> content_filter": 1}
+    changed = again["changed"][0]
+    assert changed["superseded"] == {
+        "lineage": "A",
+        "run_id": "100",
+        "outcome": "rate_limit",
+    }
+    assert changed["surviving"] == {
+        "lineage": "B",
+        "run_id": "200",
+        "outcome": "content_filter",
+    }
+
+
+def test_both_attempts_at_a_duplicated_task_are_counted_as_spent(tmp_path):
+    """Re-solving a task buys no coverage. It still costs what it costs."""
+    a = Leg("A", "100", _record(tmp_path, "a", {SHARED: ("success", 1.00, 2, None, 3)}))
+    b = Leg("B", "200", _record(tmp_path, "b", {SHARED: ("success", 2.50, 2, None, 4)}))
+    again = roll_up([a, b], surviving="B")["duplication"]["outcome_when_solved_again"]
+
+    spent = {side["lineage"]: side for side in again["spent_per_lineage_on_these_tasks"]}
+    assert spent["A"]["derived_cost_usd"] == pytest.approx(1.00)
+    assert spent["B"]["derived_cost_usd"] == pytest.approx(2.50)
+    assert (spent["A"]["turns"], spent["B"]["turns"]) == (3, 4)
+    assert again["paid_twice_usd"] == pytest.approx(3.50)
+    assert again["paid_twice_is_a_floor"] is False
+
+
+def test_an_unpriced_second_attempt_makes_the_duplicate_total_a_floor(tmp_path):
+    a = Leg("A", "100", _record(tmp_path, "a", {SHARED: ("success", 1.00, 2)}))
+    b = Leg("B", "200", _record(tmp_path, "b", {SHARED: ("success", None, 2)}))
+    again = roll_up([a, b], surviving="B")["duplication"]["outcome_when_solved_again"]
+
+    # $1.00 is what is known, not what was spent. The unpriced attempt is not
+    # zero; it is unmeasured, and the total says so rather than rounding it off.
+    assert again["paid_twice_usd"] == pytest.approx(1.00)
+    assert again["paid_twice_is_a_floor"] is True
 
 
 def test_a_task_only_the_superseded_lineage_reached_stops_the_roll_up(tmp_path):
@@ -280,13 +381,42 @@ def test_the_committed_records_still_roll_up_to_the_round_the_reports_state():
         "transport_error": 7,
         "turn_failed": 1,
     }
-    assert document["duplication"] == {
-        "tasks_solved_by_more_than_one_lineage": 45,
-        "tasks_reached_only_by_a_superseded_lineage": 0,
-        "why_coverage_does_not_add": document["duplication"][
-            "why_coverage_does_not_add"
-        ],
+    duplication = document["duplication"]
+    assert duplication["tasks_solved_by_more_than_one_lineage"] == 45
+    assert duplication["tasks_reached_only_by_a_superseded_lineage"] == 0
+
+    # The 45 that ran twice, at failure-reason granularity. 38 landed the same
+    # way both times; 7 did not, and none of the 7 moved on model competence --
+    # they moved between rate refusal, content filter, transport and success.
+    again = duplication["outcome_when_solved_again"]
+    assert (again["tasks_compared"], again["same_outcome"]) == (45, 38)
+    assert again["changed_outcome"] == 7
+    assert again["transitions"] == {
+        "content_filter -> content_filter": 3,
+        "content_filter -> success": 1,
+        "content_filter -> turn_failed": 1,
+        "rate_limit -> content_filter": 2,
+        "rate_limit -> rate_limit": 6,
+        "rate_limit -> success": 2,
+        "success -> success": 29,
+        "success -> transport_error": 1,
     }
+    assert [row["n"] for row in again["changed"]] == [4, 7, 11, 20, 39, 41, 44]
+
+    # Task 44 is the only one the superseded lineage got and the survivor lost.
+    # Its deliverable exists only in the record the round is not publishing.
+    lost = next(row for row in again["changed"] if row["n"] == 44)
+    assert lost["superseded"]["outcome"] == "success"
+    assert lost["surviving"]["outcome"] == "transport_error"
+
+    # Same 45 tasks, two attempts: $14.3866 then $13.9905. Both are floors --
+    # two tasks per side have no derivable cost -- and both were spent.
+    spent = {side["lineage"]: side for side in again["spent_per_lineage_on_these_tasks"]}
+    assert round(spent["A"]["derived_cost_usd"], 4) == 14.3866
+    assert round(spent["B"]["derived_cost_usd"], 4) == 13.9905
+    assert (spent["A"]["turns"], spent["B"]["turns"]) == (88, 78)
+    assert round(again["paid_twice_usd"], 4) == 28.3771
+    assert again["paid_twice_is_a_floor"] is True
     assert document["deliverables"] == {"files": 269, "bytes": 611_429_470}
 
     # $14.3866 superseded + $41.7784 surviving, both floors.
