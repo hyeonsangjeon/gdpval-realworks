@@ -103,8 +103,18 @@ from core.agentic_v2_stage_one_budget import (  # noqa: E402
     price_one_stage,
     run_stage_one_preflight,
 )
+from core.agentic_v2_instructions import (  # noqa: E402
+    InstructionsRefused,
+    file_digest,
+    resolve_instructions,
+    unverified_note,
+)
+# The names only. `AzureFoundryVoice` is imported late, with the Azure client,
+# so that a run which never builds one never loads the SDK; this tuple is a
+# tuple of strings and the plan is checked against it before anything is built.
+from core.agentic_v2_model_voice import REPLAY_FORMATS  # noqa: E402
 from core.agentic_v2_tool_availability import (  # noqa: E402
-    apply_tool_availability,
+    availability_for,
 )
 from core.cost_receipts import (  # noqa: E402
     BUCKET_PROBLEM_SOLVING,
@@ -339,6 +349,21 @@ def model_calls_record(
     }
 
 
+#: The one place this script names a backend.
+#:
+#: It used to name one in three: the instructions were derived for a class, the
+#: factory constructed a class, and the run record wrote a class name down, and
+#: nothing held the three against each other. A run that told the model about
+#: the fixture's refusals while building the microVM would have passed every
+#: check in the repository, and the twelve tasks it killed would have read as
+#: the model failing at its work.
+#:
+#: Swapping this is not enough on its own to run on another backend --
+#: :func:`environment_note` refuses a backend whose honest sentence nobody has
+#: written -- and that refusal is the point.
+BACKEND_IN_USE = AgenticV2FixtureBackend
+
+
 #: What the fixture backend is, in words that survive being quoted.
 #:
 #: Written into the run record rather than only into this file's docstring,
@@ -346,11 +371,27 @@ def model_calls_record(
 #: whose isolation was a fixture and whose record does not say so is a result
 #: that will eventually be described as something it was not.
 def environment_note(profile: dict) -> dict:
+    if BACKEND_IN_USE is not AgenticV2FixtureBackend:
+        raise StageRefused(
+            f"{BACKEND_IN_USE.__name__} is mounted and the sentences below "
+            "describe the fixture. They are the part of the run record a "
+            "reader trusts to say what was and was not real, so they are "
+            "written by hand per backend rather than adapted. Write them for "
+            "this one before running it."
+        )
     return {
-        "backend": "AgenticV2FixtureBackend",
+        "backend": BACKEND_IN_USE.__name__,
         "guest_booted": False,
         "exec_run_open": False,
         "policy_profile_id": profile.get("policy_profile_id"),
+        "tool_availability": [
+            {
+                "tool": entry.tool,
+                "verdict": entry.verdict,
+                "how_we_know": entry.evidence,
+            }
+            for entry in availability_for(BACKEND_IN_USE)
+        ],
         "what_was_real": [
             "the model, the deployment and the charge for every call",
             "the tool choices the model made, turn by turn",
@@ -369,16 +410,41 @@ def environment_note(profile: dict) -> dict:
     }
 
 
-def verdict_for(plan_path: Path):
-    """The same free check the gate runs, run again where the money is."""
-    plan = load_stage_one_plan(plan_path)
+def readable_path(path: Path) -> str:
+    """Relative to the batch-runner root when it can be, absolute when not.
+
+    A plan under a temporary directory is a real case -- it is how the tests
+    run one -- and ``Path.relative_to`` raises rather than falling back, which
+    would turn a record-writing line into the thing that ended the run after
+    the money was spent.
+    """
+    try:
+        return str(path.resolve().relative_to(BATCH_RUNNER_ROOT))
+    except ValueError:
+        return str(path)
+
+
+def shared_assumptions(plan: dict) -> CostAssumptions:
+    """The cost assumptions this plan borrows, read from the plan it names.
+
+    One reader, because three places in this file wanted the same four lines
+    and a fourth was about to. The width the instructions were priced at comes
+    from here, so a copy of this that drifted would price the wording against
+    one plan and check it against another.
+    """
     shared_plan_path = BATCH_RUNNER_ROOT / str(
         plan.get("cost", {}).get("assumptions_come_from")
         or "experiments/execution_envelope/advance_check_plan.yaml"
     )
-    assumptions = CostAssumptions.from_mapping(
+    return CostAssumptions.from_mapping(
         load_plan(shared_plan_path)["cost"]["assumptions"]
     )
+
+
+def verdict_for(plan_path: Path):
+    """The same free check the gate runs, run again where the money is."""
+    plan = load_stage_one_plan(plan_path)
+    assumptions = shared_assumptions(plan)
     catalog = load_task_catalog()
     result = run_stage_one_preflight(
         plan, tasks_by_id=catalog.by_task_id(), assumptions=assumptions
@@ -416,18 +482,12 @@ def check_the_plan_priced_this_stage(
     expensive. Prices come from the plan; nothing here scales an approved
     amount on its own.
     """
-    shared_plan_path = BATCH_RUNNER_ROOT / str(
-        plan.get("cost", {}).get("assumptions_come_from")
-        or "experiments/execution_envelope/advance_check_plan.yaml"
-    )
     pricing = price_one_stage(
         plan,
         stage=stage,
         task_ids=bound.task_ids,
         tasks_by_id=catalog.by_task_id(),
-        assumptions=CostAssumptions.from_mapping(
-            load_plan(shared_plan_path)["cost"]["assumptions"]
-        ),
+        assumptions=shared_assumptions(plan),
     )
     return pricing, list(pricing.problems)
 
@@ -778,8 +838,28 @@ def main() -> int:
         )
         if unpriced:
             raise StageRefused("\n  - ".join(["this stage is not priced:", *unpriced]))
+        # The exact bytes the model will be sent, worked out once, here, for
+        # the backend that will really be built. Before the shard is cut and
+        # before a client exists, because every refusal it can raise is worth
+        # having now rather than on task one of thirty.
+        instructions = resolve_instructions(
+            plan,
+            BACKEND_IN_USE,
+            priced_characters=shared_assumptions(plan).instruction_character_count,
+        )
+        # Read here too, for the same reason. Left to the voice, a plan with a
+        # misspelt format would be caught by its constructor -- on task one, of
+        # thirty, after the ledger was opened.
+        replay_format = str(
+            (plan.get("fixed_settings") or {}).get("replay_format") or "paraphrase"
+        )
+        if replay_format not in REPLAY_FORMATS:
+            raise StageRefused(
+                f"fixed_settings.replay_format is {replay_format!r}, and it is "
+                f"one of {', '.join(REPLAY_FORMATS)}"
+            )
         shard = parse_shard(args.shard, bound.task_ids)
-    except (StageRefused, ManifestRefused, ShardRefused) as refusal:
+    except (StageRefused, ManifestRefused, ShardRefused, InstructionsRefused) as refusal:
         print(f"Refused before spending anything.\n\n{refusal}")
         return 1
 
@@ -825,6 +905,17 @@ def main() -> int:
         f"  settings       {chosen.tool_calls_per_attempt} tool calls, "
         f"{chosen.max_output_tokens_per_turn} tokens per turn"
     )
+    # The two conditions that were being decided in three places and written
+    # down in none. Printed before the money, because a run sent under the
+    # wrong ones is not a cheaper mistake for having been within budget.
+    print(
+        f"  instructions   {instructions.characters} characters, "
+        f"{'derived for ' + instructions.backend if instructions.derived else 'as written in the plan'}, "
+        f"sha256 {instructions.sha256[:16]}"
+    )
+    print(f"  replay         {replay_format}")
+    if unverified_note(instructions):
+        print(f"  unverified     {unverified_note(instructions)}")
     # The stage's own figures, not the five-task plan's. Those two are the same
     # number only for advance_check_5, and printing the wrong one beside a
     # two-hundred-task run is how a stage gets described as affordable.
@@ -1000,12 +1091,11 @@ def main() -> int:
                 deployment=deployment,
                 resource=resource,
                 budget=budget,
-                instructions=apply_tool_availability(
-                    str(plan.get("instructions") or ""), AgenticV2FixtureBackend
-                ),
+                instructions=instructions.text,
                 max_output_tokens_per_turn=ceilings.max_written_tokens_per_turn,
                 request_timeout_seconds=ceilings.max_seconds,
                 prices=prices,
+                replay_format=replay_format,
             )
             voices_by_budget[id(budget)] = voice
             return voice
@@ -1140,7 +1230,7 @@ def main() -> int:
                     f"  {task_id}  has files and can open none of them; a "
                     "failure here is not the model's either"
                 )
-            return AgenticV2FixtureBackend(root=task_root, **kwargs)
+            return BACKEND_IN_USE(root=task_root, **kwargs)
 
         # Opened before the factory that writes into it, and before the first
         # model call rather than after the first finished task. The reservation
@@ -1324,6 +1414,26 @@ def main() -> int:
             else route_fingerprint
         ),
         "chosen_settings": chosen.as_dict(),
+        # The conditions that were decided at request-build time and, until
+        # now, written down nowhere. `chosen_settings` says what the plan asked
+        # for; this says what left the machine. Two digests, because they
+        # answer different questions: `plan_file` names the file that was read,
+        # and `instructions.sha256` names the bytes the model was sent, which
+        # are not the same string whenever a plan asks for a derived tool list.
+        #
+        # The plan digest matters more than it looks. The preregistration
+        # document seals `agentic_stage_one_plan.yaml` unconditionally --
+        # `core.agentic_v2_preregistration._run_conditions` calls
+        # `load_stage_one_plan()` with no argument -- so a run under `--plan`
+        # is described by *this* record and by nothing else.
+        "request_conditions": {
+            "plan_file": {
+                "path": readable_path(args.plan),
+                "sha256": file_digest(args.plan),
+            },
+            "instructions": instructions.identity(),
+            "replay_format": replay_format,
+        },
         "conversations": held.as_dict(),
         "run": (
             outcome.as_dict()

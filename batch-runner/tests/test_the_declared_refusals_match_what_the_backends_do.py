@@ -18,24 +18,32 @@ Each list is checked the strongest way that costs nothing:
 * and its ``exec_run``, the one call that would boot something, is checked by
   asking whether the class overrides it rather than by running it.
 
-Also pinned here: adding the substitution to the stage runner must not change a
-single byte of what an already-run stage sent. Every plan in the repository is
-put through :func:`apply_tool_availability` and asserted to come back identical,
-because none of them asks for a derived list.
+Also pinned here: the stage runner names exactly one backend, and adding the
+substitution to it must not change a single byte of what an already-run stage
+sent. Every plan in the repository is put through
+:func:`apply_tool_availability`; the one plan that opts in is named, and every
+other is asserted to come back identical.
 
 Offline. No model call, no network, no machine, no spend.
 """
 from __future__ import annotations
 
+import ast
+import importlib.util
+import sys
 from pathlib import Path
 
 import pytest
 import yaml
 
-from core.agentic_v2_contract import TOOL_NAMES, AgenticV2Profile
-from core.agentic_v2_fixture_backend import AgenticV2FixtureBackend
-from core.agentic_v2_microvm_backend import AgenticV2MicroVMBackend
-from core.agentic_v2_tool_availability import (
+BATCH_RUNNER_ROOT = Path(__file__).resolve().parents[1]
+if str(BATCH_RUNNER_ROOT) not in sys.path:
+    sys.path.insert(0, str(BATCH_RUNNER_ROOT))
+
+from core.agentic_v2_contract import TOOL_NAMES, AgenticV2Profile  # noqa: E402
+from core.agentic_v2_fixture_backend import AgenticV2FixtureBackend  # noqa: E402
+from core.agentic_v2_microvm_backend import AgenticV2MicroVMBackend  # noqa: E402
+from core.agentic_v2_tool_availability import (  # noqa: E402
     AVAILABILITY_BY_BACKEND,
     PLACEHOLDER,
     ToolAvailability,
@@ -44,7 +52,24 @@ from core.agentic_v2_tool_availability import (
     tool_availability_paragraph,
 )
 
-BATCH_RUNNER_ROOT = Path(__file__).resolve().parents[1]
+
+def _load_runner():
+    """Import the stage runner by path, the way a script is loaded.
+
+    Registered in ``sys.modules`` before it is executed: ``DatasetRow`` is a
+    dataclass, and ``dataclasses`` resolves a field's type by looking the
+    defining module up there. Importing runs module-level code only -- no
+    dataset, no client, no argument parsing -- which is what makes asking the
+    runner cheaper than reading it.
+    """
+    spec = importlib.util.spec_from_file_location(
+        "run_agentic_v2_stage", BATCH_RUNNER_ROOT / "scripts" / "run_agentic_v2_stage.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
 
 #: The one argv the fixture's `exec_run` serves, per its declared note.
 THE_COMMAND_THAT_WORKS = ["fixture-upper", "a.txt", "b.txt"]
@@ -284,35 +309,57 @@ def test_the_two_paragraphs_disagree_about_the_two_tools_that_matter():
     assert "browser_run refuses" not in on_the_fixture
 
 
-def test_the_stage_runner_derives_for_the_backend_it_actually_builds():
-    """Three places in the stage runner name a backend. They must agree.
+def test_the_stage_runner_names_one_backend_and_only_one():
+    """The three opinions the runner used to hold are now a single constant.
 
-    The instructions are derived for one class, the factory constructs one, and
-    the run record writes one down. A run that told the model about the fixture
-    while building the machine would be the exact failure this module exists to
-    prevent, and it would look fine in every other check.
+    It derived the instructions for one class, the factory constructed one, and
+    the run record wrote one down. A run that told the model about the fixture
+    while building the microVM would have been the exact failure this module
+    exists to prevent, and it would have passed every other check.
 
-    Read out of the source rather than by running the stage: constructing it
-    needs a staged dataset, an Azure client and an approved amount, none of
-    which belong in an offline suite.
+    Checked by parsing rather than by substring, so that a comment or a
+    docstring mentioning a backend cannot pass for a use of one, and reformatting
+    the call sites cannot fail it. Two loads of a backend class name are
+    expected and no more: the line that defines :data:`BACKEND_IN_USE`, and
+    :func:`environment_note`'s refusal to describe anything else. Everything
+    downstream -- the instructions, the factory, the record -- reads the
+    constant.
     """
-    source = (BATCH_RUNNER_ROOT / "scripts" / "run_agentic_v2_stage.py").read_text(
-        encoding="utf-8"
+    runner_path = BATCH_RUNNER_ROOT / "scripts" / "run_agentic_v2_stage.py"
+    tree = ast.parse(runner_path.read_text(encoding="utf-8"))
+    classes = set(AVAILABILITY_BY_BACKEND)
+    loads = [
+        (node.id, node.lineno)
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Name) and node.id in classes
+    ]
+    assert len(loads) == 2, (
+        "the runner names a concrete backend class somewhere other than the "
+        f"two places it should. Found {loads}. Read BACKEND_IN_USE instead, so "
+        "that changing the backend is one edit rather than three that can "
+        "disagree"
     )
-    assert (
-        "apply_tool_availability(\n"
-        '                    str(plan.get("instructions") or ""), '
-        "AgenticV2FixtureBackend\n"
-        "                )" in source
-    ), "the instructions are no longer derived for AgenticV2FixtureBackend"
-    assert "return AgenticV2FixtureBackend(root=task_root" in source, (
-        "the factory builds something other than the backend the instructions "
-        "are derived for"
-    )
-    assert '"backend": "AgenticV2FixtureBackend"' in source, (
-        "the run record names a backend other than the one built"
-    )
-    assert "AgenticV2FixtureBackend" in AVAILABILITY_BY_BACKEND
+    assert {name for name, _ in loads} == {"AgenticV2FixtureBackend"}
+
+
+def test_the_backend_the_record_names_is_the_one_the_list_is_derived_for():
+    """Ask the runner, rather than reading its source for a class name.
+
+    ``environment_note`` is what a reader three months from now will have, and
+    it is built from the same constant the factory and the instructions use.
+    The tool list it carries is asserted equal to the declared one so that a
+    record cannot describe refusals the model was never told about.
+    """
+    runner = _load_runner()
+    assert runner.BACKEND_IN_USE is AgenticV2FixtureBackend
+    assert runner.BACKEND_IN_USE.__name__ in AVAILABILITY_BY_BACKEND
+
+    note = runner.environment_note({"policy_profile_id": "offline-full-v1"})
+    assert note["backend"] == AgenticV2FixtureBackend.__name__
+    assert note["tool_availability"] == [
+        {"tool": entry.tool, "verdict": entry.verdict, "how_we_know": entry.evidence}
+        for entry in availability_for(AgenticV2FixtureBackend)
+    ]
 
 
 def test_text_without_the_placeholder_comes_back_identical():
@@ -320,13 +367,22 @@ def test_text_without_the_placeholder_comes_back_identical():
     assert apply_tool_availability(untouched, AgenticV2FixtureBackend) is untouched
 
 
-def test_no_plan_in_the_repository_asks_for_a_derived_list_yet():
+#: The only plan that opts in. A second name appearing here is a plan whose
+#: instruction text -- a pinned condition of whatever stage it runs -- has
+#: changed, and the fix is a new plan file with its own run id rather than an
+#: edit in place. Adding a name here is therefore a deliberate act.
+PLANS_THAT_ASK_FOR_A_DERIVED_LIST = (
+    "experiments/execution_envelope/agentic_corrected_harness_plan.yaml",
+)
+
+
+def test_only_the_named_plan_asks_for_a_derived_list():
     """So wiring the substitution in cannot alter any stage that has run.
 
-    The instruction text is a pinned condition. When a plan does opt in, it is
-    a new plan file with its own run id, and this test is what will say so --
-    it fails, and the fix is to name the new plan here rather than to delete
-    the assertion.
+    Every other plan in the repository is put through the substitution and
+    asserted to come back byte for byte, which is the property that lets this
+    machinery exist at all: ``agentic_stage_one_plan.yaml`` ran trial_30 under
+    a hand-written paragraph, and what it sent has to stay exactly what it sent.
     """
     plans = sorted((BATCH_RUNNER_ROOT / "experiments").rglob("*.yaml"))
     assert plans, "no experiment files found -- the glob is wrong, not the repo"
@@ -339,9 +395,19 @@ def test_no_plan_in_the_repository_asks_for_a_derived_list_yet():
             continue
         if not isinstance(loaded, dict):
             continue
+        named = str(path.relative_to(BATCH_RUNNER_ROOT).as_posix())
         text = str(loaded.get("instructions") or "")
+        derived = apply_tool_availability(text, AgenticV2FixtureBackend)
         if PLACEHOLDER in text:
-            asking.append(path.relative_to(BATCH_RUNNER_ROOT))
-        assert apply_tool_availability(text, AgenticV2FixtureBackend) == text or asking
+            asking.append(named)
+            assert derived != text, f"{named} asks for a list and got none"
+        else:
+            assert derived == text, (
+                f"{named} does not ask for a derived list and its instructions "
+                "changed anyway. Whatever stage it has already run sent "
+                "something else"
+            )
 
-    assert asking == [], f"these plans now ask for a derived list: {asking}"
+    assert asking == list(PLANS_THAT_ASK_FOR_A_DERIVED_LIST), (
+        f"the set of opted-in plans has changed: {asking}"
+    )
