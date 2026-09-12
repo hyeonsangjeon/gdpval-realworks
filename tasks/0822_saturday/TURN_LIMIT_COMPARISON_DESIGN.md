@@ -574,6 +574,7 @@ confounds      limit — browser_run's trapdoor and the paraphrase ending. Both
                fire early (hazard 0 past turn 5 on this cohort, but only 19-24
                conversations reach turns 6-8, so that is weak evidence);
                the repeat spread is unmeasured; the cohort is not
-               representative of the 220; the priced ceilings assume the
-               current replay format
+               representative of the 220; the priced ceilings are one turn
+               per attempt short, so every figure in §9 reads cheaper than
+               the run is
 ```
