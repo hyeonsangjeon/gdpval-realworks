@@ -102,8 +102,8 @@ def _verify_cleanup_commit(
         or getattr(commits[0], "commit_id", None) != revision
         or getattr(commits[1], "commit_id", None) != parent
         or getattr(commits[0], "title", None) != _cleanup_commit_title(generation)
-        or getattr(commits[0], "message", None)
-        != _cleanup_commit_description(generation)
+        or _cleanup_commit_description(generation)
+        not in str(getattr(commits[0], "message", "")).splitlines()
     ):
         raise ValueError("relay checkpoint cleanup commit identity mismatch")
 

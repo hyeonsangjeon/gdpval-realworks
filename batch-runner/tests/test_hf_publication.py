@@ -394,7 +394,11 @@ def _add_cleanup_commit(
             (
                 description
                 if description is not None
-                else f"relay-cleanup-generation: {generation}"
+                # The Hub splits a commit message into title and body and leaves
+                # the separator on the body it hands back. This fake omitted it,
+                # so the fake was the only commit the check could accept. Run
+                # 34685779030 was the first to reach it against a real Hub.
+                else f"\n\nrelay-cleanup-generation: {generation}"
             ),
         ),
         (parent or api.candidate, "publication", ""),
@@ -596,6 +600,41 @@ def test_publication_finality_accepts_exact_cleanup_child(tmp_path):
     ) == cleanup_head
 
 
+def test_publication_finality_accepts_the_body_separator_the_hub_returns(
+    tmp_path,
+):
+    """The shape a real Hub sends, pinned apart from the helper that builds it.
+
+    The check compared the body with `!=` against a marker carrying no
+    separator, which no commit the Hub returns can equal, so this branch had
+    never once passed outside the tests. Only a relay that reaches publication
+    runs it — anything else takes the `expected_generation is None` path with no
+    checkpoint to clean — and run 34685779030 was the first. It uploaded all 220
+    rows, cleaned its checkpoint, and still concluded `failure` on this line.
+
+    `_add_cleanup_commit` now builds this shape by default, so the positive
+    tests around it cover the same ground. The body is spelled out here so that
+    editing the helper cannot quietly retire the case.
+    """
+    generation = "1" * 64
+    api, root, receipt_path, _publication = _published_state(tmp_path)
+    cleanup_head = _add_cleanup_commit(
+        api,
+        generation,
+        description=f"\n\nrelay-cleanup-generation: {generation}",
+    )
+
+    assert verify_publication_finality(
+        "owner/repository",
+        root,
+        token="token",
+        identity=_identity(),
+        expected_generation=generation,
+        receipt_path=receipt_path,
+        api=api,
+    ) == cleanup_head
+
+
 def test_publication_finality_rejects_readme_drift_after_cleanup(tmp_path):
     generation = "1" * 64
     api, root, receipt_path, _publication = _published_state(
@@ -659,6 +698,10 @@ def test_publication_finality_rejects_malformed_cleanup_generation(
         (
             f"Clean relay checkpoint {'1' * 12}",
             "",
+        ),
+        (
+            f"Clean relay checkpoint {'1' * 12}",
+            f"relay-cleanup-generation: {'1' * 64} and something else",
         ),
     ],
 )
