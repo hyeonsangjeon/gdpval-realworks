@@ -89,8 +89,10 @@ from core.agentic_v2_route_check import (  # noqa: E402
 )
 from core.agentic_v2_run_driver import (  # noqa: E402
     DriverRefused,
+    RunOutcome,
     StoppedEarly,
     run_manifest,
+    the_run_was_refused,
 )
 from core.agentic_v2_sharding import ShardRefused  # noqa: E402
 from core.agentic_v2_sharding import parse as parse_shard  # noqa: E402
@@ -924,6 +926,12 @@ def main() -> int:
         )
         prices = load_provider_price_table(PAID_VOICE_PRICE_PROVIDER)
 
+    # Both named before the `try`, because the record below is written on the
+    # way out of either path and a name bound only inside a branch is the same
+    # defect as not writing the record at all.
+    outcome: RunOutcome | None = None
+    refused: DriverRefused | None = None
+
     try:
         if managed is not None:
             wrong_route = check_route_is_the_one_the_plan_fixed(
@@ -1243,8 +1251,16 @@ def main() -> int:
             ),
         )
     except DriverRefused as refusal:
-        print(f"\nThe run was refused.\n\n{refusal}")
-        return 1
+        # Not a `return`. Everything below this line is the record, and a run
+        # that was refused is exactly the run whose record somebody needs: the
+        # shard has already been charged for the tasks it got through, the
+        # ledger holds those amounts, and `journal.jsonl` holds the rows. What
+        # the refusal path alone did not leave behind was `run_record.json` --
+        # and that file is where the shard's own cohort list lives, so without
+        # it `roll_up_agentic_v2_cost.py` cannot tell a task this shard was
+        # never assigned from one it was assigned and never reached. A shard
+        # that stopped became a shard that might never have existed.
+        refused = refusal
     finally:
         if managed is not None:
             managed.close()
@@ -1304,7 +1320,11 @@ def main() -> int:
         ),
         "chosen_settings": chosen.as_dict(),
         "conversations": held.as_dict(),
-        "run": outcome.as_dict(),
+        "run": (
+            outcome.as_dict()
+            if outcome is not None
+            else the_run_was_refused(refused, run_id=run_id)
+        ),
     }
     if rehearsing is not None:
         record["rehearsal"] = rehearsing.as_dict()
@@ -1315,9 +1335,16 @@ def main() -> int:
     name = "rehearsal_record.json" if rehearsing is not None else "run_record.json"
     (into / name).write_text(written + "\n", encoding="utf-8")
 
-    summary = outcome.summary
+    summary = outcome.summary if outcome is not None else {}
     print()
     print(f"  record         {into / name}")
+    if outcome is None:
+        # The amount before the refusal, in that order and on purpose. A shard
+        # that refused still spent whatever it spent up to that point, and a
+        # reader shown only the refusal will assume it spent nothing.
+        print(f"  spent          {held.spent}")
+        print(f"\nThe run was refused.\n\n{refused}")
+        return 1
     print(f"  finished       {summary.get('succeeded', 0)} of {len(tasks_to_run)}")
     if rehearsing is not None:
         found = rehearsing.as_dict()
