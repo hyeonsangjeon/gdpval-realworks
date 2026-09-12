@@ -107,6 +107,28 @@ and hashes that string into `browser_build_sha256` where nothing can read it.
 So the instruction text is the only account of which tools refuse, which makes
 the omission load-bearing rather than untidy.
 
+And the omission is not the only place the text and the room disagree.
+`exec_run` is half open too, in the opposite direction: the instructions say
+all three named tools refuse "every time" and that "no commands run here", and
+one command does. `exec_run` with `argv: ["fixture-upper", source,
+destination]` returns `returncode: 0` and really uppercases the file. Every
+other argv — including `fixture-upper` with the wrong number of arguments —
+answers `capability_unavailable` and ends the task.
+
+The model could have found that one out. `capabilities_query(kind:
+"commands")` returns `["fixture-upper"]`, and `kind: "budgets"` states the
+turn limit outright. So of the three things worth knowing about this room, two
+are answerable from inside it and one is not, and the one that is not is the
+one that ended twelve tasks. Where the environment does answer, it contradicts
+the instruction text.
+
+**None of this touched trial_30.** All thirty obeyed the instruction and never
+called `exec_run`, so the `fixture-upper` trapdoor is exposure, not a finding
+about that run. It matters here for one reason: it is a second way for a task
+to die that more turns gives it more chances to reach, which is the same
+argument §4 makes about `browser_run` and the reason the 18 is not a stable
+denominator.
+
 ### Which layer is actually out of step
 
 It is tempting to call this a harness bug, and it is not. Both code layers
@@ -143,7 +165,7 @@ That narrows the fixes and separates them by an order of magnitude:
 
 | | what changes | size |
 |---|---|---|
-| name `browser_run` in the instructions as refusing for network operations | one pinned string | small, and settles the 12 |
+| describe the two half-open tools accurately — `browser_run` refuses the network, `exec_run` serves one command | one pinned string | small, and settles the 12 |
 | make `capability_unavailable` survivable | the trace schema, its verifier, and the conversation table | large, and explicitly flagged in-code as separate and reviewable |
 
 The second is not the cheap one-line change an earlier draft of this file
