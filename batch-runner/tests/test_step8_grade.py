@@ -2082,6 +2082,27 @@ def test_pinned_rerun_identity_accepts_exact_full_run():
     )
 
 
+def test_pinned_rerun_identity_with_no_block_is_a_silent_pass():
+    """A config without ``rerun_identity`` is not checked, and must not be.
+
+    Six of the fourteen grading configs in this repository deliberately carry no
+    ``rerun_identity``, so returning early is the correct behaviour rather than a
+    gap to close here. It is recorded as a test because it makes the guard
+    opt-in: deleting the block from a config that has one turns off all five
+    comparisons at once -- experiment id, task count, rubric sha, inference
+    revision and the ordered task ids -- and every other test in the suite stays
+    green while it happens. The drift above (``_rejects_drift``) can only fire
+    on a config that still has the block to drift from.
+    """
+    s8._validate_pinned_rerun_identity(
+        {},
+        experiment_id="exp003",
+        task_count=220,
+        rubric_commit_sha="a" * 40,
+        inference_revision="b" * 40,
+    )
+
+
 def _pinned_task_config() -> dict:
     return {
         "rerun_identity": {
