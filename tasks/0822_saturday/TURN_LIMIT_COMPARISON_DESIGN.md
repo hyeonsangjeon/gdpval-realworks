@@ -52,7 +52,11 @@ changed it must not be changed in the same run as the limit.
 
 Everything else is held at trial_30's values: same 30 tasks, same model, same
 `max_output_tokens_per_turn: 8192`, same `retry_max_attempts`, same
-`max_result_bytes`, same instructions.
+`max_result_bytes`, same instructions — **and the same replay format**. That
+last one is not a setting and does not appear in any config file, which is
+exactly why it is written down here: `_input_for` decides what the model is
+shown of its own history, changing it changes the input at every turn, and a
+run that moved it alongside the limit could not separate the two. See §4.
 
 ## 4. What the limit can actually reach
 
@@ -62,21 +66,30 @@ each turn, not from the labels:
 
 | | tasks | what happened |
 |---|---|---|
-| ended on `browser_run` | **12** | one call, reaching the network — 8 a `search`, 4 an `open_url`. Refused, task over. 2–5 of the 9 calls allowed. None retried |
+| ended on `browser_run` | **12** | one call, reaching the network — 8 a `search`, 4 an `open_url`. Refused, task over. 2–5 of the 9 calls allowed. None retried. All 12 failed |
 | ended on `workspace_apply` | **2** | same terminal refusal, different tool. One was rescued by a retry, one also hit the ceiling and failed |
-| ran out of calls, desk never broke | **9** | 5 rescued by a retry, 4 failed |
-| gave up early, without committing | **2** | stopped well short of the limit |
-| finished inside the limit | **5** | never came near the ceiling |
+| ran out of calls, desk never broke | **7** | `stop_reason: turn_limit_reached`. 3 rescued by a retry, 4 failed |
+| stopped without a tool call | **2** | not the model giving up — see below. Both failed |
+| finished inside the limit | **7** | all succeeded. Two of them on their ninth and last call |
 
 That is 30 tasks, 11 successes and 19 errors, which is trial_30's headline.
+
+An earlier draft of this table read 9 / 2 / 5 for the last three rows. The 9
+came from counting attempts that used every call in their budget, which is not
+the same question: two tasks used **9 of 9** and finished normally, calling
+`finalize` on the last call they had. Counted by `stop_reason` — the field that
+says why the loop stopped — the ceiling group is 7 and the finished group is 7.
+The two are in the finished group here, and they are the clearest candidates
+for a higher limit helping, which the old split hid.
 
 Two things follow.
 
 **The limit can only act on 18 of the 30 tasks.** The twelve that ended on
 `browser_run` were ended before the ceiling was anywhere near. Of the eighteen
-that remain, ten touched the ceiling in some attempt and five of those already
-reach success through a retry — so the visible effect is bounded at roughly
-five tasks out of thirty before any noise is considered.
+that remain, **8 hit the ceiling in some attempt and 3 of those already reach
+success through a retry** — so the visible effect is bounded at five tasks out
+of thirty before any noise is considered. (Ten of the 18 *used* every call;
+the two that finished on the last one are not tasks a higher limit rescues.)
 
 **The 18 is not a stable denominator.** A model given more turns has more
 chances to reach `browser_run` and be terminated, so tasks can move *into* the
@@ -84,6 +97,69 @@ terminated group as the limit rises. A naive success-rate comparison would
 confound "more turns helped" with "more turns found the trapdoor". Any result
 must be reported on the fixed set of 18 task ids from trial_30, with movement
 in and out of the terminated group reported separately.
+
+And there is a second reason the denominator moves, worse than the first
+because it is not a trapdoor the model can avoid. Five of the 18 hit the
+"stopped without a tool call" ending, three of them in the same task as a
+ceiling hit, and **none of the five succeeded**. That ending gets more likely
+with every extra turn, for the reason set out next.
+
+### The fifth ending, which is the harness finishing its own sentence
+
+`stop_reason: model_stopped_without_finishing` reads as the model walking away,
+and the dataclass behind it says so in as many words. Nine attempts across five
+tasks ended that way. None of them is a model giving up, and there is no
+give-up text to preserve.
+
+Every one of the nine carries a note of the same shape:
+
+```
+the model stopped without committing an answer:
+I asked for workspace_apply as call call_U8QbjyWEKeR6j4I7sKplBSdK.
+```
+
+That sentence is not the model's own phrasing. It is the harness's.
+`AzureFoundryVoice._input_for` rebuilds the whole conversation before every
+turn — correctly, and the budget is worked out on the assumption that it does —
+but what it rebuilds is a paraphrase. Each of the model's earlier turns comes
+back as one line of prose in exactly that form, and **the arguments of the call
+are dropped**. The tool's answer is replayed in full as JSON; the request that
+produced it is not. So a model eight turns in has eight lines telling it that
+it asked for `workspace_apply`, and no record of which file it read or wrote.
+
+Shown that format repeatedly, the model eventually produces the next line of it
+as text instead of emitting a function call. `next_turn` looks for a
+`function_call` item, finds none, and returns `GaveUp` carrying whatever the
+model said — which is how the harness's own replay format ended up recorded as
+the reason a task stopped.
+
+Four things say this is imitation rather than a model choosing to stop, and all
+four are in the record:
+
+- the call ids in those notes are well-formed and **none appears anywhere
+  earlier in its own conversation**. They were invented, not repeated
+- all nine name `workspace_apply`, which is 254 of the cohort's 296 tool calls
+  and so by far the most repeated line in any replayed history
+- all nine are 29–32 output tokens: one sentence, not an explanation
+- it never happens on the first turn. The earliest is the third. With no
+  history there is nothing to imitate
+
+`test_the_model_is_shown_a_paraphrase_of_its_own_turns.py` pins both halves —
+the replay format and the no-function-call branch — without calling a model.
+
+This matters twice over for the limit question. It is a failure that **gets
+more likely with every extra turn**, because every turn adds another line of
+the pattern; and the information loss it comes from also grows with the turn
+count, so the extra turns a higher limit buys are turns with thinner history
+than the ones before them. A comparison that raised the limit without touching
+this would be measuring the two together.
+
+It is also a defect rather than a stated condition, which separates it from
+everything else in this section. `browser_run` and `exec_run` behave as built
+and are described wrongly to the model; this one nobody chose. It is the
+strongest candidate for the first fix, and like the instruction text it needs
+no access change — but it changes the model's input, so it is an intervention
+on a pinned run condition and gets its own config file and run id.
 
 ### The thing worth fixing first
 
@@ -297,13 +373,23 @@ In order:
    unrelated to the limit, and what is wrong is the instruction text rather
    than the harness — the cheapest thing in the area to correct. Own run id,
    own record.
-2. **Measure the repeat spread** at the control setting, so a difference has
+2. **Fix the replay format.** The model is shown a paraphrase of its own
+   turns with the arguments stripped, and finishing that paraphrase as text
+   ended five more tasks. Unlike everything else here it is a defect rather
+   than a condition somebody chose, and its likelihood rises with the very
+   axis this experiment wants to move.
+
+   These two can be fixed in the same run, and probably should be: the goal is
+   a platform to measure the limit on, not an effect estimate for either fix.
+   What that run may not then claim is how much each one contributed. It is a
+   new baseline, and it needs saying that way.
+3. **Measure the repeat spread** at the control setting, so a difference has
    something to be compared against.
-3. **Then** run the limit comparison, on the fixture backend, on the fixed set
+4. **Then** run the limit comparison, on the fixture backend, on the fixed set
    of task ids from trial_30, reporting movement into and out of the
    terminated group separately from the success count.
 
-If the comparison is wanted before step 2, it can still run — but its output
+If the comparison is wanted before step 3, it can still run — but its output
 is a description of two runs, not a measured effect, and it must be written
 that way.
 
@@ -315,7 +401,7 @@ conditions     control = 8 (trial_30's 30 task ids, fixture backend)
                variant = one value, new config file, new run id
 axes           moving: the limit. fixed: backend, refusal behaviour, model,
                max_output_tokens_per_turn, retry policy, max_result_bytes,
-               instructions, cohort
+               instructions, replay format, cohort
 adjudication   finalize called and artifacts opened. Completion, not quality.
                No judge, so no judge to validate
 input          30 task ids fixed before the question was raised; not a random
@@ -323,6 +409,8 @@ input          30 task ids fixed before the question was raised; not a random
 unit           tasks completed out of the 18 the limit can reach; USD from the
                ledger
 stop           effect below the repeat spread → the limit stays at 8
-known          the 18 is not stable across conditions; the repeat spread is
-confounds      unmeasured; the cohort is not representative of the 220
+known          the 18 is not stable across conditions, and moves in two
+confounds      directions that both worsen with the limit — browser_run's
+               trapdoor and the paraphrase ending; the repeat spread is
+               unmeasured; the cohort is not representative of the 220
 ```

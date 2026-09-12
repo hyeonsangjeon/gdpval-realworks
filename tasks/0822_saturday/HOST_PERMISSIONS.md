@@ -201,7 +201,14 @@ fixture only two tools have no working call, and on the microVM backend
 whole host exists to provide. Granting the roles and booting a host would
 produce a machine that runs commands and a model that has been told it
 cannot. Correcting the text is therefore on the critical path rather than
-beside it, and it is the only thing on that path that needs no access change.
+beside it, and it needs no access change.
+
+A second item sits beside it, also needing no access change: the model is
+shown a paraphrase of its own previous turns rather than the turns, with the
+arguments dropped, and completing that paraphrase as text ended five more of
+trial_30's thirty tasks. That one is a defect rather than a description, and
+it is backend-independent — it will follow the run onto a real host unchanged.
+`TURN_LIMIT_COMPARISON_DESIGN.md` §4 carries both.
 
 ## What continues without it
 
