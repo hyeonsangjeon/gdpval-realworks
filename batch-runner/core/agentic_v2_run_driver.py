@@ -183,6 +183,50 @@ class RunOutcome:
         }
 
 
+#: What a refused shard's halt is called in its record.
+#:
+#: Deliberately not one of the eight ``STOP_RULES``.
+#: :func:`~core.agentic_v2_shard_collection._rule_index_of` will not place it,
+#: and :func:`~core.agentic_v2_shard_collection.siblings_that_stopped_the_run`
+#: treats a rule it cannot place as a fact about the whole run rather than
+#: about one shard. That is the right reading here and not a side effect: a
+#: driver refuses on the *shape* of what a backend handed back, and the backend
+#: is the same checked-out code in every job -- so a shard about to start will
+#: be handed the same shape. At ``max-parallel: 4`` that bounds a refusal in
+#: the two hundred and twenty to about four shards' spend instead of
+#: seventeen.
+DRIVER_REFUSED_RULE = "the run driver refused to carry on"
+
+
+def the_run_was_refused(
+    refusal: BaseException | None, *, run_id: str
+) -> dict[str, Any]:
+    """The ``run`` block for a shard whose driver would not go on.
+
+    Shaped like :meth:`RunOutcome.as_dict`, because everything downstream reads
+    that shape and a second shape for the same slot would mean every reader had
+    to know which kind of record it was holding before it could ask anything of
+    it.
+
+    ``results`` and ``summary`` are ``None`` rather than ``[]`` and ``{}``. The
+    driver was part-way through the manifest when it refused, and the rows it
+    had built went with it -- so an empty list here would be a claim that no
+    task ran, published beside a ``journal.jsonl`` that says which ones did and
+    a ledger that says what they cost. ``None`` is the one value that sends a
+    reader to those two instead of answering for them.
+    """
+    return {
+        "run_id": run_id,
+        "results": None,
+        "summary": None,
+        "stopped_early": {
+            "rule": DRIVER_REFUSED_RULE,
+            "detail": str(refusal) if refusal is not None else "",
+        },
+        "skipped_on_resume": None,
+    }
+
+
 def _attempt_once(
     task: TaskToRun,
     *,
