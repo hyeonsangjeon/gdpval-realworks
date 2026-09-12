@@ -1,0 +1,2065 @@
+{
+  "0112fc9b-c3b2-4084-8993-5a4abb1f54f1": [
+    {
+      "name": "SOAP_note_CS_2024-03-01.md",
+      "bytes": 5387,
+      "sha256": "4a7dfedd27550b5c6a5c5a3d3437324c1dfd54ff91ae5445d6bf85e308cfd1d8"
+    }
+  ],
+  "01d7e53e-0513-4109-a242-8ccaf442cd21": [
+    {
+      "name": "RecFit_RU_Healthy_Lifestyles_Agreement_Draft.docx",
+      "bytes": 44636,
+      "sha256": "aa9469db1c2061a5ddddb55d5826697a044c7f89a890d02ea603de18598b9b02"
+    },
+    {
+      "name": "generate_recfit_agreement.py",
+      "bytes": 30165,
+      "sha256": "be4b5841f0269bff3856ed9b2aaa1d53db590710c21f8e8e85b012fedfc210b2"
+    }
+  ],
+  "02314fc6-a24e-42f4-a8cd-362cae0f0ec1": [
+    {
+      "name": "monthly_safety_checklist.html",
+      "bytes": 21955,
+      "sha256": "a43c0ce9049ddab1de7b07486db82c70f60d431a297d8a9b3970dba4d9ce2fed"
+    },
+    {
+      "name": "monthly_safety_checklist.pdf",
+      "bytes": 33559,
+      "sha256": "010200e37d999bf9314f1520cf982a2134ef85c13aa2a9028605a71b02028f7a"
+    }
+  ],
+  "0419f1c3-d669-45d0-81cd-f4d5923b06a5": [
+    {
+      "name": "John Miller Performance Improvement Plan.docx",
+      "bytes": 39633,
+      "sha256": "2ccf689e726783b4e58220773bfa52a19ffbe2cb8aaa00ebf08fea0d6f743dca"
+    }
+  ],
+  "045aba2e-4093-42aa-ab7f-159cc538278c": [
+    {
+      "name": "ca_pharmacy_compliance_daily.pdf",
+      "bytes": 3611,
+      "sha256": "b6e63e2022e9875e138a69a8b8e0a99f6b0f272c4d515bcf37718921efdb64e5"
+    },
+    {
+      "name": "ca_pharmacy_compliance_quarterly_annual.pdf",
+      "bytes": 3509,
+      "sha256": "2b4cde3836d7e6b4ecfe05a88c397f450353af33059a938408d8e2c0cbe48512"
+    },
+    {
+      "name": "ca_pharmacy_compliance_weekly_monthly.pdf",
+      "bytes": 3488,
+      "sha256": "71137a619c80acc07fe5b4b6461c7885f94d17fe727818752bedc85a8bd2cdaf"
+    },
+    {
+      "name": "generate_checklists.py",
+      "bytes": 11380,
+      "sha256": "9d5134c61c125209a4bd3060f0e6cfe1bbb4d268a81c8aa27bac6fb2eda9df1b"
+    }
+  ],
+  "05389f78-589a-473c-a4ae-67c61050bfca": [
+    {
+      "name": "Model A_CPO Supplier Replacement Report.docx",
+      "bytes": 39731,
+      "sha256": "c650a41ae4f8aa80344beb7aeb0866c7fe67ece025aedef768c117e5aec54bb3"
+    },
+    {
+      "name": "Model A_Juvoxa Termination Email.docx",
+      "bytes": 38002,
+      "sha256": "b03be6baf5ef96c422ef2ec1b86e484168938805a35dcf72b02ff571a4488c90"
+    },
+    {
+      "name": "generate_deliverables.py",
+      "bytes": 15721,
+      "sha256": "5b90496b368b5a6830ab59a5e33c729085c572c6b3e18dff571d5d6c8376225c"
+    }
+  ],
+  "0e386e32-df20-4d1f-b536-7159bc409ad5": [
+    {
+      "name": "README.md",
+      "bytes": 1917,
+      "sha256": "9295dc85a469be8309be4d1df7dcb589545ffcd695ee9dddea62a57ab12562af"
+    },
+    {
+      "name": "package.json",
+      "bytes": 440,
+      "sha256": "e8ad93452bd7c341a8b3448b1dbf073896faeee0e151d42a372f9eec7e7db02f"
+    },
+    {
+      "name": "privatecrypmix-codebase.zip",
+      "bytes": 26968,
+      "sha256": "40e98c991ee9b9d4ea8a5476045bc57fd2ca438e00e8a846d0a69ecb4c5f1b5f"
+    },
+    {
+      "name": "privatecrypmix-submission.zip",
+      "bytes": 26910,
+      "sha256": "c2ea13811cb9cd1a8720eb2fb5ea753099d97cbf382f6ef81f5f5b1ce95a26ac"
+    },
+    {
+      "name": "contracts/hardhat.config.ts",
+      "bytes": 660,
+      "sha256": "68fc09398bf14001aac4a7d3ed9f9aabaf990e8d3ee5e434f6aeb89731ca2432"
+    },
+    {
+      "name": "contracts/package.json",
+      "bytes": 417,
+      "sha256": "1da474fee6fab6057a09bdce9e66009e4522c7fe17b2521d97b8bddc4e21d698"
+    },
+    {
+      "name": "contracts/tsconfig.json",
+      "bytes": 360,
+      "sha256": "a5575f81fbdb68f128d3a7f39bfd3e7a629b2b80e989669321b1b8f444785f87"
+    },
+    {
+      "name": "contracts/scripts/deploy.ts",
+      "bytes": 2077,
+      "sha256": "772e302a77cb8d24a46349df7f9abf3e8ccfbced90234e94166ee842d0f79f20"
+    },
+    {
+      "name": "contracts/src/PrivateCrypMix.sol",
+      "bytes": 5618,
+      "sha256": "8892d21c962b656e71117a0ec8f30bf97dc7a4516ca5187085da8e2b3f410e53"
+    },
+    {
+      "name": "contracts/src/adapters/AaveYieldAdapter.sol",
+      "bytes": 1548,
+      "sha256": "4a3ff8f5f1992ed3d6046a6595e68d46d4fe757cfee36c035551654f039a552b"
+    },
+    {
+      "name": "contracts/src/adapters/ConnextBridgeAdapter.sol",
+      "bytes": 1387,
+      "sha256": "fa4502e6c41a0128fc8a01236847ffebd15392f332e2d017692a21ce9fc90c09"
+    },
+    {
+      "name": "contracts/src/interfaces/IAavePool.sol",
+      "bytes": 279,
+      "sha256": "5fa7a97dc52cc12824cd7e40cc26f5f204a33f633a84ddfd8d80936a9348a9f8"
+    },
+    {
+      "name": "contracts/src/interfaces/IBridgeAdapter.sol",
+      "bytes": 290,
+      "sha256": "2dd6f1b054c138632ba1a65abbbf73858a122b8b44a4aede6e4699989a740353"
+    },
+    {
+      "name": "contracts/src/interfaces/IConnext.sol",
+      "bytes": 323,
+      "sha256": "56bf9d62c92fc7cceb360fb88ca587cdb75102568f56b478a053281154e2fe06"
+    },
+    {
+      "name": "contracts/src/interfaces/IPrivacyVerifier.sol",
+      "bytes": 341,
+      "sha256": "5135be25987fe221aaef45e963354cf066b005f47f5c4a819cdac2ee6b4ffbc2"
+    },
+    {
+      "name": "contracts/src/interfaces/IYieldAdapter.sol",
+      "bytes": 291,
+      "sha256": "502c9654e98810c0bcd731ab511e19ec7031ebb0182d0244aa872c262e574532"
+    },
+    {
+      "name": "contracts/src/mocks/MockBridgeAdapter.sol",
+      "bytes": 1353,
+      "sha256": "c5bc3fe13e323098ec320e41bb9584cdb2012eae2bb88b2dfdf0919f938659b6"
+    },
+    {
+      "name": "contracts/src/mocks/MockConnext.sol",
+      "bytes": 826,
+      "sha256": "9ff6717b1dcad9301733c35593eac03457cc001a4d878b35e3036eb87dd6dbdb"
+    },
+    {
+      "name": "contracts/src/mocks/MockERC20.sol",
+      "bytes": 324,
+      "sha256": "beceb6d9a97fa73f421dd1fb81cdc328c1c4cabb57b9d81285f7e816d558d2ce"
+    },
+    {
+      "name": "contracts/src/mocks/MockVerifier.sol",
+      "bytes": 516,
+      "sha256": "37228e0a6a2e048f11d385b424296867eb18d43b49700cb5326994acdfa93448"
+    },
+    {
+      "name": "contracts/src/mocks/MockYieldAdapter.sol",
+      "bytes": 1338,
+      "sha256": "16204e6ff037d0a79012caf0fde8f8cdddc96e2d0fbc6355466fa9668545f782"
+    },
+    {
+      "name": "contracts/test/PrivateCrypMix.ts",
+      "bytes": 5533,
+      "sha256": "2e2c44f03cab173ff1855d7ae502408ac552f581ce08540d06678413cb080c33"
+    },
+    {
+      "name": "frontend/index.html",
+      "bytes": 304,
+      "sha256": "eada23905a4f95246adee35a6dfe63dd400cf78eb85bd8757ff4f6c3fb9a06a6"
+    },
+    {
+      "name": "frontend/package.json",
+      "bytes": 583,
+      "sha256": "c9dc960f66692004df8ff88222dc89d636f704660ea6107df89fc232733c2f8d"
+    },
+    {
+      "name": "frontend/tsconfig.json",
+      "bytes": 525,
+      "sha256": "fb75bddd6ef7c3fbc7872d73786cb844e125a0348751ea549c8655e09f1f07e9"
+    },
+    {
+      "name": "frontend/vite.config.ts",
+      "bytes": 136,
+      "sha256": "cce825191508aa257f130128d6b7196270f181d985f8605cb55ebe31d65795f9"
+    },
+    {
+      "name": "frontend/src/App.tsx",
+      "bytes": 8713,
+      "sha256": "d8d02cad6018b6c46c3d774bc5bae88c4ea784cdff3f6585d46dd201ec84d2c2"
+    },
+    {
+      "name": "frontend/src/main.tsx",
+      "bytes": 581,
+      "sha256": "9beccc5721593d1065098328c6babfb2b3697b2b4859baf5bf2296836b29f272"
+    },
+    {
+      "name": "frontend/src/styles.css",
+      "bytes": 3404,
+      "sha256": "c32efe62f3d1a54373cf5d459aa152f2e129d9fdc86eaa4b31a68af188c66ec1"
+    },
+    {
+      "name": "frontend/src/vite-env.d.ts",
+      "bytes": 82,
+      "sha256": "46810b819900e60a7c15105dd43313e99e3b5e1cf0aa1cf5337b7b8660cb6a65"
+    },
+    {
+      "name": "frontend/src/lib/config.ts",
+      "bytes": 937,
+      "sha256": "a92ad1260cede48e841d2f79f7856b452b746ccc0603191a9661d17b1950aa0a"
+    },
+    {
+      "name": "frontend/src/lib/contracts.ts",
+      "bytes": 796,
+      "sha256": "34724b1810ff5a07823fe58dd6aec76db35bd21119a6118f86d1ff53d339ebe3"
+    },
+    {
+      "name": "frontend/src/lib/note.ts",
+      "bytes": 1379,
+      "sha256": "0a69cbafdfd6c2a5b2d339459cf0587b606d6ac3e7cc4806bd266b9d47c39510"
+    },
+    {
+      "name": "frontend/src/lib/wallet.ts",
+      "bytes": 536,
+      "sha256": "d552b1377cad399ad0f655a6c3587a8bae28ebf246d3bc78b772cee0b764dc4d"
+    },
+    {
+      "name": "relayer/package.json",
+      "bytes": 573,
+      "sha256": "80fab7c9a4c0602dfba569fd83f1a25b7dd2b5ed3758b55b287413357bbda0f5"
+    },
+    {
+      "name": "relayer/tsconfig.json",
+      "bytes": 245,
+      "sha256": "2b0800513ff1f8c0670fea447a7e31d810cb53ef78706af7ba76fd4623caa1a9"
+    },
+    {
+      "name": "relayer/src/index.ts",
+      "bytes": 2515,
+      "sha256": "a258541edf7bda3d45996a7e0e4bd986c4590c3807e4fe7702aa2aa1bb188705"
+    }
+  ],
+  "0e4fe8cd-16d0-4f41-8247-6385b4762582": [
+    {
+      "name": "Smith_Istanbul_Wedding_Itinerary.xlsx",
+      "bytes": 15004,
+      "sha256": "9cb775570b9684a1d5824048d413c6d3ba52124e2d38751ac46ebb8ef79e91ad"
+    },
+    {
+      "name": "build_istanbul_itinerary.py",
+      "bytes": 22897,
+      "sha256": "4adfc1c9a44b5764f474db5826aeba876d6d8c29f3b44fee34964701ee2da516"
+    }
+  ],
+  "0ec25916-1b5c-4bfe-93d3-4e103d860f3a": [
+    {
+      "name": "SBAR_Template_Emergency_Department.html",
+      "bytes": 9152,
+      "sha256": "db80daca1da30d62d41a5d20282dc92789743cb6b8db7a8781b76093b9db67e9"
+    },
+    {
+      "name": "SBAR_Template_Emergency_Department.pdf",
+      "bytes": 13803,
+      "sha256": "58bee2298dae0e27b8fd35b20de76c9eaf7230cf05ba8a70a6fd6405f6a7f06e"
+    },
+    {
+      "name": "SBAR_Template_Emergency_Department_References.md",
+      "bytes": 769,
+      "sha256": "5618085190af2aa7deeea85484fc7a90150bdabf187ea5923dc25575ddf1bc70"
+    }
+  ],
+  "0ed38524-a4ad-405f-9dee-7b2252659aad": [
+    {
+      "name": "ECID Board Meeting Talking Points.pdf",
+      "bytes": 3817,
+      "sha256": "472bae6c8a9c8da16090115f1495c7282ce7d1587142a5b6e3c96e07b8dc8655"
+    },
+    {
+      "name": "ECID District Constituent Summary.pdf",
+      "bytes": 3975,
+      "sha256": "4aa182f15d7cf554287535427d6027f5dea542421d38f94b64f4f13a9fb2e4df"
+    },
+    {
+      "name": "generate_ecid_reports.py",
+      "bytes": 14759,
+      "sha256": "2e242b9abb7ad53bf7b1dc280351ae7a8c6b12e3cafcf11cf20fb57063fd83d2"
+    }
+  ],
+  "0fad6023-767b-42c1-a1b3-027cd4f583cb": [
+    {
+      "name": "Meat Seafood FSC POG Template.xlsx",
+      "bytes": 13255,
+      "sha256": "308fb396d2882908870a9c66e73780817bfbf0a891944616fe09b99c581334db"
+    },
+    {
+      "name": "build_fsc_pog.py",
+      "bytes": 15338,
+      "sha256": "3292c0f8b62f9c9646da9b5dbd91d087725bcc6b08729374b0f380601b9b564d"
+    }
+  ],
+  "1137e2bb-bdf9-4876-b572-f29b7de5e595": [
+    {
+      "name": "PO_Audit_Deliverable.xlsx",
+      "bytes": 13151,
+      "sha256": "475b9c43bf0518def48c7404726a75a9e5175bcb8326b6425dde3c59da1cdb6d"
+    },
+    {
+      "name": "PO_Audit_Summary.docx",
+      "bytes": 37248,
+      "sha256": "eea9b99ab544484c4e75556b637d793d0c3766ec31d138e62f56cfd29bb00c9b"
+    },
+    {
+      "name": "build_po_audit.py",
+      "bytes": 10759,
+      "sha256": "cd33201b6c717321a3aed56239761f60b25b2e56054fdff94885aa08f9f835cd"
+    }
+  ],
+  "116e791e-890c-42b1-ba90-1db02e8bfd45": [
+    {
+      "name": "ab_nursing_care_plan.html",
+      "bytes": 7194,
+      "sha256": "cea297bb802a603594ffac1544206ad423bedbf70002f776d49b363f39252f4b"
+    },
+    {
+      "name": "ab_nursing_care_plan.pdf",
+      "bytes": 16635,
+      "sha256": "ae1d0686ba6ab6ef6fcea1591c845308a5c47ac903677ed78def6abb45b4ac52"
+    }
+  ],
+  "11dcc268-cb07-4d3a-a184-c6d7a19349bc": [
+    {
+      "name": "Location Report 062425.xlsx",
+      "bytes": 6047,
+      "sha256": "5c242fa1acd6d4fd766218571ed52d853f8893ab5e24eecece1a2abaf0ac2576"
+    }
+  ],
+  "15d37511-75c5-4c7f-81f1-16e00c0d95f3": [
+    {
+      "name": "GloNGroRealEstate_Year1_Revenue_Gross_Margin_Projection.csv",
+      "bytes": 1220,
+      "sha256": "eba90058ca5babeef4988558e29a26466ce4ec61e38aab76a5f5d1ec170c16a1"
+    },
+    {
+      "name": "GloNGroRealEstate_Year1_Revenue_Gross_Margin_Projection.xlsx",
+      "bytes": 6111,
+      "sha256": "95211187a54f15568c997ef2df07e8cba47f0d3b43ca9a7a588512de65c6dbf6"
+    },
+    {
+      "name": "build_glongro_projection.py",
+      "bytes": 7566,
+      "sha256": "5c19cd8a91f95e314c23dd092672598498fd107975194e5a0bc36a70bbf6e6ab"
+    },
+    {
+      "name": "extracted/pricing-image.png",
+      "bytes": 20297,
+      "sha256": "d8a809f25b7b6d4b74653ba6de8dd4a895902208380167a37d0e72d3154f0ba0"
+    }
+  ],
+  "15ddd28d-8445-4baa-ac7f-f41372e1344e": [
+    {
+      "name": "Modlev_Tail_Lamp_Negotiation_Strategy.docx",
+      "bytes": 41427,
+      "sha256": "77503807c17c30a8f90b4751d21af4bcb0d65f4d137283aa889d00260cfbf0fb"
+    },
+    {
+      "name": "modlev_tail_lamp_negotiation_strategy.md",
+      "bytes": 10581,
+      "sha256": "6de716a70a5de7029e6675c4df09bc2f444ca3c1bd03cd4347a139754224fda9"
+    }
+  ],
+  "17111c03-aac7-45c2-857d-c06d8223d6ad": [
+    {
+      "name": "Administrative Services Memo - Tentative Cleanup Schedule.pdf",
+      "bytes": 3099,
+      "sha256": "3cd2289079c6cd8a8e5c37fd624145c3d703e9386ef5dbf5ce3695fa10b1ec94"
+    },
+    {
+      "name": "Tentative Cleanup Schedule.xlsx",
+      "bytes": 8048,
+      "sha256": "7950540528c423210a56e5fe591f8b4860c310df25b67a48615a4d25089d87d3"
+    },
+    {
+      "name": "generate_cleanup_deliverables.py",
+      "bytes": 12541,
+      "sha256": "45029f6d606dad8aa00b8bbae9c9529282164ce74c2dc3b07e4d2aecae271afd"
+    }
+  ],
+  "1752cb53-5983-46b6-92ee-58ac85a11283": [
+    {
+      "name": "Completed Week One Test Plan.xlsx",
+      "bytes": 8132,
+      "sha256": "d33d14c20037117a3bf29d0657c05cac035afc2a45a80ca8f2b2a5d745b9b47b"
+    },
+    {
+      "name": "build_week_one_test_plan.py",
+      "bytes": 5369,
+      "sha256": "4592097e3f49a500ed2f66373751c7fd931c61da26ddd418dd028130fce2f17e"
+    },
+    {
+      "name": "plant_manager_email_draft.txt",
+      "bytes": 149,
+      "sha256": "1eece8034d0eaf817e3b31bcc25f425ee996228ba7fad13ac110ec71255bf3b1"
+    }
+  ],
+  "19403010-3e5c-494e-a6d3-13594e99f6af": [
+    {
+      "name": "XR Retailer 2023 Sales Performance Analysis Makeup Category Final.xlsx",
+      "bytes": 7528,
+      "sha256": "d8ba7e368487c8c5da0748c31fad7e7d7ab04c60b7b67e81bfe65ba2cc051a1f"
+    },
+    {
+      "name": "build_xr_makeup_recap.py",
+      "bytes": 12866,
+      "sha256": "e9156dd4b6d917697a563d3af8f391496d3a2ea914c5d5c1ebfa92772cb12880"
+    }
+  ],
+  "1aecc095-4d76-4b89-b752-1a0f870502cd": [
+    {
+      "name": "MA Telehealth Workflow Email.docx",
+      "bytes": 37241,
+      "sha256": "7c453388f8aaa5237a791483c8e36e0fea021e9824a01bc4e9f07e08b35ee523"
+    },
+    {
+      "name": "MA Telehealth Workflow Email.txt",
+      "bytes": 926,
+      "sha256": "9ad888c3bbe530f0dcffdb13314de2908ed589629db698ef8c5eeda5a8b77c8e"
+    },
+    {
+      "name": "Telehealth Roadmap.docx",
+      "bytes": 37966,
+      "sha256": "58670551d6c2559207bd850d8abe867da460f50b3be5b04224383f6ce8c43ec1"
+    },
+    {
+      "name": "Telehealth Workflow.docx",
+      "bytes": 39784,
+      "sha256": "3ff450c638f5927dc2d0cf3da127bbd49c7829458dd9c462c41fe96dc7cc818a"
+    }
+  ],
+  "1b1ade2d-f9f6-4a04-baa5-aa15012b53be": [
+    {
+      "name": "Revised_Sourcing_and_Nomination_Workflow_Lamp_Assemblies.docx",
+      "bytes": 41066,
+      "sha256": "72044c824529df8400039268efbc833f7c8b6abc5c0e7a8c4e1a6624fa0184bb"
+    },
+    {
+      "name": "build_workflow_doc.py",
+      "bytes": 13721,
+      "sha256": "15fc730f62f630ef3471902741969cf19771b5e4e96f3d1ee6a9efa36a2e7eff"
+    },
+    {
+      "name": "lamp_sourcing_workflow_source.md",
+      "bytes": 8749,
+      "sha256": "66834c67c2225958e0f9e44a82cfefa7321b547eaa5e518fe4a9ee7a1c6d104e"
+    }
+  ],
+  "1b9ec237-bf9c-41f9-8fa9-0e685fcd93c6": [
+    {
+      "name": "Hypertension_Lecture_Nursing_Students.pptx",
+      "bytes": 78471,
+      "sha256": "601b2ccda7b8ea3d05c3bcec0f913e859db6da188622c539138b4f0ce78ec0af"
+    },
+    {
+      "name": "generate_htn_presentation.py",
+      "bytes": 38615,
+      "sha256": "707c9e1e24004da470ec301dcb91c8bd355ba9502e6e97f97f139890cd3af9e9"
+    }
+  ],
+  "1e5a1d7f-12c1-48c6-afd9-82257b3f2409": [
+    {
+      "name": "Property_Manager_Weekly_Schedule.docx",
+      "bytes": 39705,
+      "sha256": "3aee6e6222f8fcd4d3287ef7d2199e4c60b69a221dde221237f5b5f74f4960b9"
+    },
+    {
+      "name": "generate_pm_schedule.py",
+      "bytes": 11333,
+      "sha256": "5edb9a937eeb2c762806194d39a5d5181a544e9cf291bddd687f4cbda261c866"
+    }
+  ],
+  "211d0093-2c64-4bd0-828c-0201f18924e7": [
+    {
+      "name": "Daily Task List.pdf",
+      "bytes": 82197,
+      "sha256": "b652f42e487d9323800a062b44c715f9f1b17a084e6a2617fba6a14fc5adf9fa"
+    },
+    {
+      "name": "generate_dtl_pdf.py",
+      "bytes": 11316,
+      "sha256": "05d5f53e607fa6afae23113bd46b3a02c3fa0d85771f06dc0e848c0b9b53d508"
+    }
+  ],
+  "24d1e93f-9018-45d4-b522-ad89dfd78079": [
+    {
+      "name": "Model_I_Headlamp_NPV_Analysis.xlsx",
+      "bytes": 14525,
+      "sha256": "5dfcac9b134738638b583a33e4fd8d748e0fe5196dc231fd48a53f114be7f862"
+    },
+    {
+      "name": "build_headlamp_npv_workbook.py",
+      "bytes": 16788,
+      "sha256": "56f48b6a5a7865519fbaa7a300875993c78b6e728010a9f158b9e0db367ac2a1"
+    }
+  ],
+  "27e8912c-8bd5-44ba-ad87-64066ea05264": [
+    {
+      "name": "Organizational Action Items - Ergonomics Tracker.docx",
+      "bytes": 39269,
+      "sha256": "cb88132e1fad68df0b2a5dd8e41346bbb41cd7e5a3f3f09cddab95819c9c6dd9"
+    },
+    {
+      "name": "Workstation Ergonomics Checklist.pdf",
+      "bytes": 132645,
+      "sha256": "0b1c032e7949a4db99ad67d3a914fa78c71677a86e790c9b132ea23e81e49158"
+    },
+    {
+      "name": "generate_ergonomics_deliverables.py",
+      "bytes": 27949,
+      "sha256": "2c33983cd5554c167f679bef6a247a0bb7abab25ada64e3685cc4474e9b990cf"
+    },
+    {
+      "name": "ergonomics_assets/chair_reference.png",
+      "bytes": 45166,
+      "sha256": "1002ae819777b019e6485da6c5405a8f1528dac8d1234f3aaafc3e4d166198d1"
+    },
+    {
+      "name": "ergonomics_assets/keyboard_mouse_reference.png",
+      "bytes": 43001,
+      "sha256": "c41b9dd78728a84abe9e064d2b8eecdfc0acadd77999acdf46187f3d79c00986"
+    },
+    {
+      "name": "ergonomics_assets/work_surface_reference.png",
+      "bytes": 38723,
+      "sha256": "138cfdd12a4291a3e5c3239503a9937b237657916652bdfadb176e8681b25ce1"
+    }
+  ],
+  "2c249e0f-4a8c-4f8e-b4f4-6508ba29b34f": [
+    {
+      "name": "data_flow.txt",
+      "bytes": 5067,
+      "sha256": "622c0d077187238283c0bfc84da36b7f8d436810767bd61ad46423fd16d85e5c"
+    },
+    {
+      "name": "openapi.yaml",
+      "bytes": 28083,
+      "sha256": "148e0e9b11af752e65c4dcf120f170a18e295d3453eb5eebad7883e717ef709e"
+    }
+  ],
+  "2d06bc0a-89c6-4e89-9417-5ffe725c1bc6": [
+    {
+      "name": "Annocium_Investors_LOI_536-41_Fraanklyn_Ave.docx",
+      "bytes": 40388,
+      "sha256": "d9d314d7759335b11dc9e998171a9b589746f5bb0f046cf629db6e4802288074"
+    }
+  ],
+  "2ea2e5b5-257f-42e6-a7dc-93763f28b19d": [
+    {
+      "name": "Work_Time_Study_Analysis.pptx",
+      "bytes": 63237,
+      "sha256": "3978bd0b7acec5d53ad6dab320f2333805490071ca849d0fcc817397fe0a1e0f"
+    },
+    {
+      "name": "generate_work_time_study_presentation.py",
+      "bytes": 16782,
+      "sha256": "35c07175481c000cd94493804e373c7a94a659a8887c1abc690863f05aecbc41"
+    }
+  ],
+  "327fbc21-7d26-4964-bf7c-f4f41e55c54d": [
+    {
+      "name": "May_By_Door_Sales_Plan.xlsx",
+      "bytes": 14046,
+      "sha256": "ce47a3e10d54e6f2b0a707aaa78a84f0dd4f6b8d44bb5d805b9775000c04b0ff"
+    },
+    {
+      "name": "May_Sales_Plan_Summary.txt",
+      "bytes": 183,
+      "sha256": "e53cd48e39f3cf36e936b2faff27baa5b4d03e3ae6904d3b3e3f3f41baf49a7f"
+    },
+    {
+      "name": "build_may_sales_plan.py",
+      "bytes": 16825,
+      "sha256": "5f18c6eb032f5179af6bbb1e4833b01c67450752f086b81607817f962de9cb5a"
+    }
+  ],
+  "3600de06-3f71-4e48-9480-e4828c579924": [
+    {
+      "name": "build_presentation.py",
+      "bytes": 23255,
+      "sha256": "ade3d8e339b5e7166120879d7dcde7e76cdef2e168fd560b3d7dd39285f66f02"
+    },
+    {
+      "name": "cd_to_variable_annuity_advisor_deck.pptx",
+      "bytes": 54434,
+      "sha256": "77ad63ab4531578a8663c3262d58fb44ae56c547e3740adbda74e18d00337f88"
+    },
+    {
+      "name": "presentation_sources.md",
+      "bytes": 1376,
+      "sha256": "511acd6c12cc89b73eaf58159b42e1de384bbdef4c43322dcd234b451efdb415"
+    }
+  ],
+  "38889c3b-e3d4-49c8-816a-3cc8e5313aba": [
+    {
+      "name": "Deja_Vu_Instrumental_Deliverables.zip",
+      "bytes": 208632484,
+      "sha256": "a97521ed99ceddb17bd20d00ee414166af40384120e622d76d53e18976882368"
+    },
+    {
+      "name": "build_instrumental.py",
+      "bytes": 18016,
+      "sha256": "ef8789bb083592556756e150f3fa73bfa6211173aba4553601c9319cd7df37d9"
+    },
+    {
+      "name": "deja_vu_instrumental_deliverables/Deja Vu - Master Track.wav",
+      "bytes": 52772768,
+      "sha256": "27a60a07c0b253fea7fe3d7ac87fe2c197fd64d6908b25cb891ab2980099a63e"
+    },
+    {
+      "name": "deja_vu_instrumental_deliverables/Deja Vu - Stem - Bass.wav",
+      "bytes": 52772768,
+      "sha256": "ce8cf5d2135d5cf8daed91c313141facb78c826ad5e3a9c5703d302a6c1886f3"
+    },
+    {
+      "name": "deja_vu_instrumental_deliverables/Deja Vu - Stem - Bridge.wav",
+      "bytes": 52772768,
+      "sha256": "e2ae09df1a8735e117ba8700986536bc18efa3788e76dae78071fca3345d475e"
+    },
+    {
+      "name": "deja_vu_instrumental_deliverables/Deja Vu - Stem - Guitars.wav",
+      "bytes": 52772768,
+      "sha256": "540e548b926ceff26cedb5355acf730391208cbdd074e9b4c93fb818ffe94e9e"
+    },
+    {
+      "name": "deja_vu_instrumental_deliverables/Deja Vu - Stem - Synths.wav",
+      "bytes": 52772768,
+      "sha256": "1f44b72bb000d7016184f52a068c73c2e40674a0b7454d5536e91e9e2ab77667"
+    },
+    {
+      "name": "deja_vu_instrumental_deliverables/README.txt",
+      "bytes": 399,
+      "sha256": "d4f8982c9db898fccae376b0574273eb0e6dbb5c979fa04dc871766b70861e1a"
+    }
+  ],
+  "3a4c347c-4aec-43c7-9a54-eb1f816ab1f9": [
+    {
+      "name": "Asia_Enterprise_Technology_Season_Proposal.docx",
+      "bytes": 40006,
+      "sha256": "9ee968a0b9073b5f5a8417b58addc81fe7321bc01167ffa4a5a9350302b47749"
+    },
+    {
+      "name": "generate_asia_enterprise_season.py",
+      "bytes": 11947,
+      "sha256": "1856ee18e464ee4c602dc6b5246309d536690629f04c152a6ff391a0b98e094c"
+    }
+  ],
+  "3baa0009-5a60-4ae8-ae99-4955cb328ff3": [
+    {
+      "name": "make_world_bank_chart.py",
+      "bytes": 1035,
+      "sha256": "c22615f7719e6b50c666ba7630be670550e4219d6d7db6c78aef86a49dfd2d94"
+    },
+    {
+      "name": "world_bank_global_growth_chart.jpg",
+      "bytes": 71231,
+      "sha256": "2d61931722da73f8ad3f7dfd57c21755e78e845ea50fd4c002e8656de34485db"
+    },
+    {
+      "name": "world_bank_june_2025_article.md",
+      "bytes": 2495,
+      "sha256": "dfd2af58c1bab4a129a1bd6147a99c562bb708d0a6d0f12c7ba38686059020dd"
+    }
+  ],
+  "3c19c6d1-672c-467a-8437-6fe21afb8eae": [
+    {
+      "name": "BridgeMind_AI_Monthly_Report_October_2025.pptx",
+      "bytes": 46486,
+      "sha256": "0fbf4ff30164c7c6ccb5bb0ab9801a52658df2541343e9eb40b4f070b8bac2de"
+    },
+    {
+      "name": "build_bridgemind_october_report.py",
+      "bytes": 23394,
+      "sha256": "8c6686ca4d00a948c2ddf1c56f0f2f88c814ea872a6540562932002bd816cbdf"
+    }
+  ],
+  "3f625cb2-f40e-4ead-8a97-6924356d5989": [
+    {
+      "name": "memo_abc_father_youtube.md",
+      "bytes": 6969,
+      "sha256": "9f419ee375cce362be365089b2a1845e8efe880141baeb5bc37ca710ab6dba86"
+    },
+    {
+      "name": "memo_abc_father_youtube.pdf",
+      "bytes": 6988,
+      "sha256": "e820443794d5b16a64ac02bd8e46fabcca1dbda65a1bef4e500d1ad3dd4dbce6"
+    },
+    {
+      "name": "render_memo_pdf.py",
+      "bytes": 2830,
+      "sha256": "bd4484520a740d715673c8ded2990b889aaa95580b0180f957a7c71b8d1b3249"
+    }
+  ],
+  "3f821c2d-ab97-46ec-a0fb-b8f73c2682bc": [
+    {
+      "name": "Fall 2025 Omnichannel Stock Flow.xlsx",
+      "bytes": 11429,
+      "sha256": "25c44545dee070af0526542b846877528d0d26eb121f4b1ee80d7e43fdd05db3"
+    },
+    {
+      "name": "build_stock_flow.py",
+      "bytes": 10176,
+      "sha256": "88fec139be75d270800018fadd8b497e58188cc53457ef6a1cbf3de8ca1ef909"
+    }
+  ],
+  "401a07f1-d57e-4bb0-889b-22de8c900f0e": [
+    {
+      "name": "editorial.md",
+      "bytes": 4405,
+      "sha256": "5f0cd2e2e9cac1c971aa2499a086be23efd308987a008da60c34339f9f444801"
+    },
+    {
+      "name": "science_editorial.docx",
+      "bytes": 38966,
+      "sha256": "b233cd265102eec0c5768cd66ce2c4e123367aec314e57b2a93ccdb5c60fa6b1"
+    }
+  ],
+  "403b9234-6299-4b5f-a106-70c1bc11ec4c": [
+    {
+      "name": "County_Chamber_Partnership_Presentation.pptx",
+      "bytes": 42416,
+      "sha256": "b9d02c7d46fc8c2a9b2af3bc56bc6ad0932f2b90a1e822533d9f7de46499b04e"
+    },
+    {
+      "name": "generate_presentation.py",
+      "bytes": 9788,
+      "sha256": "d90e56b659e39e5e0530531e35fd9ba026ddb6461cfa1696fa1011ecdfc7da83"
+    }
+  ],
+  "40a8c4b1-b169-4f92-a38b-7f79685037ec": [
+    {
+      "name": "Grand Rounds 2025.xlsx",
+      "bytes": 10357,
+      "sha256": "ff3f9a602aaadd11b05d3ba58e65dc1f21cb6f001a3b39708e7d86e2b102efa6"
+    },
+    {
+      "name": "build_grand_rounds_2025.py",
+      "bytes": 8604,
+      "sha256": "a28b776fa2192b08e5a0b673cb54eee99bb54706bfc9c3b0f27f7ea1fe20fa1c"
+    }
+  ],
+  "40a99a31-42d6-4f23-b3ec-8f591afe25b6": [
+    {
+      "name": "cnc_cell_design_report.pdf",
+      "bytes": 254613,
+      "sha256": "d9eec6dd260473c029f8734b4406fe3187a90daa70bb6d64e1f0e12109ef4276"
+    },
+    {
+      "name": "cnc_cell_hardware_selection.xlsx",
+      "bytes": 8100,
+      "sha256": "195e0edb84346a530c01c498623a5924210466b4753068dbcb80a33c0b44ad71"
+    },
+    {
+      "name": "cnc_cell_layout.png",
+      "bytes": 229712,
+      "sha256": "f4477e03a97368b5a21ad8acf932bdad50639ef2f71416a3839f7aac172ae936"
+    },
+    {
+      "name": "generate_cnc_cell_package.py",
+      "bytes": 25710,
+      "sha256": "4a8370f8ef22416e1a76cb90ce7f99d71c0ddd631db2e07bcc93d08bb3ef4dec"
+    }
+  ],
+  "4122f866-01fa-400b-904d-fa171cdab7c7": [
+    {
+      "name": "README.md",
+      "bytes": 3738,
+      "sha256": "5d53aa5c8ba2abb137a6edce46b8380fedad151d5bc0a1103faa82aeaee8f37b"
+    },
+    {
+      "name": "contact-form-backend.zip",
+      "bytes": 9425,
+      "sha256": "b59413caa76676cff16794844dbb0ff1d761f6fe7d3486a65e47afbf87ca4b66"
+    },
+    {
+      "name": "exports.js",
+      "bytes": 4625,
+      "sha256": "b1567016e475eb45ac840589ce54d54b4da58fc43b28e50e0478c895996f5fae"
+    },
+    {
+      "name": "exports.js.zip",
+      "bytes": 1871,
+      "sha256": "a9ed5da050f50a88f9a4f3ea0c260db515c58532c176083c76143e59168af5f7"
+    },
+    {
+      "name": "main.tf",
+      "bytes": 9338,
+      "sha256": "6bd757ee875ab03739033005a337bdd5e6fa7ec5b69b6247fe95d9d2bcc326dc"
+    },
+    {
+      "name": "outputs.tf",
+      "bytes": 582,
+      "sha256": "282134522cce6165aca896db95d969baf8b8aecc281b819ac65f6ccdc8ed6dfe"
+    },
+    {
+      "name": "variables.tf",
+      "bytes": 2129,
+      "sha256": "bc69517fe20510aafd24d52c415fe1d151cc2fd47b700d680c9e38defa6aa7bc"
+    }
+  ],
+  "41f6ef59-88c9-4b2c-bcc7-9ceb88422f48": [
+    {
+      "name": "June 2025 Declined Payments Outreach.xlsx",
+      "bytes": 10425,
+      "sha256": "0d058ef44c3d8f89e54333f2417a6776c3576dd8462c0980f3d7583c4fee8ff2"
+    },
+    {
+      "name": "Third Declined Payment Email Template.docx",
+      "bytes": 37235,
+      "sha256": "bfb3bb17516b2c3cc8c528d26b3cfa976ef9964b18600b035a57262380e1b9e4"
+    }
+  ],
+  "4520f882-715a-482d-8e87-1cb3cbdfe975": [
+    {
+      "name": "Musician_Payroll_Model.xlsx",
+      "bytes": 110213,
+      "sha256": "23f3ea91a9bb63e37d7b0b43d3e3192449344cf5c2f62ca0044db1c26160435a"
+    },
+    {
+      "name": "README.md",
+      "bytes": 973,
+      "sha256": "a5792a13d49149574ab98bb84c9dae52ba80afeec607e2f253bcfb00cba1517e"
+    },
+    {
+      "name": "build_payroll_model.py",
+      "bytes": 29522,
+      "sha256": "40d65d099b7af83d4e0522972746aba3ccd90a6f2f12d5b98c41341b1672a3a1"
+    }
+  ],
+  "45c6237b-f9c9-4526-9a8d-6a5c404624ec": [
+    {
+      "name": "Crescent_Pines_Purchase_Assortment_Spring_2022.pdf",
+      "bytes": 19523077,
+      "sha256": "34ac07f0bcdc179c00a743b2f1b790ec051e7a0e228dcf057c55a8bdc6e0779a"
+    },
+    {
+      "name": "build_purchase_assortment.py",
+      "bytes": 13748,
+      "sha256": "f313f61f55c0edb45659d7145eacd5b9627e22ab385da93e2368dbd070557601"
+    },
+    {
+      "name": "presentation_assets/order_page_1.png",
+      "bytes": 811670,
+      "sha256": "d9ac582c550cbdbddd30d8e14dc6f84cbf9b9071fad80ed926ae4ee798b0682e"
+    },
+    {
+      "name": "presentation_assets/order_page_2.png",
+      "bytes": 1553481,
+      "sha256": "6eaf54db70b52b65baae252388244511866fb7e1ccb76f6d349b279b663c9e2c"
+    },
+    {
+      "name": "presentation_assets/order_page_3.png",
+      "bytes": 1107460,
+      "sha256": "2f9cb6fd85170e856c3491100d3f30065a6e957e052457a0f8d264c95a10a842"
+    },
+    {
+      "name": "presentation_assets/order_page_4.png",
+      "bytes": 2807896,
+      "sha256": "c46ca3344c8c8a4fa7f38f9c3b662cd52191106ea2da801c6ef02b153668bfbf"
+    },
+    {
+      "name": "presentation_assets/order_page_5.png",
+      "bytes": 2551407,
+      "sha256": "c2afd1c900de4b842a9e16633334872aa93081c7f13919e973f300ed399a5e3a"
+    },
+    {
+      "name": "presentation_assets/order_page_6.png",
+      "bytes": 2087879,
+      "sha256": "5252d2480e55764aa5ec97874bcff3b6f2225749f97f11479abf419f881fbc70"
+    }
+  ],
+  "46b34f78-6c06-4416-87e2-77b6d8b20ce9": [
+    {
+      "name": "H1_2025_Energy_Trading_and_Sales_Strategy_Memo.docx",
+      "bytes": 42499,
+      "sha256": "15021df4587b658d99dc9850f48fd6edbaee4fa211089c6c5db1773ae20d31c2"
+    },
+    {
+      "name": "generate_report.py",
+      "bytes": 18484,
+      "sha256": "7bd03ada2560befd9e30885c7ff9bdc7b8ddef93131b868e209b5e6bb86f0acd"
+    },
+    {
+      "name": "source_index.md",
+      "bytes": 1590,
+      "sha256": "95ef894166caddf3dcec9e42fa796e75fdfbcccd64ca4540f94551b729114d3b"
+    }
+  ],
+  "46fc494e-a24f-45ce-b099-851d5c181fd4": [
+    {
+      "name": "backface_summary.csv",
+      "bytes": 211,
+      "sha256": "00b4d03bcfe60227240d16a9c0f33d5b1021d08e5d3712a15c3b75af968d4d89"
+    },
+    {
+      "name": "contour_20min.png",
+      "bytes": 70163,
+      "sha256": "6254579005d6152ee19d1e884c62ae4edad1e9365830489643dfb5034934f06c"
+    },
+    {
+      "name": "heat_shield_analysis.py",
+      "bytes": 14634,
+      "sha256": "715213ee66e4eeb3722ca94dba888b76e23b40b6a085da08b07757a055501e2e"
+    },
+    {
+      "name": "heat_shield_report.md",
+      "bytes": 2658,
+      "sha256": "de6efbb498412f10c8ca76edf6ea32435b87fef79213be252ad57f395f32e2c2"
+    },
+    {
+      "name": "node_temperature_profiles.png",
+      "bytes": 89248,
+      "sha256": "6659e80180fd961e6b456a166b765331ba780bc9f13c6caab8b3b6be03efb53c"
+    },
+    {
+      "name": "node_time_traces.png",
+      "bytes": 118422,
+      "sha256": "835423591b94f1c50762908a87db36b3337b38a4feea1c0f3cc20c7f818937d6"
+    },
+    {
+      "name": "temperature_snapshots.csv",
+      "bytes": 1730,
+      "sha256": "c980b08410582fcb72019e9310e59c70ab35d0026e576222598eb6bc54f42d2a"
+    }
+  ],
+  "476db143-163a-4537-9e21-fe46adad703b": [
+    {
+      "name": "generate_move_out_pdfs.py",
+      "bytes": 6572,
+      "sha256": "0e174227b9fe254a22e3cc27b8f76c8c6f60e71795e8630c5ad96cac30a4eb59"
+    },
+    {
+      "name": "move_out_inspection_tracking_sheet.pdf",
+      "bytes": 2197,
+      "sha256": "9b256f7e080b819cbe23a3c4dc262a7e1d38415da3279255050c6af97cc206c5"
+    },
+    {
+      "name": "resident_move_out_inspection_emails.pdf",
+      "bytes": 6766,
+      "sha256": "ade76a39a8db77ebe1ea906cee37a6344df0cf1bd5a1b4bd0686bf5212b18218"
+    }
+  ],
+  "47ef842d-8eac-4b90-bda8-dd934c228c96": [
+    {
+      "name": "Top_5_Inventory_Summary.xlsx",
+      "bytes": 380928,
+      "sha256": "fb8a5efc572f29bc6e534942dd6031bd9f1cca52d8f84e312353499cc76761b2"
+    },
+    {
+      "name": "build_inventory_summary.py",
+      "bytes": 7740,
+      "sha256": "8cf406b43874561d54fabd9278dd50102982a79ca82de5808e2a69261c7cad33"
+    }
+  ],
+  "4b894ae3-1f23-4560-b13d-07ed1132074e": [
+    {
+      "name": "State of Affairs_FULL_EDIT_MIX.wav",
+      "bytes": 58752080,
+      "sha256": "b35906aa5a0dde4366f456ee4130163655c9b537460387f42f13cad059f803de"
+    },
+    {
+      "name": "State of Affairs_STEM_BASS_EDITED.wav",
+      "bytes": 33553448,
+      "sha256": "43bd4f24f52c82123e3fa21a0067244f4637f5ca4bd3d732a07b774706db77f2"
+    },
+    {
+      "name": "edit_state_of_affairs.py",
+      "bytes": 5482,
+      "sha256": "fd1fede8f0a81abe84e6047233d6bc6f2cd9dc4d2e1c04dcfadaaec6596e01d7"
+    },
+    {
+      "name": "state_of_affairs_edit_report.txt",
+      "bytes": 721,
+      "sha256": "a08b15507525ed0f8543c261311bd77b34b13aede5590a5ac1b668481e09bf56"
+    }
+  ],
+  "4b98ccce-9e42-44e9-9115-6fc3e79de288": [
+    {
+      "name": "DECEASED CORRESPONDENCE 2025.docx",
+      "bytes": 38296,
+      "sha256": "e903bce6f6a4e54f0c0dd3ffde0eb23eee4a7aceefc03fee5eaa4f89dde8853c"
+    },
+    {
+      "name": "GENERAL CORRESPONDENCE 2025.docx",
+      "bytes": 38158,
+      "sha256": "2afa5c3241ca46d36f253706354100227d18a69b807bb3bb16bee4c2cabd6453"
+    },
+    {
+      "name": "PATIENT INCIDENT 007.xlsx",
+      "bytes": 34900,
+      "sha256": "3087aea38bfd79c8013baa3ada1bbf3232a4d58a1505cd58643b1c51faaa8b4e"
+    }
+  ],
+  "4c18ebae-dfaa-4b76-b10c-61fcdf26734c": [
+    {
+      "name": "Golden_Apple_Bank_SAR_Narrative.docx",
+      "bytes": 39358,
+      "sha256": "5622e08914c569d77f7c50a9951622789b8acdf2e5148faac332aa8261fd741a"
+    },
+    {
+      "name": "Supporting_Transaction_Records.xlsx",
+      "bytes": 59235,
+      "sha256": "cb963d44deedec53ad9060c8482e1d5fa5114c65d4ee95b57c0ba4442c133028"
+    },
+    {
+      "name": "generate_sar_package.py",
+      "bytes": 24351,
+      "sha256": "1e6613bd887dfb27d3d9593cebc68a7eb721c9a238e6e6570b7db87786190b81"
+    }
+  ],
+  "4d61a19a-8438-4d4c-9fc2-cf167e36dcd6": [
+    {
+      "name": "Promo Projection Form.pptx",
+      "bytes": 158947,
+      "sha256": "88e4d803a38747e425fec4f7dc06e86754d11653c3889ec52116e7184299ce04"
+    },
+    {
+      "name": "Promotion Projection Form Sample.xlsx",
+      "bytes": 7928,
+      "sha256": "3c8fb7135e75a31efebd13fe47608422537e2b822f828db488b0f56b0a2b1e75"
+    },
+    {
+      "name": "Promotion Projection Form Template.xlsx",
+      "bytes": 7377,
+      "sha256": "c392544e7fbdbbc15a1c7b7b416b973d9963044e7f9a0c3f35bcce889422f59e"
+    },
+    {
+      "name": "generate_promo_projection_assets.py",
+      "bytes": 30868,
+      "sha256": "8bb918cc17e2549c714ae1a8c601c878eeacb31b56184437713680e73cdcd66f"
+    },
+    {
+      "name": "promotion_projection_form_sample.png",
+      "bytes": 131875,
+      "sha256": "4a678ea053c4374faa5abfd5999ad667b0e624f2ad18a99ddf7d2fa1eced9e39"
+    }
+  ],
+  "4de6a529-4f61-41a1-b2dc-64951ba03457": [
+    {
+      "name": "Stanton Capital Asset Class Views - Q1 2025.pdf",
+      "bytes": 50426,
+      "sha256": "2f7ff082c49bd288e2c5e7e2b8db1530bbe1b810240d65ab4f443a991a22b21e"
+    },
+    {
+      "name": "build_stanton_q1_2025_views_pdf.py",
+      "bytes": 17106,
+      "sha256": "1576692916103779688b07f375a515d6af6da034d1dba80eba1db25899c21ab6"
+    }
+  ],
+  "552b7dd0-96f4-437c-a749-0691e0e4b381": [
+    {
+      "name": "Inventory_Incident_Analysis_2025.pptx",
+      "bytes": 273692,
+      "sha256": "66789c55bea1964c29e3c7040a17c3e8f09f90836b9fda7b7c329cb949ca0bc3"
+    },
+    {
+      "name": "generate_inventory_report.py",
+      "bytes": 17776,
+      "sha256": "d912c25e79fbf2d429f2093b9ea772fa08450c6cce78e922c0a1ab643e464c60"
+    },
+    {
+      "name": "inventory_incident_supplier_summary.csv",
+      "bytes": 426,
+      "sha256": "27385f4b0c9ca879ccafaf1ecfbe1871f25ea3e9af4ae009c00844571f83e20a"
+    },
+    {
+      "name": "report_assets/avg_duration_by_type.png",
+      "bytes": 31974,
+      "sha256": "565da6eca8a925fed4204d51fe0451d7ecd0355575d69a1d8e509f8fca1a1cc6"
+    },
+    {
+      "name": "report_assets/cost_by_type.png",
+      "bytes": 42616,
+      "sha256": "5bfd50a7c3339fcb0b6985531ba096ce4fb4ddbf3c97ac7902adafd34aafa23c"
+    },
+    {
+      "name": "report_assets/incidents_by_supplier.png",
+      "bytes": 89221,
+      "sha256": "ad55e9a70ca1bd6885fddd98891e125bac997605eabb7695b756eee74ff0b090"
+    },
+    {
+      "name": "report_assets/supplier_share_percent.png",
+      "bytes": 129160,
+      "sha256": "0899d5b1a2b8b18cdd458d003f9931f0fc71cf42697bca9b812db9cf814a530c"
+    }
+  ],
+  "55ddb773-23a4-454c-8704-d432fe1b99d9": [
+    {
+      "name": "Master Association Violation Inspection Questionnaire.pdf",
+      "bytes": 5108,
+      "sha256": "e91070f7eca216054bc0377ae36ef93f78e06b287f7fddbaaecec5f5483e2b20"
+    },
+    {
+      "name": "generate_violation_questionnaire.py",
+      "bytes": 6386,
+      "sha256": "5d82c1a3a2ccccc9b6eaf3d17d270dab3c31f0ad7144f86274f451ea19e9d6c3"
+    }
+  ],
+  "575f8679-b4c1-47a2-8e96-d570d4ed9269": [
+    {
+      "name": "Immigration_and_Family_Stress_Evaluation_Plan.docx",
+      "bytes": 44168,
+      "sha256": "d3bbfaea451f6002bbbee1d131db83db95267fa8344eb87746cd4b56116590db"
+    },
+    {
+      "name": "generate_evaluation_plan.py",
+      "bytes": 26237,
+      "sha256": "9b2463998595472e89d079c212603fbec7bcf6d8552c7fc26eeb438579afb75a"
+    }
+  ],
+  "57b2cdf2-ad62-4591-aa91-aad489740320": [
+    {
+      "name": "final_surveillance_report.md",
+      "bytes": 3058,
+      "sha256": "3eae97a2fd7cb46d688b818a46830f5c03851f942e7bc74390a5ad70bd8858ae"
+    },
+    {
+      "name": "final_surveillance_report.pdf",
+      "bytes": 3350,
+      "sha256": "605dbf87c38b80a9e19ef8da4660056421045b857eaedcdc42c1e811bce70005"
+    },
+    {
+      "name": "generate_report_pdf.py",
+      "bytes": 6068,
+      "sha256": "81e4048a467f1dadae054873c55448321ade1307c9e5aad99f142bbd7f697793"
+    },
+    {
+      "name": "extracted_photos/Arriving at male's home.png",
+      "bytes": 1245916,
+      "sha256": "18f44f4b206922c40d46e1fafd5d8a3286ae011185e34150caea5015828ff846"
+    },
+    {
+      "name": "extracted_photos/Hugging male.png",
+      "bytes": 2168438,
+      "sha256": "2184c63bc8e6550e58037c2be5aa292d15f60f2152a6424299b5a8a43eb6ca76"
+    },
+    {
+      "name": "extracted_photos/Meeting friends at book club.jpg",
+      "bytes": 138778,
+      "sha256": "cbb6244e1ea00c6e0461b81848b176017634893b81bd34ffee796f3b40aee01f"
+    },
+    {
+      "name": "extracted_photos/arriving at book club.jpg",
+      "bytes": 92906,
+      "sha256": "3b372601ebaffbb33bb805a83f6ef65697aa08b89f548b29ba4bdf857cb04e1f"
+    },
+    {
+      "name": "extracted_photos/entering the male's home.png",
+      "bytes": 1663018,
+      "sha256": "a676fcdebe6bb4a38cff37d2782bdb558701082677ece463430c32832c55ac8c"
+    },
+    {
+      "name": "extracted_photos/leaving her home.png",
+      "bytes": 1867884,
+      "sha256": "e3b26106441c935aaa06e17904e05a5b9ec8a23d86cbef4f76bb3cb1da790e68"
+    },
+    {
+      "name": "extracted_photos/leaving unknown male residence, messy hair and shirt.png",
+      "bytes": 2461550,
+      "sha256": "504199f991fd9aed3e1102bfff19b29babfb0da55d539019431aaaaf41ba8266"
+    }
+  ],
+  "60221cd0-686e-4a08-985e-d9bb2fa18501": [
+    {
+      "name": "virginia_elections_article.html",
+      "bytes": 3205,
+      "sha256": "6d3b4db736ab6fcd34ed89bc70d867c1d384978822537ae89bc2e2d7b994b4af"
+    },
+    {
+      "name": "virginia_elections_article.pdf",
+      "bytes": 13160,
+      "sha256": "796a7239e9f6d1b66356d7f6a2d7620f8cbcb9c408dafdd93b2cc8fdd0cac2af"
+    }
+  ],
+  "61717508-4df7-41be-bf97-318dfb2475c0": [
+    {
+      "name": "elder_abuse_role_play_accounts.pdf",
+      "bytes": 10120,
+      "sha256": "5d27397a5442fa050d20aca4aaf9bedc4b2a3ed3f486b9447687c73091da9461"
+    },
+    {
+      "name": "elder_abuse_training_deck.pdf",
+      "bytes": 17158,
+      "sha256": "2459b20722fc182cc4b012a732d0223da5581886ef38d836b71290e534d41840"
+    },
+    {
+      "name": "generate_training_pdfs.py",
+      "bytes": 29472,
+      "sha256": "b8921021b0a5b3bd162aea9c14e8b7562dec6bd69a8fe9642e641e4d2948b00c"
+    }
+  ],
+  "61b0946a-5c1c-4bf6-8607-84d7c7e0dfe0": [
+    {
+      "name": "Collaborative Cadaver Program Proposal.docx",
+      "bytes": 315347,
+      "sha256": "9ddff833a46a1f5fff0c446711d5468985a50835013f6fd6df27def654d0a0b8"
+    },
+    {
+      "name": "cadaver_cost_savings.png",
+      "bytes": 91286,
+      "sha256": "2d8867dac9bb87b714f3ac9b0c8b949c7c53d607497e51fc0b20d97db87a5dda"
+    },
+    {
+      "name": "cadaver_region_allocation.png",
+      "bytes": 219129,
+      "sha256": "17ec7963c757daa45a149c78a19c9822fc606e46bb9e51b0f91968689c098baf"
+    },
+    {
+      "name": "generate_proposal.py",
+      "bytes": 21722,
+      "sha256": "567732e9005bd5f60f7569e436979f3758e5a4b870e4f2d6d6fb1ec01feee6d0"
+    }
+  ],
+  "61f546a8-c374-467f-95cc-d0d9b5656eb6": [
+    {
+      "name": "TR_Apartments_Turn_Report.html",
+      "bytes": 8083,
+      "sha256": "15feb06358dc4527b12d4d31c993f80981cec7c72be68cfa56ae065a910db03d"
+    },
+    {
+      "name": "TR_Apartments_Turn_Report.pdf",
+      "bytes": 16285,
+      "sha256": "b81cb3af795e58d02f2fbaad526e3c76222bd6ac2d9a455f225464b243df1142"
+    }
+  ],
+  "6241e678-4ba3-4831-b3c7-78412697febc": [
+    {
+      "name": "B2B_Video_Production_Schedule.pdf",
+      "bytes": 22215,
+      "sha256": "4e35729f1e26aa23c8187ca6899cac1ae62d5b4086efc2af7d93eb309c8df550"
+    },
+    {
+      "name": "B2B_Video_Production_Schedule.xlsx",
+      "bytes": 12760,
+      "sha256": "448638da7ef0f3fd61662b8c6731296bb2c91a6b90a0f38c178a772953811c0b"
+    },
+    {
+      "name": "build_production_schedule.py",
+      "bytes": 19098,
+      "sha256": "e9173a7eb06e1bee8534eef8ed6e9d2d9fc404c8a9c1e9ee4481235a401190c0"
+    }
+  ],
+  "62f04c2f-e0f7-4710-876c-54ee9c2e8256": [
+    {
+      "name": "Gravon_Shoes_Exchange_Authorization_Form.xlsx",
+      "bytes": 6604,
+      "sha256": "c5817b9f4937cc41106c95509e82aa380a50719c60a23defaa46c78193d4b0e3"
+    },
+    {
+      "name": "Gravon_Shoes_Exchange_Program_Overview.docx",
+      "bytes": 37642,
+      "sha256": "5761a98afc26f85d5f55ead0b968c510c64bd2a199c291feefeb477f51662155"
+    },
+    {
+      "name": "generate_gravon_exchange_docs.py",
+      "bytes": 9597,
+      "sha256": "ed856aae3e830800c262753e5d41c7c600bb36ca5accc9d3b7fb6e912515402a"
+    }
+  ],
+  "6436ff9e-c5f2-47ba-9aaa-49d89b0594ab": [
+    {
+      "name": "Revised Student Class Evaluation Form.docx",
+      "bytes": 40280,
+      "sha256": "26bf5e7b66ab21f2cb106f80c0840d57ab4de21748d997ef1508be93115604e4"
+    },
+    {
+      "name": "create_revised_evaluation_form.py",
+      "bytes": 13518,
+      "sha256": "decd3d11bfe975daee402d153edf1998d021abc37e25411a803c9dedca6b9a7f"
+    }
+  ],
+  "650adcb1-ed19-4f88-8117-77640f7b94b6": [
+    {
+      "name": "generate_winter_schedule.py",
+      "bytes": 16031,
+      "sha256": "2ba1ffbf0d4a5cdacf0e2fde582b1a79ff88e40ea99046b2ae2ffacfcde83307"
+    },
+    {
+      "name": "winter_intern_schedule_2025_2026.xlsx",
+      "bytes": 15231,
+      "sha256": "2749a889cbb63d908349f6d5d89113a22d17966cb727a1b293739bf4c3bf3fb7"
+    }
+  ],
+  "664a42e5-3240-413a-9a57-ea93c6303269": [
+    {
+      "name": "ILIT_Sources_and_Notes.md",
+      "bytes": 1166,
+      "sha256": "efaec9be183e7d7bab38ef7d10d7c6d267a6962c2eca4dee8f206e376e63be28"
+    },
+    {
+      "name": "ILIT_Strategy_Presentation.pptx",
+      "bytes": 46661,
+      "sha256": "05038909c134babf19e3b7e507bb02a8b1fe82e95fc0503b2fdec80afbcbb40a"
+    },
+    {
+      "name": "build_ilit_presentation.py",
+      "bytes": 21555,
+      "sha256": "e6d1c1d080bf551957a5f37e98d7e45ce0cc27e17826b5954b51e18e599b2dfc"
+    }
+  ],
+  "68d8d901-dd0b-4a7e-bf9a-1074fddf1a96": [
+    {
+      "name": "Crispivore_Beef_Trial_Plan.xlsx",
+      "bytes": 13197,
+      "sha256": "f2cdf0c04ca51515310da41c104a093887cd24f7456cd0b4aec1fb2c5489a3ab"
+    },
+    {
+      "name": "build_beef_trial_workbook.py",
+      "bytes": 17546,
+      "sha256": "fbc9c11cdde8370f8b9bfb5a115cf6c77d91e2b487615bf2b19e6c5487533463"
+    }
+  ],
+  "6974adea-8326-43fa-8187-2724b15d9546": [
+    {
+      "name": "RTLS_livestock_tracking_feature_article.docx",
+      "bytes": 40526,
+      "sha256": "0327818632d2465ab6407194bb916acf014781606732e34313bb4f9fb69db150"
+    },
+    {
+      "name": "rtls-livestock-feature.md",
+      "bytes": 8589,
+      "sha256": "e36ec568f919353a573bb06ba5b36fe544aa4034640e423803a0d96bf22ffd1b"
+    }
+  ],
+  "69a8ef86-4e69-4fe2-9168-080f1e978e67": [
+    {
+      "name": "Internal_RA_Process.docx",
+      "bytes": 39292,
+      "sha256": "58cb176ffcaf199bfa575a9b903efa233081a2040795cb7eb4ae620dc0eb5e1a"
+    },
+    {
+      "name": "Key_Account_RA_Guidelines.docx",
+      "bytes": 38408,
+      "sha256": "fdd5dd129ff9f9375328a19b34a8cb9c5977262963efffd52861a9bfb24fc2f9"
+    },
+    {
+      "name": "generate_ra_docs.py",
+      "bytes": 14026,
+      "sha256": "2b4e92488733316a895baa2321533ae204c155afdebc595fdca38911ab799f14"
+    }
+  ],
+  "6a900a40-8d2b-4064-a5b1-13a60bc173d8": [
+    {
+      "name": "Q9749821-revised_including_transport.xlsx",
+      "bytes": 7113,
+      "sha256": "60d7b69fbb81ac8724195fa2817bed2059300028a8bbecb98a929623842d4ff3"
+    }
+  ],
+  "6d2c8e55-fe20-45c6-bdaf-93e676868503": [
+    {
+      "name": "December - Article 1 - Nutrition and Exercise Practitioners.pdf",
+      "bytes": 2911,
+      "sha256": "f88fe6ad7ec0c50c18aa2968e3c111e48027a6ea8288d12b8f9056ef3b421c6a"
+    },
+    {
+      "name": "December - Article 2 - Physician Referrals to Dietitians.pdf",
+      "bytes": 2931,
+      "sha256": "2f1037cdfccb9447d82e320af56dbb089bd3e1e3fb5c521d2bdfc6d0ce7e39ab"
+    },
+    {
+      "name": "December - Article 3 - Weight Management by Dietitian.pdf",
+      "bytes": 2970,
+      "sha256": "52066d82b2f41e51328ec7549f723c1286275a9b4119b198c93f4869c77c66e0"
+    },
+    {
+      "name": "Email Draft to Dr. John Smith.docx",
+      "bytes": 37834,
+      "sha256": "62583d18380c4173a2d681e51488d6eb83e261e612326699cf5046f7e2b4854d"
+    },
+    {
+      "name": "Journal Club Schedule.xlsx",
+      "bytes": 64710,
+      "sha256": "72164501ea4456bb777733b8eb28ce55daae8938819d92efaad6df849d9c2de0"
+    },
+    {
+      "name": "November - Article 1 - Long COVID Guidelines.pdf",
+      "bytes": 2833,
+      "sha256": "1d027fe1ce4d9e8fb3fe25792f3fb77bfb94734a9c149272d293c0ecf9285889"
+    },
+    {
+      "name": "November - Article 2 - Pharmacologic Interventions.pdf",
+      "bytes": 2877,
+      "sha256": "13ed41c4057c7cd58ee688766f34f0a4e1044431bce6eb097d3aa5b058965d99"
+    },
+    {
+      "name": "November - Article 3 - Interventions Systematic Review.pdf",
+      "bytes": 2882,
+      "sha256": "e71cbd86d70e2892061dd387d62dc259a17a52f475a206e2d00c9af1b6071650"
+    },
+    {
+      "name": "October - Article 1 - Peripheral Autonomic Neuropathies.pdf",
+      "bytes": 2902,
+      "sha256": "068e139ce36dd3f661541139101ed7575cb5b1dacb390bf8a2fe165aeb73eb42"
+    },
+    {
+      "name": "October - Article 2 - Diabetes and Metabolic Syndrome.pdf",
+      "bytes": 2838,
+      "sha256": "2eafc18a7d5352408fc01251071ebb4f7ed63c243ee0bcf078ae9f133efc9451"
+    },
+    {
+      "name": "October - Article 3 - Systemic Amyloidoses.pdf",
+      "bytes": 2835,
+      "sha256": "764f5928bccc0963fc446d85208a212d9a3b395dd5b7030010640d0474075730"
+    },
+    {
+      "name": "generate_journal_club_deliverables.py",
+      "bytes": 16055,
+      "sha256": "566088cf3bcffb7cc62bd4a1aab45b2d6e1917ed9f07f03741fda5ae538265e5"
+    }
+  ],
+  "6dcae3f5-bf1c-48e0-8b4b-23e6486a934c": [
+    {
+      "name": "Chief Key Indicator 5-Year.xlsx",
+      "bytes": 14595,
+      "sha256": "e8fbc1f0c600bb6507eb764edea392902de86a956f38ecb82a537c7773cf0045"
+    },
+    {
+      "name": "Email to Dr. Smith.docx",
+      "bytes": 37081,
+      "sha256": "56f95f43b230ce70e6cc2d780cb984eb1c6bb1ed22fcc7bad7d42ae268d5d75a"
+    },
+    {
+      "name": "build_chief_key_indicator_5_year.py",
+      "bytes": 12508,
+      "sha256": "1f0714eee6230f4797b86da645d198e83b64173500817c676726bb336a0113d8"
+    }
+  ],
+  "7151c60a-d4cb-4fc4-8169-3d4cb446e6b9": [
+    {
+      "name": "Facility Admission Pre-Screening Checklist.docx",
+      "bytes": 53940,
+      "sha256": "01a6c051c8b990ef158b7a17d2bafa31668feb3670a4e505680b81dc445e2fd2"
+    },
+    {
+      "name": "Fax Cover Sheet.docx",
+      "bytes": 51675,
+      "sha256": "1718f705f9034391d0857cc0b075d7dc0f54154b71b55576f76f285ca6b1d3ce"
+    },
+    {
+      "name": "generate_transfer_forms.py",
+      "bytes": 13009,
+      "sha256": "5bbfa0fc3ed86c5675f1e714ca88c01833b5ceb6ba72709c983195d2351cf516"
+    },
+    {
+      "name": "extracted_logo/image1.png",
+      "bytes": 13565,
+      "sha256": "f1d5136f3f2ca965b1d196a97b133c6d3f90d05a1e74b3b17f5bde4234c51c2a"
+    },
+    {
+      "name": "extracted_logo/image2.png",
+      "bytes": 2657,
+      "sha256": "507402f0d93ae2875bca111d39bb7f91f0416699e07a9cd1568e7e0be570f2f2"
+    },
+    {
+      "name": "extracted_logo/image3.png",
+      "bytes": 2964,
+      "sha256": "3031a338786be14ebb4199a7fede189b3031c77376aa88ab92f82b8f14b04a95"
+    },
+    {
+      "name": "extracted_logo/image4.png",
+      "bytes": 2287,
+      "sha256": "70a6784a872c4f7c84a046413ebf45ab39f19c420113466c1cf94d4b25c9b78a"
+    }
+  ],
+  "74ed1dc7-1468-48a8-9071-58775c0d667a": [
+    {
+      "name": "ERP_Order_Type_Proposal_Key_Accounts.docx",
+      "bytes": 39895,
+      "sha256": "60cdb8e63551ceb14b3c85a736a6b3b88d0d9b7193836f740337fd1653434b19"
+    }
+  ],
+  "76418a2c-a3c0-4894-b89d-2493369135d9": [
+    {
+      "name": "Daily Shipment Manifest 062525 Completed.xlsx",
+      "bytes": 6573,
+      "sha256": "21518a68c5726d1d785fba1b2c9015357f46fca3755371be6171862abb79e1f1"
+    }
+  ],
+  "76d10872-9ffa-4ede-83ee-e0f1ec5e2b8d": [
+    {
+      "name": "New Case Creation Report - Michael Reynolds (Case PT-2025-1782).html",
+      "bytes": 14518,
+      "sha256": "e61478e41f3acba2375b89b51af488c1c26c396995381a58697bb3271e63e202"
+    },
+    {
+      "name": "New Case Creation Report - Michael Reynolds (Case PT-2025-1782).pdf",
+      "bytes": 25802,
+      "sha256": "967a967da322a48bd423f0e624e7a020696c273df6f282ddf6c487f3093c6c2e"
+    }
+  ],
+  "772e7524-174e-4c88-957e-6e510b61ea69": [
+    {
+      "name": "SOAP_Note.md",
+      "bytes": 4510,
+      "sha256": "554e875936d74f7f414efa451ed307ceac40fa0cfccd00e5f0d3cfb127cdc787"
+    }
+  ],
+  "7b08cd4d-df60-41ae-9102-8aaa49306ba2": [
+    {
+      "name": "2024 Fall Music Tour P&L Report.xlsx",
+      "bytes": 9057,
+      "sha256": "03614b5fbc0cfa9cb5ad24b9ccd6e9f26363f2c98b8e3a9861cd16fcd29104dd"
+    },
+    {
+      "name": "build_fall_music_tour_pnl.py",
+      "bytes": 14830,
+      "sha256": "c6e68381d3c9d420aff14f599c1e995182ab1e30336e9632e06a30915d5ace6c"
+    }
+  ],
+  "7bbfcfe9-132d-4194-82bb-d6f29d001b01": [
+    {
+      "name": "generate_scra_questions.py",
+      "bytes": 6017,
+      "sha256": "9d5355fd689280a819bab66604cec8d6e0509106b2125eceb4f6b05820af19d2"
+    },
+    {
+      "name": "scra_audit_test_questions.xlsx",
+      "bytes": 6396,
+      "sha256": "530f2e6f0f217742b6b44105bb83ebe29a9f084a5d07fc8ec956086dbde689de"
+    }
+  ],
+  "7d7fc9a7-21a7-4b83-906f-416dea5ad04f": [
+    {
+      "name": "Aurisic_Prepaid_Amortization_Schedule_Apr2025.xlsx",
+      "bytes": 15906,
+      "sha256": "4523fe9cb01f61a58838f86ec1f5f4005a2d3362311998357bbd98899c879f4c"
+    },
+    {
+      "name": "build_prepaid_workbook.py",
+      "bytes": 16549,
+      "sha256": "07fd8ed2f4c9dbe112114c811d99008fafb3d7c62d12924dc4dd5c67791ce880"
+    }
+  ],
+  "7de33b48-5163-4f50-b5f3-8deea8185e57": [
+    {
+      "name": "README.md",
+      "bytes": 2035,
+      "sha256": "d2e161f5fc5e6cc9191fe98c807689d6cd2ed30b8564625f91524acc517c4d50"
+    },
+    {
+      "name": "ScreenReaderStatusMessage.css",
+      "bytes": 214,
+      "sha256": "006386719fa83b109580f9feb1ebe35cbe3941025fa4e5f188c0603428d089c3"
+    },
+    {
+      "name": "ScreenReaderStatusMessage.test.tsx",
+      "bytes": 4339,
+      "sha256": "0802008417444777ff246eb4477ee611dc7027abadecffc2424d14f8fb43585f"
+    },
+    {
+      "name": "ScreenReaderStatusMessage.tsx",
+      "bytes": 4534,
+      "sha256": "d982d4a2ce30d26e22412fa9112d5eb6370b1424facb64ecdc2155acc4810519"
+    },
+    {
+      "name": "package.json",
+      "bytes": 556,
+      "sha256": "64bc8f46c70b19ae47d1873bbabde38ccbc072209d05f304caa4944e4c0008e3"
+    },
+    {
+      "name": "screen-reader-status-message.zip",
+      "bytes": 4986,
+      "sha256": "d019fa56bf2ee860e773b95b2127d7f46bb013b0192caff398d36444bd19de20"
+    },
+    {
+      "name": "tsconfig.json",
+      "bytes": 349,
+      "sha256": "28a0cde900cf8faaac4fdf77bf8a46b580db7891e78856264dd77c23578552e9"
+    }
+  ],
+  "7ed932dd-244f-4d61-bf02-1bc3bab1af14": [
+    {
+      "name": "Distributor_Replenishment_Plan_July_2025.xlsx",
+      "bytes": 8133,
+      "sha256": "0aa64bddb7f5fb7713e3451527957eaf1f0adbdb4ae4c0153b0c0f28c8795c17"
+    },
+    {
+      "name": "build_replenishment_plan.py",
+      "bytes": 11036,
+      "sha256": "b5a8102a9d59b9735c7f9b2fb55fd0c4035600b9f5cafc37a63526d833d69738"
+    }
+  ],
+  "83d10b06-26d1-4636-a32c-23f92c57f30b": [
+    {
+      "name": "Population Reviewed.xlsx",
+      "bytes": 83694,
+      "sha256": "52737100225b9d26ac2ab5278d4e636f36d2edb1aa7af8eab5d005ca20a23eae"
+    },
+    {
+      "name": "Sample.xlsx",
+      "bytes": 10052,
+      "sha256": "343b05cc903f6d9126d1891eb3140b7b5a5a78d1bc25205b29412f7bf7ef54e7"
+    },
+    {
+      "name": "build_audit_sample.py",
+      "bytes": 18182,
+      "sha256": "a7f52e602e544463542ef5693998e2b6c7abb9063d7d747d589466f1458a370e"
+    }
+  ],
+  "84322284-5c2c-4873-b507-b147449d209d": [
+    {
+      "name": "weekly_investigative_report_week1.html",
+      "bytes": 17276,
+      "sha256": "32a82353c92437fc4a093cfbe208a77f91d4d046b8c33cbfcb94d50a4539c987"
+    },
+    {
+      "name": "weekly_investigative_report_week1.pdf",
+      "bytes": 28888,
+      "sha256": "179789ffdbf0d3df19b10fbdbf6a4a37086e985d35b29b5386974b837a01c949"
+    }
+  ],
+  "854f3814-681c-4950-91ac-55b0db0e3781": [
+    {
+      "name": "README.md",
+      "bytes": 3568,
+      "sha256": "cbe475bf75aab1ff63bd410cd9f4395e9155aa0135c65102bf615c7ccf612532"
+    },
+    {
+      "name": "i40_abq_okc.overpassql",
+      "bytes": 515,
+      "sha256": "89869e335ef8b50706fafe874b365de4aeb9021aef29dc16bcafeda3095855c1"
+    }
+  ],
+  "85d95ce5-b20c-41e2-834e-e788ce9622b6": [
+    {
+      "name": "J.S.docx",
+      "bytes": 144142,
+      "sha256": "14e7355bb99ae006f6404e76051b9342f974f5bd374576fb539b879115267c2c"
+    },
+    {
+      "name": "J.S.pdf",
+      "bytes": 23869,
+      "sha256": "9dc2282f2861925c27bfbb5ebf27652f028a9958a5493f968be0fab363b3ab7c"
+    },
+    {
+      "name": "generate_js_report.py",
+      "bytes": 48469,
+      "sha256": "01f6a712d635027c6c52bb2c0ea0e901b865a6bcb1fb5502112c20f2b32d12db"
+    }
+  ],
+  "87da214f-fd92-4c58-9854-f4d0d10adce0": [
+    {
+      "name": "Gold_Digital_Insurance_Reimbursement_Review.pptx",
+      "bytes": 52898,
+      "sha256": "5a4d97d68509dfd12764e1aa30c013837bde6d20b0d3391f8611bbbce333cfec"
+    },
+    {
+      "name": "build_reimbursement_review_deck.py",
+      "bytes": 21167,
+      "sha256": "358064d47f5ef58f13074503bd13f931f77f4aa57ff894c5e07fe392715edcd9"
+    },
+    {
+      "name": "reimbursement_claim_classification.csv",
+      "bytes": 5704,
+      "sha256": "474bfe3fb7da3c07e0f1a7d883bdc7b3e0e7030fa7dcd41551b9fca72170b1ab"
+    }
+  ],
+  "8a7b6fca-60cc-4ae3-b649-971753cbf8b9": [
+    {
+      "name": "clearbend_logistics_process_map.pdf",
+      "bytes": 6631,
+      "sha256": "42b1d6346cfd362d7b3469349891f11f3e7057bcfee446655e69e61d2018a28f"
+    },
+    {
+      "name": "clearbend_logistics_process_map_preview.png",
+      "bytes": 171620,
+      "sha256": "05655cd27153ece0505f8ac5ae97f6c12a070d97ab76f41f550243a23fb31c1b"
+    },
+    {
+      "name": "generate_process_map.py",
+      "bytes": 14117,
+      "sha256": "f4df9a39ffc55d807c9484ed7bde0be924e225725dff0b885a27036ca8961a76"
+    }
+  ],
+  "8f9e8bcd-6102-40da-ab76-23f51d8b21fa": [
+    {
+      "name": "Bridal_Sales_Training_Overcoming_Objections.docx",
+      "bytes": 40430,
+      "sha256": "888da7c421e538513b86728981fbd375a7a425c6cd655f2c400c83d485dd2ed6"
+    }
+  ],
+  "90edba97-74f0-425a-8ff6-8b93182eb7cb": [
+    {
+      "name": "Monthly Tracker Patient Lab Results - Completed.xlsx",
+      "bytes": 35178,
+      "sha256": "53c816032d6c117585654aa7e8fd1dbde8749f3997ab6b333de10be5bfecf2c3"
+    },
+    {
+      "name": "populate_monthly_tracker.py",
+      "bytes": 11826,
+      "sha256": "b7995f5c08bd7de791145ab735c6f08c54aa70413dc39a6de63946dbabb2da4d"
+    }
+  ],
+  "9a0d8d36-6233-4c76-9107-0d1f783c7340": [
+    {
+      "name": "build_stock_option_presentation.py",
+      "bytes": 25361,
+      "sha256": "2a884f785ee7449bbc25a9266d2da17ae86597e3d68d0926a1abbae0c905823a"
+    },
+    {
+      "name": "stock_option_tax_comparison_presentation.pptx",
+      "bytes": 47860,
+      "sha256": "4cfe31bec4485ac83053d7702933b348f14987f90d6707926f33a502a05ec3b3"
+    },
+    {
+      "name": "stock_option_tax_comparison_sources.md",
+      "bytes": 1211,
+      "sha256": "61b9aa14b62cbb9041b87ccdeebb4785c62fee9be78b014453867b4361fedd33"
+    }
+  ],
+  "9a8c8e28-ce76-408b-83c3-488422892e58": [
+    {
+      "name": "accessibility-docs.css",
+      "bytes": 3032,
+      "sha256": "38b8a05f836250bddcaebd5ed70f0066e2b39f06be5a008cabac73ecd46aedc3"
+    },
+    {
+      "name": "editorial-accessibility-checklist.html",
+      "bytes": 3630,
+      "sha256": "c388d09bb56613aeef502ad78b05e417e7c0af9052a336c1d3d420b517f37f80"
+    },
+    {
+      "name": "editorial-accessibility-checklist.pdf",
+      "bytes": 16848,
+      "sha256": "b8819aa51cc81171780701df870301edacccdef007d48993a099405971a75925"
+    },
+    {
+      "name": "editorial-accessibility-guide.html",
+      "bytes": 15182,
+      "sha256": "ffb3ea9e65838203c5d0299703ff526d0710df83e8209bcd21f38c13bef2746c"
+    },
+    {
+      "name": "editorial-accessibility-guide.pdf",
+      "bytes": 31771,
+      "sha256": "c4c1b006a61dcabf7368120b67799d51c92a9c0e8c133961ec32fda51786f91a"
+    },
+    {
+      "name": "editorial-accessibility-quiz.html",
+      "bytes": 11303,
+      "sha256": "05c6c41143e7f3fb1909d943c24fbd79ded2095cada41a93107d2325908c0a10"
+    },
+    {
+      "name": "editorial-accessibility-quiz.pdf",
+      "bytes": 25960,
+      "sha256": "fd87bf8209a33a4d5a643e67a733fa972caa9a55be70566111f213bfdde03e3e"
+    }
+  ],
+  "9e39df84-ac57-4c9b-a2e3-12b8abf2c797": [
+    {
+      "name": "Dashboard Output.xlsx",
+      "bytes": 36539,
+      "sha256": "06dac58fcd7785d4c82c9f7343f9685caec8f06877c2bb8576df3051b3a09a07"
+    },
+    {
+      "name": "generate_dashboard_output.py",
+      "bytes": 19115,
+      "sha256": "0e95387023069c7fd357dbfc2a84cd92e57d47d76ba0e424417079ea2f397aad"
+    }
+  ],
+  "9e8607e7-a38a-491f-ace1-e5ea7dc477cb": [
+    {
+      "name": "generate_latam_fintech_deck.py",
+      "bytes": 62998,
+      "sha256": "df5d5136c972985e495a11a4d2fd8f438bb070e75c915d3cc7fb5fb4060199fc"
+    },
+    {
+      "name": "latam_fintech_landscape_fall_2023.pdf",
+      "bytes": 287089,
+      "sha256": "bfc7b44d285c4a1114920e523b1585f52bd86fd314da845a5b081d1fdbe23a20"
+    },
+    {
+      "name": "latam_fintech_landscape_fall_2023.pptx",
+      "bytes": 265205,
+      "sha256": "f88b2e3591a8e945f33aed1e4bf6f6f11dedec1a837b838c6e65aaf681d6dedf"
+    },
+    {
+      "name": "deck_assets/charts/digital_adoption.png",
+      "bytes": 42222,
+      "sha256": "2caf2f7f90db2a2bd48979feb5d3da4b2ae350dfaaaf5adac469ed6c9ba2c528"
+    },
+    {
+      "name": "deck_assets/charts/fintech_share.png",
+      "bytes": 40334,
+      "sha256": "9835e95cb3b5c638b735d545d6b6cdb5249282dc7d88d133d8c9f1dd3a1a6c3c"
+    },
+    {
+      "name": "deck_assets/charts/gdp_chart.png",
+      "bytes": 43540,
+      "sha256": "386a91e4d4f959cc1d0874e1fd25d7fcbefceade243c3db2c598c216b9c1b151"
+    },
+    {
+      "name": "deck_assets/charts/vc_funding.png",
+      "bytes": 35263,
+      "sha256": "b4fd17d9c2cb6c95faeaf6f9997d612abfc9cb548c8d46c46d16da9b3ba33735"
+    },
+    {
+      "name": "deck_assets/charts/vc_geo_share.png",
+      "bytes": 50645,
+      "sha256": "0b6007b856e49beede7ed57d918a3f18506ad3bef605b9caffe5a7cc232856a3"
+    }
+  ],
+  "a0552909-bc66-4a3a-8970-ee0d17b49718": [
+    {
+      "name": "July 2025 - Arizona Pathology Bulk Form.xlsx",
+      "bytes": 28784,
+      "sha256": "7781d568ab94965a295c563636981f03186a5643e02f689a60296e8cf053e450"
+    },
+    {
+      "name": "July 2025 - Arizona Pathology Email Template.docx",
+      "bytes": 37029,
+      "sha256": "3db7ab03cd4c9189b6b9936099da3f4589db13f0367481d93a4b925a945e112d"
+    },
+    {
+      "name": "July 2025 - Canyon Pathology Bulk Form.xlsx",
+      "bytes": 28852,
+      "sha256": "6fe544a036c81e1a3b0563be47d1206f5611055f72fcc7d3bdf297ca18b1860e"
+    },
+    {
+      "name": "July 2025 - Canyon Pathology Email Template.docx",
+      "bytes": 37029,
+      "sha256": "340407655b99d0d9abd17b700f0e5113f7bfae27e56a72e7fd313b44a2cadcf2"
+    },
+    {
+      "name": "July 2025 - Minnesota Pathology Bulk Form.xlsx",
+      "bytes": 28696,
+      "sha256": "f3f3d70432faab8f19761c978e1e0cd08d631ba6ffa9749f6397370512794d06"
+    },
+    {
+      "name": "July 2025 - Minnesota Pathology Email Template.docx",
+      "bytes": 37030,
+      "sha256": "e7ad1847adfa4617253316f0b58c3a6deefea92c1480affe8a69a84a6814c958"
+    },
+    {
+      "name": "generate_bulk_forms.py",
+      "bytes": 7766,
+      "sha256": "4b0431f1dc22d6b91ce8da344a2c397e3c84bef9c901e8c4befbbd2256647ba6"
+    }
+  ],
+  "a079d38f-c529-436a-beca-3e291f9e62a3": [
+    {
+      "name": "Educational_Video_Series_Estimate.xlsx",
+      "bytes": 9490,
+      "sha256": "9c37fc74af9ed5b21ba3a1cca1e3ef262b5230d69fe8999be12d6d06ac376289"
+    }
+  ],
+  "a0ef404e-82a6-4507-bff1-633d7c8e0004": [
+    {
+      "name": "Rental_Agreement_Training_Guide.docx",
+      "bytes": 44612,
+      "sha256": "ec44b271f72b84e2f5784b5574b2a362a5acbc79675a9cbbf12072834269cbbc"
+    },
+    {
+      "name": "rental_agreement_guide_generator.py",
+      "bytes": 24169,
+      "sha256": "e0317cc74d50ea3ab6e5766d1134398b3926c719ca3882c6be0d8bba87008867"
+    }
+  ],
+  "a328feea-47db-4856-b4be-2bdc63dd88fb": [
+    {
+      "name": "Reporting_of_Unscheduled_Absence_or_Lateness_Procedure.docx",
+      "bytes": 38070,
+      "sha256": "77d34973e6fc574f194b6628ead990850b8423826af6d06801702789cf5c2298"
+    }
+  ],
+  "a46d5cd2-55fe-48fa-a4c6-6aaf6b9991b5": [
+    {
+      "name": "Safely Insurance Agency Surveillance Report.pdf",
+      "bytes": 6669630,
+      "sha256": "f2c122afd18be6e15a5b47c7a57c7a1eea6ae035ae17cfab96401912eeae29bc"
+    },
+    {
+      "name": "generate_report.py",
+      "bytes": 16088,
+      "sha256": "788e1d1cab5e27c3f47b50a7bb163f10060245984cbae2eda0b064e7db0ffd3a"
+    },
+    {
+      "name": "letterhead_background.png",
+      "bytes": 32943,
+      "sha256": "634f20186adf5e4390abdc9f261e58c3480551639dbff9ea3ec232cb36c5d9b2"
+    },
+    {
+      "name": "extracted_photos/Black sedan first observation on July 2.png",
+      "bytes": 2251369,
+      "sha256": "d28b967b1c24bef6dde827764e11078f031e4da84d74d0cfe883c2672126ccb4"
+    },
+    {
+      "name": "extracted_photos/Claimant lifting a large box.jpg",
+      "bytes": 153952,
+      "sha256": "9ae9bdc79152d5011d3bbc454d49d673c4c1971afd2fd2db4621b9301c6b6e1a"
+    },
+    {
+      "name": "extracted_photos/Claimant lifting metal.jpg",
+      "bytes": 136936,
+      "sha256": "e59a847aaa18c873eacde8bb459f1a6c882dc87a3a7790d0b25d7072aae355f8"
+    },
+    {
+      "name": "extracted_photos/Claimant with co-worker lifting metal.jpg",
+      "bytes": 124593,
+      "sha256": "7ed8ada8b2d9523d1442ff338109cdea85fc4ba3739d40d7a7f34a8942100ac6"
+    },
+    {
+      "name": "extracted_photos/Claimant working with metal on his knees with hammer.jpg",
+      "bytes": 195394,
+      "sha256": "3425fb98913c606d64e7d0ff8f0f98bc8c252b33e3a3b052589ca55f856b0b5c"
+    },
+    {
+      "name": "extracted_photos/Vehicles parked at 0300 hours.png",
+      "bytes": 1554892,
+      "sha256": "fc6eff323e8d7981ea56d78e764aa803acab6ff96af95f6924312cf0e952fb2c"
+    }
+  ],
+  "a4a9195c-5ebe-4b8d-a0c2-4a6b7a49da8b": [
+    {
+      "name": "SOP_ESD_Handling_and_Storage.docx",
+      "bytes": 40224,
+      "sha256": "f718c45d9ce391febed77af9b7183e7483b0cfa404f3ac763c026f59eb81b3ca"
+    },
+    {
+      "name": "esd_sop_source.md",
+      "bytes": 6555,
+      "sha256": "4f00a1dbb4b670b5925acd885db65c77c24a2a18627250583c2934e3f07ee859"
+    },
+    {
+      "name": "generate_esd_sop.py",
+      "bytes": 11919,
+      "sha256": "b73300dec3b0d074be4ee35ea0c39a0dd85be35379dfbb576f54803fa4d11b5d"
+    }
+  ],
+  "a69be28f-9a84-47c9-992e-b90446cdca9d": [
+    {
+      "name": "Best Jeans Regional Fit Performance - July 2025.pdf",
+      "bytes": 494383,
+      "sha256": "88fec73694f3aeb5ffdabd0cdcfb6cb69d73c3c25ef45f94f06f4e9d264c5fc4"
+    },
+    {
+      "name": "Best Jeans Regional Fit Performance - July 2025.pptx",
+      "bytes": 471028,
+      "sha256": "475cadcd98458c5df958ce4d8d5b2407c2e56a30b87f4ee73b45b44db0efc280"
+    },
+    {
+      "name": "generate_sales_fit_deck.py",
+      "bytes": 19374,
+      "sha256": "0d7e889d9205e4f25a039cf1b657c59642ced2081a0c9bca52aed23c0e7da070"
+    },
+    {
+      "name": "deck_assets/regional_totals_chart.png",
+      "bytes": 80253,
+      "sha256": "36a27e775cd9e271ed0649bc7df7ea56e8ff1687d0f2b40c4d8757bc7b58b7ab"
+    },
+    {
+      "name": "deck_assets/slide_01.png",
+      "bytes": 74005,
+      "sha256": "3585351f48cfb487161e91ae10b1d560b3db0161821458cb1f9ec278a7e3c840"
+    },
+    {
+      "name": "deck_assets/slide_02.png",
+      "bytes": 125492,
+      "sha256": "5431afd81aca2e2585aa261ed85563aa310ecaf06a4f5dd819a64976100c4142"
+    },
+    {
+      "name": "deck_assets/slide_03.png",
+      "bytes": 88175,
+      "sha256": "697de747824edf91bb69f15e83048ff4d18e40790baaa30657da8e2edf8fe722"
+    },
+    {
+      "name": "deck_assets/slide_04.png",
+      "bytes": 93238,
+      "sha256": "ad38f0c96bac53e795a0bac7bd189f815725b968162aa92ecb83ecde150ec361"
+    },
+    {
+      "name": "deck_assets/slide_05.png",
+      "bytes": 97718,
+      "sha256": "4f1089a207cb0b01b90790acb11540c30617d681a43f8751d4c079f8f432d4e0"
+    }
+  ],
+  "a73fbc98-90d4-4134-a54f-2b1d0c838791": [
+    {
+      "name": "Arena table layout-v3-page1.png",
+      "bytes": 105072,
+      "sha256": "50ac0f4db7de70bbba9f5b54f418c61ac9b8020caa7a3c04802b08986e6b18a6"
+    },
+    {
+      "name": "Meeting Room table layout-v2-page1.png",
+      "bytes": 34367,
+      "sha256": "b78ab101a57aa5348b5f0abbba36bfdc7fa6f307cbd8d7d94ee5a5a6686da544"
+    },
+    {
+      "name": "Spring Bazaar 2025 Table Assignment Plan.md",
+      "bytes": 5030,
+      "sha256": "a3d2bc8a42607f39170f6bd51b2e8863d4e5006952b88efdac2784156014065e"
+    },
+    {
+      "name": "Spring Bazaar 2025 Table Assignment Plan.pdf",
+      "bytes": 172612,
+      "sha256": "fb722b9d6c91d9e71964570548f205d9244cf9d5c9f96620150217d95480ff43"
+    },
+    {
+      "name": "Spring Bazaar 2025 Vendors List-v2-assigned.xlsx",
+      "bytes": 11646,
+      "sha256": "2d065d0d08b5980520ffdca63435eeb538c4341e7207bbcedf4c9bafbf53c261"
+    },
+    {
+      "name": "generate_bazaar_assignments.py",
+      "bytes": 17626,
+      "sha256": "805aa604794d27627d62d72b796377ad68389a14d41732c3c6997461f1a049b5"
+    }
+  ],
+  "a74ead3b-f67d-4b1c-9116-f6bb81b29d4f": [
+    {
+      "name": "Session_13_Safety_and_Protecting_Children.pptx",
+      "bytes": 54010,
+      "sha256": "53808467ea1dfaf6792de337c364ecd431c31e26ce102344763536b8dcc81208"
+    },
+    {
+      "name": "Session_14_Guiding_Behavior.pptx",
+      "bytes": 52547,
+      "sha256": "15eeb37ef16de4acc48bbb271fc15a43227119e7f6bcc60c2dfae509e2e16579"
+    },
+    {
+      "name": "build_presentations.py",
+      "bytes": 27002,
+      "sha256": "2b55d451f435bcc14130341a48b514c1b52da92f41ed0bfd1d73a7f15bc58dce"
+    },
+    {
+      "name": "assets/session13_safe_home.png",
+      "bytes": 13719,
+      "sha256": "73b947d585b2c9cff457ff97c950f84a09f5db0aee2ef66f433b2189581cbe1a"
+    },
+    {
+      "name": "assets/session14_guiding_behavior.png",
+      "bytes": 11310,
+      "sha256": "75a5466cc4ed7d953c2f20a044808633251e808f032d204bfef9bbc1b53f43a3"
+    }
+  ]
+}

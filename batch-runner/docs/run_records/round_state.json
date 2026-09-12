@@ -20,6 +20,11 @@
       "lineage": "B",
       "run_id": "34631861765",
       "record": "docs/run_records/exp035_run34631861765_partial"
+    },
+    {
+      "lineage": "B",
+      "run_id": "34657037472",
+      "record": "docs/run_records/exp035_run34657037472_partial"
     }
   ],
   "surviving_lineage": "B",
@@ -42,22 +47,38 @@
         "deliverable_bytes"
       ],
       "tasks_added_by_the_later_leg": 44
+    },
+    {
+      "earlier": "lineage B run 34631861765",
+      "later": "lineage B run 34657037472",
+      "tasks_inherited": 102,
+      "tasks_lost": 0,
+      "inherited_rows_identical": true,
+      "fields_compared": [
+        "status",
+        "outcome",
+        "reason",
+        "attempts",
+        "deliverable_file_count",
+        "deliverable_bytes"
+      ],
+      "tasks_added_by_the_later_leg": 48
     }
   ],
   "round_state": {
     "tasks_total": 220,
-    "tasks_attempted": 102,
-    "tasks_succeeded": 74,
-    "tasks_failed": 28,
-    "tasks_never_attempted": 118,
-    "coverage_percent": 46.4,
+    "tasks_attempted": 150,
+    "tasks_succeeded": 104,
+    "tasks_failed": 46,
+    "tasks_never_attempted": 70,
+    "coverage_percent": 68.2,
     "what_succeeded_means": "produced deliverable files. Nothing here has been graded."
   },
   "failure_reasons": {
-    "content_filter": 5,
-    "rate_limit": 15,
-    "transport_error": 7,
-    "turn_failed": 1
+    "content_filter": 6,
+    "rate_limit": 24,
+    "transport_error": 14,
+    "turn_failed": 2
   },
   "duplication": {
     "tasks_solved_by_more_than_one_lineage": 45,
@@ -90,7 +111,7 @@
           },
           "surviving": {
             "lineage": "B",
-            "run_id": "34631861765",
+            "run_id": "34657037472",
             "outcome": "content_filter"
           }
         },
@@ -104,7 +125,7 @@
           },
           "surviving": {
             "lineage": "B",
-            "run_id": "34631861765",
+            "run_id": "34657037472",
             "outcome": "success"
           }
         },
@@ -118,7 +139,7 @@
           },
           "surviving": {
             "lineage": "B",
-            "run_id": "34631861765",
+            "run_id": "34657037472",
             "outcome": "success"
           }
         },
@@ -132,7 +153,7 @@
           },
           "surviving": {
             "lineage": "B",
-            "run_id": "34631861765",
+            "run_id": "34657037472",
             "outcome": "turn_failed"
           }
         },
@@ -146,7 +167,7 @@
           },
           "surviving": {
             "lineage": "B",
-            "run_id": "34631861765",
+            "run_id": "34657037472",
             "outcome": "success"
           }
         },
@@ -160,7 +181,7 @@
           },
           "surviving": {
             "lineage": "B",
-            "run_id": "34631861765",
+            "run_id": "34657037472",
             "outcome": "content_filter"
           }
         },
@@ -174,7 +195,7 @@
           },
           "surviving": {
             "lineage": "B",
-            "run_id": "34631861765",
+            "run_id": "34657037472",
             "outcome": "transport_error"
           }
         }
@@ -192,7 +213,7 @@
         },
         {
           "lineage": "B",
-          "final_leg": "lineage B run 34631861765",
+          "final_leg": "lineage B run 34657037472",
           "turns": 78,
           "infrastructure_retries": 33,
           "derived_cost_usd": 13.990465,
@@ -205,8 +226,8 @@
     }
   },
   "deliverables": {
-    "files": 269,
-    "bytes": 611429470
+    "files": 371,
+    "bytes": 626993668
   },
   "cost": {
     "per_lineage": {
@@ -228,26 +249,26 @@
         "derived_cost_is_a_floor": true
       },
       "B": {
-        "final_leg": "lineage B run 34631861765",
-        "tasks_attempted": 102,
+        "final_leg": "lineage B run 34657037472",
+        "tasks_attempted": 150,
         "status_counts": {
-          "error": 28,
-          "success": 74
+          "error": 46,
+          "success": 104
         },
         "failure_reasons": {
-          "content_filter": 5,
-          "rate_limit": 15,
-          "transport_error": 7,
-          "turn_failed": 1
+          "content_filter": 6,
+          "rate_limit": 24,
+          "transport_error": 14,
+          "turn_failed": 2
         },
-        "deliverable_files": 269,
-        "deliverable_bytes": 611429470,
-        "derived_cost_usd": 41.778411,
-        "tasks_with_no_derivable_cost": 2,
+        "deliverable_files": 371,
+        "deliverable_bytes": 626993668,
+        "derived_cost_usd": 62.332846,
+        "tasks_with_no_derivable_cost": 3,
         "derived_cost_is_a_floor": true
       }
     },
-    "round_total_usd": 56.164997,
+    "round_total_usd": 76.719432,
     "round_total_is_a_floor": true,
     "is_provider_billed": false,
     "excludes": "grading. This counts only the model calls that solved tasks.",
@@ -266,17 +287,21 @@
         {
           "read_from": "/tmp/relay/34631861765/artifact/batch-results-34631861765/workspace/cost_ledger_condition_a.sqlite3",
           "sha256": "07980d514d8cae1c0074cc42ffc28298026d14ebf392ccc70e74becdd8aa85f9"
+        },
+        {
+          "read_from": "/tmp/relay/34657037472/artifact/batch-results-34657037472/workspace/cost_ledger_condition_a.sqlite3",
+          "sha256": "36b7e032ed3b53c54244ca0756e1a0e5e9e65c3f60325e46995e12669bf1610b"
         }
       ],
-      "calls_total": 258,
-      "calls_measured": 231,
-      "calls_unmeasured": 27,
-      "tasks_with_a_call": 102,
-      "derived_total_usd": 56.164962,
+      "calls_total": 356,
+      "calls_measured": 317,
+      "calls_unmeasured": 39,
+      "tasks_with_a_call": 150,
+      "derived_total_usd": 76.719386,
       "derived_total_is_a_floor": true,
       "price_table_sha256": "b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e",
       "agrees_with_the_run_records": true,
-      "difference_from_the_records_usd": -3.5e-05,
+      "difference_from_the_records_usd": -4.6e-05,
       "why_they_differ_at_all": "the records carry a per-task figure already rounded to the millionth; the ledgers round once over the whole round. The difference is that rounding, not a disagreement about calls."
     }
   },
@@ -294,7 +319,7 @@
         "B"
       ],
       "solved_more_than_once": true,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 2,
@@ -309,7 +334,7 @@
         "B"
       ],
       "solved_more_than_once": true,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 3,
@@ -324,7 +349,7 @@
         "B"
       ],
       "solved_more_than_once": true,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 4,
@@ -339,7 +364,7 @@
         "B"
       ],
       "solved_more_than_once": true,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 5,
@@ -354,7 +379,7 @@
         "B"
       ],
       "solved_more_than_once": true,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 6,
@@ -369,7 +394,7 @@
         "B"
       ],
       "solved_more_than_once": true,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 7,
@@ -384,7 +409,7 @@
         "B"
       ],
       "solved_more_than_once": true,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 8,
@@ -399,7 +424,7 @@
         "B"
       ],
       "solved_more_than_once": true,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 9,
@@ -414,7 +439,7 @@
         "B"
       ],
       "solved_more_than_once": true,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 10,
@@ -429,7 +454,7 @@
         "B"
       ],
       "solved_more_than_once": true,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 11,
@@ -444,7 +469,7 @@
         "B"
       ],
       "solved_more_than_once": true,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 12,
@@ -459,7 +484,7 @@
         "B"
       ],
       "solved_more_than_once": true,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 13,
@@ -474,7 +499,7 @@
         "B"
       ],
       "solved_more_than_once": true,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 14,
@@ -489,7 +514,7 @@
         "B"
       ],
       "solved_more_than_once": true,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 15,
@@ -504,7 +529,7 @@
         "B"
       ],
       "solved_more_than_once": true,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 16,
@@ -519,7 +544,7 @@
         "B"
       ],
       "solved_more_than_once": true,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 17,
@@ -534,7 +559,7 @@
         "B"
       ],
       "solved_more_than_once": true,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 18,
@@ -549,7 +574,7 @@
         "B"
       ],
       "solved_more_than_once": true,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 19,
@@ -564,7 +589,7 @@
         "B"
       ],
       "solved_more_than_once": true,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 20,
@@ -579,7 +604,7 @@
         "B"
       ],
       "solved_more_than_once": true,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 21,
@@ -594,7 +619,7 @@
         "B"
       ],
       "solved_more_than_once": true,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 22,
@@ -609,7 +634,7 @@
         "B"
       ],
       "solved_more_than_once": true,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 23,
@@ -624,7 +649,7 @@
         "B"
       ],
       "solved_more_than_once": true,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 24,
@@ -639,7 +664,7 @@
         "B"
       ],
       "solved_more_than_once": true,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 25,
@@ -654,7 +679,7 @@
         "B"
       ],
       "solved_more_than_once": true,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 26,
@@ -669,7 +694,7 @@
         "B"
       ],
       "solved_more_than_once": true,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 27,
@@ -684,7 +709,7 @@
         "B"
       ],
       "solved_more_than_once": true,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 28,
@@ -699,7 +724,7 @@
         "B"
       ],
       "solved_more_than_once": true,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 29,
@@ -714,7 +739,7 @@
         "B"
       ],
       "solved_more_than_once": true,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 30,
@@ -729,7 +754,7 @@
         "B"
       ],
       "solved_more_than_once": true,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 31,
@@ -744,7 +769,7 @@
         "B"
       ],
       "solved_more_than_once": true,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 32,
@@ -759,7 +784,7 @@
         "B"
       ],
       "solved_more_than_once": true,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 33,
@@ -774,7 +799,7 @@
         "B"
       ],
       "solved_more_than_once": true,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 34,
@@ -789,7 +814,7 @@
         "B"
       ],
       "solved_more_than_once": true,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 35,
@@ -804,7 +829,7 @@
         "B"
       ],
       "solved_more_than_once": true,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 36,
@@ -819,7 +844,7 @@
         "B"
       ],
       "solved_more_than_once": true,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 37,
@@ -834,7 +859,7 @@
         "B"
       ],
       "solved_more_than_once": true,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 38,
@@ -849,7 +874,7 @@
         "B"
       ],
       "solved_more_than_once": true,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 39,
@@ -864,7 +889,7 @@
         "B"
       ],
       "solved_more_than_once": true,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 40,
@@ -879,7 +904,7 @@
         "B"
       ],
       "solved_more_than_once": true,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 41,
@@ -894,7 +919,7 @@
         "B"
       ],
       "solved_more_than_once": true,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 42,
@@ -909,7 +934,7 @@
         "B"
       ],
       "solved_more_than_once": true,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 43,
@@ -924,7 +949,7 @@
         "B"
       ],
       "solved_more_than_once": true,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 44,
@@ -939,7 +964,7 @@
         "B"
       ],
       "solved_more_than_once": true,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 45,
@@ -954,7 +979,7 @@
         "B"
       ],
       "solved_more_than_once": true,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 46,
@@ -968,7 +993,7 @@
         "B"
       ],
       "solved_more_than_once": false,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 47,
@@ -982,7 +1007,7 @@
         "B"
       ],
       "solved_more_than_once": false,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 48,
@@ -996,7 +1021,7 @@
         "B"
       ],
       "solved_more_than_once": false,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 49,
@@ -1010,7 +1035,7 @@
         "B"
       ],
       "solved_more_than_once": false,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 50,
@@ -1024,7 +1049,7 @@
         "B"
       ],
       "solved_more_than_once": false,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 51,
@@ -1038,7 +1063,7 @@
         "B"
       ],
       "solved_more_than_once": false,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 52,
@@ -1052,7 +1077,7 @@
         "B"
       ],
       "solved_more_than_once": false,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 53,
@@ -1066,7 +1091,7 @@
         "B"
       ],
       "solved_more_than_once": false,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 54,
@@ -1080,7 +1105,7 @@
         "B"
       ],
       "solved_more_than_once": false,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 55,
@@ -1094,7 +1119,7 @@
         "B"
       ],
       "solved_more_than_once": false,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 56,
@@ -1108,7 +1133,7 @@
         "B"
       ],
       "solved_more_than_once": false,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 57,
@@ -1122,7 +1147,7 @@
         "B"
       ],
       "solved_more_than_once": false,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 58,
@@ -1136,7 +1161,7 @@
         "B"
       ],
       "solved_more_than_once": false,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 59,
@@ -1150,7 +1175,7 @@
         "B"
       ],
       "solved_more_than_once": false,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 60,
@@ -1164,7 +1189,7 @@
         "B"
       ],
       "solved_more_than_once": false,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 61,
@@ -1178,7 +1203,7 @@
         "B"
       ],
       "solved_more_than_once": false,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 62,
@@ -1192,7 +1217,7 @@
         "B"
       ],
       "solved_more_than_once": false,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 63,
@@ -1206,7 +1231,7 @@
         "B"
       ],
       "solved_more_than_once": false,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 64,
@@ -1220,7 +1245,7 @@
         "B"
       ],
       "solved_more_than_once": false,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 65,
@@ -1234,7 +1259,7 @@
         "B"
       ],
       "solved_more_than_once": false,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 66,
@@ -1248,7 +1273,7 @@
         "B"
       ],
       "solved_more_than_once": false,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 67,
@@ -1262,7 +1287,7 @@
         "B"
       ],
       "solved_more_than_once": false,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 68,
@@ -1276,7 +1301,7 @@
         "B"
       ],
       "solved_more_than_once": false,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 69,
@@ -1290,7 +1315,7 @@
         "B"
       ],
       "solved_more_than_once": false,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 70,
@@ -1304,7 +1329,7 @@
         "B"
       ],
       "solved_more_than_once": false,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 71,
@@ -1318,7 +1343,7 @@
         "B"
       ],
       "solved_more_than_once": false,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 72,
@@ -1332,7 +1357,7 @@
         "B"
       ],
       "solved_more_than_once": false,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 73,
@@ -1346,7 +1371,7 @@
         "B"
       ],
       "solved_more_than_once": false,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 74,
@@ -1360,7 +1385,7 @@
         "B"
       ],
       "solved_more_than_once": false,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 75,
@@ -1374,7 +1399,7 @@
         "B"
       ],
       "solved_more_than_once": false,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 76,
@@ -1388,7 +1413,7 @@
         "B"
       ],
       "solved_more_than_once": false,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 77,
@@ -1402,7 +1427,7 @@
         "B"
       ],
       "solved_more_than_once": false,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 78,
@@ -1416,7 +1441,7 @@
         "B"
       ],
       "solved_more_than_once": false,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 79,
@@ -1430,7 +1455,7 @@
         "B"
       ],
       "solved_more_than_once": false,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 80,
@@ -1444,7 +1469,7 @@
         "B"
       ],
       "solved_more_than_once": false,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 81,
@@ -1458,7 +1483,7 @@
         "B"
       ],
       "solved_more_than_once": false,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 82,
@@ -1472,7 +1497,7 @@
         "B"
       ],
       "solved_more_than_once": false,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 83,
@@ -1486,7 +1511,7 @@
         "B"
       ],
       "solved_more_than_once": false,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 84,
@@ -1500,7 +1525,7 @@
         "B"
       ],
       "solved_more_than_once": false,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 85,
@@ -1514,7 +1539,7 @@
         "B"
       ],
       "solved_more_than_once": false,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 86,
@@ -1528,7 +1553,7 @@
         "B"
       ],
       "solved_more_than_once": false,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 87,
@@ -1542,7 +1567,7 @@
         "B"
       ],
       "solved_more_than_once": false,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 88,
@@ -1556,7 +1581,7 @@
         "B"
       ],
       "solved_more_than_once": false,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 89,
@@ -1570,7 +1595,7 @@
         "B"
       ],
       "solved_more_than_once": false,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 90,
@@ -1584,7 +1609,7 @@
         "B"
       ],
       "solved_more_than_once": false,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 91,
@@ -1598,7 +1623,7 @@
         "B"
       ],
       "solved_more_than_once": false,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 92,
@@ -1612,7 +1637,7 @@
         "B"
       ],
       "solved_more_than_once": false,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 93,
@@ -1626,7 +1651,7 @@
         "B"
       ],
       "solved_more_than_once": false,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 94,
@@ -1640,7 +1665,7 @@
         "B"
       ],
       "solved_more_than_once": false,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 95,
@@ -1654,7 +1679,7 @@
         "B"
       ],
       "solved_more_than_once": false,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 96,
@@ -1668,7 +1693,7 @@
         "B"
       ],
       "solved_more_than_once": false,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 97,
@@ -1682,7 +1707,7 @@
         "B"
       ],
       "solved_more_than_once": false,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 98,
@@ -1696,7 +1721,7 @@
         "B"
       ],
       "solved_more_than_once": false,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 99,
@@ -1710,7 +1735,7 @@
         "B"
       ],
       "solved_more_than_once": false,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 100,
@@ -1724,7 +1749,7 @@
         "B"
       ],
       "solved_more_than_once": false,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 101,
@@ -1738,7 +1763,7 @@
         "B"
       ],
       "solved_more_than_once": false,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 102,
@@ -1752,583 +1777,679 @@
         "B"
       ],
       "solved_more_than_once": false,
-      "surviving_record": "lineage B run 34631861765"
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 103,
       "task_id": "74ed1dc7-1468-48a8-9071-58775c0d667a",
       "sector": "Wholesale Trade",
       "occupation": "Sales Managers",
-      "round_state": "never_attempted",
-      "reason": "run_ended_before_this_task",
-      "deliverable_file_count": 0,
-      "lineages_that_reached_it": [],
+      "round_state": "success",
+      "reason": null,
+      "deliverable_file_count": 1,
+      "lineages_that_reached_it": [
+        "B"
+      ],
       "solved_more_than_once": false,
-      "surviving_record": null
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 104,
       "task_id": "75401f7c-396d-406d-b08e-938874ad1045",
       "sector": "Information",
       "occupation": "Film and Video Editors",
-      "round_state": "never_attempted",
-      "reason": "run_ended_before_this_task",
+      "round_state": "error",
+      "reason": "turn_failed",
       "deliverable_file_count": 0,
-      "lineages_that_reached_it": [],
+      "lineages_that_reached_it": [
+        "B"
+      ],
       "solved_more_than_once": false,
-      "surviving_record": null
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 105,
       "task_id": "76418a2c-a3c0-4894-b89d-2493369135d9",
       "sector": "Manufacturing",
       "occupation": "Shipping, Receiving, and Inventory Clerks",
-      "round_state": "never_attempted",
-      "reason": "run_ended_before_this_task",
-      "deliverable_file_count": 0,
-      "lineages_that_reached_it": [],
+      "round_state": "success",
+      "reason": null,
+      "deliverable_file_count": 1,
+      "lineages_that_reached_it": [
+        "B"
+      ],
       "solved_more_than_once": false,
-      "surviving_record": null
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 106,
       "task_id": "76d10872-9ffa-4ede-83ee-e0f1ec5e2b8d",
       "sector": "Government",
       "occupation": "Child, Family, and School Social Workers",
-      "round_state": "never_attempted",
-      "reason": "run_ended_before_this_task",
-      "deliverable_file_count": 0,
-      "lineages_that_reached_it": [],
+      "round_state": "success",
+      "reason": null,
+      "deliverable_file_count": 2,
+      "lineages_that_reached_it": [
+        "B"
+      ],
       "solved_more_than_once": false,
-      "surviving_record": null
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 107,
       "task_id": "772e7524-174e-4c88-957e-6e510b61ea69",
       "sector": "Health Care and Social Assistance",
       "occupation": "Nurse Practitioners",
-      "round_state": "never_attempted",
-      "reason": "run_ended_before_this_task",
-      "deliverable_file_count": 0,
-      "lineages_that_reached_it": [],
+      "round_state": "success",
+      "reason": null,
+      "deliverable_file_count": 1,
+      "lineages_that_reached_it": [
+        "B"
+      ],
       "solved_more_than_once": false,
-      "surviving_record": null
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 108,
       "task_id": "788d2bc6-82df-4dc7-8467-a0f31405dc14",
       "sector": "Wholesale Trade",
       "occupation": "Sales Managers",
-      "round_state": "never_attempted",
-      "reason": "run_ended_before_this_task",
+      "round_state": "error",
+      "reason": "transport_error",
       "deliverable_file_count": 0,
-      "lineages_that_reached_it": [],
+      "lineages_that_reached_it": [
+        "B"
+      ],
       "solved_more_than_once": false,
-      "surviving_record": null
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 109,
       "task_id": "7b08cd4d-df60-41ae-9102-8aaa49306ba2",
       "sector": "Professional, Scientific, and Technical Services",
       "occupation": "Accountants and Auditors",
-      "round_state": "never_attempted",
-      "reason": "run_ended_before_this_task",
-      "deliverable_file_count": 0,
-      "lineages_that_reached_it": [],
+      "round_state": "success",
+      "reason": null,
+      "deliverable_file_count": 2,
+      "lineages_that_reached_it": [
+        "B"
+      ],
       "solved_more_than_once": false,
-      "surviving_record": null
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 110,
       "task_id": "7bbfcfe9-132d-4194-82bb-d6f29d001b01",
       "sector": "Government",
       "occupation": "Compliance Officers",
-      "round_state": "never_attempted",
-      "reason": "run_ended_before_this_task",
-      "deliverable_file_count": 0,
-      "lineages_that_reached_it": [],
+      "round_state": "success",
+      "reason": null,
+      "deliverable_file_count": 2,
+      "lineages_that_reached_it": [
+        "B"
+      ],
       "solved_more_than_once": false,
-      "surviving_record": null
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 111,
       "task_id": "7d7fc9a7-21a7-4b83-906f-416dea5ad04f",
       "sector": "Professional, Scientific, and Technical Services",
       "occupation": "Accountants and Auditors",
-      "round_state": "never_attempted",
-      "reason": "run_ended_before_this_task",
-      "deliverable_file_count": 0,
-      "lineages_that_reached_it": [],
+      "round_state": "success",
+      "reason": null,
+      "deliverable_file_count": 2,
+      "lineages_that_reached_it": [
+        "B"
+      ],
       "solved_more_than_once": false,
-      "surviving_record": null
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 112,
       "task_id": "7de33b48-5163-4f50-b5f3-8deea8185e57",
       "sector": "Professional, Scientific, and Technical Services",
       "occupation": "Software Developers",
-      "round_state": "never_attempted",
-      "reason": "run_ended_before_this_task",
-      "deliverable_file_count": 0,
-      "lineages_that_reached_it": [],
+      "round_state": "success",
+      "reason": null,
+      "deliverable_file_count": 7,
+      "lineages_that_reached_it": [
+        "B"
+      ],
       "solved_more_than_once": false,
-      "surviving_record": null
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 113,
       "task_id": "7ed932dd-244f-4d61-bf02-1bc3bab1af14",
       "sector": "Wholesale Trade",
       "occupation": "Sales Representatives, Wholesale and Manufacturing, Except Technical and Scientific Products",
-      "round_state": "never_attempted",
-      "reason": "run_ended_before_this_task",
-      "deliverable_file_count": 0,
-      "lineages_that_reached_it": [],
+      "round_state": "success",
+      "reason": null,
+      "deliverable_file_count": 2,
+      "lineages_that_reached_it": [
+        "B"
+      ],
       "solved_more_than_once": false,
-      "surviving_record": null
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 114,
       "task_id": "8077e700-2b31-402d-bd09-df4d33c39653",
       "sector": "Manufacturing",
       "occupation": "Mechanical Engineers",
-      "round_state": "never_attempted",
-      "reason": "run_ended_before_this_task",
+      "round_state": "error",
+      "reason": "transport_error",
       "deliverable_file_count": 0,
-      "lineages_that_reached_it": [],
+      "lineages_that_reached_it": [
+        "B"
+      ],
       "solved_more_than_once": false,
-      "surviving_record": null
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 115,
       "task_id": "8079e27d-b6f3-4f75-a9b5-db27903c798d",
       "sector": "Finance and Insurance",
       "occupation": "Financial and Investment Analysts",
-      "round_state": "never_attempted",
-      "reason": "run_ended_before_this_task",
+      "round_state": "error",
+      "reason": "rate_limit",
       "deliverable_file_count": 0,
-      "lineages_that_reached_it": [],
+      "lineages_that_reached_it": [
+        "B"
+      ],
       "solved_more_than_once": false,
-      "surviving_record": null
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 116,
       "task_id": "81db15ff-ceea-4f63-a1cd-06dc88114709",
       "sector": "Health Care and Social Assistance",
       "occupation": "Medical and Health Services Managers",
-      "round_state": "never_attempted",
-      "reason": "run_ended_before_this_task",
+      "round_state": "error",
+      "reason": "rate_limit",
       "deliverable_file_count": 0,
-      "lineages_that_reached_it": [],
+      "lineages_that_reached_it": [
+        "B"
+      ],
       "solved_more_than_once": false,
-      "surviving_record": null
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 117,
       "task_id": "8314d1b1-5b0f-42a4-b5d5-91c0867b0913",
       "sector": "Professional, Scientific, and Technical Services",
       "occupation": "Lawyers",
-      "round_state": "never_attempted",
-      "reason": "run_ended_before_this_task",
+      "round_state": "error",
+      "reason": "rate_limit",
       "deliverable_file_count": 0,
-      "lineages_that_reached_it": [],
+      "lineages_that_reached_it": [
+        "B"
+      ],
       "solved_more_than_once": false,
-      "surviving_record": null
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 118,
       "task_id": "8384083a-c31b-4194-80ba-4d335a444918",
       "sector": "Retail Trade",
       "occupation": "Pharmacists",
-      "round_state": "never_attempted",
-      "reason": "run_ended_before_this_task",
+      "round_state": "error",
+      "reason": "content_filter",
       "deliverable_file_count": 0,
-      "lineages_that_reached_it": [],
+      "lineages_that_reached_it": [
+        "B"
+      ],
       "solved_more_than_once": false,
-      "surviving_record": null
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 119,
       "task_id": "83d10b06-26d1-4636-a32c-23f92c57f30b",
       "sector": "Professional, Scientific, and Technical Services",
       "occupation": "Accountants and Auditors",
-      "round_state": "never_attempted",
-      "reason": "run_ended_before_this_task",
-      "deliverable_file_count": 0,
-      "lineages_that_reached_it": [],
+      "round_state": "success",
+      "reason": null,
+      "deliverable_file_count": 3,
+      "lineages_that_reached_it": [
+        "B"
+      ],
       "solved_more_than_once": false,
-      "surviving_record": null
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 120,
       "task_id": "84322284-5c2c-4873-b507-b147449d209d",
       "sector": "Retail Trade",
       "occupation": "Private Detectives and Investigators",
-      "round_state": "never_attempted",
-      "reason": "run_ended_before_this_task",
-      "deliverable_file_count": 0,
-      "lineages_that_reached_it": [],
+      "round_state": "success",
+      "reason": null,
+      "deliverable_file_count": 2,
+      "lineages_that_reached_it": [
+        "B"
+      ],
       "solved_more_than_once": false,
-      "surviving_record": null
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 121,
       "task_id": "854f3814-681c-4950-91ac-55b0db0e3781",
       "sector": "Professional, Scientific, and Technical Services",
       "occupation": "Software Developers",
-      "round_state": "never_attempted",
-      "reason": "run_ended_before_this_task",
-      "deliverable_file_count": 0,
-      "lineages_that_reached_it": [],
+      "round_state": "success",
+      "reason": null,
+      "deliverable_file_count": 2,
+      "lineages_that_reached_it": [
+        "B"
+      ],
       "solved_more_than_once": false,
-      "surviving_record": null
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 122,
       "task_id": "85d95ce5-b20c-41e2-834e-e788ce9622b6",
       "sector": "Government",
       "occupation": "Child, Family, and School Social Workers",
-      "round_state": "never_attempted",
-      "reason": "run_ended_before_this_task",
-      "deliverable_file_count": 0,
-      "lineages_that_reached_it": [],
+      "round_state": "success",
+      "reason": null,
+      "deliverable_file_count": 3,
+      "lineages_that_reached_it": [
+        "B"
+      ],
       "solved_more_than_once": false,
-      "surviving_record": null
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 123,
       "task_id": "87da214f-fd92-4c58-9854-f4d0d10adce0",
       "sector": "Finance and Insurance",
       "occupation": "Customer Service Representatives",
-      "round_state": "never_attempted",
-      "reason": "run_ended_before_this_task",
-      "deliverable_file_count": 0,
-      "lineages_that_reached_it": [],
+      "round_state": "success",
+      "reason": null,
+      "deliverable_file_count": 3,
+      "lineages_that_reached_it": [
+        "B"
+      ],
       "solved_more_than_once": false,
-      "surviving_record": null
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 124,
       "task_id": "8a7b6fca-60cc-4ae3-b649-971753cbf8b9",
       "sector": "Manufacturing",
       "occupation": "Industrial Engineers",
-      "round_state": "never_attempted",
-      "reason": "run_ended_before_this_task",
-      "deliverable_file_count": 0,
-      "lineages_that_reached_it": [],
+      "round_state": "success",
+      "reason": null,
+      "deliverable_file_count": 3,
+      "lineages_that_reached_it": [
+        "B"
+      ],
       "solved_more_than_once": false,
-      "surviving_record": null
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 125,
       "task_id": "8c823e32-537c-42b2-84ba-635d63c2853a",
       "sector": "Government",
       "occupation": "First-Line Supervisors of Police and Detectives",
-      "round_state": "never_attempted",
-      "reason": "run_ended_before_this_task",
+      "round_state": "error",
+      "reason": "transport_error",
       "deliverable_file_count": 0,
-      "lineages_that_reached_it": [],
+      "lineages_that_reached_it": [
+        "B"
+      ],
       "solved_more_than_once": false,
-      "surviving_record": null
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 126,
       "task_id": "8c8fc328-69fc-4559-a13f-82087baef0a1",
       "sector": "Information",
       "occupation": "Film and Video Editors",
-      "round_state": "never_attempted",
-      "reason": "run_ended_before_this_task",
+      "round_state": "error",
+      "reason": "transport_error",
       "deliverable_file_count": 0,
-      "lineages_that_reached_it": [],
+      "lineages_that_reached_it": [
+        "B"
+      ],
       "solved_more_than_once": false,
-      "surviving_record": null
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 127,
       "task_id": "8f9e8bcd-6102-40da-ab76-23f51d8b21fa",
       "sector": "Retail Trade",
       "occupation": "General and Operations Managers",
-      "round_state": "never_attempted",
-      "reason": "run_ended_before_this_task",
-      "deliverable_file_count": 0,
-      "lineages_that_reached_it": [],
+      "round_state": "success",
+      "reason": null,
+      "deliverable_file_count": 1,
+      "lineages_that_reached_it": [
+        "B"
+      ],
       "solved_more_than_once": false,
-      "surviving_record": null
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 128,
       "task_id": "90edba97-74f0-425a-8ff6-8b93182eb7cb",
       "sector": "Health Care and Social Assistance",
       "occupation": "Registered Nurses",
-      "round_state": "never_attempted",
-      "reason": "run_ended_before_this_task",
-      "deliverable_file_count": 0,
-      "lineages_that_reached_it": [],
+      "round_state": "success",
+      "reason": null,
+      "deliverable_file_count": 2,
+      "lineages_that_reached_it": [
+        "B"
+      ],
       "solved_more_than_once": false,
-      "surviving_record": null
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 129,
       "task_id": "90f37ff3-e4ed-4a0b-94bb-bed0f7def1ef",
       "sector": "Real Estate and Rental and Leasing",
       "occupation": "Real Estate Sales Agents",
-      "round_state": "never_attempted",
-      "reason": "run_ended_before_this_task",
+      "round_state": "error",
+      "reason": "transport_error",
       "deliverable_file_count": 0,
-      "lineages_that_reached_it": [],
+      "lineages_that_reached_it": [
+        "B"
+      ],
       "solved_more_than_once": false,
-      "surviving_record": null
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 130,
       "task_id": "91060ff0-3eb5-4ddf-9edb-f6758b95499e",
       "sector": "Retail Trade",
       "occupation": "Pharmacists",
-      "round_state": "never_attempted",
-      "reason": "run_ended_before_this_task",
+      "round_state": "error",
+      "reason": "transport_error",
       "deliverable_file_count": 0,
-      "lineages_that_reached_it": [],
+      "lineages_that_reached_it": [
+        "B"
+      ],
       "solved_more_than_once": false,
-      "surviving_record": null
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 131,
       "task_id": "93b336f3-61f3-4287-86d2-87445e1e0f90",
       "sector": "Manufacturing",
       "occupation": "Buyers and Purchasing Agents",
-      "round_state": "never_attempted",
-      "reason": "run_ended_before_this_task",
+      "round_state": "error",
+      "reason": "transport_error",
       "deliverable_file_count": 0,
-      "lineages_that_reached_it": [],
+      "lineages_that_reached_it": [
+        "B"
+      ],
       "solved_more_than_once": false,
-      "surviving_record": null
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 132,
       "task_id": "94925f49-36bc-42da-b45b-61078d329300",
       "sector": "Real Estate and Rental and Leasing",
       "occupation": "Real Estate Sales Agents",
-      "round_state": "never_attempted",
-      "reason": "run_ended_before_this_task",
+      "round_state": "error",
+      "reason": "rate_limit",
       "deliverable_file_count": 0,
-      "lineages_that_reached_it": [],
+      "lineages_that_reached_it": [
+        "B"
+      ],
       "solved_more_than_once": false,
-      "surviving_record": null
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 133,
       "task_id": "99ac6944-4ec6-4848-959c-a460ac705c6f",
       "sector": "Information",
       "occupation": "Audio and Video Technicians",
-      "round_state": "never_attempted",
-      "reason": "run_ended_before_this_task",
+      "round_state": "error",
+      "reason": "rate_limit",
       "deliverable_file_count": 0,
-      "lineages_that_reached_it": [],
+      "lineages_that_reached_it": [
+        "B"
+      ],
       "solved_more_than_once": false,
-      "surviving_record": null
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 134,
       "task_id": "9a0d8d36-6233-4c76-9107-0d1f783c7340",
       "sector": "Finance and Insurance",
       "occupation": "Personal Financial Advisors",
-      "round_state": "never_attempted",
-      "reason": "run_ended_before_this_task",
-      "deliverable_file_count": 0,
-      "lineages_that_reached_it": [],
+      "round_state": "success",
+      "reason": null,
+      "deliverable_file_count": 3,
+      "lineages_that_reached_it": [
+        "B"
+      ],
       "solved_more_than_once": false,
-      "surviving_record": null
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 135,
       "task_id": "9a8c8e28-ce76-408b-83c3-488422892e58",
       "sector": "Information",
       "occupation": "Editors",
-      "round_state": "never_attempted",
-      "reason": "run_ended_before_this_task",
-      "deliverable_file_count": 0,
-      "lineages_that_reached_it": [],
+      "round_state": "success",
+      "reason": null,
+      "deliverable_file_count": 7,
+      "lineages_that_reached_it": [
+        "B"
+      ],
       "solved_more_than_once": false,
-      "surviving_record": null
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 136,
       "task_id": "9e39df84-ac57-4c9b-a2e3-12b8abf2c797",
       "sector": "Manufacturing",
       "occupation": "First-Line Supervisors of Production and Operating Workers",
-      "round_state": "never_attempted",
-      "reason": "run_ended_before_this_task",
-      "deliverable_file_count": 0,
-      "lineages_that_reached_it": [],
+      "round_state": "success",
+      "reason": null,
+      "deliverable_file_count": 2,
+      "lineages_that_reached_it": [
+        "B"
+      ],
       "solved_more_than_once": false,
-      "surviving_record": null
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 137,
       "task_id": "9e8607e7-a38a-491f-ace1-e5ea7dc477cb",
       "sector": "Finance and Insurance",
       "occupation": "Financial and Investment Analysts",
-      "round_state": "never_attempted",
-      "reason": "run_ended_before_this_task",
-      "deliverable_file_count": 0,
-      "lineages_that_reached_it": [],
+      "round_state": "success",
+      "reason": null,
+      "deliverable_file_count": 8,
+      "lineages_that_reached_it": [
+        "B"
+      ],
       "solved_more_than_once": false,
-      "surviving_record": null
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 138,
       "task_id": "9efbcd35-186d-49b6-ac24-28ee2bc9a263",
       "sector": "Finance and Insurance",
       "occupation": "Securities, Commodities, and Financial Services Sales Agents",
-      "round_state": "never_attempted",
-      "reason": "run_ended_before_this_task",
+      "round_state": "error",
+      "reason": "rate_limit",
       "deliverable_file_count": 0,
-      "lineages_that_reached_it": [],
+      "lineages_that_reached_it": [
+        "B"
+      ],
       "solved_more_than_once": false,
-      "surviving_record": null
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 139,
       "task_id": "a0552909-bc66-4a3a-8970-ee0d17b49718",
       "sector": "Health Care and Social Assistance",
       "occupation": "Medical Secretaries and Administrative Assistants",
-      "round_state": "never_attempted",
-      "reason": "run_ended_before_this_task",
-      "deliverable_file_count": 0,
-      "lineages_that_reached_it": [],
+      "round_state": "success",
+      "reason": null,
+      "deliverable_file_count": 7,
+      "lineages_that_reached_it": [
+        "B"
+      ],
       "solved_more_than_once": false,
-      "surviving_record": null
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 140,
       "task_id": "a079d38f-c529-436a-beca-3e291f9e62a3",
       "sector": "Information",
       "occupation": "Producers and Directors",
-      "round_state": "never_attempted",
-      "reason": "run_ended_before_this_task",
-      "deliverable_file_count": 0,
-      "lineages_that_reached_it": [],
+      "round_state": "success",
+      "reason": null,
+      "deliverable_file_count": 1,
+      "lineages_that_reached_it": [
+        "B"
+      ],
       "solved_more_than_once": false,
-      "surviving_record": null
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 141,
       "task_id": "a0ef404e-82a6-4507-bff1-633d7c8e0004",
       "sector": "Real Estate and Rental and Leasing",
       "occupation": "Counter and Rental Clerks",
-      "round_state": "never_attempted",
-      "reason": "run_ended_before_this_task",
-      "deliverable_file_count": 0,
-      "lineages_that_reached_it": [],
+      "round_state": "success",
+      "reason": null,
+      "deliverable_file_count": 2,
+      "lineages_that_reached_it": [
+        "B"
+      ],
       "solved_more_than_once": false,
-      "surviving_record": null
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 142,
       "task_id": "a10ec48c-168e-476c-8fe3-23b2a5f616ac",
       "sector": "Real Estate and Rental and Leasing",
       "occupation": "Concierges",
-      "round_state": "never_attempted",
-      "reason": "run_ended_before_this_task",
+      "round_state": "error",
+      "reason": "rate_limit",
       "deliverable_file_count": 0,
-      "lineages_that_reached_it": [],
+      "lineages_that_reached_it": [
+        "B"
+      ],
       "solved_more_than_once": false,
-      "surviving_record": null
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 143,
       "task_id": "a1963a68-1bea-4bb1-b7e0-145c92a57449",
       "sector": "Finance and Insurance",
       "occupation": "Financial Managers",
-      "round_state": "never_attempted",
-      "reason": "run_ended_before_this_task",
+      "round_state": "error",
+      "reason": "rate_limit",
       "deliverable_file_count": 0,
-      "lineages_that_reached_it": [],
+      "lineages_that_reached_it": [
+        "B"
+      ],
       "solved_more_than_once": false,
-      "surviving_record": null
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 144,
       "task_id": "a328feea-47db-4856-b4be-2bdc63dd88fb",
       "sector": "Government",
       "occupation": "Administrative Services Managers",
-      "round_state": "never_attempted",
-      "reason": "run_ended_before_this_task",
-      "deliverable_file_count": 0,
-      "lineages_that_reached_it": [],
+      "round_state": "success",
+      "reason": null,
+      "deliverable_file_count": 1,
+      "lineages_that_reached_it": [
+        "B"
+      ],
       "solved_more_than_once": false,
-      "surviving_record": null
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 145,
       "task_id": "a45bc83b-22f9-4def-8d89-9c5661b2b86f",
       "sector": "Professional, Scientific, and Technical Services",
       "occupation": "Computer and Information Systems Managers",
-      "round_state": "never_attempted",
-      "reason": "run_ended_before_this_task",
+      "round_state": "error",
+      "reason": "rate_limit",
       "deliverable_file_count": 0,
-      "lineages_that_reached_it": [],
+      "lineages_that_reached_it": [
+        "B"
+      ],
       "solved_more_than_once": false,
-      "surviving_record": null
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 146,
       "task_id": "a46d5cd2-55fe-48fa-a4c6-6aaf6b9991b5",
       "sector": "Retail Trade",
       "occupation": "Private Detectives and Investigators",
-      "round_state": "never_attempted",
-      "reason": "run_ended_before_this_task",
-      "deliverable_file_count": 0,
-      "lineages_that_reached_it": [],
+      "round_state": "success",
+      "reason": null,
+      "deliverable_file_count": 9,
+      "lineages_that_reached_it": [
+        "B"
+      ],
       "solved_more_than_once": false,
-      "surviving_record": null
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 147,
       "task_id": "a4a9195c-5ebe-4b8d-a0c2-4a6b7a49da8b",
       "sector": "Manufacturing",
       "occupation": "Shipping, Receiving, and Inventory Clerks",
-      "round_state": "never_attempted",
-      "reason": "run_ended_before_this_task",
-      "deliverable_file_count": 0,
-      "lineages_that_reached_it": [],
+      "round_state": "success",
+      "reason": null,
+      "deliverable_file_count": 3,
+      "lineages_that_reached_it": [
+        "B"
+      ],
       "solved_more_than_once": false,
-      "surviving_record": null
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 148,
       "task_id": "a69be28f-9a84-47c9-992e-b90446cdca9d",
       "sector": "Wholesale Trade",
       "occupation": "Sales Managers",
-      "round_state": "never_attempted",
-      "reason": "run_ended_before_this_task",
-      "deliverable_file_count": 0,
-      "lineages_that_reached_it": [],
+      "round_state": "success",
+      "reason": null,
+      "deliverable_file_count": 9,
+      "lineages_that_reached_it": [
+        "B"
+      ],
       "solved_more_than_once": false,
-      "surviving_record": null
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 149,
       "task_id": "a73fbc98-90d4-4134-a54f-2b1d0c838791",
       "sector": "Government",
       "occupation": "Recreation Workers",
-      "round_state": "never_attempted",
-      "reason": "run_ended_before_this_task",
-      "deliverable_file_count": 0,
-      "lineages_that_reached_it": [],
+      "round_state": "success",
+      "reason": null,
+      "deliverable_file_count": 6,
+      "lineages_that_reached_it": [
+        "B"
+      ],
       "solved_more_than_once": false,
-      "surviving_record": null
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 150,
       "task_id": "a74ead3b-f67d-4b1c-9116-f6bb81b29d4f",
       "sector": "Government",
       "occupation": "Child, Family, and School Social Workers",
-      "round_state": "never_attempted",
-      "reason": "run_ended_before_this_task",
-      "deliverable_file_count": 0,
-      "lineages_that_reached_it": [],
+      "round_state": "success",
+      "reason": null,
+      "deliverable_file_count": 5,
+      "lineages_that_reached_it": [
+        "B"
+      ],
       "solved_more_than_once": false,
-      "surviving_record": null
+      "surviving_record": "lineage B run 34657037472"
     },
     {
       "n": 151,
