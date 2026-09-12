@@ -12,8 +12,15 @@ position, not the comparison, that decides whether a wrong pin is a free mistake
 or a paid one: the same ``ValueError`` raised after the first judge call is an
 invoice, and the judge on the sol_max path is deliberately unpriced, so that
 invoice could not even be stated in dollars afterwards. Today the check runs
-immediately after task filtering and roughly eight hundred lines before the
-``Grader`` is constructed, so a mismatch returns ``1`` having asked nothing.
+immediately after task filtering, several hundred lines before the ``Grader``
+is constructed and further still before the first ``grade_task``, so a mismatch
+returns ``1`` having asked nothing.
+
+The comparison also has to come *after* the value it is compared against.
+``resolve_source_inference_identity`` is what reads the revision the downloaded
+inference actually carries, and the pin is checked against its result. That
+ordering is asserted on its own below, because the two ends can move
+independently and the failure should say which one did.
 
 This matters right now for a config that does not exist yet. exp035's grading
 config cannot pin a real ``inference_revision`` until the final relay leg runs
@@ -35,6 +42,10 @@ STEP8 = Path(__file__).resolve().parents[1] / "step8_grade.py"
 #: The call that compares the config's pinned identity against what the
 #: downloaded inference actually says about itself.
 PIN_CHECK = "_validate_pinned_rerun_identity"
+
+#: The call that reads what the downloaded inference says about itself. The pin
+#: is compared against its result, so the check is meaningless above this line.
+RESOLVES = "resolve_source_inference_identity"
 
 #: Constructing this is the first thing in ``main()`` that can reach a paid
 #: model. ``Grader._classify`` is an attribute read on the class and appears
@@ -62,7 +73,7 @@ def _lines_of(kind: str) -> list[int]:
         if not isinstance(node, ast.Call):
             continue
         func = node.func
-        if kind == PIN_CHECK or kind == JUDGE_BUILD:
+        if kind in (PIN_CHECK, JUDGE_BUILD, RESOLVES):
             if isinstance(func, ast.Name) and func.id == kind:
                 lines.append(node.lineno)
         elif isinstance(func, ast.Attribute) and func.attr == kind:
@@ -70,7 +81,7 @@ def _lines_of(kind: str) -> list[int]:
     return sorted(lines)
 
 
-@pytest.mark.parametrize("landmark", [PIN_CHECK, JUDGE_BUILD, JUDGE_CALL])
+@pytest.mark.parametrize("landmark", [RESOLVES, PIN_CHECK, JUDGE_BUILD, JUDGE_CALL])
 def test_main_still_contains_the_landmark_the_ordering_is_measured_between(
     landmark: str,
 ):
@@ -85,6 +96,28 @@ def test_main_still_contains_the_landmark_the_ordering_is_measured_between(
         f"main() no longer calls {landmark!r}. The ordering guarantee below is "
         "measured between this and the pinned-identity check, so it cannot be "
         "checked until this is pointed at whatever replaced it."
+    )
+
+
+def test_the_pin_is_compared_only_after_the_value_it_is_compared_against():
+    """Running the check too early makes it fail for the wrong reason.
+
+    ``_validate_pinned_rerun_identity`` is handed the resolved revision as an
+    argument. Moving it above ``resolve_source_inference_identity`` therefore
+    does not produce a comparison against a stale value -- it produces an
+    ``UnboundLocalError``, or a comparison against whatever unrelated thing that
+    name held. The run still stops for free, so this is not a cost assertion
+    like the one below; what it protects is the diagnosis. An operator who typed
+    the wrong sha should be told that, not handed a traceback from a different
+    part of the file.
+    """
+    resolved = min(_lines_of(RESOLVES))
+    pin_check = min(_lines_of(PIN_CHECK))
+
+    assert resolved < pin_check, (
+        f"main() checks the pinned identity at line {pin_check}, before "
+        f"{RESOLVES} has read the actual revision at line {resolved}. The "
+        "comparison would not be against the downloaded inference at all."
     )
 
 
