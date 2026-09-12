@@ -91,18 +91,20 @@ success through a retry** — so the visible effect is bounded at five tasks out
 of thirty before any noise is considered. (Ten of the 18 *used* every call;
 the two that finished on the last one are not tasks a higher limit rescues.)
 
-**The 18 is not a stable denominator.** A model given more turns has more
-chances to reach `browser_run` and be terminated, so tasks can move *into* the
-terminated group as the limit rises. A naive success-rate comparison would
-confound "more turns helped" with "more turns found the trapdoor". Any result
-must be reported on the fixed set of 18 task ids from trial_30, with movement
-in and out of the terminated group reported separately.
+**The 18 is not a stable denominator — but less unstable than it looks.** The
+worry is that a model given more turns has more chances to reach `browser_run`
+and be terminated, so tasks move *into* the terminated group as the limit
+rises, and a naive success-rate comparison confounds "more turns helped" with
+"more turns found the trapdoor". That worry is arithmetically sound and the
+cohort does not support it. See "Neither trapdoor is a late-conversation
+event" below. Either way the reporting rule is the same: results go on the
+fixed set of 18 task ids from trial_30, with movement in and out of the
+terminated group reported separately from the success count.
 
-And there is a second reason the denominator moves, worse than the first
-because it is not a trapdoor the model can avoid. Five of the 18 hit the
-"stopped without a tool call" ending, three of them in the same task as a
-ceiling hit, and **none of the five succeeded**. That ending gets more likely
-with every extra turn, for the reason set out next.
+And there is a second ending that removes tasks for a reason unrelated to the
+limit. Five of the 18 hit the "stopped without a tool call" ending, three of
+them in the same task as a ceiling hit, and **none of the five succeeded**.
+What that ending is, is set out next.
 
 ### The fifth ending, which is the harness finishing its own sentence
 
@@ -147,12 +149,12 @@ four are in the record:
 `test_the_model_is_shown_a_paraphrase_of_its_own_turns.py` pins both halves —
 the replay format and the no-function-call branch — without calling a model.
 
-This matters twice over for the limit question. It is a failure that **gets
-more likely with every extra turn**, because every turn adds another line of
-the pattern; and the information loss it comes from also grows with the turn
-count, so the extra turns a higher limit buys are turns with thinner history
-than the ones before them. A comparison that raised the limit without touching
-this would be measuring the two together.
+This matters for the limit question, though not in the way I first wrote it.
+The information loss it comes from does grow with the turn count: the extra
+turns a higher limit buys are turns whose history is thinner than the ones
+before them. But the failure itself is not a late-conversation event — see
+directly below — so "more turns means more of this" is not what the cohort
+shows.
 
 It is also a defect rather than a stated condition, which separates it from
 everything else in this section. `browser_run` and `exec_run` behave as built
@@ -160,6 +162,46 @@ and are described wrongly to the model; this one nobody chose. It is the
 strongest candidate for the first fix, and like the instruction text it needs
 no access change — but it changes the model's input, so it is an intervention
 on a pinned run condition and gets its own config file and run id.
+
+### Neither trapdoor is a late-conversation event
+
+Both of the "more turns means more chances to die" arguments in this file are
+mechanically plausible, and neither survives contact with the cohort. Counting
+each ending against the conversations that actually reached that turn — the
+denominator shrinks as conversations end, which is what makes this a hazard
+rate rather than a share of the total:
+
+| turn | conversations reaching it | `browser_run` | | stopped without a tool call | |
+|---|---|---|---|---|---|
+| 0 | 50 | 0 | — | 0 | — |
+| 1 | 50 | 4 | 8.0% | 0 | — |
+| 2 | 45 | 6 | 13.3% | 1 | 2.2% |
+| 3 | 38 | 1 | 2.6% | 4 | **10.5%** |
+| 4 | 32 | 1 | 3.1% | 3 | 9.4% |
+| 5 | 26 | 0 | — | 1 | 3.8% |
+| 6 | 24 | 0 | — | 0 | — |
+| 7 | 21 | 0 | — | 0 | — |
+| 8 | 19 | 0 | — | 0 | — |
+
+`browser_run` fires at turns 1–2 and never after turn 4. The paraphrase ending
+fires at turns 2–5, needs history to exist at all, and never after turn 5.
+**Twenty-four conversations reached turn 6 and none of them died to either
+cause.** On this cohort the extra turns a higher limit would add are the turns
+where nothing went wrong.
+
+That is a real result and it should not be over-read. Nine and twelve events
+are few, and the denominators thin out: zero events in the 24 conversations
+that reached turn 6 is consistent with a true hazard of up to about 12%. So
+this does not show the hazard *is* zero late on. It shows the cohort gives no
+support to a hazard that rises with turn count, which is what the "unstable
+denominator" worry needs. The worry stays in the design as something to report
+on, and it drops out of the argument for doing the two fixes first — those
+stand on removing 17 of 30 tasks for reasons unrelated to the limit, which
+does not depend on when the removals happen.
+
+A repeat at the control setting (§10) would sharpen this, because it measures
+the same hazards on the same tasks a second time. That is one more thing the
+unmeasured repeat spread is currently costing.
 
 ### The thing worth fixing first
 
@@ -205,10 +247,11 @@ the instruction text.
 
 **None of this touched trial_30.** All thirty obeyed the instruction and never
 called `exec_run`, so the `fixture-upper` trapdoor is exposure, not a finding
-about that run. It matters here for one reason: it is a second way for a task
-to die that more turns gives it more chances to reach, which is the same
-argument §4 makes about `browser_run` and the reason the 18 is not a stable
-denominator.
+about that run. It matters here for one reason: it is a third way for a task to
+die on a single wrong call, in a cohort where two such ways already removed 14
+of 30. Whether extra turns make any of them more likely is a separate question,
+and the answer on this cohort is no — see "Neither trapdoor is a
+late-conversation event" above.
 
 ### Which layer is actually out of step
 
@@ -418,8 +461,7 @@ In order:
 2. **Fix the replay format.** The model is shown a paraphrase of its own
    turns with the arguments stripped, and finishing that paraphrase as text
    ended five more tasks. Unlike everything else here it is a defect rather
-   than a condition somebody chose, and its likelihood rises with the very
-   axis this experiment wants to move. It is the one fix with a price: a
+   than a condition somebody chose. It is also the one fix with a price: a
    faithful replay costs roughly 29% more on this cohort, quadratically more
    as the limit rises, so **the ceilings in §9 have to be re-derived before
    its run is scheduled** (§9, "These prices are for the broken replay
@@ -455,8 +497,11 @@ input          30 task ids fixed before the question was raised; not a random
 unit           tasks completed out of the 18 the limit can reach; USD from the
                ledger
 stop           effect below the repeat spread → the limit stays at 8
-known          the 18 is not stable across conditions, and moves in two
-confounds      directions that both worsen with the limit — browser_run's
-               trapdoor and the paraphrase ending; the repeat spread is
-               unmeasured; the cohort is not representative of the 220
+known          two endings remove 17 of 30 tasks for reasons unrelated to the
+confounds      limit — browser_run's trapdoor and the paraphrase ending. Both
+               fire early (hazard 0 past turn 5 on this cohort, but only 19-24
+               conversations reach turns 6-8, so that is weak evidence);
+               the repeat spread is unmeasured; the cohort is not
+               representative of the 220; the priced ceilings assume the
+               current replay format
 ```
