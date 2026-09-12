@@ -89,6 +89,33 @@ class ResolvedModelDisagrees(RuntimeError):
     """
 
 
+class ReplayCannotBeFaithful(RuntimeError):
+    """Raised when ``replay_format="faithful"`` cannot keep its promise.
+
+    Raised rather than returned, and for the same reason as the class above: a
+    voice that quietly fell back to paraphrasing would produce a run whose
+    record says one thing about its conditions and whose requests did another.
+    The two ways it fires -- an empty ``call_id`` and the same ``call_id``
+    twice -- are both provider errors as well as fidelity ones, so this stops
+    the task a request earlier than the service would have.
+    """
+
+
+#: How earlier turns are put back into the request.
+#:
+#: ``paraphrase`` is what trial_30 ran: each prior call becomes one line of
+#: prose, *"I asked for workspace_apply as call call_3."*, and the arguments are
+#: dropped. Nine of that cohort's attempts ended with the model completing that
+#: format as text instead of asking for a tool.
+#:
+#: ``faithful`` re-sends the provider's own shape -- a ``function_call`` item
+#: carrying ``call_id``, ``name`` and ``arguments``, followed by the matching
+#: ``function_call_output``. Opt-in, and named in the run record, because it
+#: changes what every turn after the first is charged for: re-sending every
+#: past argument was measured at roughly +29% on the input tokens.
+REPLAY_FORMATS = ("paraphrase", "faithful")
+
+
 @dataclass(frozen=True)
 class ModelCallRecord:
     """One paid call, as it goes into the ledger.
@@ -195,6 +222,21 @@ def _arguments_of(call: Any) -> Mapping[str, Any]:
     return dict(parsed) if isinstance(parsed, Mapping) else {}
 
 
+def _canonical_json(value: Any, *, what: str) -> str:
+    """One JSON encoding, chosen once, so two runs encode the same thing alike.
+
+    Sorted keys and no spaces. Not because the provider cares -- it parses
+    either -- but because the digest of a request should not move when a
+    dictionary is built in a different order.
+    """
+    try:
+        return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
+    except (TypeError, ValueError, RecursionError) as error:
+        raise ReplayCannotBeFaithful(
+            f"{what} could not be written back as JSON: {type(error).__name__}"
+        ) from None
+
+
 @dataclass
 class AzureFoundryVoice:
     """A model voice that really asks a Microsoft Foundry deployment.
@@ -221,6 +263,12 @@ class AzureFoundryVoice:
     max_output_tokens_per_turn: int
     request_timeout_seconds: float = 120.0
     prices: Mapping[str, ModelPrice] = field(default_factory=dict)
+    replay_format: str = "paraphrase"
+    """How earlier turns are put back into the request. :data:`REPLAY_FORMATS`.
+
+    Defaults to the format trial_30 ran, so nothing that exists changes. A plan
+    asks for the other one, and the run record writes down which was used.
+    """
 
     makes_paid_calls: bool = field(default=True, init=False)
     approved_spend_is_on_record: bool = field(default=True, init=False)
@@ -240,6 +288,13 @@ class AzureFoundryVoice:
             raise ValueError(
                 "a turn that may write nothing cannot ask for a tool"
             )
+        if self.replay_format not in REPLAY_FORMATS:
+            raise ValueError(
+                f"unknown replay_format {self.replay_format!r}; it is one of "
+                f"{', '.join(REPLAY_FORMATS)}. Refused here rather than "
+                "defaulted, because a typo that fell back to the default would "
+                "produce a run recorded as one format and sent as the other"
+            )
 
     # ── what the model is shown ───────────────────────────────────────────
 
@@ -251,6 +306,23 @@ class AzureFoundryVoice:
         roughly the square of its length, and the budget is worked out on the
         assumption that it happens. Hiding it here would make the bill disagree
         with the estimate.
+
+        Which of the two shapes is used is :attr:`replay_format`.
+        """
+        if self.replay_format == "faithful":
+            return self._faithful_input_for(request)
+        return self._paraphrased_input_for(request)
+
+    def _paraphrased_input_for(
+        self, request: ModelRequest
+    ) -> list[dict[str, Any]]:
+        """What trial_30 sent. Kept byte for byte, and kept as the default.
+
+        It has a known defect -- the request half of each exchange becomes a
+        sentence and the arguments are discarded -- and it is still here
+        unchanged, because it is the condition an already-run cohort ran under.
+        A comparison against that cohort is only readable if this can still be
+        reproduced exactly.
         """
         messages: list[dict[str, Any]] = [
             {"role": "user", "content": request.task_prompt}
@@ -282,6 +354,77 @@ class AzureFoundryVoice:
                 }
             )
         return messages
+
+    def _faithful_input_for(self, request: ModelRequest) -> list[dict[str, Any]]:
+        """Each earlier exchange as the provider's own two items.
+
+        A ``function_call`` carrying the ``call_id``, the tool's name and its
+        arguments, then the ``function_call_output`` carrying the same
+        ``call_id`` and what came back. The linkage between a request and its
+        answer stops being something the model has to infer from prose and
+        becomes structure the provider maintains.
+
+        **One fidelity caveat, stated rather than hidden.** The arguments are
+        re-encoded from the parsed mapping, not replayed as the bytes the model
+        emitted. :class:`core.agentic_v2_conversation.ToolExchange` holds a
+        ``Mapping``, and the layer that built it reads four fields and nothing
+        else on purpose -- that narrowness is what keeps a chain of thought out
+        of the record. Carrying the raw string through would widen it. So key
+        order and whitespace may differ from what the model wrote; every name,
+        every value and every pairing is the same. Pinned by
+        ``tests/test_the_faithful_replay_keeps_the_call_linkage.py``.
+
+        What is not sent: the model's stated reason, its reasoning items, and
+        any part of the reply this voice did not already read. The output half
+        is deliberately identical to the paraphrased one, so the difference
+        between the two formats is exactly one thing.
+        """
+        items: list[dict[str, Any]] = [
+            {"role": "user", "content": request.task_prompt}
+        ]
+        seen: set[str] = set()
+        for exchange in request.history:
+            call_id = str(exchange.call_id or "")
+            if not call_id:
+                raise ReplayCannotBeFaithful(
+                    f"an earlier {exchange.tool_name or 'call'} has no call_id, "
+                    "so its answer cannot be tied back to it"
+                )
+            if call_id in seen:
+                raise ReplayCannotBeFaithful(
+                    f"call id {call_id!r} appears twice in this conversation; "
+                    "a replay carrying it twice pairs one request with the "
+                    "wrong answer"
+                )
+            seen.add(call_id)
+            items.append(
+                {
+                    "type": "function_call",
+                    "call_id": call_id,
+                    "name": exchange.tool_name,
+                    "arguments": _canonical_json(
+                        dict(exchange.arguments),
+                        what=f"the arguments of {call_id}",
+                    ),
+                }
+            )
+            items.append(
+                {
+                    "type": "function_call_output",
+                    "call_id": call_id,
+                    "output": _canonical_json(
+                        {
+                            "call_id": call_id,
+                            "tool": exchange.tool_name,
+                            "ok": exchange.ok,
+                            "error_type": exchange.error_type,
+                            "result": exchange.data,
+                        },
+                        what=f"the result of {call_id}",
+                    ),
+                }
+            )
+        return items
 
     def _tools_for(self, available: Sequence[str]) -> list[dict]:
         """Only the tools the desk will actually accept this turn.
