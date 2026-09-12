@@ -192,6 +192,13 @@ def test_the_model_cannot_ask_which_tools_work():
 # ---------------------------------------------------------------------------
 
 
+def _exec(argv):
+    """A schema-valid `exec_run` call, so the probe matches what a model sends."""
+    call = {"argv": list(argv), "cwd": ".", "timeout_seconds": 30}
+    assert validate_tool_arguments("exec_run", call) == call
+    return call
+
+
 def test_exec_run_serves_exactly_one_command(backend):
     """The instructions say no commands run here. One does.
 
@@ -206,15 +213,17 @@ def test_exec_run_serves_exactly_one_command(backend):
     open.
     """
     (backend.work / "a.txt").write_text("hello\n", encoding="utf-8")
-
-    served = backend.exec_run({"argv": ["fixture-upper", "a.txt", "b.txt"], "cwd": "."})
+    # `timeout_seconds` is required by the contract even though the fixture
+    # ignores it, so these are calls a model could actually make: a call
+    # missing it never reaches the backend at all.
+    served = backend.exec_run(_exec(["fixture-upper", "a.txt", "b.txt"]))
     assert served["ok"] is True
     assert served["data"]["returncode"] == 0
     assert (backend.work / "b.txt").read_text(encoding="utf-8") == "HELLO\n"
 
     for argv in (["fixture-upper", "a.txt"], ["fixture-upper"], ["ls"],
                  ["sh", "-c", "echo hi"]):
-        answer = backend.exec_run({"argv": argv, "cwd": "."})
+        answer = backend.exec_run(_exec(argv))
         assert answer["ok"] is False, argv
         assert answer["error_type"] == "capability_unavailable", argv
 
@@ -245,3 +254,60 @@ def test_the_environment_advertises_the_command_the_instructions_deny(backend):
     # The number is whatever this backend was built with, not trial_30's 8.
     # What is being pinned is that the limit is answerable at all.
     assert any(item.startswith("tool_calls=") for item in budgets["data"]["items"])
+
+
+# ---------------------------------------------------------------------------
+# The general form of the mistake
+# ---------------------------------------------------------------------------
+
+
+#: One call per tool, chosen to be the best case that tool allows: if this
+#: tool works at all, this is a call that works. Validated against the
+#: contract below, so none of them is a lucky shape.
+A_CALL_THAT_SHOULD_WORK = {
+    "capabilities_query": {"kind": "commands"},
+    "workspace_apply": {"operation": "read", "path": "inputs/notes.md"},
+    "exec_run": {"argv": ["fixture-upper", "inputs/notes.md", "out.txt"],
+                 "cwd": ".", "timeout_seconds": 30},
+    "environment_resolve": {"ecosystem": "python", "requirements": ["nothing"]},
+    "environment_activate": {"lock_digest": "0" * 64},
+    "browser_run": {"operation": "open_local", "path": "inputs/notes.md"},
+    "verify_public": {"deliverables": ["inputs/notes.md"]},
+    "finalize": {"deliverables": ["inputs/notes.md"], "summary": "done"},
+}
+
+#: The tools with no working call at all under `offline-full-v1`. Two, not the
+#: three the instructions name.
+NO_CALL_WORKS = {"environment_resolve", "environment_activate"}
+
+
+def test_every_call_in_the_sweep_is_a_legal_one():
+    """Otherwise the sweep below would be measuring the schema, not the backend."""
+    for name, arguments in A_CALL_THAT_SHOULD_WORK.items():
+        assert validate_tool_arguments(name, arguments) == arguments, name
+
+
+def test_exactly_two_tools_have_no_working_call(backend):
+    """The instructions name three. Two is the answer.
+
+    This is the general form of what this file is about, and the reason it is
+    a sweep rather than two more named tests: it fails if *any* tool changes
+    which side it is on, including one added later. A tool that starts
+    refusing without being named is the `browser_run` mistake happening again;
+    a tool that stops refusing while still being named is the opposite one,
+    recorded in `test_agentic_stage_one_budget.py` as "telling a model a
+    working tool is shut costs it the tool".
+
+    Six of the eight have a call that works -- `exec_run` and `browser_run`
+    among them. Only the two package tools are shut outright, and they are shut
+    because the policy profile is `offline-full-v1`.
+    """
+    assert set(A_CALL_THAT_SHOULD_WORK) == set(TOOL_SCHEMAS)
+
+    refused = set()
+    for name in sorted(TOOL_SCHEMAS):
+        answer = getattr(backend, name)(A_CALL_THAT_SHOULD_WORK[name])
+        if answer.get("ok") is not True:
+            assert answer["error_type"] == "capability_unavailable", name
+            refused.add(name)
+    assert refused == NO_CALL_WORKS

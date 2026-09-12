@@ -115,6 +115,11 @@ destination]` returns `returncode: 0` and really uppercases the file. Every
 other argv — including `fixture-upper` with the wrong number of arguments —
 answers `capability_unavailable` and ends the task.
 
+Swept across the whole contract, giving each of the eight tools the best call
+it allows, the count comes out at **two**: only `environment_resolve` and
+`environment_activate` have no working call under `offline-full-v1`. The
+instructions name three. The third is `exec_run`, and it works.
+
 The model could have found that one out. `capabilities_query(kind:
 "commands")` returns `["fixture-upper"]`, and `kind: "budgets"` states the
 turn limit outright. So of the three things worth knowing about this room, two
