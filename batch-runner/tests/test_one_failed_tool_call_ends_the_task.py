@@ -301,3 +301,71 @@ def test_the_preregistration_already_declares_this(refused_conversation):
     assert outcome.stop_reason is StopReason.TOOL_DESK_BROKE
     assert "dispatch_one" in registered["comes_from"]
     assert result["error"] == REFUSAL
+
+
+# ---------------------------------------------------------------------------
+# ends_the_run answers about the attempt, and the two tables cross
+# ---------------------------------------------------------------------------
+
+
+def test_ends_the_run_and_the_task_being_over_are_close_to_inverted():
+    """The docstring's claim, against both tables rather than a copy of either.
+
+    `ends_the_run` reads `_ENDS_THE_RUN` in the conversation module.
+    Whether the task is opened again reads `RETRYABLE_DISPOSITIONS` via the
+    journal. They are different questions and on the three endings that matter
+    the answers do not line up:
+
+        error type                ends_the_run   task reopened
+        capability_unavailable       False           no
+        fixture_backend_error        True            yes
+        invalid_arguments            False           yes
+
+    A reader taking `False` for "the task is over" gets the refusal right and
+    every semantic failure wrong, which is how the sentence this replaces came
+    to be written.
+    """
+    from core.agentic_v2_cost_binding import (
+        RETRYABLE_DISPOSITIONS,
+        disposition_for_error,
+    )
+
+    reopened = lambda kind: disposition_for_error(kind) in RETRYABLE_DISPOSITIONS
+
+    assert ends_the_run("capability_unavailable") is False
+    assert reopened("capability_unavailable") is False
+
+    assert ends_the_run("fixture_backend_error") is True
+    assert reopened("fixture_backend_error") is True
+
+    assert ends_the_run("invalid_arguments") is False
+    assert reopened("invalid_arguments") is True, (
+        "a semantic failure is no longer retried, so the paragraph in "
+        "agentic_v2_conversation that uses it as the counterexample is wrong"
+    )
+
+    # The crossing itself, stated as the property rather than as three rows.
+    assert ends_the_run("fixture_backend_error") != ends_the_run("invalid_arguments")
+    assert reopened("fixture_backend_error") == reopened("invalid_arguments"), (
+        "the two disagree on ends_the_run and agree on being reopened; if that "
+        "stopped being true the function could be read as the task's fate"
+    )
+
+
+def test_the_docstring_no_longer_generalises_from_the_refusal():
+    """The retracted sentence is named, not deleted.
+
+    It was in a docstring for long enough to be quoted, and a reader who
+    remembers it needs to find out here that it was withdrawn rather than
+    discover the new text and assume they misremembered.
+    """
+    doc = ends_the_run.__doc__ or ""
+    # Whitespace-normalised, so that reflowing the paragraph to a different
+    # column width is not a test failure. What is asserted is the sentence.
+    flat = " ".join(doc.split())
+    assert "nothing does, today" in flat, "the retraction dropped the claim it retracts"
+    assert "true of the refusal and false of every semantic failure" in flat
+    assert "MOST_ATTEMPTS_PER_TASK" in flat, (
+        "the paragraph sends the reader to the retry gate; name the ceiling "
+        "with it or the gate looks unbounded"
+    )

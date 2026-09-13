@@ -548,7 +548,29 @@ def ends_the_run(error_type: str | None) -> bool:
 
     So a ``False`` here means the desk was working and declined the request --
     the model asked for a capability this profile does not grant, and it is
-    named. It does **not** mean the task carried on; nothing does, today.
+    named.
+
+    **What it says about the task is nothing at all, and the two are close to
+    inverted.** This function answers about the *attempt*; whether the task is
+    reopened is ``RETRYABLE_DISPOSITIONS`` in
+    :mod:`core.agentic_v2_cost_binding`, read by
+    ``core.agentic_v2_task_journal._standing_for``, up to
+    ``MOST_ATTEMPTS_PER_TASK``. On the two endings this function exists to
+    separate, the answers cross:
+
+    - ``capability_unavailable`` is ``False`` here -- absent from the table
+      above -- and its disposition is ``terminal_capability_absent``, so the
+      task really is over. This is the case the paragraph used to generalise
+      from.
+    - ``fixture_backend_error`` is ``True`` here and its disposition is
+      ``retry_infrastructure``, so the task is opened again.
+    - ``invalid_arguments`` and ``path_not_directory`` are ``False`` here, like
+      the refusal, and are ``retry_semantic``, so they too are opened again.
+
+    An earlier version of this sentence read "it does not mean the task
+    carried on; nothing does, today". That is true of the refusal and false of
+    every semantic failure, which is most of them. Do not read a task's fate
+    out of this function.
     """
     return str(error_type or "") in _ENDS_THE_RUN
 
