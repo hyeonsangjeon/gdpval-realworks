@@ -49,8 +49,21 @@ export type CostStage =
  */
 export type CostComponentName = CostStage | 'retry'
 
-/** Token/second counters, keyed by producer-defined snake_case slugs. */
-export type CostUsage = Record<string, number>
+/**
+ * Token/second counters, keyed by producer-defined snake_case slugs.
+ *
+ * A value may be `null`, and that is not a zero. Both producers seed the kinds
+ * every answering provider states — input, cached input, output, reasoning — at
+ * `0`, and seed the kinds only some providers report at `null`, promoting one to
+ * a number the moment a call actually states it. A line whose calls were all
+ * text therefore carries `audio_input_tokens: null`, meaning nobody measured it,
+ * while an audio call that genuinely reported none carries `0`. Reading the
+ * first as the second publishes a measurement that was never taken.
+ *
+ * So a reader must not write `usage.audio_input_tokens ?? 0`. Leave the absence
+ * visible, the way `known_cost_usd: null` is left visible below.
+ */
+export type CostUsage = Record<string, number | null>
 
 export interface CostComponent {
   /** What the row is called on screen. See `componentLabel()`. */

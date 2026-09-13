@@ -9,7 +9,9 @@
         "input_tokens": {"type": ["integer", "null"], "minimum": 0},
         "cached_input_tokens": {"type": ["integer", "null"], "minimum": 0},
         "output_tokens": {"type": ["integer", "null"], "minimum": 0},
-        "reasoning_tokens": {"type": ["integer", "null"], "minimum": 0}
+        "reasoning_tokens": {"type": ["integer", "null"], "minimum": 0},
+        "audio_input_tokens": {"type": ["integer", "null"], "minimum": 0},
+        "audio_output_tokens": {"type": ["integer", "null"], "minimum": 0}
       }
     },
     "costMissingReason": {

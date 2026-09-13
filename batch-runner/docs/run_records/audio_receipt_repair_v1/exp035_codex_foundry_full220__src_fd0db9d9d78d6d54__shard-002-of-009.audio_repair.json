@@ -1,0 +1,249 @@
+{
+  "derivation_schema_version": "cost-receipt-audio-repair-v1",
+  "kind": "derived_repair",
+  "what_this_is": "The audio figures the published receipt had no field for, read out of its own durable ledger. Derived, not regraded.",
+  "what_this_is_not": [
+    "not a replacement for the published grade file, which is unchanged",
+    "not a regrade: no score, judge decision or task outcome was read",
+    "not a claim of completeness: the run stays partial, see below",
+    "not a price: no cost figure moves, because none was ever published"
+  ],
+  "how_to_read_a_null": "null means nobody measured it, and is not zero. A text-only call leaves the audio columns NULL, so a line whose calls were all text reports null here rather than a measured none. A line that reported a real zero says 0, and the two stay distinguishable.",
+  "source": {
+    "grade_file": {
+      "path": "data/grades/_shards/exp035_codex_foundry_full220__judge_gpt-5_6-sol__exp035_codex_foundry_full220_v2_sol_max__cfg_89820de9d9c4e2e3__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_dc36d6837a8f0899f8bfa4d32aae9a9f6805f3b0__src_fd0db9d9d78d6d54__v2.2/shard-002-of-009.json",
+      "sha256": "aa75ce26e4f5d42bd5f477ea4a73c893d1b959666e324bf396e6b8525f1f6624"
+    },
+    "ledger_file": {
+      "path": "data/grades/_shards/exp035_codex_foundry_full220__judge_gpt-5_6-sol__exp035_codex_foundry_full220_v2_sol_max__cfg_89820de9d9c4e2e3__rubric_11e7900cdcac61bc4daf59e65feb238acda98fbf__inference_dc36d6837a8f0899f8bfa4d32aae9a9f6805f3b0__src_fd0db9d9d78d6d54__v2.2/shard-002-of-009.cost_ledger.jsonl",
+      "sha256": "eb1f26a8b6d946e6cd58b5a1927c57989c39abe2552807edc2fbc2ae8642f99a"
+    }
+  },
+  "original_scoring_provenance": {
+    "experiment_id": "exp035_codex_foundry_full220",
+    "experiment_yaml_name": "exp035_codex_foundry_full220",
+    "graded_at": "2026-09-12T19:13:22Z",
+    "graded_by": "step8_grade.py",
+    "graded_by_version": "0.1.0",
+    "grader_source_hash": "fd0db9d9d78d6d5414bdf48694eb61726ed0a741def137a58bf8508205218c43",
+    "inference_completed_at": null,
+    "inference_model": "gpt-5.4",
+    "judge": {
+      "provider": "azure_openai",
+      "api": "responses",
+      "model": "gpt-5.6-sol",
+      "deployment": "gpt-5.6-sol",
+      "api_version": "2025-04-01-preview",
+      "reasoning_effort": "max",
+      "temperature": 0,
+      "seed": 42,
+      "perception": {
+        "visual": {
+          "model": "gpt-5.6-sol",
+          "deployment": "gpt-5.6-sol",
+          "reasoning_effort": "max",
+          "vision": true,
+          "call_cap_per_task": 112
+        },
+        "audio": {
+          "model": "gpt-audio-1.5",
+          "deployment": "gpt-audio-1.5",
+          "call_cap_per_task": 32,
+          "trim_seconds": 30
+        }
+      },
+      "visual_file_cap": 10,
+      "config_name": "exp035_codex_foundry_full220_v2_sol_max",
+      "config_hash": "89820de9d9c4e2e3"
+    },
+    "prompt": {
+      "template": "prompts/grader_judge.md",
+      "version": "v2.2"
+    },
+    "renderer_fingerprint": {
+      "libreoffice_binary": "soffice",
+      "libreoffice_version": "LibreOffice 24.2.7.2 420(Build:2)",
+      "pymupdf_version": "1.28.2"
+    },
+    "rubric": {
+      "source": "huggingface",
+      "repo_id": "openai/gdpval",
+      "revision": "11e7900cdcac61bc4daf59e65feb238acda98fbf",
+      "commit_sha": "11e7900cdcac61bc4daf59e65feb238acda98fbf",
+      "short_sha": "11e7900"
+    },
+    "run_status": "partial",
+    "schema_version": "1.4",
+    "source_inference_experiment_id": "exp035_codex_foundry_full220",
+    "source_inference_repo_id": "HyeonSang/exp035_codex_foundry_full220",
+    "source_inference_revision": "dc36d6837a8f0899f8bfa4d32aae9a9f6805f3b0"
+  },
+  "receipt_state_unchanged_by_this_derivation": {
+    "schema_version": "cost-receipt-v1",
+    "status": "partial",
+    "estimated_cost_usd": null,
+    "known_cost_usd": 0.0,
+    "model_cost_usd": 0.0,
+    "runtime_cost_usd": 0.0,
+    "model_calls": 2219,
+    "currency": "USD"
+  },
+  "settled_calls": 2219,
+  "calls_reporting_audio": 30,
+  "original_usage": {
+    "input_tokens": 7655070,
+    "cached_input_tokens": 5143683,
+    "output_tokens": 682304,
+    "reasoning_tokens": 545238
+  },
+  "derived_usage": {
+    "input_tokens": 7655070,
+    "cached_input_tokens": 5143683,
+    "output_tokens": 682304,
+    "reasoning_tokens": 545238,
+    "audio_input_tokens": 8999,
+    "audio_output_tokens": 0
+  },
+  "audio_from_ledger": {
+    "audio_input_tokens": 8999,
+    "audio_output_tokens": 0
+  },
+  "audio_is_a_share_not_an_addition": {
+    "note": "Audio tokens are part of the input the provider already reported. input_tokens is unchanged and already contains them.",
+    "input_tokens": 7655070,
+    "of_which_audio": 8999
+  },
+  "components": [
+    {
+      "name": "grading",
+      "identity": {
+        "stage": "grading",
+        "retry_kind": "none",
+        "provider": "azure",
+        "deployment": "gpt-5.6-sol",
+        "requested_model": "gpt-5.6-sol",
+        "resolved_model": "gpt-5.6-sol",
+        "api_version": "v1"
+      },
+      "model_calls": 2150,
+      "original_usage": {
+        "input_tokens": 7400174,
+        "cached_input_tokens": 5111365,
+        "output_tokens": 671163,
+        "reasoning_tokens": 540519
+      },
+      "derived_usage": {
+        "input_tokens": 7400174,
+        "cached_input_tokens": 5111365,
+        "output_tokens": 671163,
+        "reasoning_tokens": 540519,
+        "audio_input_tokens": null,
+        "audio_output_tokens": null
+      },
+      "audio_from_ledger": {
+        "audio_input_tokens": null,
+        "audio_output_tokens": null
+      },
+      "calls_reporting_audio": 0
+    },
+    {
+      "name": "retry",
+      "identity": {
+        "stage": "grading",
+        "retry_kind": "semantic",
+        "provider": "azure",
+        "deployment": "gpt-5.6-sol",
+        "requested_model": "gpt-5.6-sol",
+        "resolved_model": "gpt-5.6-sol",
+        "api_version": "v1"
+      },
+      "model_calls": 27,
+      "original_usage": {
+        "input_tokens": 203340,
+        "cached_input_tokens": 32318,
+        "output_tokens": 4181,
+        "reasoning_tokens": 948
+      },
+      "derived_usage": {
+        "input_tokens": 203340,
+        "cached_input_tokens": 32318,
+        "output_tokens": 4181,
+        "reasoning_tokens": 948,
+        "audio_input_tokens": null,
+        "audio_output_tokens": null
+      },
+      "audio_from_ledger": {
+        "audio_input_tokens": null,
+        "audio_output_tokens": null
+      },
+      "calls_reporting_audio": 0
+    },
+    {
+      "name": "perception",
+      "identity": {
+        "stage": "perception",
+        "retry_kind": "none",
+        "provider": "azure",
+        "deployment": "gpt-5.6-sol",
+        "requested_model": "gpt-5.6-sol",
+        "resolved_model": "gpt-5.6-sol",
+        "api_version": "v1"
+      },
+      "model_calls": 12,
+      "original_usage": {
+        "input_tokens": 33384,
+        "cached_input_tokens": 0,
+        "output_tokens": 4935,
+        "reasoning_tokens": 3771
+      },
+      "derived_usage": {
+        "input_tokens": 33384,
+        "cached_input_tokens": 0,
+        "output_tokens": 4935,
+        "reasoning_tokens": 3771,
+        "audio_input_tokens": null,
+        "audio_output_tokens": null
+      },
+      "audio_from_ledger": {
+        "audio_input_tokens": null,
+        "audio_output_tokens": null
+      },
+      "calls_reporting_audio": 0
+    },
+    {
+      "name": "perception",
+      "identity": {
+        "stage": "perception",
+        "retry_kind": "none",
+        "provider": "azure",
+        "deployment": "gpt-audio-1.5",
+        "requested_model": "gpt-audio-1.5",
+        "resolved_model": "gpt-audio-1.5",
+        "api_version": "v1"
+      },
+      "model_calls": 30,
+      "original_usage": {
+        "input_tokens": 18172,
+        "cached_input_tokens": 0,
+        "output_tokens": 2025,
+        "reasoning_tokens": 0
+      },
+      "derived_usage": {
+        "input_tokens": 18172,
+        "cached_input_tokens": 0,
+        "output_tokens": 2025,
+        "reasoning_tokens": 0,
+        "audio_input_tokens": 8999,
+        "audio_output_tokens": 0
+      },
+      "audio_from_ledger": {
+        "audio_input_tokens": 8999,
+        "audio_output_tokens": 0
+      },
+      "calls_reporting_audio": 30
+    }
+  ],
+  "why_this_run_is_still_partial": [
+    "price_missing"
+  ]
+}

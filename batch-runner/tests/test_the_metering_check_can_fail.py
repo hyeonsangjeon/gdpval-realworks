@@ -83,8 +83,22 @@ CALL_USAGE = (
     {"input_tokens": 409, "output_tokens": 61, "audio_input_tokens": 33},
 )
 
+#: The same two calls with no audio count on either, which is what a rehearsal
+#: actually produces: the stub sets the prompt tokens and leaves the audio
+#: field alone. Built rather than mutated afterwards, because the receipt is
+#: derived from these rows -- nulling the rows behind a receipt that already
+#: counted them plants a second defect, a report disagreeing with its own
+#: ledger, and condition 9 catches that one first. The break has to be the one
+#: the test names.
+CALL_USAGE_WITHOUT_AUDIO = tuple(
+    {key: value for key, value in usage.items() if not key.startswith("audio_")}
+    for usage in CALL_USAGE
+)
 
-def _build_ledger(tmp_path: Path, *, task_ids=None, settle=(True, True)):
+
+def _build_ledger(
+    tmp_path: Path, *, task_ids=None, settle=(True, True), usage_per_call=CALL_USAGE
+):
     """Two perception calls through the real ledger, exported as JSONL.
 
     ``task_ids`` and ``settle`` exist so a caller can build a *wrong* ledger
@@ -97,7 +111,7 @@ def _build_ledger(tmp_path: Path, *, task_ids=None, settle=(True, True)):
     database = tmp_path / "cost_ledger.sqlite3"
     with CostReceiptLedger(database, run_id=RUN_ID, price_table=table) as ledger:
         for index, (usage, task, should_settle) in enumerate(
-            zip(CALL_USAGE, task_ids, settle)
+            zip(usage_per_call, task_ids, settle)
         ):
             call_id = make_call_id(
                 run_id=RUN_ID,
@@ -140,10 +154,11 @@ def _write_pair(
     settle=(True, True),
     judge_errors=(None, None),
     wire_says_which_raised=True,
+    usage_per_call=CALL_USAGE,
 ):
     """A report and the ledger beside it, as a passing run would leave them."""
     export, digest, receipt, table = _build_ledger(
-        tmp_path, task_ids=task_ids, settle=settle
+        tmp_path, task_ids=task_ids, settle=settle, usage_per_call=usage_per_call
     )
     unpriced = [DEPLOYMENT] if table.lookup("azure", DEPLOYMENT) is None else []
     wire = {"requests": 1, "requests_with_audio": 1}
@@ -164,7 +179,7 @@ def _write_pair(
                 "judge_error": judge_errors[index],
                 "wire": dict(wire),
             }
-            for index, usage in enumerate(CALL_USAGE)
+            for index, usage in enumerate(usage_per_call)
         ],
         "cost": {
             "record_kind": "measured" if measured else "rehearsal",
@@ -424,23 +439,49 @@ def test_an_unpriced_row_carrying_an_amount_fails_condition_four(tmp_path):
 
 def test_a_rehearsal_cannot_reach_measured_ok(tmp_path):
     """The stub reports no audio tokens, so condition 2 has no answer here."""
-    report_path, export = _write_pair(tmp_path, measured=False)
-    rows = _rows(export)
-    for row in rows:
-        row["audio_input_tokens"] = None
-    _rewrite_ledger(report_path, export, rows)
+    report_path, _ = _write_pair(
+        tmp_path, measured=False, usage_per_call=CALL_USAGE_WITHOUT_AUDIO
+    )
 
     outcome = checker.check(report_path)
     second = _condition(outcome, 2)
     assert second["result"] == checker.RESULT_UNANSWERABLE
     assert second["unanswerable_because"] == checker.UNANSWERABLE_REHEARSAL
-    assert outcome["counts"]["failed"] == 0
+    assert outcome["counts"]["failed"] == 0, [
+        entry for entry in outcome["conditions"] if entry["result"] == "fail"
+    ]
     assert outcome["verdict"] == checker.VERDICT_REHEARSAL_OK
     assert outcome["record_kind"] == "rehearsal"
 
 
 def test_a_paid_run_that_lost_its_audio_tokens_fails_rather_than_abstains(tmp_path):
     """Unanswerable is for the rehearsal only. A paid run owes an answer."""
+    report_path, _ = _write_pair(
+        tmp_path, measured=True, usage_per_call=CALL_USAGE_WITHOUT_AUDIO
+    )
+
+    outcome = checker.check(report_path)
+    second = _condition(outcome, 2)
+    assert second["result"] == checker.RESULT_FAIL
+    assert outcome["verdict"] == checker.VERDICT_FAILED
+    # Nothing else is wrong with this pair: the receipt reports the absence the
+    # ledger reports, so the only failure is the one this test is about.
+    assert outcome["counts"]["failed"] == 1, [
+        entry for entry in outcome["conditions"] if entry["result"] == "fail"
+    ]
+
+
+def test_a_receipt_claiming_audio_its_ledger_does_not_have_fails_condition_nine(
+    tmp_path,
+):
+    """The other direction: the rows lose the count and the receipt keeps it.
+
+    This is the shape the three tests above used to be written in, and it is a
+    real defect -- a published receipt stating a token count no surviving row
+    supports. It belongs to condition 9, which rebuilds the receipt from the
+    exported ledger, and it is asserted here so that the arrangement is
+    covered on purpose rather than as a side effect of a fixture.
+    """
     report_path, export = _write_pair(tmp_path, measured=True)
     rows = _rows(export)
     for row in rows:
@@ -448,17 +489,16 @@ def test_a_paid_run_that_lost_its_audio_tokens_fails_rather_than_abstains(tmp_pa
     _rewrite_ledger(report_path, export, rows)
 
     outcome = checker.check(report_path)
-    second = _condition(outcome, 2)
-    assert second["result"] == checker.RESULT_FAIL
+    ninth = _condition(outcome, 9)
+    assert ninth["result"] == "fail"
+    assert "usage" in ninth["data"]["differing_fields"]
     assert outcome["verdict"] == checker.VERDICT_FAILED
 
 
 def test_the_rendered_output_says_a_rehearsal_is_not_evidence(tmp_path):
-    report_path, export = _write_pair(tmp_path, measured=False)
-    rows = _rows(export)
-    for row in rows:
-        row["audio_input_tokens"] = None
-    _rewrite_ledger(report_path, export, rows)
+    report_path, _ = _write_pair(
+        tmp_path, measured=False, usage_per_call=CALL_USAGE_WITHOUT_AUDIO
+    )
 
     text = checker.render(checker.check(report_path))
     assert "rehearsal_ok" in text
