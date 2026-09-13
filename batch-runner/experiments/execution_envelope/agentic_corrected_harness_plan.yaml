@@ -536,28 +536,55 @@ experiment_record:
 
   falsification: >-
     The hypothesis is about the harness, not the model: that the two defects
-    end tasks. Three failures are counted separately over all 30 tasks, and
-    only two of them are endings. (a) Turn exhaustion — stop_reason
+    end tasks. Three failures are counted separately over all 30 tasks, and all
+    three are endings. (a) Turn exhaustion — stop_reason
     tool_call_limit_reached, which the desk raises as tool_budget_exhausted
     when the model has spent its tool_calls_per_attempt. (b) Text-only
     termination — stop_reason model_stopped_without_finishing, the model
     talking until it has nothing left to say without ever calling finalize.
-    (c) Tool refusal, which is NOT a stop_reason and must not be counted as
-    one: core.agentic_v2_conversation._ENDS_THE_RUN deliberately omits
-    capability_unavailable, so a refused call is handed back and the run
-    continues. A refusal spends a turn and the task then ends as (a) or (b).
-    It is therefore counted per task beside the ending, by
-    core.agentic_v2_outcome.refusals_handed_back_in, and the reported figure
-    is the cross-tab endings_after_a_refusal rather than a third ending count.
-    An earlier draft of this line named tool_desk_broke as the refusal figure.
-    That was wrong and is recorded here rather than quietly replaced:
-    tool_desk_broke is the harness failing, not the model being told no, and
-    counting it would have put a defect of ours in the column we are using to
-    judge the model. The hypothesis is falsified if (a) and (b) together are
-    roughly what trial_30 had. That result is publishable and it is useful: it
-    says the endings were not caused by what the design said they were caused
-    by, and the 9 imitation cases were a correlation. No threshold is set for
-    calling it improved, because a threshold needs a spread — see repeats.
+    (c) Tool refusal — the run record's error reading capability_unavailable or
+    another reason core.agentic_v2_conversation.ends_the_run does not claim.
+    This line has now been wrong in both directions and both drafts are kept,
+    because the column they describe is the one this run is judged on. The
+    first named stop_reason tool_desk_broke as the refusal figure. The second
+    called that wrong on the grounds that _ENDS_THE_RUN omits
+    capability_unavailable, so a refused call is handed back, the run continues,
+    a refusal spends a turn and the task then ends as (a) or (b) — making it a
+    per-task column beside the ending, counted by
+    core.agentic_v2_outcome.refusals_handed_back_in and reported as the
+    cross-tab endings_after_a_refusal rather than a third ending. That second
+    draft is the one that was checked against the runner, in
+    tests/test_one_failed_tool_call_ends_the_task.py, and it does not happen.
+    dispatch_one ends the task on the first tool result that is not ok, before
+    the loop's table is reached, because the trace schema refuses a record with
+    a tool event after a not-ok one; the condition is registered as
+    one_failed_tool_call_ends_the_task. So a refusal is an ending, and the
+    first draft was nearer the truth than the correction that replaced it — the
+    loop does record it as tool_desk_broke. It is still not the figure to
+    report, for the reason the second draft gave: tool_desk_broke is also what
+    a genuinely broken backend gets, and publishing a defect of ours as the
+    model being told no is the specific error to avoid. The figure is the run
+    record's own error, which agentic_v2_runner sets from the desk rather than
+    from the loop, narrowed to desk-said-no by
+    core.agentic_v2_outcome.refusals_the_desk_gave. The three categories now
+    partition the failures and are reported as three ending counts over the
+    same denominator of 30; endings_after_a_refusal is still published, and
+    under this schema it is degenerate by construction — a refused task lands
+    in the ending named after its own refusal — which is how the registered
+    condition shows up in the output. The hypothesis is falsified if (a), (b)
+    and (c) together are roughly what trial_30 had. That result is publishable
+    and it is useful: it says the endings were not caused by what the design
+    said they were caused by, and the 9 imitation cases were a correlation. No
+    threshold is set for calling it improved, because a threshold needs a
+    spread — see repeats.
+
+    One consequence of the registered condition has to be stated here rather
+    than discovered in the report. Because the first refused call ends the
+    task, this run cannot observe a model reading a refusal and choosing
+    something else, and no number it produces may be described that way. That
+    makes the derived tool-availability paragraph more load-bearing, not less:
+    it is the only remaining way a model avoids asking for a tool it will not
+    get, since it gets no second ask.
 
   moving: >-
     Two axes at once. The derived tool-availability paragraph, and
@@ -599,11 +626,19 @@ experiment_record:
     The reading logic is exercised against hand-made defective records before
     any model is called —
     tests/test_reading_a_v2_outcome_is_three_questions.py. The refusal column
-    of falsification (c) is validated the same way, on built pairs that are
-    identical in every pre-existing column and differ only in the new one —
+    of falsification (c) is validated in two places, because hand-made records
+    turned out not to be enough. Its arithmetic is checked on built pairs that
+    are identical in every pre-existing column and differ only in the new one —
     tests/test_a_refusal_is_a_cause_and_the_ceiling_is_the_ending.py, which
     also fixes that a blank error_type is never counted as a refusal, because
     inventing one would manufacture evidence for the hypothesis under test.
+    Several of those pairs are shapes no run can produce, and building them was
+    how the falsification line came to describe a harness that does not exist.
+    So the column is also checked against the real runner and the real fixture
+    backend, with nothing hand-made in the record —
+    tests/test_one_failed_tool_call_ends_the_task.py, which holds that a
+    refused call is the last tool event in the trace and that the registered
+    condition still says what the runner does.
 
   units: >-
     Task counts out of 30 for outcomes, attempt counts by stop_reason for

@@ -503,29 +503,52 @@ _ENDS_THE_RUN: Mapping[str, StopReason] = {
 }
 """Tool failures that end the run, and the ending each one gets.
 
-Everything absent from this table — including ``capability_unavailable``, which
-is what asking to run a command gets today — is handed back to the model
-instead. That is not leniency. Reading a refusal and choosing something else is
-the one behaviour stage one exists to measure, so a loop that gave up at the
-first refusal would measure nothing.
+**This table is not the whole answer, and taking it for one was wrong.** What it
+says is true of *this loop*: a reason absent from it — ``capability_unavailable``
+among them — does not make the loop below stop, and the loop goes on to append a
+``NEXT_TURN`` event saying it is showing the model a refusal. What it does not
+say is that the loop never gets there. ``dispatch_one`` in
+:mod:`core.agentic_v2_runner` raises ``_EndTheRun`` on *any* result that is not
+``ok``, before returning, because
+:func:`core.agentic_v2_provenance.verify_trace_pair` refuses a trace with a tool
+event after a not-ok one. So the desk is already gone when this table is
+consulted, and the run ends on the first refused call whatever is written here.
+
+That condition is registered, with its mechanism, in
+``core.agentic_v2_preregistration`` under
+``one_failed_tool_call_ends_the_task`` — the model is told nothing and is not
+asked for another turn. Lifting it means changing what a trace may contain, and
+that is a change to the provenance schema rather than to this table.
+
+Two consequences worth stating where the wrong sentence used to be. Reading a
+refusal and choosing something else cannot be observed in this harness today, so
+no run may be reported as having measured it. And the loop's own verdict for a
+refusal is :attr:`StopReason.TOOL_DESK_BROKE`, because all it saw was an
+exception coming out of the desk — ``agentic_v2_runner`` overrides that for the
+*run record*, which names the refusal correctly, but the conversation outcome
+keeps the broken-desk word. A reader separating "the desk said no" from "the
+desk was broken" has to use the run record's ``error``, not this stop reason.
 """
 
 
 def ends_the_run(error_type: str | None) -> bool:
-    """Whether a tool failure of this kind ends the run or is handed back.
+    """Whether a tool failure of this kind is a broken desk or a desk saying no.
 
-    The table above is the loop's own answer to that question, and this is the
-    only way to ask it from outside. It exists because the distinction is not
-    visible afterwards: a refused turn and a fatal turn both land in
-    :class:`TurnRecord` with ``ok`` false and an ``error_type``, and a reader
-    that cannot tell them apart will either count a broken desk as model
-    behaviour or drop every handed-back refusal on the floor.
+    The name is the loop's, and under the condition registered in
+    ``one_failed_tool_call_ends_the_task`` it over-promises: *both* kinds end
+    the run, because ``dispatch_one`` raises on any not-ok result before this is
+    ever consulted. What the function still answers correctly — and the reason
+    it is the only way to ask from outside — is *which* kind a failure was.
 
-    Handed-back refusals are the ones that matter for reading a run, because
-    they do not end anything. They consume turns and then the task ends some
-    *other* way — at the tool-call ceiling, or with the model talking itself
-    out. So the refusal is a cause and the ceiling is the ending, and the two
-    belong in different columns rather than in one word.
+    That distinction is not visible afterwards: a refused turn and a fatal turn
+    both land in :class:`TurnRecord` with ``ok`` false and an ``error_type``,
+    and both are reported by the loop as
+    :attr:`StopReason.TOOL_DESK_BROKE`. A reader that cannot tell them apart
+    will count a closed tool desk as a broken one.
+
+    So a ``False`` here means the desk was working and declined the request --
+    the model asked for a capability this profile does not grant, and it is
+    named. It does **not** mean the task carried on; nothing does, today.
     """
     return str(error_type or "") in _ENDS_THE_RUN
 

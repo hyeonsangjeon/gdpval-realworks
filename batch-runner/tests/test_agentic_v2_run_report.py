@@ -234,6 +234,13 @@ def test_absent_token_counts_stay_absent():
 
 
 def test_a_failure_carries_its_error_category_and_who_it_points_at():
+    """The three fields that say what went wrong and whose fault it was.
+
+    ``tool_errors`` is deliberately not one of them. This task's compute never
+    started, so no tool was ever called -- and the field used to read ``1``
+    here, which is the ending written into a field about tools. See
+    :func:`test_a_tool_error_is_a_call_that_came_back_not_ok`.
+    """
     metrics = build_agentic_v2_metrics(
         _failed_run("compute_start_failed"),
         standing=_standing(decision=DECISION_RUN),
@@ -243,7 +250,7 @@ def test_a_failure_carries_its_error_category_and_who_it_points_at():
     assert metrics["terminal_error_category"] == "compute_start_failed"
     assert metrics["agentic_v2_disposition"] == "infrastructure"
     assert metrics["agentic_v2_attributable_to"] == "environment"
-    assert metrics["tool_errors"] == 1
+    assert metrics["tool_errors"] == 0
 
 
 def test_a_success_names_no_error():
@@ -252,6 +259,178 @@ def test_a_success_names_no_error():
     assert metrics["agentic_v2_disposition"] is None
     assert metrics["tool_errors"] == 0
     assert metrics["schema_version"] == AGENTIC_V2_METRICS_SCHEMA_VERSION
+
+
+# ── tool_errors, which V1 writes into the same block ─────────────────────
+
+
+def test_a_tool_error_is_a_call_that_came_back_not_ok():
+    """V1's rule, because V1's rows are summed with these.
+
+    ``step6_report`` divides ``total_tool_errors`` by ``total_tool_calls`` and
+    publishes the quotient as a percentage. V1
+    (:mod:`core.agentic_sandbox_runner`) increments the numerator once per
+    dispatch whose result is not ``ok``, so a V2 row counting anything else
+    makes a rate out of a numerator and a denominator that are not about the
+    same events.
+    """
+    metrics = _metrics(
+        tool_calls=[
+            {"tool_name": "exec_run", "ok": True},
+            {"tool_name": "exec_run", "ok": False},
+            {"tool_name": "workspace_apply", "ok": False},
+            {"tool_name": "finalize", "ok": True},
+        ]
+    )
+    assert metrics["tool_calls"] == 4
+    assert metrics["tool_errors"] == 2
+
+
+def test_a_call_that_never_said_whether_it_worked_counts_as_not_ok():
+    """Absent is not success. The rule is ``ok is not True``, as in V1."""
+    metrics = _metrics(tool_calls=[{"tool_name": "exec_run"}])
+    assert metrics["tool_errors"] == 1
+
+
+def test_a_task_that_called_nothing_reports_no_tool_errors():
+    """The denominator is zero here, so any numerator is unreadable.
+
+    A compute that never started is a real failure and it is already reported,
+    under ``terminal_error_category``. Writing it here as well put a task with
+    no tool calls into the tool-error rate.
+    """
+    metrics = build_agentic_v2_metrics(
+        _failed_run("compute_start_failed"),
+        standing=_standing(decision=DECISION_RUN),
+        task_wall_time_ms=99.0,
+        tool_calls=(),
+        receipt=_receipt(),
+    )
+    assert metrics["tool_calls"] == 0
+    assert metrics["tool_errors"] == 0
+
+
+def test_a_task_that_hit_a_tool_error_and_finished_anyway_recovered():
+    """V1's field, at V1's moment: finalised, and something went wrong on the way.
+
+    Step 6 divides ``recovered_tasks`` by ``tasks_with_tool_errors``. V2 wrote
+    no value at all, so every V2 run read as a run in which nothing recovered.
+    """
+    metrics = _metrics(
+        tool_calls=[
+            {"tool_name": "browser_run", "ok": False},
+            {"tool_name": "exec_run", "ok": True},
+            {"tool_name": "finalize", "ok": True},
+        ]
+    )
+    assert metrics["tool_errors"] == 1
+    assert metrics["recovered_after_tool_error"] is True
+
+
+def test_a_clean_success_recovered_from_nothing():
+    metrics = _metrics(tool_calls=[{"tool_name": "finalize", "ok": True}])
+    assert metrics["tool_errors"] == 0
+    assert metrics["recovered_after_tool_error"] is False
+
+
+def test_a_failed_task_did_not_recover_however_many_errors_it_met():
+    metrics = build_agentic_v2_metrics(
+        _failed_run("tool_budget_exhausted"),
+        standing=_standing(decision=DECISION_RUN),
+        task_wall_time_ms=99.0,
+        tool_calls=[
+            {"tool_name": "browser_run", "ok": False},
+            {"tool_name": "browser_run", "ok": False},
+        ],
+        receipt=_receipt(),
+    )
+    assert metrics["tool_errors"] == 2
+    assert metrics["recovered_after_tool_error"] is False
+
+
+# ── refusals, counted beside the ending and never as one ─────────────────
+
+
+def test_a_refused_call_is_counted_by_the_reason_the_desk_gave():
+    """A refusal spends a turn and ends nothing, so it needs its own field.
+
+    The desk hands ``capability_unavailable`` back and the loop carries on --
+    :data:`core.agentic_v2_conversation._ENDS_THE_RUN` deliberately omits it.
+    Two tasks that both end at the tool ceiling, one refused seven times and
+    one that worked seven times, are identical in every other field here.
+
+    Kept by reason rather than as one number because *what* was refused is the
+    finding: a cohort refused thirty times for ``capability_unavailable`` is a
+    closed tool, and thirty different reasons is a desk nobody configured.
+    """
+    metrics = _metrics(
+        tool_calls=[
+            {
+                "tool_name": "browser_run",
+                "ok": False,
+                "error_type": "capability_unavailable",
+            },
+            {
+                "tool_name": "browser_run",
+                "ok": False,
+                "error_type": "capability_unavailable",
+            },
+            {
+                "tool_name": "environment_resolve",
+                "ok": False,
+                "error_type": "package_not_in_snapshot",
+            },
+            {"tool_name": "finalize", "ok": True},
+        ]
+    )
+    assert metrics["agentic_v2_tool_refusals"] == 3
+    assert metrics["agentic_v2_tool_refusals_by_kind"] == {
+        "capability_unavailable": 2,
+        "package_not_in_snapshot": 1,
+    }
+    # The refusals are inside `tool_errors` rather than added to it: three
+    # calls came back not-ok and all three were the desk saying no.
+    assert metrics["tool_errors"] == 3
+
+
+def test_the_failure_that_ended_the_run_is_not_counted_as_a_refusal():
+    """It is the ending, and ``terminal_error_category`` already holds it.
+
+    A run stopped by ``compute_backend_error`` has a broken tool desk, not a
+    model that was told no and chose something else. Counting it in both
+    columns is how a harness defect gets published as a tool policy.
+    """
+    metrics = build_agentic_v2_metrics(
+        _failed_run("compute_backend_error"),
+        standing=_standing(decision=DECISION_RUN),
+        task_wall_time_ms=99.0,
+        tool_calls=[
+            {
+                "tool_name": "browser_run",
+                "ok": False,
+                "error_type": "capability_unavailable",
+            },
+            {
+                "tool_name": "exec_run",
+                "ok": False,
+                "error_type": "compute_backend_error",
+            },
+        ],
+        receipt=_receipt(),
+    )
+    assert metrics["terminal_error_category"] == "compute_backend_error"
+    assert metrics["agentic_v2_tool_refusals"] == 1
+    assert metrics["agentic_v2_tool_refusals_by_kind"] == {
+        "capability_unavailable": 1
+    }
+    # `tool_errors` counts calls and so is the larger of the two here.
+    assert metrics["tool_errors"] == 2
+
+
+def test_a_run_that_met_no_refusal_says_so_with_an_empty_breakdown():
+    metrics = _metrics(tool_calls=[{"tool_name": "exec_run", "ok": True}])
+    assert metrics["agentic_v2_tool_refusals"] == 0
+    assert metrics["agentic_v2_tool_refusals_by_kind"] == {}
 
 
 # ── the row ──────────────────────────────────────────────────────────────
@@ -340,13 +519,24 @@ def test_the_metrics_are_copied_rather_than_shared():
 # ── the run ──────────────────────────────────────────────────────────────
 
 
-def _row(status=STATUS_SUCCESS, disposition=None, abandoned=0):
+def _row(
+    status=STATUS_SUCCESS,
+    disposition=None,
+    abandoned=0,
+    *,
+    ending="",
+    refusals=0,
+    by_kind=None,
+):
     return {
         "status": status,
         "observability": {
             "agentic_metrics": {
                 "agentic_v2_disposition": disposition,
                 "agentic_v2_abandoned_attempts": abandoned,
+                "terminal_error_category": ending,
+                "agentic_v2_tool_refusals": refusals,
+                "agentic_v2_tool_refusals_by_kind": by_kind or {},
             }
         },
     }
@@ -384,6 +574,81 @@ def test_dispositions_are_counted_across_the_run():
         receipt_ceiling=STATUS_PARTIAL,
     )
     assert summary["dispositions"] == {"infrastructure": 2, "semantic": 1}
+
+
+def test_the_endings_partition_the_run_and_refusals_are_not_added_to_them():
+    """Thirty tasks with forty refusals still have thirty endings.
+
+    A refusal ends nothing -- the desk hands it back and the loop carries on --
+    so counting one as an ending would report more outcomes than there were
+    tasks. The cross-tab splits each ending by whether a refusal was met on the
+    way, which is the only thing that tells a tool ceiling spent on refused
+    calls apart from one spent on work. Both tasks below ended
+    ``tool_budget_exhausted`` and they are not the same result.
+    """
+    summary = summarise_v2_run(
+        [
+            _row(
+                STATUS_ERROR,
+                "semantic",
+                ending="tool_budget_exhausted",
+                refusals=7,
+                by_kind={"capability_unavailable": 7},
+            ),
+            _row(STATUS_ERROR, "semantic", ending="tool_budget_exhausted"),
+            _row(
+                STATUS_ERROR,
+                "semantic",
+                ending="finalize_not_called",
+                refusals=1,
+                by_kind={"capability_unavailable": 1},
+            ),
+            _row(),
+        ],
+        manifest_size=4,
+        receipt_ceiling=STATUS_COMPLETE,
+    )
+    assert summary["tool_refusals"] == 8
+    assert summary["tasks_that_met_a_refusal"] == 2
+    assert summary["tool_refusals_by_kind"] == {"capability_unavailable": 8}
+    assert summary["endings_after_a_refusal"] == {
+        "accepted": {"with_refusals": 0, "without": 1},
+        "finalize_not_called": {"with_refusals": 1, "without": 0},
+        "tool_budget_exhausted": {"with_refusals": 1, "without": 1},
+    }
+
+    # The two fields have different denominators and this is where that shows:
+    # eight refusals across four tasks, two of which met one.
+    counted = sum(
+        bucket["with_refusals"] + bucket["without"]
+        for bucket in summary["endings_after_a_refusal"].values()
+    )
+    assert counted == summary["executed"] == 4
+    assert summary["tasks_that_met_a_refusal"] <= summary["executed"]
+
+
+def test_a_failure_whose_category_was_never_recorded_is_named_not_dropped():
+    """Otherwise the endings stop adding up to the run and nobody can tell."""
+    summary = summarise_v2_run(
+        [_row(STATUS_ERROR, "infrastructure")],
+        manifest_size=1,
+        receipt_ceiling=STATUS_COMPLETE,
+    )
+    assert summary["endings_after_a_refusal"] == {
+        "unrecorded": {"with_refusals": 0, "without": 1}
+    }
+
+
+def test_a_run_that_met_no_refusal_reports_zero_rather_than_nothing():
+    summary = summarise_v2_run(
+        [_row(), _row()], manifest_size=2, receipt_ceiling=STATUS_COMPLETE
+    )
+    assert summary["tool_refusals"] == 0
+    assert summary["tasks_that_met_a_refusal"] == 0
+    assert summary["tool_refusals_by_kind"] == {}
+    assert summary["endings_after_a_refusal"] == {
+        "accepted": {"with_refusals": 0, "without": 2}
+    }
 
 
 def test_a_partial_ceiling_makes_the_run_s_cost_not_fully_accounted():

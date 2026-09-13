@@ -28,18 +28,34 @@ the phrase it matched so a person can check, and it undercounts on purpose.
 the caller did not name. A denominator of thirty is reported three times over,
 once per question, and a task is never moved from one column into another.
 
-**A fourth column, and it is a cause rather than an ending.** Asking for a tool
-the desk will not give is not one of the three questions and is not a fourth
-ending either: a refused call is handed straight back to the model and the run
-carries on, so the task still finishes some *other* way. What it does is spend
-turns. A task that reached its tool-call ceiling having been refused seven
-times and a task that reached the same ceiling doing seven useful things share
-an ending and share nothing else, and one word cannot hold that. So refusals
-are counted per task beside the ending, never added to it --
-:attr:`Outcome.tool_refusals` and, across a cohort,
-``count_separately(...)["endings_after_a_refusal"]``, which is the cross-tab
-that actually separates tool refusal from turn exhaustion from a model that
-stopped talking.
+**A fourth column, and it is about the desk rather than about the model.**
+Asking for a tool the desk will not give is not one of the three questions. The
+first draft of this paragraph called it a cause rather than an ending, on the
+grounds that a refused call is handed back and the task goes on to finish some
+other way. **That is not what this harness does**, and the wrong claim is
+restated here rather than quietly dropped, because the columns below were built
+on it and a reader of those columns needs to know what they were for.
+``dispatch_one`` ends the task on the first tool result that is not ``ok``, a
+condition registered in ``core.agentic_v2_preregistration`` under
+``one_failed_tool_call_ends_the_task``; the model is told nothing and is not
+asked for another turn.
+
+So under the present schema a refusal *is* the ending, and
+:attr:`Outcome.tool_refusals` can hold at most one entry for a real run. The
+column earns its place anyway, for a different reason than the one it was added
+for: the loop reports every refused call as
+:attr:`~core.agentic_v2_conversation.StopReason.TOOL_DESK_BROKE`, the same word
+it uses for a desk that is actually broken, so without this column "the model
+asked for something it was not granted" and "the harness fell over" are one
+number. What it must not be used for is the behaviour it was named after. No run
+under this schema measures a model reading a refusal and choosing something
+else, and none may be reported as though it had.
+
+The cross-tab ``count_separately(...)["endings_after_a_refusal"]`` is kept for
+the same reason and reads the same way: it separates tool refusal from turn
+exhaustion from a model that stopped talking. Today a refused task always lands
+in the ending named after its own refusal, which is the shape that makes the
+registered condition visible in the output rather than only in a docstring.
 
 Offline. Reads a run record that already exists and the files already on disk.
 No model, no network, no cost.
@@ -132,13 +148,23 @@ class Outcome:
     error_type: Optional[str]
 
     tool_refusals: tuple[str, ...] = ()
-    """Every refusal the desk handed back to the model, in the order they came.
+    """Every refusal a working desk gave this task, in the order they came.
 
     Kept as the ``error_type`` of each one rather than a count, because *what*
     was refused is the finding -- thirty tasks each refused once for
     ``capability_unavailable`` is one story about the tool desk, and thirty
-    different reasons is another. A refusal that ended the run is not in here;
-    that is the ending, and it is in :attr:`error_type`.
+    different reasons is another.
+
+    What is excluded is a desk that *broke* -- ``compute_backend_error`` and the
+    rest of :data:`~core.agentic_v2_conversation._ENDS_THE_RUN`. That is a
+    harness defect and not a tool policy, and the two are otherwise
+    indistinguishable, because the loop reports both as ``TOOL_DESK_BROKE``.
+
+    Not excluded, contrary to what this docstring said until it was checked
+    against the runner: a refusal that ended the run. Every refusal ends the
+    run, so in a real record this holds at most one entry and that entry names
+    the same event as :attr:`error_type`. The two are not independent and must
+    not be added together.
     """
 
     quality: None = None
@@ -234,20 +260,27 @@ def refusal_phrase_in(text: str) -> Optional[str]:
     return None
 
 
-def refusals_handed_back_in(turns: Sequence[Any]) -> tuple[str, ...]:
-    """The refusals the model was given back, from one task's turn records.
+def refusals_the_desk_gave(turns: Sequence[Any]) -> tuple[str, ...]:
+    """The refusals a working desk handed down, from one task's turn records.
+
+    Named ``refusals_the_desk_gave`` until it was checked against the runner.
+    Nothing is handed back: ``dispatch_one`` ends the task on the first not-ok
+    result, so in a real run this returns at most one entry and that entry is
+    the ending. The rename is the correction; the function is unchanged and so
+    are its callers' numbers.
 
     A turn counts here when the desk answered it with ``ok`` false and the
-    reason is one the loop does *not* end on -- see
-    :func:`core.agentic_v2_conversation.ends_the_run`. The ending itself is
-    deliberately excluded: a run stopped by ``compute_backend_error`` has a
-    broken desk, not a model that was told no, and folding the two together
-    would put a harness defect and a tool policy in the same count.
+    reason is one :func:`core.agentic_v2_conversation.ends_the_run` does not
+    claim -- that is, the desk was working and declined the request, rather
+    than falling over. The distinction is the whole point of the column, and it
+    is not otherwise recoverable: the conversation loop reports both kinds as
+    ``TOOL_DESK_BROKE``, so folding them together would file a closed tool desk
+    under harness defects.
 
     Takes anything with ``ok`` and ``error_type`` -- a
-    :class:`~core.agentic_v2_conversation.TurnRecord` or the dict it
-    serialises to -- because the conversation is kept beside the run and
-    reaches a reader in either shape.
+    :class:`~core.agentic_v2_conversation.TurnRecord`, the dict it serialises
+    to, or a public result commitment -- because the conversation is kept beside
+    the run and reaches a reader in any of those shapes.
     """
 
     def field(turn: Any, name: str) -> Any:
@@ -304,7 +337,7 @@ def read_outcome(
             str(record.get("deliverable_text") or record.get("text") or "")
         ),
         error_type=(record.get("error") or None) if not record.get("success") else None,
-        tool_refusals=refusals_handed_back_in(turns),
+        tool_refusals=refusals_the_desk_gave(turns),
     )
 
 

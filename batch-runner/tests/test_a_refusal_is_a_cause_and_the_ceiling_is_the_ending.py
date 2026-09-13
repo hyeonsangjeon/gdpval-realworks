@@ -1,23 +1,36 @@
-"""Telling a turn ceiling spent on refused calls apart from one spent on work.
+"""Telling a desk that said no apart from a desk that broke.
 
 ``experiment-design`` §3 is about axes and §5 is about who validates the judge.
 Both land here. The corrected-harness plan promises to separate three failures
 -- a tool the desk refuses, a run that hits its tool-call ceiling, and a model
-that talks and stops without finalising -- and only two of those are endings.
+that talks and stops without finalising -- and the first of those had nowhere to
+live, because the conversation loop reports a refused call and a broken backend
+under the same :attr:`StopReason.TOOL_DESK_BROKE`.
 
-A refusal is not an ending. :data:`core.agentic_v2_conversation._ENDS_THE_RUN`
-leaves ``capability_unavailable`` out on purpose: the desk hands the refusal
-back and the loop carries on, because reading a refusal and choosing something
-else is the behaviour stage one exists to measure. What the refusal does is
-spend a turn. So a task refused seven times ends at its ceiling, and its row
-says ``tool_budget_exhausted`` -- the same word as a task that spent seven
-turns doing real work and ran out. One of those is a closed tool desk and the
-other is a task too big for eight calls, and before this module they were the
-same number.
+**The title of this file, and the paragraph that used to be here, were wrong.**
+What they said: ``_ENDS_THE_RUN`` leaves ``capability_unavailable`` out on
+purpose, so the desk hands the refusal back, the loop carries on, and a task
+refused seven times ends later at its ceiling -- meaning a refusal is a cause
+and the ceiling is the ending. The first clause is true and the rest does not
+happen. ``dispatch_one`` ends the task on the first not-ok result, before the
+loop's table is consulted, because the trace schema refuses a record with a tool
+event after a not-ok one. The condition is registered as
+``one_failed_tool_call_ends_the_task`` and is pinned against the real runner in
+``test_one_failed_tool_call_ends_the_task.py``, which is the file to read for
+what a refused run actually looks like.
 
-Every case is built rather than observed, and the ones that matter most are the
-pairs: two tasks identical in every existing column, separated only by the new
-one. Offline, and free. Nothing here calls a model or a backend.
+So **every case below is built, and several are built in shapes no run can
+produce** -- seven refusals followed by a ceiling, a refusal followed by a
+successful ``finalize``. They are kept, unchanged, for two reasons. They pin the
+arithmetic of the counter, which is correct independently of how many refusals a
+run can contain. And they are the specification for what the column would report
+if the trace schema were ever allowed to carry a call after a refused one, which
+is the one change that would make the behaviour the plan wants to measure
+observable at all. What they are not is evidence that any run behaves this way.
+Where a docstring below describes a task carrying on after a refusal, read it as
+that specification and not as a claim about the harness.
+
+Offline, and free. Nothing here calls a model or a backend.
 """
 from __future__ import annotations
 
@@ -33,13 +46,13 @@ from core.agentic_v2_outcome import (
     count_separately,
     ending_label,
     read_outcome,
-    refusals_handed_back_in,
+    refusals_the_desk_gave,
 )
 
 #: What asking to run a command gets from the fixture desk today.
 REFUSED = "capability_unavailable"
 
-#: What ended twelve of trial_30's thirty tasks. Also handed back.
+#: What ended twelve of trial_30's thirty tasks -- ended, on the first one.
 BROWSER = "capability_unavailable"
 
 
@@ -84,24 +97,27 @@ def _failed(error: str) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# What counts as a refusal handed back
+# What counts as a refusal the desk gave
 # ---------------------------------------------------------------------------
 
 
 def test_a_refused_turn_is_counted():
     turns = [_turn(1, ok=False, error=REFUSED), _turn(2, ok=True)]
-    assert refusals_handed_back_in(turns) == (REFUSED,)
+    assert refusals_the_desk_gave(turns) == (REFUSED,)
 
 
-def test_a_turn_that_ended_the_run_is_not_a_handed_back_refusal():
-    """The distinction the whole column rests on.
+def test_a_desk_that_broke_is_not_counted_as_a_desk_that_said_no():
+    """The distinction the whole column rests on, and the only one left.
 
-    ``compute_backend_error`` is a broken desk and it stops the run. Counting
-    it here would put a harness defect in a column about tool policy, which is
-    the confusion this module was written to prevent.
+    Both kinds stop the run, so the column cannot be about which of them does.
+    What it is about is which kind it was: ``compute_backend_error`` is a
+    harness defect and ``capability_unavailable`` is a tool policy, and the
+    conversation loop files both under ``tool_desk_broke``. Counting them
+    together would report a profile that grants nothing as a harness falling
+    over thirty times.
     """
     assert ends_the_run("compute_backend_error") is True
-    assert refusals_handed_back_in([_turn(1, ok=False, error="compute_backend_error")]) == ()
+    assert refusals_the_desk_gave([_turn(1, ok=False, error="compute_backend_error")]) == ()
 
 
 @pytest.mark.parametrize(
@@ -109,11 +125,11 @@ def test_a_turn_that_ended_the_run_is_not_a_handed_back_refusal():
     ["tool_budget_exhausted", "task_wall_time_exhausted", "compute_start_failed"],
 )
 def test_no_ending_reason_is_ever_counted_as_a_refusal(ending):
-    assert refusals_handed_back_in([_turn(1, ok=False, error=ending)]) == ()
+    assert refusals_the_desk_gave([_turn(1, ok=False, error=ending)]) == ()
 
 
 def test_a_successful_turn_is_not_a_refusal():
-    assert refusals_handed_back_in([_turn(1, ok=True), _turn(2, ok=True)]) == ()
+    assert refusals_the_desk_gave([_turn(1, ok=True), _turn(2, ok=True)]) == ()
 
 
 def test_a_failed_turn_with_no_reason_is_not_invented_into_one():
@@ -122,16 +138,16 @@ def test_a_failed_turn_with_no_reason_is_not_invented_into_one():
     Counting it would manufacture evidence for the hypothesis under test, which
     is the direction this run must not be wrong in.
     """
-    assert refusals_handed_back_in([_turn(1, ok=False, error=None)]) == ()
-    assert refusals_handed_back_in([_turn(1, ok=False, error="")]) == ()
+    assert refusals_the_desk_gave([_turn(1, ok=False, error=None)]) == ()
+    assert refusals_the_desk_gave([_turn(1, ok=False, error="")]) == ()
 
 
 def test_turns_are_read_as_records_or_as_the_dicts_they_serialise_to():
     """The conversation is kept beside the run and arrives in either shape."""
     as_records = [_turn(1, ok=False, error=REFUSED)]
     as_dicts = [record.as_dict() for record in as_records]
-    assert refusals_handed_back_in(as_dicts) == refusals_handed_back_in(as_records)
-    assert refusals_handed_back_in(as_dicts) == (REFUSED,)
+    assert refusals_the_desk_gave(as_dicts) == refusals_the_desk_gave(as_records)
+    assert refusals_the_desk_gave(as_dicts) == (REFUSED,)
 
 
 def test_a_task_with_no_turns_has_no_refusals_and_is_not_an_error():
@@ -260,10 +276,14 @@ def test_the_ceiling_keeps_its_own_name_rather_than_the_generic_ending():
 
 
 def test_a_task_that_was_refused_and_finished_anyway_is_a_success():
-    """The behaviour stage one is for. Four closed doors and a deliverable.
+    """Four closed doors and a deliverable -- the behaviour stage one was for.
 
-    If this counted as a failure the column would be measuring the tool desk's
-    policy rather than the model's response to it.
+    **No run can do this.** The first refusal ends the task, so a record with a
+    refusal *and* an accepted ``finalize`` does not exist; see this file's
+    docstring. Kept as the specification: if the trace schema is ever allowed
+    to carry a call after a not-ok one, this is what the column must report,
+    and a counter that called it a failure would be measuring the desk's policy
+    rather than the model's response to it.
     """
     outcome = read_outcome(
         "worked_around_it",
