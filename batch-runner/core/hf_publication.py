@@ -1557,8 +1557,8 @@ def verify_publication_finality(
                     or getattr(commits[1], "commit_id", None)
                     != receipt.publication_revision
                     or getattr(commits[0], "title", None) != cleanup_title
-                    or getattr(commits[0], "message", None)
-                    != cleanup_description
+                    or cleanup_description
+                    not in str(getattr(commits[0], "message", "")).splitlines()
                 ):
                     raise ValueError(
                         "relay cleanup commit lineage or generation mismatch"

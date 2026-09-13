@@ -167,11 +167,15 @@ test('no published grade republishes an amount it never measured', async () => {
     }
   }
 
-  // Every one of the eighteen blocks records tokens, so on this corpus there
+  // Every one of the nineteen blocks records tokens, so on this corpus there
   // is no row the exemption in test 2 could apply to. If a future run really
   // does spend nothing, it will fail here and the fix is to say so in the
   // assertion — not to relax the rule.
-  assert.equal(withABlock, 18, 'the corpus moved; recount before trusting the rest');
+  //
+  // Eighteen until exp035's merged grade landed on `main`; that file was read
+  // and it carries tokens like the rest, so the recount is the whole change
+  // and `offenders` — the assertion this test exists for — never moved.
+  assert.equal(withABlock, 19, 'the corpus moved; recount before trusting the rest');
   assert.deepEqual(offenders, [], 'a published row still carries an amount beside real tokens');
 });
 

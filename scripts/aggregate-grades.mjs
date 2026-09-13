@@ -736,12 +736,13 @@ function scoreExclusionLift(raw) {
   const fullDenominator = mean(full);
 
   // The producer learned to write this run-level figure in #362 (77ec989).
-  // None of the nineteen files the aggregator reads carries it; one grade file
-  // further down `data/grades` already does, so this is a payload that exists
-  // rather than one that might. It is recomputed from the same items by the
-  // same rule, so the two should agree to rounding. Reported three-valued
-  // rather than silently preferring one of them: `null` means the payload made
-  // no claim, and is not the same statement as `true`.
+  // One of the twenty files the aggregator reads now carries it — exp035's
+  // merged grade, whose claim is recomputed here and agrees; before that one
+  // landed, none did and the payload that already had it sat further down
+  // `data/grades`. It is recomputed from the same items by the same rule, so
+  // the two should agree to rounding. Reported three-valued rather than
+  // silently preferring one of them: `null` means the payload made no claim,
+  // and is not the same statement as `true`.
   const claimed = raw?.summary?.score_exclusions?.avg_score_pct_full_denominator;
   const payloadAgrees = Number.isFinite(claimed)
     ? Math.abs(claimed - fullDenominator) <= HEADLINE_ROW_TOLERANCE_PCT
@@ -790,9 +791,9 @@ const ROUTE_NAMES = ['audio', 'formatting', 'mixed', 'text', 'visual'];
  * disagree about which items the average is made of.
  *
  * **A route absent from a run that recorded routing is a measured zero. A route
- * absent from a run that recorded none is not.** Of the nineteen files read
- * here, eighteen are item-level and get a composition — seven recorded a route
- * and eleven carry `routing_modality: null` on every item; the nineteenth
+ * absent from a run that recorded none is not.** Of the twenty files read
+ * here, nineteen are item-level and get a composition — eight recorded a route
+ * and eleven carry `routing_modality: null` on every item; the twentieth
  * carries no rubric items at all and gets no composition. Zero-filling those
  * eleven into `audio: 0` would turn "never asked" into "asked and found none" —
  * the one reading this exists to prevent. So `recorded` says which of the two
@@ -809,9 +810,10 @@ const ROUTE_NAMES = ['audio', 'formatting', 'mixed', 'text', 'visual'];
  * maps stay comparable with the producer's. A `mixed` item is counted once,
  * under `mixed`, by both sides — but its `child_grades` can name a route of
  * their own, so an audio child inside a mixed item is audio-decided weight that
- * `audio` does not cover. Across all nineteen files today that count is 0: the
- * 23 mixed items on the board have 72 children between them, every one of them
- * `formatting` or `visual`. It is computed anyway, because a silent 0 that
+ * `audio` does not cover. Across all twenty files today that count is 0: the
+ * 56 mixed items on the board have 175 children between them, and they are
+ * `visual` 84, `formatting` 53 and `text` 38 — no audio child anywhere. It is
+ * computed anyway, because a silent 0 that
  * nobody measured and a measured 0 are the distinction this whole field is
  * about, and the day an audio child appears the card should say so rather than
  * quietly under-report.
@@ -899,8 +901,9 @@ function routeComposition(raw) {
 
   // Three-valued against the payload's own claim, for the reason
   // `scoreExclusionLift` gives: `null` means the payload made no claim, and
-  // that is not the same statement as `true`. No file read here carries
-  // `summary.routing` today; one written after #396 will.
+  // that is not the same statement as `true`. One of the twenty files read
+  // here now carries `summary.routing` — exp035's merged grade, the first
+  // written after #396 — and its claim is recomputed here and agrees.
   const claimed = raw?.summary?.routing;
   if (claimed && typeof claimed === 'object' && !Array.isArray(claimed)) {
     composition.payload_agrees =

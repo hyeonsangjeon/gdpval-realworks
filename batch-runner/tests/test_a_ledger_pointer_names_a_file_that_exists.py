@@ -186,15 +186,24 @@ def test_a_published_pointer_is_a_path_that_resolves():
 
 
 @pytest.mark.skipif(not GRADES_DIR.is_dir(), reason="no grades corpus in this checkout")
-def test_the_sidecar_naming_scheme_is_past_NAME_MAX_for_five_grades():
+def test_the_sidecar_naming_scheme_is_past_NAME_MAX_for_six_grades():
     """A separate defect, pinned rather than fixed, so it cannot grow quietly.
 
     step8 derives its ledger from the grade file: ``out_path.stem`` plus
     ``.cost_ledger.sqlite3``, twenty characters. ``NAME_MAX`` is 255, so any
     grade filename over 240 bytes has a sidecar that cannot be created --
-    ``ENAMETOOLONG``, verified on this filesystem, not assumed. Five files on
-    disk are already past it, the longest needing 269, and all five carry no
+    ``ENAMETOOLONG``, verified on this filesystem, not assumed. Six files on
+    disk are already past it, the longest needing 269, and all six carry no
     ledger pointer.
+
+    The sixth arrived the way this test said it would: exp035's merged grade
+    landed at 259 bytes, and the count moved because a new run landed, not
+    because the scheme did. It is also the first one whose ledger survived the
+    cliff anyway -- its shards export ``.cost_ledger.jsonl`` beside each
+    ``shard-NNN-of-009.json``, short names inside a 239-byte directory, so the
+    evidence exists even though the merged sqlite3 sibling cannot be created.
+    That is worth recording precisely because it makes the defect easier to
+    keep ignoring.
 
     Whether the missing pointer is *caused* by the cliff is not established
     here and is not claimed. Fixing it means changing how these files are
@@ -209,8 +218,8 @@ def test_the_sidecar_naming_scheme_is_past_NAME_MAX_for_five_grades():
         if len((grade.stem + suffix).encode()) > _MAX_LEDGER_NAME
     ]
 
-    assert len(over) == 5, (
-        f"{len(over)} grade files now have un-creatable ledger sidecars, not 5; "
+    assert len(over) == 6, (
+        f"{len(over)} grade files now have un-creatable ledger sidecars, not 6; "
         "the naming scheme moved, or a new run landed past NAME_MAX"
     )
     for grade in over:
