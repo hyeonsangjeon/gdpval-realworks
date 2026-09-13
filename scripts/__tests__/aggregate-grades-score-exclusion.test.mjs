@@ -527,16 +527,17 @@ test('a schema the projection has never validated gets no run-level lift either'
   assert.ok(!record.summary.score_exclusion_lift);
 });
 
-test('twelve of the nineteen published files owe part of their headline to unread rubric', async () => {
-  // Twelve known positives against seven known negatives, on the real data.
+test('thirteen of the twenty published files owe part of their headline to unread rubric', async () => {
+  // Thirteen known positives against seven known negatives, on the real data.
   // An equality rather than a floor: a corpus that changes this should make
   // somebody look at it, the same way the headline-support corpus check does.
   const files = (await readdir(GRADES_DIR))
     .filter((name) => name.endsWith('.json'))
     .sort();
-  assert.ok(files.length >= 19, `expected the published corpus, found ${files.length}`);
+  assert.ok(files.length >= 20, `expected the published corpus, found ${files.length}`);
 
   let withLift = 0;
+  let claiming = 0;
   let worst = 0;
   for (const name of files) {
     const raw = JSON.parse(await readFile(join(GRADES_DIR, name), 'utf8'));
@@ -559,13 +560,28 @@ test('twelve of the nineteen published files owe part of their headline to unrea
     assert.equal(got.avg_score_pct_from_rows,
       record.summary.headline_support.avg_score_pct_from_rows,
       `${name}: the run-level readers disagree about which rows they read`);
-    assert.equal(got.payload_agrees, null,
-      `${name}: a published payload started claiming its own figure`);
+    // Three-valued, and only one of the three is a defect. `null` is a payload
+    // that made no claim; `true` is one that made a claim and the aggregator
+    // recomputed the same figure from the same items. exp035's merged grade is
+    // the first file here to carry
+    // `summary.score_exclusions.avg_score_pct_full_denominator` — the arrival
+    // the aggregator's own comment at that derivation said to expect — and it
+    // agrees. What must never appear is `false`: a published figure and a
+    // recomputed one that are not the same number.
+    assert.notEqual(got.payload_agrees, false,
+      `${name}: a published payload claims a figure the rows do not support`);
+    if (got.payload_agrees !== null) claiming += 1;
 
     worst = Math.max(worst, got.lift_pct);
   }
 
-  assert.equal(withLift, 12, `expected twelve affected files, found ${withLift}`);
+  assert.equal(withLift, 13, `expected thirteen affected files, found ${withLift}`);
+  // The equality above stopped being able to see the `null` → `true` move once
+  // `false` became the only failing value, so count the claimants separately.
+  // One today, exp035's merged grade. This number rising is not a defect — it
+  // is the producer's #362 figure reaching more runs — but it should still be
+  // somebody's decision to write down rather than something that slid past.
+  assert.equal(claiming, 1, `expected one payload to carry its own figure, found ${claiming}`);
   // exp998's three-task pro smoke: one task of three, 3.53 points of headline.
   // The 215-220 task runs move 0.14 to 0.53.
   assert.ok(worst >= 3.5, `the widest published run-level lift fell to ${worst}`);
