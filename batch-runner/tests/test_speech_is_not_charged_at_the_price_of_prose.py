@@ -915,25 +915,78 @@ def _committed_audio_ledgers():
 
 
 def test_the_committed_speech_rows_predate_the_split_and_say_so():
-    """176 rows, no split, no price. That is the state being fixed, on record.
+    """165 rows, no split, no price. That is the state being fixed, on record.
 
     They were written before the counts were captured, so the breakdown is not
     in them and cannot be put in them — a share recovered by multiplying by
     today's ratio would be a number this repository made up about calls it
     already paid for. They stay as they are: usage recorded, price refused.
+
+    The count is asserted rather than described. It was written as 176 when
+    this landed (#444) and nobody noticed it stop being true, because every
+    assertion here is per-row.
     """
     audio_rows = [
         row
         for _, rows in _committed_audio_ledgers()
         for row in rows
         if "audio" in str(row.get("resolved_model") or "").lower()
+        and "audio_input_tokens" not in row
     ]
-    assert audio_rows, "no committed speech rows found to check"
+    assert len(audio_rows) == 165, (
+        f"{len(audio_rows)} committed speech rows now predate the split, not "
+        "165; either a pre-split ledger was removed or one was rewritten"
+    )
 
     for row in audio_rows:
         assert "audio_input_tokens" not in row
         assert "audio_output_tokens" not in row
         assert row.get("model_cost_usd") is None
+        if row.get("state") == "settled":
+            reasons = row["missing_reasons"]
+            if isinstance(reasons, str):
+                reasons = json.loads(reasons)
+            assert REASON_PRICE_MISSING in reasons
+
+
+def test_the_speech_rows_written_since_the_split_carry_the_counts():
+    """The other half, which exists now: rows written after the split.
+
+    exp035 is the first published run whose speech rows postdate the columns,
+    and they carry them — 38 rows across two shard ledgers, 11,399 audio input
+    tokens. So the gap in the sentence above is closed at the ledger: the
+    counts were captured.
+
+    They are still unpriced, and that is the correct outcome rather than a
+    second defect. ``gpt-audio-1.5`` is deliberately absent from the price
+    table, so ``model_cost_usd`` stays ``None`` and ``price_missing`` stays in
+    the reasons. Known usage, refused price, is exactly the state this file
+    was written to protect.
+
+    What the ledger holding these counts does *not* establish is that anything
+    downstream can express them. The ``cost-receipt-v1`` usage block has four
+    fields and none of them is audio, so these tokens have no route to a
+    receipt; the two shards carrying them are the two that still fail
+    ``usage_containment``. That gap is asserted where it is visible, in
+    ``test_the_nine_exp035_shards_verify_as_published.py``, not here.
+    """
+    post_split = [
+        row
+        for _, rows in _committed_audio_ledgers()
+        for row in rows
+        if "audio" in str(row.get("resolved_model") or "").lower()
+        and "audio_input_tokens" in row
+    ]
+    assert len(post_split) == 38, (
+        f"{len(post_split)} committed speech rows now postdate the split, not 38"
+    )
+    assert sum(row["audio_input_tokens"] for row in post_split) == 11399
+
+    for row in post_split:
+        assert row.get("model_cost_usd") is None, (
+            "a speech row acquired a price; gpt-audio-1.5 is unpriced on "
+            "purpose and a number here would be prose rates charged to speech"
+        )
         if row.get("state") == "settled":
             reasons = row["missing_reasons"]
             if isinstance(reasons, str):

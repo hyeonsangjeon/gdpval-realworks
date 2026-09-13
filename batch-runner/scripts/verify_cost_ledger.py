@@ -563,12 +563,57 @@ def check_partial_cause(receipt: dict[str, Any], settled: list[dict[str, Any]]) 
     )
 
 
-def check_task_coverage(grade: dict[str, Any], settled: list[dict[str, Any]]) -> Finding:
-    """What every task cost -- including the ones that failed.
+def _declared_consumption(item: dict[str, Any]) -> dict[str, Any] | None:
+    """What a task row says it consumed, or ``None`` if it does not say.
 
-    A task that errored still sent calls and still got billed for them. A
-    receipt that only accounts for successes understates the run, so the
-    per-task split is reported for both.
+    ``step8_grade.py`` writes the same number twice: once as call counters on
+    the task, once as ``model_calls`` on that task's own receipt. Both are read
+    here, because a disagreement between the two is itself a finding, and
+    because an older payload may carry only one of them.
+
+    ``render_call_count`` is deliberately left out. A render is not a model
+    call and never reaches the ledger, so adding it would make every task that
+    rendered anything look over-billed.
+    """
+    counters = ("judge_call_count", "perception_call_count")
+    counted = (
+        sum(int(item.get(name) or 0) for name in counters)
+        if any(name in item for name in counters)
+        else None
+    )
+    receipt = item.get("grading_cost")
+    receipt = receipt if isinstance(receipt, dict) else {}
+    claimed = (
+        int(receipt.get("model_calls") or 0) if "model_calls" in receipt else None
+    )
+    if counted is None and claimed is None:
+        return None
+    return {
+        "calls": counted if counted is not None else claimed,
+        "counted_calls": counted,
+        "receipt_calls": claimed,
+        "cost_usd": _dec(
+            _first_present(receipt, "estimated_cost_usd", "known_cost_usd")
+        ),
+    }
+
+
+def check_task_coverage(grade: dict[str, Any], settled: list[dict[str, Any]]) -> Finding:
+    """What every task cost -- including the ones that never reached the judge.
+
+    A task that errored *during* grading still sent calls and still got billed
+    for them, so a receipt that only accounts for successes understates the
+    run. But a task can also stop before the first judge call -- nothing was
+    produced to grade, or nothing could be chosen from what was -- and then
+    zero calls really did cost zero dollars.
+
+    Being named in the payload does not tell those two apart. The payload's own
+    figures do: every task states its call counts, restates them on a per-task
+    receipt, and leaves rows in the ledger. This reconciles all three, task by
+    task. A disagreement in either direction is a finding -- a task claiming
+    calls the ledger cannot show, and a task whose calls sit in the ledger
+    behind a zero it declared for itself. A task that declares nothing at all
+    still falls under the older rule below: no rows means graded for free.
     """
     per_task: dict[str, dict[str, Any]] = {}
     for row in settled:
@@ -578,7 +623,9 @@ def check_task_coverage(grade: dict[str, Any], settled: list[dict[str, Any]]) ->
         bucket["cost"] += _dec(row.get("model_cost_usd"))
 
     results = grade.get("results") or grade.get("tasks") or []
-    graded_ids, failed_ids = set(), set()
+    failed_ids, undeclared = set(), set()
+    disputed: list[dict[str, Any]] = []
+    never_graded: list[str] = []
     if isinstance(results, list):
         for item in results:
             if not isinstance(item, dict):
@@ -586,19 +633,65 @@ def check_task_coverage(grade: dict[str, Any], settled: list[dict[str, Any]]) ->
             task_id = str(item.get("task_id") or item.get("id") or "")
             if not task_id:
                 continue
-            graded_ids.add(task_id)
             status = str(item.get("status") or item.get("grade_status") or "").lower()
             if item.get("error") or status in {"error", "failed", "failure"}:
                 failed_ids.add(task_id)
 
-    uncosted = sorted(graded_ids - set(per_task))
-    if uncosted:
+            declared = _declared_consumption(item)
+            billed = int(per_task.get(task_id, {}).get("calls", 0))
+            if declared is None:
+                undeclared.add(task_id)
+                continue
+            counted, claimed = declared["counted_calls"], declared["receipt_calls"]
+            if counted is not None and claimed is not None and counted != claimed:
+                disputed.append(
+                    {
+                        "task_id": task_id,
+                        "counted_calls": counted,
+                        "receipt_calls": claimed,
+                        "ledger_calls": billed,
+                        "why": "the task and its own receipt disagree",
+                    }
+                )
+            elif declared["calls"] != billed:
+                disputed.append(
+                    {
+                        "task_id": task_id,
+                        "declared_calls": declared["calls"],
+                        "ledger_calls": billed,
+                        "why": "the ledger does not hold the calls the task declares",
+                    }
+                )
+            elif declared["calls"] == 0 and declared["cost_usd"] != 0:
+                disputed.append(
+                    {
+                        "task_id": task_id,
+                        "declared_calls": 0,
+                        "declared_cost_usd": str(declared["cost_usd"]),
+                        "why": "a task that made no call cannot have been billed",
+                    }
+                )
+            elif declared["calls"] == 0:
+                never_graded.append(task_id)
+
+    uncosted = sorted(undeclared - set(per_task))
+    if disputed or uncosted:
+        parts = []
+        if disputed:
+            parts.append(
+                f"{len(disputed)} tasks do not agree with the ledger about what "
+                "they consumed"
+            )
+        if uncosted:
+            parts.append(
+                f"{len(uncosted)} graded tasks have no call in the ledger, so they "
+                "appear to have been graded for free"
+            )
         return Finding(
             "task_coverage",
             False,
-            f"{len(uncosted)} graded tasks have no call in the ledger, so they "
-            "appear to have been graded for free",
-            {"tasks_without_cost": uncosted[:20]},
+            "; ".join(parts),
+            {"disputed": disputed[:20], "tasks_without_cost": uncosted[:20]},
         )
 
     failed_cost = {
@@ -606,15 +699,21 @@ def check_task_coverage(grade: dict[str, Any], settled: list[dict[str, Any]]) ->
         for task_id in sorted(failed_ids)
         if task_id in per_task
     }
+    free = (
+        f"; {len(never_graded)} never reached the judge and cost nothing"
+        if never_graded
+        else ""
+    )
     return Finding(
         "task_coverage",
         True,
         f"{len(per_task)} tasks carry cost; {len(failed_ids)} failed tasks were "
         f"billed {sum((_dec(v) for v in failed_cost.values()), Decimal(0))} USD "
-        "and are accounted for, not treated as free",
+        f"and are accounted for, not treated as free{free}",
         {
             "per_task": {k: {"calls": v["calls"], "cost_usd": str(v["cost"])} for k, v in sorted(per_task.items())},
             "failed_task_cost_usd": failed_cost,
+            "tasks_never_graded": sorted(never_graded),
         },
     )
 

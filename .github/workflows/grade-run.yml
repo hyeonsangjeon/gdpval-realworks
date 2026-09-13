@@ -1911,6 +1911,32 @@ jobs:
           cd batch-runner
           pip install -r requirements.txt
 
+      # The verification runs the real `npm run aggregate`, so this job needs
+      # the same toolchain the dashboard build uses -- pinned to the version in
+      # deploy.yml, because the point is to find out whether *that* build would
+      # accept this commit. Without it `npm run aggregate` dies on the first of
+      # its eight scripts:
+      #
+      #   Cannot find package 'yaml' imported from scripts/aggregate-tests.mjs
+      #
+      # which never reaches aggregate-grades.mjs at all. That reports as a
+      # rejected tree and says nothing about what was published. All nine
+      # exp035 shards failed that way, on the first run that ever reached here.
+      #
+      # That error is in the uploaded `published-verification-*.json`, under
+      # the aggregation finding's `output_tail`, and *only* there --
+      # `gh run view --log` for those runs does not contain the string. A
+      # reader checking this comment against the logs will find nothing and
+      # conclude it is wrong.
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dashboard dependencies
+        run: npm ci
+
       # No continue-on-error, and no flag that turns a check off. A failure
       # here fails the workflow with the commit and the check named in the job
       # summary. It does not revert, rewrite or delete what was published: the
