@@ -42,7 +42,7 @@ import yaml
 from core.agentic_v2_call_agreement import describe, the_stop_rule
 from core.agentic_v2_fixture_backend import AgenticV2FixtureBackend
 from core.agentic_v2_instructions import file_digest, resolve_instructions
-from core.agentic_v2_manifest_binding import STAGE_SIZES
+from core.agentic_v2_manifest_binding import STAGE_FIVE, STAGE_SIZES, STAGE_THIRTY
 from core.agentic_v2_model_voice import REPLAY_FORMATS
 from core.agentic_v2_reporting_rules import THE_EN_CHAIN, THE_KO_CHAIN
 from core.agentic_v2_tool_availability import PLACEHOLDER
@@ -249,20 +249,44 @@ def test_the_record_answers_every_heading_before_the_run(corrected):
     assert missing == [], f"the design record has nothing under {missing}"
 
 
-def test_repeats_is_recorded_as_undecided_rather_than_invented(corrected):
-    """Because the spread of one condition has never been measured here.
+def test_repeats_is_a_decision_that_states_what_it_does_not_buy(corrected):
+    """``experiment-design`` §4 asks for the spread before the comparison.
 
-    ``experiment-design`` §4 asks for the spread before the comparison, and the
-    honest answer is that trial_30 ran once. A number here would be a figure
-    with nothing behind it, so the slot carries the word and the note carries
-    the consequence: a single run cannot support a causal claim.
+    This field used to read ``undecided``, on the reasoning that trial_30 ran
+    once and any number would have nothing behind it. Half of that still
+    holds and is why this test exists in its present form: no number here is
+    justified by a power calculation, and the note has to say so in the same
+    breath as the number, or the number will be read as one that was.
+
+    The other half was a mistake. Leaving it open meant the design had no
+    stated end and nobody could say in advance what would be spent, which is
+    not caution. So the slot carries a concrete count, and the guard moves
+    from "refuse a number" to "refuse an unqualified number".
     """
     record = corrected["experiment_record"]
-    assert str(record["repeats"]).strip().lower() == "undecided"
-    assert "causal" in record["repeats_note"]
+    repeats = record["repeats"]
+
+    assert isinstance(repeats, int), "an operational choice, not a word"
+    assert repeats >= 2, "one run has no spread to estimate"
+
+    note = record["repeats_note"].lower()
+    assert "not statistical power" in note or "not statistical power" in note.replace(
+        ",", ""
+    )
+    for disclaimed in ("confidence interval", "significance"):
+        assert disclaimed in note, (
+            f"the note must say the three repeats do not buy a {disclaimed}"
+        )
 
 
 def test_the_run_list_is_finite_and_says_which_entries_spend(corrected):
+    """The list is the only thing bounding how many times the gate is paid.
+
+    The per-stage ceiling has no memory: it cannot tell a first trial_30 from
+    a third, and each run passes it on its own. So a list that grew by one
+    entry unnoticed would spend one more approval unnoticed, and this test is
+    what makes that a failure rather than a surprise.
+    """
     record = corrected["experiment_record"]
     runs = record["run_list"]
 
@@ -271,12 +295,44 @@ def test_the_run_list_is_finite_and_says_which_entries_spend(corrected):
     assert len({run["id"] for run in runs}) == len(runs)
 
     paid = [run for run in runs if run["paid"]]
-    assert len(paid) == 1, "more than one paid run is more than one approval"
     assert [run["id"] for run in runs if not run["paid"]] == ["rehearsal"]
+
+    # One compatibility run and exactly `repeats` runs of the cohort. Spelled
+    # out rather than counted loosely, so a fourth repeat has to be written
+    # here as well as there.
+    repeats = record["repeats"]
+    assert len(paid) == 1 + repeats, (
+        "the paid entries are one compatibility run plus the declared repeats; "
+        "any other count is an approval nobody wrote down"
+    )
+
+    at_stage = [run["stage"] for run in paid]
+    assert at_stage.count(STAGE_FIVE) == 1
+    assert at_stage.count(STAGE_THIRTY) == repeats
 
     for run in paid:
         assert run["stage"] in STAGE_SIZES
         assert run["stage"] in corrected["stages"]
+
+    # Every repeat after the first is conditional, and says on what.
+    cohort_runs = [run for run in paid if run["stage"] == STAGE_THIRTY]
+    for run in cohort_runs:
+        assert run.get("requires"), f"{run['id']} spends without naming its gate"
+
+
+def test_the_repeats_are_gated_on_compatibility_ledger_and_source(corrected):
+    """Three gates, checked before each dispatch rather than argued after.
+
+    Named here because a gate that exists only in a sentence somewhere gets
+    skipped by whoever is in a hurry.
+    """
+    gates = corrected["experiment_record"]["run_list_gates"].lower()
+    assert "compatibility" in gates
+    assert "ledger" in gates and "receipt" in gates
+    assert "source integrity" in gates and "sha256" in gates
+    assert "model_calls_not_counted" in gates, (
+        "the ledger gate must be the invariant the stop rules use, not equality"
+    )
 
 
 def test_the_confounds_include_the_one_that_is_easiest_to_forget(corrected):

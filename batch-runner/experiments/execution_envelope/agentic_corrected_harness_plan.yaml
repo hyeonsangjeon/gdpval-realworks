@@ -52,10 +52,28 @@
 #
 # exec_run stays shut. No guest boots. This runs on the fixture backend, so it
 # exercises the loop and not the isolation, and no result from it is evidence
-# about the isolation. The microVM backend is not reachable from here: the host
-# it would boot on has none of the twelve roles it needs
-# (tasks/0822_saturday/HOST_PERMISSIONS.md), and that is unchanged by anything
-# in this file.
+# about the isolation. The microVM backend is not reachable from here, and the
+# shape of the block is worth stating exactly rather than as a slogan, because
+# "twelve roles" — which an earlier draft of this comment said — is wrong in
+# both halves. Run 34684908054 (2026-09-12) measured twelve *actions*, not
+# roles, and all twelve came back false. Ten of them block. The other two are
+# conditional and never decide the verdict: publicIPAddresses/write only
+# matters if attachPublicIp is set and the template defaults it false, and
+# resourceGroups/write is at subscription scope and only matters if the group
+# does not already exist. The principal holds two role assignments, both
+# Cognitive Services OpenAI User at the Foundry account scope, which is
+# data-plane only. The minimal change is two roles — Virtual Machine
+# Contributor and Network Contributor — at resource-group scope, with the
+# group created by the owner first, which is the step that removes the one
+# subscription-scope item. Not subscription scope, not Owner, and no
+# Microsoft.Authorization write. Quota is not the constraint: Standard_D8as_v5
+# in eastus2 shows 100 limit, 0 in use, and 8 are needed. Three survey runs
+# agree (34549220652, 34683287478, 34684908054). One thing nobody has
+# measured: that a machine in this subscription boots a guest at all. The
+# order is roles, then host, then a boot test, then the backend — so the roles
+# are gate one of four and not the whole distance.
+# (tasks/0822_saturday/HOST_PERMISSIONS.md.) None of this is changed by
+# anything in this file, and none of it is requested here.
 #
 # Read this file with:
 #     cd batch-runner
@@ -518,13 +536,28 @@ experiment_record:
 
   falsification: >-
     The hypothesis is about the harness, not the model: that the two defects
-    end tasks. It is falsified if the corrected run ends roughly as many tasks
-    on tool refusals and text-only endings as trial_30 did — the two
-    stop_reason values tool_desk_broke and model_stopped_without_finishing,
-    counted over all 30 tasks. That result is publishable and it is useful: it
+    end tasks. Three failures are counted separately over all 30 tasks, and
+    only two of them are endings. (a) Turn exhaustion — stop_reason
+    tool_call_limit_reached, which the desk raises as tool_budget_exhausted
+    when the model has spent its tool_calls_per_attempt. (b) Text-only
+    termination — stop_reason model_stopped_without_finishing, the model
+    talking until it has nothing left to say without ever calling finalize.
+    (c) Tool refusal, which is NOT a stop_reason and must not be counted as
+    one: core.agentic_v2_conversation._ENDS_THE_RUN deliberately omits
+    capability_unavailable, so a refused call is handed back and the run
+    continues. A refusal spends a turn and the task then ends as (a) or (b).
+    It is therefore counted per task beside the ending, by
+    core.agentic_v2_outcome.refusals_handed_back_in, and the reported figure
+    is the cross-tab endings_after_a_refusal rather than a third ending count.
+    An earlier draft of this line named tool_desk_broke as the refusal figure.
+    That was wrong and is recorded here rather than quietly replaced:
+    tool_desk_broke is the harness failing, not the model being told no, and
+    counting it would have put a defect of ours in the column we are using to
+    judge the model. The hypothesis is falsified if (a) and (b) together are
+    roughly what trial_30 had. That result is publishable and it is useful: it
     says the endings were not caused by what the design said they were caused
     by, and the 9 imitation cases were a correlation. No threshold is set for
-    calling it improved, because there is no basis for one — see repeats.
+    calling it improved, because a threshold needs a spread — see repeats.
 
   moving: >-
     Two axes at once. The derived tool-availability paragraph, and
@@ -565,7 +598,12 @@ experiment_record:
     counting it as work done is the specific error this line exists to stop.
     The reading logic is exercised against hand-made defective records before
     any model is called —
-    tests/test_reading_a_v2_outcome_is_three_questions.py.
+    tests/test_reading_a_v2_outcome_is_three_questions.py. The refusal column
+    of falsification (c) is validated the same way, on built pairs that are
+    identical in every pre-existing column and differ only in the new one —
+    tests/test_a_refusal_is_a_cause_and_the_ceiling_is_the_ending.py, which
+    also fixes that a blank error_type is never counted as a refusal, because
+    inventing one would manufacture evidence for the hypothesis under test.
 
   units: >-
     Task counts out of 30 for outcomes, attempt counts by stop_reason for
@@ -584,28 +622,80 @@ experiment_record:
     tasks, which is the direction that matters here: nothing in it was tuned to
     these thirty.
 
-  repeats: undecided
+  repeats: 3
   repeats_note: >-
-    How many times one condition must be run to know its spread has not been
-    measured, and no honest number can be put here yet. trial_30 ran once.
-    Writing "3" would be a figure with nothing behind it. The consequence is
-    stated rather than hidden: a single corrected run cannot support a causal
-    claim, and the report will say the difference is a difference between two
-    runs. Measuring the spread is its own cohort with its own approval and is
-    not part of this run list.
+    Three runs of the identical 30-task condition, and what that buys is named
+    precisely: an initial estimate of the spread, not statistical power. Three
+    points give a range and a rough sense of whether run-to-run movement is
+    small or large compared with the difference from trial_30. They do not
+    support a confidence interval, a significance test, or a claim that any
+    observed difference is outside noise, and no such claim will be made from
+    them. An earlier draft of this field said "undecided" on the grounds that
+    no honest number existed. That was half right — no number is justified by
+    a power calculation — but leaving it blank left the operational choice
+    open indefinitely, which is its own failure: it meant nobody could say in
+    advance how much was going to be spent or when the design stopped. Three
+    is a decision, recorded before the first run, with its limits stated. If
+    the three spread wider than the gap to trial_30, the honest report is that
+    this design cannot resolve the difference, and that is a result. The
+    unanswered question stays unanswered and is written down rather than
+    assumed away: nobody has measured the run-to-run spread of this harness on
+    this deployment, and three runs will estimate it, not establish it.
 
   run_list:
     - id: "rehearsal"
       what: "the whole cohort with no model, to prove the plan resolves"
       paid: false
+    - id: "compatibility_5"
+      what: >-
+        five tasks, to prove the corrected harness is technically compatible
+        with this backend and deployment — that the derived instruction
+        paragraph builds, the faithful replay is accepted by the API, the
+        ledger opens and settles, and the run record's source hashes match.
+        It is not a result about the model and no outcome figure from it is
+        reported as one.
+      paid: true
+      stage: "advance_check_5"
     - id: "corrected_baseline_1"
       what: "trial_30 under this plan"
       paid: true
       stage: "trial_30"
+      requires: "compatibility_5 passed all three gates below"
+    - id: "corrected_baseline_2"
+      what: "the identical condition again, for the spread"
+      paid: true
+      stage: "trial_30"
+      requires: "corrected_baseline_1 completed and its receipt settled"
+    - id: "corrected_baseline_3"
+      what: "the identical condition a third time"
+      paid: true
+      stage: "trial_30"
+      requires: "corrected_baseline_2 completed and its receipt settled"
+  run_list_gates: >-
+    The three repeats are conditional and the conditions are checked before
+    each dispatch, not argued afterwards. (1) Technical compatibility:
+    compatibility_5 ended with no stop_reason in the tool_desk_broke family
+    and no run-wide refusal. (2) Ledger integrity: the receipt settled, and
+    receipt.model_calls == voice rows + model_calls_not_counted held per task
+    — the same invariant as stop_rules, applied as a precondition rather than
+    as an abort. (3) Source integrity: the plan sha256 and the resolved
+    instruction sha256 in the run record match the ones printed at the start,
+    and the resolved_model is the pinned one. Any gate failing stops the list
+    there; the remedy is a new entry written here, not a retry decided while
+    a run is in flight.
   run_list_note: >-
-    Two entries, and the list is closed. Anything beyond it — a repeat, a
-    limit comparison, a shard re-run after a failure — is a new entry written
-    here before it is dispatched, not a decision made while a run is in flight.
+    Five entries, and the list is closed. Anything beyond it — a fourth
+    repeat, a limit comparison, a shard re-run after a failure — is a new
+    entry written here before it is dispatched, not a decision made while a
+    run is in flight. On what this costs: the per-stage approved maxima above
+    are unchanged and none is raised. The list spends them up to four times
+    over — once at advance_check_5 and three times at trial_30 — because the
+    gate has no memory and cannot tell a first run from a third, so this list
+    is the only thing that bounds the count. For scale, trial_30 actually
+    drew 6.131815 USD against its 200.00 ceiling, so three repeats are
+    expected to land near twenty dollars rather than near six hundred. That
+    is an expectation from one past run and not a ceiling; the ceilings are
+    the numbers above.
 
   stop_rules: >-
     The eight in core/agentic_v2_preregistration.STOP_RULES apply unchanged. In

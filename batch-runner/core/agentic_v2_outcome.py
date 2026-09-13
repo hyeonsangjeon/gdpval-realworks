@@ -28,6 +28,19 @@ the phrase it matched so a person can check, and it undercounts on purpose.
 the caller did not name. A denominator of thirty is reported three times over,
 once per question, and a task is never moved from one column into another.
 
+**A fourth column, and it is a cause rather than an ending.** Asking for a tool
+the desk will not give is not one of the three questions and is not a fourth
+ending either: a refused call is handed straight back to the model and the run
+carries on, so the task still finishes some *other* way. What it does is spend
+turns. A task that reached its tool-call ceiling having been refused seven
+times and a task that reached the same ceiling doing seven useful things share
+an ending and share nothing else, and one word cannot hold that. So refusals
+are counted per task beside the ending, never added to it --
+:attr:`Outcome.tool_refusals` and, across a cohort,
+``count_separately(...)["endings_after_a_refusal"]``, which is the cross-tab
+that actually separates tool refusal from turn exhaustion from a model that
+stopped talking.
+
 Offline. Reads a run record that already exists and the files already on disk.
 No model, no network, no cost.
 """
@@ -37,6 +50,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Optional, Sequence
 
+from core.agentic_v2_conversation import ends_the_run
 from core.artifact_verifier import verify_one
 
 #: ``finalize`` was called and the desk gave back a terminal result.
@@ -117,6 +131,16 @@ class Outcome:
     reads_like_a_refusal_notice: Optional[str]
     error_type: Optional[str]
 
+    tool_refusals: tuple[str, ...] = ()
+    """Every refusal the desk handed back to the model, in the order they came.
+
+    Kept as the ``error_type`` of each one rather than a count, because *what*
+    was refused is the finding -- thirty tasks each refused once for
+    ``capability_unavailable`` is one story about the tool desk, and thirty
+    different reasons is another. A refusal that ended the run is not in here;
+    that is the ending, and it is in :attr:`error_type`.
+    """
+
     quality: None = None
     """Not measured. See the module docstring; this is a slot, not a result."""
 
@@ -153,6 +177,24 @@ class Outcome:
             if verdict.exists and verdict.size_bytes > 0 and verdict.openable is None
         )
 
+    @property
+    def met_a_refusal(self) -> bool:
+        """Whether the desk turned this task down at least once.
+
+        Says nothing about how the task ended. A task can meet four refusals
+        and still finalise, and that is a model working around a closed tool
+        rather than a failure -- which is the behaviour stage one is for.
+        """
+        return bool(self.tool_refusals)
+
+    @property
+    def tool_refusals_by_kind(self) -> dict[str, int]:
+        """The refusals this task met, grouped by reason."""
+        counted: dict[str, int] = {}
+        for reason in self.tool_refusals:
+            counted[reason] = counted.get(reason, 0) + 1
+        return counted
+
     def as_row(self) -> dict[str, Any]:
         """Three answers side by side, none derived from another."""
         return {
@@ -163,6 +205,8 @@ class Outcome:
             "files_not_checked": len(self.files_not_checked),
             "reads_like_a_refusal_notice": self.reads_like_a_refusal_notice,
             "error_type": self.error_type,
+            "tool_refusals": len(self.tool_refusals),
+            "tool_refusals_by_kind": self.tool_refusals_by_kind,
             "quality": None,
             "quality_not_measured_because": self.quality_not_measured_because,
         }
@@ -190,19 +234,54 @@ def refusal_phrase_in(text: str) -> Optional[str]:
     return None
 
 
+def refusals_handed_back_in(turns: Sequence[Any]) -> tuple[str, ...]:
+    """The refusals the model was given back, from one task's turn records.
+
+    A turn counts here when the desk answered it with ``ok`` false and the
+    reason is one the loop does *not* end on -- see
+    :func:`core.agentic_v2_conversation.ends_the_run`. The ending itself is
+    deliberately excluded: a run stopped by ``compute_backend_error`` has a
+    broken desk, not a model that was told no, and folding the two together
+    would put a harness defect and a tool policy in the same count.
+
+    Takes anything with ``ok`` and ``error_type`` -- a
+    :class:`~core.agentic_v2_conversation.TurnRecord` or the dict it
+    serialises to -- because the conversation is kept beside the run and
+    reaches a reader in either shape.
+    """
+
+    def field(turn: Any, name: str) -> Any:
+        if isinstance(turn, Mapping):
+            return turn.get(name)
+        return getattr(turn, name, None)
+
+    refusals: list[str] = []
+    for turn in turns:
+        if field(turn, "ok"):
+            continue
+        reason = str(field(turn, "error_type") or "")
+        if reason and not ends_the_run(reason):
+            refusals.append(reason)
+    return tuple(refusals)
+
+
 def read_outcome(
     task_id: str,
     record: Mapping[str, Any],
     *,
     collected_paths: Sequence[str | Path] = (),
     collection_root: Optional[str | Path] = None,
+    turns: Sequence[Any] = (),
 ) -> Outcome:
     """Answer the three questions about one task, separately.
 
     `record` is the V2 result envelope the runner wrote. `collected_paths` are
     the files as they landed on the host -- ``Collection.submission_paths`` --
     rather than the paths ``finalize`` named, because question 2 is about what
-    is on disk and not about what was claimed.
+    is on disk and not about what was claimed. `turns` is that task's
+    conversation, which the runner keeps beside the result rather than inside
+    it; passing it adds the refusal column and leaving it out is not an error,
+    because a task that never reached a model has no turns to read.
     """
     verdicts: list[FileVerdict] = []
     for candidate in collected_paths:
@@ -225,7 +304,20 @@ def read_outcome(
             str(record.get("deliverable_text") or record.get("text") or "")
         ),
         error_type=(record.get("error") or None) if not record.get("success") else None,
+        tool_refusals=refusals_handed_back_in(turns),
     )
+
+
+def ending_label(outcome: Outcome) -> str:
+    """The one name for how a task ended, with the ceiling kept specific.
+
+    ``finalize_ended_first`` covers a turn ceiling, a wall clock and a broken
+    desk, which are three different findings, so for that case the runner's own
+    ``error_type`` is the label. The other two endings are already specific.
+    """
+    if outcome.finalize == FINALIZE_ENDED_FIRST and outcome.error_type:
+        return outcome.error_type
+    return outcome.finalize
 
 
 def count_separately(outcomes: Sequence[Outcome]) -> dict[str, Any]:
@@ -234,7 +326,22 @@ def count_separately(outcomes: Sequence[Outcome]) -> dict[str, Any]:
     ``tasks`` is the denominator for all three and is every task handed in,
     including ones that never ran. Nothing here returns a success rate: which
     of the three a rate would be about is exactly what gets lost.
+
+    ``endings_after_a_refusal`` is the cross-tab rather than a fourth tally.
+    Refusals do not end tasks, so counting them alongside endings would double
+    count; splitting each ending by whether the task met one is what tells a
+    turn ceiling spent on refused calls apart from a turn ceiling spent on work.
     """
+    endings: dict[str, dict[str, int]] = {}
+    for one in outcomes:
+        row = endings.setdefault(ending_label(one), {"with_refusals": 0, "without": 0})
+        row["with_refusals" if one.met_a_refusal else "without"] += 1
+
+    by_kind: dict[str, int] = {}
+    for one in outcomes:
+        for reason, count in one.tool_refusals_by_kind.items():
+            by_kind[reason] = by_kind.get(reason, 0) + count
+
     return {
         "tasks": len(outcomes),
         "finalize_accepted": sum(1 for one in outcomes if one.finalize_was_accepted),
@@ -250,6 +357,15 @@ def count_separately(outcomes: Sequence[Outcome]) -> dict[str, Any]:
         "files_not_checked": sum(len(one.files_not_checked) for one in outcomes),
         "read_like_a_refusal_notice": sum(
             1 for one in outcomes if one.reads_like_a_refusal_notice
+        ),
+        "tasks_that_met_a_refusal": sum(1 for one in outcomes if one.met_a_refusal),
+        "tool_refusals": sum(len(one.tool_refusals) for one in outcomes),
+        "tool_refusals_by_kind": by_kind,
+        "endings_after_a_refusal": endings,
+        "refusal_note": (
+            "a refusal is a cause and not an ending: the desk hands it back and "
+            "the task goes on. These counts are not part of the denominator and "
+            "are never added to the endings above"
         ),
         "quality_measured": 0,
         "quality_note": (

@@ -511,6 +511,25 @@ first refusal would measure nothing.
 """
 
 
+def ends_the_run(error_type: str | None) -> bool:
+    """Whether a tool failure of this kind ends the run or is handed back.
+
+    The table above is the loop's own answer to that question, and this is the
+    only way to ask it from outside. It exists because the distinction is not
+    visible afterwards: a refused turn and a fatal turn both land in
+    :class:`TurnRecord` with ``ok`` false and an ``error_type``, and a reader
+    that cannot tell them apart will either count a broken desk as model
+    behaviour or drop every handed-back refusal on the floor.
+
+    Handed-back refusals are the ones that matter for reading a run, because
+    they do not end anything. They consume turns and then the task ends some
+    *other* way — at the tool-call ceiling, or with the model talking itself
+    out. So the refusal is a cause and the ceiling is the ending, and the two
+    belong in different columns rather than in one word.
+    """
+    return str(error_type or "") in _ENDS_THE_RUN
+
+
 # ---------------------------------------------------------------------------
 # What is kept afterwards
 # ---------------------------------------------------------------------------
