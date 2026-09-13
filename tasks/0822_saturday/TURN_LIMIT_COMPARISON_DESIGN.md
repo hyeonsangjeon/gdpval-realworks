@@ -50,12 +50,51 @@ ends a task on its first tool result that is not `ok: true`. Changing that is
 not a setting — it reaches the trace schema (see §4) — but if it is ever
 changed it must not be changed in the same run as the limit.
 
-Everything else is held at trial_30's values: same 30 tasks, same model, same
-`max_output_tokens_per_turn: 8192`, same `retry_max_attempts`, same
-`max_result_bytes`, same instructions — **and the same replay format**. That
-last one is not a setting and does not appear in any config file, which is
-exactly why it is written down here: `_input_for` decides what the model is
-shown of its own history, changing it changes the input at every turn, and a
+Everything else is held fixed across the two legs — but **not at trial_30's
+values, which is what this paragraph used to say.** It read: *"Everything else
+is held at trial_30's values: … same instructions — and the same replay format.
+That last one is not a setting and does not appear in any config file, which is
+exactly why it is written down here."* Both halves are now wrong, and the two
+items it named are exactly the two the Verdict below requires to change first.
+About the instructions the Verdict already said so in as many words — *"the
+instruction text is a pinned condition, and trial_30 keeps the one it ran
+under"* — so the file contradicted itself. And the replay format stopped being
+config-less three hours after this was typed: this document was last edited at
+`78df149`, and `3acc0b1` added `fixed_settings.replay_format` that same
+afternoon.
+
+The anchor is the **corrected baseline**,
+`experiments/execution_envelope/agentic_corrected_harness_plan.yaml`. Against
+the plan trial_30 ran under it moves exactly two things, and
+`test_the_corrected_harness_plan_moves_only_two_things.py` holds it to that: the
+instruction text, now derived from whichever backend is mounted, and one new
+key, `replay_format: faithful`. **Both legs take the corrected values.** A leg
+that took trial_30's would move three axes and report one — the failure this
+section exists to prevent, reached by following the section.
+
+What is held, and where each one is pinned rather than asserted:
+
+| held across both legs | where |
+|---|---|
+| the cohort | `task_ids` |
+| the model **and its deployment** | `model.resolved_model`, `model.deployment` — both `gpt-5.4` |
+| the API route | `azure_connection.account` / `.project` / `.route_profile` |
+| the per-task time limit | `fixed_settings.per_task_timeout_seconds: 1200` |
+| the retry policy | `fixed_settings.retry_max_attempts`, `retry_reasons_allowed` |
+| the write cap | `chosen_settings.max_output_tokens_per_turn: 8192` |
+| the tool-result cap | `max_result_bytes` — a code default in `agentic_v2_tools.py`, not a plan key |
+| the instruction text | the corrected plan's derived paragraph |
+| the replay format | `fixed_settings.replay_format: faithful` |
+
+The rows above the last two are the same objects in both plans and are compared
+object-by-object by that same test, so this table is checkable rather than a
+promise. Three of them — the deployment, the API route and the time limit — were
+being held all along and simply were not written down. An item that is held but
+unlisted is the one that moves without anyone noticing.
+
+The replay format still earns a sentence of its own now that it has a key, for
+the reason it always did: `_input_for` decides what the model is shown of its
+own history, so changing it changes the input at every turn of every task, and a
 run that moved it alongside the limit could not separate the two. See §4.
 
 ## 4. What the limit can actually reach
@@ -586,11 +625,13 @@ that way.
 
 ```
 intervention   tool_calls_per_attempt, and nothing else
-conditions     control = 8 (trial_30's 30 task ids, fixture backend)
+conditions     control = 8 (trial_30's 30 task ids, fixture backend, and the
+               corrected harness — the setting, not trial_30 the run; §3)
                variant = one value, new config file, new run id
-axes           moving: the limit. fixed: backend, refusal behaviour, model,
-               max_output_tokens_per_turn, retry policy, max_result_bytes,
-               instructions, replay format, cohort
+axes           moving: the limit. fixed, all at the corrected baseline's
+               values: backend, refusal behaviour, model and deployment, API
+               route, max_output_tokens_per_turn, per-task time limit, retry
+               policy, max_result_bytes, instructions, replay format, cohort
 adjudication   finalize called and artifacts opened. Completion, not quality.
                No judge, so no judge to validate
 input          30 task ids fixed before the question was raised; not a random
