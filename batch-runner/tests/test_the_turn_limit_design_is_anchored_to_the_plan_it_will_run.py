@@ -37,6 +37,9 @@ from typing import Any
 import pytest
 import yaml
 
+from core.agentic_v2_conversation_runner import ceilings_from
+from core.agentic_v2_runner import _validate_budget_caps
+
 BATCH_RUNNER_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = BATCH_RUNNER_ROOT.parent
 ENVELOPE = BATCH_RUNNER_ROOT / "experiments" / "execution_envelope"
@@ -267,3 +270,128 @@ def test_the_record_block_agrees_with_the_section_it_summarises(record):
 )
 def test_the_record_block_lists_the_three_that_were_missing(record, condition):
     assert condition in record
+
+
+# ── what the knob moves without anyone touching a second setting ───────────
+#
+# §3 above is a list of conditions a *person* must hold still. These are about
+# the limit's own reach, which no amount of discipline holds: `ceilings_from`
+# derives four per-task ceilings from `tool_calls_per_attempt`, and the record
+# block said "and nothing else".
+
+
+def _moved_by_the_knob(ran: dict[str, Any]) -> dict[str, bool]:
+    """Which ceilings differ between two candidates, asked of the real function.
+
+    Derived rather than listed, so a later change to ``ceilings_from`` -- a new
+    derived ceiling, or one of these pinned to a constant -- lands here instead
+    of leaving §3 describing arithmetic the code stopped doing.
+    """
+
+    def at(calls: int) -> dict[str, Any]:
+        class Chosen:
+            tool_calls_per_attempt = calls
+            max_output_tokens_per_turn = 8192
+
+        return ceilings_from(ran, Chosen).as_dict()
+
+    low, high = at(3), at(8)
+    return {name: low[name] != high[name] for name in low}
+
+
+def test_section_three_names_every_ceiling_the_limit_drags_with_it(axes, ran):
+    """The four that move are named; the three that hold are not called moved."""
+    moved = _moved_by_the_knob(ran)
+
+    assert sorted(name for name, did in moved.items() if did) == [
+        "max_input_tokens",
+        "max_model_calls",
+        "max_model_turns",
+        "max_output_tokens",
+    ]
+    for name, did in moved.items():
+        if did:
+            assert name in axes, f"{name} moves with the limit and §3 is silent"
+    assert "Time is holdable; tokens are not" in axes
+
+
+def test_the_one_that_moves_quadratically_is_marked_as_the_odd_one(axes, ran):
+    """Two rates, not one. A reader who takes them as one rate mis-sizes it."""
+
+    def at(calls: int) -> dict[str, Any]:
+        class Chosen:
+            tool_calls_per_attempt = calls
+            max_output_tokens_per_turn = 8192
+
+        return ceilings_from(ran, Chosen).as_dict()
+
+    low, high = at(3), at(8)
+    linear = high["max_model_turns"] / low["max_model_turns"]
+    quadratic = high["max_input_tokens"] / low["max_input_tokens"]
+
+    assert round(linear, 2) == 2.25
+    assert round(quadratic, 2) == 4.50
+    assert quadratic > linear
+    assert "×2.25" in axes and "×4.50" in axes
+
+
+def test_section_three_warns_about_the_candidate_that_changes_the_variable(
+    axes, ran
+):
+    """The value it names is computed, not typed.
+
+    At ``calls`` the loop allows ``calls + 1`` turns and the desk allows its own
+    ``budget_caps["tool_calls"]``. Whichever is smaller decides which ending the
+    task gets, and the grid crosses over. If the desk default ever changes, the
+    crossing moves and the paragraph naming 32 becomes wrong -- here, not in a
+    write-up.
+    """
+    desk = int(_validate_budget_caps(None)["tool_calls"])
+    grid = [int(one) for one in ran["candidate_settings"]["tool_calls_per_attempt"]]
+
+    crossing = [calls for calls in grid if calls + 1 > desk]
+
+    assert crossing == [32], (
+        "one candidate lets the desk bind first; §3's warning is written about "
+        f"exactly that one and the grid now crosses at {crossing}"
+    )
+    assert str(desk) in axes
+    assert "tool_call_limit_reached" in axes
+    assert "turn_limit_reached" in axes
+
+
+def test_the_record_block_stopped_claiming_one_axis(record):
+    """Retracted the way this file retracts: the old sentence stays quoted."""
+    assert "and nothing else" in record
+    assert 'This line read "and nothing else"' in record
+    assert "quadratically" in record
+
+
+# ── the denominator, which the two documents disagreed about ───────────────
+
+
+def test_the_record_block_takes_its_denominator_from_the_plan(record, corrected):
+    """The plan says all 30 and the record block said 18.
+
+    The record block is the part that gets pasted into a write-up, so it is the
+    worst of the two places for this to lag. The rule is read out of the plan
+    rather than repeated here, so that moving it there moves it in one place.
+    """
+    denominator = " ".join(corrected["experiment_record"]["denominator"].split())
+
+    assert denominator.startswith("All 30 tasks")
+    assert "exploratory" in denominator
+
+    assert "out of all 30" in record
+    assert "exploratory" in record
+    assert 'This line read "out of the 18"' in record
+
+
+def test_section_four_reports_the_headline_on_thirty(design):
+    """§4 is where the 18 is derived, so it is where the temptation lives."""
+    section = design.split("## 4. What the limit can actually reach")[1]
+    section = " ".join(section.split("## 5. What judges the outcome")[0].split())
+
+    assert "the headline runs on all 30" in section
+    assert "labelled exploratory" in section
+    assert "put the results on the 18 outright" in section
