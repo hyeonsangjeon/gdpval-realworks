@@ -23,8 +23,13 @@ identical objects -- so this plan cannot quietly raise its own ceiling, and
 "the same conditions except the harness" is checkable rather than asserted.
 
 **The record answers the questions the design asks**, including the ones whose
-honest answer is that nobody knows: ``repeats`` is ``undecided`` with the
-consequence written out, rather than a number with nothing behind it.
+honest answer is that nobody knows. This paragraph used to end "``repeats`` is
+``undecided`` with the consequence written out, rather than a number with
+nothing behind it", and half of that is now wrong: leaving the slot open meant
+the design had no stated end and nobody could say in advance what would be
+spent. ``repeats`` is ``3`` with what three does not buy written beside it, and
+the questions that really have no answer are gathered in ``open_questions``
+instead of being spread through the fields that do.
 
 Offline. Two YAML files, a digest and a string builder. Nothing here calls a
 model, resolves a cohort or costs anything.
@@ -69,8 +74,11 @@ TRIAL_30_SENT_THESE_INSTRUCTIONS = (
     "222d0ffaa43e1156c305c1ff0164c0f7dd3544b0f06b565d0ff2475c4e2d51f8"
 )
 
-#: The eight headings ``experiment-design`` §11 asks an experiment to answer
-#: before it runs, in this repository's names for them.
+#: The headings ``experiment-design`` §11 asks an experiment to answer before
+#: it runs, in this repository's names for them. The comment above this tuple
+#: used to say "the eight headings" while the tuple held twelve, which is the
+#: same lag this file exists to catch one level up; the count is left to the
+#: tuple now.
 THE_DESIGN_RECORD_ASKS = (
     "decision",
     "falsification",
@@ -84,7 +92,16 @@ THE_DESIGN_RECORD_ASKS = (
     "run_list",
     "stop_rules",
     "known_confounds",
+    # Not one of §11's rows. §11 asks what the design knows; the skill's ten
+    # questions are about what it does not, and an answer that does not exist
+    # is only recorded if there is somewhere to record it.
+    "open_questions",
 )
+
+#: Settings that would decide whether a repeat is a repeat. Checked against the
+#: request that is actually built rather than against the plan alone, because a
+#: plan that pins none and a voice that sends none are two different silences.
+THE_SAMPLING_CONTROLS = ("temperature", "top_p", "seed")
 
 
 def _load(path: Path) -> dict[str, Any]:
@@ -664,3 +681,205 @@ def test_the_caveat_is_the_section_directly_after_the_two_changes(header):
     )
     # And the header itself must not have made the claim first.
     assert "improvement" not in header.lower()
+
+
+# ---------------------------------------------------------------------------
+# What the record cannot answer
+#
+# ``experiment-design`` ends by asking which of its ten questions have no
+# answer. A design that never writes that down does not stop having the gaps;
+# it stops being able to see them, and every gap then gets discovered in the
+# report instead, where it reads as a result being walked back.
+# ---------------------------------------------------------------------------
+
+
+def _payload_keys_the_voice_sends() -> list[str]:
+    """The request body, read out of the source rather than listed here.
+
+    Built by parsing rather than by importing and calling, because calling it
+    needs a client and a live route, and this file is offline. What matters is
+    that the plan's sentence about the request cannot drift from the request:
+    add a key in ``agentic_v2_model_voice.py`` and the assertion below is the
+    thing that notices.
+    """
+    import ast
+
+    source = (BATCH_RUNNER_ROOT / "core" / "agentic_v2_model_voice.py").read_text(
+        encoding="utf-8"
+    )
+    for node in ast.walk(ast.parse(source)):
+        is_payload = (
+            isinstance(node, ast.AnnAssign)
+            and isinstance(node.target, ast.Name)
+            and node.target.id == "payload"
+            and isinstance(node.value, ast.Dict)
+        )
+        if is_payload:
+            return [key.value for key in node.value.keys]
+    raise AssertionError("the voice no longer builds a literal payload mapping")
+
+
+def test_the_record_says_what_it_cannot_answer_instead_of_answering_it(corrected):
+    """The rule the field is written under, kept in the field.
+
+    Without it the slot is a place to put a guess. An unanswered question that
+    has been given a plausible answer is worse than one left blank, because
+    the blank is visible from the outside and the guess is not.
+    """
+    questions = corrected["experiment_record"]["open_questions"]
+
+    assert "recorded as unanswered" in questions
+    assert "invented" in questions
+    # Each gap has to say what would close it, or it is a complaint.
+    assert questions.count("What would answer it") >= 3
+
+
+def test_the_sampling_question_is_read_off_the_request_that_is_actually_sent(
+    corrected,
+):
+    """Three repeats of "the identical condition", and nothing pins the sampling.
+
+    The plan sets no temperature, no ``top_p`` and no seed, and neither does
+    the voice -- so there is no setting whose effect could be checked, which is
+    a different situation from a setting that was set and ignored. The keys are
+    derived from the source so that adding one lands here: a ``temperature``
+    appearing in that payload would make the plan's sentence false and would
+    also change what the three repeats measure.
+    """
+    record = corrected["experiment_record"]
+    questions = record["open_questions"]
+    sent = _payload_keys_the_voice_sends()
+
+    for control in THE_SAMPLING_CONTROLS:
+        assert control not in sent, (
+            f"the voice now sends {control}; the open question about repeats "
+            "is stated on the basis that it does not"
+        )
+        assert control not in corrected["fixed_settings"]
+        assert control not in corrected["model"]
+        assert control in questions, (
+            f"{control} is one of the settings whose absence the question is "
+            "about, and the question does not name it"
+        )
+
+    for key in sent:
+        assert key in questions, (
+            f"the request carries {key} and the record's description of it "
+            "does not; a list that is nearly the request is worse than none"
+        )
+    assert "agentic_v2_model_voice.py" in questions
+
+
+def test_the_repeat_count_is_the_number_of_repeat_entries_on_the_list(corrected):
+    """``repeats: 3`` and three entries are one decision written twice.
+
+    They are in different fields and a reader takes whichever they read first,
+    so a fourth entry added without touching ``repeats`` would put a fourth
+    paid run behind a number that still says three.
+    """
+    record = corrected["experiment_record"]
+    repeats = [
+        entry for entry in record["run_list"] if entry.get("stage") == STAGE_THIRTY
+    ]
+
+    assert len(repeats) == record["repeats"]
+    assert all(entry["paid"] for entry in repeats)
+    # And each waits on the one before it, so three is a sequence and not a fan.
+    assert all("requires" in entry for entry in repeats)
+
+
+def test_the_denominator_is_the_cohort_size_the_binding_enforces(corrected):
+    """The headline denominator, taken from the code that refuses a wrong one.
+
+    ``bind_stage`` raises if a stage resolves to a different number of tasks
+    than ``STAGE_SIZES`` fixes, so the 30 in the record is not a hope about how
+    many tasks will run. Derived here rather than typed, because the value of
+    the sentence is that the two agree.
+    """
+    record = corrected["experiment_record"]
+    denominator = " ".join(record["denominator"].split())
+
+    assert denominator.startswith(f"All {STAGE_SIZES[STAGE_THIRTY]} tasks")
+    assert f"out of {STAGE_SIZES[STAGE_THIRTY]}" in " ".join(record["units"].split())
+
+    compatibility = [
+        entry for entry in record["run_list"] if entry.get("stage") == STAGE_FIVE
+    ]
+    assert len(compatibility) == 1
+    # The entry writes its size into its own name and its prose spells it out;
+    # the name is the half a machine can check, so that renaming the entry
+    # without moving the stage is caught here.
+    assert compatibility[0]["id"].endswith(str(STAGE_SIZES[STAGE_FIVE]))
+    assert compatibility[0]["what"].startswith("five tasks")
+
+
+def test_the_one_sided_spread_is_named_as_a_limit_and_not_as_a_confound(corrected):
+    """Three repeats measure one side. The comparator ran once and stays once.
+
+    Nothing on the closed list re-runs the old harness, so after three repeats
+    the comparison is still a range against a point. That is not fixed by
+    running the corrected side more times, which is exactly why it belongs
+    here rather than in ``known_confounds``.
+    """
+    record = corrected["experiment_record"]
+    questions = record["open_questions"]
+
+    assert "trial_30 ran once" in questions
+    assert "range against a point" in questions
+    assert "repeats_note" in questions
+
+    old_harness_again = [
+        entry
+        for entry in record["run_list"]
+        if "trial_30's harness" in entry["what"] or "old harness" in entry["what"]
+    ]
+    assert old_harness_again == [], (
+        "something on the list re-runs the old harness and the open question "
+        "says nothing does"
+    )
+
+
+def test_the_permissions_question_points_at_the_survey_instead_of_summarising_it(
+    corrected,
+):
+    """The shorthand is how a stale count survives being corrected.
+
+    ``HOST_PERMISSIONS.md`` is regenerated from a survey and held to it by its
+    own test. A number copied out of it into this plan is a number that stops
+    being checked, and the two versions of that shorthand that have already
+    been in circulation are both wrong now.
+    """
+    questions = corrected["experiment_record"]["open_questions"]
+    repo_root = BATCH_RUNNER_ROOT.parent
+
+    assert (repo_root / "tasks" / "0822_saturday" / "HOST_PERMISSIONS.md").is_file()
+    assert (
+        BATCH_RUNNER_ROOT
+        / "tests"
+        / "test_the_host_permissions_report_matches_its_survey.py"
+    ).is_file()
+    assert "HOST_PERMISSIONS.md" in questions
+    assert "not summarised here" in questions
+
+    for stale in ("three permissions", "twelve roles", "12 roles"):
+        assert stale not in questions.lower()
+
+
+def test_the_disclaimer_case_is_the_same_task_in_both_fields(corrected):
+    """Two fields naming one past task, and no way to tell if they diverge.
+
+    ``adjudication`` cites it as the run's own instance of an answer that
+    passes both checkable tests and says nothing about quality;
+    ``open_questions`` cites it as what grading would be for. A typo in either
+    turns a real case into an unfindable one.
+    """
+    record = corrected["experiment_record"]
+    import re
+
+    def cited(field: str) -> set[str]:
+        return set(re.findall(r"\b[0-9a-f]{8}\b", record[field]))
+
+    shared = cited("adjudication") & cited("open_questions")
+    assert len(shared) == 1, f"the two fields cite {shared or 'no'} task in common"
+    assert "README_LIMITATION.txt" in record["open_questions"]
+    assert "README_LIMITATION.txt" in record["adjudication"]

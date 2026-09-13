@@ -904,3 +904,56 @@ experiment_record:
     report has to be read off the conversation events or else say which
     attempt it means. tool_errors is not a refusal count either: it sums to 19
     against 14 endings and stands at 1 on six tasks whose desk never broke.
+
+  open_questions: >-
+    Four things this design does not answer, written down here rather than
+    discovered in the report. None of them is a confound: a confound threatens
+    a number this run produces, and each of these is a question it produces no
+    number for. The rule this field is written under is that an unanswered
+    question is recorded as unanswered — an answer invented to fill the slot
+    would be the worse of the two failures.
+    (1) Whether a repeat is a repeat. repeats says the identical condition
+    three times, and identical is demonstrated of the inputs and assumed of the
+    sampling. The request this run sends carries seven keys — model,
+    instructions, input, tools, max_output_tokens, parallel_tool_calls and
+    timeout, built in agentic_v2_model_voice.py — and not one of them is a
+    temperature, a top_p or a seed; the plan pins none either, so there is no
+    setting written down whose effect could be checked. That is the honest
+    reading of the three: they measure whatever this deployment does when it is
+    asked the same thing three times, which is not the same as measuring noise
+    around a condition held fixed. It also means the usual check does not
+    apply — the question is normally whether the deployment honours the
+    settings that were set, and here none was. What would answer it is a
+    deliberate repeatability check, the same task twice with nothing else
+    moved, and that is not on the run list.
+    (2) The spread will exist on one side only. Three repeats give the
+    corrected harness a range. trial_30 ran once, on the old harness, and
+    re-running it is not one of the five entries, so its own range is unknown
+    and stays unknown. A range against a point is not two ranges, and no figure
+    may be called outside noise on the strength of the three (repeats_note).
+    What would answer it is repeating trial_30's harness, which is a new entry
+    written on the list before it is dispatched and is not written here.
+    (3) Nothing in this run measures whether the work is any good, which
+    adjudication (3) states as a reporting rule and which is also a question
+    left open. trial_30 carries grading_approved_maximum_usd null with the
+    reason in stages, so the outcome stops at finalize-called and
+    artifact-produced, and the run cannot say how many of its successes read
+    like task 38889c3b's README_LIMITATION.txt. What would answer it is
+    grading, which is a separate approval asked for separately.
+    (4) Whether any of it holds outside the fixture. The header says this and
+    the record says it again because the record is the part that travels: this
+    runs against AgenticV2FixtureBackend with no guest and exec_run shut, so
+    every result is a diagnostic about the loop and none is evidence about the
+    isolation. Real-host execution waits on an access change that is not made
+    here and is not summarised here either — tasks/0822_saturday/
+    HOST_PERMISSIONS.md holds the surveyed actions, which of them block and
+    which are conditional, and the roles and scope that would clear them, and
+    tests/test_the_host_permissions_report_matches_its_survey.py holds that
+    document to the survey it came from. Quoting a count from memory instead is
+    how the stale version of this sentence stayed in circulation.
+    One of the design questions has an answer rather than a gap, and it is
+    written down so the silence is not read as an oversight: nothing in this
+    harness is tied to a particular customer's environment. It is an internal
+    benchmark, there is no contract rate, deployment name or capacity figure
+    carried in it that another reader would have to substitute, and no part of
+    it is being prepared for reuse elsewhere.
