@@ -477,6 +477,39 @@ def test_finalize_being_called_is_not_recorded_as_work_done(corrected):
     assert "no judge is run" in adjudication
 
 
+def test_the_disclaimer_case_is_named_from_a_run_and_not_described(corrected):
+    """A rule with an example in it is harder to read past.
+
+    "A file saying the model could not do the task" is abstract enough to be
+    agreed with and then not applied. trial_30 has one: a task filed as a
+    success whose two deliverables are named ``README_LIMITATION.txt`` and
+    ``DELIVERABLE_NOTE.txt``. Naming it puts a number on the reader's screen
+    that the success count cannot separate.
+    """
+    adjudication = corrected["experiment_record"]["adjudication"]
+
+    assert "38889c3b" in adjudication
+    assert "README_LIMITATION.txt" in adjudication
+    assert "no way to say how many" in adjudication
+
+
+def test_a_cause_is_not_read_off_the_stop_reason(corrected):
+    """The units line said to count causes by ``stop_reason``. It cannot be.
+
+    ``tool_desk_broke`` is what the conversation loop files a refusal, a
+    malformed call and a broken backend under, and trial_30 contains one of
+    each. Counting causes that way reports a policy refusal and a defect of
+    ours as the same event -- the exact error the refusal column was added to
+    prevent, reintroduced one field lower down.
+    """
+    units = corrected["experiment_record"]["units"]
+
+    assert "not from the conversation's stop_reason" in units
+    assert "tool_desk_broke" in units
+    assert "error_type and disposition" in units
+    assert "agentic_metrics.tool_calls" in units
+
+
 def test_the_stop_rule_about_the_bill_names_a_check_that_exists(corrected):
     """And the check it names behaves the way the plan says it does.
 

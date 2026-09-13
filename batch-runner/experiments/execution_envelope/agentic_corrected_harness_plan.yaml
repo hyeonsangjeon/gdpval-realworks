@@ -550,15 +550,22 @@ experiment_record:
     called that wrong on the grounds that _ENDS_THE_RUN omits
     capability_unavailable, so a refused call is handed back, the run continues,
     a refusal spends a turn and the task then ends as (a) or (b) — making it a
-    per-task column beside the ending, counted by
-    core.agentic_v2_outcome.refusals_handed_back_in and reported as the
+    per-task column beside the ending, counted by what was then
+    core.agentic_v2_outcome.refusals_handed_back_in, since renamed
+    refusals_the_desk_gave because the name asserted the thing that turned out
+    not to happen, and reported as the
     cross-tab endings_after_a_refusal rather than a third ending. That second
     draft is the one that was checked against the runner, in
     tests/test_one_failed_tool_call_ends_the_task.py, and it does not happen.
-    dispatch_one ends the task on the first tool result that is not ok, before
-    the loop's table is reached, because the trace schema refuses a record with
-    a tool event after a not-ok one; the condition is registered as
-    one_failed_tool_call_ends_the_task. So a refusal is an ending, and the
+    dispatch_one ends the attempt on the first tool result that is not ok,
+    before the loop's table is reached, because the trace schema refuses a
+    record with a tool event after a not-ok one; the condition is registered as
+    one_failed_tool_call_ends_the_task. For a refusal the attempt's ending is
+    also the task's, because capability_unavailable closes as
+    terminal_capability_absent and that disposition is not retried — checked in
+    trial_30, where all 12 browser_run refusals ended their task and the other
+    2 run-ending calls, neither of them refusals, were retried. So a refusal is
+    an ending, and the
     first draft was nearer the truth than the correction that replaced it — the
     loop does record it as tool_desk_broke. It is still not the figure to
     report, for the reason the second draft gave: tool_desk_broke is also what
@@ -638,11 +645,24 @@ experiment_record:
     backend, with nothing hand-made in the record —
     tests/test_one_failed_tool_call_ends_the_task.py, which holds that a
     refused call is the last tool event in the trace and that the registered
-    condition still says what the runner does.
+    condition still says what the runner does. There is a real instance of the
+    (1)-and-(2)-without-(3) case rather than only a described one: trial_30's
+    task 38889c3b is filed status success with two collected files, and they
+    are README_LIMITATION.txt and DELIVERABLE_NOTE.txt, the deliverable text
+    opening "Could not create the requested audio deliverables". Whatever this
+    run's success count is, a reader should assume it contains some of these
+    and the run has no way to say how many.
 
   units: >-
-    Task counts out of 30 for outcomes, attempt counts by stop_reason for
-    causes, USD from the cost ledger for money. Ledger figures and estimates
+    Task counts out of 30 for outcomes, attempt counts for causes, USD from the
+    cost ledger for money. A cause is read from the journal's closed record —
+    its error_type and disposition — and not from the conversation's
+    stop_reason, which files a desk refusal, a malformed call by the model and
+    a broken backend under the one word tool_desk_broke; trial_30 contains one
+    of each and they are not the same finding. Tool-call counts are read from
+    the conversation events and not from agentic_metrics.tool_calls, which is
+    the last attempt's number — see known_confounds (8). Ledger figures and
+    estimates
     are never mixed in one number: the ledger is what was charged, the estimate
     is what the gate priced, and a call whose model is not in the price list is
     recorded as missing rather than as zero. Failed and retried calls are
