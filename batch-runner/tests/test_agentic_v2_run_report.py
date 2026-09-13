@@ -579,11 +579,14 @@ def test_dispositions_are_counted_across_the_run():
 def test_the_endings_partition_the_run_and_refusals_are_not_added_to_them():
     """Thirty tasks with forty refusals still have thirty endings.
 
-    A refusal ends nothing -- the desk hands it back and the loop carries on --
-    so counting one as an ending would report more outcomes than there were
-    tasks. The cross-tab splits each ending by whether a refusal was met on the
-    way, which is the only thing that tells a tool ceiling spent on refused
-    calls apart from one spent on work. Both tasks below ended
+    The endings partition the run and the refusals do not join them, but not
+    for the reason this docstring used to give. It said a refusal ends nothing
+    -- the desk hands it back and the loop carries on -- which is not what the
+    runner does. A refusal ends the attempt it is in, so in a real record it is
+    the same event as that task's ending, and adding the two would count one
+    event twice. The cross-tab splits each ending by whether a refusal was met
+    on the way, which is the only thing that tells a tool ceiling spent on
+    refused calls apart from one spent on work. Both tasks below ended
     ``tool_budget_exhausted`` and they are not the same result.
     """
     summary = summarise_v2_run(

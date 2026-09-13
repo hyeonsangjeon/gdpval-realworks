@@ -372,10 +372,15 @@ def count_separately(outcomes: Sequence[Outcome]) -> dict[str, Any]:
     including ones that never ran. Nothing here returns a success rate: which
     of the three a rate would be about is exactly what gets lost.
 
-    ``endings_after_a_refusal`` is the cross-tab rather than a fourth tally.
-    Refusals do not end tasks, so counting them alongside endings would double
-    count; splitting each ending by whether the task met one is what tells a
-    turn ceiling spent on refused calls apart from a turn ceiling spent on work.
+    ``endings_after_a_refusal`` is the cross-tab rather than a fourth tally,
+    and the reason given here used to be the wrong one. It said refusals do not
+    end tasks, so adding them to the endings would report more outcomes than
+    there were tasks. The conclusion holds and the premise does not: a refusal
+    ends the attempt it is in, so in a record this harness produced it is the
+    *same event* as that task's ending, and adding the two counts one event
+    twice. Splitting each ending by whether the task met a refusal on the way
+    is what tells a tool ceiling spent on refused calls apart from one spent on
+    work.
     """
     endings: dict[str, dict[str, int]] = {}
     for one in outcomes:
@@ -408,9 +413,14 @@ def count_separately(outcomes: Sequence[Outcome]) -> dict[str, Any]:
         "tool_refusals_by_kind": by_kind,
         "endings_after_a_refusal": endings,
         "refusal_note": (
-            "a refusal is a cause and not an ending: the desk hands it back and "
-            "the task goes on. These counts are not part of the denominator and "
-            "are never added to the endings above"
+            "a refusal ends the attempt it is in: dispatch_one stops on the "
+            "first not-ok result, so in a record this harness produced a "
+            "refused task holds one refusal and it names the same event as "
+            "that task's ending. These counts are not part of the denominator "
+            "and are never added to the endings above, because that would "
+            "count one event twice. An earlier version of this note said the "
+            "desk hands a refusal back and the task goes on; that is not what "
+            "this harness does, and no run may be read as though it were"
         ),
         "quality_measured": 0,
         "quality_note": (

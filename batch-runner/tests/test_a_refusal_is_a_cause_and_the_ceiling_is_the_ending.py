@@ -348,9 +348,36 @@ def test_the_cross_tab_totals_back_to_the_task_count():
     assert total == counted["tasks"] == 3
 
 
-def test_the_tally_says_in_words_that_a_refusal_is_not_an_ending():
+def test_the_emitted_note_gives_the_right_reason_for_not_adding_the_counts():
+    """The note is output rather than a docstring, and it kept the old claim.
+
+    ``agentic_v2_outcome``'s module docstring, its ``Outcome.tool_refusals``
+    paragraph and this file's own header were all corrected when the refusal
+    turned out to end the attempt. The string ``count_separately`` *emits* was
+    not, so a person reading a run's counts was still being told the desk hands
+    a refusal back and the task goes on. None of the docstrings that correct it
+    travel with the report.
+
+    What the note must carry is the instruction *and* its reason. "Do not add
+    these to the endings" is right either way; without the reason a reader has
+    no way to tell that it is right because the refusal and the ending are one
+    event, rather than because they are unrelated.
+    """
     counted = count_separately([read_outcome("a", _succeeded())])
-    assert "a cause and not an ending" in counted["refusal_note"]
+    note = counted["refusal_note"]
+
+    assert "ends the attempt it is in" in note
+    assert "names the same event as that task's ending" in note
+    assert "count one event twice" in note, (
+        "the reason went missing; the instruction then reads as a convention "
+        "rather than as arithmetic"
+    )
+    assert "the desk hands a refusal back and the task goes on" in note, (
+        "the retraction dropped the sentence it retracts. It was emitted for "
+        "long enough to be quoted back, and a reader who remembers it needs to "
+        "learn here that it was withdrawn rather than assume they misread"
+    )
+    assert "that is not what this harness does" in note
 
 
 def test_the_row_carries_the_count_and_the_kinds():
