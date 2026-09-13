@@ -17,9 +17,9 @@ Clause (a) already tolerates a partly-readable bundle -- that is what
 ``.py`` or ``.txt`` sibling fails ``issubset`` and the bundle stays on the text
 route no matter what the probe found. That is the hole.
 
-This file records what it is worth. Across all 99 committed grade payloads,
-12 payloads carry a mixed renderable/non-renderable bundle under a TEXT or
-FORMATTING criterion, and they belong to just three tasks:
+This file records what it is worth. When ``323`` measured it, 12 payloads
+carried a mixed renderable/non-renderable bundle under a TEXT or FORMATTING
+criterion, and they belonged to just three tasks:
 
     46fc494e   .pdf + .py            70 items x 4 payloads   (gold-185)
     58ac1cc5   .docx .pdf + .txt     39 items x 6 payloads   (220-task runs)
@@ -27,7 +27,27 @@ FORMATTING criterion, and they belong to just three tasks:
 
 722 items in all. In every one of them the renderable member yields text, so
 clause (a) closes the gate before clause (c) is ever consulted. Clause (c)
-blocked **nothing**. The hole has no causal effect on any published grade in
+blocked **nothing**.
+
+exp035 then landed and multiplied that corpus by five: 10 more payloads, 48
+more tasks, 3,324 more items, 4,046 in all. This file separates the two,
+because they support the finding to different depths.
+
+The **outcome** is pinned across all of it and is directly observed. Every one
+of the 4,046 items records ``perception_called: false``: no mixed bundle has
+ever escalated, in any published grade, under either era. That is read off the
+payload rather than inferred.
+
+The **mechanism** is pinned only where the payload can carry it. ``323``'s
+"clause (a) shut the gate, so clause (c) blocked nothing" is a claim about
+*which* clause closed it, and it needs extraction evidence to stand. exp035
+supplies that for 28 of its 48 tasks and 84 of its 3,324 items; for the other
+20 tasks the payload cannot say whether (a) or (c) refused the bundle. So
+``323``'s zero is **stale rather than falsified** -- it was measured over a
+three-task corpus that is no longer what is committed -- and the 20 tasks are
+named below rather than folded into a number.
+
+Either way the hole has no observed causal effect on any published grade in
 this repository, which is why ``322`` was right to pin it rather than change
 the gate: loosening clause (c) buys zero measured benefit and spends it against
 the per-task image budget, which is where escalation has already gone wrong
@@ -78,16 +98,50 @@ EXPECTED_CORPUS = {
     XLSX_AND_TXT: ({".xlsx"}, {".txt"}, 6, 208),
 }
 
+#: The run whose payloads arrived after ``323`` took its measurement. Kept as a
+#: path fragment because that is the only place a grade file records which run
+#: produced it; the merged grade and its nine shards all carry it.
+EXP035_RUN = "exp035_codex_foundry_full220"
+
+#: exp035's extent, pinned so it cannot grow quietly either. ``bf68f2ad`` is
+#: the one task present in both eras, which is why the task totals here and in
+#: ``EXPECTED_CORPUS`` add to 50 rather than 51.
+EXP035_TASKS = 48
+EXP035_PAYLOADS = 10
+EXP035_ITEMS = 3324
+
+#: Where exp035's mechanism evidence runs out. 84 of its items carry an
+#: extraction marker, spread over 28 tasks; the 20 below carry none at all, so
+#: for them the payload cannot distinguish clause (a) from clause (c).
+EXP035_ITEMS_WITH_EXTRACTION = 84
+EXP035_TASKS_WITHOUT_EXTRACTION = {
+    "1b9ec237", "1e5a1d7f", "401a07f1", "4de6a529", "575f8679",
+    "6974adea", "69a8ef86", "6dcae3f5", "83d10b06", "87da214f",
+    "a0ef404e", "a74ead3b", "a99d85fc", "d025a41c", "d7cfae6f",
+    "dfb4e0cd", "ed2bc14c", "f9f82549", "fd6129bd", "ffed32d8",
+}
+
 #: What ``read_deliverable`` stamps on text it pulled out of a binary format.
 EXTRACTION_MARKER = re.compile(r'"kind"\s*:\s*"(xlsx|docx|pptx|pdf)"')
 PDF_PAGE_MARKER = "[Page "
+
+
+def _from_exp035(path: Path) -> bool:
+    return EXP035_RUN in str(path)
+
+
+def _has_extraction_evidence(item: dict) -> bool:
+    text = item.get("evidence") or ""
+    return bool(EXTRACTION_MARKER.search(text)) or PDF_PAGE_MARKER in text
 
 
 def _mixed_bundle_items() -> list[tuple[Path, str, dict]]:
     """Every published item that put a mixed bundle in front of a text judge.
 
     Walks the committed payloads rather than a hard-coded list so that a new
-    grade landing in ``data/grades`` is picked up, not silently skipped.
+    grade landing in ``data/grades`` is picked up, not silently skipped. The
+    era split happens in the fixtures below, on the returned paths -- this walk
+    stays corpus-wide so that nothing is filtered out before it is counted.
     """
     found: list[tuple[Path, str, dict]] = []
     for path in sorted(GRADES.rglob("*.json")):
@@ -127,16 +181,34 @@ def mixed_bundles() -> list[tuple[Path, str, dict]]:
     return found
 
 
-def test_only_three_tasks_ever_put_a_mixed_bundle_on_the_text_route(mixed_bundles):
-    """The canary. A fourth task here means the zero in ``323`` is stale.
+@pytest.fixture(scope="module")
+def historical_bundles(mixed_bundles) -> list[tuple[Path, str, dict]]:
+    """The corpus ``323`` actually measured, with exp035 held out.
 
-    This is deliberately strict: the whole finding is a measurement over a
-    known corpus, so the corpus changing invalidates it. Adding a grade that
-    trips this is not a bug in the grade -- it is a request to re-measure.
+    Not a narrowing of what is checked: the held-out half is checked by
+    ``test_exp035_multiplied_the_corpus_by_five_and_none_of_it_escalated``,
+    and the outcome assertion below runs over both halves together.
+    """
+    return [row for row in mixed_bundles if not _from_exp035(row[0])]
+
+
+@pytest.fixture(scope="module")
+def exp035_bundles(mixed_bundles) -> list[tuple[Path, str, dict]]:
+    return [row for row in mixed_bundles if _from_exp035(row[0])]
+
+
+def test_the_three_tasks_323_measured_are_unchanged(historical_bundles):
+    """The canary, still strict, now scoped to the corpus it was measured over.
+
+    ``323``'s finding is a measurement, so the corpus changing invalidates it.
+    A grade tripping this is not a bug in the grade -- it is a request to
+    re-measure. exp035 *was* that request, and it is answered by pinning its
+    extent separately rather than by widening these numbers to swallow it,
+    because the two eras support the finding to different depths.
     """
     by_task: dict[str, set[Path]] = {}
     counts: dict[str, int] = {}
-    for path, task_id, _item in mixed_bundles:
+    for path, task_id, _item in historical_bundles:
         prefix = task_id[:8]
         by_task.setdefault(prefix, set()).add(path)
         counts[prefix] = counts.get(prefix, 0) + 1
@@ -151,14 +223,81 @@ def test_only_three_tasks_ever_put_a_mixed_bundle_on_the_text_route(mixed_bundle
             f"{prefix} now appears as {counts[prefix]} items across "
             f"{len(by_task[prefix])} payloads, not {items} across {payloads}"
         )
-    assert len({p for p, _t, _i in mixed_bundles}) == 12
-    assert len(mixed_bundles) == 722
+    assert len({p for p, _t, _i in historical_bundles}) == 12
+    assert len(historical_bundles) == 722
 
 
-def test_each_bundle_has_the_shape_that_makes_the_gate_refuse_it(mixed_bundles):
+def test_exp035_multiplied_the_corpus_by_five_and_none_of_it_escalated(
+    mixed_bundles, exp035_bundles
+):
+    """The outcome, read off the payload rather than inferred from a clause.
+
+    ``perception_called`` is the item's own record of whether the judge was
+    handed a rendered image. It is ``False`` on every mixed bundle ever
+    published -- all 4,046 of them, both eras -- so the hole has still cost
+    nothing, and that holds for the 20 tasks whose mechanism is undetermined
+    just as much as for the ones that carry extraction evidence.
+
+    This is the assertion that makes holding exp035 out of the numbers above
+    safe. It runs over the whole corpus, not either half.
+    """
+    by_task = {task_id[:8] for _p, task_id, _i in exp035_bundles}
+    payloads = {path for path, _t, _i in exp035_bundles}
+    assert (len(by_task), len(payloads), len(exp035_bundles)) == (
+        EXP035_TASKS,
+        EXP035_PAYLOADS,
+        EXP035_ITEMS,
+    ), (
+        f"exp035 now contributes {len(exp035_bundles)} items across "
+        f"{len(payloads)} payloads and {len(by_task)} tasks, not "
+        f"{EXP035_ITEMS}/{EXP035_PAYLOADS}/{EXP035_TASKS}"
+    )
+    assert len(mixed_bundles) == 722 + EXP035_ITEMS
+
+    escalated = [
+        (path, task_id)
+        for path, task_id, item in mixed_bundles
+        if item.get("perception_called") is not False
+    ]
+    assert not escalated, (
+        f"{len(escalated)} mixed bundles escalated to the vision path, e.g. "
+        f"{escalated[:3]}. 322 pinned this hole on the grounds that it costs "
+        f"nothing; that is no longer true and the gate needs re-deciding."
+    )
+
+
+def test_the_twenty_undetermined_tasks_are_named_rather_than_counted(exp035_bundles):
+    """Where the mechanism evidence stops, listed so it cannot drift silently.
+
+    84 of exp035's 3,324 items carry an extraction marker. The 28 tasks holding
+    them inherit ``323``'s clause-(a) reading; the 20 that carry none do not,
+    and no claim is made about which clause refused their bundles. Naming them
+    rather than reporting "20" means a task moving between the two groups shows
+    up as a diff instead of a silently equal count.
+    """
+    with_evidence: dict[str, int] = {}
+    seen: set[str] = set()
+    for _path, task_id, item in exp035_bundles:
+        prefix = task_id[:8]
+        seen.add(prefix)
+        with_evidence.setdefault(prefix, 0)
+        if _has_extraction_evidence(item):
+            with_evidence[prefix] += 1
+
+    silent = {prefix for prefix, count in with_evidence.items() if count == 0}
+    assert silent == EXP035_TASKS_WITHOUT_EXTRACTION, (
+        f"the undetermined set moved: now {sorted(silent)}. A task gaining "
+        f"evidence is good news and a task losing it is not, but either way "
+        f"323's clause-(a) reading covers a different set than it says."
+    )
+    assert sum(with_evidence.values()) == EXP035_ITEMS_WITH_EXTRACTION
+    assert len(seen) - len(silent) == 28
+
+
+def test_each_bundle_has_the_shape_that_makes_the_gate_refuse_it(historical_bundles):
     """Renderable and non-renderable in one selection -- clause (c)'s trigger."""
     shapes: dict[str, set[str]] = {}
-    for _path, task_id, item in mixed_bundles:
+    for _path, task_id, item in historical_bundles:
         suffixes = {Path(p).suffix.lower() for p in item["selected_paths"]}
         shapes.setdefault(task_id[:8], set()).update(suffixes)
 
@@ -168,7 +307,9 @@ def test_each_bundle_has_the_shape_that_makes_the_gate_refuse_it(mixed_bundles):
         assert not (non_renderable & GRADER_VISUAL_RENDER_EXTENSIONS)
 
 
-def test_the_renderable_member_yielded_text_so_clause_a_shut_the_gate(mixed_bundles):
+def test_the_renderable_member_yielded_text_so_clause_a_shut_the_gate(
+    historical_bundles,
+):
     """The causal claim: the gate never reached clause (c) on these bundles.
 
     ``read_deliverable`` stamps the source format on text it extracted from a
@@ -178,15 +319,10 @@ def test_the_renderable_member_yielded_text_so_clause_a_shut_the_gate(mixed_bund
     -- the ``.txt`` sibling never gets a say.
     """
     for prefix in (XLSX_AND_TXT, DOCX_PDF_AND_TXT):
-        evidence = [
-            item.get("evidence") or ""
-            for _p, task_id, item in mixed_bundles
-            if task_id.startswith(prefix)
-        ]
         extracted = [
-            text
-            for text in evidence
-            if EXTRACTION_MARKER.search(text) or PDF_PAGE_MARKER in text
+            item
+            for _p, task_id, item in historical_bundles
+            if task_id.startswith(prefix) and _has_extraction_evidence(item)
         ]
         assert extracted, (
             f"{prefix}: no recorded evidence shows text extracted from a "

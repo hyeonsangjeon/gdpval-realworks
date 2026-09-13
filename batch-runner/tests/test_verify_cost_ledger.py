@@ -276,6 +276,121 @@ def test_a_failed_task_is_billed_and_reported_not_written_off(tmp_path):
     assert coverage.data["failed_task_cost_usd"] == {"dead-task": "0.020000"}
 
 
+# Being in the payload is not the same as having been graded. A task can stop
+# before the first judge call -- no file to grade, or no way to choose among the
+# files -- and then zero calls really did cost zero. The payload says so three
+# times over: two call counters, a per-task receipt, and the rows it left in the
+# ledger. These pin that the check reconciles those three rather than assuming
+# any task named in the payload must have a bill. A task that says nothing at
+# all is still covered by the old rule, which
+# `test_a_task_graded_for_free_is_caught` above holds in place.
+
+
+def _task_row(
+    task_id: str,
+    *,
+    judge: int,
+    perception: int = 0,
+    model_calls: int | None = None,
+    cost: float = 0.0,
+    error: str | None = None,
+) -> dict:
+    """A task row shaped the way ``step8_grade.py`` writes one."""
+    return {
+        "task_id": task_id,
+        "error": error,
+        "judge_call_count": judge,
+        "perception_call_count": perception,
+        "render_call_count": 0,
+        "grading_cost": {
+            "schema_version": "cost-receipt-v1",
+            "status": "complete",
+            "currency": "USD",
+            "estimated_cost_usd": cost,
+            "known_cost_usd": cost,
+            "model_calls": judge + perception if model_calls is None else model_calls,
+            "usage": {},
+            "components": [],
+            "missing_reasons": [],
+        },
+    }
+
+
+def _graded_task() -> dict:
+    """The one task `_good_calls` bills: two grading calls and one perception."""
+    return _task_row(TASK, judge=2, perception=1, cost=0.025)
+
+
+def test_a_task_that_never_reached_the_judge_is_not_a_free_grade(tmp_path):
+    """exp035 published 78 of these across nine shards. The model produced no
+    file, or the selector refused to choose among the files it did produce, so
+    grading stopped before the first judge call. Reading that as "graded for
+    free" fails a run for being accurate about work it did not do."""
+    results = [_graded_task(), _task_row("never-graded", judge=0, error="no_deliverables")]
+    findings, _ = verify(_write(tmp_path, _good_calls(), results=results))
+    coverage = next(f for f in findings if f.check == "task_coverage")
+    assert coverage.ok is True
+    assert coverage.data["tasks_never_graded"] == ["never-graded"]
+
+
+def test_a_task_claiming_calls_it_cannot_show_is_still_caught(tmp_path):
+    """The defect this check was written for, unchanged: the task says it was
+    graded and no line of the bill agrees."""
+    results = [_graded_task(), _task_row("billed-nowhere", judge=5, cost=0.05)]
+    findings, _ = verify(_write(tmp_path, _good_calls(), results=results))
+    coverage = next(f for f in findings if f.check == "task_coverage")
+    assert coverage.ok is False
+    assert "billed-nowhere" in str(coverage.data)
+
+
+def test_calls_hidden_behind_a_zero_count_are_caught(tmp_path):
+    """Why this is a reconciliation and not a skip. A task that declares
+    nothing while the ledger holds its calls is consumption the receipt's
+    per-task split disowns -- and it is exactly what a rule that simply ignored
+    zero-call tasks would wave through."""
+    calls = _good_calls() + [_call("c9", task_id="quiet-task", cost="0.030000")]
+    results = [_graded_task(), _task_row("quiet-task", judge=0)]
+    findings, _ = verify(_write(tmp_path, calls, results=results))
+    coverage = next(f for f in findings if f.check == "task_coverage")
+    assert coverage.ok is False
+    assert "quiet-task" in str(coverage.data)
+
+
+def test_a_task_that_undercounts_its_calls_is_caught(tmp_path):
+    """Partial under-declaration, which the old rule could not see at all: one
+    row in the ledger is enough for it, however many the task claims."""
+    calls = _good_calls() + [
+        _call("cA1", task_id="short-count", cost="0.030000"),
+        _call("cA2", task_id="short-count", cost="0.030000"),
+    ]
+    results = [_graded_task(), _task_row("short-count", judge=1, cost=0.03)]
+    findings, _ = verify(_write(tmp_path, calls, results=results))
+    coverage = next(f for f in findings if f.check == "task_coverage")
+    assert coverage.ok is False
+    assert "short-count" in str(coverage.data)
+
+
+def test_a_task_with_no_calls_and_a_bill_is_caught(tmp_path):
+    """Zero calls and a dollar figure are not both true. This is the shape a
+    real never-graded task must not be allowed to hide in."""
+    results = [_graded_task(), _task_row("free-lunch", judge=0, cost=12.50)]
+    findings, _ = verify(_write(tmp_path, _good_calls(), results=results))
+    coverage = next(f for f in findings if f.check == "task_coverage")
+    assert coverage.ok is False
+    assert "free-lunch" in str(coverage.data)
+
+
+def test_a_task_whose_two_self_declarations_disagree_is_caught(tmp_path):
+    """The counters and the per-task receipt restate the same number. When
+    they stop agreeing, the payload contradicts itself and neither figure can
+    be quoted."""
+    results = [_graded_task(), _task_row("two-stories", judge=0, model_calls=4)]
+    findings, _ = verify(_write(tmp_path, _good_calls(), results=results))
+    coverage = next(f for f in findings if f.check == "task_coverage")
+    assert coverage.ok is False
+    assert "two-stories" in str(coverage.data)
+
+
 # The two that carry the whole point of the distinction.
 
 def test_an_unpriced_model_is_honest_and_still_passes(tmp_path):

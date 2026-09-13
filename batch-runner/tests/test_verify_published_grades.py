@@ -685,6 +685,63 @@ def test_the_verification_runs_the_real_aggregation(grade_run_workflow):
     assert vpg.DEFAULT_AGGREGATE_CMD == "npm run aggregate"
 
 
+def test_the_job_can_actually_run_the_aggregation_it_calls(grade_run_workflow):
+    """The check above pins *that* the real aggregation runs. This pins that it
+    can.
+
+    The job installed Python and then called ``npm run aggregate`` into a tree
+    with no ``node_modules``, so the aggregation died on the first of its eight
+    scripts -- ``Cannot find package 'yaml' imported from
+    scripts/aggregate-tests.mjs`` -- without ever reaching
+    ``aggregate-grades.mjs``. That reports as a rejected tree: the same verdict
+    a genuinely broken commit would get, on a commit nothing had looked at. All
+    nine exp035 shards failed this way, and the toolchain has to be installed
+    before the step that needs it.
+
+    The error is recorded in each run's ``published-verification-*.json``
+    artifact and nowhere else; it is not in the workflow logs.
+    """
+    job = grade_run_workflow["jobs"]["verify-published"]
+    names = [step.get("name", "") for step in job["steps"]]
+    setup = next(
+        i for i, s in enumerate(job["steps"])
+        if str(s.get("uses", "")).startswith("actions/setup-node@")
+    )
+    install = next(
+        i for i, s in enumerate(job["steps"]) if s.get("run", "").strip() == "npm ci"
+    )
+    verify_step = names.index("Verify what this run published")
+    assert setup < install < verify_step, (
+        f"node must be installed before the aggregation runs: {names}"
+    )
+
+
+def test_the_aggregation_is_checked_with_the_toolchain_the_dashboard_uses():
+    """A different major version would answer a different question.
+
+    The finding this job reports is "the dashboard build would fail on this
+    commit", which is only true if it runs what the dashboard build runs.
+    """
+    yaml = pytest.importorskip("yaml")
+    deploy = yaml.safe_load(
+        (REPO_ROOT / ".github/workflows/deploy.yml").read_text(encoding="utf-8")
+    )
+    grade = yaml.safe_load(
+        (REPO_ROOT / ".github/workflows/grade-run.yml").read_text(encoding="utf-8")
+    )
+
+    def node_step(workflow):
+        for job in workflow["jobs"].values():
+            for step in job["steps"]:
+                if str(step.get("uses", "")).startswith("actions/setup-node@"):
+                    return step
+        raise AssertionError("no setup-node step")
+
+    theirs, ours = node_step(deploy), node_step(grade)
+    assert ours["uses"] == theirs["uses"]
+    assert ours["with"]["node-version"] == theirs["with"]["node-version"]
+
+
 def test_the_verification_spends_nothing_and_starts_nothing(grade_run_workflow):
     """The cycle this must not create: a publish that triggers a check that
     triggers another paid grading run. Nothing in this job dispatches a

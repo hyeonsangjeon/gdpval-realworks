@@ -157,6 +157,27 @@ def _keys(receipt):
     return [(line.stage, line.retry_kind) for line in receipt.components]
 
 
+def _identities(receipt):
+    """What actually makes a line unique, per ``ReceiptComponent``'s contract.
+
+    ``_keys`` is the pair a reader shows in a column header, and it is the
+    right key for the synthetic summaries in this file, which call one model.
+    It is not an identity. ``ReceiptComponent`` says so directly: "Two models
+    called at the same stage are two lines, never one summed line, because a
+    single line carrying two models' tokens cannot be priced by any table."
+
+    exp035 is the first published run to exercise that. Its ``perception``
+    stage ran a visual reader and an audio reader, so it publishes two
+    ``perception/none`` lines -- 418 calls on ``gpt-5.6-sol`` and 38 on
+    ``gpt-audio-1.5``. Keyed on the pair those read as one line duplicated;
+    keyed on the identity they are what the dataclass promised.
+    """
+    return [
+        (line.stage, line.retry_kind, line.resolved_model)
+        for line in receipt.components
+    ]
+
+
 def _lines(receipt, stage, retry_kind=RETRY_NONE):
     """Every line at this stage -- one per model that was called under it."""
     return [
@@ -710,9 +731,15 @@ def _published_receipt_sets():
 def test_every_published_run_summary_now_names_the_stages_behind_it():
     """Blast radius, measured rather than asserted.
 
-    All twenty-one published receipt sets are folded. Every one of them
-    published ``components: []`` before; every one of them now names its
-    stages, and every one stays inside the cap.
+    All published receipt sets are folded. Every one of them published
+    ``components: []`` before; every one of them now names its stages, and
+    every one stays inside the cap.
+
+    Uniqueness is checked on the line identity, not on the ``(stage, retry)``
+    pair -- see ``_identities``. Three of these sets publish two lines at
+    ``perception/none`` because two different models ran there, which is the
+    shape ``ReceiptComponent`` was written to produce rather than a line
+    counted twice.
     """
     seen = 0
     for path, _field, receipts in _published_receipt_sets():
@@ -720,8 +747,11 @@ def test_every_published_run_summary_now_names_the_stages_behind_it():
         summary = summarise_receipts(receipts)
         assert summary.components, f"{path} still names no stage"
         assert len(summary.components) <= _MAX_COMPONENTS, path
-        keys = _keys(summary)
-        assert len(keys) == len(set(keys)), f"{path} carries a duplicate line"
+        identities = _identities(summary)
+        assert len(identities) == len(set(identities)), (
+            f"{path} carries a duplicate line: the same stage, retry kind and "
+            f"model appears twice in {identities}"
+        )
     assert seen >= 21, f"expected the published receipt sets to still be there, saw {seen}"
 
 
