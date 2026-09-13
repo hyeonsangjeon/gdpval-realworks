@@ -51,6 +51,7 @@ Offline, free, model-free.
 
 from __future__ import annotations
 
+import json
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -356,6 +357,63 @@ def test_neither_ending_is_named_by_the_contract(worked_to_the_end):
     assert THE_QUIET not in ERROR_TYPE_FOR_A_CONVERSATION_THAT_STOPPED
 
 
+def test_the_run_record_carries_the_count_rather_than_offering_it(
+    worked_to_the_end, talked_and_stopped
+):
+    """Criterion (a) is answered by the file, not by someone running a function.
+
+    This is the half of finding 9 that was easy to repeat. A counter that
+    exists and has no caller leaves the question exactly as unanswerable as it
+    was -- which is what ``read_outcome``, ``count_separately`` and
+    ``ending_label`` are. Criterion (c)'s counter is wired
+    (``agentic_v2_run_report.summarise_v2_run`` calls ``refusals_the_desk_gave``
+    and publishes ``endings_after_a_refusal``); this one is wired into the run
+    record beside the block it is derived from.
+    """
+    _, kept = worked_to_the_end
+    _, quiet = talked_and_stopped
+
+    for held, reason in ((kept, THE_REACHED), (quiet, THE_QUIET)):
+        block = held.as_dict()
+        assert block["endings"]["tasks"] == 1
+        assert block["endings"]["by_stop_reason"] == {reason: 1}
+        assert block["endings"]["recorded_as_finalize_not_called"] == 1
+
+
+def test_the_count_cannot_disagree_with_the_block_it_sits_beside(
+    worked_to_the_end,
+):
+    """One source, and the other source would have said the same thing.
+
+    ``as_dict`` counts off the serialised block rather than off ``outcomes``,
+    so a reader can redo the arithmetic on what is in front of them. That is
+    only a free choice because the counter reads an outcome in either form,
+    which is what the second assertion holds it to -- otherwise the two
+    readings could drift and the record would carry the luckier one.
+    """
+    _, kept = worked_to_the_end
+    block = kept.as_dict()
+
+    assert block["endings"] == endings_the_conversations_recorded(
+        block["conversations"]
+    )
+    assert block["endings"] == endings_the_conversations_recorded(
+        {
+            f"{task_id}#{attempt}": outcome
+            for (task_id, attempt), outcome in kept.outcomes.items()
+        }
+    )
+
+
+def test_the_record_survives_being_written_as_json(worked_to_the_end):
+    """``run_record.json`` is where a reader meets this, so round-trip it."""
+    _, kept = worked_to_the_end
+    written = json.loads(json.dumps(kept.as_dict(), sort_keys=True, default=str))
+
+    assert written["endings"]["ran_out_of_turns"] == 1
+    assert written["endings"]["by_stop_reason"] == {THE_REACHED: 1}
+
+
 # ── the counter that makes criterion (a) answerable ───────────────────────
 
 
@@ -444,6 +502,7 @@ def test_the_plan_no_longer_registers_an_ending_this_run_cannot_reach(
     assert THE_REACHED in live
     assert THE_REGISTERED not in live
     assert "endings_the_conversations_recorded" in live
+    assert "conversations.endings" in live
 
 
 def test_the_plan_keeps_the_draft_it_replaced(corrected_plan):

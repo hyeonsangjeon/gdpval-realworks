@@ -564,8 +564,9 @@ experiment_record:
     three are endings. (a) Turn exhaustion — stop_reason turn_limit_reached,
     which the conversation loop raises itself once the model has been asked
     max_model_turns times, counted by
-    core.agentic_v2_outcome.endings_the_conversations_recorded over the run
-    record's conversations block. (b) Text-only termination — stop_reason
+    core.agentic_v2_outcome.endings_the_conversations_recorded and written into
+    the run record at conversations.endings, beside the per-attempt block it is
+    derived from. (b) Text-only termination — stop_reason
     model_stopped_without_finishing, the model
     talking until it has nothing left to say without ever calling finalize.
     (c) Tool refusal — the run record's error reading capability_unavailable or
@@ -605,6 +606,16 @@ experiment_record:
     How many tasks this affected in trial_30 is not stated here, because that
     run's record is not in this repository and the figure cannot be derived
     offline.
+
+    The count is written by the run rather than offered to whoever opens the
+    file, which is the half of this that was easiest to repeat. The three
+    functions finding 9 named — read_outcome, count_separately, ending_label —
+    are correct and have no production caller, and a figure nobody computes
+    leaves the question as unanswerable as it was. Criterion (c)'s counter is
+    wired: agentic_v2_run_report.summarise_v2_run calls refusals_the_desk_gave
+    and publishes endings_after_a_refusal. (a) is wired the same way, in
+    TaskConversations.as_dict, derived from the conversations block beside it
+    and from no second source, so the two cannot disagree.
     This line has now been wrong in both directions and both drafts are kept,
     because the column they describe is the one this run is judged on. The
     first named stop_reason tool_desk_broke as the refusal figure. The second
