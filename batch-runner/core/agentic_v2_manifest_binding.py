@@ -30,15 +30,22 @@ and :data:`ANSWER_FIELDS_THAT_MUST_NOT_TRAVEL` is checked against
 ``TaskToRun``'s own fields at import, so a later widening of that dataclass to
 carry an answer fails on import rather than in a result.
 
-**What is still missing, stated plainly.** ``TaskToRun.reference_files`` carries
-the *names* the dataset lists, because that is what the dataset gives and what
+**What this no longer claims.** ``TaskToRun.reference_files`` carries the
+*names* the dataset lists, because that is what the dataset gives and what
 :meth:`core.agentic_v2_runner.AgenticV2ScriptedRunner.run` accepts — it takes
-the list and passes it into the worker unchanged. Nothing yet copies those files
-into the guest's workspace as bytes. A bound task is therefore a task whose
-reference files are *named* and not *present*, and a task needing one of them to
-be opened will fail on its merits. That is a gap in the environment, not in this
-module, and :func:`unmet_needs` reports it per task so a stage-five result can
-be read knowing which tasks were asked to work without their inputs.
+the list and passes it into the worker unchanged. This paragraph used to go on
+to say that nothing copies those files into the guest's workspace as bytes, that
+a bound task is therefore one whose reference files are *named* and not
+*present*, and that a task needing one will fail on its merits.
+:mod:`core.agentic_v2_reference_staging` is that copy, and it has existed since
+before this run was planned, so all three sentences are now false.
+
+Naming a file and receiving it are still two different facts, and they are
+answered in two different places on purpose. :func:`unmet_needs` says which
+tasks *wanted* files. :func:`core.agentic_v2_reference_staging.staging_record`
+says which *got* them, per task and by name, including the ones refused and
+why — a task denied its spreadsheet is not a task that never had one. A result
+is read against the second.
 
 Nothing here calls a model, opens a guest, or spends anything.
 """
@@ -333,24 +340,34 @@ def bind_stage(
 
 
 def unmet_needs(bound: BoundManifest) -> dict[str, Any]:
-    """Which bound tasks are being asked to work without their inputs.
+    """Which bound tasks name input files — not which ones received them.
 
-    A task with reference files whose bytes are not in the guest can still be
-    attempted, and may still fail on its merits — but a reader comparing stages
-    needs to know which failures had that handicap. Reporting it is not the same
-    as fixing it, and this does not fix it.
+    This used to answer both, and could, because for a while the answer to the
+    second was always no. It wrote ``reference_file_bytes_are_in_the_guest:
+    False`` and a sentence ending "A failure on one of them is not evidence
+    about the model". :mod:`core.agentic_v2_reference_staging` made both false
+    and the field stayed, so a run record carried it a few keys away from
+    ``reference_files``, which says what was actually delivered. On the
+    thirty-task cohort the stale sentence names 14 of 30 tasks and tells a
+    reader to discount them for missing inputs they were given.
+
+    So the boolean is gone rather than corrected: a single flag for a whole
+    cohort is read as "all of them" or "none of them" when the truth is "most",
+    which is the reason :func:`~core.agentic_v2_reference_staging.staging_record`
+    was written per task. What stays here is the half this function can answer
+    on its own, from the binding, without knowing whether a run happened.
     """
     needing = [task.task_id for task in bound.tasks if task.reference_files]
     return {
         "stage": bound.stage,
         "tasks_needing_reference_files": needing,
         "tasks_needing_reference_files_count": len(needing),
-        "reference_file_bytes_are_in_the_guest": False,
+        "whether_they_arrived_is_recorded_in": "reference_files",
         "what_that_means": (
             f"{len(needing)} of {len(bound.tasks)} bound tasks name reference "
-            "files that nothing copies into the workspace, so those tasks run "
-            "with the file names in their prompt and not the files. A failure "
-            "on one of them is not evidence about the model."
+            "files. This is which tasks wanted them, not which got them: the "
+            "run record's `reference_files` answers that, per task and by "
+            "name, and a result is read against that one."
         ),
     }
 
