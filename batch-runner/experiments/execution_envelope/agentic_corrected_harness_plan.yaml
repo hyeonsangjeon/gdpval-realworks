@@ -772,4 +772,18 @@ experiment_record:
     the model's own bytes, so key order and whitespace may differ from what it
     wrote. (6) The 9 text-only endings are the observation the replay fix came
     from, which makes this run a test of a hypothesis formed on the same data;
-    it is not independent evidence for it.
+    it is not independent evidence for it. (7) A refused tool call ends the
+    task — the first not-ok result raises out of dispatch_one before the model
+    is asked again, registered as one_failed_tool_call_ends_the_task and pinned
+    in tests/test_one_failed_tool_call_ends_the_task.py. So the refusal count
+    in falsification (c) is an upper bound on what the tool policy actually
+    cost, not a measure of it: a task that would have read the refusal and
+    written the report from what it already knew is counted here exactly like a
+    task that had nothing else to try, because neither was given the turn that
+    would tell them apart. This also means after_stage_one's success criterion,
+    which is frozen identical to the plan trial_30 ran under and therefore not
+    editable here, has to be read with its tool result an ok one; a not-ok
+    result is not a thing the model is asked again about. And it is the reason
+    the derived tool-availability paragraph carries more weight than it looks
+    like it should: it is the only occasion on which the model learns what it
+    cannot use, because the second occasion does not exist.

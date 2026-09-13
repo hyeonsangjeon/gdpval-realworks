@@ -349,6 +349,51 @@ def test_the_confounds_include_the_one_that_is_easiest_to_forget(corrected):
     assert "concurrent control" in confounds
 
 
+def test_the_refusal_count_is_written_down_as_a_ceiling_not_a_measurement(
+    corrected,
+):
+    """The confound the corrected plan could not have had when it was drafted.
+
+    A refused call ends the task before the model is asked again, so the
+    tasks counted under ``falsification`` (c) are not the tasks the tool
+    policy cost anything. They are those *plus* every task that would have
+    read the refusal and got on with something else, and nothing in the run
+    separates the two because neither is given the turn that would. Reported
+    as a measurement it overstates the policy's effect by an unknown amount;
+    reported as a ceiling it is honest and still useful.
+
+    Pinned here because the plan is the artefact a reader reaches for, and a
+    limit that lives only in a test file is a limit nobody reads.
+    """
+    confounds = corrected["experiment_record"]["known_confounds"]
+
+    assert "upper bound" in confounds
+    assert "not a measure of it" in confounds
+    assert "one_failed_tool_call_ends_the_task" in confounds
+    assert "test_one_failed_tool_call_ends_the_task.py" in confounds
+
+
+def test_the_frozen_success_criterion_is_read_with_the_refusal_in_mind(
+    ran, corrected
+):
+    """``after_stage_one`` is identical in both plans, and has to stay that way.
+
+    Its criterion asks for a test showing the model was asked again with a
+    tool result in front of it. Read loosely that is refusal recovery, which
+    no run produces. The fix is not to edit the criterion -- moving it would
+    break the one property this plan is built on, that it differs from the
+    plan trial_30 ran under in exactly two places -- but to say in the record
+    which reading is the live one.
+    """
+    assert ran["after_stage_one"] == corrected["after_stage_one"], (
+        "the criterion is frozen; the clarification belongs in the record"
+    )
+
+    confounds = corrected["experiment_record"]["known_confounds"]
+    assert "after_stage_one" in confounds
+    assert "ok one" in confounds
+
+
 def test_the_denominator_is_all_thirty_and_the_subset_is_labelled(corrected):
     record = corrected["experiment_record"]
     assert "All 30 tasks" in record["denominator"]
