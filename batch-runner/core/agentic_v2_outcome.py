@@ -445,3 +445,99 @@ def count_separately(outcomes: Sequence[Outcome]) -> dict[str, Any]:
             "answer exists, not whether it is right"
         ),
     }
+
+
+def endings_the_conversations_recorded(
+    conversations: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Falsification (a) and (b), counted off the field that keeps them apart.
+
+    Everything above reads a task's ``error``, and ``error`` cannot answer
+    this. A task that worked to its last allowed turn and a task that said one
+    thing and stopped both arrive here as ``finalize_not_called``:
+    ``turn_limit_reached`` has no entry in
+    :data:`core.agentic_v2_runner.ERROR_TYPE_FOR_A_CONVERSATION_THAT_STOPPED`
+    and takes the default, and so does ``model_stopped_without_finishing``.
+    The two are opposite findings -- one says the ceiling was too low, the
+    other says the model could not do the task -- and the published
+    ``terminal_error_category`` is the same word for both.
+
+    The exact ending is not lost, only summarised away.
+    :meth:`~core.agentic_v2_conversation.ConversationOutcome.as_dict` keeps
+    ``stop_reason``, and ``run_agentic_v2_stage.py`` writes it into the run
+    record under ``conversations``. This function reads that block, so the
+    separation the corrected-harness plan registers is answerable from a record
+    the run already produces, with no change to
+    :data:`core.agentic_v2_contract.ERROR_TYPES` and therefore no change to
+    what is retried or what a run costs.
+
+    **What it does not answer.** Falsification (c), tool refusal, is not here.
+    The loop reports a desk that said no and a desk that fell over as the same
+    ``tool_desk_broke``, so it cannot be told from this block at all;
+    :func:`refusals_the_desk_gave` reads the turn records instead, and that
+    division is deliberate rather than an omission.
+
+    ``conversations`` is the ``{"task#attempt": {...}}`` mapping, values in
+    either the dict or the object form. A task's ending is its **last**
+    attempt; earlier ones are counted in ``attempts_not_counted`` rather than
+    dropped silently, because folding retries into the denominator would report
+    more endings than there were tasks.
+    """
+    from core.agentic_v2_runner import ERROR_TYPE_FOR_A_CONVERSATION_THAT_STOPPED
+
+    def reason_of(outcome: Any) -> str:
+        if isinstance(outcome, Mapping):
+            raw = outcome.get("stop_reason")
+        else:
+            raw = getattr(outcome, "stop_reason", None)
+        return str(getattr(raw, "value", raw) or "")
+
+    last: dict[str, tuple[int, str]] = {}
+    folded = 0
+    for key, outcome in conversations.items():
+        task_id, _, attempt_text = str(key).rpartition("#")
+        if not task_id:
+            task_id, attempt_text = str(key), "1"
+        try:
+            attempt = int(attempt_text)
+        except ValueError:
+            attempt = 1
+        seen = last.get(task_id)
+        if seen is None:
+            last[task_id] = (attempt, reason_of(outcome))
+            continue
+        folded += 1
+        if attempt > seen[0]:
+            last[task_id] = (attempt, reason_of(outcome))
+
+    tally: dict[str, int] = {}
+    for _, reason in last.values():
+        tally[reason] = tally.get(reason, 0) + 1
+
+    merged = sum(
+        count
+        for reason, count in tally.items()
+        if reason and reason not in ERROR_TYPE_FOR_A_CONVERSATION_THAT_STOPPED
+    )
+    return {
+        "tasks": len(last),
+        "by_stop_reason": dict(sorted(tally.items())),
+        "ran_out_of_turns": tally.get("turn_limit_reached", 0),
+        "stopped_without_finishing": tally.get(
+            "model_stopped_without_finishing", 0
+        ),
+        # How much the published column is hiding. Every ending counted here
+        # reaches the report as `finalize_not_called`, so this is the number of
+        # tasks whose reported ending does not name what happened to them.
+        "recorded_as_finalize_not_called": merged,
+        "attempts_not_counted": folded,
+        "note": (
+            "counted from conversations[].stop_reason, not from the task's "
+            "error. The two disagree on purpose: error is the contract's word "
+            "for the ending and the contract has no word for running out of "
+            "turns, so the report merges this column's first two figures into "
+            "one bucket. Tool refusal is not counted here -- the loop cannot "
+            "tell a desk that said no from one that broke; see "
+            "refusals_the_desk_gave"
+        ),
+    }

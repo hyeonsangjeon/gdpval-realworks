@@ -45,6 +45,28 @@
 # it exists to make possible is the one after it, which moves
 # tool_calls_per_attempt and nothing else.
 #
+# "And nothing else" is the intent and it is not what the knob does.
+# conversation_runner.ceilings_from derives four ceilings from it, at two
+# different rates: max_model_turns, max_model_calls and max_output_tokens all
+# scale as (calls + 1), and max_input_tokens as (calls + 1)(calls + 2). Moving
+# it from 3 to 8 multiplies the first three by 2.25 and the fourth by 4.5. Only
+# max_seconds, max_written_tokens_per_turn and max_repeats_of_one_request hold.
+# So the later run can hold time fixed and cannot hold tokens fixed, and it is
+# a turn-and-token comparison rather than a turn comparison. Saying which is a
+# design decision that has to be made before it is dispatched, not after.
+#
+# One value of the six candidates is worse than a confound. The desk's own
+# ceiling is 32 and does not move with this knob, so at
+# tool_calls_per_attempt 32 the loop's ceiling becomes 33, the desk binds first
+# instead, the task gets 32 tool calls rather than 33, and the recorded ending
+# changes from finalize_not_called to tool_budget_exhausted. Every other
+# candidate -- 4, 6, 8, 12, 16 -- ends at the turn ceiling and records the same
+# word. A comparison that includes 32 is comparing two different outcome
+# variables, and the change of label would look like an effect. Either drop 32
+# from the grid or raise budget_caps["tool_calls"] with it; doing neither is
+# the trap. Measured against the real runner and desk in
+# tests/test_the_registered_ceiling_is_not_the_one_that_binds.py.
+#
 # trial_30 (run 34671538199, 2026-09-12) is past reference, not a control. It
 # ran on a different day, against a different harness, and nothing was held
 # constant between the two except the cohort and the settings. A number from it
@@ -539,13 +561,50 @@ experiment_record:
   falsification: >-
     The hypothesis is about the harness, not the model: that the two defects
     end tasks. Three failures are counted separately over all 30 tasks, and all
-    three are endings. (a) Turn exhaustion — stop_reason
-    tool_call_limit_reached, which the desk raises as tool_budget_exhausted
-    when the model has spent its tool_calls_per_attempt. (b) Text-only
-    termination — stop_reason model_stopped_without_finishing, the model
+    three are endings. (a) Turn exhaustion — stop_reason turn_limit_reached,
+    which the conversation loop raises itself once the model has been asked
+    max_model_turns times, counted by
+    core.agentic_v2_outcome.endings_the_conversations_recorded over the run
+    record's conversations block. (b) Text-only termination — stop_reason
+    model_stopped_without_finishing, the model
     talking until it has nothing left to say without ever calling finalize.
     (c) Tool refusal — the run record's error reading capability_unavailable or
     another reason core.agentic_v2_conversation.ends_the_run does not claim.
+
+    Line (a) is a third correction and the draft it replaces is kept, for the
+    reason the paragraph below gives. It read: "stop_reason
+    tool_call_limit_reached, which the desk raises as tool_budget_exhausted
+    when the model has spent its tool_calls_per_attempt." Both halves are
+    wrong, and the second is why the first went unnoticed. The desk's ceiling
+    is not tool_calls_per_attempt: it is budget_caps["tool_calls"], which
+    run_agentic_v2_stage.py never passes, so it is the default 32 while
+    tool_calls_per_attempt is the fixed 8. The loop's ceiling is
+    tool_calls_per_attempt + 1 = 9. Nine binds first, every time, leaving 23 of
+    the desk's 32 calls unspent — so a task that keeps working ends at
+    turn_limit_reached and tool_call_limit_reached is not reachable at the
+    settings this run fixes. As written, (a) counted zero by construction, and
+    the tasks it was meant to count landed in (b): turn_limit_reached has no
+    entry in agentic_v2_runner.ERROR_TYPE_FOR_A_CONVERSATION_THAT_STOPPED and
+    neither does model_stopped_without_finishing, so both reach the report as
+    terminal_error_category finalize_not_called, with disposition semantic and
+    attributable_to "model". A ceiling this run chose was going to be published
+    as the model failing. The three categories did not partition; one of them
+    was empty and another held two opposite findings. Checked against the real
+    runner, the real dispatcher and the real fixture backend, with no
+    hand-made record, in tests/test_the_registered_ceiling_is_not_the_one_that_binds.py.
+
+    Two things are not fixed by the correction. The report still merges (a)
+    into (b), because separating them there means a new member in
+    core.agentic_v2_contract.ERROR_TYPES and a disposition for it in
+    core.agentic_v2_cost_binding.ERROR_DISPOSITION, which decides what is
+    retried and therefore what a run costs; that is a paid-path schema change
+    and is not made here. The published column is unchanged and the separation
+    is read from conversations[].stop_reason instead. And the size of the merge
+    is reported rather than assumed: recorded_as_finalize_not_called is the
+    count of tasks whose published ending does not name what happened to them.
+    How many tasks this affected in trial_30 is not stated here, because that
+    run's record is not in this repository and the figure cannot be derived
+    offline.
     This line has now been wrong in both directions and both drafts are kept,
     because the column they describe is the one this run is judged on. The
     first named stop_reason tool_desk_broke as the refusal figure. The second
