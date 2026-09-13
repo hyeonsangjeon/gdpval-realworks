@@ -78,6 +78,30 @@ class _EndTheRun(Exception):
 #: distinction is not lost: the caller supplying the conversation holds its
 #: record, which names the reason exactly.
 #:
+#: That paragraph named two of the six reasons that fall through. The other
+#: four are listed in :data:`STOP_REASONS_WITH_NO_ERROR_TYPE_TO_NAME_THEM`, and
+#: one of them is not a detail. ``turn_limit_reached`` is the ending a task
+#: reaches by working steadily until it runs out of allowed turns, and it is
+#: raised by the loop itself. Recorded as ``finalize_not_called`` it is
+#: indistinguishable from a model that talked and stopped -- opposite findings,
+#: one saying the ceiling was too low and the other that the model could not do
+#: the task.
+#:
+#: The ceiling that *is* named here, ``tool_call_limit_reached``, is a
+#: different ceiling: the loop never raises it, and it arrives only when a tool
+#: desk returns ``tool_budget_exhausted`` for itself. So the ceiling this map
+#: separates and the ceiling a task actually reaches are not the same ending,
+#: and :mod:`core.agentic_v2_outcome` used to describe them as though they
+#: were.
+#:
+#: Naming the turn ceiling properly means adding a member to
+#: :data:`core.agentic_v2_contract.ERROR_TYPES` and a disposition for it in
+#: :data:`core.agentic_v2_cost_binding.ERROR_DISPOSITION`, which decides
+#: whether a task is retried and therefore what a run costs. That is a change
+#: to the paid path and is deliberately not made here. Until it is, the exact
+#: reason is in the run record's ``conversations`` entry for the task, under
+#: ``stop_reason``, and that is the field to read.
+#:
 #: ``paid_call_refused`` is the one worth reading twice. It is the gate that is
 #: still shut, and mapping it to ``capability_unavailable`` puts it in the
 #: ``terminal_capability_absent`` disposition — recorded as a result, attempted
@@ -91,6 +115,27 @@ ERROR_TYPE_FOR_A_CONVERSATION_THAT_STOPPED: dict[str, str] = {
     "tool_desk_broke": "runner_internal_error",
     "limit_missing": "runner_internal_error",
 }
+
+#: Endings that are recorded as ``finalize_not_called`` because no contract
+#: error type names them.
+#:
+#: Written down so the set is a decision rather than whatever is left over.
+#: ``test_every_ending_is_named_or_knowingly_unnamed.py`` checks this against
+#: :class:`core.agentic_v2_conversation.StopReason` at import, so a new ending
+#: cannot join the fallback by being forgotten -- which is how
+#: ``turn_limit_reached`` got here.
+#:
+#: Only ``model_stopped_without_finishing`` is described accurately by the name
+#: it is given. The four above it are ceilings, and ``model_reply_unusable`` is
+#: this harness failing to parse a reply, not the model declining to answer.
+STOP_REASONS_WITH_NO_ERROR_TYPE_TO_NAME_THEM: frozenset[str] = frozenset({
+    "turn_limit_reached",
+    "cost_limit_reached",
+    "writing_limit_reached",
+    "repeated_request",
+    "model_reply_unusable",
+    "model_stopped_without_finishing",
+})
 
 
 class AgenticV2IsolatedFixtureRunner:

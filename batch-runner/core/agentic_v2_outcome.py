@@ -89,9 +89,19 @@ FINALIZE_ACCEPTED = "accepted"
 FINALIZE_NOT_CALLED = "not_called"
 
 #: The run ended some other way -- a ceiling, a broken desk, a refused call --
-#: before any terminal result existed. Distinct from "not called" on purpose:
-#: a task stopped at its turn limit and a task that talked until it ran out of
-#: things to say are different failures and get counted separately.
+#: before any terminal result existed.
+#:
+#: This used to say that a task stopped at its turn limit and a task that
+#: talked until it ran out of things to say "are different failures and get
+#: counted separately". They are different failures and they are *not* counted
+#: separately. ``turn_limit_reached`` is not in
+#: :data:`core.agentic_v2_runner.ERROR_TYPE_FOR_A_CONVERSATION_THAT_STOPPED`,
+#: so the runner records it as ``finalize_not_called`` and it arrives here as
+#: :data:`FINALIZE_NOT_CALLED` -- the same value as the model that went quiet.
+#: The separation this constant exists for is real for a broken desk, a refused
+#: call and a wall clock, and absent for the turn ceiling. Read
+#: ``conversations[task#attempt].stop_reason`` in the run record to tell those
+#: two apart.
 FINALIZE_ENDED_FIRST = "ended_before_it_could_be"
 
 #: What the runner calls the ending where nothing was ever finalised.
@@ -354,11 +364,18 @@ def read_outcome(
 
 
 def ending_label(outcome: Outcome) -> str:
-    """The one name for how a task ended, with the ceiling kept specific.
+    """The one name for how a task ended, as specific as the runner made it.
 
-    ``finalize_ended_first`` covers a turn ceiling, a wall clock and a broken
-    desk, which are three different findings, so for that case the runner's own
-    ``error_type`` is the label. The other two endings are already specific.
+    ``finalize_ended_first`` covers several unlike endings, so for that case the
+    runner's own ``error_type`` is the label rather than the generic name.
+
+    What this cannot recover is an ending the runner did not name. The
+    docstring here used to claim the label "covers a turn ceiling, a wall clock
+    and a broken desk". The wall clock and the broken desk arrive with their own
+    ``error_type``; the turn ceiling arrives as ``finalize_not_called``, which
+    is :data:`FINALIZE_NOT_CALLED` and never reaches the branch below. This
+    function is faithful to ``error_type`` -- the loss is upstream, in
+    :data:`core.agentic_v2_runner.STOP_REASONS_WITH_NO_ERROR_TYPE_TO_NAME_THEM`.
     """
     if outcome.finalize == FINALIZE_ENDED_FIRST and outcome.error_type:
         return outcome.error_type
