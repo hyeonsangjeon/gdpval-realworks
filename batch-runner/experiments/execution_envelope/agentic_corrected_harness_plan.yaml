@@ -30,8 +30,10 @@
 #    re-sent as the provider's own function_call item carrying its call_id,
 #    its name and its arguments, instead of as the sentence "I asked for
 #    workspace_apply as call call_3." with the arguments discarded. Nine
-#    attempts in trial_30 ended with the model writing another line of that
-#    format as text rather than asking for a tool.
+#    attempts in trial_30, across five of its thirty tasks, ended with the
+#    model writing another line of that format as text rather than asking for
+#    a tool — the denominator is said because the twelve above it is a count
+#    of tasks and these two numbers otherwise read as the same kind of thing.
 #
 # ── What this run can and cannot say ───────────────────────────────────────
 #

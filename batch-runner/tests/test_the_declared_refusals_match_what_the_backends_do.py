@@ -411,3 +411,74 @@ def test_only_the_named_plan_asks_for_a_derived_list():
     assert asking == list(PLANS_THAT_ASK_FOR_A_DERIVED_LIST), (
         f"the set of opted-in plans has changed: {asking}"
     )
+
+
+# ---------------------------------------------------------------------------
+# The standing sentence above the list, which is the other declaration
+# ---------------------------------------------------------------------------
+
+
+def test_the_sentence_that_a_refusal_ends_the_task_is_true_to_the_end_of_the_chain():
+    """The per-tool verdicts are proved against the methods; this was not.
+
+    ``A_REFUSAL_ENDS_THE_TASK`` is the first thing the derived paragraph says
+    and the only part of it that is about the harness rather than a backend.
+    It is also the sentence the hand-written paragraph got wrong -- it told
+    the model a refusal cost it a turn -- so it is the correction, not a
+    preamble to it.
+
+    Its truth is assembled from four modules and no single one of them can be
+    read to check it:
+
+      1. the desk answers ``ok: False`` with ``capability_unavailable``;
+      2. ``agentic_v2_runner`` overrides the loop's ``tool_desk_broke`` with
+         the desk's own error type, which is the step that makes the run
+         record disagree with the conversation;
+      3. ``ERROR_DISPOSITION`` sends that error type to
+         ``terminal_capability_absent``;
+      4. that disposition is terminal, so the retry layer does not reopen the
+         task.
+
+    Break link 3 or 4 -- give refusals a retry, as ``semantic`` and
+    ``infrastructure`` have -- and the task no longer ends, while the model
+    goes on being told it does. Nothing in the suite fails. The sentence is
+    the last thing anyone would think to edit, because it reads like a
+    statement about tools rather than about the retry layer.
+    """
+    from core.agentic_v2_cost_binding import (
+        DISPOSITION_TERMINAL_CAPABILITY,
+        ERROR_DISPOSITION,
+        TERMINAL_DISPOSITIONS,
+    )
+    from core.agentic_v2_tool_availability import A_REFUSAL_ENDS_THE_TASK
+
+    # What the sentence claims, in the two halves it claims it in.
+    assert "ends your task" in A_REFUSAL_ENDS_THE_TASK
+    assert "there is no turn after it" in A_REFUSAL_ENDS_THE_TASK
+
+    disposition = ERROR_DISPOSITION["capability_unavailable"]
+    assert disposition == DISPOSITION_TERMINAL_CAPABILITY
+    assert disposition in TERMINAL_DISPOSITIONS, (
+        "a refused call is retried now, so the model is being told its task "
+        "ends when it does not. Either the disposition moved or the sentence "
+        "has to"
+    )
+
+
+def test_the_sentence_is_the_paragraphs_first_line_and_not_a_footnote():
+    """Where it sits is part of what it does.
+
+    A model reads the list to decide which tool to reach for. The cost of
+    reaching wrongly has to be known before the list, not after it, or the
+    list is a menu with the price on the back.
+    """
+    from core.agentic_v2_tool_availability import (
+        A_REFUSAL_ENDS_THE_TASK,
+        tool_availability_paragraph,
+    )
+
+    paragraph = tool_availability_paragraph(AgenticV2FixtureBackend)
+    assert paragraph.startswith(A_REFUSAL_ENDS_THE_TASK)
+    # And every tool the list names comes after it, not before.
+    for entry in availability_for(AgenticV2FixtureBackend):
+        assert paragraph.index(entry.tool) > len(A_REFUSAL_ENDS_THE_TASK)

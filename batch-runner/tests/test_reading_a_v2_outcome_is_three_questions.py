@@ -366,3 +366,48 @@ def test_the_outcome_is_frozen(tmp_path):
     with pytest.raises(Exception):
         outcome.finalize = FINALIZE_NOT_CALLED  # type: ignore[misc]
     assert isinstance(outcome, Outcome)
+
+
+# ---------------------------------------------------------------------------
+# The fourth column's paragraph, held to the table it describes
+# ---------------------------------------------------------------------------
+
+
+def test_the_module_docstring_names_the_right_disposition_for_each_ending():
+    """The paragraph explaining the fourth column now names three error types.
+
+    It says a refusal ends the task while a fallen-over desk and a malformed
+    call end only the attempt, and that all three reach the loop as
+    ``TOOL_DESK_BROKE``. That is the distinction the column exists for, so it
+    is worth exactly as much as it is true -- and it is a claim about a table
+    in another module, which is the kind of claim that goes stale silently.
+
+    Checked against the table rather than against a copy of it, so that
+    reclassifying any of the three fails here and not in a report six weeks
+    later.
+    """
+    import core.agentic_v2_outcome as outcome_module
+    from core.agentic_v2_cost_binding import (
+        ERROR_DISPOSITION,
+        RETRY_INFRASTRUCTURE,
+        RETRY_SEMANTIC,
+        TERMINAL_DISPOSITIONS,
+    )
+
+    doc = outcome_module.__doc__ or ""
+    assert "ends the *attempt*" in doc, (
+        "the paragraph went back to saying dispatch_one ends the task, which "
+        "is true only of the refusal"
+    )
+
+    # The one that coincides.
+    assert ERROR_DISPOSITION["capability_unavailable"] in TERMINAL_DISPOSITIONS
+
+    # The two that do not, each named in the paragraph.
+    assert ERROR_DISPOSITION["fixture_backend_error"] == RETRY_INFRASTRUCTURE
+    for named in ("invalid_arguments", "path_not_directory"):
+        assert named in doc, f"the paragraph stopped naming {named}"
+        assert ERROR_DISPOSITION[named] == RETRY_SEMANTIC, (
+            f"{named} is no longer a semantic retry, so the paragraph's "
+            "example of an attempt that is not an ending is now wrong"
+        )

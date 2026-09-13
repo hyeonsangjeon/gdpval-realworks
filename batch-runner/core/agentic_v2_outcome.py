@@ -35,10 +35,22 @@ grounds that a refused call is handed back and the task goes on to finish some
 other way. **That is not what this harness does**, and the wrong claim is
 restated here rather than quietly dropped, because the columns below were built
 on it and a reader of those columns needs to know what they were for.
-``dispatch_one`` ends the task on the first tool result that is not ``ok``, a
-condition registered in ``core.agentic_v2_preregistration`` under
+``dispatch_one`` ends the *attempt* on the first tool result that is not
+``ok``, a condition registered in ``core.agentic_v2_preregistration`` under
 ``one_failed_tool_call_ends_the_task``; the model is told nothing and is not
 asked for another turn.
+
+Whether the attempt's ending is also the task's is decided one layer up, by
+``ERROR_DISPOSITION`` in :mod:`core.agentic_v2_cost_binding`, and the answer
+differs for endings the conversation loop files under the same word. A desk
+refusal is ``capability_unavailable``, which is terminal, so for a refusal the
+two endings coincide. A fixture backend that fell over is
+``fixture_backend_error``, which is ``retry_infrastructure``, and a malformed
+call is ``invalid_arguments`` or ``path_not_directory``, which are
+``retry_semantic``: those end the attempt and the task is opened again. All
+three arrive at the loop as ``TOOL_DESK_BROKE``, which is the fourth column's
+whole reason for existing and also why "ends the task" is the wrong sentence
+for anything but the refusal.
 
 So under the present schema a refusal *is* the ending, and
 :attr:`Outcome.tool_refusals` can hold at most one entry for a real run. The

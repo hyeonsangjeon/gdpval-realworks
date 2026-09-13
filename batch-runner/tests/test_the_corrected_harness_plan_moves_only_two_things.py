@@ -608,3 +608,59 @@ def test_the_reporting_rule_forbids_a_figure_before_it_is_measured(corrected):
         "the record has to say what the check cannot do, or passing it reads "
         "as the report being right"
     )
+
+
+# ---------------------------------------------------------------------------
+# The header, which is a comment and so is read by nothing else
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def header() -> str:
+    """The plan's opening comment block, as text.
+
+    Every other test in this file reads parsed YAML, so the twenty-four lines
+    a person actually reads first are the only part of the plan nothing holds
+    to anything. They carry the two figures that motivate the run.
+    """
+    raw = THE_CORRECTED_PLAN.read_text(encoding="utf-8")
+    return raw.split("# ── What this run can and cannot say")[0]
+
+
+def test_the_two_motivating_figures_each_carry_their_denominator(header):
+    """Twelve and nine count different things, and sit four lines apart.
+
+    Twelve is tasks out of thirty. Nine is attempts, across five tasks, and
+    an attempt is not a task here: the retry layer decides the task, and only
+    a `capability_unavailable` disposition is certain to carry its attempt's
+    ending through to it. A reader who takes nine as a task count reads 30%
+    of the cohort where the tasks affected were 17% of it.
+
+    This is the conflation `experiment_record.falsification` and `units`
+    already correct further down the same file, so the header getting it
+    wrong would be the plan disagreeing with itself.
+    """
+    assert "Twelve of trial_30's thirty tasks" in header
+    assert "Nine\n#    attempts in trial_30, across five of its thirty tasks" in header, (
+        "the attempt figure lost its denominator; beside a task count four "
+        "lines above, nine then reads as nine tasks"
+    )
+
+
+def test_the_caveat_is_the_section_directly_after_the_two_changes(header):
+    """The one claim this run is not allowed to make, in the place it would be made.
+
+    The header is where a combined change gets described as two improvements,
+    and a reader who stops after the numbered list would carry that away. So
+    the list is not allowed to end the reading: the section that says the two
+    axes cannot be told apart has to be the next thing on the page, not a
+    paragraph further down that a skimmer never reaches.
+    """
+    raw = THE_CORRECTED_PLAN.read_text(encoding="utf-8")
+    after = raw[len(header):]
+    assert after.startswith("# ── What this run can and cannot say")
+    assert "Two axes move at once" in after[:600], (
+        "the caveat moved away from the change list it qualifies"
+    )
+    # And the header itself must not have made the claim first.
+    assert "improvement" not in header.lower()
