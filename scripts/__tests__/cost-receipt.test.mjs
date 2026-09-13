@@ -1272,3 +1272,100 @@ test('every cost summary in the published index is accepted', async () => {
   }
   assert.ok(seen >= 3, `expected at least the 3 known cost-carrying reports, saw ${seen}`);
 });
+
+// ── Audio, and the difference between a measured zero and a silence ───────
+
+// Shard 8 of the exp035 grading round, which is the evidence this section was
+// written from. Its ledger measured 2,400 input audio tokens over the eight
+// calls it sent to the speech reader, and the receipt published beside it says
+// nothing about them, because `cost-receipt-v1` had no field to say it in.
+// The same amounts appear in batch-runner/tests/test_cost_projection.py.
+const SHARD_8_USAGE = {
+  input_tokens: 7_107_879,
+  cached_input_tokens: 4_391_813,
+  output_tokens: 603_481,
+  reasoning_tokens: 496_609,
+  audio_input_tokens: 2_400,
+  audio_output_tokens: 0,
+};
+
+test('an audio count reaches the reader at both levels', () => {
+  const projected = projectCostReceipt(receipt({
+    model_calls: 1722,
+    usage: SHARD_8_USAGE,
+    components: [component({
+      name: 'perception',
+      stage: 'perception',
+      model_calls: 8,
+      usage: { input_tokens: 4843, audio_input_tokens: 2400, audio_output_tokens: 0 },
+    })],
+  }));
+
+  assert.equal(projected.usage.audio_input_tokens, 2400);
+  assert.equal(projected.components[0].usage.audio_input_tokens, 2400);
+  // Unchanged, and deliberately so: audio is a share of the input the provider
+  // already reported, not something to add to it.
+  assert.equal(projected.usage.input_tokens, 7_107_879);
+});
+
+test('a kind nobody measured stays null rather than becoming zero', () => {
+  const projected = projectCostReceipt(receipt({
+    usage: { input_tokens: 1200, audio_input_tokens: null, audio_output_tokens: null },
+    components: [component({
+      usage: { input_tokens: 1200, audio_input_tokens: null, audio_output_tokens: null },
+    })],
+  }));
+
+  for (const usage of [projected.usage, projected.components[0].usage]) {
+    // Present and null. Dropping the key would be the same loss by a quieter
+    // route: a reader cannot tell an absent key from one that was never in
+    // this contract.
+    assert.ok('audio_input_tokens' in usage);
+    assert.equal(usage.audio_input_tokens, null);
+    assert.equal(usage.audio_output_tokens, null);
+  }
+});
+
+test('a measured zero and a silence do not arrive looking alike', () => {
+  const projected = projectCostReceipt(receipt({
+    usage: { audio_input_tokens: 0, audio_output_tokens: null },
+  }));
+
+  assert.equal(projected.usage.audio_input_tokens, 0);
+  assert.equal(projected.usage.audio_output_tokens, null);
+});
+
+test('an invalid audio count is refused like every other kind', () => {
+  // The fields are new; the rules they answer to are not. Nothing about audio
+  // gets a lenient path into a published report.
+  for (const [value, message] of [
+    [-1, /audio_input_tokens is out of range/],
+    [1.5, /audio_input_tokens must be an integer/],
+    [true, /audio_input_tokens must be an integer/],
+    ['2400', /audio_input_tokens must be an integer/],
+  ]) {
+    assert.throws(
+      () => projectCostReceipt(receipt({ usage: { audio_input_tokens: value } })),
+      message,
+    );
+  }
+});
+
+/**
+ * The boundary this repair stops at, written down rather than left to be found.
+ *
+ * `summarizeCostReceipts` rolls amounts, coverage and component lines across a
+ * run, and carries no `usage` at any level — not audio, and not the four kinds
+ * that predate it. That is the shape it has always had, so audio is not being
+ * dropped here relative to anything else. Adding token counts to the run
+ * summary would change what every published report's `summary.cost` block
+ * contains, which is a separate decision from repairing the receipt contract.
+ */
+test('the run summary carries no token counts of any kind', () => {
+  const summary = summarizeCostReceipts([
+    row(projectCostReceipt(receipt({ model_calls: 1722, usage: SHARD_8_USAGE }))),
+  ]);
+
+  assert.ok(!('usage' in summary));
+  for (const total of summary.components) assert.ok(!('usage' in total));
+});

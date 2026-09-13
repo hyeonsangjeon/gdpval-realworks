@@ -561,6 +561,16 @@ SPOKEN = CallUsage(
     audio_output_tokens=0,
 )
 
+#: The same shape of call with nothing spoken in it. The two audio fields are
+#: left at their default ``None`` rather than set to ``0``, which is what a
+#: provider reporting a text-only reply actually gives back.
+WRITTEN = CallUsage(
+    input_tokens=415,
+    cached_input_tokens=0,
+    output_tokens=67,
+    reasoning_tokens=0,
+)
+
 
 def test_the_ledger_records_which_part_of_the_call_was_speech(ledger):
     """The gap in the 176 rows already committed, closed for the next run.
@@ -607,23 +617,75 @@ def test_a_speech_call_stays_out_of_the_problem_solving_ledger(ledger):
     assert solving.missing_reasons == ()
 
 
-def test_the_published_receipt_still_reports_exactly_four_token_counts(ledger):
-    """The ledger gained columns; the published contract did not gain keys.
+def test_the_published_receipt_now_reports_the_audio_split_too(ledger):
+    """The ledger gained columns, and the published contract followed.
 
-    ``cost-receipt-v1``'s usage block is closed — grade.schema.json declares it
-    ``additionalProperties: false`` — so a receipt that grew two keys would
-    stop validating everywhere it is already published. The split lives in the
-    ledger, which is the audit trail, and reaches a reader through it.
+    ``cost-receipt-v1``'s usage block is still closed — grade.schema.json
+    declares it ``additionalProperties: false`` — but the two audio keys are
+    now declared inside it, so the split the ledger records reaches a reader
+    through the receipt instead of only through the audit trail.
+
+    The block stays closed on purpose. Permitting arbitrary extra properties
+    would carry these two counts and simultaneously stop anyone noticing the
+    next kind that has nowhere to go.
     """
     ledger.settle(
         _speech_call(ledger, "task-1"), usage=SPOKEN, resolved_model="a-speech-model"
     )
-    assert set(ledger.receipt_for("task-1", BUCKET_GRADING).usage) == {
+    usage = ledger.receipt_for("task-1", BUCKET_GRADING).usage
+    assert set(usage) == {
         "input_tokens",
         "cached_input_tokens",
         "output_tokens",
         "reasoning_tokens",
+        "audio_input_tokens",
+        "audio_output_tokens",
     }
+    assert usage["audio_input_tokens"] == 30
+    assert usage["audio_output_tokens"] == 0
+
+
+def test_a_receipt_over_no_speech_leaves_the_audio_counts_unmeasured(ledger):
+    """A kind nobody measured is ``None``, and it never becomes a zero.
+
+    A prose-only receipt has not measured zero audio tokens; nothing in the
+    run looked. Seeding those keys at zero would publish a measurement the
+    ledger cannot support, and would be indistinguishable from the genuine
+    zero the call above reports for ``audio_output_tokens`` — which *is* a
+    measurement, taken on a call that really did carry speech.
+
+    The call is settled first on purpose: the receipt has to be built for the
+    question to mean anything. ``build_receipt`` is what seeds the usage block
+    from ``empty_usage()`` and then adds what the rows state, so this asserts
+    the real path rather than a dataclass default.
+    """
+    ledger.settle(
+        _speech_call(ledger, "task-1"), usage=WRITTEN, resolved_model="a-speech-model"
+    )
+    usage = ledger.receipt_for("task-1", BUCKET_GRADING).usage
+    assert usage["audio_input_tokens"] is None
+    assert usage["audio_output_tokens"] is None
+    assert usage["input_tokens"] == 415
+
+
+def test_a_receipt_over_no_calls_at_all_states_nothing_rather_than_zero(ledger):
+    """A receipt covering no calls carries no usage block at all.
+
+    ``receipt_for`` answers a task with no rows from ``CostReceipt.not_run()``,
+    which never reaches ``build_receipt`` and so never reaches
+    ``empty_usage()``. Its ``usage`` is an empty mapping — not six keys, and
+    not four zeros.
+
+    That is the same rule as the test above taken one step further: a run that
+    made no calls measured no tokens of any kind, and an ``input_tokens`` of
+    ``0`` sitting there would be a claim about a call that was never placed.
+    Pinned here because it is the one place the published contract's usage
+    block is legitimately absent, and a future change that helpfully filled it
+    in would be publishing zeros nobody measured.
+    """
+    receipt = ledger.receipt_for("task-1", BUCKET_GRADING)
+    assert receipt.model_calls == 0
+    assert receipt.usage == {}
 
 
 def test_every_retry_of_a_speech_call_keeps_its_own_split(ledger):
@@ -963,12 +1025,17 @@ def test_the_speech_rows_written_since_the_split_carry_the_counts():
     the reasons. Known usage, refused price, is exactly the state this file
     was written to protect.
 
-    What the ledger holding these counts does *not* establish is that anything
-    downstream can express them. The ``cost-receipt-v1`` usage block has four
-    fields and none of them is audio, so these tokens have no route to a
-    receipt; the two shards carrying them are the two that still fail
-    ``usage_containment``. That gap is asserted where it is visible, in
-    ``test_the_nine_exp035_shards_verify_as_published.py``, not here.
+    What the ledger holding these counts does *not* establish is that the
+    receipts already published carry them. The ``cost-receipt-v1`` usage block
+    has grown the two audio fields, so a receipt built today does — but the
+    exp035 shard receipts were built before it did, and widening a schema does
+    not reach back and fill a document that was written under the old one.
+    Those two shards therefore still fail verification: the failure moved from
+    ``usage_containment`` ("the receipt has nowhere to put this") to
+    ``usage_reconciles`` ("the receipt has somewhere and it is empty"), which
+    is a more exact statement of the same unrepaired gap. It is asserted where
+    it is visible, in ``test_the_nine_exp035_shards_verify_as_published.py``,
+    not here.
     """
     post_split = [
         row

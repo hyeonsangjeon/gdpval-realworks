@@ -111,6 +111,12 @@ class RealTask:
             "cached_input_tokens": sum(s[2] for s in self.stages),
             "output_tokens": sum(s[3] for s in self.stages),
             "reasoning_tokens": sum(s[4] for s in self.stages),
+            # These tasks are text. The published payloads they were read out
+            # of carry no audio counts, and the receipt says so with ``None``
+            # rather than ``0`` -- nobody measured audio here, which is not the
+            # same statement as measuring none of it.
+            "audio_input_tokens": None,
+            "audio_output_tokens": None,
         }
 
     def __repr__(self):  # keeps pytest ids readable
@@ -438,9 +444,15 @@ def test_the_parts_add_up_to_the_whole(table, task):
     assert receipt.known_cost_usd == receipt.model_cost_usd + receipt.runtime_cost_usd
     assert sum(c.model_calls for c in receipt.components) == receipt.model_calls
     for field in task.totals:
-        assert (
-            sum(c.usage[field] for c in receipt.components) == receipt.usage[field]
-        ), field
+        # Summed the way the builder sums: a kind no component stated stays
+        # unstated on the whole. Adding ``None`` in as a zero here would let a
+        # receipt that lost a token kind entirely still add up.
+        stated = [
+            component.usage[field]
+            for component in receipt.components
+            if component.usage[field] is not None
+        ]
+        assert (sum(stated) if stated else None) == receipt.usage[field], field
 
 
 # ── The two ways a token gets charged twice ──────────────────────────────

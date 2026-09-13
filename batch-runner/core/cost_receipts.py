@@ -1038,11 +1038,32 @@ class CostReceipt:
 
 
 def empty_usage() -> dict[str, int | None]:
+    """The token kinds a receipt's ``usage`` block is closed over.
+
+    The seeds are deliberately asymmetric. Every priced call reports the first
+    four kinds -- a provider that answers at all states them, if only as zero --
+    so a receipt covering no calls honestly says zero for those and every
+    receipt published before this function grew says zero too.
+
+    Audio is different. The ledger's audio columns are NULL on every row
+    written before audio metering existed, and NULL on every text-only call
+    since. Seeding them at zero would turn "nobody measured this" into "we
+    measured this and it was none", which is a claim the ledger does not
+    support. They seed at ``None`` and are promoted to an integer by the first
+    row that actually reports one -- including a row reporting a genuine zero,
+    which is a measurement and stays distinguishable from the absence.
+
+    The accumulators in ``build_receipt``, ``summarise_receipts`` and
+    ``_merge_components`` already skip ``None`` values and coalesce with
+    ``(x or 0) + value``, so they carry this distinction without change.
+    """
     return {
         "input_tokens": 0,
         "cached_input_tokens": 0,
         "output_tokens": 0,
         "reasoning_tokens": 0,
+        "audio_input_tokens": None,
+        "audio_output_tokens": None,
     }
 
 

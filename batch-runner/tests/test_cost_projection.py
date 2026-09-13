@@ -327,6 +327,118 @@ def test_the_same_stage_and_retry_kind_twice_is_rejected():
         )
 
 
+# ── Audio, and the difference between a measured zero and a silence ───────
+
+#: Shard 8 of the exp035 grading round, which is the evidence this section was
+#: written from. Its ledger measured 2,400 input audio tokens over the eight
+#: calls it sent to the speech reader, and the receipt published beside it says
+#: nothing about them, because ``cost-receipt-v1`` had no field to say it in.
+#: The same amounts appear in ``scripts/__tests__/cost-receipt.test.mjs``: if
+#: the two readers ever drift, one of these numbers moves and the other does
+#: not.
+_SHARD_8_USAGE = {
+    "input_tokens": 7_107_879,
+    "cached_input_tokens": 4_391_813,
+    "output_tokens": 603_481,
+    "reasoning_tokens": 496_609,
+    "audio_input_tokens": 2_400,
+    "audio_output_tokens": 0,
+}
+
+
+def test_an_audio_count_reaches_the_reader_at_both_levels():
+    """Both are needed. A total with no line behind it cannot be attributed."""
+    projected = project_cost_receipt(
+        _receipt(
+            model_calls=1722,
+            usage=_SHARD_8_USAGE,
+            components=[
+                _component(
+                    name="perception",
+                    stage="perception",
+                    model_calls=8,
+                    usage={
+                        "input_tokens": 4843,
+                        "audio_input_tokens": 2400,
+                        "audio_output_tokens": 0,
+                    },
+                ),
+            ],
+        )
+    )
+    assert projected["usage"]["audio_input_tokens"] == 2400
+    assert projected["components"][0]["usage"]["audio_input_tokens"] == 2400
+    # Unchanged, and deliberately so: audio is a share of the input the
+    # provider already reported, not something to add to it.
+    assert projected["usage"]["input_tokens"] == 7_107_879
+
+
+def test_a_kind_nobody_measured_stays_null_rather_than_becoming_zero():
+    """A text-only line leaves the audio columns empty, and empty is not none.
+
+    The producer seeds these two kinds at ``None`` and promotes one to a number
+    only when a call actually reports it, so ``null`` here means the question
+    was never asked. Projecting it as ``0`` would publish a measurement nobody
+    took -- and it would read as the stronger claim, because a zero looks
+    checked.
+    """
+    projected = project_cost_receipt(
+        _receipt(
+            usage={
+                "input_tokens": 1200,
+                "audio_input_tokens": None,
+                "audio_output_tokens": None,
+            },
+            components=[
+                _component(
+                    usage={
+                        "input_tokens": 1200,
+                        "audio_input_tokens": None,
+                        "audio_output_tokens": None,
+                    }
+                ),
+            ],
+        )
+    )
+    for usage in (projected["usage"], projected["components"][0]["usage"]):
+        # Present and null. Dropping the key would be the same loss by a
+        # quieter route: a reader cannot tell an absent key from one that was
+        # never in this contract.
+        assert "audio_input_tokens" in usage
+        assert usage["audio_input_tokens"] is None
+        assert usage["audio_output_tokens"] is None
+
+
+def test_a_measured_zero_and_a_silence_do_not_arrive_looking_alike():
+    """The asymmetry, at the one layer where collapsing it would be invisible.
+
+    Shard 8's speech reader returned no output audio, and that ``0`` is a
+    measurement. The grading model beside it was never asked, and that ``null``
+    is not. Both must survive the trip to the reader as themselves.
+    """
+    projected = project_cost_receipt(
+        _receipt(usage={"audio_input_tokens": 0, "audio_output_tokens": None})
+    )
+    assert projected["usage"]["audio_input_tokens"] == 0
+    assert projected["usage"]["audio_output_tokens"] is None
+
+
+@pytest.mark.parametrize(
+    "value, message",
+    [
+        (-1, "out of range"),
+        (1.5, "must be an integer"),
+        (True, "must be an integer"),
+        ("2400", "must be an integer"),
+    ],
+)
+def test_an_invalid_audio_count_is_refused_like_every_other_kind(value, message):
+    # The fields are new; the rules they answer to are not. Nothing about audio
+    # gets a lenient path into a published report.
+    with pytest.raises(ValueError, match=message):
+        project_cost_receipt(_receipt(usage={"audio_input_tokens": value}))
+
+
 # ── Row projection ────────────────────────────────────────────────────────
 
 
@@ -714,6 +826,34 @@ def test_two_retries_in_one_task_are_one_task_in_the_component_total():
     # The guard this test was written for still holds: one task, and no row
     # claiming more tasks paid it than the run contains.
     assert all(row["tasks"] == 1 for row in summary["components"])
+
+
+def test_the_run_summary_carries_no_token_counts_of_any_kind():
+    """The boundary this repair stops at, written down rather than left to be
+    found.
+
+    ``summarize_cost_receipts`` rolls amounts, coverage and component lines
+    across a run, and carries no ``usage`` at any level -- not audio, and not
+    the four kinds that predate it. That is the shape it has always had, so
+    audio is not being dropped here relative to anything else.
+
+    Stated because the alternative is a reader noticing the absence and
+    concluding the audio work missed a spot. Adding token counts to the run
+    summary would change what every published report's ``summary.cost`` block
+    contains, which is a separate decision from repairing the receipt contract,
+    and this repair does not make it.
+
+    The grading path is the one that does carry usage:
+    ``core.cost_receipts.summarise_receipts`` -- a different module with a
+    near-identical name, and it inherits the audio fields from
+    ``empty_usage()`` without needing a change of its own.
+    """
+    receipt = project_cost_receipt(_receipt(model_calls=1722, usage=_SHARD_8_USAGE))
+    summary = summarize_cost_receipts(
+        [_row("task-a", problem_solving_cost=receipt)], "problem_solving_cost"
+    )
+    assert "usage" not in summary
+    assert all("usage" not in component for component in summary["components"])
 
 
 # ── Ledger reference ──────────────────────────────────────────────────────

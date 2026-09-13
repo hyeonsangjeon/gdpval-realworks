@@ -111,6 +111,20 @@ batch-runner/scripts/*
 # repository cannot be run against the paid run it was written for. Held by
 # tests/test_the_metering_check_can_fail.py.
 !batch-runner/scripts/verify_audio_metering_run.py
+# Derives the audio columns of two already-published receipts from their own
+# ledgers and writes them beside the originals as a separate versioned record,
+# because the originals are immutable evidence and a newer schema accepting a
+# field does not put a number into a file written months earlier. This one has
+# a reason of its own to be named, beyond the directory rule hiding it: the
+# record it produces publishes this script's sha256 and tells a reader to run
+# it again rather than trust the hashes. Derived evidence that cannot be
+# re-derived is not evidence, and a `!` line missing here is exactly how it
+# ships unre-derivable -- measured on the branch that added it, where the
+# README, the commit message and the pull request all cited a file `git add -A`
+# had skipped without a word. Held by
+# tests/test_the_derived_repair_is_in_the_repository.py, which asks git what is
+# tracked rather than trusting this list.
+!batch-runner/scripts/derive_audio_receipt_repair.py
 # The follow-up check that runs on the commit a grading run actually pushed.
 # It is invoked by the verify-published job in grade-run.yml, so the directory
 # rule hiding it would leave that job calling a file the checkout does not
