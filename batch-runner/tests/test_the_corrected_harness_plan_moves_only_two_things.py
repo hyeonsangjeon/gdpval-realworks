@@ -394,6 +394,70 @@ def test_the_frozen_success_criterion_is_read_with_the_refusal_in_mind(
     assert "ok one" in confounds
 
 
+def test_the_ending_is_checked_against_the_paid_run_and_not_only_the_fixture(
+    corrected,
+):
+    """The same finding, read off trial_30's record instead of a scripted one.
+
+    ``test_one_failed_tool_call_ends_the_task.py`` proves the rule against the
+    real runner, but with a scripted voice and the offline backend, and the
+    plan's own line about fixture results being harness diagnostics applies to
+    it as much as to anything else. trial_30 is the counterpart: 296 requests,
+    282 answers, every answer ok, and a 14-call gap that is the 14 attempts
+    which stopped on a tool call. A not-ok result was never handed back in a
+    run that was paid for.
+
+    The arithmetic is in the record rather than the counts alone, because
+    "0 refusals were handed back" and "no refusal can be handed back" read the
+    same and only one of them is what happened.
+    """
+    confounds = corrected["experiment_record"]["known_confounds"]
+
+    assert "296" in confounds and "282" in confounds
+    assert "_EndTheRun" in confounds
+    assert "was ever handed a not-ok result" in confounds
+
+
+def test_the_record_separates_ending_the_attempt_from_ending_the_task(
+    corrected,
+):
+    """Because trial_30 contains a task that was refused and finished anyway.
+
+    Not the behaviour the plan wants to measure -- the model never read the
+    refusal -- but a second attempt did the task. The attempt is what a tool
+    call ends. The task ends because ``capability_unavailable`` closes as
+    ``terminal_capability_absent`` and that disposition is not retried, which
+    is a retry policy and not the dispatcher's rule. Written down separately
+    so that a change to the retry policy is not mistaken for a change to the
+    dispatcher.
+    """
+    confounds = corrected["experiment_record"]["known_confounds"]
+
+    assert "What ends is the attempt" in confounds
+    assert "terminal_capability_absent" in confounds
+    assert "invalid_arguments" in confounds
+    assert "fixture_backend_error" in confounds
+    assert "tool_desk_broke" in confounds
+
+
+def test_the_record_says_which_tool_count_belongs_to_which_attempt(corrected):
+    """The metrics field that would have been quoted as a per-task count.
+
+    ``agentic_metrics.tool_calls`` is the last attempt's number on all 30 of
+    trial_30's tasks. Summed it reads 155 against 296 actual calls, and the
+    rows where it is wrong are the rows that retried -- the same rows whose
+    cost figure *does* cover every attempt. A table mixing the two would
+    divide a whole-task cost by a last-attempt call count and read as a
+    per-call price.
+    """
+    confounds = corrected["experiment_record"]["known_confounds"]
+
+    assert "agentic_metrics.tool_calls" in confounds
+    assert "155" in confounds
+    assert "conservative_cost_usd" in confounds
+    assert "tool_errors is not a refusal count" in confounds
+
+
 def test_the_denominator_is_all_thirty_and_the_subset_is_labelled(corrected):
     record = corrected["experiment_record"]
     assert "All 30 tasks" in record["denominator"]

@@ -786,4 +786,29 @@ experiment_record:
     result is not a thing the model is asked again about. And it is the reason
     the derived tool-availability paragraph carries more weight than it looks
     like it should: it is the only occasion on which the model learns what it
-    cannot use, because the second occasion does not exist.
+    cannot use, because the second occasion does not exist. Checked against
+    trial_30's own record and not only against the fixture: its 50 attempts
+    hold 296 tool_requested events and 282 tool_answered ones, and every one of
+    the 282 answers is ok with no error_type, so the 14-call difference is
+    exactly the 14 attempts that stopped on a tool call — each a request with
+    no answer after it, each carrying detail "running the tool failed:
+    _EndTheRun". No attempt in that run was ever handed a not-ok result. What
+    ends is the attempt; whether the task ends is a second decision taken on
+    the disposition, and the two coincide for a refusal only because
+    capability_unavailable closes as terminal_capability_absent and is not
+    retried. All 12 browser_run refusals closed that way and map one-to-one
+    onto the 12 tasks the run record files under capability_unavailable. The
+    remaining 2 run-ending calls were workspace_apply and neither was a
+    refusal — one invalid_arguments, the model's own malformed call, closed
+    semantic; one fixture_backend_error, closed infrastructure — and both were
+    retried, one of them going on to finish. That the run holds one of each is
+    why the refusal column is worth carrying at all: the conversation record
+    files all three under tool_desk_broke. (8) agentic_metrics.tool_calls is
+    the last attempt's count and not the task's. It equals the final attempt's
+    tool_requested total on all 30 of trial_30's tasks, sums to 155 where the
+    conversation events hold 296, and differs on every one of the 11 tasks
+    that took more than one attempt — while conservative_cost_usd on those
+    same rows covers every attempt. So a per-task tool count in this run's
+    report has to be read off the conversation events or else say which
+    attempt it means. tool_errors is not a refusal count either: it sums to 19
+    against 14 endings and stands at 1 on six tasks whose desk never broke.

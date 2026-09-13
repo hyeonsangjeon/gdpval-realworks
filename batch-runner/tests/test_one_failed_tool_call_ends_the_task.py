@@ -20,6 +20,18 @@ What it pins, in both of the runner's modes:
 
 Nothing here calls a model, reaches a network, or spends anything: the voice is
 scripted and the backend is the offline fixture.
+
+Which is also this file's limit, and the reason the plan's ``known_confounds``
+carries the same finding read off trial_30's record instead. There the 50
+attempts hold 296 tool requests and 282 answers, every answer ok, and the 14
+missing answers are the 14 attempts that stopped on a tool call. Two things
+that are invisible from here show up there. What a not-ok result ends is the
+**attempt** -- the task ends too only because ``capability_unavailable`` closes
+as ``terminal_capability_absent``, a disposition the retry policy does not
+retry, so the registered condition's name holds for a refusal and not for every
+ending. And the other two run-ending calls in that run were an
+``invalid_arguments`` and a ``fixture_backend_error``, both retried, one going
+on to finish -- three unlike causes filed under one ``tool_desk_broke``.
 """
 
 from __future__ import annotations
