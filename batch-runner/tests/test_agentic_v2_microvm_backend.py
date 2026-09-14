@@ -538,3 +538,123 @@ class TestStateCoversWhatWouldRunInIt:
         assert one.state_sha256() != two.state_sha256()
         one.close()
         two.close()
+
+
+class TestTheRealPathWhenTheBootComesApart:
+    """The whole chain, from ``exec_run`` to the jail on the disk.
+
+    Every other test in this file hands the backend a stand-in launcher, which
+    is right for what those check and is exactly why they could not have caught
+    the thing this one does. A stand-in never places an image, so it never
+    leaves one behind; the defect lived in the seam between the backend, the
+    per-call machine and the launcher, and a test that replaces the middle of
+    that seam cannot see it.
+
+    So here the chain is real: ``AgenticV2MicroVMBackend.exec_run`` ->
+    ``OneCallMachine.__call__`` -> a genuine work disk built by ``mke2fs`` ->
+    the real plan builder -> ``first_boot`` -> ``place_the_images``. Two host
+    facilities are stood in for, and neither is code under test: running the
+    jailer, which is the failure being injected, and ``os.chown``, which needs
+    root and this box does not have. ``chroot_base`` is redirected into the
+    temp directory through ``build_plan``, the field that exists for it, rather
+    than writing under /srv on a developer's machine.
+
+    No machine boots. This box runs kernel 3.10 and cannot.
+    """
+
+    def test_a_boot_that_comes_apart_takes_its_jail_with_it(
+        self, tmp_path, monkeypatch
+    ):
+        import functools
+        import os as os_module
+
+        from core.agentic_v2_microvm_launch import build_launch_plan
+        from core.agentic_v2_one_call_machine import OneCallMachine
+
+        host = tmp_path / "host"
+        host.mkdir()
+        for name in ("firecracker", "vmlinux", "rootfs.ext4"):
+            image = host / name
+            image.write_bytes(b"not really an image, but a readable file")
+            image.chmod(0o755)
+        jail_base = tmp_path / "jail"
+
+        # Root, which this box is not. The plan chowns the placed images to the
+        # account the jailer drops to; whether that call happens is C1's test,
+        # not this one's.
+        monkeypatch.setattr(os_module, "chown", lambda *a, **k: None)
+
+        # The injection, and the observation, in one place. FileNotFoundError
+        # out of the jailer is not hypothetical -- it is what a host without
+        # firecracker installed does, which is every host in this repository
+        # today. What it sees is recorded so that the assertion about the jail
+        # being gone afterwards cannot pass by it never having been there.
+        seen: dict = {}
+
+        def no_jailer_on_this_host(argv, timeout=300.0):
+            chroot = jail_base / "firecracker"
+            seen["jails"] = sorted(p.name for p in chroot.iterdir()) if chroot.exists() else []
+            seen["work_disk_inside"] = sorted(
+                str(p.relative_to(jail_base)) for p in jail_base.rglob("work.ext4")
+            )
+            raise FileNotFoundError(2, "No such file or directory", argv[0])
+
+        monkeypatch.setattr(
+            "core.agentic_v2_first_boot._run", no_jailer_on_this_host
+        )
+
+        machine = OneCallMachine(
+            kernel=host / "vmlinux",
+            rootfs=host / "rootfs.ext4",
+            firecracker_binary=host / "firecracker",
+            uid=997,
+            gid=997,
+            vcpu_count=1,
+            cgroup_version=2,
+            scratch=tmp_path / "scratch",
+            build_plan=functools.partial(build_launch_plan, chroot_base=jail_base),
+        )
+        backend = _backend(tmp_path, launcher=machine)
+        try:
+            result = backend.exec_run(_ok())
+
+            # The model is told the backend broke, not that its command
+            # returned something.
+            assert result == {"ok": False, "error_type": "compute_backend_error"}
+
+            # The injection really did land after placement, so the two
+            # assertions below are about something that existed.
+            assert seen["jails"], "the jail was never built; nothing was placed"
+            assert seen["work_disk_inside"], "no work disk reached the jail"
+
+            record = backend.boots[0]
+            assert record["booted"] is False
+
+            # Two failures, two records. The run failed because the jailer is
+            # not installed; the cleanup that followed is a separate outcome
+            # with its own answer. Read as one sentence, a launch that failed
+            # and left a chroot holding the work image is indistinguishable
+            # from one that failed and cleaned up after itself.
+            assert "FileNotFoundError" in record["original_error"]
+            assert "BootAbandoned" in record["launcher_error"]
+            teardown = record["teardown"]
+            assert teardown["after_a_failure"] is True
+            assert teardown["all_gone"] is True
+            assert teardown["failures"] == []
+
+            # The guest's disk is kept before the jail goes, so a failed call
+            # is not also a lost workspace.
+            salvaged = teardown["salvaged"]
+            assert salvaged["returned_copy"] is not None
+            assert Path(salvaged["returned_copy"]).exists()
+
+            # And the jail itself is off the disk. What is left is the jailer's
+            # per-machine directory, empty: the plan names the chroot in
+            # `destroy_after_the_run` and names nothing else, and removing a
+            # named path's parent is exactly how one run on a shared host
+            # deletes another run's work. An empty directory costs an inode;
+            # the rule it would cost is worth more than that.
+            assert not (jail_base / "firecracker" / seen["jails"][0] / "root").exists()
+            assert [p for p in jail_base.rglob("*") if p.is_file()] == []
+        finally:
+            backend.close()

@@ -331,6 +331,66 @@ def test_the_dry_run_says_what_is_missing_rather_than_only_what_is_ready():
     assert "reference files that are not in the workspace" not in printed
 
 
+# ── The isolation line says what is true at the moment it prints ──────────
+#
+# The banner used to print "none — fixture backend, exec_run shut" as a
+# constant, under every backend. Once --isolated-approval could hand the run a
+# real one, that line went on saying none while the run held the isolated
+# backend: the one sentence a reader checks for isolation was the one sentence
+# that could not report it. The two tests below hold both directions -- the
+# fixture's wording unchanged, and the isolated one not describable as none.
+
+
+def _a_choice_of(backend_class):
+    """The smallest choice the banner can be asked about.
+
+    Only ``backend_class`` is read by :func:`isolation_line`; the rest is what
+    :class:`BackendChoice` requires to exist.
+    """
+    from core.agentic_v2_isolated_selection import BackendChoice
+
+    return BackendChoice(
+        backend_class=backend_class,
+        extra_kwargs={},
+        identity_to_declare=None,
+        grounds={},
+    )
+
+
+def test_the_fixture_banner_is_the_sentence_it_has_always_been():
+    """The control for the change, and the thing most likely to be broken by it.
+
+    Every run to date printed this, and results already quoted carry it. If
+    making the line conditional had also reworded the default, an old record
+    and a new one would disagree about a path that did not change.
+    """
+    from core.agentic_v2_fixture_backend import AgenticV2FixtureBackend
+
+    line = runner.isolation_line(_a_choice_of(AgenticV2FixtureBackend))
+
+    assert line == "  isolation      none — fixture backend, exec_run shut"
+
+
+def test_an_isolated_backend_is_not_reported_as_no_isolation_at_all():
+    """And is not reported as a booted one either.
+
+    Two ways to be wrong, opposite directions. Saying ``none`` while holding
+    the isolated backend understates what the run is about to do. Saying the
+    isolation is *in place* overstates it: selection is a class and a set of
+    arguments, and at the moment this line prints nothing has been booted and
+    no task has gone through it. The banner may report the first and must not
+    report the second.
+    """
+    from core.agentic_v2_microvm_backend import AgenticV2MicroVMBackend
+
+    line = runner.isolation_line(_a_choice_of(AgenticV2MicroVMBackend))
+
+    assert "none" not in line
+    assert "AgenticV2MicroVMBackend" in line
+    assert "nothing booted yet" in line
+    assert "no task has used it" in line
+
+
 # ── The expert's answer never travels ─────────────────────────────────────
 
 

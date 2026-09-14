@@ -73,6 +73,7 @@ from core.agentic_v2_cost_binding import bind_run_to_ledger  # noqa: E402
 from core.agentic_v2_fixture_backend import AgenticV2FixtureBackend  # noqa: E402
 from core.agentic_v2_isolated_selection import (  # noqa: E402
     HANDWRITTEN_NOTES,
+    BackendChoice,
     IsolatedBackendRefused,
     IsolationApproval,
     select_backend,
@@ -728,6 +729,28 @@ def the_paid_setup_a_dry_run_can_reach(stage: str) -> list[str]:
     return []
 
 
+def isolation_line(choice: BackendChoice) -> str:
+    """What the banner may truthfully say about isolation at the moment it prints.
+
+    This line goes out before the first task runs, so the strongest true
+    statement about an isolated backend is that one was *selected*. Nothing has
+    booted, nothing has been contained, and no task has used it.
+
+    Until 2026-09-14 the line was a constant — ``none — fixture backend`` — with
+    no reference to what had just been chosen, so a run handed an approval and
+    an isolated backend announced in its own banner that it had no isolation.
+    Wrong in one direction is a reader who distrusts a working setup; wrong in
+    the other is a reader who reads "isolated" off a run that only selected one.
+    Neither is on offer here: selection is reported as selection.
+    """
+    if not choice.is_isolated:
+        return "  isolation      none — fixture backend, exec_run shut"
+    return (
+        f"  isolation      {choice.backend_class.__name__} selected — nothing "
+        "booted yet and no task has used it"
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Run one pre-registered Agentic Sandbox V2 stage."
@@ -984,7 +1007,7 @@ def main() -> int:
     else:
         print("  marking        not approved for this stage, and not spent here")
         print(f"                 {money['grading_not_approved_because']}")
-    print(f"  isolation      none — fixture backend, exec_run shut")
+    print(isolation_line(choice))
     # Was a flat count of tasks whose files "are not in the workspace", which
     # stopped being true the moment staging existed. What is still true, and is
     # what a reader needs, is where they come from and the one that cannot be

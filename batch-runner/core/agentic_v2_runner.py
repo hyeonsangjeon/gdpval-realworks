@@ -604,8 +604,17 @@ class AgenticV2ScriptedRunner:
             # own source text. Which one a run admits is now a value the caller
             # supplies, not a comparison written into this file, and the
             # default is the fixture -- so nothing changes for any caller that
-            # does not say otherwise, and no caller in this repository says
-            # otherwise today.
+            # does not say otherwise.
+            #
+            # One caller does say otherwise. scripts/run_agentic_v2_stage.py
+            # passes `admitted_identity=choice.identity_to_declare`, and that
+            # is None -- the fixture default, this line unchanged -- unless the
+            # run was given --isolated-approval and the approval held up. Until
+            # 2026-09-14 this comment ended by ruling that caller out, which
+            # was right when it was written and wrong from the moment the flag
+            # was wired. A description of the default path that is false about
+            # the other path is worse than no description, because it is the
+            # sentence a reader trusts instead of following the call.
             #
             # Two things are checked elsewhere rather than here, and both are
             # load-bearing. `_validate_admitted_identity` refuses a backend
