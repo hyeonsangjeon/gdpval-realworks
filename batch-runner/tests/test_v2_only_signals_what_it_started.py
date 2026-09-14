@@ -26,6 +26,7 @@ Pre-registration, written before the fix: ``docs/agentic_v2_ownership_and_teardo
 from __future__ import annotations
 
 import functools
+import json
 import os
 import shutil
 import signal
@@ -41,8 +42,13 @@ from core.agentic_v2_first_boot import (
     BootRefused,
     _clean_up_after_a_failure,
     first_boot,
+    the_host_was_left_running,
 )
-from core.agentic_v2_microvm_backend import AgenticV2MicroVMBackend, GuestImage
+from core.agentic_v2_microvm_backend import (
+    EXEC_RECORD_DIR,
+    AgenticV2MicroVMBackend,
+    GuestImage,
+)
 from core.agentic_v2_microvm_launch import build_launch_plan
 from core.agentic_v2_one_call_machine import OneCallMachine
 from core.agentic_v2_substrate import AgenticV2SubstrateManifest
@@ -152,6 +158,43 @@ def _jailer_writing_that_then_fails(plan, pid=4242):
 
 def _jailer_writing_nothing(argv, timeout=300.0):
     return subprocess.CompletedProcess(argv, 0, "", "")
+
+
+def _jailer_writing_a_pid_nobody_may_signal(plan):
+    """Start, write a PID this run is forbidden to signal, then fail.
+
+    ``0`` is the value ``_a_pid_this_may_signal`` turns away first, because
+    ``kill(0, …)`` signals the launcher's own process group. Cleanup therefore
+    never looks at any process at all — ``was_running`` stays ``None`` — and yet
+    it still copies the work disk out, because what blocks the copy is a jail
+    that was already there and this jail was not. That combination is a row the
+    cleanup predicate did not have.
+    """
+
+    def jailer(argv, timeout=300.0):
+        Path(plan["host_side"]["chroot_dir"]).mkdir(parents=True, exist_ok=True)
+        Path(plan["host_side"]["pid_file"]).write_text("0\n")
+        raise subprocess.TimeoutExpired(argv, 120.0)
+
+    return jailer
+
+
+def _a_clock_that_swaps_the_pid_file(pid_file: Path) -> _Clock:
+    """D4's clock, reused: the watched PID file is replaced mid-flight.
+
+    The run reaches its deadline with the guest still visibly running and with
+    no way to show the file still names what it started, so it declines to
+    signal. Nothing is stopped and nothing is confirmed — which is the state the
+    copy label used to read as "nothing was writing".
+    """
+
+    class _Replacing(_Clock):
+        def sleep(self, seconds):
+            super().sleep(seconds)
+            if self.t > 1.0 and pid_file.exists():
+                pid_file.write_text(f"{STRANGER}\n")
+
+    return _Replacing()
 
 
 def _finished(*, exit_status="0"):
@@ -696,9 +739,14 @@ def test_d11_and_any_other_exception_from_cleanup_is_collected_not_raised(
         "OverflowError" in failure["error"]
         for failure in abandoned.teardown["failures"]
     )
-    # And the jail still came down, because the failure was collected rather
-    # than allowed to skip the rest of the cleanup.
-    assert abandoned.teardown["all_gone"] is True
+    # And the removal step was still *reached*, which is what this test is
+    # about: the failure above was collected rather than allowed to skip the
+    # rest of the cleanup. It then declined, and said so, because `os.kill`
+    # raising means nothing was ever signalled — the last this run saw of its
+    # own machine, it was running. Taking the jail out from under it would be
+    # the failure path doing what D21 stops the success path from doing.
+    assert abandoned.teardown["all_gone"] is False
+    assert "never confirmed stopped" in abandoned.teardown["destroy_refused_because"]
 
 
 def test_d12_the_backend_record_still_carries_both_failures(tmp_path, monkeypatch):
@@ -921,5 +969,384 @@ def test_p1_the_backend_record_carries_the_ownership_and_shutdown_evidence(
 
         assert machine_record["teardown"]["all_gone"] is True
         assert sorted(jail_base.glob("firecracker/*/root")) == []
+    finally:
+        backend.close()
+
+
+# --------------------------------------------------------------------------
+# D17-D21 — what a returned copy is worth, and whose jail it is safe to remove
+# --------------------------------------------------------------------------
+
+
+def _reach(row: str, plan, pid_file: Path):
+    """The jailer, the signals and the clock that take a real boot to ``row``.
+
+    Every route here goes through ``first_boot`` itself. Nothing below stubs the
+    thing being asked about: ``_still_running`` is left alone, the ownership
+    re-check at the deadline is left alone, and the copy is taken by the module's
+    own ``shutil.copy2``. Only the jailer and ``os.kill`` are stood in for, which
+    are the host's two edges and not the logic under test.
+    """
+    if row == "no pid file ever appeared":
+        return _jailer_writing_nothing, _Signals(), None
+    if row == "the guest exited on its own":
+        return _jailer_writing(plan), _Signals(starts_alive=False), None
+    if row == "it went between the probe and the signal":
+        return (
+            _jailer_writing(plan),
+            _Signals(
+                dies_after=None,
+                kill_raises=ProcessLookupError(3, "No such process"),
+            ),
+            None,
+        )
+    if row == "it overran and was left alone":
+        return (
+            _jailer_writing(plan),
+            _Signals(dies_after=None),
+            _a_clock_that_swaps_the_pid_file(pid_file),
+        )
+    if row == "it was signalled and did not stop":
+        return _jailer_writing(plan), _Signals(dies_after=None), None
+    if row == "it was signalled and was confirmed gone":
+        return _jailer_writing(plan), _Signals(dies_after=0), None
+    raise AssertionError(f"no route to {row!r}")
+
+
+#: Every state a run can be in at the moment it copies the work disk out, and
+#: what the copy is worth in each. The list is finite because the copy site is
+#: reached from exactly six places in ``first_boot``, and it is written out in
+#: full because the defect this replaces was a three-valued field read as a
+#: boolean — the kind of thing a sampled table hides rather than shows.
+#:
+#: Columns: outcome, last observed running state, confirmed stopped,
+#: ``copied_while_running``, ``copy_integrity``.
+THE_COPY_TRUTH_TABLE = [
+    ("no pid file ever appeared", "never_started", None, None, None, "unverified"),
+    ("the guest exited on its own", "booted", False, None, False, "intact"),
+    (
+        "it went between the probe and the signal",
+        "booted",
+        False,
+        None,
+        False,
+        "intact",
+    ),
+    (
+        "it overran and was left alone",
+        "overran_and_was_left_alone",
+        True,
+        None,
+        True,
+        "torn",
+    ),
+    (
+        "it was signalled and did not stop",
+        "overran_and_did_not_stop",
+        True,
+        False,
+        True,
+        "torn",
+    ),
+    (
+        "it was signalled and was confirmed gone",
+        "stopped_by_the_deadline",
+        False,
+        True,
+        False,
+        "intact",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "row,outcome,last_seen,confirmed,copied,integrity",
+    THE_COPY_TRUTH_TABLE,
+    ids=[case[0].replace(" ", "-") for case in THE_COPY_TRUTH_TABLE],
+)
+def test_d17_every_path_that_copies_the_work_disk_says_what_the_copy_is_worth(
+    plan, tmp_path, monkeypatch, row, outcome, last_seen, confirmed, copied, integrity
+):
+    """The whole table, through the ordinary call, one row at a time.
+
+    ``guest_confirmed_stopped`` has three values and the copy label was derived
+    from ``is False`` alone. ``None is False`` is ``False``, so four of these six
+    rows arrived at the same answer — "not copied while running" — and two of
+    them had no business being there. The rows that must *not* move are as much
+    the point as the rows that must: calling an ordinary self-exiting boot torn
+    would not be a fix, it would be a run nobody can use.
+    """
+    pid_file = Path(plan["host_side"]["pid_file"])
+    jailer, signals, clock = _reach(row, plan, pid_file)
+
+    result = _boot(
+        plan, tmp_path, monkeypatch, jailer=jailer, signals=signals, clock=clock
+    )
+
+    assert result["outcome"] == outcome
+    assert result["guest_last_seen_running"] is last_seen
+    assert result["guest_confirmed_stopped"] is confirmed
+
+    salvaged = result["salvaged"]
+    assert salvaged["returned_copy"] is not None, (
+        "this row is about what a copy is worth, so a copy has to have been taken"
+    )
+    assert Path(salvaged["returned_copy"]).exists()
+    assert salvaged["copied_while_running"] is copied
+    assert salvaged["copy_integrity"] == integrity
+    assert salvaged["copy_integrity_because"].strip()
+
+
+def test_d18_a_copy_is_only_called_intact_when_this_run_watched_the_writer_stop():
+    """The rule the table above is an instance of, stated once.
+
+    Read as a property rather than as six rows: ``intact`` is reachable only from
+    a state where this run *observed* the guest gone. Not from a signal it sent,
+    not from a deadline it reached, and not from never having looked.
+    """
+    for _, _, last_seen, confirmed, copied, integrity in THE_COPY_TRUTH_TABLE:
+        if integrity == "intact":
+            assert last_seen is False or confirmed is True
+            assert copied is False
+        if last_seen is True:
+            assert integrity == "torn"
+            assert copied is True
+        if last_seen is None:
+            assert integrity == "unverified"
+            assert copied is None
+
+
+def test_d19_a_guest_left_alone_because_it_could_not_be_claimed_is_still_a_live_writer(
+    plan, tmp_path, monkeypatch
+):
+    """Row 4 on its own, because row 4 is the damage.
+
+    A machine that overran, was still visibly running, and was deliberately not
+    signalled — because the PID file had been replaced and this run will not kill
+    a stranger — used to record its copy as "not taken while running". Nothing
+    had stopped. Nothing had even been asked to stop. The field said the
+    opposite of what happened, and it said it in the safe-looking direction.
+    """
+    pid_file = Path(plan["host_side"]["pid_file"])
+    signals = _Signals(dies_after=None)
+
+    result = _boot(
+        plan,
+        tmp_path,
+        monkeypatch,
+        jailer=_jailer_writing(plan),
+        signals=signals,
+        clock=_a_clock_that_swaps_the_pid_file(pid_file),
+    )
+
+    assert result["outcome"] == "overran_and_was_left_alone"
+    assert result["stop_signal_sent"] is False
+    assert result["guest_confirmed_stopped"] is None
+    assert result["guest_last_seen_running"] is True
+    assert result["salvaged"]["copied_while_running"] is True
+    assert result["salvaged"]["copy_integrity"] == "torn"
+    assert the_host_was_left_running(result) is True
+    # And the reason it was left alone still holds: the stranger was never
+    # signalled, which is what the whole ownership gate is for.
+    assert not signals.anything_reached_kill_for(STRANGER)
+
+
+def test_d20_a_copy_taken_without_ever_looking_at_a_process_is_unverified(
+    plan, tmp_path, monkeypatch
+):
+    """The row the cleanup path did not have, on the cleanup path.
+
+    The independent review called ``_clean_up_after_a_failure``'s predicate the
+    correct form to copy onto the normal path. It is not: it reads
+    ``was_running is True``, and there is a live branch where ``was_running`` is
+    ``None`` — the PID file held a value this run is forbidden to signal, so no
+    process was ever looked at — and a copy is taken anyway, because what blocks
+    the copy is a jail that was already there and this jail was not.
+
+    Copying that predicate over would have moved the defect rather than fixing
+    it, and left the two paths saying different things about the same host. They
+    now go through one judgement, and this is the row that proves it is not the
+    old one.
+    """
+    with pytest.raises(BootAbandoned) as raised:
+        _boot(
+            plan,
+            tmp_path,
+            monkeypatch,
+            jailer=_jailer_writing_a_pid_nobody_may_signal(plan),
+            signals=_Signals(dies_after=None),
+        )
+
+    teardown = raised.value.teardown
+    assert teardown["process"]["was_running"] is None
+    assert teardown["process"]["confirmed_stopped"] is None
+    assert teardown["process"]["signalled"] is False
+    assert "whole group" in teardown["process"]["left_alone_because"]
+
+    salvaged = teardown["salvaged"]
+    assert salvaged["returned_copy"] is not None
+    assert salvaged["copied_while_running"] is None
+    assert salvaged["copy_integrity"] == "unverified"
+
+
+def test_d21_a_jail_is_not_removed_out_from_under_a_machine_this_run_left_running(
+    plan, tmp_path, monkeypatch
+):
+    """The teardown consequence of the two outcomes above.
+
+    ``first_boot`` removed the jail as the last thing it did, unconditionally.
+    On the two paths that end with a guest still on the host that is an
+    ``rmtree`` of the rootfs, the work disk and the socket a live Firecracker
+    holds open — and the record then said the jail was gone, which was true, and
+    said nothing about what had been using it.
+
+    A leaked directory is the worse-looking outcome and the better one: it can be
+    removed by hand once the machine is gone. The refusal carries its reason,
+    because "still there" and "still there because this run would not take it
+    from a live machine" are one directory listing and two findings.
+    """
+    chroot = Path(plan["host_side"]["chroot_dir"])
+    result = _boot(
+        plan,
+        tmp_path,
+        monkeypatch,
+        jailer=_jailer_writing(plan),
+        signals=_Signals(dies_after=None),
+    )
+
+    assert result["outcome"] == "overran_and_did_not_stop"
+    assert result["teardown"]["all_gone"] is False
+    assert "still on the host" in result["teardown"]["refused_because"]
+    assert result["teardown"]["left_behind"] == list(
+        plan["host_side"]["destroy_after_the_run"]
+    )
+    assert chroot.exists()
+
+
+def test_d22_an_ordinary_boot_still_takes_its_jail_down(plan, tmp_path, monkeypatch):
+    """The negative control for D21, and the one that matters more.
+
+    A rule that keeps jails around is only an improvement if it keeps around the
+    ones that are dangerous to remove. Every ordinary run has to end with its
+    jail gone, or the fix above is a disk-filling leak wearing a safety argument.
+    """
+    chroot = Path(plan["host_side"]["chroot_dir"])
+    for signals in (_Signals(starts_alive=False), _Signals(dies_after=0)):
+        result = _boot(
+            plan, tmp_path, monkeypatch, jailer=_jailer_writing(plan), signals=signals
+        )
+        assert the_host_was_left_running(result) is False
+        assert result["teardown"]["all_gone"] is True
+        assert result["teardown"]["refused_because"] is None
+        assert not chroot.exists()
+
+
+# --------------------------------------------------------------------------
+# P2 — the same two outcomes, through the call the product actually makes
+# --------------------------------------------------------------------------
+
+
+def _a_jailer_that_boots_and_stays(jail_base: Path, pid: int = 4242):
+    """A machine that starts and is still there when the deadline arrives."""
+
+    def jailer(argv, timeout=300.0):
+        _the_jail_just_placed(jail_base, pid)
+        return subprocess.CompletedProcess(argv, 0, "", "")
+
+    return jailer
+
+
+class _SignalsThatSwapThePidFile(_Signals):
+    """``_Signals``, with the PID file replaced under the watcher.
+
+    D17 drives this row from the clock. That seam is not available here and its
+    absence is the point: ``OneCallMachine`` calls ``first_boot`` with no ``now``
+    or ``sleep``, so the product path runs on the real clock. The swap is driven
+    from the liveness probe instead — already a stand-in, and already the thing
+    that decides how long the loop runs — and the call asks for a one-second
+    deadline so the real wait is a second rather than the policy's default.
+
+    This is also why the row chosen here is the one that never signals. The
+    signalled variant would add the ten-second confirmation window to the wall
+    clock, and a ten-second unit test is a test people start skipping.
+    """
+
+    def __init__(self, jail_base: Path, **rest):
+        super().__init__(**rest)
+        self.jail_base = jail_base
+
+    def __call__(self, pid, sig):
+        answer = super().__call__(pid, sig)
+        if sig == 0:
+            roots = sorted(self.jail_base.glob("firecracker/*/root"))
+            if roots:
+                (roots[-1] / "firecracker.pid").write_text(f"{STRANGER}\n")
+        return answer
+
+
+def test_p2_a_command_that_finished_under_a_machine_nobody_stopped_says_both(
+    tmp_path, monkeypatch
+):
+    """The command answered. The host is still occupied. Both are reported.
+
+    ``exec_run`` returned ``{"ok": true, "returncode": 0}`` here and stopped
+    there. Everything the run had learned — that a guest it started is still on
+    the host, that the work disk those streams came off had a live writer
+    attached — reached the end of ``first_boot`` and went no further. Two calls
+    later the record was indistinguishable from a clean one.
+
+    Discarding the returncode instead would be the opposite mistake and a worse
+    one: the command really did finish, and throwing that away because the
+    teardown was untidy loses a real answer. So the three axes stay separate.
+    The returncode is the command's; ``host_left_running`` is the host's;
+    ``copy_integrity`` is the bytes'. They are allowed to disagree, and here
+    they do.
+    """
+    machine, jail_base, host = _a_real_machine(tmp_path, monkeypatch)
+    signals = _SignalsThatSwapThePidFile(jail_base, dies_after=None)
+    monkeypatch.setattr(os, "kill", signals)
+    monkeypatch.setattr(
+        "core.agentic_v2_first_boot._run", _a_jailer_that_boots_and_stays(jail_base)
+    )
+    monkeypatch.setattr(
+        "core.agentic_v2_first_boot.files_out_of_work_disk",
+        lambda image, names, **kw: _finished(),
+    )
+
+    backend = _backend_over(tmp_path, machine)
+    try:
+        result = backend.exec_run({"argv": ["true"], "cwd": ".", "timeout_seconds": 1})
+
+        # Axis one, unchanged: the command ran and this is what it returned.
+        assert result["ok"] is True
+        assert result["data"] == {"returncode": 0}
+        assert result["error_type"] is None
+
+        record = backend.boots[0]
+        assert record["boot_outcome"] == "overran_and_was_left_alone"
+        # Axis two and axis three, which used to stop at first_boot's return.
+        assert record["machine"]["host_left_running"] is True
+        assert record["machine"]["guest_confirmed_stopped"] is None
+        assert record["machine"]["guest_last_seen_running"] is True
+        assert record["machine"]["copied_while_running"] is True
+        assert record["machine"]["copy_integrity"] == "torn"
+        assert "overran_and_was_left_alone" in record["grounds"]
+        assert "the host is not free" in record["grounds"]
+
+        # And they are on disk beside the streams, for whoever reads the
+        # transcript after this process is gone.
+        meta = json.loads(
+            (backend.work / EXEC_RECORD_DIR / "0000" / "meta.json").read_text()
+        )
+        assert meta["host_left_running"] is True
+        assert meta["copy_integrity"] == "torn"
+        assert meta["copy_integrity_because"].strip()
+        assert meta["result"]["ok"] is True
+        assert meta["result"]["data"] == {"returncode": 0}
+
+        # The stranger was never signalled and the jail is still standing,
+        # because something this run started is still inside it.
+        assert signals.real_signals == []
+        assert sorted(jail_base.glob("firecracker/*/root")) != []
     finally:
         backend.close()

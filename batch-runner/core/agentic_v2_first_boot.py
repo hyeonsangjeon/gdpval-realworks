@@ -101,6 +101,121 @@ Recorded in the artefact rather than left out of it. An ownership verdict with
 no statement of its limit reads as proof, and this one is not proof.
 """
 
+OUTCOMES_THAT_LEAVE_THE_HOST_RUNNING = frozenset(
+    {"overran_and_was_left_alone", "overran_and_did_not_stop"}
+)
+"""Outcomes after which a machine this run launched is still on the host.
+
+Named here, beside the code that produces them, because this vocabulary has
+already grown once — from four outcomes to six — while the module that reads it
+still knew four, and the two new ones fell through into the ordinary-success
+branch. A consumer that imports this set finds out when it grows again; one that
+spells the strings out for itself does not.
+"""
+
+COPY_INTACT = "intact"
+COPY_TORN = "torn"
+COPY_UNVERIFIED = "unverified"
+COPY_ABSENT = "no_copy"
+"""How far a returned work-disk copy may be trusted, as four named states.
+
+A string rather than a boolean, and that is the point. ``copied_while_running``
+is three-valued — the guest was seen running, seen gone, or never looked at —
+and every boolean spelling of it rounds the third case into one of the first
+two. ``None is False`` is ``False``, so "never checked" recorded itself as "not
+copied while running", which is the safe-looking direction and the wrong one.
+Nothing reads a missing key or a ``None`` as :data:`COPY_INTACT` by accident.
+"""
+
+
+def _how_intact_is_the_copy(
+    *,
+    a_copy_was_taken: bool,
+    last_seen_running: bool | None,
+    confirmed_stopped: bool | None,
+) -> dict[str, Any]:
+    """Say whether a returned copy may be read as an intact filesystem.
+
+    Both call sites in this module go through here, because both had the same
+    defect in different clothes and fixing one of them would have left the other
+    saying the opposite thing about the same host.
+
+    Three inputs, not one. Whether there is a copy at all; what this run last
+    *observed* about the writer; and whether a stop was confirmed. The second is
+    the one that was missing: a signal that was never sent is not evidence the
+    guest was gone, and a guest that exited on its own was never signalled. Read
+    only ``confirmed_stopped`` and those two cases are indistinguishable, which
+    is how the ordinary boot and the machine nobody could stop came to be
+    labelled the same way.
+
+    ``last_seen_running=None`` means no process was ever looked at — the PID file
+    never appeared, or it named something this run refused to claim. That is not
+    "nothing was writing"; see :data:`CANNOT_RULE_OUT`. It is recorded as
+    unverified, and unverified never reads as intact.
+    """
+    if not a_copy_was_taken:
+        return {
+            "copied_while_running": None,
+            "copy_integrity": COPY_ABSENT,
+            "copy_integrity_because": "no copy of the work disk was returned",
+        }
+    if confirmed_stopped is True:
+        return {
+            "copied_while_running": False,
+            "copy_integrity": COPY_INTACT,
+            "copy_integrity_because": (
+                "the guest was signalled and confirmed gone before the copy was "
+                "taken"
+            ),
+        }
+    if last_seen_running is False:
+        return {
+            "copied_while_running": False,
+            "copy_integrity": COPY_INTACT,
+            "copy_integrity_because": (
+                "the guest was observed to have stopped before the copy was "
+                "taken, so nothing was writing to the disk"
+            ),
+        }
+    if last_seen_running is True:
+        return {
+            "copied_while_running": True,
+            "copy_integrity": COPY_TORN,
+            "copy_integrity_because": (
+                "the guest was still running when the copy was taken"
+                if confirmed_stopped is None
+                else "the guest was signalled and was still running "
+                f"{STOP_CONFIRMATION_SECONDS:g}s later, so the copy was taken "
+                "out from under a live writer"
+            ),
+        }
+    return {
+        "copied_while_running": None,
+        "copy_integrity": COPY_UNVERIFIED,
+        "copy_integrity_because": (
+            "no process was ever observed for this run, so nothing here says "
+            "whether anything was writing to the disk when it was copied"
+        ),
+    }
+
+
+def the_host_was_left_running(boot: Mapping[str, Any]) -> bool:
+    """Whether a machine this run launched is still on the host afterwards.
+
+    Separate from what the command did and from what the copy is worth. A
+    command can finish with a returncode of 0 in a guest that then refuses to
+    shut down, and all three of those are true at once; folding them into one
+    answer is how a leaked machine reached the model as an ordinary success.
+
+    ``guest_confirmed_stopped is False`` is included because it is the same
+    state reached by a different route: a signal went out and the process was
+    still there afterwards.
+    """
+    return (
+        boot.get("outcome") in OUTCOMES_THAT_LEAVE_THE_HOST_RUNNING
+        or boot.get("guest_confirmed_stopped") is False
+    )
+
 
 class BootRefused(RuntimeError):
     """The plan was not run, and the reason is not a boot failure."""
@@ -382,7 +497,9 @@ def first_boot(
     salvage: dict[str, Any] = {
         "returned_copy": None,
         "results_read": False,
-        "copied_while_running": False,
+        **_how_intact_is_the_copy(
+            a_copy_was_taken=False, last_seen_running=None, confirmed_stopped=None
+        ),
     }
     grounds: list[dict[str, Any]] = []
 
@@ -433,7 +550,13 @@ def first_boot(
             },
             {
                 "ground": "it held a value this platform can signal",
-                "held": watched is not None,
+                # A different question from the one above, and it has to be
+                # asked separately or the fourth ground is the third ground
+                # written twice. ``watched`` is only ever set from
+                # ``_a_pid_this_may_signal``, so re-checking the range here is
+                # belt and braces — but a ground nobody can fail is not
+                # evidence, and this list is offered as evidence.
+                "held": watched is not None and 0 < watched <= PID_CEILING,
             },
         ]
 
@@ -441,6 +564,10 @@ def first_boot(
         stopped_by_the_deadline = False
         stop_signal_sent = False
         guest_confirmed_stopped: bool | None = None
+        # What this run last *observed* about the writer, which is not the same
+        # question as whether it sent a signal. None until something is looked
+        # at; False once it has been seen gone; True while it is still there.
+        guest_last_seen_running: bool | None = None
         left_alone_because: str | None = None
 
         if watched is None:
@@ -448,6 +575,7 @@ def first_boot(
             left_alone_because = why_not_this_pid
         else:
             while _still_running(watched):
+                guest_last_seen_running = True
                 if now() - started_at < deadline_seconds:
                     sleep(POLL_SECONDS)
                     continue
@@ -464,6 +592,7 @@ def first_boot(
                 except ProcessLookupError:
                     # It went on its own between the probe and the signal.
                     outcome = "booted"
+                    guest_last_seen_running = False
                     break
                 stop_signal_sent = True
                 guest_confirmed_stopped = _confirm_it_stopped(
@@ -471,6 +600,7 @@ def first_boot(
                 )
                 if guest_confirmed_stopped:
                     stopped_by_the_deadline = True
+                    guest_last_seen_running = False
                     outcome = "stopped_by_the_deadline"
                 else:
                     # A signal was sent and the machine is still there. Saying
@@ -478,6 +608,12 @@ def first_boot(
                     # asserting something nobody observed.
                     outcome = "overran_and_did_not_stop"
                 break
+            else:
+                # The loop condition went false, so the guest is gone. This is
+                # the ordinary end of a boot and it is also the case that a
+                # ``confirmed_stopped``-only reading cannot tell apart from a
+                # machine nobody managed to stop: neither one was signalled.
+                guest_last_seen_running = False
         ran_for = round(now() - started_at, 3)
 
         disk_in_jail = chroot_dir / "work.ext4"
@@ -496,7 +632,13 @@ def first_boot(
             returned = str(work_disk) + ".returned"
             shutil.copy2(disk_in_jail, returned)
             salvage["returned_copy"] = returned
-            salvage["copied_while_running"] = guest_confirmed_stopped is False
+            salvage.update(
+                _how_intact_is_the_copy(
+                    a_copy_was_taken=True,
+                    last_seen_running=guest_last_seen_running,
+                    confirmed_stopped=guest_confirmed_stopped,
+                )
+            )
             results = files_out_of_work_disk(disk_in_jail, WORK_DISK_RESULTS)
             salvage["results_read"] = True
     except BaseException as failure:
@@ -524,7 +666,11 @@ def first_boot(
     if outcome == "booted" and exit_status is None:
         outcome = "booted_but_wrote_nothing"
 
-    destroyed = _destroy(host_side.get("destroy_after_the_run", []))
+    destroyed = _destroy_unless_something_is_still_running(
+        host_side.get("destroy_after_the_run", []),
+        outcome=outcome,
+        guest_confirmed_stopped=guest_confirmed_stopped,
+    )
 
     return {
         "schema_version": "1.0",
@@ -551,9 +697,13 @@ def first_boot(
         "deadline_seconds": deadline_seconds,
         "stopped_by_the_deadline": stopped_by_the_deadline,
         # Sent and gone are two observations. Only the second one says the host
-        # is free again, and only the first one was ever being recorded.
+        # is free again, and only the first one was ever being recorded. The
+        # third is what this run last *saw*, which is the only one of the three
+        # that distinguishes a guest that exited on its own — never signalled,
+        # nothing to confirm — from one nobody ever looked at.
         "stop_signal_sent": stop_signal_sent,
         "guest_confirmed_stopped": guest_confirmed_stopped,
+        "guest_last_seen_running": guest_last_seen_running,
         "command_exit_status": exit_status,
         "results": results,
         "salvaged": salvage,
@@ -564,6 +714,49 @@ def first_boot(
             "--daemonize sends the console to /dev/null"
         ),
     }
+
+
+def _destroy_unless_something_is_still_running(
+    paths: list[str],
+    *,
+    outcome: str,
+    guest_confirmed_stopped: bool | None,
+) -> dict[str, Any]:
+    """Remove the jail, unless this run has just said the guest is still in it.
+
+    The direct consequence of the two outcomes above, and the reason they could
+    not be added without coming here. Both of them end with a machine this run
+    launched still on the host; the line that followed removed the jail anyway,
+    which is an ``rmtree`` of the rootfs, the work disk and the socket a live
+    Firecracker is holding open. The run then returned a record saying the jail
+    was gone, which it was, and saying nothing about what was using it.
+
+    A leaked directory is a worse-looking outcome and a better one. It can be
+    found, inspected and removed by hand once the machine is gone; a filesystem
+    pulled out from under a running guest cannot be undone, and the guest is
+    still running afterwards either way.
+
+    The refusal is recorded rather than silent, because "the jail is still
+    there" and "the jail is still there because this run would not take it from
+    a live machine" are the same directory listing and different findings.
+    """
+    if the_host_was_left_running(
+        {"outcome": outcome, "guest_confirmed_stopped": guest_confirmed_stopped}
+    ):
+        return {
+            "removed": {},
+            "all_gone": False,
+            "failures": [],
+            "refused_because": (
+                f"the machine ended as {outcome!r}, so a guest this run started "
+                "is still on the host; removing its jail would take the work "
+                "disk and the socket it is using with it"
+            ),
+            "left_behind": list(paths),
+        }
+    destroyed = _destroy(paths)
+    destroyed["refused_because"] = None
+    return destroyed
 
 
 def _destroy(paths: list[str]) -> dict[str, Any]:
@@ -756,12 +949,18 @@ def _clean_up_after_a_failure(
         _collect("copy the work disk out of the jail", chroot_dir.as_posix(), failure)
 
     # Whether anyone may read that copy as an intact filesystem. Taken from what
-    # was observed a moment ago rather than from whether a signal was sent: the
-    # guest was running when this looked, and nothing since has said it stopped.
-    salvage["copied_while_running"] = bool(
-        salvage.get("returned_copy") is not None
-        and process["was_running"] is True
-        and process["confirmed_stopped"] is not True
+    # was observed a moment ago rather than from whether a signal was sent, and
+    # through the same judgement the ordinary path uses, because the two used to
+    # disagree about the same host. The branches above that set
+    # ``left_alone_because`` leave ``was_running`` at None — this run refused to
+    # claim the process, so it never looked at it — and a copy taken in that
+    # state is unverified rather than clean.
+    salvage.update(
+        _how_intact_is_the_copy(
+            a_copy_was_taken=salvage.get("returned_copy") is not None,
+            last_seen_running=process["was_running"],
+            confirmed_stopped=process["confirmed_stopped"],
+        )
     )
 
     # ---- 3. remove the jail, if it is this run's to remove ---------------
@@ -771,6 +970,18 @@ def _clean_up_after_a_failure(
         refused_to_destroy = (
             "the jail was on disk before this run placed anything; removing it "
             "would take another run's work disk with it"
+        )
+    elif process["was_running"] is True and process["confirmed_stopped"] is not True:
+        # The same rule the ordinary path applies, for the same reason. Step 1
+        # above either declined to signal or sent one and could not confirm it
+        # landed; either way the last thing this run observed was a live process
+        # holding this jail's work disk and socket open. Removing it here would
+        # be the failure path doing what the success path was just stopped from
+        # doing.
+        refused_to_destroy = (
+            "this run's own machine was last seen running and was never "
+            "confirmed stopped, so removing its jail would take the disk and "
+            "socket it is using with it"
         )
     else:
         try:

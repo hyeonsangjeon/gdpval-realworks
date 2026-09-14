@@ -75,6 +75,7 @@ from core.agentic_v2_exec_boot import (
     read_the_boot,
 )
 from core.agentic_v2_fixture_backend import AgenticV2FixtureBackend
+from core.agentic_v2_first_boot import the_host_was_left_running
 from core.agentic_v2_microvm import REQUIRED_MICROVM_POLICY
 from core.agentic_v2_substrate import AgenticV2SubstrateManifest
 from core.agentic_v2_provenance import canonical_sha256
@@ -118,12 +119,21 @@ def _how_the_machine_ended(boot: Mapping[str, Any]) -> dict[str, Any]:
     kept under separate keys here as well; folding them into one boolean is how
     "SIGKILL was delivered" came to read as "the host is free again".
 
+    Three axes, and they are kept apart on purpose. What the command did lives
+    in ``result``. Whether the host is free again is ``host_left_running``.
+    Whether the bytes the guest wrote may be read as an intact filesystem is
+    ``copy_integrity``. All three can disagree — a command can exit 0 in a guest
+    that then refuses to shut down, leaving a work disk copied out from under a
+    live writer — and the record is where that disagreement has to survive,
+    because the model is told only the first of the three.
+
     Every value is read with ``.get``. A launcher that does not report these is
     recorded as not having reported them, which is a different statement from
     reporting that nothing was owned, and neither one is worth an exception
     inside a boot that otherwise succeeded.
     """
     evidence = boot.get("pid_file") or {}
+    salvaged = boot.get("salvaged") or {}
     return {
         "outcome": boot.get("outcome"),
         "vm_id": boot.get("vm_id"),
@@ -133,6 +143,12 @@ def _how_the_machine_ended(boot: Mapping[str, Any]) -> dict[str, Any]:
         "cannot_rule_out": evidence.get("cannot_rule_out"),
         "stop_signal_sent": boot.get("stop_signal_sent"),
         "guest_confirmed_stopped": boot.get("guest_confirmed_stopped"),
+        "guest_last_seen_running": boot.get("guest_last_seen_running"),
+        "host_left_running": the_host_was_left_running(boot),
+        "copied_while_running": salvaged.get("copied_while_running"),
+        "copy_integrity": salvaged.get("copy_integrity"),
+        "copy_integrity_because": salvaged.get("copy_integrity_because"),
+        "returned_copy": salvaged.get("returned_copy"),
         "teardown": boot.get("teardown"),
     }
 
@@ -410,6 +426,7 @@ class AgenticV2MicroVMBackend(AgenticV2FixtureBackend):
             return {"ok": False, "error_type": "compute_backend_error"}
 
         reading = read_the_boot(boot, deadline=deadline)
+        machine = _how_the_machine_ended(boot)
         record = {
             "call": len(self.boots),
             "booted": True,
@@ -419,13 +436,17 @@ class AgenticV2MicroVMBackend(AgenticV2FixtureBackend):
             "grounds": reading["grounds"],
             "result": reading["result"],
             "image": self.image.as_record(),
-            "machine": _how_the_machine_ended(boot),
+            "machine": machine,
         }
-        record["output_files"] = self._keep_the_output(record["call"], reading)
+        record["output_files"] = self._keep_the_output(
+            record["call"], reading, machine=machine
+        )
         self.boots.append(record)
         return reading["result"]
 
-    def _keep_the_output(self, call: int, reading: Mapping[str, Any]) -> dict[str, Any]:
+    def _keep_the_output(
+        self, call: int, reading: Mapping[str, Any], *, machine: Mapping[str, Any]
+    ) -> dict[str, Any]:
         """Put the streams where the model can ask for them.
 
         If this fails — a full workspace, most likely — the command's own
@@ -435,6 +456,14 @@ class AgenticV2MicroVMBackend(AgenticV2FixtureBackend):
         about it directly, which is honest: from where it sits the files simply
         are not there, and reading a file that is not there already has a
         meaning.
+
+        ``meta.json`` carries the machine's state as well as the command's
+        result, and the two are not the same answer. The streams and the
+        returncode beside them were read off a work disk that may have had a
+        live writer attached; a transcript that records only "returncode 0"
+        cannot be told apart afterwards from one taken off a machine that shut
+        down cleanly. Whoever reads these files later is the last person in a
+        position to notice, so the evidence goes where they are.
         """
         where = f"{EXEC_RECORD_DIR}/{call:04d}"
         written: dict[str, Any] = {"directory": where, "kept": [], "not_kept": None}
@@ -448,6 +477,10 @@ class AgenticV2MicroVMBackend(AgenticV2FixtureBackend):
                     "truncated": reading["truncated"],
                     "result": reading["result"],
                     "grounds": reading["grounds"],
+                    "host_left_running": machine.get("host_left_running"),
+                    "copy_integrity": machine.get("copy_integrity"),
+                    "copy_integrity_because": machine.get("copy_integrity_because"),
+                    "guest_confirmed_stopped": machine.get("guest_confirmed_stopped"),
                 },
                 sort_keys=True,
                 separators=(",", ":"),
