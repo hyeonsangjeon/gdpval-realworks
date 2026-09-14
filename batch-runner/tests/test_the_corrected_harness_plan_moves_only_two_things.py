@@ -36,6 +36,7 @@ model, resolves a cohort or costs anything.
 """
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import json
 from pathlib import Path
@@ -48,7 +49,7 @@ from core.agentic_v2_call_agreement import describe, the_stop_rule
 from core.agentic_v2_fixture_backend import AgenticV2FixtureBackend
 from core.agentic_v2_instructions import file_digest, resolve_instructions
 from core.agentic_v2_manifest_binding import STAGE_FIVE, STAGE_SIZES, STAGE_THIRTY
-from core.agentic_v2_model_voice import REPLAY_FORMATS
+from core.agentic_v2_model_voice import REPLAY_FORMATS, AzureFoundryVoice
 from core.agentic_v2_reporting_rules import THE_EN_CHAIN, THE_KO_CHAIN
 from core.agentic_v2_tool_availability import PLACEHOLDER
 from core.execution_envelope_cost import CostAssumptions
@@ -102,6 +103,11 @@ THE_DESIGN_RECORD_ASKS = (
 #: request that is actually built rather than against the plan alone, because a
 #: plan that pins none and a voice that sends none are two different silences.
 THE_SAMPLING_CONTROLS = ("temperature", "top_p", "seed")
+
+#: trial_30's settled charge, as it is written in ``run_list_note``. A string
+#: rather than a float: the test asks whether the note quotes this figure, not
+#: whether some number is close to it.
+PAST_CHARGE = "6.131815"
 
 
 def _load(path: Path) -> dict[str, Any]:
@@ -337,9 +343,62 @@ def test_the_run_list_is_finite_and_says_which_entries_spend(corrected):
         assert run.get("requires"), f"{run['id']} spends without naming its gate"
 
 
+def test_the_scale_expectation_names_the_format_it_was_measured_under(corrected):
+    """A bill rung up under the old format cannot be quoted at the new one.
+
+    ``run_list_note`` reaches for trial_30's actual charge to say what three
+    repeats will cost. That charge was rung up under ``paraphrase``; this plan
+    sets ``replay_format`` to ``faithful``, and six hundred lines above, the
+    same file puts the difference between them at +719,526 input tokens. The
+    first version of this note carried the figure across without mentioning
+    that anything had moved, which left the expectation short by about a
+    third -- the two sentences are far enough apart that nobody reading
+    either one alone would see it.
+
+    **The ceilings are not what this guards, and are not affected.** They
+    were always computed as though every past argument were re-sent at full
+    length, so the format change does not move them and none is re-derived.
+    The one sentence that says "for scale" is the whole of it.
+
+    The old format is read from the plan that ran rather than spelled here,
+    so that if the default ever changes under it, this fails instead of
+    quietly comparing the wrong pair.
+    """
+    note = corrected["experiment_record"]["run_list_note"]
+
+    if PAST_CHARGE not in note:
+        return  # the note stopped quoting it; there is nothing to reconcile
+
+    default_format = next(
+        field.default
+        for field in dataclasses.fields(AzureFoundryVoice)
+        if field.name == "replay_format"
+    )
+    ran_under = _load(THE_PLAN_THAT_RAN)["fixed_settings"].get(
+        "replay_format", default_format
+    )
+    runs_under = corrected["fixed_settings"]["replay_format"]
+
+    assert ran_under in REPLAY_FORMATS and runs_under in REPLAY_FORMATS
+    if ran_under == runs_under:
+        return  # same axis; the figure carries across unadjusted after all
+
+    assert ran_under in note, (
+        f"the note quotes {PAST_CHARGE} USD but never says it was measured "
+        f"under {ran_under!r}, so it reads as this plan's own expectation"
+    )
+    assert runs_under in note, (
+        f"the note has to name the format this plan actually sets "
+        f"({runs_under!r}) beside the one the figure came from"
+    )
+    assert "ceiling" in note.lower(), (
+        "an adjusted expectation sitting alone reads as a raised limit; the "
+        "note must keep saying the ceilings are elsewhere and unchanged"
+    )
+
+
 def test_the_repeats_are_gated_on_compatibility_ledger_and_source(corrected):
     """Three gates, checked before each dispatch rather than argued after.
-
     Named here because a gate that exists only in a sentence somewhere gets
     skipped by whoever is in a hurry.
     """

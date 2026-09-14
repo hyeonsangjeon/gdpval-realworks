@@ -819,10 +819,20 @@ experiment_record:
     over — once at advance_check_5 and three times at trial_30 — because the
     gate has no memory and cannot tell a first run from a third, so this list
     is the only thing that bounds the count. For scale, trial_30 actually
-    drew 6.131815 USD against its 200.00 ceiling, so three repeats are
-    expected to land near twenty dollars rather than near six hundred. That
-    is an expectation from one past run and not a ceiling; the ceilings are
-    the numbers above.
+    drew 6.131815 USD against its 200.00 ceiling — but it drew that under
+    "paraphrase", and this plan sets replay_format to "faithful". The figure
+    does not carry across unadjusted, because the +719,526 input tokens
+    named at replay_format above are exactly the difference between the two
+    formats. At the receipt rate for azure:gpt-5.4 — 2.50 USD per million
+    input — that delta is 1.798815 USD, so one repeat is expected near 7.93
+    and three near 23.79 rather than near 18.40. The delta being 29.3% of
+    6.131815 is what makes the "about +29%" above check out, and it is the
+    receipt block that reproduces it, not the planning block, which gives
+    14.7%. All of these are expectations from one past run, inheriting that
+    run's own caveat that the token delta is estimated and over-counts;
+    none of them is a ceiling. The ceilings are the numbers above and they
+    do not move, because as replay_format says they were always computed as
+    though every past argument were re-sent at full length.
 
   stop_rules: >-
     The eight in core/agentic_v2_preregistration.STOP_RULES apply unchanged. In
