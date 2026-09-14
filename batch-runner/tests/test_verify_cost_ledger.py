@@ -77,26 +77,47 @@ def _call(
     return row
 
 
+#: The token kinds ``cost-receipt-v1``'s usage block is closed over. Spelled
+#: out rather than imported from the verifier: a test that reads the list off
+#: the thing it is checking would keep passing if the list itself went wrong.
+USAGE_KEYS = (
+    "input_tokens",
+    "cached_input_tokens",
+    "output_tokens",
+    "reasoning_tokens",
+    "audio_input_tokens",
+    "audio_output_tokens",
+)
+
+
+def _sum_usage(rows: list[dict]) -> dict[str, int | None]:
+    """Sum the way the real builder sums: a kind nobody stated stays ``None``.
+
+    Reimplemented here rather than called out of ``core`` so that the two
+    agreeing is evidence rather than a tautology. The distinction it keeps is
+    the one the whole repair rests on -- "nobody measured this" and "measured,
+    and it was none" must not arrive at the verifier as the same integer.
+    """
+    totals: dict[str, int | None] = {key: None for key in USAGE_KEYS}
+    for row in rows:
+        for key in USAGE_KEYS:
+            value = row.get(key)
+            if value is None:
+                continue
+            totals[key] = (totals[key] or 0) + int(value)
+    return totals
+
+
 def _receipt_from(calls: list[dict]) -> dict:
     """Build the receipt those calls actually justify."""
     settled = [row for row in calls if row["state"] == "settled"]
     total = sum((Decimal(row["model_cost_usd"] or 0) for row in settled), Decimal(0))
-    usage = {
-        key: sum(int(row.get(key) or 0) for row in settled)
-        for key in ("input_tokens", "cached_input_tokens", "output_tokens", "reasoning_tokens")
-    }
+    usage = _sum_usage(settled)
     components = {}
     for row in settled:
         key = (row["stage"], row["retry_kind"], row["provider"], row["deployment"],
                row["requested_model"], row["resolved_model"], row["api_version"])
-        bucket = components.setdefault(
-            key, {"model_calls": 0, "cost": Decimal(0),
-                  "usage": {k: 0 for k in usage}}
-        )
-        bucket["model_calls"] += 1
-        bucket["cost"] += Decimal(row["model_cost_usd"] or 0)
-        for token_key in usage:
-            bucket["usage"][token_key] += int(row.get(token_key) or 0)
+        components.setdefault(key, []).append(row)
 
     unpriced = [row for row in settled if row["model_cost_usd"] is None]
     status = "partial" if unpriced else "complete"
@@ -121,12 +142,14 @@ def _receipt_from(calls: list[dict]) -> dict:
                 "resolved_model": key[5],
                 "api_version": key[6],
                 "status": "complete",
-                "model_calls": bucket["model_calls"],
-                "known_cost_usd": float(bucket["cost"]),
-                "usage": bucket["usage"],
+                "model_calls": len(rows),
+                "known_cost_usd": float(
+                    sum((Decimal(r["model_cost_usd"] or 0) for r in rows), Decimal(0))
+                ),
+                "usage": _sum_usage(rows),
                 "missing_reasons": [],
             }
-            for key, bucket in components.items()
+            for key, rows in components.items()
         ],
         "price_table_sha256": PRICE_TABLE,
         "missing_reasons": [],
@@ -428,18 +451,164 @@ def test_a_complete_claim_over_an_unpriced_call_is_caught(tmp_path):
     assert _verdict(_write(tmp_path, calls, receipt))["partial_cause"] is False
 
 
-def test_audio_tokens_the_receipt_cannot_express_are_reported(tmp_path):
-    """cost-receipt-v1 closes usage over four token kinds; the ledger table has
-    since grown audio columns. A run that used them has a usage block that no
-    longer states everything consumed."""
+# 오디오 — 영수증이 담게 된 뒤. 통과하는 경우 하나에 무효화 시도 여섯.
+
+def test_audio_tokens_now_reconcile_like_every_other_kind(tmp_path):
+    """``cost-receipt-v1`` closes usage over six kinds, audio among them.
+
+    A run that used audio has a usage block that states it, so the ledger and
+    the receipt simply agree and nothing is reported. This is the case the
+    repair was for; the two after it are why widening the block did not make
+    the checks weaker.
+    """
     calls = _good_calls() + [
         _call("cA", stage="perception",
               extra={"audio_input_tokens": 4200, "audio_output_tokens": 0})
     ]
+    verdict = _verdict(_write(tmp_path, calls))
+    assert all(verdict.values()), verdict
+
+
+def test_a_receipt_that_omits_the_audio_it_consumed_is_caught(tmp_path):
+    """The planted omission: audio metered, receipt silent.
+
+    This is the shape of every receipt published before the fields existed.
+    It must fail, and it must fail while naming the measured number -- the
+    point of the finding is the ledger's count, not that a key is missing.
+    """
+    calls = _good_calls() + [
+        _call("cA", stage="perception",
+              extra={"audio_input_tokens": 4200, "audio_output_tokens": 0})
+    ]
+    receipt = _receipt_from(calls)
+    for key in ("audio_input_tokens", "audio_output_tokens"):
+        receipt["usage"].pop(key)
+        for component in receipt["components"]:
+            component["usage"].pop(key)
+
+    findings, _ = verify(_write(tmp_path, calls, receipt))
+    verdict = {f.check: f.ok for f in findings}
+    assert verdict["usage_reconciles"] is False
+    assert verdict["components_reconcile"] is False
+
+    reconciles = next(f for f in findings if f.check == "usage_reconciles")
+    assert reconciles.data["audio_input_tokens"] == {"receipt": None, "ledger": 4200}
+    assert reconciles.data["audio_output_tokens"] == {"receipt": None, "ledger": 0}
+
+
+def test_a_receipt_claiming_zero_audio_over_a_run_that_used_it_is_caught(tmp_path):
+    """The false zero: the failure a widened schema could have introduced.
+
+    Declaring the fields makes it possible to write ``0`` into them. A zero
+    that no call supports is worse than the old silence, because it reads as a
+    measurement. The verifier compares against the ledger, so it fails.
+    """
+    calls = _good_calls() + [
+        _call("cA", stage="perception",
+              extra={"audio_input_tokens": 4200, "audio_output_tokens": 0})
+    ]
+    receipt = _receipt_from(calls)
+    receipt["usage"]["audio_input_tokens"] = 0
+    for component in receipt["components"]:
+        if component["stage"] == "perception":
+            component["usage"]["audio_input_tokens"] = 0
+
+    verdict = _verdict(_write(tmp_path, calls, receipt))
+    assert verdict["usage_reconciles"] is False
+    assert verdict["components_reconcile"] is False
+
+
+def test_a_receipt_predating_the_audio_fields_still_passes_on_a_text_run(tmp_path):
+    """Old readers and old records survive. The change is additive.
+
+    Every receipt published before this contract grew omits the two audio keys
+    entirely. Over a ledger that never metered audio there is nothing to
+    disagree with, and failing those records would condemn evidence that was
+    honest under the contract it was written for.
+    """
+    calls = _good_calls()
+    receipt = _receipt_from(calls)
+    for key in ("audio_input_tokens", "audio_output_tokens"):
+        receipt["usage"].pop(key)
+        for component in receipt["components"]:
+            component["usage"].pop(key)
+
+    verdict = _verdict(_write(tmp_path, calls, receipt))
+    assert all(verdict.values()), verdict
+
+
+def test_a_zero_call_receipt_may_still_say_zero_rather_than_nothing(tmp_path):
+    """The other legacy shape: literal zeros against a ledger with no rows.
+
+    ``empty_usage`` seeds the four long-standing kinds at zero, so a receipt
+    covering no calls states zero for them. A ledger with no rows measured
+    nothing at all. Those two descriptions of the same emptiness agree, and a
+    stricter rule would fail every such receipt already published.
+
+    ``identity`` is excluded rather than asserted: a ledger with no rows names
+    no run, which is a real thing to say about an empty ledger and has nothing
+    to do with tokens. Excluding it here keeps this test about the one
+    distinction it exists for.
+    """
+    receipt = _receipt_from([])
+    receipt["usage"] = {key: 0 for key in USAGE_KEYS}
+
+    verdict = _verdict(_write(tmp_path, [], receipt, results=[]))
+    verdict.pop("identity")
+    assert all(verdict.values()), verdict
+
+
+def test_a_token_kind_the_receipt_still_cannot_express_is_reported(tmp_path):
+    """The check that caught audio did not retire with it.
+
+    ``usage_containment`` reads the kinds off the ledger rows rather than a
+    list kept in the verifier, so the next thing metered is caught on the run
+    it appears instead of the release someone remembers to widen a constant.
+    ``cache_write_input_tokens`` is a real example: the Codex adapter meters it
+    and neither ``CallUsage`` nor the price table has a place for it.
+    """
+    calls = _good_calls() + [
+        _call("cA", extra={"cache_write_input_tokens": 777})
+    ]
     findings, _ = verify(_write(tmp_path, calls))
     containment = next(f for f in findings if f.check == "usage_containment")
     assert containment.ok is False
-    assert containment.data["totals"]["audio_input_tokens"] == 4200
+    assert containment.data["totals"]["cache_write_input_tokens"] == 777
+    assert containment.data["unexpressible_keys"] == ["cache_write_input_tokens"]
+
+
+def test_a_negative_token_count_in_the_ledger_is_refused_not_summed(tmp_path):
+    """Corrupt evidence stops the sum instead of being coerced past.
+
+    A negative count is not a measurement. Reading it as zero, or adding it,
+    would publish a number no provider reported; the check says the ledger
+    cannot be summed and names the call.
+    """
+    calls = _good_calls() + [
+        _call("cA", stage="perception", extra={"audio_input_tokens": -5})
+    ]
+    findings, _ = verify(_write(tmp_path, calls))
+    reconciles = next(f for f in findings if f.check == "usage_reconciles")
+    assert reconciles.ok is False
+    assert "cA" in reconciles.data["ledger_error"]
+    assert "negative" in reconciles.data["ledger_error"]
+
+
+def test_a_token_count_that_is_not_an_integer_is_refused(tmp_path):
+    """Same rule, the other way a column goes wrong.
+
+    A string, a float, or a boolean in a token column means the writer is not
+    what we think it is. ``True`` matters most: it is an ``int`` in Python and
+    would otherwise be summed as one token.
+    """
+    for value in ("4200", 4200.5, True):
+        calls = _good_calls() + [
+            _call("cA", stage="perception", extra={"audio_input_tokens": value})
+        ]
+        findings, _ = verify(_write(tmp_path, calls))
+        reconciles = next(f for f in findings if f.check == "usage_reconciles")
+        assert reconciles.ok is False, f"{value!r} was accepted as a token count"
+        assert "not an integer" in reconciles.data["ledger_error"]
 
 
 def test_a_ledger_mixing_two_runs_is_caught(tmp_path):

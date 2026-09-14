@@ -46,19 +46,20 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, Iterable
 
-# The four token kinds a cost-receipt-v1 ``usage`` block is closed over. The
-# ledger may carry more (audio, for one); see CHECK_USAGE_CONTAINMENT for why
-# that is reported rather than quietly dropped.
+# The token kinds a cost-receipt-v1 ``usage`` block is closed over. Audio was
+# outside it until the published schema grew explicit ``audio_*_tokens``
+# properties: the ledger measured those columns, the receipt had nowhere to put
+# them, and check_usage_containment reported the gap. It is inside now, so it
+# reconciles exactly like every other kind. See _extra_token_keys for what
+# still happens to a kind the receipt cannot express.
 RECEIPT_USAGE_KEYS = (
     "input_tokens",
     "cached_input_tokens",
     "output_tokens",
     "reasoning_tokens",
+    "audio_input_tokens",
+    "audio_output_tokens",
 )
-
-# Ledger token columns outside the receipt's four. Present in the table since
-# audio grading landed; absent from rows written before it.
-EXTRA_TOKEN_KEYS = ("audio_input_tokens", "audio_output_tokens")
 
 # The tuple a receipt component is keyed on. A component is one line of the
 # bill, and two calls belong to the same line only when all of this matches.
@@ -122,7 +123,97 @@ def _load_jsonl(path: Path) -> list[dict[str, Any]]:
 
 
 def _tokens(row: dict[str, Any], keys: Iterable[str]) -> dict[str, int]:
+    """A row's counts with absent read as zero. For predicates, not for sums.
+
+    Fine where the question is "did this call use any of these", which is what
+    the remaining callers ask. Wrong where the question is "how many", because
+    it answers "none measured" and "measured none" with the same integer. Use
+    ``_token_totals`` there.
+    """
     return {key: int(row.get(key) or 0) for key in keys}
+
+
+def _as_count(value: Any) -> int | None:
+    """A token count, or ``None`` for a kind nobody stated.
+
+    Anything else raises. A count that is negative, fractional, a string or a
+    bool is not a measurement, and coercing it would publish a number the
+    provider never reported. ``bool`` is rejected explicitly because it is an
+    ``int`` in Python and ``True`` would otherwise be read as one token.
+    """
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"{value!r} is not an integer token count")
+    if value < 0:
+        raise ValueError(f"{value!r} is a negative token count")
+    return value
+
+
+def _token_totals(
+    rows: Iterable[dict[str, Any]], keys: Iterable[str]
+) -> dict[str, int | None]:
+    """Sum the way the receipt builder sums: absent stays absent.
+
+    A key holds ``None`` until some row states a count for it, and a row
+    stating zero is such a row. That keeps "the ledger never measured this"
+    distinct from "the ledger measured this and it was none" -- the same
+    distinction ``core.cost_receipts.empty_usage`` seeds the receipt with, and
+    the reason this check can be compared against it at all.
+
+    Raises ValueError naming the call if the ledger carries a value that is not
+    a non-negative integer, which is corruption of the durable evidence and
+    louder than a silent coercion to zero.
+    """
+    keys = tuple(keys)
+    totals: dict[str, int | None] = {key: None for key in keys}
+    for row in rows:
+        for key in keys:
+            try:
+                count = _as_count(row.get(key))
+            except ValueError as exc:
+                raise ValueError(f"call {row.get('call_id')!r}: {key} {exc}") from None
+            if count is None:
+                continue
+            totals[key] = (totals[key] or 0) + count
+    return totals
+
+
+def _usage_agrees(stated: int | None, ledger: int | None) -> bool:
+    """Does a stated count match what the ledger actually measured?
+
+    Where the ledger measured nothing, a receipt may say so with ``null`` or
+    with ``0``. Every receipt published before a column existed says ``0`` for
+    it, and rejecting those would fail records that were honest under the
+    contract they were published under -- the schema change is additive, and
+    so is this. Where the ledger did measure, only the measured number agrees:
+    silence is an omission and a different number is a misstatement, and both
+    fail.
+    """
+    if ledger is None:
+        return stated is None or stated == 0
+    return stated == ledger
+
+
+def _extra_token_keys(rows: Iterable[dict[str, Any]]) -> tuple[str, ...]:
+    """Token columns in the ledger that the receipt's usage block cannot hold.
+
+    Derived from the rows rather than listed here. A hardcoded list stops being
+    a check the moment the receipt catches up with it -- which is what happened
+    to audio -- and says nothing about whatever is metered next. Anything named
+    ``*_tokens`` outside ``RECEIPT_USAGE_KEYS`` is reported whether or not this
+    file has heard of it.
+    """
+    return tuple(
+        sorted(
+            {
+                key
+                for row in rows
+                for key in row
+                if key.endswith("_tokens") and key not in RECEIPT_USAGE_KEYS
+            }
+        )
+    )
 
 
 def _is_price_absent(reasons: Iterable[str]) -> bool:
@@ -302,18 +393,35 @@ def check_all_calls_settled(calls: list[dict[str, Any]]) -> Finding:
 
 
 def check_usage_reconciles(receipt: dict[str, Any], settled: list[dict[str, Any]]) -> Finding:
-    """The per-call tokens must add up to the receipt's totals, exactly."""
-    stated = receipt.get("usage") or {}
-    summed = {key: 0 for key in RECEIPT_USAGE_KEYS}
-    for row in settled:
-        for key, value in _tokens(row, RECEIPT_USAGE_KEYS).items():
-            summed[key] += value
+    """The per-call tokens must add up to the receipt's totals, exactly.
 
-    mismatches = {
-        key: {"receipt": stated.get(key), "ledger": summed[key]}
-        for key in RECEIPT_USAGE_KEYS
-        if int(stated.get(key) or 0) != summed[key]
-    }
+    Exactly, and also faithfully: a kind the ledger never measured has to stay
+    unmeasured in the receipt. Filling it with a zero would be the one failure
+    this check cannot afterwards detect, because a zero reads as a measurement
+    and there is nothing left to compare it against.
+    """
+    stated = receipt.get("usage") or {}
+    try:
+        summed = _token_totals(settled, RECEIPT_USAGE_KEYS)
+    except ValueError as exc:
+        return Finding(
+            "usage_reconciles",
+            False,
+            f"the ledger cannot be summed: {exc}",
+            {"ledger_error": str(exc)},
+        )
+
+    mismatches: dict[str, Any] = {}
+    for key in RECEIPT_USAGE_KEYS:
+        raw = stated.get(key)
+        try:
+            claimed = _as_count(raw)
+        except ValueError as exc:
+            mismatches[key] = {"receipt": raw, "ledger": summed[key], "problem": str(exc)}
+            continue
+        if not _usage_agrees(claimed, summed[key]):
+            mismatches[key] = {"receipt": raw, "ledger": summed[key]}
+
     if mismatches:
         return Finding(
             "usage_reconciles",
@@ -328,40 +436,60 @@ def check_usage_reconciles(receipt: dict[str, Any], settled: list[dict[str, Any]
 
 
 def check_usage_containment(settled: list[dict[str, Any]]) -> Finding:
-    """Tokens the receipt's four-key usage block cannot represent.
+    """Tokens the receipt's usage block cannot represent.
 
-    ``cost-receipt-v1`` closes ``usage`` over four kinds. The ledger table has
-    since grown audio columns. Where those are non-zero, the receipt's usage
-    block is not a full statement of what was consumed -- the dollars may
-    still be right, but a reader adding up the usage will not reach them. That
-    is reported as a gap in the receipt's coverage, never as a pass.
+    ``cost-receipt-v1`` closes ``usage`` over a fixed set of kinds. Audio used
+    to fall outside it -- metered in the ledger, unrepresentable in the
+    receipt, so a reader adding the usage up would not reach what the run
+    consumed. That gap is closed, and audio now reconciles like every other
+    kind in check_usage_reconciles.
+
+    This check does not retire with it. It asks the same question of whatever
+    the ledger carries today, reading the kinds off the rows instead of a list
+    kept here, so the next thing metered is caught the run it appears rather
+    than the release someone remembers to widen this file. The dollars may
+    still be right; the usage block is not a full statement of what was
+    consumed, and that is reported, never passed.
     """
+    extra_keys = _extra_token_keys(settled)
+    if not extra_keys:
+        return Finding(
+            "usage_containment",
+            True,
+            "the receipt's usage block is closed over every token kind this "
+            "ledger carries",
+            {"receipt_keys": list(RECEIPT_USAGE_KEYS)},
+        )
+
     carriers = []
     for row in settled:
-        extra = _tokens(row, EXTRA_TOKEN_KEYS)
+        extra = _tokens(row, extra_keys)
         if any(extra.values()):
             carriers.append(
                 {"call_id": row.get("call_id"), "stage": row.get("stage"), **extra}
             )
     if carriers:
         totals = {
-            key: sum(int(item.get(key) or 0) for item in carriers)
-            for key in EXTRA_TOKEN_KEYS
+            key: sum(int(item.get(key) or 0) for item in carriers) for key in extra_keys
         }
         return Finding(
             "usage_containment",
             False,
             f"{len(carriers)} calls consumed token kinds the receipt's usage "
             f"block cannot express ({totals}), so its usage understates the run",
-            {"totals": totals, "calls": carriers[:20]},
+            {
+                "totals": totals,
+                "unexpressible_keys": list(extra_keys),
+                "calls": carriers[:20],
+            },
         )
-    present = any(key in row for row in settled for key in EXTRA_TOKEN_KEYS)
-    detail = (
-        "no call used a token kind outside the receipt's four"
-        if present
-        else "this ledger predates the extra token columns; nothing to contain"
+    return Finding(
+        "usage_containment",
+        True,
+        f"the ledger carries {len(extra_keys)} token kinds the receipt cannot "
+        "express, and no call used any of them",
+        {"unexpressible_keys": list(extra_keys)},
     )
-    return Finding("usage_containment", True, detail)
 
 
 def check_cost_reconciles(receipt: dict[str, Any], settled: list[dict[str, Any]]) -> Finding:
@@ -412,19 +540,32 @@ def check_cost_reconciles(receipt: dict[str, Any], settled: list[dict[str, Any]]
 def check_components_reconcile(
     receipt: dict[str, Any], settled: list[dict[str, Any]]
 ) -> Finding:
-    """Each line of the bill must be backed by the calls assigned to it."""
-    grouped: dict[tuple, dict[str, Any]] = {}
+    """Each line of the bill must be backed by the calls assigned to it.
+
+    Per line, token kinds carry the same absent/measured distinction the
+    receipt's own totals do, so a component that omits a kind its calls
+    reported is caught here and not only in the grand total -- where one line
+    over-stating and another under-stating would cancel out.
+    """
+    rows_by_key: dict[tuple, list[dict[str, Any]]] = {}
     for row in settled:
         key = tuple(row.get(field) for field in COMPONENT_KEY)
-        bucket = grouped.setdefault(
-            key, {"model_calls": 0, "cost": Decimal(0), "usage": {k: 0 for k in RECEIPT_USAGE_KEYS}}
-        )
-        bucket["model_calls"] += 1
-        bucket["cost"] += _dec(row.get("model_cost_usd"))
-        for token_key, value in _tokens(row, RECEIPT_USAGE_KEYS).items():
-            bucket["usage"][token_key] += value
+        rows_by_key.setdefault(key, []).append(row)
 
     problems = []
+    grouped: dict[tuple, dict[str, Any]] = {}
+    for key, rows in rows_by_key.items():
+        try:
+            usage = _token_totals(rows, RECEIPT_USAGE_KEYS)
+        except ValueError as exc:
+            problems.append(f"component {dict(zip(COMPONENT_KEY, key))}: {exc}")
+            usage = {token_key: None for token_key in RECEIPT_USAGE_KEYS}
+        grouped[key] = {
+            "model_calls": len(rows),
+            "cost": sum((_dec(row.get("model_cost_usd")) for row in rows), Decimal(0)),
+            "usage": usage,
+        }
+
     components = receipt.get("components") or []
     for component in components:
         key = tuple(component.get(field) for field in COMPONENT_KEY)
@@ -445,10 +586,16 @@ def check_components_reconcile(
             )
         stated_usage = component.get("usage") or {}
         for token_key in RECEIPT_USAGE_KEYS:
-            if int(stated_usage.get(token_key) or 0) != bucket["usage"][token_key]:
+            raw = stated_usage.get(token_key)
+            try:
+                claimed = _as_count(raw)
+            except ValueError as exc:
+                problems.append(f"component {name!r}: {token_key} {exc}")
+                continue
+            if not _usage_agrees(claimed, bucket["usage"][token_key]):
                 problems.append(
                     f"component {name!r}: {token_key} receipt "
-                    f"{stated_usage.get(token_key)}, ledger {bucket['usage'][token_key]}"
+                    f"{raw}, ledger {bucket['usage'][token_key]}"
                 )
 
     for key, bucket in grouped.items():
