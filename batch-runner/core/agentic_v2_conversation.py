@@ -503,12 +503,76 @@ _ENDS_THE_RUN: Mapping[str, StopReason] = {
 }
 """Tool failures that end the run, and the ending each one gets.
 
-Everything absent from this table — including ``capability_unavailable``, which
-is what asking to run a command gets today — is handed back to the model
-instead. That is not leniency. Reading a refusal and choosing something else is
-the one behaviour stage one exists to measure, so a loop that gave up at the
-first refusal would measure nothing.
+**This table is not the whole answer, and taking it for one was wrong.** What it
+says is true of *this loop*: a reason absent from it — ``capability_unavailable``
+among them — does not make the loop below stop, and the loop goes on to append a
+``NEXT_TURN`` event saying it is showing the model a refusal. What it does not
+say is that the loop never gets there. ``dispatch_one`` in
+:mod:`core.agentic_v2_runner` raises ``_EndTheRun`` on *any* result that is not
+``ok``, before returning, because
+:func:`core.agentic_v2_provenance.verify_trace_pair` refuses a trace with a tool
+event after a not-ok one. So the desk is already gone when this table is
+consulted, and the run ends on the first refused call whatever is written here.
+
+That condition is registered, with its mechanism, in
+``core.agentic_v2_preregistration`` under
+``one_failed_tool_call_ends_the_task`` — the model is told nothing and is not
+asked for another turn. Lifting it means changing what a trace may contain, and
+that is a change to the provenance schema rather than to this table.
+
+Two consequences worth stating where the wrong sentence used to be. Reading a
+refusal and choosing something else cannot be observed in this harness today, so
+no run may be reported as having measured it. And the loop's own verdict for a
+refusal is :attr:`StopReason.TOOL_DESK_BROKE`, because all it saw was an
+exception coming out of the desk — ``agentic_v2_runner`` overrides that for the
+*run record*, which names the refusal correctly, but the conversation outcome
+keeps the broken-desk word. A reader separating "the desk said no" from "the
+desk was broken" has to use the run record's ``error``, not this stop reason.
 """
+
+
+def ends_the_run(error_type: str | None) -> bool:
+    """Whether a tool failure of this kind is a broken desk or a desk saying no.
+
+    The name is the loop's, and under the condition registered in
+    ``one_failed_tool_call_ends_the_task`` it over-promises: *both* kinds end
+    the run, because ``dispatch_one`` raises on any not-ok result before this is
+    ever consulted. What the function still answers correctly — and the reason
+    it is the only way to ask from outside — is *which* kind a failure was.
+
+    That distinction is not visible afterwards: a refused turn and a fatal turn
+    both land in :class:`TurnRecord` with ``ok`` false and an ``error_type``,
+    and both are reported by the loop as
+    :attr:`StopReason.TOOL_DESK_BROKE`. A reader that cannot tell them apart
+    will count a closed tool desk as a broken one.
+
+    So a ``False`` here means the desk was working and declined the request --
+    the model asked for a capability this profile does not grant, and it is
+    named.
+
+    **What it says about the task is nothing at all, and the two are close to
+    inverted.** This function answers about the *attempt*; whether the task is
+    reopened is ``RETRYABLE_DISPOSITIONS`` in
+    :mod:`core.agentic_v2_cost_binding`, read by
+    ``core.agentic_v2_task_journal._standing_for``, up to
+    ``MOST_ATTEMPTS_PER_TASK``. On the two endings this function exists to
+    separate, the answers cross:
+
+    - ``capability_unavailable`` is ``False`` here -- absent from the table
+      above -- and its disposition is ``terminal_capability_absent``, so the
+      task really is over. This is the case the paragraph used to generalise
+      from.
+    - ``fixture_backend_error`` is ``True`` here and its disposition is
+      ``retry_infrastructure``, so the task is opened again.
+    - ``invalid_arguments`` and ``path_not_directory`` are ``False`` here, like
+      the refusal, and are ``retry_semantic``, so they too are opened again.
+
+    An earlier version of this sentence read "it does not mean the task
+    carried on; nothing does, today". That is true of the refusal and false of
+    every semantic failure, which is most of them. Do not read a task's fate
+    out of this function.
+    """
+    return str(error_type or "") in _ENDS_THE_RUN
 
 
 # ---------------------------------------------------------------------------

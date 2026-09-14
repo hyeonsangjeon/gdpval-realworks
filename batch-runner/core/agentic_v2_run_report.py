@@ -44,6 +44,7 @@ from typing import Any, Mapping, Sequence
 
 from core.agentic_v2_contract import TOOL_NAMES
 from core.agentic_v2_cost_binding import describe_run_outcome
+from core.agentic_v2_outcome import refusals_the_desk_gave
 from core.agentic_v2_task_journal import (
     DECISION_SKIP_FINISHED,
     TaskStanding,
@@ -132,6 +133,26 @@ def _tool_counts(calls: Sequence[Mapping[str, Any]]) -> dict[str, int]:
     return counts
 
 
+def _failed_calls(calls: Sequence[Mapping[str, Any]]) -> int:
+    """How many tool calls came back not-ok, which is what ``tool_errors`` means.
+
+    Copied deliberately from V1's own rule --
+    ``core.agentic_sandbox_runner`` increments the field once per dispatch
+    whose result is not ``ok`` -- because the two runners write the *same* key
+    into the *same* block and step 6 adds them together. ``total_tool_errors``
+    divided by ``total_tool_calls`` is published as a percentage, so a V2 row
+    counting something else makes a rate out of a numerator and a denominator
+    that are not about the same events.
+
+    V2 used to write ``0 if the task succeeded else 1``, which is a fact about
+    the ending rather than about any tool. It reads wrong in both directions: a
+    task refused seven times that finished anyway reported no tool errors at
+    all, and a task whose compute never started -- so no tool was ever called --
+    reported one, against a denominator of zero calls.
+    """
+    return sum(1 for call in calls if call.get("ok") is not True)
+
+
 def _receipt_status(receipt: Mapping[str, Any] | None) -> str:
     if receipt is None:
         return STATUS_NOT_RUN
@@ -170,6 +191,11 @@ def build_agentic_v2_metrics(
         )
     outcome = describe_run_outcome(run_record)
     counts = _tool_counts(tool_calls)
+    failed_calls = _failed_calls(tool_calls)
+    refusals = refusals_the_desk_gave(tool_calls)
+    by_kind: dict[str, int] = {}
+    for reason in refusals:
+        by_kind[reason] = by_kind.get(reason, 0) + 1
     status = _receipt_status(receipt)
     cost_is_known = status == STATUS_COMPLETE and standing.cost_is_fully_accounted
 
@@ -178,7 +204,12 @@ def build_agentic_v2_metrics(
         "task_wall_time_ms": float(task_wall_time_ms),
         "model_api_calls": int(model_api_calls),
         "tool_calls": sum(counts.values()),
-        "tool_errors": 0 if outcome["succeeded"] else 1,
+        "tool_errors": failed_calls,
+        # V1's rule, at V1's moment: the task finalised and something went
+        # wrong on the way. step 6 divides this by `tasks_with_tool_errors` and
+        # publishes it as a recovery rate, and V2 was writing no value at all,
+        # so every V2 run read as nothing recovered.
+        "recovered_after_tool_error": outcome["succeeded"] and failed_calls > 0,
         "tool_calls_by_name": counts,
         "terminal_error_category": outcome["error_type"] or "",
         "usage_complete": cost_is_known,
@@ -189,6 +220,25 @@ def build_agentic_v2_metrics(
         "agentic_v2_attempts": standing.attempts,
         "agentic_v2_abandoned_attempts": standing.abandoned_attempts,
         "agentic_v2_cost_receipt_status": status,
+        # What the desk refused, kept apart from what broke it.
+        #
+        # Written first on the belief that a refused call is handed back and the
+        # task goes on to end some *other* way, which would have made this and
+        # `terminal_error_category` two independent facts. It is not what the
+        # runner does. `dispatch_one` ends the task on the first not-ok result
+        # -- registered in `core.agentic_v2_preregistration` as
+        # `one_failed_tool_call_ends_the_task` -- so in a real run this is 0 or
+        # 1, and when it is 1 it names the same event as the category above.
+        # **Do not add them.** A cohort's refusal count is not a count of
+        # anything the endings do not already contain.
+        #
+        # Kept, because it answers a question the ending cannot: whether the
+        # desk was working and said no, or fell over. The conversation loop
+        # reports both as `tool_desk_broke`, and a run where every task was
+        # refused a capability it was never granted is a finding about the
+        # profile, not about the model.
+        "agentic_v2_tool_refusals": len(refusals),
+        "agentic_v2_tool_refusals_by_kind": dict(sorted(by_kind.items())),
     }
     if input_tokens is not None:
         metrics["input_tokens"] = int(input_tokens)
@@ -295,6 +345,10 @@ def summarise_v2_run(
     abandoned = 0
     succeeded = 0
     unsettled: dict[str, int] = {}
+    refusals_total = 0
+    refused_tasks = 0
+    refusals_by_kind: dict[str, int] = {}
+    endings: dict[str, dict[str, int]] = {}
     for row in rows:
         metrics = (row.get("observability") or {}).get("agentic_metrics") or {}
         disposition = metrics.get("agentic_v2_disposition")
@@ -303,6 +357,36 @@ def summarise_v2_run(
         abandoned += int(metrics.get("agentic_v2_abandoned_attempts") or 0)
         if row.get("status") == STATUS_SUCCESS:
             succeeded += 1
+
+        # The cross-tab. Each task lands in exactly one ending and is then
+        # split by whether the desk refused it on the way. Today that split is
+        # degenerate by construction -- a refused task's ending *is* its
+        # refusal -- and printing it that way is the point: the shape of this
+        # table is how `one_failed_tool_call_ends_the_task` shows up in a
+        # result rather than only in a docstring. If the trace schema is ever
+        # allowed to carry a call after a not-ok one, this is the table that
+        # starts telling a turn ceiling spent on refused calls apart from one
+        # spent on work, with no change here.
+        # The ending keeps the runner's own word for it -- the same string
+        # `terminal_error_category` publishes -- rather than a second
+        # vocabulary invented here.
+        met = int(metrics.get("agentic_v2_tool_refusals") or 0) > 0
+        if met:
+            refused_tasks += 1
+        refusals_total += int(metrics.get("agentic_v2_tool_refusals") or 0)
+        for reason, count in (
+            metrics.get("agentic_v2_tool_refusals_by_kind") or {}
+        ).items():
+            refusals_by_kind[str(reason)] = refusals_by_kind.get(
+                str(reason), 0
+            ) + int(count)
+        if row.get("status") == STATUS_SUCCESS:
+            ending = "accepted"
+        else:
+            ending = str(metrics.get("terminal_error_category") or "") or "unrecorded"
+        bucket = endings.setdefault(ending, {"with_refusals": 0, "without": 0})
+        bucket["with_refusals" if met else "without"] += 1
+
         # Read off the receipt the row carries rather than off the metrics
         # copy, because the receipt is the object the money is on and the
         # metrics field is derived from it. A row with no receipt says nothing
@@ -328,6 +412,18 @@ def summarise_v2_run(
         "not_reached": max(0, int(manifest_size) - len(rows)),
         "abandoned_attempts": abandoned,
         "dispositions": dict(sorted(dispositions.items())),
+        # Refusals are counted beside the endings and never added to them.
+        # Under `one_failed_tool_call_ends_the_task` a refusal *is* an ending,
+        # so the two overlap rather than partition: a run of 30 tasks with 12
+        # refusals has 30 endings, 12 of which are those refusals.
+        # `tasks_that_met_a_refusal` is the one of these that shares the
+        # denominator, and `endings_after_a_refusal` is where the overlap can
+        # actually be seen -- a refused task lands in the ending named after
+        # its own refusal.
+        "tasks_that_met_a_refusal": refused_tasks,
+        "tool_refusals": refusals_total,
+        "tool_refusals_by_kind": dict(sorted(refusals_by_kind.items())),
+        "endings_after_a_refusal": dict(sorted(endings.items())),
         "receipt_ceiling": ceiling,
         # How many tasks the run could not settle, and under which status.
         # Empty where every receipt read `complete`; a reader chasing a short

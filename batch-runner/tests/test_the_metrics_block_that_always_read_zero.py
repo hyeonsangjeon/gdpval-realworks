@@ -235,6 +235,31 @@ def test_the_metrics_block_now_names_the_tools_that_ran(real_result):
     assert metrics["tool_calls_by_name"]["browser_run"] == 0
 
 
+def test_a_run_that_met_no_refusal_reports_zero_rather_than_nothing(real_result):
+    """The negative half of the refusal column, on a record a backend wrote.
+
+    There is no positive half in this file, and not because the fixture is too
+    simple: a run *ends* on its first refused call, so a record containing one
+    is a failed record with no ``finalize`` in it. That case is pinned against
+    the real runner in
+    ``test_one_failed_tool_call_ends_the_task.py``, which also checks that the
+    refusal is the last thing in the trace.
+    """
+    metrics = build_agentic_v2_metrics(
+        real_result,
+        standing=a_standing(),
+        tool_calls=_tool_calls_of(real_result),
+        model_api_calls=_model_calls_of(a_receipt()),
+        task_wall_time_ms=1234.0,
+        receipt=a_receipt(),
+    )
+
+    assert metrics["agentic_v2_tool_refusals"] == 0
+    assert metrics["agentic_v2_tool_refusals_by_kind"] == {}
+    assert metrics["tool_errors"] == 0
+    assert metrics["recovered_after_tool_error"] is False
+
+
 # ---------------------------------------------------------------------------
 # The count and the tokens, read off the only thing that knows them
 # ---------------------------------------------------------------------------

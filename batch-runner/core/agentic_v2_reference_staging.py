@@ -990,10 +990,12 @@ def staging_record(stagings: Sequence[TaskStaging]) -> dict[str, Any]:
     """What the run record carries about which tasks got their inputs.
 
     Replaces the flat ``reference_file_bytes_are_in_the_guest: False`` that
-    :func:`core.agentic_v2_manifest_binding.unmet_needs` writes today. That
-    field was honest when nothing was staged; once something is, a single
-    boolean for a whole cohort is the field most likely to be read as "all of
-    them" or "none of them" when the truth is "most".
+    :func:`core.agentic_v2_manifest_binding.unmet_needs` used to write — and
+    went on writing for a while after this function existed, into the same run
+    record, a few keys away. That field was honest when nothing was staged;
+    once something is, a single boolean for a whole cohort is the field most
+    likely to be read as "all of them" or "none of them" when the truth is
+    "most".
 
     The summary counts are for a reader skimming. The per-task detail underneath
     is what a result gets read against, and it is not summarised away: every
