@@ -55,6 +55,7 @@ from core.agentic_v2_isolated_selection import (
 )
 from core.agentic_v2_microvm_backend import AgenticV2MicroVMBackend
 from core.agentic_v2_runner import AgenticV2ScriptedRunner
+from core.agentic_v2_task_journal import JournalRefused
 
 
 BATCH_RUNNER_ROOT = Path(__file__).resolve().parents[1]
@@ -688,3 +689,245 @@ def test_the_choice_is_frozen(tmp_path):
     assert isinstance(choice, BackendChoice)
     with pytest.raises(Exception):
         choice.backend_class = AgenticV2MicroVMBackend  # type: ignore[misc]
+
+
+# -- the cohort loop, with the isolated backend underneath it ---------------
+#
+# The two seams below are the ones the design record listed and could not check
+# while the stage script was unable to construct this backend at all. They are
+# about money: on the fixture a repeated task costs nothing, and on this backend
+# every ``exec_run`` is a machine. So "resume skips what is done" and "the
+# receipt agrees with what ran" stop being bookkeeping and become the difference
+# between paying once and paying twice.
+#
+# The driver's own suite already checks resume with a stand-in runner. What it
+# cannot say -- because a stand-in has no backend -- is that a skipped task
+# boots nothing. That is the only claim these add.
+
+from tests.test_agentic_v2_run_driver import _success, _tasks  # noqa: E402
+
+
+def a_cohort_factory(tmp_path, launcher, *, script=None):
+    """A runner factory whose runners are the real isolated backend.
+
+    Each task gets its own root, so ``launcher.calls`` can be read back per
+    task: the workspace path a boot was handed contains the task id that owns
+    it. ``script`` may refuse a task by returning a failure envelope *without*
+    reaching ``exec_run``, which is how an interrupted first run is staged.
+    """
+    approval = an_approval(tmp_path, a_booted_host(tmp_path))
+    choice = select_backend(approval=approval, session="cohort-under-test")
+    assert choice.is_isolated, "this factory is pointless against the fixture"
+    made: list[str] = []
+
+    class Runner:
+        def __init__(self, task):
+            self.task = task
+
+        def run(self, prompt, reference_files, occupation, **kwargs):
+            task_id = kwargs["task_id"]
+            made.append(task_id)
+            if script is not None:
+                answer = script(task_id)
+                if answer is not None:
+                    return answer
+            backend = choice.backend_class(
+                root=tmp_path / "roots" / task_id,
+                profile=a_profile(),
+                image=choice.extra_kwargs["image"],
+                boot_one_command=launcher,
+                substrate_manifest=choice.extra_kwargs["substrate_manifest"],
+            )
+            backend.start(timeout_seconds=5)
+            ran = backend.exec_run(an_exec(script="echo done"))
+            assert ran["ok"] is True, ran
+            return _success(task_id)
+
+        def close(self):
+            return None
+
+    def build(task):
+        return Runner(task)
+
+    build.made = made  # type: ignore[attr-defined]
+    return build
+
+
+def boots_by_task(launcher) -> list[str]:
+    """Which task each boot belonged to, in the order the boots happened."""
+    owners = []
+    for call in launcher.calls:
+        parts = Path(call["workspace"]).resolve().parts
+        owners.append(next(part for part in parts if part.startswith("task-")))
+    return owners
+
+
+def test_a_resumed_run_does_not_boot_again_for_a_task_the_journal_finished(tmp_path):
+    """The seam the design record called resume, priced.
+
+    The first run is interrupted after two tasks. The second must boot for the
+    third and for nothing else -- on this backend a re-run is not a repeated
+    row, it is a second machine for work already paid for.
+    """
+    from core.agentic_v2_run_driver import run_manifest
+
+    tasks = _tasks(3)
+    journal = tmp_path / "journal.jsonl"
+    first_launcher = Launcher(status=0, stdout="done\n", stderr="")
+    attempts = {"n": 0}
+
+    def two_then_stop(task_id):
+        attempts["n"] += 1
+        if attempts["n"] > 2:
+            raise KeyboardInterrupt
+        return None  # fall through to the backend
+
+    with pytest.raises(KeyboardInterrupt):
+        run_manifest(
+            tasks,
+            run_id="run-resume",
+            runner_factory=a_cohort_factory(
+                tmp_path / "first", first_launcher, script=two_then_stop
+            ),
+            journal_path=journal,
+            collect_into=tmp_path / "collected",
+        )
+
+    # The control for the assertion below: boots really do happen here, so
+    # "one boot in the second run" is a count and not an absence.
+    assert boots_by_task(first_launcher) == ["task-0001", "task-0002"]
+
+    second_launcher = Launcher(status=0, stdout="done\n", stderr="")
+    factory = a_cohort_factory(tmp_path / "second", second_launcher)
+    outcome = run_manifest(
+        tasks,
+        run_id="run-resume",
+        runner_factory=factory,
+        journal_path=journal,
+        collect_into=tmp_path / "collected",
+    )
+
+    assert outcome.skipped_on_resume == ("task-0001", "task-0002")
+    assert factory.made == ["task-0003"], "a skipped task must not reach a runner"
+    assert boots_by_task(second_launcher) == ["task-0003"], (
+        "resume skipped the task and booted for it anyway, which is the one "
+        "way this backend costs twice for one task"
+    )
+
+
+def test_a_journal_from_another_run_is_refused_before_a_machine_starts(tmp_path):
+    """Preregistered negative control: the resume that is handed the wrong journal.
+
+    The refusal has to come before the first boot, not after it. A run that
+    discovers the mismatch on task two has already bought task one.
+    """
+    from core.agentic_v2_run_driver import run_manifest
+
+    tasks = _tasks(2)
+    journal = tmp_path / "journal.jsonl"
+    launcher = Launcher(status=0, stdout="done\n", stderr="")
+    run_manifest(
+        tasks,
+        run_id="run-one",
+        runner_factory=a_cohort_factory(tmp_path / "one", launcher),
+        journal_path=journal,
+        collect_into=tmp_path / "collected",
+    )
+    assert len(launcher.calls) == 2
+
+    intruder = Launcher(status=0, stdout="done\n", stderr="")
+    with pytest.raises(JournalRefused) as refusal:
+        run_manifest(
+            tasks,
+            run_id="run-two",
+            runner_factory=a_cohort_factory(tmp_path / "two", intruder),
+            journal_path=journal,
+            collect_into=tmp_path / "collected",
+        )
+    assert "run-one" in str(refusal.value)
+    assert intruder.calls == [], "the wrong journal was noticed after a boot"
+
+
+def test_every_task_that_booted_has_a_receipt_and_one_that_did_not_has_none(tmp_path):
+    """The seam the design record called per-task attribution.
+
+    Reservation and settlement agree per task, and the agreement is read the
+    only way that means anything here: against the boots, not against the rows.
+    """
+    from core.agentic_v2_run_driver import run_manifest
+    from core.cost_receipts import STATUS_COMPLETE
+
+    priced: list[tuple[str, int]] = []
+
+    def receipt_for(task, attempt):
+        priced.append((task.task_id, attempt))
+        return {
+            "status": STATUS_COMPLETE,
+            "estimated_cost_usd": 0.5,
+            "known_cost_usd": 0.5,
+        }
+
+    tasks = _tasks(2)
+    launcher = Launcher(status=0, stdout="done\n", stderr="")
+    outcome = run_manifest(
+        tasks,
+        run_id="run-priced",
+        runner_factory=a_cohort_factory(tmp_path / "first", launcher),
+        journal_path=tmp_path / "journal.jsonl",
+        collect_into=tmp_path / "collected",
+        receipt_for=receipt_for,
+    )
+
+    assert boots_by_task(launcher) == ["task-0001", "task-0002"]
+    assert [task_id for task_id, _ in priced] == ["task-0001", "task-0002"]
+    assert outcome.summary["cost_is_fully_accounted"] is True
+    assert outcome.summary["unaccounted_tasks"] == []
+
+    # Resume: the second run boots for nothing, and prices nothing. A pricing
+    # callback that fires for a skipped task would be charging for a machine
+    # that never started.
+    priced.clear()
+    quiet = Launcher(status=0, stdout="done\n", stderr="")
+    again = run_manifest(
+        tasks,
+        run_id="run-priced",
+        runner_factory=a_cohort_factory(tmp_path / "second", quiet),
+        journal_path=tmp_path / "journal.jsonl",
+        collect_into=tmp_path / "collected",
+        receipt_for=receipt_for,
+    )
+    assert again.skipped_on_resume == ("task-0001", "task-0002")
+    assert quiet.calls == []
+    assert priced == []
+
+
+def test_a_booted_task_whose_receipt_is_missing_is_unaccounted_not_free(tmp_path):
+    """Preregistered negative control: the charge nobody can settle.
+
+    A machine started. If that task can then be reported as fully accounted,
+    the run's cost total is a number with a hole in it, and the hole is exactly
+    the size of the part this backend adds.
+    """
+    from core.agentic_v2_run_driver import run_manifest
+
+    tasks = _tasks(2)
+    launcher = Launcher(status=0, stdout="done\n", stderr="")
+    outcome = run_manifest(
+        tasks,
+        run_id="run-unpriced",
+        runner_factory=a_cohort_factory(tmp_path / "first", launcher),
+        journal_path=tmp_path / "journal.jsonl",
+        collect_into=tmp_path / "collected",
+        receipt_for=lambda task, attempt: (
+            None if task.task_id == "task-0002" else {
+                "status": "complete",
+                "estimated_cost_usd": 0.5,
+                "known_cost_usd": 0.5,
+            }
+        ),
+    )
+
+    assert boots_by_task(launcher) == ["task-0001", "task-0002"]
+    assert outcome.summary["unaccounted_tasks"] == ["task-0002"]
+    assert outcome.summary["cost_is_fully_accounted"] is False
+

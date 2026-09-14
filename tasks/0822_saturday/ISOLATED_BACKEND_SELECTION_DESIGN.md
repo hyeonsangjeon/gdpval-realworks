@@ -298,18 +298,25 @@ list at the top of this file, and **none of the rows say real-host-tested.**
 | 3 | absent `/out/exit_status` is an error, never `returncode: 0` | code implemented, fixture-tested |
 | 4 | staged reference files are in the workspace the guest is handed | code implemented, fixture-tested |
 | 5 | timeout / cancel / cleanup, and collection before purge | code implemented, fixture-tested |
-| 6 | resume skips what the journal says is done | **not yet checked under this backend** |
-| 7 | reservation and settlement agree per task | **not yet checked under this backend** |
+| 6 | resume skips what the journal says is done | code implemented, fixture-tested |
+| 7 | reservation and settlement agree per task | code implemented, fixture-tested |
 
 Rows 1–5 are covered by
-`tests/test_the_isolated_backend_is_selected_only_by_an_approved_boot.py`, 38
-tests, every assertion with a negative control; twelve deliberate defects were
-injected into the two production modules one at a time and **all twelve were
-caught** (`missed: 0`, every file restored byte-for-byte).
+`tests/test_the_isolated_backend_is_selected_only_by_an_approved_boot.py`, and
+rows 6 and 7 by four further tests in the same file that drive `run_manifest`
+with this backend underneath it rather than with a stand-in runner. That
+distinction is the whole point of the two rows: the driver's own suite already
+checks resume, but a stand-in has no machine, so it cannot say that a skipped
+task boots nothing. On the fixture a repeated task is a repeated row; here it
+is a second machine for work already paid for.
+
+Seventeen deliberate defects were injected into the production modules one at a
+time — twelve into selection and the boot reader, five into the driver and the
+journal — and **all seventeen were caught** (`missed: 0` both runs, every file
+restored byte-for-byte, baseline green after each restore).
 
 Rows 6 and 7 were untestable before this work because the stage script could
-not construct the isolated backend at all. They became testable with row 1, and
-are the next thing to write.
+not construct the isolated backend at all. They became testable with row 1.
 
 **What all seven rows share:** a scripted boot stood in for a guest. They say
 the wiring holds. They say nothing whatsoever about isolation, and no row here
