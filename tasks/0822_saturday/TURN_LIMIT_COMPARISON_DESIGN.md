@@ -50,13 +50,94 @@ ends a task on its first tool result that is not `ok: true`. Changing that is
 not a setting — it reaches the trace schema (see §4) — but if it is ever
 changed it must not be changed in the same run as the limit.
 
-Everything else is held at trial_30's values: same 30 tasks, same model, same
-`max_output_tokens_per_turn: 8192`, same `retry_max_attempts`, same
-`max_result_bytes`, same instructions — **and the same replay format**. That
-last one is not a setting and does not appear in any config file, which is
-exactly why it is written down here: `_input_for` decides what the model is
-shown of its own history, changing it changes the input at every turn, and a
+Everything else is held fixed across the two legs — but **not at trial_30's
+values, which is what this paragraph used to say.** It read: *"Everything else
+is held at trial_30's values: … same instructions — and the same replay format.
+That last one is not a setting and does not appear in any config file, which is
+exactly why it is written down here."* Both halves are now wrong, and the two
+items it named are exactly the two the Verdict below requires to change first.
+About the instructions the Verdict already said so in as many words — *"the
+instruction text is a pinned condition, and trial_30 keeps the one it ran
+under"* — so the file contradicted itself. And the replay format stopped being
+config-less three hours after this was typed: this document was last edited at
+`78df149`, and `3acc0b1` added `fixed_settings.replay_format` that same
+afternoon.
+
+The anchor is the **corrected baseline**,
+`experiments/execution_envelope/agentic_corrected_harness_plan.yaml`. Against
+the plan trial_30 ran under it moves exactly two things, and
+`test_the_corrected_harness_plan_moves_only_two_things.py` holds it to that: the
+instruction text, now derived from whichever backend is mounted, and one new
+key, `replay_format: faithful`. **Both legs take the corrected values.** A leg
+that took trial_30's would move three axes and report one — the failure this
+section exists to prevent, reached by following the section.
+
+What is held, and where each one is pinned rather than asserted:
+
+| held across both legs | where |
+|---|---|
+| the cohort | `task_ids` |
+| the model **and its deployment** | `model.resolved_model`, `model.deployment` — both `gpt-5.4` |
+| the API route | `azure_connection.account` / `.project` / `.route_profile` |
+| the per-task time limit | `fixed_settings.per_task_timeout_seconds: 1200` |
+| the retry policy | `fixed_settings.retry_max_attempts`, `retry_reasons_allowed` |
+| the write cap | `chosen_settings.max_output_tokens_per_turn: 8192` |
+| the tool-result cap | `max_result_bytes` — a code default in `agentic_v2_tools.py`, not a plan key |
+| the instruction text | the corrected plan's derived paragraph |
+| the replay format | `fixed_settings.replay_format: faithful` |
+
+The rows above the last two are the same objects in both plans and are compared
+object-by-object by that same test, so this table is checkable rather than a
+promise. Three of them — the deployment, the API route and the time limit — were
+being held all along and simply were not written down. An item that is held but
+unlisted is the one that moves without anyone noticing.
+
+The replay format still earns a sentence of its own now that it has a key, for
+the reason it always did: `_input_for` decides what the model is shown of its
+own history, so changing it changes the input at every turn of every task, and a
 run that moved it alongside the limit could not separate the two. See §4.
+
+### The knob is not one axis, and one candidate is not the same measurement
+
+Everything above is about what a *person* might move alongside the limit. This
+is about what the limit moves on its own, which nothing above says and which
+the record block below used to deny outright.
+
+`ceilings_from` derives four per-task ceilings from `tool_calls_per_attempt`,
+at two different rates:
+
+| derived ceiling | from | 3 → 8 |
+|---|---|---|
+| `max_model_turns` | `calls + 1` | ×2.25 |
+| `max_model_calls` | `calls + 1` | ×2.25 |
+| `max_output_tokens` | `per_turn × (calls + 1)` | ×2.25 |
+| `max_input_tokens` | `per_turn × (calls + 1) × (calls + 2)` | **×4.50** |
+
+Three hold: `max_written_tokens_per_turn`, `max_seconds` and
+`max_repeats_of_one_request`. The write cap in §3's table is the per-turn one
+and it does hold — but the run-wide output budget moves with the limit and the
+input budget moves quadratically. **Time is holdable; tokens are not.** The
+comparison is therefore a turn-and-token comparison, and reporting it as a turn
+comparison hands the token budget's share to the limit.
+
+That is not an argument for pinning the token ceilings instead. They are
+derived on purpose: a longer conversation is re-sent in full every turn, so a
+fixed token budget would starve the longer leg and the run would measure the
+starvation. It is an argument for naming the compound in the record rather than
+leaving it to a reader's inference.
+
+**And one candidate on the grid measures something else again.** The desk has a
+ceiling of its own, `budget_caps["tool_calls"]`, which
+`scripts/run_agentic_v2_stage.py` never passes — so it is the default 32. At
+every candidate below 32 the loop's `calls + 1` binds first and a task that
+keeps working ends `turn_limit_reached`. At 32 the loop's ceiling is 33, the
+desk's 32 binds first, the task gets 32 calls rather than 33, and the recorded
+ending changes to `tool_call_limit_reached`. A comparison spanning that value
+changes outcome variable mid-grid, and the change of label reads as an effect.
+Drop 32, or raise `budget_caps["tool_calls"]` alongside it; doing neither is
+the trap. Run, not read: `test_the_registered_ceiling_is_not_the_one_that_binds.py`
+walks the plan's own candidate list through the real dispatcher and the real
+fixture backend and records where the crossing happens.
 
 ## 4. What the limit can actually reach
 
@@ -98,9 +179,13 @@ and be terminated, so tasks move *into* the terminated group as the limit
 rises, and a naive success-rate comparison confounds "more turns helped" with
 "more turns found the trapdoor". That worry is arithmetically sound and the
 cohort does not support it. See "Neither trapdoor is a late-conversation
-event" below. Either way the reporting rule is the same: results go on the
-fixed set of 18 task ids from trial_30, with movement in and out of the
-terminated group reported separately from the success count.
+event" below. Either way the reporting rule is the same: the headline runs on
+all 30, the 18 is a post-hoc subset and every figure over it is labelled
+exploratory, and movement in and out of the terminated group is reported
+separately from the success count. An earlier draft of this sentence put the
+results on the 18 outright; the plan the comparison will run under does not
+(`denominator`), and a subset chosen after seeing which tasks the limit could
+touch is not a denominator a headline may use.
 
 And there is a second ending that removes tasks for a reason unrelated to the
 limit. Five of the 18 hit the "stopped without a tool call" ending, three of
@@ -585,18 +670,28 @@ that way.
 ## The record this would keep
 
 ```
-intervention   tool_calls_per_attempt, and nothing else
-conditions     control = 8 (trial_30's 30 task ids, fixture backend)
+intervention   tool_calls_per_attempt. This line read "and nothing else",
+               which is false of the knob itself: it derives max_model_turns,
+               max_model_calls, max_output_tokens and max_input_tokens, the
+               last quadratically (§3). Nothing else is moved by hand
+conditions     control = 8 (trial_30's 30 task ids, fixture backend, and the
+               corrected harness — the setting, not trial_30 the run; §3)
                variant = one value, new config file, new run id
-axes           moving: the limit. fixed: backend, refusal behaviour, model,
-               max_output_tokens_per_turn, retry policy, max_result_bytes,
-               instructions, replay format, cohort
+axes           moving: the limit, and the four ceilings derived from it. fixed,
+               all at the corrected baseline's values: backend, refusal
+               behaviour, model and deployment, API route,
+               max_output_tokens_per_turn (the per-turn cap — the run-wide
+               total is derived and does move), per-task time limit, retry
+               policy, max_result_bytes, instructions, replay format, cohort
 adjudication   finalize called and artifacts opened. Completion, not quality.
                No judge, so no judge to validate
 input          30 task ids fixed before the question was raised; not a random
                sample of the 220
-unit           tasks completed out of the 18 the limit can reach; USD from the
-               ledger
+unit           tasks completed out of all 30, for every headline number; the
+               18 the limit can reach is a post-hoc subset and any figure over
+               it is exploratory and labelled so. This line read "out of the
+               18", which the plan it will run under does not (denominator).
+               USD from the ledger
 stop           effect below the repeat spread → the limit stays at 8
 known          two endings remove 17 of 30 tasks for reasons unrelated to the
 confounds      limit — browser_run's trapdoor and the paraphrase ending. Both

@@ -80,6 +80,7 @@ from core.agentic_v2_conversation import (
 )
 from core.agentic_v2_contract import TOOL_NAMES
 from core.agentic_v2_cost_binding import ModelTurn, retry_kind_for_error
+from core.agentic_v2_outcome import endings_the_conversations_recorded
 from core.agentic_v2_runner import AgenticV2ScriptedRunner
 from core.agentic_v2_stage_one_budget import StageOneBudget
 from core.cost_receipts import CallUsage, RETRY_NONE, STAGE_GENERATION
@@ -259,14 +260,28 @@ class TaskConversations:
         return self.outcomes.get((task_id, attempt))
 
     def as_dict(self) -> dict[str, Any]:
+        conversations = {
+            f"{task_id}#{attempt}": outcome.as_dict()
+            for (task_id, attempt), outcome in sorted(self.outcomes.items())
+        }
         return {
             "per_task_ceilings": self.per_task.as_dict(),
             "run_wide_ceilings": self.run_wide.as_dict(),
             "spent": self.spent,
-            "conversations": {
-                f"{task_id}#{attempt}": outcome.as_dict()
-                for (task_id, attempt), outcome in sorted(self.outcomes.items())
-            },
+            "conversations": conversations,
+            # Counted here rather than left to whoever opens the file, because
+            # a figure nobody computes is a figure nobody reads. The plan
+            # registers turn exhaustion and text-only termination as separate
+            # findings and the published `terminal_error_category` gives them
+            # one word, so this is the only place in the record where the two
+            # are apart.
+            #
+            # Read off the block above rather than off `self.outcomes`, so that
+            # the count is derived from the same object a reader is checking it
+            # against. Either source gives the same answer -- the counter takes
+            # an outcome in the dict or the object form -- and taking the one
+            # in the file removes the question.
+            "endings": endings_the_conversations_recorded(conversations),
         }
 
 

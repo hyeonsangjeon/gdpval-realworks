@@ -1,0 +1,543 @@
+"""Reading a V2 task's ending as three questions instead of one word.
+
+The report row carries ``status: success | error``, and that one word is asked
+to carry three separate facts that routinely disagree:
+
+1. **``finalize`` was called and the tool desk accepted it.**
+2. **A file came back, and it is a real file** -- present, non-empty, and
+   openable by whatever owns its format.
+3. **The work is any good.**
+
+A task can have (1) and not (2): ``finalize`` names paths and the collection
+short-writes one. It can have (1) and (2) and not (3), and that is the case
+worth naming, because it is common and it looks like success from every angle a
+pipeline can see. A model that cannot do a task and writes ``I was unable to
+complete this analysis`` into ``answer.md`` has called ``finalize``, produced a
+non-empty file that opens cleanly as text, and done none of the work. Counting
+it as a task done is the specific error this module exists to stop.
+
+**Nothing here measures (3).** No judge is run, no rubric is applied, and no
+score is produced; marking thirty answers is a separate approval that this run
+does not have. :attr:`Outcome.quality` is therefore always ``None`` and says why.
+:attr:`Outcome.reads_like_a_refusal_notice` is not a quality measure either --
+it is a flag that says *do not read (1) and (2) as (3) for this one*, it names
+the phrase it matched so a person can check, and it undercounts on purpose.
+
+**The three cannot be summed.** :class:`Outcome` has no truth value: asking
+``if outcome:`` raises rather than quietly answering one of the three questions
+the caller did not name. A denominator of thirty is reported three times over,
+once per question, and a task is never moved from one column into another.
+
+**A fourth column, and it is about the desk rather than about the model.**
+Asking for a tool the desk will not give is not one of the three questions. The
+first draft of this paragraph called it a cause rather than an ending, on the
+grounds that a refused call is handed back and the task goes on to finish some
+other way. **That is not what this harness does**, and the wrong claim is
+restated here rather than quietly dropped, because the columns below were built
+on it and a reader of those columns needs to know what they were for.
+``dispatch_one`` ends the *attempt* on the first tool result that is not
+``ok``, a condition registered in ``core.agentic_v2_preregistration`` under
+``one_failed_tool_call_ends_the_task``; the model is told nothing and is not
+asked for another turn.
+
+Whether the attempt's ending is also the task's is decided one layer up, by
+``ERROR_DISPOSITION`` in :mod:`core.agentic_v2_cost_binding`, and the answer
+differs for endings the conversation loop files under the same word. A desk
+refusal is ``capability_unavailable``, which is terminal, so for a refusal the
+two endings coincide. A fixture backend that fell over is
+``fixture_backend_error``, which is ``retry_infrastructure``, and a malformed
+call is ``invalid_arguments`` or ``path_not_directory``, which are
+``retry_semantic``: those end the attempt and the task is opened again. All
+three arrive at the loop as ``TOOL_DESK_BROKE``, which is the fourth column's
+whole reason for existing and also why "ends the task" is the wrong sentence
+for anything but the refusal.
+
+So under the present schema a refusal *is* the ending, and
+:attr:`Outcome.tool_refusals` can hold at most one entry for a real run. The
+column earns its place anyway, for a different reason than the one it was added
+for: the loop reports every refused call as
+:attr:`~core.agentic_v2_conversation.StopReason.TOOL_DESK_BROKE`, the same word
+it uses for a desk that is actually broken, so without this column "the model
+asked for something it was not granted" and "the harness fell over" are one
+number. What it must not be used for is the behaviour it was named after. No run
+under this schema measures a model reading a refusal and choosing something
+else, and none may be reported as though it had.
+
+The cross-tab ``count_separately(...)["endings_after_a_refusal"]`` is kept for
+the same reason and reads the same way: it separates tool refusal from turn
+exhaustion from a model that stopped talking. Today a refused task always lands
+in the ending named after its own refusal, which is the shape that makes the
+registered condition visible in the output rather than only in a docstring.
+
+Offline. Reads a run record that already exists and the files already on disk.
+No model, no network, no cost.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Mapping, Optional, Sequence
+
+from core.agentic_v2_conversation import ends_the_run
+from core.artifact_verifier import verify_one
+
+#: ``finalize`` was called and the desk gave back a terminal result.
+FINALIZE_ACCEPTED = "accepted"
+
+#: The run ended and ``finalize`` was never called. The runner names this
+#: ending itself: ``error: finalize_not_called``.
+FINALIZE_NOT_CALLED = "not_called"
+
+#: The run ended some other way -- a ceiling, a broken desk, a refused call --
+#: before any terminal result existed.
+#:
+#: This used to say that a task stopped at its turn limit and a task that
+#: talked until it ran out of things to say "are different failures and get
+#: counted separately". They are different failures and they are *not* counted
+#: separately. ``turn_limit_reached`` is not in
+#: :data:`core.agentic_v2_runner.ERROR_TYPE_FOR_A_CONVERSATION_THAT_STOPPED`,
+#: so the runner records it as ``finalize_not_called`` and it arrives here as
+#: :data:`FINALIZE_NOT_CALLED` -- the same value as the model that went quiet.
+#: The separation this constant exists for is real for a broken desk, a refused
+#: call and a wall clock, and absent for the turn ceiling. Read
+#: ``conversations[task#attempt].stop_reason`` in the run record to tell those
+#: two apart.
+FINALIZE_ENDED_FIRST = "ended_before_it_could_be"
+
+#: What the runner calls the ending where nothing was ever finalised.
+_NOT_CALLED_ERROR = "finalize_not_called"
+
+#: Phrases that mean the file is the model saying it could not do the work.
+#: Deliberately short and literal. A longer list would catch more and would
+#: start making judgements about content, which is question 3 and is not
+#: measured here. Matched case-insensitively against the first part of the
+#: deliverable text only -- a refusal is at the top or it is not what the file
+#: is about.
+_REFUSAL_PHRASES = (
+    "i am unable to",
+    "i was unable to",
+    "i cannot complete",
+    "i can't complete",
+    "i do not have access",
+    "i don't have access",
+    "unable to complete this task",
+    "cannot be completed",
+    "no files were provided",
+    "as an ai",
+)
+
+#: How much of the deliverable text is looked at. A refusal notice is the whole
+#: file; a real answer that happens to contain one of these phrases in passing
+#: is not, and reading only the opening is what keeps the second from being
+#: flagged as the first.
+_OPENING_CHARACTERS = 600
+
+
+@dataclass(frozen=True)
+class FileVerdict:
+    """One collected file, on question 2 only.
+
+    ``openable`` is three-valued and stays that way. ``None`` means no library
+    for that format was installed, which is *not checked* rather than *good* --
+    folding it into either would put a guess in a count.
+    """
+
+    path: str
+    exists: bool
+    size_bytes: int
+    openable: Optional[bool]
+    problems: tuple[str, ...]
+
+    @property
+    def is_usable(self) -> bool:
+        """Present, non-empty, opened cleanly, and nothing complained."""
+        return (
+            self.exists
+            and self.size_bytes > 0
+            and self.openable is True
+            and not self.problems
+        )
+
+
+@dataclass(frozen=True)
+class Outcome:
+    """One task's ending, with the three questions kept apart."""
+
+    task_id: str
+    finalize: str
+    files: tuple[FileVerdict, ...]
+    reads_like_a_refusal_notice: Optional[str]
+    error_type: Optional[str]
+
+    tool_refusals: tuple[str, ...] = ()
+    """Every refusal a working desk gave this task, in the order they came.
+
+    Kept as the ``error_type`` of each one rather than a count, because *what*
+    was refused is the finding -- thirty tasks each refused once for
+    ``capability_unavailable`` is one story about the tool desk, and thirty
+    different reasons is another.
+
+    What is excluded is a desk that *broke* -- ``compute_backend_error`` and the
+    rest of :data:`~core.agentic_v2_conversation._ENDS_THE_RUN`. That is a
+    harness defect and not a tool policy, and the two are otherwise
+    indistinguishable, because the loop reports both as ``TOOL_DESK_BROKE``.
+
+    Not excluded, contrary to what this docstring said until it was checked
+    against the runner: a refusal that ended the run. Every refusal ends the
+    run, so in a real record this holds at most one entry and that entry names
+    the same event as :attr:`error_type`. The two are not independent and must
+    not be added together.
+    """
+
+    quality: None = None
+    """Not measured. See the module docstring; this is a slot, not a result."""
+
+    quality_not_measured_because: str = (
+        "no judge is run in this experiment and marking the answers is not "
+        "approved. A task can reach every green in this record and be wrong."
+    )
+
+    def __bool__(self) -> bool:
+        raise TypeError(
+            f"{self.task_id}: an outcome has three answers and no single one. "
+            "Ask finalize_was_accepted, produced_a_usable_file, or quality -- "
+            "the third of which is always None here"
+        )
+
+    @property
+    def finalize_was_accepted(self) -> bool:
+        return self.finalize == FINALIZE_ACCEPTED
+
+    @property
+    def produced_a_usable_file(self) -> bool:
+        return any(verdict.is_usable for verdict in self.files)
+
+    @property
+    def files_not_checked(self) -> tuple[FileVerdict, ...]:
+        """Collected, non-empty, and no validator was installed for the format.
+
+        Reported rather than counted either way. A run with many of these has a
+        thin venv, not a bad model.
+        """
+        return tuple(
+            verdict
+            for verdict in self.files
+            if verdict.exists and verdict.size_bytes > 0 and verdict.openable is None
+        )
+
+    @property
+    def met_a_refusal(self) -> bool:
+        """Whether the desk turned this task down at least once.
+
+        Says nothing about how the task ended. A task can meet four refusals
+        and still finalise, and that is a model working around a closed tool
+        rather than a failure -- which is the behaviour stage one is for.
+        """
+        return bool(self.tool_refusals)
+
+    @property
+    def tool_refusals_by_kind(self) -> dict[str, int]:
+        """The refusals this task met, grouped by reason."""
+        counted: dict[str, int] = {}
+        for reason in self.tool_refusals:
+            counted[reason] = counted.get(reason, 0) + 1
+        return counted
+
+    def as_row(self) -> dict[str, Any]:
+        """Three answers side by side, none derived from another."""
+        return {
+            "task_id": self.task_id,
+            "finalize": self.finalize,
+            "files_collected": len(self.files),
+            "files_usable": sum(1 for verdict in self.files if verdict.is_usable),
+            "files_not_checked": len(self.files_not_checked),
+            "reads_like_a_refusal_notice": self.reads_like_a_refusal_notice,
+            "error_type": self.error_type,
+            "tool_refusals": len(self.tool_refusals),
+            "tool_refusals_by_kind": self.tool_refusals_by_kind,
+            "quality": None,
+            "quality_not_measured_because": self.quality_not_measured_because,
+        }
+
+
+def _finalize_verdict(record: Mapping[str, Any]) -> str:
+    if record.get("success") is True:
+        return FINALIZE_ACCEPTED
+    if str(record.get("error") or "") == _NOT_CALLED_ERROR:
+        return FINALIZE_NOT_CALLED
+    return FINALIZE_ENDED_FIRST
+
+
+def refusal_phrase_in(text: str) -> Optional[str]:
+    """The first refusal phrase in the opening of `text`, or ``None``.
+
+    Not a quality judgement in either direction. A hit means the file should
+    not be read as work done without someone looking; a miss means nothing at
+    all, because a model can fail a task in fluent prose.
+    """
+    opening = str(text or "")[:_OPENING_CHARACTERS].lower()
+    for phrase in _REFUSAL_PHRASES:
+        if phrase in opening:
+            return phrase
+    return None
+
+
+def refusals_the_desk_gave(turns: Sequence[Any]) -> tuple[str, ...]:
+    """The refusals a working desk handed down, from one task's turn records.
+
+    Named ``refusals_the_desk_gave`` until it was checked against the runner.
+    Nothing is handed back: ``dispatch_one`` ends the task on the first not-ok
+    result, so in a real run this returns at most one entry and that entry is
+    the ending. The rename is the correction; the function is unchanged and so
+    are its callers' numbers.
+
+    A turn counts here when the desk answered it with ``ok`` false and the
+    reason is one :func:`core.agentic_v2_conversation.ends_the_run` does not
+    claim -- that is, the desk was working and declined the request, rather
+    than falling over. The distinction is the whole point of the column, and it
+    is not otherwise recoverable: the conversation loop reports both kinds as
+    ``TOOL_DESK_BROKE``, so folding them together would file a closed tool desk
+    under harness defects.
+
+    Takes anything with ``ok`` and ``error_type`` -- a
+    :class:`~core.agentic_v2_conversation.TurnRecord`, the dict it serialises
+    to, or a public result commitment -- because the conversation is kept beside
+    the run and reaches a reader in any of those shapes.
+    """
+
+    def field(turn: Any, name: str) -> Any:
+        if isinstance(turn, Mapping):
+            return turn.get(name)
+        return getattr(turn, name, None)
+
+    refusals: list[str] = []
+    for turn in turns:
+        if field(turn, "ok"):
+            continue
+        reason = str(field(turn, "error_type") or "")
+        if reason and not ends_the_run(reason):
+            refusals.append(reason)
+    return tuple(refusals)
+
+
+def read_outcome(
+    task_id: str,
+    record: Mapping[str, Any],
+    *,
+    collected_paths: Sequence[str | Path] = (),
+    collection_root: Optional[str | Path] = None,
+    turns: Sequence[Any] = (),
+) -> Outcome:
+    """Answer the three questions about one task, separately.
+
+    `record` is the V2 result envelope the runner wrote. `collected_paths` are
+    the files as they landed on the host -- ``Collection.submission_paths`` --
+    rather than the paths ``finalize`` named, because question 2 is about what
+    is on disk and not about what was claimed. `turns` is that task's
+    conversation, which the runner keeps beside the result rather than inside
+    it; passing it adds the refusal column and leaving it out is not an error,
+    because a task that never reached a model has no turns to read.
+    """
+    verdicts: list[FileVerdict] = []
+    for candidate in collected_paths:
+        report = verify_one(candidate, workdir=collection_root)
+        verdicts.append(
+            FileVerdict(
+                path=str(candidate),
+                exists=report.exists,
+                size_bytes=report.size_bytes,
+                openable=report.openable,
+                problems=tuple(report.errors),
+            )
+        )
+
+    return Outcome(
+        task_id=task_id,
+        finalize=_finalize_verdict(record),
+        files=tuple(verdicts),
+        reads_like_a_refusal_notice=refusal_phrase_in(
+            str(record.get("deliverable_text") or record.get("text") or "")
+        ),
+        error_type=(record.get("error") or None) if not record.get("success") else None,
+        tool_refusals=refusals_the_desk_gave(turns),
+    )
+
+
+def ending_label(outcome: Outcome) -> str:
+    """The one name for how a task ended, as specific as the runner made it.
+
+    ``finalize_ended_first`` covers several unlike endings, so for that case the
+    runner's own ``error_type`` is the label rather than the generic name.
+
+    What this cannot recover is an ending the runner did not name. The
+    docstring here used to claim the label "covers a turn ceiling, a wall clock
+    and a broken desk". The wall clock and the broken desk arrive with their own
+    ``error_type``; the turn ceiling arrives as ``finalize_not_called``, which
+    is :data:`FINALIZE_NOT_CALLED` and never reaches the branch below. This
+    function is faithful to ``error_type`` -- the loss is upstream, in
+    :data:`core.agentic_v2_runner.STOP_REASONS_WITH_NO_ERROR_TYPE_TO_NAME_THEM`.
+    """
+    if outcome.finalize == FINALIZE_ENDED_FIRST and outcome.error_type:
+        return outcome.error_type
+    return outcome.finalize
+
+
+def count_separately(outcomes: Sequence[Outcome]) -> dict[str, Any]:
+    """The three tallies over one denominator, never folded together.
+
+    ``tasks`` is the denominator for all three and is every task handed in,
+    including ones that never ran. Nothing here returns a success rate: which
+    of the three a rate would be about is exactly what gets lost.
+
+    ``endings_after_a_refusal`` is the cross-tab rather than a fourth tally,
+    and the reason given here used to be the wrong one. It said refusals do not
+    end tasks, so adding them to the endings would report more outcomes than
+    there were tasks. The conclusion holds and the premise does not: a refusal
+    ends the attempt it is in, so in a record this harness produced it is the
+    *same event* as that task's ending, and adding the two counts one event
+    twice. Splitting each ending by whether the task met a refusal on the way
+    is what tells a tool ceiling spent on refused calls apart from one spent on
+    work.
+    """
+    endings: dict[str, dict[str, int]] = {}
+    for one in outcomes:
+        row = endings.setdefault(ending_label(one), {"with_refusals": 0, "without": 0})
+        row["with_refusals" if one.met_a_refusal else "without"] += 1
+
+    by_kind: dict[str, int] = {}
+    for one in outcomes:
+        for reason, count in one.tool_refusals_by_kind.items():
+            by_kind[reason] = by_kind.get(reason, 0) + count
+
+    return {
+        "tasks": len(outcomes),
+        "finalize_accepted": sum(1 for one in outcomes if one.finalize_was_accepted),
+        "finalize_not_called": sum(
+            1 for one in outcomes if one.finalize == FINALIZE_NOT_CALLED
+        ),
+        "finalize_ended_first": sum(
+            1 for one in outcomes if one.finalize == FINALIZE_ENDED_FIRST
+        ),
+        "produced_a_usable_file": sum(
+            1 for one in outcomes if one.produced_a_usable_file
+        ),
+        "files_not_checked": sum(len(one.files_not_checked) for one in outcomes),
+        "read_like_a_refusal_notice": sum(
+            1 for one in outcomes if one.reads_like_a_refusal_notice
+        ),
+        "tasks_that_met_a_refusal": sum(1 for one in outcomes if one.met_a_refusal),
+        "tool_refusals": sum(len(one.tool_refusals) for one in outcomes),
+        "tool_refusals_by_kind": by_kind,
+        "endings_after_a_refusal": endings,
+        "refusal_note": (
+            "a refusal ends the attempt it is in: dispatch_one stops on the "
+            "first not-ok result, so in a record this harness produced a "
+            "refused task holds one refusal and it names the same event as "
+            "that task's ending. These counts are not part of the denominator "
+            "and are never added to the endings above, because that would "
+            "count one event twice. An earlier version of this note said the "
+            "desk hands a refusal back and the task goes on; that is not what "
+            "this harness does, and no run may be read as though it were"
+        ),
+        "quality_measured": 0,
+        "quality_note": (
+            "no judge was run. The three counts above are about whether an "
+            "answer exists, not whether it is right"
+        ),
+    }
+
+
+def endings_the_conversations_recorded(
+    conversations: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Falsification (a) and (b), counted off the field that keeps them apart.
+
+    Everything above reads a task's ``error``, and ``error`` cannot answer
+    this. A task that worked to its last allowed turn and a task that said one
+    thing and stopped both arrive here as ``finalize_not_called``:
+    ``turn_limit_reached`` has no entry in
+    :data:`core.agentic_v2_runner.ERROR_TYPE_FOR_A_CONVERSATION_THAT_STOPPED`
+    and takes the default, and so does ``model_stopped_without_finishing``.
+    The two are opposite findings -- one says the ceiling was too low, the
+    other says the model could not do the task -- and the published
+    ``terminal_error_category`` is the same word for both.
+
+    The exact ending is not lost, only summarised away.
+    :meth:`~core.agentic_v2_conversation.ConversationOutcome.as_dict` keeps
+    ``stop_reason``, and ``run_agentic_v2_stage.py`` writes it into the run
+    record under ``conversations``. This function reads that block, so the
+    separation the corrected-harness plan registers is answerable from a record
+    the run already produces, with no change to
+    :data:`core.agentic_v2_contract.ERROR_TYPES` and therefore no change to
+    what is retried or what a run costs.
+
+    **What it does not answer.** Falsification (c), tool refusal, is not here.
+    The loop reports a desk that said no and a desk that fell over as the same
+    ``tool_desk_broke``, so it cannot be told from this block at all;
+    :func:`refusals_the_desk_gave` reads the turn records instead, and that
+    division is deliberate rather than an omission.
+
+    ``conversations`` is the ``{"task#attempt": {...}}`` mapping, values in
+    either the dict or the object form. A task's ending is its **last**
+    attempt; earlier ones are counted in ``attempts_not_counted`` rather than
+    dropped silently, because folding retries into the denominator would report
+    more endings than there were tasks.
+    """
+    from core.agentic_v2_runner import ERROR_TYPE_FOR_A_CONVERSATION_THAT_STOPPED
+
+    def reason_of(outcome: Any) -> str:
+        if isinstance(outcome, Mapping):
+            raw = outcome.get("stop_reason")
+        else:
+            raw = getattr(outcome, "stop_reason", None)
+        return str(getattr(raw, "value", raw) or "")
+
+    last: dict[str, tuple[int, str]] = {}
+    folded = 0
+    for key, outcome in conversations.items():
+        task_id, _, attempt_text = str(key).rpartition("#")
+        if not task_id:
+            task_id, attempt_text = str(key), "1"
+        try:
+            attempt = int(attempt_text)
+        except ValueError:
+            attempt = 1
+        seen = last.get(task_id)
+        if seen is None:
+            last[task_id] = (attempt, reason_of(outcome))
+            continue
+        folded += 1
+        if attempt > seen[0]:
+            last[task_id] = (attempt, reason_of(outcome))
+
+    tally: dict[str, int] = {}
+    for _, reason in last.values():
+        tally[reason] = tally.get(reason, 0) + 1
+
+    merged = sum(
+        count
+        for reason, count in tally.items()
+        if reason and reason not in ERROR_TYPE_FOR_A_CONVERSATION_THAT_STOPPED
+    )
+    return {
+        "tasks": len(last),
+        "by_stop_reason": dict(sorted(tally.items())),
+        "ran_out_of_turns": tally.get("turn_limit_reached", 0),
+        "stopped_without_finishing": tally.get(
+            "model_stopped_without_finishing", 0
+        ),
+        # How much the published column is hiding. Every ending counted here
+        # reaches the report as `finalize_not_called`, so this is the number of
+        # tasks whose reported ending does not name what happened to them.
+        "recorded_as_finalize_not_called": merged,
+        "attempts_not_counted": folded,
+        "note": (
+            "counted from conversations[].stop_reason, not from the task's "
+            "error. The two disagree on purpose: error is the contract's word "
+            "for the ending and the contract has no word for running out of "
+            "turns, so the report merges this column's first two figures into "
+            "one bucket. Tool refusal is not counted here -- the loop cannot "
+            "tell a desk that said no from one that broke; see "
+            "refusals_the_desk_gave"
+        ),
+    }

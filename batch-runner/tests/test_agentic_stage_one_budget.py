@@ -1820,11 +1820,15 @@ def test_a_plan_with_no_stages_block_refuses_rather_than_passing_by_default(
 
 # ── What the model is actually told, and what that costs ───────────────────
 #
-# Until 2026-09-11 the plan had no `instructions` key at all, so the runner sent
-# the empty string on every turn while this repository's own notes said the
-# standing instructions "describe the V2 tool contract". The model was told
-# nothing: not that three of its eight tools refuse, not that its input files
-# exist, not where they are.
+# Until #534 the plan had no `instructions` key at all, while this repository's
+# own notes went on saying the standing instructions "describe the V2 tool
+# contract". Had a run reached a model in that window it would have been told
+# nothing -- not that three of its eight tools refuse, not that its input files
+# exist, not where they are -- because the runner reads
+# `plan.get("instructions") or ""`, which cannot fail. None did: #534 landed
+# before the first run that ever reached a model. What was wrong in that window
+# was the notes; what is still true is the expression, and it is refused now in
+# core/agentic_v2_instructions.py.
 #
 # The text is now in the plan, which puts it in two places at once. It is the
 # thing most likely to be edited casually, and it is billed on every turn of

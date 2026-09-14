@@ -23,12 +23,14 @@ methods buys the same guarantee without putting anything in the record --
 fixture's tools for real and asks the microVM's the way it can be asked without
 a machine.
 
-**Nothing reads this yet.** The instruction text is a pinned condition of
-trial_30, and changing it means a new plan file and a new run id rather than an
-edit in place. :func:`apply_tool_availability` is therefore a no-op on any
-instruction string that does not ask for it: a plan opts in by putting
-:data:`PLACEHOLDER` in its text, and every plan in the repository today does
-not, so every one of them passes through byte for byte.
+**Read by the stage runner, and only where a plan asks.** The instruction text
+is a pinned condition of trial_30, and changing it means a new plan file and a
+new run id rather than an edit in place. :func:`apply_tool_availability` is
+therefore a no-op on any instruction string that does not ask for it: a plan
+opts in by putting :data:`PLACEHOLDER` in its text, so every plan written
+before this one passes through byte for byte.
+:mod:`core.agentic_v2_instructions` is what the runner actually calls; it wraps
+this and names the exact bytes that went to the model.
 """
 from __future__ import annotations
 
@@ -52,6 +54,20 @@ A_REFUSAL_ENDS_THE_TASK = (
 )
 
 
+#: How a verdict below was established. ``executed`` means a test really calls
+#: the method and observes the answer. ``asserted`` means the verdict was read
+#: out of the class -- it overrides the inherited method, its docstring says
+#: what it does -- and the method has never been run here.
+#:
+#: The distinction is not pedantry. ``AgenticV2MicroVMBackend.exec_run`` is
+#: declared ``works`` and boots a guest to do it, and per
+#: ``tasks/0822_saturday/HOST_PERMISSIONS.md`` **nobody has measured that a
+#: machine in this subscription boots a guest at all**. Both facts are true at
+#: once and a single word cannot carry them, so the word for "we checked it
+#: runs" and the word for "we checked the code is there" are kept apart.
+EVIDENCE_KINDS = ("executed", "asserted")
+
+
 @dataclass(frozen=True)
 class ToolAvailability:
     """One tool, on one backend, in the terms the model needs.
@@ -60,15 +76,22 @@ class ToolAvailability:
     the one that matters and the one a yes/no list cannot hold: both backends
     have a tool that serves some arguments and refuses others, and on both of
     them it is the tool the current paragraph gets wrong.
+
+    ``evidence`` says how the verdict was established and is not shown to the
+    model -- it is for whoever is about to spend money on a run. See
+    :data:`EVIDENCE_KINDS`.
     """
 
     tool: str
     verdict: str
     note: str
+    evidence: str = "executed"
 
     def __post_init__(self) -> None:
         if self.verdict not in {"works", "partly", "refuses"}:
             raise ValueError(f"{self.tool}: unknown verdict {self.verdict!r}")
+        if self.evidence not in EVIDENCE_KINDS:
+            raise ValueError(f"{self.tool}: unknown evidence {self.evidence!r}")
         if self.verdict != "works" and not self.note.strip():
             raise ValueError(
                 f"{self.tool}: a tool that does not simply work needs a note "
@@ -119,6 +142,7 @@ _MICROVM: tuple[ToolAvailability, ...] = (
         "works",
         "runs your command in a machine of its own. One boot per call, so "
         "prefer one command that does the work to several that build up to it.",
+        evidence="asserted",
     ),
     ToolAvailability(
         "browser_run",
@@ -179,7 +203,13 @@ def availability_for(backend: Any) -> tuple[ToolAvailability, ...]:
 
 
 def tool_availability_paragraph(backend: Any) -> str:
-    """The list as the model should read it, longest-lived facts first."""
+    """The list as the model should read it, longest-lived facts first.
+
+    Says nothing about :attr:`ToolAvailability.evidence`. How we came to know a
+    tool works is an operator's question, and the model cannot act on it: it
+    would read "declared to work, never run here" as a reason to avoid a tool
+    that is in fact its only way to run a command.
+    """
     entries = availability_for(backend)
     lines = [A_REFUSAL_ENDS_THE_TASK, ""]
 
@@ -195,6 +225,32 @@ def tool_availability_paragraph(backend: Any) -> str:
             lines.append(f"{entry.tool} refuses: {entry.note}")
 
     return "\n".join(lines)
+
+
+def unverified_claims(backend: Any) -> tuple[ToolAvailability, ...]:
+    """The tools `backend` is declared to serve that nobody here has run.
+
+    Empty on the fixture: every one of its eight is called for real in
+    ``tests/test_the_declared_refusals_match_what_the_backends_do.py``.
+
+    One entry on the microVM -- ``exec_run`` -- and that entry is the whole
+    reason this function exists. It is the only tool on that backend that runs
+    anything, it is declared ``works`` on the strength of the class overriding
+    the fixture's method, and the host it would boot on has not been granted
+    the roles to boot anything (``tasks/0822_saturday/HOST_PERMISSIONS.md``).
+    A run on that backend should say so out loud before it spends, rather than
+    discovering it once per task.
+
+    Refusals are not included. A tool declared to refuse and checked by calling
+    it has been established the strongest way available, and one that turned
+    out to work anyway would be a pleasant surprise rather than a run whose
+    results were produced by something other than what was described.
+    """
+    return tuple(
+        entry
+        for entry in availability_for(backend)
+        if entry.verdict != "refuses" and entry.evidence != "executed"
+    )
 
 
 def apply_tool_availability(instructions: str, backend: Any) -> str:

@@ -21,7 +21,9 @@ no model was called. Cost: nothing.
 | **Principal** | the app registration behind `secrets.AZURE_CLIENT_ID` / `vars.AZURE_AI_EXPECTED_CLIENT_ID` — the same identity the paid inference runs authenticate with |
 | **What it holds** | 2 role assignments, both **Cognitive Services OpenAI User**, both scoped to the Foundry account |
 | **Why that blocks** | that is a data-plane inference role. It carries no `Microsoft.Compute`, `Microsoft.Network` or `Microsoft.Resources` write at all, so every host action is denied for the same single reason |
-| **Smallest change** | **Virtual Machine Contributor + Network Contributor**, both at **resource-group scope**, on a resource group the owner creates first |
+| **What is blocked** | **12 actions measured, all denied — but 10 of them block.** Every one of the ten is at resource-group scope. The other two are **conditional** and do not drive the verdict: `publicIPAddresses/write` (only if `attachPublicIp`, which the template defaults to `false`) and `resourceGroups/write` (only if the group does not exist — the one subscription-scope item on the list, and step 1 below removes it) |
+| **Recommended change** | **two roles**: Virtual Machine Contributor + Network Contributor, both at **resource-group scope**, on a resource group the owner creates first |
+| **Not the smallest, and worth saying** | those two built-ins also carry `delete`, `powerOff`, `restart` and extension actions this deployment never takes. A custom role holding exactly the ten blocking actions is strictly smaller — see Option B. Option A is recommended for using definitions that already exist, not for being minimal |
 | **Not the change** | nothing at subscription scope, no Owner, no `Microsoft.Authorization` write, no new subscription |
 
 The two roles are not a guess. They were evaluated against the real built-in

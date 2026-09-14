@@ -305,17 +305,36 @@ def test_the_record_carries_the_schema_and_both_seals(bench):
     assert record["stage"] == STAGE_FIVE
 
 
-# ── what is still missing ────────────────────────────────────────────────
+# ── which tasks wanted files, which is not which got them ────────────────
 
 
-def test_the_binding_says_which_tasks_lack_their_input_files(bench):
+def test_the_binding_says_which_tasks_name_input_files(bench):
     needs = unmet_needs(_bind(bench))
     assert needs["tasks_needing_reference_files"] == ["task-0001"]
-    assert needs["reference_file_bytes_are_in_the_guest"] is False
-    assert "not evidence about the model" in needs["what_that_means"]
+    assert needs["whether_they_arrived_is_recorded_in"] == "reference_files"
+    assert "not which got them" in needs["what_that_means"]
 
 
-def test_a_task_with_no_reference_files_is_not_counted_as_handicapped(bench):
+def test_the_binding_no_longer_says_whether_the_files_arrived(bench):
+    """The field this replaced was emitted into the run record, not a docstring.
+
+    ``binding_record`` goes into the record whole, so ``unmet_needs`` is read by
+    whoever reads a result. While it hard-coded
+    ``reference_file_bytes_are_in_the_guest: False`` it sat a few keys from
+    ``reference_files``, which says what staging actually delivered, and the two
+    answered the same question opposite ways. On the thirty-task cohort the
+    stale one named 14 of 30.
+
+    Asserted as an absence because the old value was pinned by a passing test,
+    which is how it survived a green suite.
+    """
+    needs = unmet_needs(_bind(bench))
+    assert "reference_file_bytes_are_in_the_guest" not in needs
+    for gone in ("nothing copies", "not evidence about the model"):
+        assert gone not in needs["what_that_means"]
+
+
+def test_a_task_with_no_reference_files_is_not_counted_as_wanting_any(bench):
     needs = unmet_needs(_bind(bench))
     assert needs["tasks_needing_reference_files_count"] == 1
 
