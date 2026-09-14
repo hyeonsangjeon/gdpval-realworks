@@ -30,11 +30,27 @@ from core.agentic_v2_first_boot import (
     WORK_DISK_RESULTS,
     BootAbandoned,
     BootRefused,
+    claim_the_jail,
     first_boot,
     place_the_images,
     unjailed_image_check,
 )
 from core.agentic_v2_microvm_launch import build_launch_plan
+
+
+def _claimed(plan):
+    """Take the jail the way ``first_boot`` does, for tests that call the steps.
+
+    ``place_the_images`` no longer creates the directory and no longer accepts
+    being called without the evidence that it is this run's, so a test that
+    exercises it directly has to go through the same door the production path
+    does.
+    """
+    return claim_the_jail(
+        Path(plan["host_side"]["chroot_dir"]),
+        vm_id=str(plan["vm_id"]),
+        plan_sha256=str(plan["plan_sha256"]),
+    )
 
 
 @pytest.fixture
@@ -197,6 +213,7 @@ def test_only_the_work_disk_is_writable_by_the_account_the_jailer_drops_to(
 
     placement = place_the_images(
         plan,
+        claim=_claimed(plan),
         kernel=tmp_path / "vmlinux",
         rootfs=tmp_path / "rootfs.ext4",
         work_disk=tmp_path / "work.ext4",
@@ -222,6 +239,7 @@ def test_the_configuration_placed_in_the_jail_is_the_plans_own(
     monkeypatch.setattr(os, "chown", lambda *a, **k: None)
     placement = place_the_images(
         plan,
+        claim=_claimed(plan),
         kernel=tmp_path / "vmlinux",
         rootfs=tmp_path / "rootfs.ext4",
         work_disk=tmp_path / "work.ext4",
@@ -767,7 +785,8 @@ def test_a_pid_file_that_was_already_there_is_not_this_runs_to_kill(
     the PID file *inside* the chroot, so a PID file that was already there means
     a jail that was already there, and a run that placed its images in it would
     have overwritten a live work disk and then removed the jail around it. The
-    refusal happens before anything is written.
+    refusal happens before anything is written — the ``mkdir`` that takes the
+    jail's name fails, because the name is already taken.
 
     The guard further down still exists and is still checked, directly, in
     ``test_v2_only_signals_what_it_started.py``.
@@ -789,7 +808,7 @@ def test_a_pid_file_that_was_already_there_is_not_this_runs_to_kill(
         )
 
     assert signalled == []
-    assert "does not start" in str(caught.value)
+    assert "creates nothing and starts nothing" in str(caught.value)
     assert pid_file.read_text().strip() == "1"
 
 
@@ -816,7 +835,7 @@ def test_this_runs_own_machine_is_stopped_when_it_is_still_running(
 
     process = caught.value.teardown["process"]
     assert signalled == [(4242, signal.SIGKILL)]
-    assert process["existed_before_this_run"] is False
+    assert process["jail_held_by_this_run"] is True
     assert process["pid"] == 4242
     assert process["signalled"] is True
 

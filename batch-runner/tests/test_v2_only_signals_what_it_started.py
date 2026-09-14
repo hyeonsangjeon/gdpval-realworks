@@ -433,7 +433,7 @@ def test_d1_a_pid_file_from_before_this_run_is_never_signalled(
 
     assert not signals.anything_reached_kill_for(STRANGER)
     assert signals.sent == []
-    assert "does not start" in str(refused.value)
+    assert "creates nothing and starts nothing" in str(refused.value)
     assert Path(plan["host_side"]["pid_file"]).read_text().strip() == str(STRANGER)
 
 
@@ -537,6 +537,11 @@ def test_d5_cleanup_leaves_a_jail_this_run_did_not_create_alone(
     guard that is only unreachable is not a guard that holds. All three
     destructive operations are checked — the stranger is not signalled, its disk
     is not copied out, and its jail is still there afterwards.
+
+    The claim handed in is one this run holds for some *other* jail, which is
+    the honest shape of this scenario: the jail on disk carries no ownership
+    record of this run's, so every step has to read that as "not mine" rather
+    than as "unclaimed, therefore free".
     """
     chroot = _a_jail_someone_else_is_using(plan)
     before = (chroot / "work.ext4").read_bytes()
@@ -547,16 +552,16 @@ def test_d5_cleanup_leaves_a_jail_this_run_did_not_create_alone(
     teardown = _clean_up_after_a_failure(
         host_side=plan["host_side"],
         pid_file=Path(plan["host_side"]["pid_file"]),
-        pid_file_was_already_there=True,
+        claim={"nonce": "a-nonce-this-jail-has-never-carried", "vm_id": plan["vm_id"]},
         work_disk=tmp_path / "work.ext4",
         salvage=salvage,
-        chroot_was_already_there=True,
     )
 
     assert signals.sent == []
     assert (chroot / "work.ext4").read_bytes() == before
     assert chroot.exists()
     assert teardown["process"]["signalled"] is False
+    assert teardown["process"]["jail_held_by_this_run"] is False
     assert "another run's" in teardown["process"]["left_alone_because"]
     assert salvage["returned_copy"] is None
     assert teardown["removed"] == {}
