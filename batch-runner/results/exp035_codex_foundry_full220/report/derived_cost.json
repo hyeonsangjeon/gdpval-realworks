@@ -1,0 +1,29 @@
+{
+ "what_this_is": "The derived floor this round already computed, copied to where the dashboard reads it. Not a receipt and not an invoice: a receipt says the run stood behind a figure, this says someone priced the run's tokens afterwards from outside it. A floor because 56 of 510 calls reported no usage at all. Solving only -- grading is not in it.",
+ "method": "roll_up_round.py --ledger over the 6 run ledgers of this round's relay (2 lineages, 6 legs), priced with the committed receipt price table (sha256 b01b384c...); the same fingerprint the run's own task records carry. Copied from docs/run_records/round_state.json cost.ledger_cross_check and not re-priced here. Covers every lineage, $14.386586 of it work a later lineage superseded. Excludes grading.",
+ "price_table_sha256": "b01b384c532b1457804e3a77713d2b079b06b363a5ff3b8b939fe65a4cb30b4e",
+ "calls_total": 510,
+ "calls_measured": 454,
+ "calls_unmeasured": 56,
+ "tasks_with_a_call": 220,
+ "derived_total_usd": 112.773814,
+ "derived_total_is_a_floor": true,
+ "derived_total_is_provider_billed": false,
+ "pricer_refusals": null,
+ "source": {
+  "round_state": "docs/run_records/round_state.json",
+  "round_state_sha256": "c650bc6fc4c8b20eacf6913b027ac0a8a7285e27caa211efe964e58d3cb40cd4",
+  "ledger_sha256": [
+   "ebdc1503aea31f197b4e9a6fb101246dca6fa73a36a7f354dd83893f0f262c0e",
+   "eb7559e5cdf531d9cd1a5572c437a09dbbfc34bfe1e66676951dbfeaedaf1d2c",
+   "07980d514d8cae1c0074cc42ffc28298026d14ebf392ccc70e74becdd8aa85f9",
+   "36b7e032ed3b53c54244ca0756e1a0e5e9e65c3f60325e46995e12669bf1610b",
+   "380c6c0ecd4755bfc7cb0b6d17c50d09bdd45af8f74edd01fc6c0eed103340ad",
+   "2a955d6679971ad9047b0a6a6c56ce86864f4c462c4086c21ce3922fdd846abb"
+  ],
+  "derived_by": "batch-runner/scripts/derive_round_cost_sidecar.py",
+  "derived_by_sha256": "8711ca9c2257779c05e208187c6238916e9befb3ca88d83091e98cfdbce61bef",
+  "round_total_usd_from_the_task_records": 112.773878,
+  "spent_on_work_that_was_superseded_usd": 14.386586
+ }
+}
