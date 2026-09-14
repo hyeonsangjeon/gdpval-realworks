@@ -57,15 +57,27 @@ or decide that something is affordable. The voice is a parameter. Passing a real
 one is a separate, reviewable change, and the deployment it would reach is still
 behind a role assignment nobody in this repository may grant.
 
-It also does not pass an ``admitted_identity`` through to the runner, although
-the runner accepts one. ``AgenticV2ScriptedRunner`` is the only file in ``core``
-allowed to mention that argument, and
-``test_nothing_in_this_repository_declares_a_non_default_identity`` enforces it
-by reading every other module's source. That test is the standing evidence for
-the claim that the guest is mapped and not run, and a wiring module that
-forwarded the argument would retire the claim in exchange for a parameter no
-caller uses today. When a run is admitted for real, adding it back is part of
-that change, and that test is the line that changes with it.
+It does pass an ``admitted_identity`` through to the runner, and that is a
+change from how this module used to work. It used to refuse to, and the reason
+given was that a test reading every other module in ``core`` and asserting none
+of them mentioned the argument was the standing evidence that the guest was
+mapped and not run.
+
+Two things were wrong with keeping it that way. A source-text search is evidence
+about spelling: it says no module writes those characters, not that no run can
+be admitted. And leaving the wire cut meant a host that finally booted would
+still need a code change before anything could use it, which is the part of this
+work that is supposed to be finished offline.
+
+So the claim is now made where it can be checked behaviourally.
+``core.agentic_v2_isolated_selection`` is the one module that computes an
+identity, it returns ``None`` -- the foundation's own -- unless it is handed a
+written approval *and* an artefact showing a guest that really booted on this
+kernel, and its refusals are exercised one by one. ``default`` remains what
+every caller in this repository gets. The test above changed with this: it now
+names that module as the single exception and pins the refusals, which is a
+narrower and truer statement than "nobody spells it". It is
+``test_only_one_module_computes_an_identity_and_it_refuses_by_default``.
 """
 
 from __future__ import annotations
@@ -339,6 +351,7 @@ def build_runner_factory(
         Callable[[str, int], Optional[Callable[[int], None]]]
     ] = None,
     tools_available: Sequence[str] = TOOL_NAMES,
+    admitted_identity: Optional[Mapping[str, Any]] = None,
 ) -> Callable[[Any], AgenticV2ScriptedRunner]:
     """A ``runner_factory`` for :func:`core.agentic_v2_run_driver.run_manifest`.
 
@@ -422,6 +435,7 @@ def build_runner_factory(
             budget_caps=budget_caps,
             cancel_requested=cancel_requested,
             required_backend_type=required_backend_type,
+            admitted_identity=admitted_identity,
         )
 
     return build

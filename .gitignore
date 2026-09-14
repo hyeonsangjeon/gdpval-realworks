@@ -349,6 +349,12 @@ tasks/0822_saturday/*
 # to ask about the turn limit re-derives the same blockers, or does not, and
 # runs it.
 !tasks/0822_saturday/TURN_LIMIT_COMPARISON_DESIGN.md
+# The gap list for the isolated backend, written before the code that closes
+# it. Its value is entirely in having been written first: §3 records a decision
+# that the work then reversed, and the reversal is only legible because the
+# original wording is still there to read. A design record edited to agree with
+# its outcome is not one.
+!tasks/0822_saturday/ISOLATED_BACKEND_SELECTION_DESIGN.md
 !tasks/0828_friday/
 tasks/0828_friday/*
 !tasks/0828_friday/TASK_PER_TASK_COST_RECEIPTS.md
