@@ -106,6 +106,37 @@ probe's result can be pinned here without touching D1.
 BROWSER_OPERATIONS_THAT_NEED_A_NETWORK = frozenset({"search", "open_url"})
 
 
+def _how_the_machine_ended(boot: Mapping[str, Any]) -> dict[str, Any]:
+    """Carry the launcher's ownership and shutdown evidence into the record.
+
+    ``read_the_boot`` answers what the *command* did, which is what the model is
+    told. It says nothing about what happened to the machine that ran it, and on
+    a host running more than one of these at a time that is the half that matters
+    afterwards: whether this run established the process was its own before it
+    signalled anything, and whether the guest was confirmed gone rather than
+    merely sent a signal. Sent and gone are separate observations, so they are
+    kept under separate keys here as well; folding them into one boolean is how
+    "SIGKILL was delivered" came to read as "the host is free again".
+
+    Every value is read with ``.get``. A launcher that does not report these is
+    recorded as not having reported them, which is a different statement from
+    reporting that nothing was owned, and neither one is worth an exception
+    inside a boot that otherwise succeeded.
+    """
+    evidence = boot.get("pid_file") or {}
+    return {
+        "outcome": boot.get("outcome"),
+        "vm_id": boot.get("vm_id"),
+        "owned_by_this_run": evidence.get("owned_by_this_run"),
+        "ownership_grounds": evidence.get("ownership_grounds"),
+        "left_alone_because": evidence.get("left_alone_because"),
+        "cannot_rule_out": evidence.get("cannot_rule_out"),
+        "stop_signal_sent": boot.get("stop_signal_sent"),
+        "guest_confirmed_stopped": boot.get("guest_confirmed_stopped"),
+        "teardown": boot.get("teardown"),
+    }
+
+
 @dataclass(frozen=True)
 class GuestImage:
     """What was booted, named so that two runs can be told apart.
@@ -388,6 +419,7 @@ class AgenticV2MicroVMBackend(AgenticV2FixtureBackend):
             "grounds": reading["grounds"],
             "result": reading["result"],
             "image": self.image.as_record(),
+            "machine": _how_the_machine_ended(boot),
         }
         record["output_files"] = self._keep_the_output(record["call"], reading)
         self.boots.append(record)

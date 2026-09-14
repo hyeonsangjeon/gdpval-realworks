@@ -67,6 +67,40 @@ absence after this long means the machine never started — which is a different
 outcome from a machine that started and overran, and the artefact says which.
 """
 
+STOP_CONFIRMATION_SECONDS = 10.0
+CONFIRMATION_POLL_SECONDS = 0.25
+"""How long this waits to see a signalled machine actually go.
+
+Finite on purpose. A process that has been SIGKILLed is normally gone within
+milliseconds, but it stays visible while the kernel reaps it and it stays
+visible indefinitely if it is stuck in uninterruptible sleep on a wedged device.
+Waiting forever would hang the run; declaring it stopped because a signal was
+sent would put a guess in the artefact. So it waits this long and then records
+what it actually saw.
+"""
+
+PID_CEILING = 2**31 - 1
+"""The largest value ``os.kill`` accepts on this interpreter.
+
+Measured rather than assumed, on CPython 3.10 on this host: ``2147483647``
+raises ``ProcessLookupError`` (it converted, and no such process exists),
+``2147483648`` raises ``OverflowError``. That matters beyond tidiness, because
+``OverflowError`` is **not** an ``OSError`` — every ``except OSError`` guard in
+this module lets it through.
+"""
+
+CANNOT_RULE_OUT = (
+    "PID reuse. Between the last moment this run looked at that number and the "
+    "moment it signals, the kernel may have ended that process and handed the "
+    "same number to another. POSIX offers this code no way to close that "
+    "window; re-reading the file immediately before signalling narrows it."
+)
+"""What the ownership evidence below still does not establish.
+
+Recorded in the artefact rather than left out of it. An ownership verdict with
+no statement of its limit reads as proof, and this one is not proof.
+"""
+
 
 class BootRefused(RuntimeError):
     """The plan was not run, and the reason is not a boot failure."""
@@ -105,14 +139,110 @@ def _run(argv: list[str], timeout: float = 300.0) -> subprocess.CompletedProcess
     )
 
 
-def _still_running(pid: int) -> bool:
+def _a_pid_this_may_signal(raw: Any) -> tuple[int | None, str]:
+    """The PID in ``raw`` if it is one this may signal, or why it is not.
+
+    Four classes of value are turned away, and the first two are the reason this
+    function exists at all rather than being an ``int()`` at the call site:
+
+    ``0``
+        ``kill(0, …)`` signals *this process's entire process group*, which
+        includes the launcher. It is the one value that looks like a PID, passes
+        every type check, and destroys the caller.
+    negative
+        ``kill(-n, …)`` signals process group ``n``; ``kill(-1, …)`` signals
+        every process this user is permitted to signal. Both were measured on
+        this host to return without raising, so nothing downstream notices.
+    above :data:`PID_CEILING`
+        the conversion to a C long fails before the kernel is reached, and it
+        fails with ``OverflowError``, which is not an ``OSError``.
+    unreadable
+        a file the jailer was still writing, or one holding something that was
+        never a number.
+    """
+    if raw is None or isinstance(raw, bool):
+        return None, "the PID file held no readable PID"
     try:
-        os.kill(pid, 0)
+        pid = int(str(raw).strip())
+    except (TypeError, ValueError):
+        return None, "the PID file held no readable PID"
+    if pid == 0:
+        return None, (
+            "a PID of 0 means this process's whole group, which includes the "
+            "launcher itself, so it is never signalled"
+        )
+    if pid < 0:
+        return None, (
+            "a negative PID names a process group rather than a process, and "
+            "-1 is every process this user may signal"
+        )
+    if pid > PID_CEILING:
+        return None, (
+            f"a PID above {PID_CEILING} cannot be handed to the operating "
+            "system on this platform, so nothing could be signalled by it"
+        )
+    return pid, ""
+
+
+def _still_running(pid: int) -> bool:
+    checked, why_not = _a_pid_this_may_signal(pid)
+    if checked is None:
+        # Unreachable from this module, which checks before it asks. Kept so
+        # that it stays unreachable: a future caller gets an exception rather
+        # than a probe of its own process group.
+        raise ValueError(why_not)
+    try:
+        os.kill(checked, 0)
     except ProcessLookupError:
         return False
     except PermissionError:
         return True
     return True
+
+
+def _may_signal_now(pid_file: Path, watched: int) -> tuple[bool, str]:
+    """Re-read the PID file at the moment of the signal, not before.
+
+    The file this run watched appear can be replaced between then and the
+    deadline — by a wrapper that re-execs, or by another run that found the same
+    jail. What gets signalled has to be what was read, checked again now.
+    """
+    try:
+        text = pid_file.read_text().strip()
+    except OSError as failure:
+        return False, (
+            f"the PID file could not be re-read before signalling "
+            f"({type(failure).__name__}: {failure}), so what it names now is "
+            "unknown"
+        )
+    named_now, why_not = _a_pid_this_may_signal(text)
+    if named_now is None:
+        return False, f"the PID file no longer holds a usable PID: {why_not}"
+    if named_now != watched:
+        return False, (
+            f"the PID file now names {named_now} rather than the {watched} this run "
+            "watched appear, so it was replaced and this is not ours to stop"
+        )
+    return True, ""
+
+
+def _confirm_it_stopped(
+    pid: int,
+    *,
+    now: Callable[[], float],
+    sleep: Callable[[float], None],
+) -> bool:
+    """Whether the machine actually went, watched on a finite deadline.
+
+    Separate from whether a signal was sent, because they are separate
+    observations and only one of them is evidence that the host is free again.
+    """
+    started = now()
+    while now() - started < STOP_CONFIRMATION_SECONDS:
+        if not _still_running(pid):
+            return True
+        sleep(CONFIRMATION_POLL_SECONDS)
+    return not _still_running(pid)
 
 
 def place_the_images(
@@ -191,6 +321,10 @@ def first_boot(
     raise :class:`BootAbandoned` — but not before this run's own jail, and this
     run's own process, are taken down. Until 2026-09-14 they raised straight out
     of here and left the chroot behind, which is where the work disk lives.
+
+    And one refusal is about neither the plan nor the machine: a jail that was
+    already on disk under the name this plan uses. That is another run's, and
+    this one does not start on top of it. See the comment at the check.
     """
     if plan.get("starts_nothing") is not True:
         raise BootRefused("this is not a launch plan from the C1 builder")
@@ -204,14 +338,53 @@ def first_boot(
 
     host_side = plan["host_side"]
     pid_file = Path(host_side["pid_file"])
+    chroot_named = Path(str(host_side["chroot_dir"]))
     deadline_seconds = float(host_side["deadline_seconds"])
 
-    # Read before this run creates anything, and never read again. A PID file
-    # that was already there names a process this run did not start, and the
-    # only process this module may ever signal is one whose PID file it watched
-    # appear. Two of these can be on one host at once.
+    # Read before this run creates anything, and never read again.
+    chroot_was_already_there = chroot_named.exists()
     pid_file_was_already_there = pid_file.exists()
-    salvage: dict[str, Any] = {"returned_copy": None, "results_read": False}
+
+    if chroot_was_already_there or pid_file_was_already_there:
+        # Refused here, before anything is placed, because by the time the
+        # deadline fires it is already too late for the two worse things.
+        #
+        # The plan puts the PID file *inside* the chroot and names the chroot as
+        # the thing to remove afterwards. So a jail that was already on disk
+        # holds another run's live work disk and another run's PID, and carrying
+        # on would copy this run's images over that disk, chown it, and then
+        # remove the whole jail out from under a running machine. Signalling a
+        # stranger's process is the smallest of the three.
+        #
+        # Two runs arrive at one jail by an ordinary route, not an exotic one:
+        # ``--run-id``'s own help says "Reuse it to resume", the per-call
+        # counter restarts at zero on a fresh process, and the machine name is
+        # built from the two. A resumed run therefore lands on call 0000's jail
+        # by design.
+        #
+        # Nothing about a directory that was already here says whose it is. It
+        # could be this run's own wreckage from a crash, and it could be a live
+        # machine; the host offers no way to tell those apart from here. So this
+        # refuses and says so, rather than guessing in the direction that
+        # happens to let the run continue.
+        raise BootRefused(
+            "this plan's jail is already on disk "
+            f"(chroot {'present' if chroot_was_already_there else 'absent'}, "
+            f"PID file {'present' if pid_file_was_already_there else 'absent'}: "
+            f"{chroot_named}), so it holds another run's work disk and PID file. "
+            "Placing this run's images there would overwrite them and removing "
+            "it afterwards would take that run's jail down while it is using "
+            "it. Nothing here establishes that it is this run's, so this run "
+            "does not start. Resuming a run id reuses the machine name, which "
+            "is how two runs reach one jail."
+        )
+
+    salvage: dict[str, Any] = {
+        "returned_copy": None,
+        "results_read": False,
+        "copied_while_running": False,
+    }
+    grounds: list[dict[str, Any]] = []
 
     try:
         placement = place_the_images(
@@ -222,33 +395,89 @@ def first_boot(
         started_at = now()
         launch = _run([jailer_binary, *plan["jailer"]["argv"]], timeout=120.0)
 
-        pid: int | None = None
+        # ``watched`` is the only value this run will ever signal, and it is set
+        # once, here, from a file that did not exist a moment ago.
+        watched: int | None = None
+        why_not_this_pid = "no PID file appeared, so nothing started"
         while now() - started_at < PID_FILE_GRACE_SECONDS:
             if pid_file.exists():
                 try:
-                    pid = int(pid_file.read_text().strip())
-                except ValueError:
-                    pid = None
-                if pid:
-                    break
+                    text = pid_file.read_text().strip()
+                except OSError as unreadable:
+                    why_not_this_pid = (
+                        f"the PID file could not be read "
+                        f"({type(unreadable).__name__}: {unreadable})"
+                    )
+                else:
+                    watched, why_not_this_pid = _a_pid_this_may_signal(text)
+                    if watched is not None:
+                        break
             sleep(POLL_SECONDS)
+
+        # What this run can actually say about whose process that is. Written
+        # down as the separate things it checked rather than as one boolean,
+        # because a verdict nobody can audit is how "the PID file was not there"
+        # came to stand in for ownership in the first place.
+        grounds = [
+            {
+                "ground": "the jail did not exist before this run placed anything",
+                "held": not chroot_was_already_there,
+            },
+            {
+                "ground": "no PID file was there before this run launched",
+                "held": not pid_file_was_already_there,
+            },
+            {
+                "ground": "a PID file appeared while this run was watching",
+                "held": watched is not None,
+            },
+            {
+                "ground": "it held a value this platform can signal",
+                "held": watched is not None,
+            },
+        ]
 
         outcome = "booted"
         stopped_by_the_deadline = False
-        if pid is None:
+        stop_signal_sent = False
+        guest_confirmed_stopped: bool | None = None
+        left_alone_because: str | None = None
+
+        if watched is None:
             outcome = "never_started"
+            left_alone_because = why_not_this_pid
         else:
-            while _still_running(pid):
-                if now() - started_at >= deadline_seconds:
+            while _still_running(watched):
+                if now() - started_at < deadline_seconds:
+                    sleep(POLL_SECONDS)
+                    continue
+                may_signal, why_not_now = _may_signal_now(pid_file, watched)
+                if not may_signal:
+                    # The deadline is reached and the thing at the end of it is
+                    # not demonstrably ours. Leaving a machine running is bad;
+                    # killing a stranger's is worse and is not recoverable.
+                    outcome = "overran_and_was_left_alone"
+                    left_alone_because = why_not_now
+                    break
+                try:
+                    os.kill(watched, signal.SIGKILL)
+                except ProcessLookupError:
+                    # It went on its own between the probe and the signal.
+                    outcome = "booted"
+                    break
+                stop_signal_sent = True
+                guest_confirmed_stopped = _confirm_it_stopped(
+                    watched, now=now, sleep=sleep
+                )
+                if guest_confirmed_stopped:
                     stopped_by_the_deadline = True
                     outcome = "stopped_by_the_deadline"
-                    try:
-                        os.kill(pid, signal.SIGKILL)
-                    except ProcessLookupError:
-                        stopped_by_the_deadline = False
-                        outcome = "booted"
-                    break
-                sleep(POLL_SECONDS)
+                else:
+                    # A signal was sent and the machine is still there. Saying
+                    # it was stopped by the deadline would be the artefact
+                    # asserting something nobody observed.
+                    outcome = "overran_and_did_not_stop"
+                break
         ran_for = round(now() - started_at, 3)
 
         disk_in_jail = chroot_dir / "work.ext4"
@@ -259,9 +488,15 @@ def first_boot(
             # still exist once the jail is gone; reading the files out of the
             # image is a convenience on top of it. Reading first meant an image
             # this module could not parse took the bytes down with it.
+            #
+            # Both of those come *after* the machine is stopped, because a
+            # filesystem copied out from under a running guest is a torn one.
+            # It is still taken — it is the only copy there will be — and it is
+            # labelled, so that nothing downstream reads it as intact.
             returned = str(work_disk) + ".returned"
             shutil.copy2(disk_in_jail, returned)
             salvage["returned_copy"] = returned
+            salvage["copied_while_running"] = guest_confirmed_stopped is False
             results = files_out_of_work_disk(disk_in_jail, WORK_DISK_RESULTS)
             salvage["results_read"] = True
     except BaseException as failure:
@@ -269,8 +504,11 @@ def first_boot(
             host_side=host_side,
             pid_file=pid_file,
             pid_file_was_already_there=pid_file_was_already_there,
+            chroot_was_already_there=chroot_was_already_there,
             work_disk=work_disk,
             salvage=salvage,
+            now=now,
+            sleep=sleep,
         )
         # KeyboardInterrupt and SystemExit are cleaned up after and then left
         # alone. Wrapping them would turn a stop into a RuntimeError nobody
@@ -301,14 +539,24 @@ def first_boot(
         },
         "pid_file": {
             "path": pid_file.as_posix(),
-            "appeared": pid is not None,
-            "pid_recorded": pid is not None,
+            "appeared": watched is not None,
+            "pid_recorded": watched is not None,
+            "pid_watched": watched,
+            "owned_by_this_run": watched is not None and left_alone_because is None,
+            "ownership_grounds": grounds,
+            "left_alone_because": left_alone_because,
+            "cannot_rule_out": CANNOT_RULE_OUT,
         },
         "ran_for_seconds": ran_for,
         "deadline_seconds": deadline_seconds,
         "stopped_by_the_deadline": stopped_by_the_deadline,
+        # Sent and gone are two observations. Only the second one says the host
+        # is free again, and only the first one was ever being recorded.
+        "stop_signal_sent": stop_signal_sent,
+        "guest_confirmed_stopped": guest_confirmed_stopped,
         "command_exit_status": exit_status,
         "results": results,
+        "salvaged": salvage,
         "placement": placement,
         "teardown": destroyed,
         "channel": (
@@ -367,99 +615,175 @@ def _clean_up_after_a_failure(
     pid_file_was_already_there: bool,
     work_disk: str | Path,
     salvage: dict[str, Any],
+    chroot_was_already_there: bool = False,
+    now: Callable[[], float] = time.monotonic,
+    sleep: Callable[[float], None] = time.sleep,
 ) -> dict[str, Any]:
     """Take down what this run started, in the order that keeps the results.
 
-    Three obligations, and the order of the first two cannot be swapped:
+    Four obligations, and the order is the whole point:
 
-    1. the work disk comes out of the jail *before* the jail is removed, because
-       the copy beside it is the only place the guest's writes still exist;
-    2. the jail is removed, because ``workdir: ephemeral-quota`` is a policy and
+    1. the machine is stopped, and stopping is followed by *asking whether it
+       stopped*, because a signal that was sent is not a process that is gone;
+    2. the work disk comes out of the jail, after the writer has stopped and
+       before the jail is removed — the copy beside it is the only place the
+       guest's writes still exist, and a filesystem copied out from under a
+       running guest is a torn one;
+    3. the jail is removed, because ``workdir: ephemeral-quota`` is a policy and
        not tidiness;
-    3. nothing here touches a path or a process this run did not create.
+    4. nothing here touches a path or a process this run did not create.
 
-    The third is the one worth stating as a rule. A process is signalled only
-    when its PID file did not exist before this run launched anything — a file
-    that was already there names something else's machine — and only the paths
-    in ``destroy_after_the_run`` are removed.
+    The fourth is the one worth stating as a rule, and the one that is easiest
+    to get wrong in the safe-looking direction. A process is signalled only when
+    every ground in ``ownership_grounds`` held: the jail was not on disk before
+    this run placed anything, no PID file was there before it launched, one
+    appeared while it was watching, and the value in it is one this platform can
+    signal. The jail being there first is the strongest of those, because the
+    plan puts the PID file *inside* the chroot — a jail that predates this run
+    holds another run's PID file and another run's work disk.
 
-    Failures are collected, never raised. This runs while another exception is
-    already on its way out, and an error raised from in here would replace the
-    reason the run failed with the reason the cleanup failed. Both are wanted,
-    which is why the caller gets them in two places.
+    None of that rules out PID reuse, and this does not claim it does; see
+    :data:`CANNOT_RULE_OUT`, which goes out with the record.
+
+    Failures are collected, never raised, and now that means **every**
+    ``Exception`` rather than the two that were anticipated. This runs while
+    another exception is already on its way out; anything raised from in here
+    would replace the reason the run failed with the reason the cleanup failed,
+    and would do it before ``BootAbandoned`` was ever constructed — so the
+    original error, the salvaged path and this record would all be lost at once.
+    ``KeyboardInterrupt`` and ``SystemExit`` are not caught: a Ctrl-C during
+    cleanup should stop, not be filed as a teardown failure.
     """
     failures: list[dict[str, str]] = []
+
+    def _collect(what: str, path: str, failure: BaseException) -> None:
+        failures.append(
+            {
+                "what": what,
+                "path": path,
+                "error": f"{type(failure).__name__}: {failure}",
+            }
+        )
 
     # Derived from the plan rather than from however far the caller got, so a
     # placement that failed half way through still has its jail found.
     chroot_dir = Path(str(host_side["chroot_dir"]))
-    if salvage.get("returned_copy") is None:
-        disk_in_jail = chroot_dir / "work.ext4"
-        if not disk_in_jail.exists():
-            salvage["why_not"] = "no work disk reached the jail"
-        else:
-            returned = str(work_disk) + ".returned"
-            try:
-                shutil.copy2(disk_in_jail, returned)
-                salvage["returned_copy"] = returned
-            except OSError as failure:
-                salvage["why_not"] = "the work disk could not be copied out"
-                failures.append(
-                    {
-                        "what": "copy the work disk out of the jail",
-                        "path": returned,
-                        "error": f"{type(failure).__name__}: {failure}",
-                    }
-                )
 
+    # ---- 1. stop it, if it is this run's to stop -------------------------
     process: dict[str, Any] = {
         "pid_file": pid_file.as_posix(),
         "existed_before_this_run": pid_file_was_already_there,
+        "chroot_existed_before_this_run": chroot_was_already_there,
         "pid": None,
         "signalled": False,
+        "was_running": None,
+        "confirmed_stopped": None,
         "left_alone_because": None,
+        "cannot_rule_out": CANNOT_RULE_OUT,
     }
-    if pid_file_was_already_there:
-        process["left_alone_because"] = (
-            "this PID file was there before this run launched anything, so "
-            "whatever it names is not this run's to kill"
+    try:
+        if chroot_was_already_there:
+            process["left_alone_because"] = (
+                "the jail was on disk before this run placed anything, so the "
+                "PID file inside it and the machine it names are another run's, "
+                "and this run does not stop another run's machine"
+            )
+        elif pid_file_was_already_there:
+            process["left_alone_because"] = (
+                "this PID file was there before this run launched anything, so "
+                "whatever it names is not this run's to kill"
+            )
+        elif not pid_file.exists():
+            process["left_alone_because"] = "no PID file appeared, so nothing started"
+        else:
+            try:
+                text: Any = pid_file.read_text().strip()
+            except OSError as unreadable:
+                text = None
+                process["left_alone_because"] = "the PID file could not be read"
+                _collect("read this run's PID file", pid_file.as_posix(), unreadable)
+            if text is not None:
+                pid, why_not = _a_pid_this_may_signal(text)
+                if pid is None:
+                    process["left_alone_because"] = why_not
+                else:
+                    process["pid"] = pid
+                    running = _still_running(pid)
+                    process["was_running"] = running
+                    if not running:
+                        process["confirmed_stopped"] = True
+                        process["left_alone_because"] = "it had already stopped"
+                    else:
+                        os.kill(pid, signal.SIGKILL)
+                        process["signalled"] = True
+                        stopped = _confirm_it_stopped(pid, now=now, sleep=sleep)
+                        process["confirmed_stopped"] = stopped
+                        if not stopped:
+                            failures.append(
+                                {
+                                    "what": "confirm this run's machine stopped",
+                                    "path": pid_file.as_posix(),
+                                    "error": (
+                                        "SIGKILL was sent and the process was "
+                                        f"still there {STOP_CONFIRMATION_SECONDS}s "
+                                        "later; sent is not stopped"
+                                    ),
+                                }
+                            )
+    except Exception as failure:  # noqa: BLE001 - the docstring is the contract
+        _collect("stop this run's machine", pid_file.as_posix(), failure)
+
+    # ---- 2. get the bytes out, now that the writer has stopped -----------
+    try:
+        if chroot_was_already_there:
+            salvage["why_not"] = (
+                "the jail was there before this run, so the disk inside it is "
+                "another run's and this run does not copy it out"
+            )
+        elif salvage.get("returned_copy") is None:
+            disk_in_jail = chroot_dir / "work.ext4"
+            if not disk_in_jail.exists():
+                salvage["why_not"] = "no work disk reached the jail"
+            else:
+                returned = str(work_disk) + ".returned"
+                try:
+                    shutil.copy2(disk_in_jail, returned)
+                    salvage["returned_copy"] = returned
+                except OSError as failure:
+                    salvage["why_not"] = "the work disk could not be copied out"
+                    _collect("copy the work disk out of the jail", returned, failure)
+    except Exception as failure:  # noqa: BLE001 - the docstring is the contract
+        _collect("copy the work disk out of the jail", chroot_dir.as_posix(), failure)
+
+    # Whether anyone may read that copy as an intact filesystem. Taken from what
+    # was observed a moment ago rather than from whether a signal was sent: the
+    # guest was running when this looked, and nothing since has said it stopped.
+    salvage["copied_while_running"] = bool(
+        salvage.get("returned_copy") is not None
+        and process["was_running"] is True
+        and process["confirmed_stopped"] is not True
+    )
+
+    # ---- 3. remove the jail, if it is this run's to remove ---------------
+    destroyed: dict[str, Any] = {"removed": {}, "all_gone": False, "failures": []}
+    refused_to_destroy: str | None = None
+    if chroot_was_already_there:
+        refused_to_destroy = (
+            "the jail was on disk before this run placed anything; removing it "
+            "would take another run's work disk with it"
         )
-    elif not pid_file.exists():
-        process["left_alone_because"] = "no PID file appeared, so nothing started"
     else:
         try:
-            process["pid"] = int(pid_file.read_text().strip())
-        except (OSError, ValueError) as failure:
-            process["left_alone_because"] = "the PID file held no readable PID"
-            failures.append(
-                {
-                    "what": "read this run's PID file",
-                    "path": pid_file.as_posix(),
-                    "error": f"{type(failure).__name__}: {failure}",
-                }
-            )
-        else:
-            if not _still_running(int(process["pid"])):
-                process["left_alone_because"] = "it had already stopped"
-            else:
-                try:
-                    os.kill(int(process["pid"]), signal.SIGKILL)
-                    process["signalled"] = True
-                except OSError as failure:
-                    failures.append(
-                        {
-                            "what": "stop this run's machine",
-                            "path": pid_file.as_posix(),
-                            "error": f"{type(failure).__name__}: {failure}",
-                        }
-                    )
-
-    destroyed = _destroy(list(host_side.get("destroy_after_the_run", [])))
+            destroyed = _destroy(list(host_side.get("destroy_after_the_run", [])))
+        except Exception as failure:  # noqa: BLE001 - the docstring is the contract
+            _collect("remove", chroot_dir.as_posix(), failure)
     failures.extend(destroyed["failures"])
+
     return {
         "after_a_failure": True,
         "removed": destroyed["removed"],
         "all_gone": destroyed["all_gone"],
+        "destroy_refused_because": refused_to_destroy,
         "failures": failures,
         "clean": not failures,
         "process": process,

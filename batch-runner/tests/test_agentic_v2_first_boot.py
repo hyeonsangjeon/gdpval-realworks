@@ -342,7 +342,11 @@ def test_a_machine_that_overruns_is_killed_and_says_so(plan, tmp_path, monkeypat
         tmp_path,
         monkeypatch,
         jailer=_writes_the_pid_file(plan),
-        running=lambda pid: True,
+        # Alive until it is signalled, and gone afterwards. A stand-in that
+        # reports alive forever is a guest that never stopped, which is a
+        # different outcome with its own test; this one is about the machine
+        # that does stop when the deadline says so.
+        running=lambda pid: not killed,
         results={name: None for name in WORK_DISK_RESULTS},
     )
 
@@ -722,7 +726,6 @@ def test_a_removal_that_fails_carries_its_reason_not_a_bare_false(
 ):
     """"Still there" and "still there because" are one boolean and two findings."""
     chroot = Path(plan["host_side"]["chroot_dir"])
-    chroot.mkdir(parents=True, exist_ok=True)
 
     def jailer(argv, timeout=300.0):
         # The jail's parent stops accepting removals after the images are in.
@@ -757,14 +760,25 @@ def test_a_removal_that_fails_carries_its_reason_not_a_bare_false(
 def test_a_pid_file_that_was_already_there_is_not_this_runs_to_kill(
     plan, tmp_path, monkeypatch
 ):
-    """Two of these can be on one host at once, and one must not stop the other."""
+    """Two of these can be on one host at once, and one must not stop the other.
+
+    This used to reach the cleanup path and check the guard there. It no longer
+    gets that far, and that is the fix rather than a regression: the plan puts
+    the PID file *inside* the chroot, so a PID file that was already there means
+    a jail that was already there, and a run that placed its images in it would
+    have overwritten a live work disk and then removed the jail around it. The
+    refusal happens before anything is written.
+
+    The guard further down still exists and is still checked, directly, in
+    ``test_v2_only_signals_what_it_started.py``.
+    """
     pid_file = Path(plan["host_side"]["pid_file"])
     pid_file.parent.mkdir(parents=True, exist_ok=True)
     pid_file.write_text("1\n")  # pid 1 is running on every host there is
     signalled = []
     monkeypatch.setattr(os, "kill", lambda pid, sig: signalled.append((pid, sig)))
 
-    with pytest.raises(BootAbandoned) as caught:
+    with pytest.raises(BootRefused) as caught:
         _boot(
             plan,
             tmp_path,
@@ -774,12 +788,9 @@ def test_a_pid_file_that_was_already_there_is_not_this_runs_to_kill(
             results=_finished(),
         )
 
-    process = caught.value.teardown["process"]
     assert signalled == []
-    assert process["existed_before_this_run"] is True
-    assert process["signalled"] is False
-    assert process["pid"] is None
-    assert "not this run's to kill" in process["left_alone_because"]
+    assert "does not start" in str(caught.value)
+    assert pid_file.read_text().strip() == "1"
 
 
 def test_this_runs_own_machine_is_stopped_when_it_is_still_running(
