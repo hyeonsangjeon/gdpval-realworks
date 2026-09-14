@@ -365,12 +365,80 @@ class TestReadingOneBootAsOneResult:
             _boot("booted_but_wrote_nothing"),
             _boot("never_started"),
             _boot("stopped_by_the_deadline"),
+            _boot("overran_and_was_left_alone", status=0),
+            _boot("overran_and_did_not_stop"),
         ):
             assert read_the_boot(boot, deadline=ANY_DEADLINE)["grounds"].strip()
 
     def test_the_deadline_that_was_applied_travels_with_the_reading(self):
         read = read_the_boot(_boot("booted", status=0), deadline=ANY_DEADLINE)
         assert read["deadline"] == ANY_DEADLINE
+
+    # -- the two outcomes the producing side grew and this side did not ----
+    #
+    # ``first_boot`` can now end in six states. This reader knew four, and the
+    # two it did not know both fell through a branch keyed on the exit status
+    # alone: a returncode present meant an ordinary success, indistinguishable
+    # from a machine that shut down cleanly. The machine in question was still
+    # on the host.
+
+    @pytest.mark.parametrize(
+        "outcome", ["overran_and_was_left_alone", "overran_and_did_not_stop"]
+    )
+    def test_a_finished_command_keeps_its_status_and_still_reports_a_live_host(
+        self, outcome
+    ):
+        read = read_the_boot(_boot(outcome, status=0), deadline=ANY_DEADLINE)
+
+        # The command answered, so the answer stands. Turning a finished piece
+        # of work into a failure because the teardown was untidy would lose a
+        # real result and tell the model nothing it can act on.
+        assert read["result"]["ok"] is True
+        assert read["result"]["data"] == {"returncode": 0}
+
+        # And the part that used to go no further than first_boot's return.
+        assert read["host_left_running"] is True
+        assert outcome in read["grounds"]
+        assert "the host is not free" in read["grounds"]
+        assert "live writer" in read["grounds"]
+
+    @pytest.mark.parametrize(
+        "outcome", ["overran_and_was_left_alone", "overran_and_did_not_stop"]
+    )
+    def test_a_machine_still_running_that_wrote_no_status_is_a_backend_fault(
+        self, outcome
+    ):
+        # Not ``cancelled``: nothing was successfully stopped, so calling it a
+        # cancellation would report a bound that held when it did not. Not the
+        # generic fall-through either, which named neither the outcome nor the
+        # host.
+        read = read_the_boot(_boot(outcome), deadline=ANY_DEADLINE)
+        assert read["result"]["ok"] is False
+        assert read["result"]["error_type"] == "compute_backend_error"
+        assert read["result"]["data"] == {}
+        assert read["host_left_running"] is True
+        assert outcome in read["grounds"]
+
+    def test_the_copy_label_travels_out_beside_the_result(self):
+        # ``exec_run``'s data schema is a returncode with additionalProperties
+        # false, so this cannot ride inside the result. It rides beside it, and
+        # the backend puts it in the run record and in the kept meta.json.
+        boot = _boot("overran_and_did_not_stop", status=0)
+        boot["guest_confirmed_stopped"] = False
+        boot["salvaged"] = {
+            "copy_integrity": "torn",
+            "copy_integrity_because": "a live writer was still attached",
+        }
+        read = read_the_boot(boot, deadline=ANY_DEADLINE)
+        assert read["copy_integrity"] == "torn"
+        assert read["copy_integrity_because"] == "a live writer was still attached"
+
+    def test_an_ordinary_boot_still_reports_a_host_that_is_free(self):
+        # The negative control. A rule that flags live hosts is only useful if
+        # the hosts it does not flag are genuinely free.
+        for boot in (_boot("booted", status=0), _boot("stopped_by_the_deadline")):
+            read = read_the_boot(boot, deadline=ANY_DEADLINE)
+            assert read["host_left_running"] is False
 
 
 class TestOutputGoesToTheWorkspaceAndSaysWhenItWasCut:

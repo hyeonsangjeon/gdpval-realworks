@@ -54,6 +54,10 @@ import base64
 import shlex
 from typing import Any, Mapping
 
+from core.agentic_v2_first_boot import (
+    OUTCOMES_THAT_LEAVE_THE_HOST_RUNNING,
+    the_host_was_left_running,
+)
 from core.agentic_v2_microvm import REQUIRED_MICROVM_POLICY
 
 
@@ -321,24 +325,44 @@ def read_the_boot(
 ) -> dict[str, Any]:
     """Read one boot as a tool result, and say on what grounds.
 
-    Four outcomes come back from the launcher and they mean four different
-    things. The table is small and every row of it matters:
+    Six outcomes come back from the launcher and they mean six different things.
+    The table is small and every row of it matters:
 
-    ===========================  =============  ==================================
-    boot outcome                 exit status    what the model is told
-    ===========================  =============  ==================================
-    ``booted``                   present        ``ok``, with that returncode
-    ``booted``                   absent         ``compute_backend_error``
-    ``booted_but_wrote_nothing`` absent         ``compute_backend_error``
-    ``never_started``            absent         ``compute_start_failed``
-    ``stopped_by_the_deadline``  absent         ``cancelled`` — the bound worked
-    ``stopped_by_the_deadline``  **present**    ``ok``, with that returncode
-    ===========================  =============  ==================================
+    ================================  =============  =============================
+    boot outcome                      exit status    what the model is told
+    ================================  =============  =============================
+    ``booted``                        present        ``ok``, with that returncode
+    ``booted``                        absent         ``compute_backend_error``
+    ``booted_but_wrote_nothing``      absent         ``compute_backend_error``
+    ``never_started``                 absent         ``compute_start_failed``
+    ``stopped_by_the_deadline``       absent         ``cancelled`` — the bound worked
+    ``stopped_by_the_deadline``       **present**    ``ok``, with that returncode
+    ``overran_and_was_left_alone``    absent         ``compute_backend_error``
+    ``overran_and_was_left_alone``    **present**    ``ok``, and the host is not free
+    ``overran_and_did_not_stop``      absent         ``compute_backend_error``
+    ``overran_and_did_not_stop``      **present**    ``ok``, and the host is not free
+    ================================  =============  =============================
 
-    The last row is the one that is easy to get wrong. If the guest wrote an
-    exit status, the command **finished**; the machine merely failed to shut
-    down inside its deadline afterwards. Throwing the returncode away there
-    would discard a real answer because of something that happened after it.
+    The rows with an exit status present are the ones that are easy to get
+    wrong. If the guest wrote an exit status, the command **finished**; the
+    machine merely failed to shut down inside its deadline afterwards. Throwing
+    the returncode away there would discard a real answer because of something
+    that happened after it.
+
+    The last four rows were the ones nobody had written. The launcher grew two
+    outcomes and this function still knew four, so a machine that overran and
+    was never stopped came back through the ``status is not None`` branch as an
+    ordinary success with nothing anywhere saying a guest was still running on
+    the host. The returncode is still returned — that part was right — but the
+    host's state and the work disk's integrity are separate answers to separate
+    questions, and they now travel beside it instead of being absent.
+
+    Three axes, never folded together:
+
+    ``result``               what the *command* did. The model sees this.
+    ``host_left_running``    whether a machine this run launched is still there.
+    ``copy_integrity``       whether the returned work disk may be read as an
+                             intact filesystem.
 
     A deadline that fires is not an error in the machine. It is stage C's third
     attack succeeding on purpose — the bound doing exactly what it was measured
@@ -353,6 +377,8 @@ def read_the_boot(
     stdout, stdout_cut = _capped(results.get("/out/stdout"))
     stderr, stderr_cut = _capped(results.get("/out/stderr"))
     status = boot.get("command_exit_status")
+    salvaged = boot.get("salvaged") or {}
+    left_running = the_host_was_left_running(boot)
 
     def answer(
         ok: bool, error_type: str | None, data: dict, grounds: str
@@ -365,6 +391,14 @@ def read_the_boot(
             "deadline": dict(deadline),
             "boot_outcome": outcome,
             "grounds": grounds,
+            # Beside the result rather than inside it: ``exec_run``'s data
+            # schema is a returncode and nothing else with
+            # ``additionalProperties`` false, so a key added there would be a
+            # contract violation rather than a warning. These reach the run
+            # record and the kept meta.json instead.
+            "host_left_running": left_running,
+            "copy_integrity": salvaged.get("copy_integrity"),
+            "copy_integrity_because": salvaged.get("copy_integrity_because"),
         }
 
     if status is not None:
@@ -398,12 +432,23 @@ def read_the_boot(
                 "the guest could not decode the payload onto the work disk, "
                 "which is a fault in the image and not in the request",
             )
-        ran_anyway = (
-            " after its deadline had already fired, so the command finished and "
-            "only the shutdown overran"
-            if outcome == "stopped_by_the_deadline"
-            else ""
-        )
+        ran_anyway = ""
+        if outcome == "stopped_by_the_deadline":
+            ran_anyway = (
+                " after its deadline had already fired, so the command finished "
+                "and only the shutdown overran"
+            )
+        elif outcome in OUTCOMES_THAT_LEAVE_THE_HOST_RUNNING:
+            # The command's answer is still the command's answer. What is *not*
+            # ordinary is that the guest it ran in is still on the host, and
+            # that anything read back off its work disk was read with a live
+            # writer attached. Both belong in the grounds; neither one turns a
+            # finished piece of work into a failure.
+            ran_anyway = (
+                f", and the machine it ran in was not stopped ({outcome}), so "
+                "the host is not free and the returned work disk was copied "
+                "out from under a live writer"
+            )
         return answer(
             True,
             None,
@@ -426,6 +471,15 @@ def read_the_boot(
             "compute_start_failed",
             {},
             "the jailer wrote no pid file, so no machine existed to run in",
+        )
+    if outcome in OUTCOMES_THAT_LEAVE_THE_HOST_RUNNING:
+        return answer(
+            False,
+            "compute_backend_error",
+            {},
+            f"the machine ended as {outcome!r} — it was still running when this "
+            "run let go of it and it wrote no exit status, so nothing here says "
+            "the command ran and the host is not free",
         )
     return answer(
         False,
