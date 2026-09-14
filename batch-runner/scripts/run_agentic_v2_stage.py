@@ -71,6 +71,12 @@ from core.agentic_v2_conversation_runner import (  # noqa: E402
 )
 from core.agentic_v2_cost_binding import bind_run_to_ledger  # noqa: E402
 from core.agentic_v2_fixture_backend import AgenticV2FixtureBackend  # noqa: E402
+from core.agentic_v2_isolated_selection import (  # noqa: E402
+    HANDWRITTEN_NOTES,
+    IsolatedBackendRefused,
+    IsolationApproval,
+    select_backend,
+)
 from core.agentic_v2_manifest_binding import (  # noqa: E402
     ManifestRefused,
     bind_stage,
@@ -370,17 +376,21 @@ BACKEND_IN_USE = AgenticV2FixtureBackend
 #: because the record is what a reader three months from now will have. A run
 #: whose isolation was a fixture and whose record does not say so is a result
 #: that will eventually be described as something it was not.
-def environment_note(profile: dict) -> dict:
-    if BACKEND_IN_USE is not AgenticV2FixtureBackend:
-        raise StageRefused(
-            f"{BACKEND_IN_USE.__name__} is mounted and the sentences below "
-            "describe the fixture. They are the part of the run record a "
-            "reader trusts to say what was and was not real, so they are "
-            "written by hand per backend rather than adapted. Write them for "
-            "this one before running it."
-        )
+def environment_note(profile: dict, backend: type | None = None) -> dict:
+    backend = backend or BACKEND_IN_USE
+    if backend is not AgenticV2FixtureBackend:
+        written = HANDWRITTEN_NOTES.get(backend.__name__)
+        if written is None:
+            raise StageRefused(
+                f"{backend.__name__} is mounted and the sentences below "
+                "describe the fixture. They are the part of the run record a "
+                "reader trusts to say what was and was not real, so they are "
+                "written by hand per backend rather than adapted. Write them "
+                "for this one before running it."
+            )
+        return written(profile)
     return {
-        "backend": BACKEND_IN_USE.__name__,
+        "backend": backend.__name__,
         "guest_booted": False,
         "exec_run_open": False,
         "policy_profile_id": profile.get("policy_profile_id"),
@@ -390,7 +400,7 @@ def environment_note(profile: dict) -> dict:
                 "verdict": entry.verdict,
                 "how_we_know": entry.evidence,
             }
-            for entry in availability_for(BACKEND_IN_USE)
+            for entry in availability_for(backend)
         ],
         "what_was_real": [
             "the model, the deployment and the charge for every call",
@@ -771,6 +781,20 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "--isolated-approval",
+        type=Path,
+        default=None,
+        help=(
+            "Path to a JSON document approving this run onto a real guest, "
+            "naming the approver and stage C2's first-boot artefact. Left out "
+            "-- which is every run so far -- the foundation fixture is used "
+            "and no identity is declared. Supplied, the artefact has to show a "
+            "guest that really booted on this kernel with its images still "
+            "hashing to what they hashed then, or the run is refused before "
+            "anything is spent."
+        ),
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help=(
@@ -797,6 +821,11 @@ def main() -> int:
             "model. Pick one."
         )
         return 1
+
+    # Settled here rather than after the dry-run exit, because the launcher
+    # names its jail after the run and the backend is chosen further down this
+    # same block. Computing it twice would put two ids on one run.
+    run_id = args.run_id or f"agentic-v2-{args.stage}-{int(time.time())}"
 
     try:
         plan, verdict, catalog = verdict_for(args.plan)
@@ -842,9 +871,32 @@ def main() -> int:
         # the backend that will really be built. Before the shard is cut and
         # before a client exists, because every refusal it can raise is worth
         # having now rather than on task one of thirty.
+        # Chosen before the instructions are derived, because the derivation
+        # depends on which backend it is: the tool list the model is given
+        # comes from that backend's availability, and a run that resolved the
+        # fixture's list and then mounted the isolated one would tell the model
+        # about a browser it does not have. Refused here, in front of the
+        # pricing, so a bad approval costs nothing.
+        try:
+            choice = (
+                select_backend()
+                if args.isolated_approval is None
+                else select_backend(
+                    approval=IsolationApproval.load(args.isolated_approval),
+                    session=run_id,
+                )
+            )
+        except IsolatedBackendRefused as refusal:
+            raise StageRefused(str(refusal)) from refusal
+        if choice.is_isolated:
+            print(f"  backend        {choice.backend_class.__name__}")
+            for key, value in sorted(choice.grounds.items()):
+                if key != "images_rechecked":
+                    print(f"    {key:<20} {value}")
+            print()
         instructions = resolve_instructions(
             plan,
-            BACKEND_IN_USE,
+            choice.backend_class,
             priced_characters=shared_assumptions(plan).instruction_character_count,
         )
         # Read here too, for the same reason. Left to the voice, a plan with a
@@ -988,7 +1040,6 @@ def main() -> int:
         else Path(tempfile.mkdtemp(prefix=f"agentic-v2-{args.stage}-"))
     )
     into.mkdir(parents=True, exist_ok=True)
-    run_id = args.run_id or f"agentic-v2-{args.stage}-{int(time.time())}"
     print(f"  run id         {run_id}")
     print(f"  writing to     {into}")
     print()
@@ -1230,7 +1281,9 @@ def main() -> int:
                     f"  {task_id}  has files and can open none of them; a "
                     "failure here is not the model's either"
                 )
-            return BACKEND_IN_USE(root=task_root, **kwargs)
+            return choice.backend_class(
+                root=task_root, **choice.extra_kwargs, **kwargs
+            )
 
         # Opened before the factory that writes into it, and before the first
         # model call rather than after the first finished task. The reservation
@@ -1274,6 +1327,7 @@ def main() -> int:
             attempt_of=attempt_of,
             cancel_requested=cancel_requested,
             before_model_call_for=reserve_for,
+            admitted_identity=choice.identity_to_declare,
             **(
                 {"voice": rehearsing}
                 if rehearsing is not None
@@ -1407,7 +1461,7 @@ def main() -> int:
             },
             pinned_model=pinned_model,
         ),
-        "environment": environment_note(profile),
+        "environment": environment_note(profile, choice.backend_class),
         "route_fingerprint": (
             rehearsal_is_not_a_run()
             if rehearsing is not None

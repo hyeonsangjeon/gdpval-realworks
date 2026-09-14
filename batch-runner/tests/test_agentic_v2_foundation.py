@@ -3834,23 +3834,52 @@ def test_a_startup_no_standard_accepts_fails_cleanly_rather_than_late(tmp_path):
     assert "started" not in kinds
 
 
-def test_nothing_in_this_repository_declares_a_non_default_identity():
-    """The claim that the guest is mapped but not run, made checkable.
+def test_only_one_module_computes_an_identity_and_it_refuses_by_default():
+    """Admission is wired now, and this is what keeps it honest.
 
-    `_RESULT_STANDARD_BY_BACKEND` now has an entry for the microVM backend, so
-    the old "there is only one backend anywhere" guard no longer says anything.
-    This is what replaces it: admission is possible, and nothing does it. The
-    day some caller does, this test is the line that has to change with it.
+    This replaces ``test_nothing_in_this_repository_declares_a_non_default_identity``,
+    which asserted that no module outside the runner so much as spelled
+    ``admitted_identity=``. That was a true statement about the source text and
+    a weak one about the system: it proved nobody had written the characters,
+    not that nobody could be admitted, and it made a booted host need a code
+    change before anything could use it — which is the part of the work meant to
+    be finished while no host exists.
+
+    What is asserted instead is narrower and checkable. Exactly one module in
+    ``core`` computes an identity and exactly one forwards it, both named here,
+    so a third turns this red. And the computing one answers ``None`` — the
+    foundation's own, the value every run in this repository has used — unless
+    it is handed a written approval. The refusals that stand behind that are
+    exercised one by one in
+    ``test_the_isolated_backend_is_selected_only_by_an_approved_boot.py``.
     """
     core = Path(agentic_v2_runner.__file__).resolve().parent
-    declaring = [
+    declaring = {
         path.name
         for path in sorted(core.glob("*.py"))
-        if "admitted_identity=" in path.read_text(encoding="utf-8")
-        and path.name != "agentic_v2_runner.py"
-    ]
+        if "admitted_identity" in path.read_text(encoding="utf-8")
+    }
 
-    assert declaring == []
+    assert declaring == {
+        # takes one and validates it
+        "agentic_v2_runner.py",
+        # computes one, from an approval and a boot that really happened
+        "agentic_v2_isolated_selection.py",
+        # hands the runner whatever the stage chose, including None
+        "agentic_v2_conversation_runner.py",
+    }, (
+        "a module that computes or forwards a backend identity is a module that "
+        "can admit a backend, and the list of them is meant to be short enough "
+        "to read"
+    )
+
+    from core.agentic_v2_isolated_selection import select_backend
+
+    assert select_backend().identity_to_declare is None, (
+        "with no approval the runner has to fall back to the foundation's own "
+        "identity, which is what makes the default path the one every existing "
+        "run took"
+    )
 
 
 @pytest.mark.parametrize(

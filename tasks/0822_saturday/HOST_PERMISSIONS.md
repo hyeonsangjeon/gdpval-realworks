@@ -177,12 +177,19 @@ change rather than a flag:
 
 1. **The roles**, above. Blocked, and reported here.
 2. **Admission.** `AgenticV2ScriptedRunner` admits exactly one backend
-   identity and defaults to the fixture's. No module outside that file is even
-   allowed to mention the argument —
-   `test_nothing_in_this_repository_declares_a_non_default_identity` reads
-   every other module's source to enforce it, and the wiring layer documents
-   that it deliberately does not forward the parameter. That test is the line
-   that changes when a guest is admitted for real.
+   identity and defaults to the fixture's. The wiring for a non-default one now
+   exists, and it is deliberately not a flag: `core/agentic_v2_isolated_selection.py`
+   is the only module that computes an identity, and it returns the default
+   unless it is handed a written approval naming an approver *and* stage C2's
+   artefact showing a guest that really booted on this kernel, with the
+   firecracker and jailer binaries still present and the kernel and rootfs
+   still hashing to what they hashed then. Any of those missing is a refusal
+   that names which. `test_only_one_module_computes_an_identity_and_it_refuses_by_default`
+   holds the list of modules allowed to touch the argument to three and pins
+   the default; the refusals themselves are exercised one at a time in
+   `test_the_isolated_backend_is_selected_only_by_an_approved_boot.py`.
+   Nothing in this repository writes such an approval, and on a host with no
+   `/dev/kvm` no artefact of that shape can be produced.
 3. **Activation.** The substrate, supply-chain and microVM manifests all
    declare `production_activation: "disabled"`, and three separate validators
    reject a document that says anything else. Flipping it is a reviewable edit
