@@ -125,6 +125,16 @@ batch-runner/scripts/*
 # tests/test_the_derived_repair_is_in_the_repository.py, which asks git what is
 # tracked rather than trusting this list.
 !batch-runner/scripts/derive_audio_receipt_repair.py
+# The same problem one level up, for a whole relayed round. `derive_run_cost.py`
+# prices a run from that run's own sqlite ledger; a round whose six ledgers
+# lived on runners that no longer exist has no second chance at that, and its
+# derivation survives only as the cross-check committed in round_state.json.
+# This script copies it to where the dashboard reads it, and refuses rather
+# than writes when the record does not hold together. Named here for the reason
+# above and one more: the sidecar it writes cites this file's sha256, so an
+# untracked copy would put a hash in a published artefact pointing at nothing.
+# Held by tests/test_the_round_sidecar_is_in_the_repository.py.
+!batch-runner/scripts/derive_round_cost_sidecar.py
 # The follow-up check that runs on the commit a grading run actually pushed.
 # It is invoked by the verify-published job in grade-run.yml, so the directory
 # rule hiding it would leave that job calling a file the checkout does not
