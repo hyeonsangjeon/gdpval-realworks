@@ -52,6 +52,7 @@ from core.agentic_v2_isolated_selection import (
     isolated_environment_note,
     select_backend,
     the_fixture,
+    what_a_booted_host_left,
 )
 from core.agentic_v2_microvm_backend import AgenticV2MicroVMBackend
 from core.agentic_v2_runner import AgenticV2ScriptedRunner
@@ -302,6 +303,113 @@ def test_an_artefact_from_another_machine_is_refused(tmp_path):
         select_backend(approval=approval, session="run-under-test")
     assert "6.8.0-somewhere-else" in str(raised.value)
     assert os.uname().release in str(raised.value)
+
+
+def _with_a_host_block(artefact: Path, mutate) -> Path:
+    """Rewrite the artefact's host evidence in place, including by removing it.
+
+    ``a_booted_host``'s ``changes`` merges dictionaries, which cannot express
+    "this key is not there" — and not being there is the case the check exists
+    for, so it needs saying.
+    """
+    document = json.loads(artefact.read_text(encoding="utf-8"))
+    mutate(document)
+    artefact.write_text(json.dumps(document), encoding="utf-8")
+    return artefact
+
+
+def test_an_intact_artefact_is_returned_as_it_was_written(tmp_path):
+    """The control. Without it, "everything is refused" would also pass."""
+    artefact = a_booted_host(tmp_path)
+    assert what_a_booted_host_left(artefact) == json.loads(
+        artefact.read_text(encoding="utf-8")
+    )
+
+
+@pytest.mark.parametrize(
+    "mutate, expected",
+    [
+        (lambda d: d.pop("host"), "carries no host block"),
+        (lambda d: d["host"].pop("kernel_release"), "records no kernel_release"),
+        (lambda d: d["host"].update(kernel_release=""), "is empty"),
+        (lambda d: d["host"].update(kernel_release="   "), "is empty"),
+        (
+            lambda d: d["host"].update(kernel_release=["6.8.0"]),
+            "rather than a release string",
+        ),
+        (
+            lambda d: d.update(host=["kernel_release", "6.8.0"]),
+            "rather than a block of host facts",
+        ),
+    ],
+    ids=["no-host", "no-release", "empty", "blank", "not-a-string", "not-a-mapping"],
+)
+def test_an_artefact_with_no_readable_kernel_evidence_is_refused(
+    tmp_path, mutate, expected
+):
+    """Absent evidence is refused, not skipped.
+
+    The check read the release with ``or ""`` and then compared only when the
+    result was non-empty, so the three artefacts that say nothing about their
+    host — no block, no key, an empty string — went through the check that
+    exists to catch exactly them. Two malformed shapes are here for the same
+    reason: something that is not a host block is not evidence of a host.
+    """
+    artefact = _with_a_host_block(a_booted_host(tmp_path), mutate)
+    with pytest.raises(IsolatedBackendRefused) as raised:
+        select_backend(
+            approval=an_approval(tmp_path, artefact), session="run-under-test"
+        )
+    assert expected in str(raised.value)
+
+
+def test_missing_kernel_evidence_stops_before_anything_can_start_a_machine(
+    tmp_path, monkeypatch
+):
+    """Where the refusal lands, not just that it lands.
+
+    ``one_machine_per_call`` is the last thing selection builds, and it is the
+    object every later boot goes through. A refusal that arrived after it would
+    still be a refusal and would still be too late.
+    """
+    reached: list[dict] = []
+
+    def spy(*args, **kwargs):
+        reached.append(dict(kwargs))
+        return "a machine nothing in this test starts"
+
+    monkeypatch.setattr(
+        "core.agentic_v2_isolated_selection.one_machine_per_call", spy
+    )
+
+    blinded = _with_a_host_block(a_booted_host(tmp_path), lambda d: d.pop("host"))
+    with pytest.raises(IsolatedBackendRefused):
+        select_backend(
+            approval=an_approval(tmp_path, blinded), session="run-under-test"
+        )
+    assert reached == []
+
+    # And the spy is not vacuous: the same call on an intact artefact reaches it.
+    select_backend(
+        approval=an_approval(tmp_path, a_booted_host(tmp_path)),
+        session="run-under-test",
+    )
+    assert len(reached) == 1
+
+
+def test_a_matching_kernel_release_is_not_claimed_to_be_a_host_identity(tmp_path):
+    """Two machines built from one image report the same release.
+
+    So the value is recorded with what it does and does not establish beside it,
+    rather than left for a reader to over-read.
+    """
+    choice = select_backend(
+        approval=an_approval(tmp_path, a_booted_host(tmp_path)),
+        session="run-under-test",
+    )
+    shows = choice.grounds["what_the_kernel_release_shows"]
+    assert "not a host identity" in shows
+    assert "differently provisioned" in shows
 
 
 @pytest.mark.parametrize("binary", ["firecracker", "jailer"])

@@ -29,15 +29,23 @@ capability, and nothing would fail.
 
 **What this deliberately does not do.** ``core/agentic_v2_runner.py`` checks at
 startup that the backend's identity is the one the runner was told to admit, and
-fails anything else with ``compute_start_failed``. Nothing admits this backend:
-the declaration defaults to the foundation fixture's identity, no caller in this
-repository passes anything else, and the substrate manifests still carry
-``production_activation: "disabled"``. The admission is deliberately a value a
-caller has to supply rather than a comparison someone can loosen, so that the
-day this backend does run, a diff says which identity was let in and who let it
-in. Opening it quietly from here would be the one move that makes every other
-honest thing in this file worthless. So the backend is proven directly by its
-tests, and no run admits it yet.
+fails anything else with ``compute_start_failed``. One caller can admit this
+backend and only one: ``scripts/run_agentic_v2_stage.py`` passes whatever
+``select_backend`` chose, which is this backend's identity when the run was
+given ``--isolated-approval`` and the approval held up, and ``None`` — the
+foundation fixture's identity, the path every run to date took — otherwise.
+The substrate manifests still carry ``production_activation: "disabled"``, and
+no real host has booted one of these. Until 2026-09-14 this paragraph opened by
+ruling out any admitting caller at all, which was right when it was written and
+wrong from the moment the flag was wired; a stale reassurance, in the file a
+reader opens *to check*, is the worst place to leave one.
+
+The admission is deliberately a value a caller has to supply rather than a
+comparison someone can loosen, so that the day this backend does run, a diff
+says which identity was let in and who let it in. Opening it quietly from here
+would be the one move that makes every other honest thing in this file
+worthless. So the backend is proven directly by its tests, and the one path
+that admits it has to be asked for on the command line.
 
 **The capability gaps are gaps, and are reported as such.** ``environment_*``
 cannot work: the machine has no route off itself, which is stage C's fourth
@@ -348,14 +356,26 @@ class AgenticV2MicroVMBackend(AgenticV2FixtureBackend):
                 deadline_seconds=deadline["applied_seconds"],
             )
         except Exception as failure:  # the launcher itself came apart
-            self.boots.append(
-                {
-                    "call": len(self.boots),
-                    "booted": False,
-                    "launcher_error": f"{type(failure).__name__}: {failure}",
-                    "deadline": deadline,
-                }
-            )
+            gave_up = {
+                "call": len(self.boots),
+                "booted": False,
+                "launcher_error": f"{type(failure).__name__}: {failure}",
+                "deadline": deadline,
+            }
+            # A boot given up on after the images were placed carries two
+            # outcomes, and they answer different questions. What went wrong
+            # with the run is one; whether this run's jail and its process went
+            # down with it is the other. Flattened into the single sentence
+            # above they read as one event, and a launch that failed leaving a
+            # chroot on the disk becomes indistinguishable from a launch that
+            # failed and cleaned up after itself. So both are kept, under their
+            # own keys, whenever the failure carries them.
+            teardown = getattr(failure, "teardown", None)
+            original = getattr(failure, "original", None)
+            if teardown is not None and original is not None:
+                gave_up["original_error"] = f"{type(original).__name__}: {original}"
+                gave_up["teardown"] = dict(teardown)
+            self.boots.append(gave_up)
             return {"ok": False, "error_type": "compute_backend_error"}
 
         reading = read_the_boot(boot, deadline=deadline)

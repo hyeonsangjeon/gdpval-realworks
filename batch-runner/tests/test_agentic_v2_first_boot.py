@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import subprocess
 from pathlib import Path
 
@@ -27,6 +28,7 @@ import pytest
 
 from core.agentic_v2_first_boot import (
     WORK_DISK_RESULTS,
+    BootAbandoned,
     BootRefused,
     first_boot,
     place_the_images,
@@ -68,14 +70,19 @@ class _Clock:
         self.t += seconds
 
 
-def _boot(plan, tmp_path, monkeypatch, *, jailer, running, results):
-    """Run :func:`first_boot` with the host replaced and the clock in hand."""
+def _boot(plan, tmp_path, monkeypatch, *, jailer, running, results=None, reader=None):
+    """Run :func:`first_boot` with the host replaced and the clock in hand.
+
+    ``results`` hands back a fixed reading of the work disk; ``reader`` replaces
+    the reading itself, for the cases where getting the files out is the thing
+    that fails.
+    """
     clock = _Clock()
     monkeypatch.setattr("core.agentic_v2_first_boot._run", jailer)
     monkeypatch.setattr("core.agentic_v2_first_boot._still_running", running)
     monkeypatch.setattr(
         "core.agentic_v2_first_boot.files_out_of_work_disk",
-        lambda image, names, **kw: dict(results),
+        reader or (lambda image, names, **kw: dict(results or {})),
     )
     return first_boot(
         plan,
@@ -436,3 +443,395 @@ def test_the_unjailed_check_survives_a_guest_that_never_exits(tmp_path, monkeypa
     assert check["timed_out"] is True
     assert check["returncode"] is None
     assert "Linux" in check["console_tail"]
+
+
+# --------------------------------------------------------------------------
+# a failure after the images are placed takes this run's jail down with it —
+# and only this run's
+#
+# Every case below fails at a different point *after* the chroot exists and
+# the work disk is inside it. Before 2026-09-14 each of them raised straight
+# out of first_boot and left the jail on the disk, which is where the guest's
+# writes live. The control is the first test: without it, "the chroot is gone"
+# would also be satisfied by a harness that never made one.
+# --------------------------------------------------------------------------
+
+
+def _raises(exception):
+    def jailer(argv, timeout=300.0):
+        raise exception
+
+    return jailer
+
+
+def _returned_copy(tmp_path):
+    return Path(str(tmp_path / "work.ext4") + ".returned")
+
+
+def test_a_run_that_does_not_fail_is_the_control_for_the_ones_that_do(
+    plan, tmp_path, monkeypatch
+):
+    """The same four observations the failure cases make, on a normal run."""
+    chroot = Path(plan["host_side"]["chroot_dir"])
+
+    record = _boot(
+        plan,
+        tmp_path,
+        monkeypatch,
+        jailer=_writes_the_pid_file(plan),
+        running=lambda pid: False,
+        results=_finished(),
+    )
+
+    assert record["outcome"] == "booted"
+    assert not chroot.exists()
+    assert _returned_copy(tmp_path).exists()
+    assert record["teardown"]["all_gone"] is True
+    assert "after_a_failure" not in record["teardown"]
+
+
+def test_a_launcher_that_times_out_does_not_leave_the_jail_behind(
+    plan, tmp_path, monkeypatch
+):
+    chroot = Path(plan["host_side"]["chroot_dir"])
+
+    with pytest.raises(BootAbandoned) as caught:
+        _boot(
+            plan,
+            tmp_path,
+            monkeypatch,
+            jailer=_raises(subprocess.TimeoutExpired(["jailer"], 120.0)),
+            running=lambda pid: False,
+            results=_finished(),
+        )
+
+    assert isinstance(caught.value.original, subprocess.TimeoutExpired)
+    assert not chroot.exists()
+    assert caught.value.teardown["all_gone"] is True
+    assert caught.value.teardown["clean"] is True
+    assert _returned_copy(tmp_path).exists()
+
+
+def test_a_jailer_that_is_not_installed_does_not_leave_the_jail_behind(
+    plan, tmp_path, monkeypatch
+):
+    """The images are placed before the jailer is looked for, so this one leaks."""
+    chroot = Path(plan["host_side"]["chroot_dir"])
+
+    with pytest.raises(BootAbandoned) as caught:
+        _boot(
+            plan,
+            tmp_path,
+            monkeypatch,
+            jailer=_raises(FileNotFoundError(2, "No such file or directory", "jailer")),
+            running=lambda pid: False,
+            results=_finished(),
+        )
+
+    assert isinstance(caught.value.original, FileNotFoundError)
+    assert not chroot.exists()
+    assert caught.value.teardown["all_gone"] is True
+    assert _returned_copy(tmp_path).exists()
+
+
+def test_the_run_failure_and_the_cleanup_are_two_records_not_one(
+    plan, tmp_path, monkeypatch
+):
+    """A launch that failed and a jail still on the disk is not one finding.
+
+    Read as a single sentence, "the launcher timed out" is the same whether the
+    chroot came down or not — and one of those is a policy breach while the
+    other is a Tuesday. So the exception carries the two separately, and the
+    cleanup's own verdict is a field rather than prose.
+    """
+    with pytest.raises(BootAbandoned) as caught:
+        _boot(
+            plan,
+            tmp_path,
+            monkeypatch,
+            jailer=_raises(subprocess.TimeoutExpired(["jailer"], 120.0)),
+            running=lambda pid: False,
+            results=_finished(),
+        )
+
+    abandoned = caught.value
+    assert isinstance(abandoned.original, subprocess.TimeoutExpired)
+    assert abandoned.teardown["after_a_failure"] is True
+    assert abandoned.teardown["clean"] is True
+    assert abandoned.teardown["failures"] == []
+    assert "TimeoutExpired" in str(abandoned)
+
+
+def test_a_placement_that_fails_half_way_still_has_its_jail_removed(
+    plan, tmp_path, monkeypatch
+):
+    """The chroot exists from the first image onwards, so half a placement leaks.
+
+    The kernel goes in first and the rootfs second, so removing the rootfs from
+    the host makes the second copy raise with one image already in the jail.
+    """
+    chroot = Path(plan["host_side"]["chroot_dir"])
+    real_placement = place_the_images
+    seen = {}
+
+    def half_way(plan_arg, **kwargs):
+        try:
+            return real_placement(plan_arg, **kwargs)
+        finally:
+            seen["chroot_existed"] = chroot.exists()
+
+    monkeypatch.setattr("core.agentic_v2_first_boot.place_the_images", half_way)
+    (tmp_path / "rootfs.ext4").unlink()
+
+    with pytest.raises(BootAbandoned) as caught:
+        _boot(
+            plan,
+            tmp_path,
+            monkeypatch,
+            jailer=_writes_the_pid_file(plan),
+            running=lambda pid: False,
+            results=_finished(),
+        )
+
+    assert seen["chroot_existed"] is True
+    assert isinstance(caught.value.original, FileNotFoundError)
+    assert not chroot.exists()
+    assert caught.value.teardown["all_gone"] is True
+    # The work disk never reached the jail, so there is nothing to salvage and
+    # the record says which of those two it is.
+    assert caught.value.teardown["salvaged"]["returned_copy"] is None
+    assert caught.value.teardown["salvaged"]["why_not"] == (
+        "no work disk reached the jail"
+    )
+
+
+def test_a_read_that_fails_still_leaves_the_guests_bytes_beside_the_work_disk(
+    plan, tmp_path, monkeypatch
+):
+    """Copy out first, read second — the other order loses the only copy.
+
+    ``files_out_of_work_disk`` walks the image with ``debugfs``. An image this
+    module cannot parse is exactly the case where the raw bytes are worth most,
+    and reading before copying took them down with the jail.
+    """
+    chroot = Path(plan["host_side"]["chroot_dir"])
+
+    def cannot_read(image, names, **kwargs):
+        raise RuntimeError("debugfs could not make sense of this image")
+
+    with pytest.raises(BootAbandoned) as caught:
+        _boot(
+            plan,
+            tmp_path,
+            monkeypatch,
+            jailer=_writes_the_pid_file(plan),
+            running=lambda pid: False,
+            reader=cannot_read,
+        )
+
+    returned = _returned_copy(tmp_path)
+    assert isinstance(caught.value.original, RuntimeError)
+    assert returned.exists()
+    assert returned.read_bytes() == (tmp_path / "work.ext4").read_bytes()
+    assert not chroot.exists()
+    salvaged = caught.value.teardown["salvaged"]
+    assert salvaged["returned_copy"] == str(returned)
+    assert salvaged["results_read"] is False
+
+
+def test_a_read_that_takes_the_image_down_with_it_still_leaves_the_copy(
+    plan, tmp_path, monkeypatch
+):
+    """The case the order above actually exists for, and the one that pins it.
+
+    Added because a mutation pass found the test above passes under *either*
+    order. A reader that merely raises loses nothing: the cleanup salvages the
+    disk afterwards, so copy-first and read-first end in the same place. The
+    order only shows when the read is what destroys the image -- which is the
+    failure the production comment names, ``debugfs`` on an image it cannot
+    parse -- because then there is nothing left for the cleanup to salvage and
+    the copy had to have happened first or not at all.
+    """
+    chroot = Path(plan["host_side"]["chroot_dir"])
+
+    def reads_it_to_pieces(image, names, **kwargs):
+        Path(image).unlink()
+        raise RuntimeError("debugfs could not make sense of this image")
+
+    with pytest.raises(BootAbandoned) as caught:
+        _boot(
+            plan,
+            tmp_path,
+            monkeypatch,
+            jailer=_writes_the_pid_file(plan),
+            running=lambda pid: False,
+            reader=reads_it_to_pieces,
+        )
+
+    returned = _returned_copy(tmp_path)
+    salvaged = caught.value.teardown["salvaged"]
+    assert returned.exists(), (
+        "the guest's bytes are gone. The copy is the only place they existed "
+        "once debugfs took the image apart, and it has to precede the read"
+    )
+    assert returned.read_bytes() == (tmp_path / "work.ext4").read_bytes()
+    assert salvaged["returned_copy"] == str(returned)
+    assert "why_not" not in salvaged
+    assert not chroot.exists()
+
+
+def test_a_salvage_that_cannot_be_written_says_so_and_the_jail_still_goes(
+    plan, tmp_path, monkeypatch
+):
+    """Failing to keep the bytes is not a reason to keep the jail as well."""
+    chroot = Path(plan["host_side"]["chroot_dir"])
+
+    def jailer(argv, timeout=300.0):
+        Path(plan["host_side"]["pid_file"]).write_text("4242\n")
+        # The directory the copy has to write into stops accepting new entries
+        # between the placement and the failure.
+        os.chmod(tmp_path, 0o555)
+        raise subprocess.TimeoutExpired(argv, 120.0)
+
+    try:
+        with pytest.raises(BootAbandoned) as caught:
+            _boot(
+                plan,
+                tmp_path,
+                monkeypatch,
+                jailer=jailer,
+                running=lambda pid: False,
+                results=_finished(),
+            )
+    finally:
+        os.chmod(tmp_path, 0o755)
+
+    teardown = caught.value.teardown
+    assert teardown["salvaged"]["returned_copy"] is None
+    assert teardown["salvaged"]["why_not"] == "the work disk could not be copied out"
+    assert [f["what"] for f in teardown["failures"]] == [
+        "copy the work disk out of the jail"
+    ]
+    assert teardown["clean"] is False
+    assert not chroot.exists()
+    assert teardown["all_gone"] is True
+
+
+def test_a_removal_that_fails_carries_its_reason_not_a_bare_false(
+    plan, tmp_path, monkeypatch
+):
+    """"Still there" and "still there because" are one boolean and two findings."""
+    chroot = Path(plan["host_side"]["chroot_dir"])
+    chroot.mkdir(parents=True, exist_ok=True)
+
+    def jailer(argv, timeout=300.0):
+        # The jail's parent stops accepting removals after the images are in.
+        os.chmod(chroot.parent, 0o555)
+        raise subprocess.TimeoutExpired(argv, 120.0)
+
+    try:
+        with pytest.raises(BootAbandoned) as caught:
+            _boot(
+                plan,
+                tmp_path,
+                monkeypatch,
+                jailer=jailer,
+                running=lambda pid: False,
+                results=_finished(),
+            )
+    finally:
+        os.chmod(chroot.parent, 0o755)
+
+    teardown = caught.value.teardown
+    assert teardown["all_gone"] is False
+    assert teardown["removed"][chroot.as_posix()] is False
+    assert teardown["clean"] is False
+    removal = [f for f in teardown["failures"] if f["what"] == "remove"]
+    assert removal and "PermissionError" in removal[0]["error"]
+    # The run's own failure is untouched by the cleanup's.
+    assert isinstance(caught.value.original, subprocess.TimeoutExpired)
+    # And the bytes came out before any of that was attempted.
+    assert _returned_copy(tmp_path).exists()
+
+
+def test_a_pid_file_that_was_already_there_is_not_this_runs_to_kill(
+    plan, tmp_path, monkeypatch
+):
+    """Two of these can be on one host at once, and one must not stop the other."""
+    pid_file = Path(plan["host_side"]["pid_file"])
+    pid_file.parent.mkdir(parents=True, exist_ok=True)
+    pid_file.write_text("1\n")  # pid 1 is running on every host there is
+    signalled = []
+    monkeypatch.setattr(os, "kill", lambda pid, sig: signalled.append((pid, sig)))
+
+    with pytest.raises(BootAbandoned) as caught:
+        _boot(
+            plan,
+            tmp_path,
+            monkeypatch,
+            jailer=_raises(subprocess.TimeoutExpired(["jailer"], 120.0)),
+            running=lambda pid: True,
+            results=_finished(),
+        )
+
+    process = caught.value.teardown["process"]
+    assert signalled == []
+    assert process["existed_before_this_run"] is True
+    assert process["signalled"] is False
+    assert process["pid"] is None
+    assert "not this run's to kill" in process["left_alone_because"]
+
+
+def test_this_runs_own_machine_is_stopped_when_it_is_still_running(
+    plan, tmp_path, monkeypatch
+):
+    """The other half of the rule: its own PID file, so its own process."""
+    signalled = []
+    monkeypatch.setattr(os, "kill", lambda pid, sig: signalled.append((pid, sig)))
+
+    def jailer(argv, timeout=300.0):
+        Path(plan["host_side"]["pid_file"]).write_text("4242\n")
+        raise subprocess.TimeoutExpired(argv, 120.0)
+
+    with pytest.raises(BootAbandoned) as caught:
+        _boot(
+            plan,
+            tmp_path,
+            monkeypatch,
+            jailer=jailer,
+            running=lambda pid: True,
+            results=_finished(),
+        )
+
+    process = caught.value.teardown["process"]
+    assert signalled == [(4242, signal.SIGKILL)]
+    assert process["existed_before_this_run"] is False
+    assert process["pid"] == 4242
+    assert process["signalled"] is True
+
+
+def test_only_the_path_the_plan_named_is_removed(plan, tmp_path, monkeypatch):
+    """No glob, no parent, nothing derived from the naming convention.
+
+    A cleanup by pattern cleans up after other runs too. The plan is hash-checked
+    on the way in; a pattern invented during a failure is not.
+    """
+    chroot = Path(plan["host_side"]["chroot_dir"])
+    somebody_elses = chroot.parent / "another-runs-jail"
+    somebody_elses.mkdir(parents=True)
+    (somebody_elses / "work.ext4").write_bytes(b"another guest wrote this")
+
+    with pytest.raises(BootAbandoned):
+        _boot(
+            plan,
+            tmp_path,
+            monkeypatch,
+            jailer=_raises(subprocess.TimeoutExpired(["jailer"], 120.0)),
+            running=lambda pid: False,
+            results=_finished(),
+        )
+
+    assert not chroot.exists()
+    assert somebody_elses.exists()
+    assert (somebody_elses / "work.ext4").read_bytes() == b"another guest wrote this"
+

@@ -482,3 +482,107 @@ def test_the_sentence_is_the_paragraphs_first_line_and_not_a_footnote():
     # And every tool the list names comes after it, not before.
     for entry in availability_for(AgenticV2FixtureBackend):
         assert paragraph.index(entry.tool) > len(A_REFUSAL_ENDS_THE_TASK)
+
+
+# ── Two descriptions of who may admit the microVM ─────────────────────────
+#
+# `core/agentic_v2_runner.py` and `core/agentic_v2_microvm_backend.py` each
+# told a reader, in prose, that no caller in this repository admits the
+# isolated backend. That was true when it was written and stopped being true
+# when `--isolated-approval` was wired to `admitted_identity`, and nothing
+# failed, because prose has no test. These two hold the sentences against the
+# call they describe, in both directions.
+
+
+def _reflowed(path: Path) -> str:
+    """A file's text with its line breaks -- and its comment markers -- removed.
+
+    Both sentences are wrapped prose, one a comment and one a module docstring,
+    so a line-oriented search misses them for the ordinary reason: the wrap
+    lands mid-sentence. Flattening first is what makes the absence real rather
+    than an artefact of where the paragraph happened to break.
+
+    The comment markers come out for the same reason, one step further in. A
+    mutation pass put the stale sentence back across two comment lines and this
+    check stayed green, because joining the lines left a ``#`` sitting in the
+    middle of the sentence it was looking for. A search that any reflow can
+    evade is not a search.
+    """
+    words = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            stripped = stripped[1:]
+        words.extend(stripped.split())
+    return " ".join(words)
+
+
+def _a_caller_supplies_an_admitted_identity() -> bool:
+    """Whether the stage runner really hands the runner an identity to admit.
+
+    Read from the syntax, so that a mention in a comment or a docstring cannot
+    pass for a caller. A call that passes a literal ``None`` is not one either:
+    that is the fixture default, which is the thing the old sentence was
+    describing correctly.
+    """
+    runner_path = BATCH_RUNNER_ROOT / "scripts" / "run_agentic_v2_stage.py"
+    tree = ast.parse(runner_path.read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        for keyword in node.keywords:
+            if keyword.arg != "admitted_identity":
+                continue
+            passes_the_default = (
+                isinstance(keyword.value, ast.Constant)
+                and keyword.value.value is None
+            )
+            if not passes_the_default:
+                return True
+    return False
+
+
+@pytest.mark.parametrize(
+    "module_name",
+    ["agentic_v2_runner", "agentic_v2_microvm_backend"],
+)
+def test_neither_file_still_says_that_no_caller_admits_the_microvm(module_name):
+    """The claim is checked against the call, not blacklisted as a string.
+
+    If the wiring were ever taken back out -- no call supplying anything but
+    the default -- the old sentence becomes true again and this stops asking
+    for it to be gone. A test that only forbade the words would keep forbidding
+    them after they had become correct, which is the same defect one step
+    along: prose pinned to a fact that moved.
+    """
+    text = _reflowed(BATCH_RUNNER_ROOT / "core" / f"{module_name}.py")
+    stale = "no caller in this repository passes anything else"
+    also_stale = "no caller in this repository says otherwise today"
+
+    if _a_caller_supplies_an_admitted_identity():
+        assert stale not in text, (
+            f"core/{module_name}.py says no caller admits the isolated "
+            "backend, and scripts/run_agentic_v2_stage.py passes an identity "
+            "to admit. One of the two has to move"
+        )
+        assert also_stale not in text
+    else:
+        assert "--isolated-approval" not in text, (
+            f"core/{module_name}.py describes a caller that no longer exists"
+        )
+
+
+def test_both_files_say_the_admission_has_to_be_asked_for_on_the_command_line():
+    """What replaced the stale sentence has to carry the condition.
+
+    "One caller can admit it" without "only when the run asks" is a worse
+    description than the one it replaced: it reads as though an ordinary run
+    might. The condition is the whole content of the claim, so it is pinned
+    here rather than left to survive the next reflow on its own.
+    """
+    for module_name in ("agentic_v2_runner", "agentic_v2_microvm_backend"):
+        text = _reflowed(BATCH_RUNNER_ROOT / "core" / f"{module_name}.py")
+        assert "--isolated-approval" in text, (
+            f"core/{module_name}.py names a caller that can admit the "
+            "isolated backend without naming what the caller has to be given"
+        )

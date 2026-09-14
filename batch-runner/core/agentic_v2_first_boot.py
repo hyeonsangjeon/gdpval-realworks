@@ -72,6 +72,33 @@ class BootRefused(RuntimeError):
     """The plan was not run, and the reason is not a boot failure."""
 
 
+class BootAbandoned(RuntimeError):
+    """Something failed after the images were placed, and the jail came down.
+
+    Carries two failures rather than one, because they are two. ``original`` is
+    what went wrong with the run. ``teardown`` is what happened when this module
+    then took its own jail down, including any way that itself went wrong.
+
+    Collapsing them into one string loses the case that matters most: a launch
+    that failed *and* a chroot still sitting on the disk holding the work image.
+    Read as a single sentence those are indistinguishable from a launch that
+    failed and cleaned up after itself, and the second one is a policy breach
+    while the first is a Tuesday.
+    """
+
+    def __init__(
+        self, *, original: BaseException, teardown: Mapping[str, Any]
+    ) -> None:
+        self.original = original
+        self.teardown = dict(teardown)
+        finished = "finished" if self.teardown.get("clean") else "did not finish"
+        super().__init__(
+            f"the run failed after the images were placed "
+            f"({type(original).__name__}: {original}), and the cleanup that "
+            f"followed {finished}"
+        )
+
+
 def _run(argv: list[str], timeout: float = 300.0) -> subprocess.CompletedProcess:
     return subprocess.run(  # noqa: S603
         argv, check=False, capture_output=True, text=True, timeout=timeout
@@ -157,6 +184,13 @@ def first_boot(
     a guest that would not boot, one that overran its deadline, one that booted
     and wrote nothing. Those are findings. It raises only when the plan itself
     is unusable, which is not a finding about a machine.
+
+    A third case sits between those two: the plan was fine and the machine never
+    got far enough to produce a finding, because the jailer was not installed or
+    took longer than its own cap or the image could not be read back. Those
+    raise :class:`BootAbandoned` — but not before this run's own jail, and this
+    run's own process, are taken down. Until 2026-09-14 they raised straight out
+    of here and left the chroot behind, which is where the work disk lives.
     """
     if plan.get("starts_nothing") is not True:
         raise BootRefused("this is not a launch plan from the C1 builder")
@@ -171,48 +205,79 @@ def first_boot(
     host_side = plan["host_side"]
     pid_file = Path(host_side["pid_file"])
     deadline_seconds = float(host_side["deadline_seconds"])
-    placement = place_the_images(
-        plan, kernel=kernel, rootfs=rootfs, work_disk=work_disk, uid=uid, gid=gid
-    )
-    chroot_dir = Path(placement["chroot_dir"])
 
-    started_at = now()
-    launch = _run([jailer_binary, *plan["jailer"]["argv"]], timeout=120.0)
+    # Read before this run creates anything, and never read again. A PID file
+    # that was already there names a process this run did not start, and the
+    # only process this module may ever signal is one whose PID file it watched
+    # appear. Two of these can be on one host at once.
+    pid_file_was_already_there = pid_file.exists()
+    salvage: dict[str, Any] = {"returned_copy": None, "results_read": False}
 
-    pid: int | None = None
-    while now() - started_at < PID_FILE_GRACE_SECONDS:
-        if pid_file.exists():
-            try:
-                pid = int(pid_file.read_text().strip())
-            except ValueError:
-                pid = None
-            if pid:
-                break
-        sleep(POLL_SECONDS)
+    try:
+        placement = place_the_images(
+            plan, kernel=kernel, rootfs=rootfs, work_disk=work_disk, uid=uid, gid=gid
+        )
+        chroot_dir = Path(placement["chroot_dir"])
 
-    outcome = "booted"
-    stopped_by_the_deadline = False
-    if pid is None:
-        outcome = "never_started"
-    else:
-        while _still_running(pid):
-            if now() - started_at >= deadline_seconds:
-                stopped_by_the_deadline = True
-                outcome = "stopped_by_the_deadline"
+        started_at = now()
+        launch = _run([jailer_binary, *plan["jailer"]["argv"]], timeout=120.0)
+
+        pid: int | None = None
+        while now() - started_at < PID_FILE_GRACE_SECONDS:
+            if pid_file.exists():
                 try:
-                    os.kill(pid, signal.SIGKILL)
-                except ProcessLookupError:
-                    stopped_by_the_deadline = False
-                    outcome = "booted"
-                break
+                    pid = int(pid_file.read_text().strip())
+                except ValueError:
+                    pid = None
+                if pid:
+                    break
             sleep(POLL_SECONDS)
-    ran_for = round(now() - started_at, 3)
 
-    disk_in_jail = chroot_dir / "work.ext4"
-    results: dict[str, str | None] = {}
-    if disk_in_jail.exists():
-        results = files_out_of_work_disk(disk_in_jail, WORK_DISK_RESULTS)
-        shutil.copy2(disk_in_jail, str(work_disk) + ".returned")
+        outcome = "booted"
+        stopped_by_the_deadline = False
+        if pid is None:
+            outcome = "never_started"
+        else:
+            while _still_running(pid):
+                if now() - started_at >= deadline_seconds:
+                    stopped_by_the_deadline = True
+                    outcome = "stopped_by_the_deadline"
+                    try:
+                        os.kill(pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        stopped_by_the_deadline = False
+                        outcome = "booted"
+                    break
+                sleep(POLL_SECONDS)
+        ran_for = round(now() - started_at, 3)
+
+        disk_in_jail = chroot_dir / "work.ext4"
+        results: dict[str, str | None] = {}
+        if disk_in_jail.exists():
+            # The copy first, the reading second, and that order is not
+            # interchangeable. This copy is the only place the guest's writes
+            # still exist once the jail is gone; reading the files out of the
+            # image is a convenience on top of it. Reading first meant an image
+            # this module could not parse took the bytes down with it.
+            returned = str(work_disk) + ".returned"
+            shutil.copy2(disk_in_jail, returned)
+            salvage["returned_copy"] = returned
+            results = files_out_of_work_disk(disk_in_jail, WORK_DISK_RESULTS)
+            salvage["results_read"] = True
+    except BaseException as failure:
+        teardown = _clean_up_after_a_failure(
+            host_side=host_side,
+            pid_file=pid_file,
+            pid_file_was_already_there=pid_file_was_already_there,
+            work_disk=work_disk,
+            salvage=salvage,
+        )
+        # KeyboardInterrupt and SystemExit are cleaned up after and then left
+        # alone. Wrapping them would turn a stop into a RuntimeError nobody
+        # asked for; not cleaning up after them would leak the jail on Ctrl-C.
+        if isinstance(failure, Exception):
+            raise BootAbandoned(original=failure, teardown=teardown) from failure
+        raise
 
     exit_status = None
     raw_status = (results.get("/out/exit_status") or "").strip()
@@ -259,12 +324,147 @@ def _destroy(paths: list[str]) -> dict[str, Any]:
     Reported rather than assumed. A chroot that survives holds the work disk,
     which holds whatever the guest wrote, and "destroyed after the run" is part
     of ``workdir: ephemeral-quota`` rather than tidiness.
+
+    **Only the paths the plan named.** No glob, no parent directory, nothing
+    derived from a naming convention. A run that cleans up by pattern cleans up
+    after other runs too, and the plan is hash-checked on the way in while a
+    pattern invented here is not.
+
+    A removal that fails now carries its reason instead of leaving a reader to
+    infer one from the path still being there. "Still there" and "still there
+    because the directory is not writable" are the same boolean and different
+    findings. ``onerror`` rather than ``onexc``: this runs on Python 3.10.
     """
-    gone = {}
+    gone: dict[str, bool] = {}
+    failures: list[dict[str, str]] = []
+
+    def _note_it(_function: Any, path: Any, excinfo: Any) -> None:
+        failures.append(
+            {
+                "what": "remove",
+                "path": str(path),
+                "error": f"{type(excinfo[1]).__name__}: {excinfo[1]}",
+            }
+        )
+
     for path in paths:
-        shutil.rmtree(path, ignore_errors=True)
+        # Absent already is not a failure, and was not one under ignore_errors
+        # either. Handing rmtree a missing path would report one.
+        if Path(path).exists():
+            shutil.rmtree(path, onerror=_note_it)
         gone[path] = not Path(path).exists()
-    return {"removed": gone, "all_gone": all(gone.values()) if gone else False}
+    return {
+        "removed": gone,
+        "all_gone": all(gone.values()) if gone else False,
+        "failures": failures,
+    }
+
+
+def _clean_up_after_a_failure(
+    *,
+    host_side: Mapping[str, Any],
+    pid_file: Path,
+    pid_file_was_already_there: bool,
+    work_disk: str | Path,
+    salvage: dict[str, Any],
+) -> dict[str, Any]:
+    """Take down what this run started, in the order that keeps the results.
+
+    Three obligations, and the order of the first two cannot be swapped:
+
+    1. the work disk comes out of the jail *before* the jail is removed, because
+       the copy beside it is the only place the guest's writes still exist;
+    2. the jail is removed, because ``workdir: ephemeral-quota`` is a policy and
+       not tidiness;
+    3. nothing here touches a path or a process this run did not create.
+
+    The third is the one worth stating as a rule. A process is signalled only
+    when its PID file did not exist before this run launched anything — a file
+    that was already there names something else's machine — and only the paths
+    in ``destroy_after_the_run`` are removed.
+
+    Failures are collected, never raised. This runs while another exception is
+    already on its way out, and an error raised from in here would replace the
+    reason the run failed with the reason the cleanup failed. Both are wanted,
+    which is why the caller gets them in two places.
+    """
+    failures: list[dict[str, str]] = []
+
+    # Derived from the plan rather than from however far the caller got, so a
+    # placement that failed half way through still has its jail found.
+    chroot_dir = Path(str(host_side["chroot_dir"]))
+    if salvage.get("returned_copy") is None:
+        disk_in_jail = chroot_dir / "work.ext4"
+        if not disk_in_jail.exists():
+            salvage["why_not"] = "no work disk reached the jail"
+        else:
+            returned = str(work_disk) + ".returned"
+            try:
+                shutil.copy2(disk_in_jail, returned)
+                salvage["returned_copy"] = returned
+            except OSError as failure:
+                salvage["why_not"] = "the work disk could not be copied out"
+                failures.append(
+                    {
+                        "what": "copy the work disk out of the jail",
+                        "path": returned,
+                        "error": f"{type(failure).__name__}: {failure}",
+                    }
+                )
+
+    process: dict[str, Any] = {
+        "pid_file": pid_file.as_posix(),
+        "existed_before_this_run": pid_file_was_already_there,
+        "pid": None,
+        "signalled": False,
+        "left_alone_because": None,
+    }
+    if pid_file_was_already_there:
+        process["left_alone_because"] = (
+            "this PID file was there before this run launched anything, so "
+            "whatever it names is not this run's to kill"
+        )
+    elif not pid_file.exists():
+        process["left_alone_because"] = "no PID file appeared, so nothing started"
+    else:
+        try:
+            process["pid"] = int(pid_file.read_text().strip())
+        except (OSError, ValueError) as failure:
+            process["left_alone_because"] = "the PID file held no readable PID"
+            failures.append(
+                {
+                    "what": "read this run's PID file",
+                    "path": pid_file.as_posix(),
+                    "error": f"{type(failure).__name__}: {failure}",
+                }
+            )
+        else:
+            if not _still_running(int(process["pid"])):
+                process["left_alone_because"] = "it had already stopped"
+            else:
+                try:
+                    os.kill(int(process["pid"]), signal.SIGKILL)
+                    process["signalled"] = True
+                except OSError as failure:
+                    failures.append(
+                        {
+                            "what": "stop this run's machine",
+                            "path": pid_file.as_posix(),
+                            "error": f"{type(failure).__name__}: {failure}",
+                        }
+                    )
+
+    destroyed = _destroy(list(host_side.get("destroy_after_the_run", [])))
+    failures.extend(destroyed["failures"])
+    return {
+        "after_a_failure": True,
+        "removed": destroyed["removed"],
+        "all_gone": destroyed["all_gone"],
+        "failures": failures,
+        "clean": not failures,
+        "process": process,
+        "salvaged": salvage,
+    }
 
 
 def unjailed_image_check(

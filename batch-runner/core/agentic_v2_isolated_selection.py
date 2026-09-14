@@ -169,11 +169,27 @@ HANDWRITTEN_NOTES: Mapping[str, Any] = {
 def what_a_booted_host_left(path: str | Path) -> dict[str, Any]:
     """Stage C2's artefact, or a refusal that says which thing is missing.
 
-    Four refusals rather than one, because they ask four different things of
-    whoever reads them: run C2, run C2 *here*, fix the host, or go and look at
-    why the boot failed. A single "the isolated backend is unavailable" would
-    hide which, and the difference is the difference between a five-minute fix
-    and a re-provisioned machine.
+    A refusal per thing that can be wrong, rather than one for all of them,
+    because they ask different things of whoever reads them: run C2, run C2
+    *here*, fix the host, re-run the boot that failed, or go and look at what
+    wrote this file. A single "the isolated backend is unavailable" would hide
+    which, and the difference is the difference between a five-minute fix and a
+    re-provisioned machine.
+
+    **Absent evidence is refused, not skipped.** Until 2026-09-14 the kernel
+    check read ``host.kernel_release`` with ``or ""`` and then compared only if
+    the result was non-empty, so an artefact with no ``host`` block, no
+    ``kernel_release``, or an empty one passed the check that exists to catch
+    exactly that. An artefact that says nothing about the machine it ran on is
+    the case this check is for, not an exemption from it.
+
+    **What a matching release does and does not establish.** Two hosts
+    provisioned from one image report the same release, so equality here is not
+    a host identity and must not be read as one. What it rules out is an
+    artefact carried over from a *differently* provisioned machine. The host is
+    pinned by the other checks — the recorded binaries still being where they
+    were, and the images still hashing to what they hashed to — and by the
+    approval naming the artefact.
 
     Lifted from ``scripts/run_agentic_stage_d_probe.py`` so the cohort path gets
     the same refusals rather than a second set that drifts from them.
@@ -197,17 +213,46 @@ def what_a_booted_host_left(path: str | Path) -> dict[str, Any]:
             "to run its commands on"
         )
 
-    recorded = str((artefact.get("host") or {}).get("kernel_release") or "")
-    running = os.uname().release
-    if recorded and recorded != running:
+    host = artefact.get("host")
+    if host is None:
         raise IsolatedBackendRefused(
-            f"the guest booted on kernel {recorded} and this host is running "
-            f"{running}, so the artefact describes a different machine than the "
-            "one about to be paid for"
+            "the artefact carries no host block, so nothing in it says which "
+            "machine the guest booted on. That is the case this check exists "
+            "for, and it is refused rather than waved through"
+        )
+    if not isinstance(host, dict):
+        raise IsolatedBackendRefused(
+            f"the artefact's host is a {type(host).__name__} rather than a "
+            "block of host facts, so it was not written by the first-boot "
+            "script and nothing in it can be read as evidence"
+        )
+    recorded = host.get("kernel_release")
+    if recorded is None:
+        raise IsolatedBackendRefused(
+            "the artefact's host block records no kernel_release, so there is "
+            "no evidence that the machine about to be paid for is the machine "
+            "that booted a guest"
+        )
+    if not isinstance(recorded, str):
+        raise IsolatedBackendRefused(
+            f"the artefact's host.kernel_release is a {type(recorded).__name__} "
+            "rather than a release string, so it names no kernel"
+        )
+    if not recorded.strip():
+        raise IsolatedBackendRefused(
+            "the artefact's host.kernel_release is empty, which is not a kernel "
+            "this host can be compared against"
+        )
+    running = os.uname().release
+    if recorded.strip() != running:
+        raise IsolatedBackendRefused(
+            f"the guest booted on kernel {recorded.strip()} and this host is "
+            f"running {running}, so the artefact describes a different machine "
+            "than the one about to be paid for"
         )
 
     for binary in ("firecracker", "jailer"):
-        where = (artefact.get("host") or {}).get(binary)
+        where = host.get(binary)
         if not where or not Path(str(where)).exists():
             raise IsolatedBackendRefused(
                 f"{binary} was recorded at {where!r} and it is not there now"
@@ -452,6 +497,14 @@ def select_backend(
             "first_boot_artefact": Path(first_boot_artefact).as_posix(),
             "images_rechecked": images,
             "kernel_release": os.uname().release,
+            "what_the_kernel_release_shows": (
+                "that this host and the artefact's host report the same "
+                "release, which rules out an artefact carried over from a "
+                "differently provisioned machine. It is not a host identity — "
+                "two machines built from one image report the same string — "
+                "and it is recorded next to the value so that nobody reads the "
+                "value as more than it is"
+            ),
         },
     )
 
