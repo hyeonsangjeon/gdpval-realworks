@@ -785,12 +785,14 @@ BY_A_PINNED_HANDLE = "pidfd"
 """The signal went through a descriptor pinned to one process."""
 
 BY_THE_NUMBER_RECHECKED = "number_rechecked"
-"""The signal went by number, with the start time re-read immediately before.
+"""Historical only: a stop this code used to send by number.
 
-Which leaves a gap: the re-read and the signal are two operations, and between
-them the number can be handed on. It is the narrowest the number alone allows
-and it is not zero, so the artefact records which of the two was used rather
-than reporting a stop the same way in both cases.
+Kept so a reader of a run recorded before 2026-09-15 still has the name for
+what it is holding. **Nothing in this module writes it any more.** The by-number
+path it named re-read the start time and then signalled — two operations, with
+the number free to be handed on between them — and that gap was accepted on the
+strength of :data:`HANDLE_UNSUPPORTED`, which says only that the *capability*
+is missing. A missing capability is not permission to use a racier one.
 """
 
 
@@ -807,12 +809,17 @@ HANDLE_UNSUPPORTED = "unsupported"
 """No handle because this kernel or interpreter does not have the interface.
 
 ``ENOSYS`` from the syscall, or the attribute missing from the interpreter.
-This is the *only* verdict that may go on to signal by number, and it may do
-so because it is a statement about the whole host rather than about one
-process: a host that answers ``ENOSYS`` has no pidfd for anything, and
+Both mean the same thing and this is the change of 2026-09-15: *the safe way to
+stop a process is unavailable here*. That is a statement about the host, and it
+used to be read as permission to fall back to the number. It is not. The two
+facts are unrelated — a host that cannot pin a process has not thereby shown
+that a given number still names this run's process, which is the only thing
+that would make signalling it safe.
+
+So this verdict refuses like the rest, and the jail is kept.
 :data:`OLDEST_HOST_KERNEL_FIRECRACKER_VALIDATES` sits above the releases that
-added the interface, so such a host is already outside what Firecracker
-validates and cannot be the one a guest is booted on.
+added the interface, so a host that reaches here is already outside what
+Firecracker validates and cannot be one a guest is booted on.
 """
 
 HANDLE_DENIED = "denied"
@@ -828,19 +835,30 @@ signal — so none of them does.
 """
 
 HANDLE_UNKNOWN = "unknown"
-"""No handle, and the reason is not one of the above.
+"""No handle, or no way to tell what the handle names.
 
-Descriptor exhaustion, a kernel that answered something undocumented, an
-interpreter built against a different libc. Unknown is not permission to
-proceed; it is refused exactly like :data:`HANDLE_DENIED`, because the thing
-that is unknown is whether the process is this run's.
+Two routes reach it. One is a reason the ``pidfd_open`` taxonomy cannot read —
+descriptor exhaustion, an undocumented errno, an interpreter built against a
+different libc. The other is a handle that opened while ``/proc`` would not say
+when the process began, so whether the number moved between admission and the
+open is unanswered.
+
+Unknown is not permission to proceed; it is refused exactly like
+:data:`HANDLE_DENIED`, because the thing that is unknown is whether the process
+is this run's. It is also not :data:`HANDLE_HANDED_ON`: that verdict is a
+positive finding that the number now names something else, and it lets the
+caller treat this run's machine as stopped. Unknown does not.
 """
 
-MAY_SIGNAL_BY_NUMBER_INSTEAD = frozenset({HANDLE_UNSUPPORTED})
-"""The verdicts that allow the by-number path. Deliberately one element.
+NO_VERDICT_MAY_SIGNAL_BY_NUMBER = True
+"""There is no verdict that sends ``SIGKILL`` to a bare number. Declared.
 
-Written as a set so the allowance is a piece of data a reader can check,
-rather than the shape of an ``if`` that grew an ``or``.
+This replaced a ``frozenset`` of the verdicts allowed to fall back, which held
+exactly :data:`HANDLE_UNSUPPORTED`. A set with one member reads as a dial that
+happens to be turned down; the fact is that the by-number path is gone from
+this module, so the shape that says so is a flag and not a set. A test asserts
+that the module's own source sends no ``SIGKILL`` to a bare number any more,
+which is the claim this constant makes in prose.
 """
 
 
@@ -853,9 +871,10 @@ PIDFD_OPEN_ARRIVED_IN = (5, 3)
 Both are here so the relationship between them and
 ``OLDEST_HOST_KERNEL_FIRECRACKER_VALIDATES`` can be asserted rather than
 asserted-in-prose: the oldest kernel Firecracker's own policy lists is above
-both, so a host that clears the containment readiness check has this interface
-and the by-number path below is reachable only on hosts that check already
-reports as outside what Firecracker validates. This host is one of those.
+both, so a host that clears the containment readiness check has this interface.
+A host that does not have it cannot be stopped safely by this module at all,
+and since 2026-09-15 is refused rather than signalled by number. This host is
+one of those.
 """
 
 
@@ -876,27 +895,37 @@ def _a_handle_pinned_to(pid: int, started: int) -> tuple[int | None, str, str]:
     and the residue there is a replacement that began inside the same clock tick
     as the process it replaced — a process that lived under ten milliseconds.
 
-    **Where it is not available, and why that is four answers and not one.**
+    **Where it is not available, and why every one of those answers refuses.**
     ``pidfd_open`` is a syscall, not a library call, and an old kernel answers
     ``ENOSYS`` no matter what the interpreter exposes. This host is one of
     those, so nothing in this repository's own test runs takes the handle path.
 
-    That case — :data:`HANDLE_UNSUPPORTED` — is the only one that goes on to
-    signal by number, and the reason is that it is a fact about the host rather
-    than about the process: a kernel without the call has no handle for
-    *anything*, and :data:`OLDEST_HOST_KERNEL_FIRECRACKER_VALIDATES` sits above
-    the releases that added both halves of the interface, so such a host is
-    already outside what Firecracker validates.
+    That case — :data:`HANDLE_UNSUPPORTED` — used to be the one verdict that
+    went on to signal by number, on the grounds that it is a fact about the host
+    rather than about the process. The grounds were sound and the conclusion did
+    not follow. "This kernel cannot pin a process" and "this number still names
+    the process this run admitted" are unrelated statements, and only the second
+    would make a bare ``kill`` safe. Since 2026-09-15 it refuses with the rest.
 
-    A refusal is not that. ``EPERM`` from a kernel that *has* the call is a
-    statement about this run's relationship to that particular process, and so
-    is an errno this code cannot read. Both refuse
-    (:data:`HANDLE_DENIED`, :data:`HANDLE_UNKNOWN`) rather than reaching for a
-    weaker way to send the same signal, because the question they leave open is
-    whether the process is this run's — and "I could not check" has never been
-    an answer to that. The earlier version of this function folded every
-    ``OSError`` into "this kernel has no pidfd", which on a new kernel was a
-    false statement that authorised the weaker path.
+    ``EPERM`` from a kernel that *has* the call is a statement about this run's
+    relationship to that particular process, and so is an errno this code cannot
+    read, and so is a handle that opened over a ``/proc`` that would not say
+    when the process began. All three refuse (:data:`HANDLE_DENIED`,
+    :data:`HANDLE_UNKNOWN`) rather than reaching for a weaker way to send the
+    same signal, because the question they leave open is whether the process is
+    this run's — and "I could not check" has never been an answer to that. The
+    earlier version of this function folded every ``OSError`` into "this kernel
+    has no pidfd", which on a new kernel was a false statement that authorised
+    the weaker path.
+
+    **An unreadable start time is not a handover.** Reading it back is how the
+    open is checked, and ``_when_that_process_started`` answers ``None`` for
+    every way that reading can fail. Treating ``None`` as "different from what
+    was admitted" put those failures in :data:`HANDLE_HANDED_ON`, whose meaning
+    to the caller is *the machine is not there any more* — so a ``/proc`` this
+    run could not read reported a stop that had not happened. They are split
+    here: a value that reads back and differs is a handover, and no value at all
+    is :data:`HANDLE_UNKNOWN`.
     """
     try:
         handle = os.pidfd_open(pid)
@@ -934,7 +963,23 @@ def _a_handle_pinned_to(pid: int, started: int) -> tuple[int | None, str, str]:
             f"a handle on process {pid} could not be taken and the reason is not "
             f"one this code knows how to read ({named}: {failed})",
         )
-    if _when_that_process_started(pid) != started:
+    started_now = _when_that_process_started(pid)
+    if started_now is None:
+        # Not a finding. ``_when_that_process_started`` returns ``None`` for
+        # every unreadable ``/proc`` — a process that ended, a ``/proc`` this
+        # run may not read, a line it could not parse — and none of those says
+        # the number was handed on. Folding them into HANDLE_HANDED_ON told the
+        # caller "gone or someone else's", which is the one verdict that makes
+        # the caller stop *without* keeping the jail. Unknown keeps the jail.
+        os.close(handle)
+        return (
+            None,
+            HANDLE_UNKNOWN,
+            f"a handle on process {pid} was taken and its start time could not "
+            "be read back, so whether it is still the process this run "
+            "admitted is unknown",
+        )
+    if started_now != started:
         os.close(handle)
         return (
             None,
@@ -972,18 +1017,25 @@ def _stop_the_process_this_run_identified(pid: int, started: int) -> dict[str, A
     """Send ``SIGKILL`` to a process that has already been admitted as this run's.
 
     Admission is the caller's job and has happened before this is reached. What
-    is left is the gap between deciding and acting, and the two ways of closing
-    it are not equally good:
+    is left is the gap between deciding and acting, and there is now one way of
+    closing it rather than two: through a pinned descriptor, the decision and
+    the signal name the same object, so there is nothing to close.
 
-    * through a pinned descriptor, the decision and the signal name the same
-      object, so there is nothing to close.
-    * by number, the best available is to read the start time again and signal
-      immediately after — which is what the by-number path does, and which
-      leaves the two-operation gap this function exists to report honestly.
+    **The other way is gone.** Until 2026-09-15 a verdict of
+    :data:`HANDLE_UNSUPPORTED` fell through to ``os.kill`` with the start time
+    re-read immediately before. Two operations, and the number could be handed
+    on between them. The justification was that "this kernel has no pidfd"
+    describes the host, not the process — which is true, and does not help: it
+    says the safe instrument is missing, not that the unsafe one is accurate
+    here. Every verdict other than :data:`HANDLE_TAKEN` and the two that mean
+    the process is not there now refuses, and the jail stays where it is.
 
     ``already_gone`` is its own answer rather than a failure. A process that
     ended between the decision and the signal is not an error and is not a
-    refusal; it is the machine having stopped, which is what was wanted.
+    refusal; it is the machine having stopped, which is what was wanted. It is
+    reached only from a *positive* finding — ``ProcessLookupError`` from
+    ``pidfd_open``, or a start time that reads back as a different value — never
+    from a reading this run could not take.
     """
     handle, verdict, why_no_handle = _a_handle_pinned_to(pid, started)
     if handle is not None:
@@ -1041,46 +1093,21 @@ def _stop_the_process_this_run_identified(pid: int, started: int) -> dict[str, A
             "handle_verdict": verdict,
             "signal_target": None,
         }
-    if verdict not in MAY_SIGNAL_BY_NUMBER_INSTEAD:
-        # Denied, or a reason this code cannot read. The process may well be
-        # this run's, and it may well still be running — neither is established,
-        # and a signal by number would be sent on the strength of neither. The
-        # machine is left where it is and the jail is left with it.
-        return {
-            "signalled": False,
-            "how": None,
-            "already_gone": False,
-            "refused_because": why_no_handle,
-            "handle_verdict": verdict,
-            "signal_target": None,
-        }
-    if not _still_the_same_process(pid, started):
-        return {
-            "signalled": False,
-            "how": None,
-            "already_gone": True,
-            "refused_because": "",
-            "handle_verdict": verdict,
-            "signal_target": None,
-        }
-    try:
-        os.kill(pid, signal.SIGKILL)
-    except ProcessLookupError:
-        return {
-            "signalled": False,
-            "how": None,
-            "already_gone": True,
-            "refused_because": "",
-            "handle_verdict": verdict,
-            "signal_target": None,
-        }
+    # Denied, unsupported, or a reason this code cannot read. None of the three
+    # establishes that the number still names this run's process, and that is
+    # the only fact a signal by number would have to stand on. Unsupported used
+    # to be excepted here on the grounds that it describes the host rather than
+    # the process — true, and beside the point: a host with no way to pin a
+    # process has not thereby shown the number is still the right one. The
+    # machine is left where it is and the jail is left with it, which is what
+    # lets a later reader see that this run did not finish clearing up.
     return {
-        "signalled": True,
-        "how": BY_THE_NUMBER_RECHECKED,
+        "signalled": False,
+        "how": None,
         "already_gone": False,
         "refused_because": why_no_handle,
         "handle_verdict": verdict,
-        "signal_target": pid,
+        "signal_target": None,
     }
 
 
@@ -1903,6 +1930,14 @@ def first_boot(
                     outcome = "overran_and_was_left_alone"
                     left_alone_because = stop["refused_because"]
                     stop_handle = None
+                    # Which reading it refused on, carried out in the field that
+                    # exists to be read rather than only inside the sentence
+                    # above. A host with no ``pidfd`` at all and a host that had
+                    # one and would not hand it over are different things to go
+                    # and do something about, and after this path became the
+                    # only ending a refusal has, leaving the field at ``None``
+                    # would have made them the same record.
+                    stop_handle_verdict = stop["handle_verdict"]
                     break
                 stop_signal_sent = True
                 stop_handle = stop["how"]

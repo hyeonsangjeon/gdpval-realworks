@@ -68,7 +68,9 @@ signalled, still be confirmed stopped and still have its jail taken down.
 
 from __future__ import annotations
 
+import ast
 import errno
+import inspect
 import os
 import platform
 import signal
@@ -84,6 +86,10 @@ from core.agentic_v2_first_boot import (
     BY_A_PINNED_HANDLE,
     BY_THE_NUMBER_RECHECKED,
     CANNOT_RULE_OUT,
+    HANDLE_HANDED_ON,
+    HANDLE_UNKNOWN,
+    HANDLE_UNSUPPORTED,
+    NO_VERDICT_MAY_SIGNAL_BY_NUMBER,
     OUTCOME_STARTED_AND_NOT_IDENTIFIED,
     OUTCOMES_THAT_LEAVE_THE_HOST_RUNNING,
     PIDFD_OPEN_ARRIVED_IN,
@@ -605,11 +611,47 @@ def test_g6_the_residue_is_the_jail_not_the_interval_and_the_claim_is_no_wider(
     )
 
 
+def _this_kernel_hands_out_handles() -> bool:
+    """Whether ``pidfd_open`` works here, asked of this process and nothing else.
+
+    Since the by-number fallback was removed there is exactly one way for this
+    module to stop a machine, and on a kernel without ``pidfd_open`` that way is
+    not available — so the two owned controls below cannot pass here and are not
+    asserted here. That is a statement about this box, not a hole in the target:
+    :func:`test_k1c_a_host_firecracker_validates_always_has_the_handle` is the
+    measurement showing every host that clears the containment readiness check
+    has the descriptor, and a host that does not clear it cannot boot a guest
+    for these paths to stop.
+
+    The probe opens a handle on the interpreter itself and closes it at once.
+    ``os.pidfd_open`` has existed as a name since Python 3.9 and will happily
+    call a syscall the kernel does not implement, so the attribute is not the
+    question.
+    """
+    try:
+        handle = os.pidfd_open(os.getpid())
+    except (OSError, AttributeError):
+        return False
+    os.close(handle)
+    return True
+
+
+_NEEDS_A_HANDLE = pytest.mark.skipif(
+    not _this_kernel_hands_out_handles(),
+    reason=(
+        "this kernel hands out no pidfd, so the only remaining stop path cannot "
+        "run here. It runs in CI and on the target host; the stand-in controls "
+        "k1b and j1b keep this box from going green on an all-refusal build"
+    ),
+)
+
+
 # --------------------------------------------------------------------------
 # H — the normal stop path, at the deadline
 # --------------------------------------------------------------------------
 
 
+@_NEEDS_A_HANDLE
 def test_h1_an_owned_guest_that_overruns_is_still_signalled_and_confirmed(
     plan, tmp_path, monkeypatch, sleepers
 ):
@@ -832,6 +874,7 @@ def test_h5_nothing_published_is_not_a_start_failure(plan, tmp_path, monkeypatch
 # --------------------------------------------------------------------------
 
 
+@_NEEDS_A_HANDLE
 def test_j1_teardown_stops_a_process_this_run_started(
     plan, tmp_path, monkeypatch, sleepers
 ):
@@ -863,6 +906,61 @@ def test_j1_teardown_stops_a_process_this_run_started(
     assert process["pid_started_at_ticks"] is not None
     assert process["launch_floor"]["ticks_since_boot"] is not None
     assert (ours, signal.SIGKILL) in spy.real_signals
+
+
+def test_j1b_the_teardown_control_on_a_box_without_the_syscalls(
+    plan, tmp_path, monkeypatch, sleepers
+):
+    """The same control as ``j1``, run here, with the two syscalls stood in for.
+
+    ``j1`` is skipped on this kernel, and a skipped positive control is a gap
+    with a good excuse: an implementation that refused every stop unconditionally
+    would pass everything still running here, and that is precisely the shape
+    the design forbids. So the pair to :func:`test_k1b_with_a_handle_the_signal_does_not_go_by_number`
+    exists for the failure path too — ``k1b`` keeps the ordinary path honest on
+    this box and this keeps the teardown path honest.
+
+    What it establishes is bounded in the same way ``k1b``'s is. Everything
+    except ``pidfd_open`` and ``pidfd_send_signal`` is real: a real sleeper, real
+    ``/proc`` reads, the real confirmation loop, the real exception being carried
+    out. What a kernel that implements those two syscalls actually does with them
+    is not observable from here and is not claimed — that is what ``j1`` is for,
+    where it can run.
+    """
+    opened: list[int] = []
+
+    def open_handle(pid, flags=0):
+        opened.append(pid)
+        return os.open(os.devnull, os.O_RDONLY)
+
+    def send(handle, signum, *args, **kwargs):
+        os.kill(opened[-1], signum)
+
+    monkeypatch.setattr(os, "pidfd_open", open_handle, raising=False)
+    monkeypatch.setattr(signal, "pidfd_send_signal", send, raising=False)
+
+    with pytest.raises(BootAbandoned) as abandoned:
+        _boot(
+            plan,
+            tmp_path,
+            monkeypatch,
+            jailer=_a_jailer_that_starts_a_guest_then_fails(plan, sleepers),
+        )
+
+    ours = sleepers.started[-1]
+    assert "TimeoutExpired" in str(abandoned.value)
+
+    process = abandoned.value.teardown["process"]
+    assert process["pid"] == ours
+    assert process["was_running"] is True
+    assert process["signalled"] is True
+    assert process["stop_handle"] == BY_A_PINNED_HANDLE
+    assert process["confirmed_stopped"] is True
+    # The handle was opened on the sleeper before anything was sent, so the
+    # signal did not go out on a number looked up separately.
+    assert opened and opened[0] == ours
+    # And the jail went with it, because this time the stop was established.
+    assert abandoned.value.teardown["destroy_refused_because"] is None
 
 
 def test_j2_teardown_refuses_a_process_older_than_the_launch_and_keeps_the_artefact(
@@ -1003,22 +1101,34 @@ def test_j5_a_floor_from_before_a_restart_refuses_on_the_reboot_reading(
 # --------------------------------------------------------------------------
 
 
-def test_k1_the_fallback_is_declared_rather_than_silent(
+def test_k1_without_a_handle_nothing_is_signalled_and_the_jail_stays(
     plan, tmp_path, monkeypatch, sleepers
 ):
-    """Without a handle the stop still happens, and it says so.
+    """No handle, no stop — and the jail is left where a person can find it.
 
-    This used to assert that ``pidfd_open`` was never called at all. The reason
-    given was a good one — a silent fallback from a failed probe is the implicit
-    unsafe path the design forbids — but the conclusion drawn from it was too
-    strong. What has to be forbidden is the *silence*, not the probe: a run that
-    stopped its machine by number and a run that stopped it through a pinned
-    descriptor are carrying different evidence, and an artefact that reported
-    both the same way would be hiding that from whoever reads it.
+    This assertion has been rewritten twice and it is worth saying what each
+    version was for. The first forbade ``pidfd_open`` from being *called*, on
+    the grounds that silently retreating from a failed probe is the implicit
+    unsafe path the design forbids. True about the silence, too strong about the
+    probe: it banned the instrument rather than the retreat. The second allowed
+    the retreat and demanded it be named, so a run that stopped its machine by
+    number and a run that stopped it through a pinned descriptor carried visibly
+    different evidence.
 
-    So the fallback is exercised here by poisoning both halves of the interface,
-    and what is asserted is that the machine still stops — the over-safe
-    direction is a failure too — and that the record names which way it went.
+    The second is what is being replaced. Naming the weaker path made it
+    readable; it did not make it sound. ``ENOSYS`` says this kernel has no way
+    to pin a process — which is a fact about the host and not a licence to
+    assume the number still names the right process — and the one thing a signal
+    by number needs is exactly that assumption. So the retreat is gone rather
+    than labelled, and what a poisoned interface produces now is a refusal.
+
+    Three things are asserted about that refusal, because a refusal that only
+    declines is not obviously better than the thing it replaced. Nothing is sent
+    at the sleeper. The record says why in words a reader can act on and in the
+    verdict field, so "this kernel never had it" and "this kernel refused this
+    run" stay different findings. And the jail stays on disk — that is the part
+    that makes the leak visible later instead of being tidied away by the run
+    that caused it.
     """
 
     def poisoned(*args, **kwargs):
@@ -1036,9 +1146,211 @@ def test_k1_the_fallback_is_declared_rather_than_silent(
         jailer=_a_jailer_that_starts_a_guest(plan, sleepers),
     )
 
-    assert result["outcome"] == "stopped_by_the_deadline"
-    assert (sleepers.started[-1], signal.SIGKILL) in spy.real_signals
-    assert result["stop_handle"] == BY_THE_NUMBER_RECHECKED
+    ours = sleepers.started[-1]
+    assert result["outcome"] == "overran_and_was_left_alone"
+    assert result["outcome"] in OUTCOMES_THAT_LEAVE_THE_HOST_RUNNING
+    assert (ours, signal.SIGKILL) not in spy.real_signals, (
+        "a SIGKILL went out by number on a host that cannot pin a process, "
+        "which is the fallback this change removed"
+    )
+    assert result["stop_handle"] is None
+    assert result["stop_handle_verdict"] == HANDLE_UNSUPPORTED
+    left_alone = result["pid_file"]["left_alone_because"]
+    assert left_alone and "no pidfd" in left_alone
+    assert result["teardown"]["refused_because"], (
+        "the jail was removed after a stop that was never established, which "
+        "takes away the only durable sign that this run left a machine behind"
+    )
+    # The sleeper is still there — this test really did leave it running, and
+    # the fixture is what takes it away rather than the code under test.
+    os.kill(ours, 0)
+
+
+def test_k1a_the_module_sends_no_signal_to_a_bare_number(monkeypatch):
+    """Read out of the module's own syntax, not out of its behaviour.
+
+    :func:`test_k1_without_a_handle_nothing_is_signalled_and_the_jail_stays`
+    covers the path that used to fall back. It cannot cover a path someone adds
+    next year, and "we removed it" is the kind of claim that quietly stops being
+    true one edit at a time. So the source is parsed and every ``os.kill`` in it
+    is looked at: the second argument must be the literal ``0``, which asks
+    whether a process is there and sends nothing.
+
+    Two of those exist and both are liveness probes. A third that carried a
+    signal would be a stop by number however it was spelled, and this fails on
+    it without needing to know what the surrounding code was trying to do.
+
+    ``NO_VERDICT_MAY_SIGNAL_BY_NUMBER`` says the same thing in prose for a
+    person reading the module, and is asserted here so the flag and the syntax
+    cannot drift apart.
+    """
+    tree = ast.parse(inspect.getsource(agentic_v2_first_boot))
+    signalling = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        callee = node.func
+        if not (isinstance(callee, ast.Attribute) and callee.attr == "kill"):
+            continue
+        if not (isinstance(callee.value, ast.Name) and callee.value.id == "os"):
+            continue
+        second = node.args[1] if len(node.args) > 1 else None
+        sends_nothing = isinstance(second, ast.Constant) and second.value == 0
+        if not sends_nothing:
+            signalling.append((node.lineno, ast.unparse(node)))
+
+    assert signalling == [], (
+        "these send a signal to a number rather than through a handle pinned "
+        f"to a process: {signalling}. A number is the one part of a process's "
+        "identity the kernel hands out again"
+    )
+    assert NO_VERDICT_MAY_SIGNAL_BY_NUMBER is True
+
+
+def test_k1d_the_old_word_stays_readable_and_stays_unwritten(monkeypatch):
+    """Records written before 2026-09-15 still say ``number_rechecked``.
+
+    Deleting the constant would not delete those artefacts; it would only stop
+    anyone from matching against them by name, and a reader who found the string
+    in an old run record would have nothing in the tree to look it up in. So the
+    name survives with its value unchanged.
+
+    What must not survive is the writing. The two are easy to confuse — keeping
+    a constant for readers looks exactly like keeping it for use — so the second
+    half asserts the module mentions it once, at its definition, and nowhere
+    else.
+    """
+    assert BY_THE_NUMBER_RECHECKED == "number_rechecked"
+    assert BY_THE_NUMBER_RECHECKED != BY_A_PINNED_HANDLE
+
+    source = inspect.getsource(agentic_v2_first_boot)
+    written = [
+        (number, line.strip())
+        for number, line in enumerate(source.splitlines(), start=1)
+        if "BY_THE_NUMBER_RECHECKED" in line
+    ]
+    assert len(written) == 1 and written[0][1].startswith(
+        "BY_THE_NUMBER_RECHECKED ="
+    ), f"the historical word is being written again: {written}"
+
+
+def _a_handle_whose_start_time_reads_back(value, monkeypatch, *, opened):
+    """Stand in for the two ``/proc``-and-syscall readings the stop path takes.
+
+    ``pidfd_open`` answers with a real descriptor — this box has no working one
+    — and the start-time read that :func:`_a_handle_pinned_to` takes *after*
+    that descriptor is open answers with whatever ``value`` computes. Every
+    earlier reading is left alone, which matters: the ownership interval is
+    decided from those, and a fake that answered from the start would change
+    what got admitted rather than what happened once it was.
+
+    ``value`` receives the real reading for the same PID, so a caller can ask
+    for "one tick later" without knowing what the real one is.
+    """
+    real = agentic_v2_first_boot._when_that_process_started
+
+    def open_handle(pid, flags=0):
+        opened.append(pid)
+        return os.open(os.devnull, os.O_RDONLY)
+
+    def reading(pid):
+        truth = real(pid)
+        return value(truth) if opened else truth
+
+    monkeypatch.setattr(os, "pidfd_open", open_handle, raising=False)
+    monkeypatch.setattr(
+        agentic_v2_first_boot, "_when_that_process_started", reading
+    )
+
+
+def test_k1e_an_unreadable_start_time_keeps_the_machine_and_the_jail(
+    plan, tmp_path, monkeypatch, sleepers
+):
+    """``None`` from ``/proc`` is not a report that the process went.
+
+    Until 2026-09-15 :func:`_a_handle_pinned_to` compared the start time it read
+    back after opening the handle against the one that was admitted and called
+    any difference a handover — including the difference between a number and
+    ``None``. ``_when_that_process_started`` answers ``None`` for every way that
+    reading can fail: a process that ended, a ``/proc`` this run may not read, a
+    line it could not parse. Only the first of those is the process going away.
+
+    The consequence was not a mislabelled field. ``HANDLE_HANDED_ON`` reaches
+    the caller as ``already_gone``, which is the one answer that means *the
+    machine is stopped* — so a failed reading ended the run with the jail
+    removed and a guest possibly still on the host, and nothing in the record
+    said the reading had failed. Here the same failure produces a refusal: the
+    sleeper is still alive afterwards and the jail is still on disk.
+    """
+    opened: list[int] = []
+    _a_handle_whose_start_time_reads_back(
+        lambda truth: None, monkeypatch, opened=opened
+    )
+    spy = _SpyOnRealSignals().install(monkeypatch)
+
+    result = _boot(
+        plan,
+        tmp_path,
+        monkeypatch,
+        jailer=_a_jailer_that_starts_a_guest(plan, sleepers),
+    )
+
+    ours = sleepers.started[-1]
+    assert opened == [ours], "the handle was not taken on this run's own process"
+    assert result["outcome"] == "overran_and_was_left_alone"
+    assert result["stop_handle_verdict"] == HANDLE_UNKNOWN, (
+        "an unreadable reading was recorded as something other than unknown"
+    )
+    assert (ours, signal.SIGKILL) not in spy.real_signals
+    assert result["guest_confirmed_stopped"] is None
+    assert the_host_was_left_running(result) is True
+    assert result["teardown"]["refused_because"]
+    # Still there. This is the fact the old verdict asserted the opposite of.
+    os.kill(ours, 0)
+
+
+def test_k1f_a_start_time_that_reads_back_different_is_a_handover(
+    plan, tmp_path, monkeypatch, sleepers
+):
+    """The control for ``k1e``: a value that *does* read back, and differs.
+
+    Splitting ``None`` out of the handover verdict is only an improvement if the
+    handover verdict still catches handovers — a version that answered
+    ``unknown`` to everything would pass ``k1e`` and be worse than what it
+    replaced, because a recycled number would then hold a jail open for ever.
+
+    So the same seam is driven with a reading that succeeds and comes back
+    different. That is a positive finding about the number — something else has
+    it now — and the answer is ``already_gone``: nothing is signalled, because
+    signalling would reach the stranger, and this run's machine is not there.
+    """
+    opened: list[int] = []
+    _a_handle_whose_start_time_reads_back(
+        lambda truth: (truth or 0) + 1, monkeypatch, opened=opened
+    )
+    spy = _SpyOnRealSignals().install(monkeypatch)
+
+    result = _boot(
+        plan,
+        tmp_path,
+        monkeypatch,
+        jailer=_a_jailer_that_starts_a_guest(plan, sleepers),
+    )
+
+    ours = sleepers.started[-1]
+    assert opened == [ours]
+    assert result["outcome"] == "booted", (
+        "a positively different start time says this run's process is not on "
+        "that number any more, which is the machine having stopped"
+    )
+    assert result["outcome"] != "overran_and_was_left_alone"
+    assert (ours, signal.SIGKILL) not in spy.real_signals, (
+        "the number belongs to something this run did not start"
+    )
+    assert the_host_was_left_running(result) is False
+    # The two readings end in opposite places, which is the whole point of
+    # telling them apart, and neither one signals.
+    os.kill(ours, 0)
 
 
 def test_k1b_with_a_handle_the_signal_does_not_go_by_number(

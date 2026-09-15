@@ -51,6 +51,7 @@ from pathlib import Path
 
 import pytest
 
+from core import agentic_v2_first_boot
 from core.agentic_v2_first_boot import (
     CANNOT_RULE_OUT,
     CLOCK_TICKS_PER_SECOND as HZ,
@@ -60,13 +61,14 @@ from core.agentic_v2_first_boot import (
     HANDLE_TAKEN,
     HANDLE_UNKNOWN,
     HANDLE_UNSUPPORTED,
-    MAY_SIGNAL_BY_NUMBER_INSTEAD,
+    NO_VERDICT_MAY_SIGNAL_BY_NUMBER,
     _a_handle_pinned_to,
     _clean_up_after_a_failure,
     _confined_to_this_runs_jail,
     _has_exited_but_not_been_reaped,
     _ours_is_gone,
     _started_during_this_runs_launch,
+    _stop_the_process_this_run_identified,
     _the_instant_the_number_was_read,
     _the_instant_this_run_launched,
     _the_jail_a_process_is_confined_to,
@@ -725,16 +727,40 @@ def test_x10_a_killed_child_that_nobody_collected_is_read_as_gone(own_children):
     assert _ours_is_gone(child.pid, started) is True
 
 
-def test_x11_every_way_of_not_getting_a_handle_keeps_its_own_name(monkeypatch):
-    """Four refusals, and only one of them may be answered by number instead.
+def _a_number_this_kernel_cannot_have_assigned() -> int:
+    """A PID above this kernel's ceiling, so no process can be behind it.
 
-    ``unsupported`` is a statement about this kernel or this interpreter: the
-    interface is not there for anybody, so the older route is the only route
-    and taking it is not a downgrade. ``denied`` and ``unknown`` are statements
-    about *this attempt* on a kernel that has the interface — answering those by
-    number is precisely the silent weakening this taxonomy exists to stop, and
-    the earlier version of the function did exactly that by folding every
-    ``OSError`` into "this kernel has no pidfd".
+    Needed because the test below drives the real stop function, and the
+    regression it guards against is a signal going out by number. Pointing that
+    at this interpreter would end the test session instead of failing a test,
+    and pointing it at a live child would be this suite killing something to
+    find out whether it would. A number the kernel will never hand out answers
+    ``ProcessLookupError`` to anything sent at it, so a reintroduced fallback
+    shows up as a wrong return value — which is a red test and nothing else.
+    """
+    try:
+        ceiling = int(Path("/proc/sys/kernel/pid_max").read_text().strip())
+    except (OSError, ValueError):  # pragma: no cover - /proc is present here
+        ceiling = 4_194_304
+    return ceiling + 1
+
+
+def test_x11_every_way_of_not_getting_a_handle_keeps_its_own_name(monkeypatch):
+    """Each way of not getting a handle keeps its own name, and none is a way through.
+
+    The names still matter and are still worth telling apart, because they are
+    what a person reads afterwards to know *why* a machine was left running:
+    ``unsupported`` says this kernel or this interpreter never had the
+    interface, ``denied`` says a kernel that has it refused this attempt, and
+    ``unknown`` says the reading itself could not be taken. Three different
+    situations and three different things to go and do about them.
+
+    What changed on 2026-09-15 is the consequence, not the taxonomy.
+    ``unsupported`` used to be the one verdict that fell through to ``os.kill``
+    on the bare number, on the argument that it describes the host rather than
+    the process. The argument is sound and the conclusion did not follow: a host
+    with no way to pin a process has not thereby shown that the number still
+    names the right one. So the fall-through is gone and all four refuse.
 
     The refusals are induced rather than found, because a host cannot be asked
     to deny a handle on demand. What is being checked is the reading, which is
@@ -760,11 +786,30 @@ def test_x11_every_way_of_not_getting_a_handle_keeps_its_own_name(monkeypatch):
         assert verdict == expected, f"{raising!r} was read as {verdict}"
         assert why_not != "", "a refusal that says nothing cannot be acted on"
 
-    assert MAY_SIGNAL_BY_NUMBER_INSTEAD == frozenset({HANDLE_UNSUPPORTED}), (
-        "denied and unknown must not join this set. A kernel that has the "
-        "interface and refused this run a handle has not said the process may "
-        "be signalled some other way; it has said this run could not establish "
-        "what it was about to signal"
+        # And the reading is carried through to the act. This used to be a
+        # statement about a set of verdicts allowed to fall back; a set is a
+        # description of the code and this is the code doing it.
+        unassignable = _a_number_this_kernel_cannot_have_assigned()
+        _, _, why_for_that_number = _a_handle_pinned_to(unassignable, 1)
+        stop = _stop_the_process_this_run_identified(unassignable, 1)
+        assert stop["signalled"] is False, (
+            f"{verdict} sent a signal. A kernel that has no interface, or one "
+            "that has it and refused this run a handle, has not said the "
+            "process may be signalled some other way — it has said this run "
+            "could not establish what it was about to signal"
+        )
+        assert stop["how"] is None
+        assert stop["already_gone"] is False, (
+            f"{verdict} is not an observation that the process ended; reading "
+            "it as one would let the caller drop the jail"
+        )
+        assert stop["refused_because"] == why_for_that_number != ""
+        assert stop["handle_verdict"] == verdict
+
+    assert NO_VERDICT_MAY_SIGNAL_BY_NUMBER is True, (
+        "the flag says in prose what the loop above just checked. It replaced "
+        "a one-member frozenset, which read as a dial that happened to be "
+        "turned down rather than as an absent path"
     )
 
 
@@ -787,9 +832,10 @@ def _this_kernel_hands_out_handles() -> bool:
 @pytest.mark.skipif(
     not _this_kernel_hands_out_handles(),
     reason=(
-        "this kernel has no pidfd_open, so a handle cannot be taken here. The "
-        "production path falls back to signalling by number, which is what "
-        "HANDLE_UNSUPPORTED authorises and test_x11 covers. Measured on the "
+        "this kernel has no pidfd_open, so a handle cannot be taken here. Since "
+        "2026-09-15 there is no second way to send a signal, so on this box "
+        "every stop refuses — test_x11 covers that refusal and test_x13 covers "
+        "the verdicts a handle that *was* taken can end in. Measured on the "
         "target host (6.17.0-1022-azure), where this test does run."
     ),
 )
@@ -838,3 +884,89 @@ def test_x12_a_real_handle_names_one_process_and_is_dropped_when_it_would_not(
     assert nothing is None
     assert verdict == HANDLE_GONE
     assert "already gone when a handle was asked for" in why_not
+
+
+def _a_handle_that_opens_and_a_start_time_that_answers(value, monkeypatch):
+    """Take the handle, then answer the start-time re-read with ``value``.
+
+    This box hands out no ``pidfd``, so the two readings after the handle is
+    open — the ones that decide between ``unknown`` and ``handed on`` — are
+    unreachable here without standing in for ``pidfd_open``. What is stood in
+    for is only the *taking* of the handle; the reading that follows is the
+    real function, answering what ``value`` computes from the real one, and the
+    branch under test is production code either way.
+    """
+    opened: list[int] = []
+    real = agentic_v2_first_boot._when_that_process_started
+
+    def open_handle(pid, flags=0):
+        opened.append(pid)
+        return os.open(os.devnull, os.O_RDONLY)
+
+    def reading(pid):
+        truth = real(pid)
+        return value(truth) if opened else truth
+
+    monkeypatch.setattr(os, "pidfd_open", open_handle, raising=False)
+    monkeypatch.setattr(
+        agentic_v2_first_boot, "_when_that_process_started", reading
+    )
+    return opened
+
+
+def test_x13_a_start_time_that_will_not_read_is_unknown_not_a_handover(
+    monkeypatch, own_children
+):
+    """``None`` and "a different number" are two findings, and they end apart.
+
+    Both arrive at the same line — the start time read back after the handle is
+    open does not equal the one that was admitted — and until 2026-09-15 both
+    left it as ``HANDLE_HANDED_ON``. Only one of them is a finding about the
+    process. ``_when_that_process_started`` answers ``None`` whenever the
+    reading fails at all, and a reading that failed says nothing about who owns
+    the number.
+
+    The cost of merging them was not in the name. ``HANDLE_HANDED_ON`` reaches
+    the caller as ``already_gone``, which is the answer that means *stopped* —
+    so a ``/proc`` this run could not read ended the boot as though the machine
+    had gone, with the jail taken down behind it. Here the two are driven
+    through :func:`_stop_the_process_this_run_identified`, which is the function
+    the caller actually branches on, and they come out on opposite sides of it.
+    """
+    child = own_children.spawn()
+    started = _when_that_process_started(child.pid)
+    assert started is not None
+
+    opened = _a_handle_that_opens_and_a_start_time_that_answers(
+        lambda truth: None, monkeypatch
+    )
+    unreadable = _stop_the_process_this_run_identified(child.pid, started)
+    assert opened == [child.pid], "the handle was never taken, so nothing was tested"
+    assert unreadable["handle_verdict"] == HANDLE_UNKNOWN
+    assert unreadable["signalled"] is False
+    assert unreadable["already_gone"] is False, (
+        "a reading that failed was reported as the process having stopped"
+    )
+    assert unreadable["signal_target"] is None
+    assert "could not be read back" in unreadable["refused_because"]
+
+    monkeypatch.undo()
+
+    opened = _a_handle_that_opens_and_a_start_time_that_answers(
+        lambda truth: (truth or 0) + 1, monkeypatch
+    )
+    handed_on = _stop_the_process_this_run_identified(child.pid, started)
+    assert opened == [child.pid]
+    assert handed_on["handle_verdict"] == HANDLE_HANDED_ON
+    assert handed_on["signalled"] is False
+    assert handed_on["already_gone"] is True, (
+        "a start time that read back different is a positive finding that this "
+        "run's process is no longer on that number, which the caller is "
+        "entitled to treat as stopped"
+    )
+    assert handed_on["signal_target"] is None
+
+    # The control for both: neither of them signalled, so the process behind
+    # the number — which in the second reading stands in for a stranger — is
+    # still there afterwards.
+    assert os.kill(child.pid, 0) is None
