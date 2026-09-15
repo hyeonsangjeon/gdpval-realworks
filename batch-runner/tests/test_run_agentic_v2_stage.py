@@ -771,6 +771,174 @@ def test_a_rehearsal_collects_a_deliverable_for_every_task_onto_disk(tmp_path):
         assert "must not be scored as one" in one.read_text("utf-8")
 
 
+# ── A host an earlier task left running ───────────────────────────────────
+#
+# The backend refuses a second command on a host it already dirtied, and that
+# guard can only see one task: the object holding it is built per task. What
+# reaches the next task, and the next process, is a file in a directory the run
+# owns. These are the tests of the whole seam -- the real entry point, the real
+# driver, the real reader -- rather than of either end of it.
+#
+# A rehearsal is the right place for them. It walks the production path with a
+# stand-in where the model goes, so "refused before any task was worked" is a
+# statement about the code that will run the 220, and it costs nothing to make.
+
+
+def _leak_record(into, **fields):
+    (into / "host_state").mkdir(parents=True, exist_ok=True)
+    (into / "host_state" / "unresolved_host.json").write_text(
+        json.dumps(
+            {
+                "schema": "agentic_v2_unresolved_host/1",
+                "task_id": "task-that-leaked",
+                "outcome": "overran_and_did_not_stop",
+                **fields,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+@needs_dataset
+def test_a_run_finding_a_host_left_running_stops_before_working_a_task(tmp_path):
+    """The resume case, end to end.
+
+    The process that leaked the machine is gone, and with it every in-memory
+    guard. This one starts with a journal that knows which tasks finished and
+    nothing at all about the host -- except the file, which is the only thing
+    the two processes share.
+    """
+    into = tmp_path / "rehearsal"
+    into.mkdir()
+    _leak_record(into)
+
+    finished = _run("--stage", "advance_check_5", "--rehearse", "--into", str(into))
+
+    # 1, the same as every other early stop: a run that halted is not a run
+    # that finished. Deliberate rather than a crash -- nothing on stderr, and
+    # the record it did write is on disk.
+    assert finished.returncode == 1, finished.stdout + finished.stderr
+    assert finished.stderr == ""
+    assert (into / "rehearsal_record.json").is_file()
+    assert "finished       0 of 5" in finished.stdout
+    assert "Stopped early" in finished.stdout
+    # Which task left it, and how it ended. Without those the halt says only
+    # that something was refused and the reason has to be guessed later.
+    assert "task-that-leaked" in finished.stdout
+    assert "overran_and_did_not_stop" in finished.stdout
+    # No workspace was staged, because the refusal happens before the task is
+    # built -- which is before anything would have been sent to a model.
+    assert sorted((into / "workspaces").glob("*")) == []
+
+
+@needs_dataset
+def test_cleanup_confirmed_on_the_host_lets_the_same_run_work_every_task(tmp_path):
+    """The owned positive control, on the same file and the same entry point.
+
+    An implementation that refused whenever the file existed would pass the
+    test above and stop every run from here on. Re-admission exists; what it
+    costs is somebody establishing on the host that the machine is gone and
+    writing that down. Nothing in a run writes this block, and no elapsed time
+    produces it.
+    """
+    into = tmp_path / "rehearsal"
+    into.mkdir()
+    _leak_record(into, resolved={"cleanup_confirmed": True})
+
+    finished = _run("--stage", "advance_check_5", "--rehearse", "--into", str(into))
+
+    assert finished.returncode == 0, finished.stdout + finished.stderr
+    assert "finished       5 of 5" in finished.stdout
+    assert "Stopped early" not in finished.stdout
+
+
+@needs_dataset
+def test_a_claim_of_cleanup_that_is_not_true_does_not_open_the_host(tmp_path):
+    """The bounded negative control beside it.
+
+    ``"true"`` is what a hand-edited file looks like when somebody is guessing,
+    and it is the one value that would open the host if this read truthiness
+    rather than the value.
+    """
+    into = tmp_path / "rehearsal"
+    into.mkdir()
+    _leak_record(into, resolved={"cleanup_confirmed": "true"})
+
+    finished = _run("--stage", "advance_check_5", "--rehearse", "--into", str(into))
+
+    assert "finished       0 of 5" in finished.stdout
+    assert "Stopped early" in finished.stdout
+
+
+def test_the_backend_is_handed_the_runs_directory_rather_than_a_tasks():
+    """Read from the source, because no microVM boots in this suite.
+
+    The backend is rebuilt for every task with ``root`` set to that task's
+    workspace, so anything worked out from ``root`` changes with the task and
+    would be a new empty directory each time -- and on a resumed run, a
+    different one again. The directory has to come from the run.
+    """
+    source = RUNNER_PATH.read_text("utf-8")
+    assert 'host_state = into / "host_state"' in source
+
+    factory = source.split("def backend_factory(")[1].split("def ")[0]
+    assert "host_state_dir=host_state" in factory
+    assert "Path(root).parent" not in factory
+
+
+def test_the_run_is_asked_before_each_task_and_not_only_after_one():
+    """``stop_when`` alone cannot reach the case this was built for.
+
+    It is asked once a task's row is written, so within one process it does
+    stop the run. A resumed run is a different process: it begins at the next
+    task and would have taken its first turn before anything asked. So the same
+    question is also handed to the driver as ``admit_task``, which is read
+    before the runner is built.
+    """
+    source = RUNNER_PATH.read_text("utf-8")
+    driving = source.split("outcome = run_manifest(")[1].split("except ")[0]
+    assert "admit_task=admit_task" in driving
+
+    # One reader, two callers. Two implementations of "is the host still dirty"
+    # would be two chances to disagree, and the disagreement would only ever
+    # show up in a run that had already decided.
+    block = source.split("def a_host_left_unresolved(")[1].split("stagings:")[0]
+    assert block.count("read_the_unresolved_host(") == 1
+    assert block.count("def stopped_by_an_unresolved_host(") == 1
+    assert "return stopped_by_an_unresolved_host(after_task)" in block
+    assert "return stopped_by_an_unresolved_host(before_task)" in block
+
+
+def test_the_record_rides_the_artifact_a_resume_is_restored_from():
+    """A resumed run reads the host_state its predecessor wrote.
+
+    Nothing in this repository copies that file across runs. It survives
+    because the workflow hands the stage one directory, uploads that
+    directory whole, and restores it whole -- so ``host_state/`` travels
+    inside it without anyone naming it. That is an existing contract rather
+    than a new mechanism, which is why it is used; but it is invisible from
+    Python, and narrowing ``path:`` to a list of files would delete the
+    guarantee without changing a line any other test here reads.
+
+    Two occurrences, not one: the restore on the way in and the upload on the
+    way out. A third would mean something else now claims the same directory
+    and somebody should look.
+    """
+    workflow = (
+        Path(__file__).resolve().parents[2]
+        / ".github"
+        / "workflows"
+        / "agentic-v2-stage-run.yml"
+    ).read_text(encoding="utf-8")
+
+    assert '--into "$GITHUB_WORKSPACE/agentic-v2-run"' in workflow
+    assert workflow.count("path: agentic-v2-run/") == 2
+
+    # And the stage writes the record inside that directory rather than
+    # beside it, which is the half this repository can still get wrong.
+    assert 'host_state = into / "host_state"' in RUNNER_PATH.read_text("utf-8")
+
+
 # ── Which model answered ──────────────────────────────────────────────────
 #
 # A deployment is an alias. What answers behind it carries its own name, the

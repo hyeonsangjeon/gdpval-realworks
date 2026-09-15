@@ -28,7 +28,11 @@ handing back ``returncode: 0`` would tell the model its work is on disk when it
 is not, and every later turn would be reasoning about files that are not there.
 So the call is reported as an infrastructure failure, and the exit status the
 guest really wrote is kept in the record under its own name rather than thrown
-away.
+away. The outcome it overwrites is kept the same way. Two of the outcomes that
+mean a machine is still on the host are reached before anything is signalled, so
+they arrive with ``guest_confirmed_stopped`` still ``None`` and that outcome is
+the only field saying a guest was left behind — overwriting it in place would
+report an occupied host as a free one.
 
 The outcome used for that case is ``workspace_did_not_come_back``.
 :func:`core.agentic_v2_exec_boot.read_the_boot` has no branch naming it, so it
@@ -207,6 +211,13 @@ class OneCallMachine:
                 "command_exit_status"
             ]
             booted["command_exit_status"] = None
+            # The outcome is kept for the same reason the status is. Two of the
+            # outcomes that leave a machine on the host are reached before any
+            # signal goes out, so ``guest_confirmed_stopped`` is still ``None``
+            # on them and ``outcome`` is the only field carrying the leak. The
+            # carriage fault and the leak are separate facts and overwriting in
+            # place would leave the second one with nowhere to live.
+            booted["outcome_before_the_carriage_failed"] = booted["outcome"]
             booted["outcome"] = WORKSPACE_DID_NOT_COME_BACK
 
         self.record.append(

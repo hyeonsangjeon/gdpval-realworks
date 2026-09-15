@@ -346,6 +346,21 @@ def read_the_boot(
     ``overran_and_did_not_stop``          **present**  ``ok``, and the host is not free
     ====================================  ===========  =========================
 
+    **The two ``started_and_could_not_be_identified`` rows route like the
+    host-not-free outcomes and must not be worded like them.** Those mean "this
+    run's machine was left running" — an observation. This one is reached two
+    ways and neither supports that sentence: either the launcher ran and no
+    process was ever named, or something was seen holding the number the machine
+    published and the interval that would have adopted it declined. In the
+    second the liveness is observed and the ownership is not; in the first
+    neither is. Routing them with the host-not-free rows is right, because none
+    of the three permits treating the host as free. Describing them the same way
+    would assert exactly what the identity check declined to assert, which is why
+    the table says *unknown* here and *not free* there. Note also what is not on
+    this table: this outcome is deliberately not folded into ``never_started``,
+    because that row says the jailer wrote no pid file, over a host that may have
+    a guest on it.
+
     The rows with an exit status present are the ones that are easy to get
     wrong. If the guest wrote an exit status, the command **finished**; the
     machine merely failed to shut down inside its deadline afterwards. Throwing
@@ -458,16 +473,25 @@ def read_the_boot(
                 "and only the shutdown overran"
             )
         elif outcome == OUTCOME_STARTED_AND_NOT_IDENTIFIED:
-            # Reachable, and it has to be said differently. The exit status is a
-            # file on the work disk, so the guest can have finished and written
-            # one while this run still never got a process it could name. The
-            # branch below would report that as a machine known to be running,
-            # which is a claim this run cannot make in either direction.
+            # Reachable by two routes, and it has to be said differently from the
+            # rows below either way. On one, the exit status is a file on the
+            # work disk, so the guest can have finished and written one while
+            # this run still never got a process it could name. On the other,
+            # something was seen holding the number the machine published and
+            # the interval that would have adopted it declined — liveness
+            # observed, ownership not. The branch below would report both as a
+            # machine known to be running, which is a claim this run cannot make
+            # in either direction. What the two routes share is weaker than that
+            # and is what the sentence says: no process was named, so nothing
+            # here establishes the host is free. Which route it was is in the
+            # record's ``left_alone_because``, not in this message — but the
+            # outcome's own name is in it, because the two rows below name
+            # themselves and a run record is searched by that name.
             ran_anyway = (
                 ", though this run never got a process it could name for the "
-                "machine it ran in, so nothing here says the host is free and "
-                "the returned work disk may have been copied while something "
-                "still had it open"
+                f"machine it ran in ({outcome}), so nothing here says the host "
+                "is free and the returned work disk may have been copied while "
+                "something still had it open"
             )
         elif outcome in OUTCOMES_THAT_LEAVE_THE_HOST_RUNNING:
             # The command's answer is still the command's answer. What is *not*
@@ -510,13 +534,25 @@ def read_the_boot(
         # control flow. An absent pid file is not that evidence — the launcher
         # ran and the run simply cannot say what it left behind, which is a
         # backend that failed to report rather than a start that failed.
+        #
+        # The other route here saw more than that and still cannot say more: a
+        # process was holding the number the machine published, and the interval
+        # that would have adopted it declined. Routed exactly like the row below
+        # it, deliberately — no exit status, and a host that cannot be called
+        # free. The wording has to stay off that row's sentence either way. "It
+        # was still running when this run let go of it" is a claim about *our*
+        # machine, which is the one claim neither route establishes: on the
+        # first nothing was ever named, and on the second the liveness was
+        # observed and the ownership was not. What both routes support is the
+        # weaker sentence below, and which route it was is in the record's
+        # ``left_alone_because``.
         return answer(
             False,
             "compute_backend_error",
             {},
-            "the launcher ran and this run never got a process it could name, "
-            "so nothing here says the command ran and nothing here says the "
-            "host is free",
+            f"the machine ended as {outcome!r} — the launcher ran and this run "
+            "never got a process it could name, so nothing here says the "
+            "command ran and nothing here says the host is free",
         )
     if outcome in OUTCOMES_THAT_LEAVE_THE_HOST_RUNNING:
         return answer(

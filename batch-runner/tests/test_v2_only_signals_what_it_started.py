@@ -25,6 +25,7 @@ Pre-registration, written before the fix: ``docs/agentic_v2_ownership_and_teardo
 
 from __future__ import annotations
 
+import errno
 import functools
 import json
 import os
@@ -43,9 +44,11 @@ from core.agentic_v2_first_boot import (
     BootAbandoned,
     BootRefused,
     _clean_up_after_a_failure,
+    _the_instant_this_run_launched,
     first_boot,
     the_host_was_left_running,
 )
+from core import agentic_v2_first_boot
 from core.agentic_v2_microvm_backend import (
     EXEC_RECORD_DIR,
     AgenticV2MicroVMBackend,
@@ -57,6 +60,130 @@ from core.agentic_v2_substrate import AgenticV2SubstrateManifest
 
 STRANGER = 424242
 """A PID this run did not start. Never signalled, in any test here."""
+
+OURS = 4242
+"""The PID the stand-in jailer publishes, and the only one given an identity."""
+
+
+def _a_stand_in_guest_with_an_identity(monkeypatch, *pids: int) -> None:
+    """Let the invented PIDs answer the questions a real guest answers.
+
+    The launcher will not signal a process it cannot show it started, and a
+    number a test made up names nothing on the host — so a stand-in that only
+    reports *alive* is half a guest. This supplies the other half: for the PIDs
+    named here, "when did you start" answers with a host clock reading taken
+    **while the run was launching**, which is where a real guest's start time
+    falls.
+
+    **When that reading is taken is the whole of this helper.** The run bounds
+    ownership from both ends — a floor read immediately before the jailer runs,
+    a ceiling read the moment it first holds a number — so a stand-in stamped
+    outside that interval is not a guest this run could have started, and the
+    launcher is right to refuse it. The two hooks below are exactly those two
+    instants, and the stamp is taken *after* the floor is read and *before* the
+    ceiling is, which is the order the real events happen in. Whichever of the
+    two the code under test reaches first, the answer lands inside.
+
+    This used to stamp the clock the first time the start time was *asked for*,
+    which is after the run already holds the number — a process born after the
+    run observed it, which cannot exist. Nothing caught it, because with one
+    bound there was nothing an impossibly-late start time could fail.
+
+    **The answer is remembered, and that is the point, not an optimisation.** A
+    real process's start time never moves; answering with a fresh clock reading
+    each time would make the guest look like a different process on every probe,
+    and the launcher would correctly refuse to signal it. Getting this wrong
+    makes a working guard look broken.
+
+    Only the PIDs listed. :data:`STRANGER` is deliberately never among them —
+    a process this run cannot account for is exactly what it stands for.
+    """
+    known = set(pids)
+    real = agentic_v2_first_boot._when_that_process_started
+    real_floor = agentic_v2_first_boot._the_instant_this_run_launched
+    real_ceiling = agentic_v2_first_boot._the_instant_the_number_was_read
+    real_confinement = agentic_v2_first_boot._confined_to_this_runs_jail
+    born: dict[str, int | None] = {}
+
+    def confined(pid: int, chroot_dir) -> tuple[bool, str]:
+        """"Are you inside this run's jail" — the other half of being a guest.
+
+        A real guest is put in the jail by the jailer, which needs privileges a
+        test process does not have, so an invented PID cannot be made to answer
+        this truthfully here. What the reading actually does against real
+        processes is measured directly in
+        ``test_v2_ownership_is_bound_to_the_launch``.
+
+        Anything not named here is asked for real, so a stranger is refused on
+        the host's own answer rather than on this helper's say-so.
+        """
+        if pid in known:
+            return True, ""
+        return real_confinement(pid, chroot_dir)
+
+    def _born_now() -> None:
+        if "ticks" not in born:
+            reading = agentic_v2_first_boot._the_host_clock_in_ticks()
+            born["ticks"] = reading["ticks_since_boot"]
+
+    def floor() -> dict:
+        reading = real_floor()
+        _born_now()
+        return reading
+
+    def ceiling() -> dict:
+        _born_now()
+        return real_ceiling()
+
+    def started(pid: int) -> int | None:
+        if pid not in known:
+            return real(pid)
+        _born_now()
+        return born["ticks"]
+
+    monkeypatch.setattr(
+        "core.agentic_v2_first_boot._when_that_process_started", started
+    )
+    monkeypatch.setattr(
+        "core.agentic_v2_first_boot._the_instant_this_run_launched", floor
+    )
+    monkeypatch.setattr(
+        "core.agentic_v2_first_boot._the_instant_the_number_was_read", ceiling
+    )
+    monkeypatch.setattr(
+        "core.agentic_v2_first_boot._confined_to_this_runs_jail", confined
+    )
+
+
+def _as_if_the_jailer_had_chrooted(monkeypatch, in_the_jail) -> None:
+    """Answer the confinement question for processes a stand-in jailer placed.
+
+    The run's positive ground for ownership is that the process it is about to
+    signal has this run's own jail as its root — a jail it created and holds a
+    claim on. That is established by the *jailer*, which chroots the guest, and
+    chrooting needs a privilege a test process does not have. So for the real
+    processes a stand-in jailer starts, this answers the way the host would have
+    answered if the jailer had been the real one.
+
+    ``in_the_jail`` is a live container of PIDs, not a snapshot: the stand-in
+    jailer adds to it as it starts each guest, which happens after this is
+    installed.
+
+    **Only what the stand-in jailer put there.** Every other number — a stranger
+    in an old PID file, a real sleeper this run did not launch, an invented one —
+    is asked for real, so it is refused on the host's own reading. That is what
+    keeps this from being a way to make a refusal disappear.
+    """
+    real_confinement = agentic_v2_first_boot._confined_to_this_runs_jail
+
+    def confined(pid: int, chroot_dir) -> tuple[bool, str]:
+        if pid in in_the_jail:
+            return True, ""
+        return real_confinement(pid, chroot_dir)
+
+    monkeypatch.setattr(
+        "core.agentic_v2_first_boot._confined_to_this_runs_jail", confined
+    )
 
 
 @pytest.fixture
@@ -116,7 +243,7 @@ class _Clock:
 
 
 class _Signals:
-    """Stands in for ``os.kill`` and records every call that reached it.
+    """Stands in for the kernel's signalling, and records every call that reached it.
 
     Signal 0 is a liveness probe and never terminates anything; anything else is
     a real signal. Keeping the two apart in the record is the point — "a signal
@@ -126,6 +253,15 @@ class _Signals:
     ``dies_after`` is how many probes after the real signal still report the
     process alive. ``None`` means it never reports dead, which is the case the
     finite confirmation deadline exists for.
+
+    **It stands in for the handle path too, and it has to.** This class is not a
+    spy but a simulator: its liveness answer is gated on ``was_signalled``,
+    which only the ``os.kill`` path used to set. On a kernel with ``pidfd`` the
+    module signals through a pinned handle, ``os.kill`` is never reached, the
+    simulated liveness never flips, and the confirmation deadline runs out
+    against a machine the simulation was told to kill. That produced a
+    ``guest_confirmed_stopped`` of ``False`` on CI for a stop that had in fact
+    happened. The assertion was right; the simulation was a transport behind.
     """
 
     def __init__(self, *, starts_alive=True, dies_after=0, kill_raises=None):
@@ -135,6 +271,51 @@ class _Signals:
         self.kill_raises = kill_raises
         self.was_signalled = False
         self.probes_after_the_signal = 0
+        self.by_handle: list[tuple[int, int]] = []
+        self._behind: dict[int, int] = {}
+
+    def install(self, monkeypatch) -> "_Signals":
+        """Replace every way the module has of signalling, not just the old one.
+
+        ``os.pidfd_open`` is replaced as well. Left real, it would be asked for
+        a handle on a number this simulation invented, answer
+        ``ProcessLookupError``, and the module would correctly read that as "the
+        process is gone" — turning a simulated live machine into an absent one
+        for reasons that have nothing to do with what the test is asking.
+        """
+        monkeypatch.setattr(os, "kill", self)
+        monkeypatch.setattr(os, "pidfd_open", self._open_a_handle, raising=False)
+        monkeypatch.setattr(
+            signal, "pidfd_send_signal", self._through_a_handle, raising=False
+        )
+        monkeypatch.setattr(
+            agentic_v2_first_boot,
+            "_the_process_a_handle_names",
+            lambda handle: self._behind.get(handle),
+        )
+        return self
+
+    def _open_a_handle(self, pid, *rest):
+        """A real descriptor standing for a real one.
+
+        Not an invented number: the code under test closes what it opens, and a
+        number nothing opened fails that close with ``EBADF``. Handing back an
+        actual descriptor keeps the close real, so a handle this run forgets to
+        release still shows up as a leak rather than as an error in the
+        stand-in.
+        """
+        if not self.starts_alive:
+            raise ProcessLookupError(3, "No such process")
+        handle = os.open(os.devnull, os.O_RDONLY)
+        self._behind[handle] = pid
+        return handle
+
+    def _through_a_handle(self, handle, sig, *rest):
+        pid = self._behind.get(handle)
+        if pid is None:
+            raise OSError(errno.EBADF, "not a handle this simulation opened")
+        self.by_handle.append((pid, sig))
+        return self(pid, sig)
 
     def __call__(self, pid, sig):
         self.sent.append((pid, sig))
@@ -238,7 +419,8 @@ def _boot(plan, tmp_path, monkeypatch, *, jailer, signals, reader=None, clock=No
     """
     clock = clock or _Clock()
     monkeypatch.setattr("core.agentic_v2_first_boot._run", jailer)
-    monkeypatch.setattr(os, "kill", signals)
+    signals.install(monkeypatch)
+    _a_stand_in_guest_with_an_identity(monkeypatch, OURS)
     monkeypatch.setattr(
         "core.agentic_v2_first_boot.files_out_of_work_disk",
         reader or (lambda image, names, **kw: _finished()),
@@ -571,7 +753,7 @@ def test_d5_cleanup_leaves_a_jail_this_run_did_not_create_alone(
     chroot = _a_jail_someone_else_is_using(plan)
     before = (chroot / "work.ext4").read_bytes()
     signals = _Signals(dies_after=None)
-    monkeypatch.setattr(os, "kill", signals)
+    signals.install(monkeypatch)
     salvage = {"returned_copy": None, "results_read": False, "copied_while_running": False}
 
     teardown = _clean_up_after_a_failure(
@@ -584,6 +766,16 @@ def test_d5_cleanup_leaves_a_jail_this_run_did_not_create_alone(
         # ownership as the only thing that can produce the refusal below.
         launch_was_attempted=False,
         launch_spawned_nothing=False,
+        # Read before the ownership check, so it never gets as far as mattering
+        # here — but it is required and has no default, and passing the real
+        # reading rather than ``None`` keeps ownership the only thing that can
+        # produce the refusal below.
+        launch_floor=_the_instant_this_run_launched(),
+        # The other end of the same interval. Like the floor above it is
+        # read before the ownership check can matter here, and ``None``
+        # says only that nothing had read a PID yet — this path would take
+        # its own reading if it got that far, which it does not.
+        number_read_at=None,
         work_disk=tmp_path / "work.ext4",
         salvage=salvage,
     )
@@ -608,9 +800,19 @@ def test_d6_ownership_is_recorded_as_evidence_both_when_it_holds_and_when_it_doe
     The falsifier written into the pre-registration was "ownership was claimed
     and the only ground was that no PID file was there". So the record has to
     carry the individual grounds *and* what stays unprovable — on both answers.
-    A run that is granted ownership still cannot rule out PID reuse: between the
-    last probe and the signal the kernel may have handed that number to someone
-    else, and nothing available here closes that window.
+    A run that is granted ownership still cannot rule out everything. What is
+    left is narrower than it was: the process has to be inside the jail this run
+    created and holds an exclusive claim on, so what the evidence cannot
+    separate is a second jailer run against that same jail from outside this
+    run. A number handed on to some unrelated process born after this run
+    launched no longer reads the same from here, because that process is not in
+    the jail.
+
+    Four of the six grounds are about the *file*; the last two are about the
+    *process*, and both are needed before the deadline path may signal
+    anything. They are not interchangeable — the sixth, confinement to this
+    run's jail, is what says the process is this run's, and the fifth can only
+    turn a candidate away.
     """
     refused = _boot(
         plan,
@@ -627,8 +829,12 @@ def test_d6_ownership_is_recorded_as_evidence_both_when_it_holds_and_when_it_doe
         True,
         False,
         False,
+        # No PID file appeared, so there is no process to place in time and
+        # none to find inside the jail either.
+        False,
+        False,
     ]
-    assert "reuse" in evidence["cannot_rule_out"].lower()
+    assert "confined to this run's jail" in evidence["cannot_rule_out"]
     assert evidence["left_alone_because"]
 
     # Its own vm_id, and that is now a requirement rather than tidiness. The
@@ -646,10 +852,23 @@ def test_d6_ownership_is_recorded_as_evidence_both_when_it_holds_and_when_it_doe
 
     granted = owned["pid_file"]
     assert granted["owned_by_this_run"] is True
-    assert len(granted["ownership_grounds"]) == 4
+    assert len(granted["ownership_grounds"]) == 6
     assert all(g["held"] for g in granted["ownership_grounds"])
+    # The fifth ground says *while*, not *after*. One bound would have read
+    # "after this run launched", which is true of every process on the host that
+    # is younger than the floor; what is recorded here is the interval.
+    assert (
+        "began while this run was launching"
+        in granted["ownership_grounds"][4]["ground"]
+    )
+    # And the sixth is the one that makes the verdict a claim about this run's
+    # own machine rather than about a window in time.
+    assert (
+        "confined to the jail this run made and holds"
+        in granted["ownership_grounds"][5]["ground"]
+    )
     assert granted["left_alone_because"] is None
-    assert "reuse" in granted["cannot_rule_out"].lower()
+    assert "confined to this run's jail" in granted["cannot_rule_out"]
 
 
 # --------------------------------------------------------------------------
@@ -806,7 +1025,8 @@ def test_d12_the_backend_record_still_carries_both_failures(tmp_path, monkeypatc
     """
     machine, jail_base, host = _a_real_machine(tmp_path, monkeypatch)
     signals = _Signals(kill_raises=OverflowError("Python int too large"))
-    monkeypatch.setattr(os, "kill", signals)
+    signals.install(monkeypatch)
+    _a_stand_in_guest_with_an_identity(monkeypatch, OURS)
     monkeypatch.setattr(
         "core.agentic_v2_first_boot._run", _a_jailer_that_starts_then_dies(jail_base)
     )
@@ -872,13 +1092,23 @@ def test_d14_the_machine_is_stopped_before_its_disk_is_copied(
     racing a live Firecracker.
     """
     order: list[str] = []
-    signals = _Signals(dies_after=0)
-    real_kill = signals.__call__
 
-    def watching_kill(pid, sig):
-        if sig != 0:
-            order.append("signal")
-        return real_kill(pid, sig)
+    class _RecordingTheOrder(_Signals):
+        """``_Signals``, noting when a real signal reached the kernel.
+
+        This used to be a plain function wrapped around ``signals.__call__``,
+        which meant it stood in for ``os.kill`` and nothing else. Once the
+        production path reaches for a handle first, such a wrapper sees the
+        signal only by accident. Subclassing keeps both transports installed
+        and still puts the observation at the point where a signal lands.
+        """
+
+        def __call__(self, pid, sig):
+            if sig != 0:
+                order.append("signal")
+            return super().__call__(pid, sig)
+
+    signals = _RecordingTheOrder(dies_after=0)
 
     real_copy = __import__("shutil").copy2
 
@@ -895,7 +1125,7 @@ def test_d14_the_machine_is_stopped_before_its_disk_is_copied(
             tmp_path,
             monkeypatch,
             jailer=_jailer_writing_that_then_fails(plan),
-            signals=watching_kill,
+            signals=signals,
         )
 
     assert order == ["signal", "copy"]
@@ -974,13 +1204,14 @@ def test_p1_the_backend_record_carries_the_ownership_and_shutdown_evidence(
     below the launcher on purpose.
 
     The guest here exits on its own, which is the ordinary case, and the record
-    has to say so precisely: owned, on four grounds, with no signal sent and
+    has to say so precisely: owned, on five grounds, with no signal sent and
     therefore nothing to confirm — and with the one thing that stays unprovable
     still written down rather than rounded off to "owned".
     """
     machine, jail_base, host = _a_real_machine(tmp_path, monkeypatch)
     signals = _Signals(starts_alive=False)
-    monkeypatch.setattr(os, "kill", signals)
+    signals.install(monkeypatch)
+    _a_stand_in_guest_with_an_identity(monkeypatch, OURS)
     monkeypatch.setattr(
         "core.agentic_v2_first_boot._run", _a_jailer_that_boots_and_exits(jail_base)
     )
@@ -1002,9 +1233,13 @@ def test_p1_the_backend_record_carries_the_ownership_and_shutdown_evidence(
             True,
             True,
             True,
+            True,
+            True,
         ]
         assert machine_record["left_alone_because"] is None
-        assert "reuse" in machine_record["cannot_rule_out"].lower()
+        assert "confined to this run's jail" in (
+            machine_record["cannot_rule_out"]
+        )
 
         # Nothing was signalled, so there is nothing to have confirmed. False and
         # None are different answers and the record keeps them apart.
@@ -1457,7 +1692,8 @@ def test_p2_a_command_that_finished_under_a_machine_nobody_stopped_says_both(
     """
     machine, jail_base, host = _a_real_machine(tmp_path, monkeypatch)
     signals = _SignalsThatSwapThePidFile(jail_base, dies_after=None)
-    monkeypatch.setattr(os, "kill", signals)
+    signals.install(monkeypatch)
+    _a_stand_in_guest_with_an_identity(monkeypatch, OURS)
     monkeypatch.setattr(
         "core.agentic_v2_first_boot._run", _a_jailer_that_boots_and_stays(jail_base)
     )
