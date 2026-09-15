@@ -37,6 +37,7 @@ import shutil
 import signal
 import subprocess
 import time
+import uuid
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
@@ -101,16 +102,82 @@ Recorded in the artefact rather than left out of it. An ownership verdict with
 no statement of its limit reads as proof, and this one is not proof.
 """
 
-OUTCOMES_THAT_LEAVE_THE_HOST_RUNNING = frozenset(
-    {"overran_and_was_left_alone", "overran_and_did_not_stop"}
+CLAIM_FILE_NAME = ".owned-by.json"
+"""Where a run writes down that this jail's name is its own.
+
+Inside the chroot rather than beside it, so the record and the thing it records
+are one object with one lifetime. ``destroy_after_the_run`` already names the
+chroot, so the record goes when the jail goes, and there is no state in which a
+claim outlives the jail it claims or a jail exists with its claim swept out
+from under it.
+
+The guest never sees this. The jailer chroots Firecracker here, but the guest's
+filesystem is ``rootfs.ext4`` — a separate image, attached as a block device —
+so this file is visible to the jailed host process and to nothing inside the
+machine.
+"""
+
+CLAIM_DOES_NOT_ESTABLISH = (
+    "whether the process a claim names is still alive. The PID, the boot id and "
+    "the process start time are written down so a person can look; nothing here "
+    "reads them back, and no path reclaims a jail because its claim looks stale. "
+    "A claim that is not this run's is a refusal, not a puzzle to solve. " +
+    CANNOT_RULE_OUT
 )
-"""Outcomes after which a machine this run launched is still on the host.
+"""The limit of the claim, carried inside every claim.
+
+Taking a name atomically settles who may write into it. It does not settle what
+is happening inside it, and the distance between those two is exactly where a
+convenient inference would go: *this claim is hours old, so surely nobody is
+using it*. There is no evidence for the *surely*, so nothing acts on it.
+"""
+
+OUTCOME_STARTED_AND_NOT_IDENTIFIED = "started_and_could_not_be_identified"
+"""The launcher ran, and this run never got a process it could name.
+
+The word the ordinary path was missing. ``never_started`` is a finding — it says
+nothing was put on the host — and the only evidence that supports it is this
+run's own account of its own control flow: the launch was not reached, or it
+raised the one error that proves the ``exec`` never happened. An absent PID file
+is neither. It is the jailer's fork-to-publication window, or a file caught
+mid-write, and the run cannot tell those from an empty host.
+
+Recording that state as ``never_started`` is not a wording problem. The teardown
+gate reads ``outcome``, so the word decides whether ``rmtree`` runs on a jail
+whose work disk something may still have open.
+
+Applying that rule leaves ``never_started`` with no producer. Nothing reaches the
+ordinary return without having attempted a launch that did ``exec`` — the flag is
+set on the line above the call, and the one error that proves nothing spawned is
+re-raised — so the ordinary path's answer here is always this one. The two states
+``never_started`` used to stand for both leave through the abandonment path,
+which carries the two flags themselves rather than a word standing in for them.
+:func:`core.agentic_v2_exec_boot.read_the_boot` keeps its ``never_started`` row
+because records written before this change still say it.
+"""
+
+OUTCOMES_THAT_LEAVE_THE_HOST_RUNNING = frozenset(
+    {
+        "overran_and_was_left_alone",
+        "overran_and_did_not_stop",
+        OUTCOME_STARTED_AND_NOT_IDENTIFIED,
+    }
+)
+"""Outcomes after which this run may not treat the host as free.
 
 Named here, beside the code that produces them, because this vocabulary has
 already grown once — from four outcomes to six — while the module that reads it
 still knew four, and the two new ones fell through into the ordinary-success
 branch. A consumer that imports this set finds out when it grows again; one that
 spells the strings out for itself does not.
+
+The first two are findings: a machine this run launched *is* still there. The
+third is not, and the set is named for what it decides rather than for what the
+first two have in common. Unknown belongs with occupied and not with free,
+because the two are only interchangeable if the missing evidence is assumed to
+be absence — which is the assumption that put an ``rmtree`` under a live writer.
+Callers that need the difference read ``outcome`` itself; what this set answers
+is the narrower question of whether anything may be taken away.
 """
 
 COPY_INTACT = "intact"
@@ -200,7 +267,7 @@ def _how_intact_is_the_copy(
 
 
 def the_host_was_left_running(boot: Mapping[str, Any]) -> bool:
-    """Whether a machine this run launched is still on the host afterwards.
+    """Whether this run must not treat the host as free afterwards.
 
     Separate from what the command did and from what the copy is worth. A
     command can finish with a returncode of 0 in a guest that then refuses to
@@ -210,6 +277,21 @@ def the_host_was_left_running(boot: Mapping[str, Any]) -> bool:
     ``guest_confirmed_stopped is False`` is included because it is the same
     state reached by a different route: a signal went out and the process was
     still there afterwards.
+
+    **True covers two different findings and three callers read it.** For the
+    two overran outcomes and for a signal that did not take, it says a machine
+    this run launched is still there. For
+    :data:`OUTCOME_STARTED_AND_NOT_IDENTIFIED` it says something weaker: the
+    launcher ran, this run never got a process it could name, and nothing it can
+    see distinguishes an empty host from an occupied one. Both answer the one
+    question every caller here is actually asking — may anything be taken away,
+    reused or reported as finished — and the answer to that is no either way.
+
+    A caller that needs the difference reads ``outcome``, which is in the same
+    mapping and says which of the three it was. Widening this to a three-valued
+    answer was the alternative and it moves all three call sites at once; the
+    one that matters is :func:`_destroy_unless_something_is_still_running`,
+    where "still running" and "cannot say" take the same branch.
     """
     return (
         boot.get("outcome") in OUTCOMES_THAT_LEAVE_THE_HOST_RUNNING
@@ -315,13 +397,26 @@ def _still_running(pid: int) -> bool:
     return True
 
 
-def _may_signal_now(pid_file: Path, watched: int) -> tuple[bool, str]:
+def _may_signal_now(
+    pid_file: Path, watched: int, *, chroot_dir: Path, claim: Mapping[str, Any]
+) -> tuple[bool, str]:
     """Re-read the PID file at the moment of the signal, not before.
 
     The file this run watched appear can be replaced between then and the
     deadline — by a wrapper that re-execs, or by another run that found the same
     jail. What gets signalled has to be what was read, checked again now.
+
+    The jail's ownership record is re-read here too, and for the same reason
+    rather than a different one. A PID file that still holds the watched number
+    says the number did not change; it does not say the jail around it is still
+    this run's. Both questions are asked at the moment of the signal because
+    that is the moment their answers are used.
     """
+    held, why = _this_run_still_holds_it(chroot_dir, claim)
+    if not held:
+        return False, (
+            f"{why}, so the process its PID file names is not this run's to stop"
+        )
     try:
         text = pid_file.read_text().strip()
     except OSError as failure:
@@ -360,9 +455,215 @@ def _confirm_it_stopped(
     return not _still_running(pid)
 
 
+def _who_this_process_is() -> dict[str, Any]:
+    """Enough about this process to tell it apart from one that reuses its number.
+
+    Every field is allowed to be missing. This has to work where ``/proc`` is
+    not what it is on Linux, and a field that could not be read is written down
+    as ``None`` rather than guessed. None of it is read back by any code path
+    here — see :data:`CLAIM_DOES_NOT_ESTABLISH`. It is written so a person
+    holding a stuck jail has something to go on.
+    """
+    boot_id: str | None = None
+    started_at: int | None = None
+    try:
+        boot_id = Path("/proc/sys/kernel/random/boot_id").read_text().strip() or None
+    except OSError:
+        pass
+    try:
+        stat = Path("/proc/self/stat").read_text()
+        # Field 22 is starttime. Field 2 is the command name, which may itself
+        # contain spaces and brackets, so the fields are counted from after the
+        # last ')' — where field 3 begins, making starttime index 19.
+        started_at = int(stat[stat.rindex(")") + 1:].split()[19])
+    except (OSError, ValueError, IndexError):
+        pass
+    return {"pid": os.getpid(), "boot_id": boot_id, "process_started_at": started_at}
+
+
+def _read_the_claim(chroot_dir: Path) -> tuple[dict[str, Any] | None, str]:
+    """What a jail says about who owns it, and how that reads in a sentence.
+
+    Four answers, kept apart rather than collapsed: a claim, no claim at all, a
+    claim that could not be read, and a file that is there but is not a claim.
+    Every one of them is a refusal upstream. **None of them is "unowned, help
+    yourself."** A jail carrying no ownership record is the case this code knows
+    *least* about — it may predate this file, or be a crashed run's wreckage, or
+    hold a machine that is running right now — and reading least-known as free
+    is the exact shape of the defect this replaces, wearing different clothes.
+    """
+    record = chroot_dir / CLAIM_FILE_NAME
+    try:
+        raw = record.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return None, (
+            "It carries no ownership record at all, which says nothing about "
+            "whether it is free."
+        )
+    except OSError as unreadable:
+        return None, (
+            "Its ownership record could not be read "
+            f"({type(unreadable).__name__}: {unreadable})."
+        )
+    try:
+        claim = json.loads(raw)
+    except json.JSONDecodeError as malformed:
+        return None, f"Its ownership record is not readable JSON ({malformed})."
+    if not isinstance(claim, dict) or not isinstance(claim.get("nonce"), str):
+        return None, (
+            "Its ownership record has no nonce, so there is nothing to match "
+            "against it."
+        )
+    return claim, (
+        f"It is claimed for vm_id {claim.get('vm_id')!r} by PID "
+        f"{claim.get('claimed_by', {}).get('pid')}, nonce {claim['nonce'][:8]}."
+    )
+
+
+def claim_the_jail(
+    chroot_dir: Path, *, vm_id: str, plan_sha256: str
+) -> dict[str, Any]:
+    """Take this jail's name for this run, atomically, before anything is in it.
+
+    One ``mkdir(2)`` decides it. The directory either did not exist and now does
+    and is this run's, or it existed and this run is told so — the kernel makes
+    that choice once, for everybody, with no window between asking and taking.
+
+    What this replaces was two operations with a gap: an ``exists()`` read near
+    the top of :func:`first_boot`, and a ``mkdir(exist_ok=True)`` further down
+    inside :func:`place_the_images`. Two runs of the same ``vm_id`` could both
+    read *absent* in that gap and both go on, and ``exist_ok=True`` meant the
+    second one succeeded too. That is not a theoretical width: on this host, 19
+    of 20 unforced pairs got through together, and both members of each pair
+    then launched, placed images into the one jail, copied the one work disk out
+    and removed the one directory.
+
+    **Winning is written down, not remembered.** ``nonce`` is a value only the
+    winner holds, and every later step that would touch this jail re-reads the
+    file and compares rather than trusting a boolean carried down from here. A
+    boolean reports what was true when it was set; the file reports what is true
+    at the moment of the question, and those differ in exactly the case that
+    matters.
+
+    Raises :class:`BootRefused` if the name is taken, and quotes what the other
+    claim says if it can be read. It does not act on that content and does not
+    remove anything: see :data:`CLAIM_DOES_NOT_ESTABLISH`.
+    """
+    try:
+        chroot_dir.mkdir(parents=True, exist_ok=False)
+    except FileExistsError:
+        _, how_it_reads = _read_the_claim(chroot_dir)
+        raise BootRefused(
+            f"the jail this plan names is already on disk ({chroot_dir}), so "
+            "the name is not this run's to take. It holds another run's images, "
+            "work disk and PID file: placing this run's images there would "
+            "overwrite them, and removing it afterwards would take that jail "
+            f"down while it is in use. {how_it_reads} This run creates nothing "
+            "and starts nothing. Two runs reach one jail by sharing a vm_id, "
+            "which is what resuming a run id does."
+        ) from None
+
+    claim = {
+        "schema_version": "1.0",
+        "vm_id": vm_id,
+        "plan_sha256": plan_sha256,
+        "nonce": uuid.uuid4().hex,
+        "claimed_at_unix": time.time(),
+        "claimed_by": _who_this_process_is(),
+        "does_not_establish": CLAIM_DOES_NOT_ESTABLISH,
+    }
+    record = chroot_dir / CLAIM_FILE_NAME
+    record.write_text(json.dumps(claim, indent=2, sort_keys=True), encoding="utf-8")
+    os.chmod(record, 0o444)
+
+    # Read it back before anything is placed. If what is on disk is not what was
+    # just written, every ownership question downstream would be comparing
+    # against a value that was never there, and the first moment anyone would
+    # find out is the moment the jail is being torn down.
+    written_back, how_it_reads = _read_the_claim(chroot_dir)
+    if written_back is None or written_back.get("nonce") != claim["nonce"]:
+        raise BootRefused(
+            "this run created the jail and then could not read its own "
+            f"ownership record back out of it. {how_it_reads} Nothing "
+            "downstream could prove the jail is this run's, so nothing is "
+            "placed and nothing is started. The directory is left exactly as "
+            "it is rather than removed on the strength of an ownership claim "
+            "that just failed to hold."
+        )
+    return claim
+
+
+def _this_run_still_holds_it(
+    chroot_dir: Path, claim: Mapping[str, Any]
+) -> tuple[bool, str]:
+    """Re-read the evidence now, instead of trusting a flag set earlier.
+
+    Called again at every step that would act on the jail — placing images,
+    signalling, copying the disk out, removing the directory — because what
+    those steps need to know is whether the jail is this run's *now*, and a
+    value read at the top of the run answers whether it was this run's *then*.
+    """
+    on_disk, how_it_reads = _read_the_claim(chroot_dir)
+    if on_disk is None:
+        return False, (
+            f"the jail no longer carries this run's ownership record. {how_it_reads}"
+        )
+    if on_disk.get("nonce") != claim.get("nonce"):
+        return False, (
+            f"the jail carries an ownership record this run did not write. "
+            f"{how_it_reads}"
+        )
+    return True, "the jail still carries the ownership record this run wrote"
+
+
+def _give_back_an_unused_claim(chroot_dir: Path, claim: Mapping[str, Any]) -> str:
+    """Hand back a name this run took and then decided not to use.
+
+    Reachable only between taking the claim and putting the first thing in the
+    jail, and guarded twice over. The record must still be this run's, and the
+    removal is ``rmdir`` rather than ``rmtree`` — so if anything at all got in
+    there, the kernel refuses and this reports that instead of deleting it. A
+    shortcut here (*we made it a moment ago, so it must be empty*) would be the
+    one removal in this module standing on an assumption rather than evidence.
+
+    The record has to come out before the directory can, which opens a gap: a
+    handback that gets as far as the ``rmdir`` and is refused there would leave
+    the jail standing with its ownership record already gone. Nothing would then
+    be able to say whose that jail is — not even the run that made it — so the
+    record is put back. Everything downstream reads a jail with no record as a
+    refusal, which is the safe direction, but it is also the *uninformative*
+    one, and this is the one place where the informative answer is still known.
+    """
+    record = chroot_dir / CLAIM_FILE_NAME
+    held, why = _this_run_still_holds_it(chroot_dir, claim)
+    if not held:
+        return f"left as it is, because {why}"
+    written = record.read_text(encoding="utf-8")
+    try:
+        record.unlink()
+        chroot_dir.rmdir()
+    except OSError as failure:
+        put_back = "and its ownership record is back where it was"
+        try:
+            record.write_text(written, encoding="utf-8")
+            os.chmod(record, 0o444)
+        except OSError as restore_failed:
+            put_back = (
+                "and its ownership record could not be put back "
+                f"({type(restore_failed).__name__}: {restore_failed}), so nothing "
+                "on disk now says whose jail this is"
+            )
+        return (
+            "could not be handed back "
+            f"({type(failure).__name__}: {failure}), so it is left as it is {put_back}"
+        )
+    return "handed back empty, for whoever asks for the name next"
+
+
 def place_the_images(
     plan: Mapping[str, Any],
     *,
+    claim: Mapping[str, Any],
     kernel: str | Path,
     rootfs: str | Path,
     work_disk: str | Path,
@@ -371,9 +672,11 @@ def place_the_images(
 ) -> dict[str, Any]:
     """Put each image where ``place_in_jail`` says, with the mode it says.
 
-    The jailer will create this directory itself if it is absent; it is created
-    here because the images have to be inside it before the machine starts and
-    there is no later moment to put them there.
+    The directory is not created here any more. :func:`claim_the_jail` created
+    it exclusively before this was called, and this refuses unless the record
+    that call wrote is still the one in it. Ordering used to be a property of
+    where the lines sat in the file, which nothing checked; now the later step
+    asks, so ``claim`` is required and has no default.
 
     Ownership follows the plan's ``writable_by_the_jailed_user`` rather than a
     convention: the two images the guest must not change are ``0444`` and owned
@@ -382,8 +685,15 @@ def place_the_images(
     true only for as long as the guest chose to respect it.
     """
     chroot_dir = Path(plan["host_side"]["chroot_dir"])
-    chroot_dir.mkdir(parents=True, exist_ok=True)
+    held, why = _this_run_still_holds_it(chroot_dir, claim)
+    if not held:
+        raise BootRefused(
+            f"nothing is placed in this jail because {why}. Images written into "
+            "a jail this run does not hold would land on another run's work "
+            "disk and rootfs."
+        )
     sources = {"/vmlinux": Path(kernel), "/rootfs.ext4": Path(rootfs)}
+
     placed = []
     for item in plan["place_in_jail"]:
         target = chroot_dir / item["in_jail"].lstrip("/")
@@ -437,9 +747,10 @@ def first_boot(
     run's own process, are taken down. Until 2026-09-14 they raised straight out
     of here and left the chroot behind, which is where the work disk lives.
 
-    And one refusal is about neither the plan nor the machine: a jail that was
-    already on disk under the name this plan uses. That is another run's, and
-    this one does not start on top of it. See the comment at the check.
+    And one refusal is about neither the plan nor the machine: a jail whose name
+    is already taken. That name is taken here, by :func:`claim_the_jail`, in one
+    atomic step before anything is placed or launched, and a run that does not
+    get it does not start. See the comment at the claim.
     """
     if plan.get("starts_nothing") is not True:
         raise BootRefused("this is not a launch plan from the C1 builder")
@@ -456,42 +767,45 @@ def first_boot(
     chroot_named = Path(str(host_side["chroot_dir"]))
     deadline_seconds = float(host_side["deadline_seconds"])
 
-    # Read before this run creates anything, and never read again.
-    chroot_was_already_there = chroot_named.exists()
-    pid_file_was_already_there = pid_file.exists()
+    # The name is taken before anything is placed and before any PID is looked
+    # at, and taking it is one operation rather than a look followed by a leap.
+    #
+    # It has to come first because by the time the deadline fires it is already
+    # too late for the two worse things. The plan puts the PID file *inside* the
+    # chroot and names the chroot as the thing to remove afterwards. So a jail
+    # that is already on disk holds another run's live work disk and another
+    # run's PID, and carrying on would copy this run's images over that disk,
+    # chown it, and then remove the whole jail out from under a running machine.
+    # Signalling a stranger's process is the smallest of the three.
+    #
+    # Two runs arrive at one jail by an ordinary route, not an exotic one:
+    # ``--run-id``'s own help says "Reuse it to resume", the per-call counter
+    # restarts at zero on a fresh process, and the machine name is built from
+    # the two. A resumed run therefore lands on call 0000's jail by design.
+    #
+    # Nothing about a directory that was already here says whose it is. It could
+    # be this run's own wreckage from a crash, and it could be a live machine;
+    # the host offers no way to tell those apart from here. So this refuses and
+    # says so, rather than guessing in the direction that happens to let the run
+    # continue — and it does not delete the thing in its way, because a run that
+    # clears an obstacle it cannot identify is the failure it was meant to stop.
+    claim = claim_the_jail(
+        chroot_named, vm_id=str(plan["vm_id"]), plan_sha256=str(plan["plan_sha256"])
+    )
 
-    if chroot_was_already_there or pid_file_was_already_there:
-        # Refused here, before anything is placed, because by the time the
-        # deadline fires it is already too late for the two worse things.
-        #
-        # The plan puts the PID file *inside* the chroot and names the chroot as
-        # the thing to remove afterwards. So a jail that was already on disk
-        # holds another run's live work disk and another run's PID, and carrying
-        # on would copy this run's images over that disk, chown it, and then
-        # remove the whole jail out from under a running machine. Signalling a
-        # stranger's process is the smallest of the three.
-        #
-        # Two runs arrive at one jail by an ordinary route, not an exotic one:
-        # ``--run-id``'s own help says "Reuse it to resume", the per-call
-        # counter restarts at zero on a fresh process, and the machine name is
-        # built from the two. A resumed run therefore lands on call 0000's jail
-        # by design.
-        #
-        # Nothing about a directory that was already here says whose it is. It
-        # could be this run's own wreckage from a crash, and it could be a live
-        # machine; the host offers no way to tell those apart from here. So this
-        # refuses and says so, rather than guessing in the direction that
-        # happens to let the run continue.
+    if pid_file.exists():
+        # Unreachable for a plan that puts the PID file inside the chroot, since
+        # that directory did not exist a moment ago. Kept because the check is
+        # about the file this run will signal, not about where the builder
+        # happens to put it, and a guard that holds only under today's layout is
+        # one nobody notices breaking.
+        handed_back = _give_back_an_unused_claim(chroot_named, claim)
         raise BootRefused(
-            "this plan's jail is already on disk "
-            f"(chroot {'present' if chroot_was_already_there else 'absent'}, "
-            f"PID file {'present' if pid_file_was_already_there else 'absent'}: "
-            f"{chroot_named}), so it holds another run's work disk and PID file. "
-            "Placing this run's images there would overwrite them and removing "
-            "it afterwards would take that run's jail down while it is using "
-            "it. Nothing here establishes that it is this run's, so this run "
-            "does not start. Resuming a run id reuses the machine name, which "
-            "is how two runs reach one jail."
+            f"a PID file was already at {pid_file} before this run launched "
+            "anything, so it names a process this run did not start and must "
+            "not signal, and the deadline path has no way to tell it from one "
+            f"this run started. Nothing was placed and nothing was started; the "
+            f"jail this run had just claimed was {handed_back}."
         )
 
     salvage: dict[str, Any] = {
@@ -502,20 +816,78 @@ def first_boot(
         ),
     }
     grounds: list[dict[str, Any]] = []
+    # Whether this run reached the call that starts a machine. Read by the
+    # teardown handler, which is the only place that has to tell "nothing of
+    # this run's was ever started" apart from "something may be running and
+    # this run cannot see it".
+    #
+    # It is this run's own record of its own control flow, and that is the point
+    # of it. Every host-side substitute for this question is an inference:
+    # the PID file may not have been published yet, the jailer's own process may
+    # already have exited because it daemonised, and neither absence is a
+    # finding. This flag has no such window — either the call below was reached
+    # or it was not.
+    launch_was_attempted = False
+    # Narrower, and knowable for a different reason: this one says the jailer
+    # process never came into being at all. It is still not a host reading — it
+    # is what the launch call itself reported back. See the call site.
+    launch_spawned_nothing = False
 
     try:
         placement = place_the_images(
-            plan, kernel=kernel, rootfs=rootfs, work_disk=work_disk, uid=uid, gid=gid
+            plan,
+            claim=claim,
+            kernel=kernel,
+            rootfs=rootfs,
+            work_disk=work_disk,
+            uid=uid,
+            gid=gid,
         )
         chroot_dir = Path(placement["chroot_dir"])
 
         started_at = now()
-        launch = _run([jailer_binary, *plan["jailer"]["argv"]], timeout=120.0)
+        # Set before the call and not after it, because "the call raised" is not
+        # "nothing started". A timeout means the jailer is still running; an
+        # exec that fails after the fork is reported to this process as an
+        # exception too. Setting this afterwards would record exactly the window
+        # it exists to close.
+        launch_was_attempted = True
+        try:
+            launch = _run([jailer_binary, *plan["jailer"]["argv"]], timeout=120.0)
+        except OSError as never_execed:
+            # The one launch failure that really does mean nothing started, and
+            # it is knowable here without reading the host. ``subprocess``
+            # reports a child's failed ``exec`` back to this process through an
+            # error pipe, reaps the child, and re-raises it with ``filename``
+            # set to the executable it could not run. A child that *did* exec
+            # cannot arrive in this handler at all: it returns a completed
+            # process, or it times out, and a timeout is ``TimeoutExpired``,
+            # which is not an ``OSError``.
+            #
+            # The test is deliberately the narrow one rather than the bare
+            # ``except``. An ``OSError`` that is not about ``argv[0]`` — a pipe
+            # that fails while reading output the child is already producing,
+            # say — comes from after the exec succeeded, leaves this ``False``,
+            # and is refused along with everything else this run cannot account
+            # for.
+            #
+            # This branch is neither hypothetical nor rare. It is what a host
+            # without the jailer installed does, which is every host that runs
+            # this repository's tests — the CI runners and the development boxes
+            # — though not the one host provisioned to boot on. Leaving it out
+            # costs more than a leaked directory: ``vm_id`` is derived, not
+            # drawn, so the jail left behind is the name the same run's next
+            # attempt will claim, and the claim is ``exist_ok=False``.
+            launch_spawned_nothing = never_execed.filename == jailer_binary
+            raise
 
         # ``watched`` is the only value this run will ever signal, and it is set
         # once, here, from a file that did not exist a moment ago.
         watched: int | None = None
-        why_not_this_pid = "no PID file appeared, so nothing started"
+        why_not_this_pid = (
+            "no PID file appeared within the grace window, so there is no PID "
+            "this run may signal"
+        )
         while now() - started_at < PID_FILE_GRACE_SECONDS:
             if pid_file.exists():
                 try:
@@ -535,14 +907,29 @@ def first_boot(
         # down as the separate things it checked rather than as one boolean,
         # because a verdict nobody can audit is how "the PID file was not there"
         # came to stand in for ownership in the first place.
+        #
+        # The first ground is the load-bearing one and it is a question asked
+        # *now*, against the disk, rather than a flag set at the top of the run.
+        # Its predecessor — "the jail did not exist before this run placed
+        # anything" — was a boolean holding the result of one ``exists()`` call,
+        # and two concurrent runs both got ``False`` from it and both recorded
+        # the ground as held.
+        still_ours, still_ours_why = _this_run_still_holds_it(chroot_named, claim)
         grounds = [
             {
-                "ground": "the jail did not exist before this run placed anything",
-                "held": not chroot_was_already_there,
+                "ground": (
+                    "the ownership record this run wrote is still the one in the jail"
+                ),
+                "held": still_ours,
+                "reading": still_ours_why,
             },
             {
                 "ground": "no PID file was there before this run launched",
-                "held": not pid_file_was_already_there,
+                "held": True,
+                "reading": (
+                    "checked against the disk before anything was placed; a run "
+                    "that found one there did not reach this point"
+                ),
             },
             {
                 "ground": "a PID file appeared while this run was watching",
@@ -571,7 +958,23 @@ def first_boot(
         left_alone_because: str | None = None
 
         if watched is None:
-            outcome = "never_started"
+            # Not ``never_started``. That word is a finding — it says nothing was
+            # put on the host — and only two things support it: that the launch
+            # was never reached, and that the launch reported its own ``exec``
+            # never happened. Both are this run's account of its own control
+            # flow, and neither can arrive *here*. ``launch_was_attempted`` is
+            # set on the line above the call, and the one error that proves
+            # nothing spawned is re-raised out of its handler, so a run that
+            # reaches this line has attempted a launch that did exec.
+            #
+            # What is left is the host declining to answer: the pid file may not
+            # have been published yet, or was caught mid-write, and a host
+            # declining to answer is not a host saying no. The cleanup path
+            # already draws this line — it is the whole of
+            # ``(launch_was_attempted and not launch_spawned_nothing)`` below.
+            # The ordinary path had one word for all three arrivals, and that
+            # word is what the teardown gate reads.
+            outcome = OUTCOME_STARTED_AND_NOT_IDENTIFIED
             left_alone_because = why_not_this_pid
         else:
             while _still_running(watched):
@@ -579,7 +982,9 @@ def first_boot(
                 if now() - started_at < deadline_seconds:
                     sleep(POLL_SECONDS)
                     continue
-                may_signal, why_not_now = _may_signal_now(pid_file, watched)
+                may_signal, why_not_now = _may_signal_now(
+                    pid_file, watched, chroot_dir=chroot_named, claim=claim
+                )
                 if not may_signal:
                     # The deadline is reached and the thing at the end of it is
                     # not demonstrably ours. Leaving a machine running is bad;
@@ -618,7 +1023,20 @@ def first_boot(
 
         disk_in_jail = chroot_dir / "work.ext4"
         results: dict[str, str | None] = {}
-        if disk_in_jail.exists():
+        still_ours_at_the_copy, why_not_ours = _this_run_still_holds_it(
+            chroot_named, claim
+        )
+        if not still_ours_at_the_copy:
+            # Asked again here rather than inherited from the check above,
+            # because a disk that is no longer in this run's jail is no longer
+            # this run's to read. Copying it out would put another run's bytes
+            # under this run's result path, which is worse than having no copy:
+            # a missing copy is visibly missing, and a stranger's copy is not.
+            salvage["why_not"] = (
+                f"no copy was taken because {why_not_ours}, so the work disk in "
+                "that jail is not this run's to read"
+            )
+        elif disk_in_jail.exists():
             # The copy first, the reading second, and that order is not
             # interchangeable. This copy is the only place the guest's writes
             # still exist once the jail is gone; reading the files out of the
@@ -645,8 +1063,9 @@ def first_boot(
         teardown = _clean_up_after_a_failure(
             host_side=host_side,
             pid_file=pid_file,
-            pid_file_was_already_there=pid_file_was_already_there,
-            chroot_was_already_there=chroot_was_already_there,
+            claim=claim,
+            launch_was_attempted=launch_was_attempted,
+            launch_spawned_nothing=launch_spawned_nothing,
             work_disk=work_disk,
             salvage=salvage,
             now=now,
@@ -670,6 +1089,8 @@ def first_boot(
         host_side.get("destroy_after_the_run", []),
         outcome=outcome,
         guest_confirmed_stopped=guest_confirmed_stopped,
+        chroot_dir=chroot_named,
+        claim=claim,
     )
 
     return {
@@ -678,6 +1099,11 @@ def first_boot(
         "vm_id": plan["vm_id"],
         "plan_sha256": plan["plan_sha256"],
         "policy_sha256": plan["policy_sha256"],
+        # The evidence that this jail's name was this run's, carried out with
+        # the record rather than left on a disk that the same record says to
+        # remove. ``nonce`` is what every ownership question in here compared
+        # against, so a reader can see what was being compared.
+        "jail_claim": dict(claim),
         "jailer": {
             "argv": list(plan["jailer"]["argv"]),
             "returncode": launch.returncode,
@@ -721,15 +1147,33 @@ def _destroy_unless_something_is_still_running(
     *,
     outcome: str,
     guest_confirmed_stopped: bool | None,
+    chroot_dir: Path,
+    claim: Mapping[str, Any],
 ) -> dict[str, Any]:
-    """Remove the jail, unless this run has just said the guest is still in it.
+    """Remove the jail, unless it is not this run's or something is still in it.
 
-    The direct consequence of the two outcomes above, and the reason they could
-    not be added without coming here. Both of them end with a machine this run
-    launched still on the host; the line that followed removed the jail anyway,
-    which is an ``rmtree`` of the rootfs, the work disk and the socket a live
-    Firecracker is holding open. The run then returned a record saying the jail
-    was gone, which it was, and saying nothing about what was using it.
+    Two refusals, and they are about different things. The first is ownership:
+    the jail's record has to still be the one this run wrote, checked here at
+    the moment of removal rather than inherited from a flag set before the boot.
+    ``rmtree`` is the least recoverable thing this module does, so it is the
+    place least willing to act on a stale answer. ``claim`` has no default for
+    the same reason — a cleanup that can be called without evidence will be.
+
+    The second is the direct consequence of the outcomes that mean this host may
+    not be treated as free, and the reason they could not be added without
+    coming here. Two of them are findings: a machine this run launched is still
+    on the host. The line that followed removed the jail anyway, which is an
+    ``rmtree`` of the rootfs, the work disk and the socket a live Firecracker is
+    holding open. The run then returned a record saying the jail was gone, which
+    it was, and saying nothing about what was using it.
+
+    The third is not a finding but the absence of one: the launcher ran and this
+    run never got a process it could name. That state used to arrive here
+    wearing the word ``never_started`` and was removed like an empty jail, which
+    is the same ``rmtree`` reached by assuming the missing evidence was absence.
+    It is refused for the same reason and recorded differently, because "a guest
+    is still running" and "nothing here can say whether one is" are different
+    findings and a reader has to be able to tell them apart.
 
     A leaked directory is a worse-looking outcome and a better one. It can be
     found, inspected and removed by hand once the machine is gone; a filesystem
@@ -740,18 +1184,43 @@ def _destroy_unless_something_is_still_running(
     there" and "the jail is still there because this run would not take it from
     a live machine" are the same directory listing and different findings.
     """
-    if the_host_was_left_running(
-        {"outcome": outcome, "guest_confirmed_stopped": guest_confirmed_stopped}
-    ):
+    held, why = _this_run_still_holds_it(chroot_dir, claim)
+    if not held:
         return {
             "removed": {},
             "all_gone": False,
             "failures": [],
             "refused_because": (
+                f"nothing was removed because {why}. Whatever is in that jail "
+                "now belongs to whoever holds it, and this run does not take "
+                "down a jail on the strength of having once held the name"
+            ),
+            "left_behind": list(paths),
+        }
+    if the_host_was_left_running(
+        {"outcome": outcome, "guest_confirmed_stopped": guest_confirmed_stopped}
+    ):
+        if outcome == OUTCOME_STARTED_AND_NOT_IDENTIFIED:
+            # Not the same sentence. The two overran outcomes know a machine is
+            # there; this one knows that it does not know, and a record claiming
+            # a live guest on this evidence would be the mirror image of the bug
+            # being fixed — asserting the answer the run could not get.
+            refused_because = (
+                "the launcher ran and this run never got a process it could "
+                "name, so nothing here says the jail is empty; removing it "
+                "would take a work disk something may still have open"
+            )
+        else:
+            refused_because = (
                 f"the machine ended as {outcome!r}, so a guest this run started "
                 "is still on the host; removing its jail would take the work "
                 "disk and the socket it is using with it"
-            ),
+            )
+        return {
+            "removed": {},
+            "all_gone": False,
+            "failures": [],
+            "refused_because": refused_because,
             "left_behind": list(paths),
         }
     destroyed = _destroy(paths)
@@ -805,10 +1274,11 @@ def _clean_up_after_a_failure(
     *,
     host_side: Mapping[str, Any],
     pid_file: Path,
-    pid_file_was_already_there: bool,
+    claim: Mapping[str, Any],
+    launch_was_attempted: bool,
+    launch_spawned_nothing: bool,
     work_disk: str | Path,
     salvage: dict[str, Any],
-    chroot_was_already_there: bool = False,
     now: Callable[[], float] = time.monotonic,
     sleep: Callable[[float], None] = time.sleep,
 ) -> dict[str, Any]:
@@ -827,16 +1297,59 @@ def _clean_up_after_a_failure(
     4. nothing here touches a path or a process this run did not create.
 
     The fourth is the one worth stating as a rule, and the one that is easiest
-    to get wrong in the safe-looking direction. A process is signalled only when
-    every ground in ``ownership_grounds`` held: the jail was not on disk before
-    this run placed anything, no PID file was there before it launched, one
-    appeared while it was watching, and the value in it is one this platform can
-    signal. The jail being there first is the strongest of those, because the
-    plan puts the PID file *inside* the chroot — a jail that predates this run
-    holds another run's PID file and another run's work disk.
+    to get wrong in the safe-looking direction. All three steps are gated on the
+    same question — is the ownership record this run wrote still the one in this
+    jail — and each of them **asks it again, against the disk**, rather than
+    reading a value passed in from before the boot. That is why ``claim`` is
+    required and has no default. Its predecessor was
+    ``chroot_was_already_there: bool = False``, and every caller that forgot it
+    got the answer that permits signalling, copying and removal; a default that
+    can only be wrong in the unsafe direction is not a default.
+
+    A process is signalled only when the jail is still this run's, no PID file
+    was there before it launched, one appeared while it was watching, and the
+    value in it is one this platform can signal. The jail is the strongest of
+    those, because the plan puts the PID file *inside* the chroot — a jail this
+    run does not hold contains another run's PID file and another run's work
+    disk.
 
     None of that rules out PID reuse, and this does not claim it does; see
     :data:`CANNOT_RULE_OUT`, which goes out with the record.
+
+    Removal is gated on a second question, separate from ownership: is anything
+    of this run's possibly still using this jail. Two readings answer it, and
+    nothing else does.
+
+    * ``launch_was_attempted`` is ``False`` — this run never reached the call
+      that starts a machine, so there is no machine of this run's to be using
+      anything. That is the case this step is *for*, and it must keep working,
+      or a failure before the launch leaks a jail every time.
+    * ``launch_spawned_nothing`` is ``True`` — the call was reached and reported
+      back that the jailer was never executed. Same conclusion as the reading
+      above, arrived at one step later, and it is what a host without the jailer
+      installed produces on every call.
+    * a PID this run watched was confirmed stopped.
+
+    Everything else refuses, including the reading that looks most like an
+    empty jail: the launch was reached and no usable PID ever turned up. That
+    is not a finding that nothing is running. The jailer forks and execs before
+    it publishes a PID file, so an absent file is consistent with a machine that
+    started a moment ago, and a file holding bytes that are not a PID is a file
+    something was in the middle of writing. ``pid_file.exists()`` is read here
+    as evidence that something *did* start, never as evidence that nothing did;
+    it has no window in the first direction and a real one in the second.
+
+    ``launch_was_attempted`` is required and has no default for the same reason
+    ``claim`` is. There is no value that is safe to assume: ``False`` permits
+    removal, which is the unsafe direction, and ``True`` refuses the one case
+    this step exists to handle.
+
+    ``launch_spawned_nothing`` is required too, for a different reason. Its
+    unsafe value is the one a default would have to pick — ``False`` here only
+    ever refuses — but the two arguments are a pair and are only meaningful read
+    together, and a default is how one of a pair silently stops tracking the
+    other. It is also the narrower of the two claims and the easier to widen by
+    accident, so a caller is made to say it.
 
     Failures are collected, never raised, and now that means **every**
     ``Exception`` rather than the two that were anticipated. This runs while
@@ -863,10 +1376,30 @@ def _clean_up_after_a_failure(
     chroot_dir = Path(str(host_side["chroot_dir"]))
 
     # ---- 1. stop it, if it is this run's to stop -------------------------
+    holds_it, why_not_ours = _this_run_still_holds_it(chroot_dir, claim)
+    # Read once, here, before anything is signalled, and read again by step 3
+    # from this variable rather than from the disk.
+    #
+    # This signal only points one way. A PID file being there at all does say
+    # the jailer got far enough to write one, so something was started; whether
+    # its contents are a PID this run may signal is a second question, and the
+    # answer to it is not evidence about the first. The converse does *not*
+    # follow. An absent PID file does not say nothing was started, because the
+    # jailer forks and execs before it publishes, and a failure that lands in
+    # this handler can land inside that window. So this variable is read as
+    # "something is definitely running" and never as "nothing is".
+    #
+    # What nothing was started *does* follow from is ``launch_was_attempted``,
+    # which is this run's own record of its own control flow rather than an
+    # inference from the host.
+    a_pid_file_appeared = holds_it and pid_file.exists()
     process: dict[str, Any] = {
         "pid_file": pid_file.as_posix(),
-        "existed_before_this_run": pid_file_was_already_there,
-        "chroot_existed_before_this_run": chroot_was_already_there,
+        "jail_held_by_this_run": holds_it,
+        "jail_reading": why_not_ours,
+        "launch_was_attempted": launch_was_attempted,
+        "launch_spawned_nothing": launch_spawned_nothing,
+        "pid_file_appeared": a_pid_file_appeared,
         "pid": None,
         "signalled": False,
         "was_running": None,
@@ -875,19 +1408,18 @@ def _clean_up_after_a_failure(
         "cannot_rule_out": CANNOT_RULE_OUT,
     }
     try:
-        if chroot_was_already_there:
+        if not holds_it:
             process["left_alone_because"] = (
-                "the jail was on disk before this run placed anything, so the "
-                "PID file inside it and the machine it names are another run's, "
-                "and this run does not stop another run's machine"
+                f"{why_not_ours}, so the PID file inside it and the machine it "
+                "names are another run's, and this run does not stop another "
+                "run's machine"
             )
-        elif pid_file_was_already_there:
+        elif not a_pid_file_appeared:
             process["left_alone_because"] = (
-                "this PID file was there before this run launched anything, so "
-                "whatever it names is not this run's to kill"
+                "no PID file is in this jail, so there is no PID this run may "
+                "signal. That is a reason not to signal, and it is not a "
+                "finding that nothing was started"
             )
-        elif not pid_file.exists():
-            process["left_alone_because"] = "no PID file appeared, so nothing started"
         else:
             try:
                 text: Any = pid_file.read_text().strip()
@@ -928,10 +1460,11 @@ def _clean_up_after_a_failure(
 
     # ---- 2. get the bytes out, now that the writer has stopped -----------
     try:
-        if chroot_was_already_there:
+        holds_it_now, why_not_ours_now = _this_run_still_holds_it(chroot_dir, claim)
+        if not holds_it_now:
             salvage["why_not"] = (
-                "the jail was there before this run, so the disk inside it is "
-                "another run's and this run does not copy it out"
+                f"{why_not_ours_now}, so the disk inside it is another run's "
+                "and this run does not copy it out"
             )
         elif salvage.get("returned_copy") is None:
             disk_in_jail = chroot_dir / "work.ext4"
@@ -966,22 +1499,69 @@ def _clean_up_after_a_failure(
     # ---- 3. remove the jail, if it is this run's to remove ---------------
     destroyed: dict[str, Any] = {"removed": {}, "all_gone": False, "failures": []}
     refused_to_destroy: str | None = None
-    if chroot_was_already_there:
+    holds_it_at_removal, why_not_at_removal = _this_run_still_holds_it(
+        chroot_dir, claim
+    )
+    if not holds_it_at_removal:
         refused_to_destroy = (
-            "the jail was on disk before this run placed anything; removing it "
-            "would take another run's work disk with it"
+            f"{why_not_at_removal}; removing it would take another run's work "
+            "disk with it"
         )
     elif process["was_running"] is True and process["confirmed_stopped"] is not True:
-        # The same rule the ordinary path applies, for the same reason. Step 1
-        # above either declined to signal or sent one and could not confirm it
-        # landed; either way the last thing this run observed was a live process
-        # holding this jail's work disk and socket open. Removing it here would
-        # be the failure path doing what the success path was just stopped from
-        # doing.
+        # Not the same rule the ordinary path applies, and the comment that used
+        # to say it was is the thing the independent review caught. The ordinary
+        # path asks ``outcome in OUTCOMES_THAT_LEAVE_THE_HOST_RUNNING or
+        # guest_confirmed_stopped is False``; no ``outcome`` exists here, because
+        # the run failed before one was assigned, so that vocabulary is not
+        # available and this branch is written in the two readings that are.
+        #
+        # The claim that *is* true is narrower and worth having in its place:
+        # this branch and the one below it together refuse a superset of what
+        # the ordinary path refuses. Step 1 either declined to signal or sent one
+        # and could not confirm it landed; either way the last thing this run
+        # observed was a live process holding this jail's work disk and socket
+        # open.
         refused_to_destroy = (
             "this run's own machine was last seen running and was never "
             "confirmed stopped, so removing its jail would take the disk and "
             "socket it is using with it"
+        )
+    elif (
+        (launch_was_attempted and not launch_spawned_nothing) or a_pid_file_appeared
+    ) and process["confirmed_stopped"] is not True:
+        # The gap the review found, in the state that looks most like an empty
+        # jail: this run reached the launch and never got a PID it could watch,
+        # so ``was_running`` is still None and the branch above lets it through.
+        #
+        # None is not False. It says this run never looked at a process, and the
+        # three ways of arriving here are a PID file that is absent, one that
+        # could not be read, and one holding bytes that are not a PID. The last
+        # two are a file something was in the middle of writing. The first is the
+        # window between fork and publication. None of the three is a finding
+        # that nothing is running, and the record said as much three steps ago —
+        # ``copy_integrity`` is ``unverified`` on exactly this path, which is
+        # this module's own words for "what was writing to that disk cannot be
+        # named from here". Removing the jail would be the other half of the same
+        # return value contradicting it.
+        #
+        # ``a_pid_file_appeared`` is in the condition as well as
+        # ``launch_was_attempted`` because a PID file in a jail this run claimed
+        # and never launched into is a state nothing here can explain, and an
+        # unexplained writer is treated the same as a known one.
+        #
+        # ``launch_spawned_nothing`` is the one subtraction from that, and it is
+        # subtracted from the reaching-the-launch half only. It does not soften
+        # the rule; it names a case the rule was never about. "The call raised"
+        # is not "nothing started" in general — that is why the flag above is set
+        # before the call and not after — but one launch failure does carry its
+        # own proof, because ``subprocess`` can only raise ``OSError`` about
+        # ``argv[0]`` when the ``exec`` never succeeded. A PID file still refuses
+        # even then: if something wrote one into this jail, this run's account of
+        # its own launch does not explain it, and the unexplained writer wins.
+        refused_to_destroy = (
+            "this run started something and never saw a PID it could watch, so "
+            "nothing here can say whether that machine is still writing to this "
+            "jail; an absent or unreadable PID file is not a stopped machine"
         )
     else:
         try:

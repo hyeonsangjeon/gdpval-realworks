@@ -31,6 +31,8 @@ import os
 import shutil
 import signal
 import subprocess
+import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -67,6 +69,29 @@ def plan(tmp_path, monkeypatch):
     monkeypatch.setattr(os, "chown", lambda *a, **k: None)
     return build_launch_plan(
         vm_id="test-own",
+        firecracker_binary=tmp_path / "firecracker",
+        kernel_path=tmp_path / "vmlinux",
+        rootfs_path=tmp_path / "rootfs.ext4",
+        work_disk_path=tmp_path / "work.ext4",
+        uid=997,
+        gid=997,
+        vcpu_count=1,
+        cgroup_version=2,
+        chroot_base=tmp_path / "jail",
+    )
+
+
+def _a_second_plan(plan, tmp_path, *, vm_id="test-own-2"):
+    """The same host and images under a second name.
+
+    Needed wherever one test boots twice. A boot that ends without a pid file no
+    longer removes its jail, so the first attempt's ``vm_id`` stays claimed and a
+    second attempt on it is refused before anything starts — which is the point
+    of ``exist_ok=False`` and not something to work around by deleting the jail
+    the run just declined to delete.
+    """
+    return build_launch_plan(
+        vm_id=vm_id,
         firecracker_binary=tmp_path / "firecracker",
         kernel_path=tmp_path / "vmlinux",
         rootfs_path=tmp_path / "rootfs.ext4",
@@ -433,7 +458,7 @@ def test_d1_a_pid_file_from_before_this_run_is_never_signalled(
 
     assert not signals.anything_reached_kill_for(STRANGER)
     assert signals.sent == []
-    assert "does not start" in str(refused.value)
+    assert "creates nothing and starts nothing" in str(refused.value)
     assert Path(plan["host_side"]["pid_file"]).read_text().strip() == str(STRANGER)
 
 
@@ -537,6 +562,11 @@ def test_d5_cleanup_leaves_a_jail_this_run_did_not_create_alone(
     guard that is only unreachable is not a guard that holds. All three
     destructive operations are checked — the stranger is not signalled, its disk
     is not copied out, and its jail is still there afterwards.
+
+    The claim handed in is one this run holds for some *other* jail, which is
+    the honest shape of this scenario: the jail on disk carries no ownership
+    record of this run's, so every step has to read that as "not mine" rather
+    than as "unclaimed, therefore free".
     """
     chroot = _a_jail_someone_else_is_using(plan)
     before = (chroot / "work.ext4").read_bytes()
@@ -547,16 +577,22 @@ def test_d5_cleanup_leaves_a_jail_this_run_did_not_create_alone(
     teardown = _clean_up_after_a_failure(
         host_side=plan["host_side"],
         pid_file=Path(plan["host_side"]["pid_file"]),
-        pid_file_was_already_there=True,
+        claim={"nonce": "a-nonce-this-jail-has-never-carried", "vm_id": plan["vm_id"]},
+        # False on purpose, and it is the weaker of the two values here. With
+        # True the launch branch would also refuse, and this test would pass
+        # even if ownership had stopped gating removal entirely. False leaves
+        # ownership as the only thing that can produce the refusal below.
+        launch_was_attempted=False,
+        launch_spawned_nothing=False,
         work_disk=tmp_path / "work.ext4",
         salvage=salvage,
-        chroot_was_already_there=True,
     )
 
     assert signals.sent == []
     assert (chroot / "work.ext4").read_bytes() == before
     assert chroot.exists()
     assert teardown["process"]["signalled"] is False
+    assert teardown["process"]["jail_held_by_this_run"] is False
     assert "another run's" in teardown["process"]["left_alone_because"]
     assert salvage["returned_copy"] is None
     assert teardown["removed"] == {}
@@ -595,8 +631,17 @@ def test_d6_ownership_is_recorded_as_evidence_both_when_it_holds_and_when_it_doe
     assert "reuse" in evidence["cannot_rule_out"].lower()
     assert evidence["left_alone_because"]
 
+    # Its own vm_id, and that is now a requirement rather than tidiness. The
+    # refused boot above leaves its jail on the disk, because a launcher that ran
+    # and published no pid file has not said the jail is empty. The name stays
+    # claimed, and ``claim_the_jail`` is ``exist_ok=False``.
+    second = _a_second_plan(plan, tmp_path)
     owned = _boot(
-        plan, tmp_path, monkeypatch, jailer=_jailer_writing(plan), signals=_Signals()
+        second,
+        tmp_path,
+        monkeypatch,
+        jailer=_jailer_writing(second),
+        signals=_Signals(),
     )
 
     granted = owned["pid_file"]
@@ -1022,7 +1067,14 @@ def _reach(row: str, plan, pid_file: Path):
 #: Columns: outcome, last observed running state, confirmed stopped,
 #: ``copied_while_running``, ``copy_integrity``.
 THE_COPY_TRUTH_TABLE = [
-    ("no pid file ever appeared", "never_started", None, None, None, "unverified"),
+    (
+        "no pid file ever appeared",
+        "started_and_could_not_be_identified",
+        None,
+        None,
+        None,
+        "unverified",
+    ),
     ("the guest exited on its own", "booted", False, None, False, "intact"),
     (
         "it went between the probe and the signal",
@@ -1239,6 +1291,107 @@ def test_d22_an_ordinary_boot_still_takes_its_jail_down(plan, tmp_path, monkeypa
         assert result["teardown"]["all_gone"] is True
         assert result["teardown"]["refused_because"] is None
         assert not chroot.exists()
+
+
+def test_d23_a_live_writer_and_no_pid_file_is_not_an_empty_jail(
+    plan, tmp_path, monkeypatch
+):
+    """The ordinary path's version of D21, with a real process holding the disk.
+
+    D21 and D22 covered the two outcomes that *say* a machine is still there.
+    This is the state that says nothing at all: the launcher exits 0, something
+    is running, and no pid file ever appears. The run has no process to probe, so
+    every host-side question returns the same silence a genuinely empty jail
+    would — and the word written down for that silence used to be
+    ``never_started``, which is not in the set the teardown gate reads. The jail
+    came down on top of the writer and the record said ``all_gone: True``.
+
+    The writer here is a real child of this test, opened on the work disk inside
+    the jail, with the copy taken and the teardown reached while its descriptor
+    is still open. Nothing is signalled by the code under test — there is no PID
+    for it to signal — and the child is this test's to stop, which it does.
+
+    This is a substitute launcher on a box with no ``/dev/kvm``, so it says
+    nothing about how long a real jailer takes to publish a pid. What it pins is
+    narrower and does not depend on that: whatever the reason the file is absent,
+    a run that cannot name a process must not treat the jail as free.
+    """
+    real_kill = os.kill
+    chroot = Path(plan["host_side"]["chroot_dir"])
+    disk_in_jail = chroot / "work.ext4"
+    opened = tmp_path / "the-writer-has-it-open"
+    children: list[subprocess.Popen] = []
+
+    def a_jailer_that_leaves_a_writer_and_no_pid_file(argv, timeout=300.0):
+        child = subprocess.Popen(
+            [
+                sys.executable,
+                "-c",
+                "import pathlib, sys, time\n"
+                "fd = open(sys.argv[1], 'ab')\n"
+                "pathlib.Path(sys.argv[2]).write_text('open')\n"
+                "time.sleep(30)\n",
+                str(disk_in_jail),
+                str(opened),
+            ]
+        )
+        children.append(child)
+        for _ in range(100):
+            if opened.exists():
+                break
+            time.sleep(0.05)
+        # Exit 0 and no pid file. This is the shape the ordinary path could not
+        # tell apart from an empty host.
+        return subprocess.CompletedProcess(argv, 0, "", "")
+
+    try:
+        signals = _Signals()
+        result = _boot(
+            plan,
+            tmp_path,
+            monkeypatch,
+            jailer=a_jailer_that_leaves_a_writer_and_no_pid_file,
+            signals=signals,
+            reader=lambda image, names, **kw: {n: None for n in WORK_DISK_RESULTS},
+        )
+
+        assert opened.exists(), "the writer never got the disk open"
+        assert children[0].poll() is None, (
+            "the writer has to still be holding the disk at the moment teardown "
+            "ran, or this test is not about the state it names"
+        )
+
+        # The destructive fact first, deliberately. If this test ever fails it
+        # should say "the jail came down on a live writer", not "the outcome is
+        # spelled differently"; the word is asserted below because it is how the
+        # gate reaches this answer, not because it is the finding.
+        assert result["teardown"]["all_gone"] is False
+        assert chroot.exists()
+        assert disk_in_jail.exists()
+        assert "never got a process it could name" in result["teardown"][
+            "refused_because"
+        ]
+        assert result["teardown"]["left_behind"] == list(
+            plan["host_side"]["destroy_after_the_run"]
+        )
+
+        assert result["outcome"] == "started_and_could_not_be_identified"
+        assert result["pid_file"]["appeared"] is False
+        assert result["pid_file"]["pid_watched"] is None
+        assert result["guest_confirmed_stopped"] is None
+        assert the_host_was_left_running(result) is True
+        # Nothing was signalled, because there was no PID to signal. The writer
+        # is left running and left alone, which is the whole of the claim: this
+        # run does not clean up what it cannot identify, in either direction.
+        assert signals.sent == []
+    finally:
+        for child in children:
+            if child.poll() is None:
+                # This test's own child, by the pid this test was handed when it
+                # created it. ``os.kill`` is stood in for inside the boot, so the
+                # reference taken before it is the one used here.
+                real_kill(child.pid, signal.SIGKILL)
+            child.wait(timeout=10)
 
 
 # --------------------------------------------------------------------------

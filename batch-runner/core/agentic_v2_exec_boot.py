@@ -55,6 +55,7 @@ import shlex
 from typing import Any, Mapping
 
 from core.agentic_v2_first_boot import (
+    OUTCOME_STARTED_AND_NOT_IDENTIFIED,
     OUTCOMES_THAT_LEAVE_THE_HOST_RUNNING,
     the_host_was_left_running,
 )
@@ -325,23 +326,25 @@ def read_the_boot(
 ) -> dict[str, Any]:
     """Read one boot as a tool result, and say on what grounds.
 
-    Six outcomes come back from the launcher and they mean six different things.
-    The table is small and every row of it matters:
+    Seven outcomes come back from the launcher and they mean seven different
+    things. The table is small and every row of it matters:
 
-    ================================  =============  =============================
-    boot outcome                      exit status    what the model is told
-    ================================  =============  =============================
-    ``booted``                        present        ``ok``, with that returncode
-    ``booted``                        absent         ``compute_backend_error``
-    ``booted_but_wrote_nothing``      absent         ``compute_backend_error``
-    ``never_started``                 absent         ``compute_start_failed``
-    ``stopped_by_the_deadline``       absent         ``cancelled`` — the bound worked
-    ``stopped_by_the_deadline``       **present**    ``ok``, with that returncode
-    ``overran_and_was_left_alone``    absent         ``compute_backend_error``
-    ``overran_and_was_left_alone``    **present**    ``ok``, and the host is not free
-    ``overran_and_did_not_stop``      absent         ``compute_backend_error``
-    ``overran_and_did_not_stop``      **present**    ``ok``, and the host is not free
-    ================================  =============  =============================
+    ====================================  ===========  =========================
+    boot outcome                          exit status  what the model is told
+    ====================================  ===========  =========================
+    ``booted``                            present      ``ok``, with that returncode
+    ``booted``                            absent       ``compute_backend_error``
+    ``booted_but_wrote_nothing``          absent       ``compute_backend_error``
+    ``never_started``                     absent       ``compute_start_failed``
+    ``started_and_could_not_be_identified`` absent     ``compute_backend_error``
+    ``started_and_could_not_be_identified`` **present** ``ok``, host state unknown
+    ``stopped_by_the_deadline``           absent       ``cancelled`` — the bound worked
+    ``stopped_by_the_deadline``           **present**  ``ok``, with that returncode
+    ``overran_and_was_left_alone``        absent       ``compute_backend_error``
+    ``overran_and_was_left_alone``        **present**  ``ok``, and the host is not free
+    ``overran_and_did_not_stop``          absent       ``compute_backend_error``
+    ``overran_and_did_not_stop``          **present**  ``ok``, and the host is not free
+    ====================================  ===========  =========================
 
     The rows with an exit status present are the ones that are easy to get
     wrong. If the guest wrote an exit status, the command **finished**; the
@@ -357,10 +360,26 @@ def read_the_boot(
     host's state and the work disk's integrity are separate answers to separate
     questions, and they now travel beside it instead of being absent.
 
+    ``started_and_could_not_be_identified`` is the one row that is not a finding
+    about the machine. It says the launcher ran and the launcher's caller never
+    got a process it could name, so this function says neither that a guest is
+    running nor that the host is free. It is kept out of the
+    ``compute_start_failed`` row on purpose: that row tells the model no machine
+    existed, and "the pid file was not there" is not evidence for that.
+
+    ``never_started`` keeps its row and no longer has a live producer.
+    :mod:`core.agentic_v2_first_boot` stopped writing it once the evidence rule
+    above was applied, because nothing reaches its ordinary return without having
+    attempted a launch that did ``exec``. Records written before that change
+    still say it, and this function reads records.
+
     Three axes, never folded together:
 
     ``result``               what the *command* did. The model sees this.
-    ``host_left_running``    whether a machine this run launched is still there.
+    ``host_left_running``    whether the host may be treated as free afterwards.
+                             True for a machine known to still be there *and*
+                             for one this run could not identify; ``boot_outcome``
+                             beside it is what tells those apart.
     ``copy_integrity``       whether the returned work disk may be read as an
                              intact filesystem.
 
@@ -438,6 +457,18 @@ def read_the_boot(
                 " after its deadline had already fired, so the command finished "
                 "and only the shutdown overran"
             )
+        elif outcome == OUTCOME_STARTED_AND_NOT_IDENTIFIED:
+            # Reachable, and it has to be said differently. The exit status is a
+            # file on the work disk, so the guest can have finished and written
+            # one while this run still never got a process it could name. The
+            # branch below would report that as a machine known to be running,
+            # which is a claim this run cannot make in either direction.
+            ran_anyway = (
+                ", though this run never got a process it could name for the "
+                "machine it ran in, so nothing here says the host is free and "
+                "the returned work disk may have been copied while something "
+                "still had it open"
+            )
         elif outcome in OUTCOMES_THAT_LEAVE_THE_HOST_RUNNING:
             # The command's answer is still the command's answer. What is *not*
             # ordinary is that the guest it ran in is still on the host, and
@@ -470,7 +501,22 @@ def read_the_boot(
             False,
             "compute_start_failed",
             {},
-            "the jailer wrote no pid file, so no machine existed to run in",
+            "the launch either was never reached or reported that its exec "
+            "never happened, so no machine existed to run in",
+        )
+    if outcome == OUTCOME_STARTED_AND_NOT_IDENTIFIED:
+        # Deliberately not ``compute_start_failed``. That answer says no machine
+        # existed, and the only evidence for it is this run's account of its own
+        # control flow. An absent pid file is not that evidence — the launcher
+        # ran and the run simply cannot say what it left behind, which is a
+        # backend that failed to report rather than a start that failed.
+        return answer(
+            False,
+            "compute_backend_error",
+            {},
+            "the launcher ran and this run never got a process it could name, "
+            "so nothing here says the command ran and nothing here says the "
+            "host is free",
         )
     if outcome in OUTCOMES_THAT_LEAVE_THE_HOST_RUNNING:
         return answer(
