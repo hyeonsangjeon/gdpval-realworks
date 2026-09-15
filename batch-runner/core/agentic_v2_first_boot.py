@@ -132,16 +132,52 @@ convenient inference would go: *this claim is hours old, so surely nobody is
 using it*. There is no evidence for the *surely*, so nothing acts on it.
 """
 
+OUTCOME_STARTED_AND_NOT_IDENTIFIED = "started_and_could_not_be_identified"
+"""The launcher ran, and this run never got a process it could name.
+
+The word the ordinary path was missing. ``never_started`` is a finding — it says
+nothing was put on the host — and the only evidence that supports it is this
+run's own account of its own control flow: the launch was not reached, or it
+raised the one error that proves the ``exec`` never happened. An absent PID file
+is neither. It is the jailer's fork-to-publication window, or a file caught
+mid-write, and the run cannot tell those from an empty host.
+
+Recording that state as ``never_started`` is not a wording problem. The teardown
+gate reads ``outcome``, so the word decides whether ``rmtree`` runs on a jail
+whose work disk something may still have open.
+
+Applying that rule leaves ``never_started`` with no producer. Nothing reaches the
+ordinary return without having attempted a launch that did ``exec`` — the flag is
+set on the line above the call, and the one error that proves nothing spawned is
+re-raised — so the ordinary path's answer here is always this one. The two states
+``never_started`` used to stand for both leave through the abandonment path,
+which carries the two flags themselves rather than a word standing in for them.
+:func:`core.agentic_v2_exec_boot.read_the_boot` keeps its ``never_started`` row
+because records written before this change still say it.
+"""
+
 OUTCOMES_THAT_LEAVE_THE_HOST_RUNNING = frozenset(
-    {"overran_and_was_left_alone", "overran_and_did_not_stop"}
+    {
+        "overran_and_was_left_alone",
+        "overran_and_did_not_stop",
+        OUTCOME_STARTED_AND_NOT_IDENTIFIED,
+    }
 )
-"""Outcomes after which a machine this run launched is still on the host.
+"""Outcomes after which this run may not treat the host as free.
 
 Named here, beside the code that produces them, because this vocabulary has
 already grown once — from four outcomes to six — while the module that reads it
 still knew four, and the two new ones fell through into the ordinary-success
 branch. A consumer that imports this set finds out when it grows again; one that
 spells the strings out for itself does not.
+
+The first two are findings: a machine this run launched *is* still there. The
+third is not, and the set is named for what it decides rather than for what the
+first two have in common. Unknown belongs with occupied and not with free,
+because the two are only interchangeable if the missing evidence is assumed to
+be absence — which is the assumption that put an ``rmtree`` under a live writer.
+Callers that need the difference read ``outcome`` itself; what this set answers
+is the narrower question of whether anything may be taken away.
 """
 
 COPY_INTACT = "intact"
@@ -231,7 +267,7 @@ def _how_intact_is_the_copy(
 
 
 def the_host_was_left_running(boot: Mapping[str, Any]) -> bool:
-    """Whether a machine this run launched is still on the host afterwards.
+    """Whether this run must not treat the host as free afterwards.
 
     Separate from what the command did and from what the copy is worth. A
     command can finish with a returncode of 0 in a guest that then refuses to
@@ -241,6 +277,21 @@ def the_host_was_left_running(boot: Mapping[str, Any]) -> bool:
     ``guest_confirmed_stopped is False`` is included because it is the same
     state reached by a different route: a signal went out and the process was
     still there afterwards.
+
+    **True covers two different findings and three callers read it.** For the
+    two overran outcomes and for a signal that did not take, it says a machine
+    this run launched is still there. For
+    :data:`OUTCOME_STARTED_AND_NOT_IDENTIFIED` it says something weaker: the
+    launcher ran, this run never got a process it could name, and nothing it can
+    see distinguishes an empty host from an occupied one. Both answer the one
+    question every caller here is actually asking — may anything be taken away,
+    reused or reported as finished — and the answer to that is no either way.
+
+    A caller that needs the difference reads ``outcome``, which is in the same
+    mapping and says which of the three it was. Widening this to a three-valued
+    answer was the alternative and it moves all three call sites at once; the
+    one that matters is :func:`_destroy_unless_something_is_still_running`,
+    where "still running" and "cannot say" take the same branch.
     """
     return (
         boot.get("outcome") in OUTCOMES_THAT_LEAVE_THE_HOST_RUNNING
@@ -821,11 +872,12 @@ def first_boot(
             # for.
             #
             # This branch is neither hypothetical nor rare. It is what a host
-            # without the jailer installed does, which is every host this
-            # repository runs on today. Leaving it out costs more than a leaked
-            # directory: ``vm_id`` is derived, not drawn, so the jail left
-            # behind is the name the same run's next attempt will claim, and
-            # the claim is ``exist_ok=False``.
+            # without the jailer installed does, which is every host that runs
+            # this repository's tests — the CI runners and the development boxes
+            # — though not the one host provisioned to boot on. Leaving it out
+            # costs more than a leaked directory: ``vm_id`` is derived, not
+            # drawn, so the jail left behind is the name the same run's next
+            # attempt will claim, and the claim is ``exist_ok=False``.
             launch_spawned_nothing = never_execed.filename == jailer_binary
             raise
 
@@ -906,7 +958,23 @@ def first_boot(
         left_alone_because: str | None = None
 
         if watched is None:
-            outcome = "never_started"
+            # Not ``never_started``. That word is a finding — it says nothing was
+            # put on the host — and only two things support it: that the launch
+            # was never reached, and that the launch reported its own ``exec``
+            # never happened. Both are this run's account of its own control
+            # flow, and neither can arrive *here*. ``launch_was_attempted`` is
+            # set on the line above the call, and the one error that proves
+            # nothing spawned is re-raised out of its handler, so a run that
+            # reaches this line has attempted a launch that did exec.
+            #
+            # What is left is the host declining to answer: the pid file may not
+            # have been published yet, or was caught mid-write, and a host
+            # declining to answer is not a host saying no. The cleanup path
+            # already draws this line — it is the whole of
+            # ``(launch_was_attempted and not launch_spawned_nothing)`` below.
+            # The ordinary path had one word for all three arrivals, and that
+            # word is what the teardown gate reads.
+            outcome = OUTCOME_STARTED_AND_NOT_IDENTIFIED
             left_alone_because = why_not_this_pid
         else:
             while _still_running(watched):
@@ -1091,13 +1159,21 @@ def _destroy_unless_something_is_still_running(
     place least willing to act on a stale answer. ``claim`` has no default for
     the same reason — a cleanup that can be called without evidence will be.
 
-    The second is the direct consequence of the two overran outcomes, and the
-    reason they could not be added without coming here. Both of them end with a
-    machine this run launched still on the host; the line that followed removed
-    the jail anyway, which is an ``rmtree`` of the rootfs, the work disk and the
-    socket a live Firecracker is holding open. The run then returned a record
-    saying the jail was gone, which it was, and saying nothing about what was
-    using it.
+    The second is the direct consequence of the outcomes that mean this host may
+    not be treated as free, and the reason they could not be added without
+    coming here. Two of them are findings: a machine this run launched is still
+    on the host. The line that followed removed the jail anyway, which is an
+    ``rmtree`` of the rootfs, the work disk and the socket a live Firecracker is
+    holding open. The run then returned a record saying the jail was gone, which
+    it was, and saying nothing about what was using it.
+
+    The third is not a finding but the absence of one: the launcher ran and this
+    run never got a process it could name. That state used to arrive here
+    wearing the word ``never_started`` and was removed like an empty jail, which
+    is the same ``rmtree`` reached by assuming the missing evidence was absence.
+    It is refused for the same reason and recorded differently, because "a guest
+    is still running" and "nothing here can say whether one is" are different
+    findings and a reader has to be able to tell them apart.
 
     A leaked directory is a worse-looking outcome and a better one. It can be
     found, inspected and removed by hand once the machine is gone; a filesystem
@@ -1124,15 +1200,27 @@ def _destroy_unless_something_is_still_running(
     if the_host_was_left_running(
         {"outcome": outcome, "guest_confirmed_stopped": guest_confirmed_stopped}
     ):
+        if outcome == OUTCOME_STARTED_AND_NOT_IDENTIFIED:
+            # Not the same sentence. The two overran outcomes know a machine is
+            # there; this one knows that it does not know, and a record claiming
+            # a live guest on this evidence would be the mirror image of the bug
+            # being fixed — asserting the answer the run could not get.
+            refused_because = (
+                "the launcher ran and this run never got a process it could "
+                "name, so nothing here says the jail is empty; removing it "
+                "would take a work disk something may still have open"
+            )
+        else:
+            refused_because = (
+                f"the machine ended as {outcome!r}, so a guest this run started "
+                "is still on the host; removing its jail would take the work "
+                "disk and the socket it is using with it"
+            )
         return {
             "removed": {},
             "all_gone": False,
             "failures": [],
-            "refused_because": (
-                f"the machine ended as {outcome!r}, so a guest this run started "
-                "is still on the host; removing its jail would take the work "
-                "disk and the socket it is using with it"
-            ),
+            "refused_because": refused_because,
             "left_behind": list(paths),
         }
     destroyed = _destroy(paths)

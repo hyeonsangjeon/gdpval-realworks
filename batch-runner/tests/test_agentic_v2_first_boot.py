@@ -299,9 +299,20 @@ def test_a_command_that_failed_inside_a_working_guest_is_still_a_boot(
     assert result["command_exit_status"] == 17
 
 
-def test_a_jailer_that_never_wrote_a_pid_file_never_started(
+def test_a_jailer_that_wrote_no_pid_file_is_not_a_machine_that_never_started(
     plan, tmp_path, monkeypatch
 ):
+    """A launcher that ran is not a launcher that put nothing on the host.
+
+    This used to be recorded as ``never_started``, and that word is what the
+    teardown gate reads, so the jail came down. A jailer that exits non-zero
+    without publishing a pid file has not told this run whether it forked first,
+    and the run has no other way to ask: the pid file is absent either way.
+
+    So the answer is the one that says so, and the jail is left where it is with
+    the refusal written down beside it.
+    """
+
     def jailer(argv, timeout=300.0):
         return subprocess.CompletedProcess(argv, 1, "", "jailer: mknod failed\n")
 
@@ -314,9 +325,14 @@ def test_a_jailer_that_never_wrote_a_pid_file_never_started(
         results={name: None for name in WORK_DISK_RESULTS},
     )
 
-    assert result["outcome"] == "never_started"
+    assert result["outcome"] == "started_and_could_not_be_identified"
     assert result["pid_file"]["appeared"] is False
     assert "mknod failed" in result["jailer"]["stderr"]
+    assert result["teardown"]["all_gone"] is False
+    assert "never got a process it could name" in result["teardown"][
+        "refused_because"
+    ]
+    assert Path(plan["host_side"]["chroot_dir"]).exists()
 
 
 def test_a_guest_that_booted_and_wrote_nothing_is_its_own_outcome(
