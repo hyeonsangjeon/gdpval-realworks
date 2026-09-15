@@ -645,3 +645,137 @@ def test_a_stop_when_that_never_fires_does_not_shorten_the_run(tmp_path):
     assert outcome.stopped is None
     assert len(outcome.rows) == 3
     assert asked == ["task-0001", "task-0002", "task-0003"]
+
+
+# ── the same rule, asked before the task instead of after ────────────────
+
+
+def _refuse_from(rule_index=7):
+    def refuse(task_id):
+        return StoppedEarly(
+            rule_index=rule_index,
+            rule=STOP_RULES[rule_index],
+            detail="a task left a machine running and nothing has cleaned it up",
+            after_task=task_id,
+        )
+
+    return refuse
+
+
+def test_a_task_refused_before_it_starts_never_builds_a_runner(tmp_path):
+    """The difference between this and ``stop_when`` is what it costs.
+
+    ``stop_when`` is asked once the row is written, so the run halts having
+    paid for the task that halted it. That is right for the rule it was built
+    for: the wrong model answering is something you only learn from an answer.
+
+    A host left running is known before the next task starts, and the next
+    task's first act would be to build a backend on it and send a request. So
+    this is asked first, and what it saves is a model call, not a record.
+    """
+    order: list[str] = []
+    made: list[str] = []
+
+    def build(task):
+        made.append(task.task_id)
+        return _Runner(_success, [])
+
+    def admit(task_id):
+        order.append(f"asked:{task_id}")
+        return _refuse_from()(task_id) if task_id == "task-0003" else None
+
+    outcome, _ = _run(
+        tmp_path,
+        _tasks(4),
+        _success,
+        factory=build,
+        admit_task=admit,
+        on_task=lambda tid, row: order.append(f"ran:{tid}"),
+    )
+
+    assert made == ["task-0001", "task-0002"], "a refused task built a runner"
+    assert [row["task_id"] for row in outcome.rows] == ["task-0001", "task-0002"]
+    assert order[-1] == "asked:task-0003"
+    assert outcome.stopped is not None
+    assert outcome.stopped.rule_index == 7
+    assert outcome.stopped.after_task == "task-0003"
+    # The two tasks that finished keep everything. Refusing the next piece of
+    # work is not a verdict on the work already done.
+    assert all(row["status"] == "success" for row in outcome.rows)
+
+
+def test_a_refused_task_is_counted_as_not_reached_and_named_nowhere_else(tmp_path):
+    # It has no row, no attempt and no cost, and there is no honest way to give
+    # it a score. Writing it down as a failure would put a zero beside a task
+    # nothing was ever asked about; ``not_reached`` is what the report already
+    # calls the tasks a run stopped short of.
+    outcome, _ = _run(
+        tmp_path,
+        _tasks(3),
+        _success,
+        admit_task=lambda task_id: (
+            _refuse_from()(task_id) if task_id == "task-0002" else None
+        ),
+    )
+    assert [row["task_id"] for row in outcome.rows] == ["task-0001"]
+    assert outcome.summary["not_reached"] == 2
+    assert outcome.summary["failed"] == 0
+    # Named once, in the halt, as the task the run stopped at. Not among the
+    # tasks whose spend is unaccounted for -- it has no spend.
+    assert outcome.summary["stopped_early"]["after_task"] == "task-0002"
+    assert "task-0002" not in outcome.summary["unaccounted_tasks"]
+    assert "task-0002" not in outcome.summary["dispositions"]
+
+
+def test_a_run_that_starts_on_a_dirty_host_stops_before_its_first_task(tmp_path):
+    """The resume case, which is the only one ``stop_when`` cannot reach.
+
+    A resumed run is a new process. Its journal knows which tasks finished; it
+    knows nothing about a machine the previous process could not stop, because
+    that fact lived in an object that no longer exists. Asked before the first
+    task, the durable record is the only thing either process shares.
+    """
+    outcome, factory = _run(
+        tmp_path, _tasks(3), _success, admit_task=_refuse_from()
+    )
+    assert outcome.rows == []
+    assert factory.made == []
+    assert outcome.stopped is not None
+    assert outcome.stopped.rule_index == 7
+    assert outcome.stopped.after_task == "task-0001"
+    assert outcome.summary["stopped_early"] is not None
+
+
+def test_an_admit_task_that_never_refuses_asks_about_every_task(tmp_path):
+    # The owned positive control. An implementation that refused everything
+    # would pass all three tests above, and this is the one it fails.
+    asked: list[str] = []
+
+    def always(task_id):
+        asked.append(task_id)
+        return None
+
+    outcome, factory = _run(tmp_path, _tasks(3), _success, admit_task=always)
+    assert asked == ["task-0001", "task-0002", "task-0003"]
+    assert len(outcome.rows) == 3
+    assert len(factory.made) == 3
+    assert outcome.stopped is None
+
+
+def test_a_run_with_no_admit_task_behaves_exactly_as_before(tmp_path):
+    outcome, factory = _run(tmp_path, _tasks(3), _success)
+    assert outcome.stopped is None
+    assert len(outcome.rows) == 3
+    assert len(factory.made) == 3
+
+
+def test_both_halves_of_rule_seven_are_described_where_the_driver_declares_them(
+    tmp_path,
+):
+    # The declaration is what a reader checks first, and it said one moment
+    # when there are now two. The second exists only when a caller passes
+    # ``admit_task`` -- claiming it unconditionally would be a promise this
+    # driver cannot keep on its own.
+    said = RULES_THIS_DRIVER_WATCHES[7]
+    assert "admit_task" in said
+    assert "after a task" in said and "before one" in said

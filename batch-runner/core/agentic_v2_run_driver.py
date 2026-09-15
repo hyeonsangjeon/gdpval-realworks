@@ -85,7 +85,14 @@ CONSECUTIVE_RUNNER_DEFECTS_THAT_STOP_A_RUN = 3
 RULES_THIS_DRIVER_WATCHES: dict[int, str] = {
     6: "counts consecutive runner_defect dispositions and stops at three",
     7: "stops on compute_cleanup_failed, because the next task would inherit "
-    "a guest that was not cleaned",
+    "a guest that was not cleaned. Watched at two moments, and the second "
+    "only when a caller passes admit_task: after a task, where the error "
+    "type arrives on its own, and before one, where it has to be asked for. "
+    "The two catch different leaks. A task that tries a second command on a "
+    "host it already dirtied is refused by the backend and arrives here as "
+    "the error type; a task that dirties the host and then finishes without "
+    "asking for anything else returns no error at all, and the only place "
+    "left to catch it is the start of the next task",
 }
 
 #: The rest, and who checks them.
@@ -295,6 +302,7 @@ def run_manifest(
     clock: Callable[[], float] = time.monotonic,
     on_task: Callable[[str, Mapping[str, Any]], None] | None = None,
     stop_when: Callable[[str], "StoppedEarly | None"] | None = None,
+    admit_task: Callable[[str], "StoppedEarly | None"] | None = None,
 ) -> RunOutcome:
     """Run a fixed manifest, resuming what a previous run left.
 
@@ -309,6 +317,17 @@ def run_manifest(
     see :data:`RULES_A_CALLER_CAN_HAND_THIS_DRIVER` — where the comparison
     needs the plan on one side and the model's replies on the other, and this
     loop holds neither.
+
+    ``admit_task`` is asked *before* each task, and it is the same shape for a
+    different reason. ``stop_when`` saves the record; this saves the money. A
+    rule that is already broken when a task is about to start — a host an
+    earlier task left running, say — costs a full task's model turns if it is
+    only noticed afterwards, because by then the turns have been taken. So
+    this one is asked before ``runner_factory`` is called, which is before the
+    backend is built and before the first request leaves.
+
+    Both are the caller's to supply and neither is invented here. A run that
+    passes neither is watched by this loop exactly as it always was.
 
     A caller enforcing such a rule should wire the runner's ``cancel_requested``
     to the same condition. The two stop different things: cancelling ends the
@@ -342,6 +361,22 @@ def run_manifest(
     for task_id in to_run:
         task = by_id[task_id]
         row: dict[str, Any] | None = None
+
+        if admit_task is not None:
+            # Before the runner is built, which is before the backend is built
+            # and before the first request leaves. A task refused here has no
+            # row, no attempt and no cost, and the journal never opens it — so
+            # it is counted in ``not_reached`` and named nowhere else, which is
+            # the true description of it.
+            #
+            # What is being refused is the next piece of work, never work that
+            # is already finished. A task this process has done keeps its row;
+            # a task a previous process did is not in ``to_run`` at all, so it
+            # is in ``skipped_on_resume`` and never reaches this line.
+            refused = admit_task(task_id)
+            if refused is not None:
+                outcome.stopped = refused
+                break
 
         while (
             journal.standing(task_id).decision == DECISION_RUN

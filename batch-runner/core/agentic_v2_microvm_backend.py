@@ -104,6 +104,23 @@ binary names are an argument to this backend rather than a constant, so the
 probe's result can be pinned here without touching D1.
 """
 
+UNRESOLVED_HOST_RECORD = "unresolved_host.json"
+"""The file a run leaves behind when it could not give a host back.
+
+One name, in a directory the caller passes in, read by the next backend before
+it boots anything. It is deliberately a file and not a field on this class: the
+class is rebuilt for every task, so a field could not have been the thing that
+reaches task N+1, and neither could anything else held in this process.
+"""
+
+UNRESOLVED_HOST_SCHEMA = "agentic_v2_unresolved_host/1"
+"""Stamped into the record so a reader can tell it is the thing it expects.
+
+Versioned because the refusal it drives is fail-closed: a future reader that
+does not recognise the shape has to keep refusing rather than treat an
+unparsed record as an absent one.
+"""
+
 BROWSER_OPERATIONS_THAT_NEED_A_NETWORK = frozenset({"search", "open_url"})
 
 
@@ -153,6 +170,59 @@ def _how_the_machine_ended(boot: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def read_the_unresolved_host(
+    host_state_dir: str | Path | None,
+) -> Mapping[str, Any] | None:
+    """A host an earlier task left running, read back from a run's own disk.
+
+    Module level rather than a method because two very different callers have
+    to get the same answer from it: the backend, deciding whether to boot, and
+    the stage script, deciding whether to let another task start at all. A
+    second implementation of "is the host still dirty" is the kind of thing
+    that stays in agreement for about one change.
+
+    ``None`` is not "the host is free". It is "no record of a leak was found",
+    and with no directory to look in it is "there was nowhere to look". The
+    caller that cares about that difference is the one that chose the
+    directory.
+
+    A record is still unresolved unless it carries a ``resolved`` block saying
+    cleanup was confirmed. Nothing in a run writes that block, and nothing
+    here deletes the file. Re-admission is meant to cost someone a deliberate
+    act on the host: this code never removes a jail, never signals by number,
+    and never decides on its own that a machine it could not stop has since
+    stopped.
+
+    A record that exists and cannot be read comes back as a record, carrying
+    why. That is deliberate. It is the one state where refusing costs a task
+    and proceeding could put a second machine on a host that already has one.
+    """
+    if host_state_dir is None:
+        return None
+    path = Path(host_state_dir) / UNRESOLVED_HOST_RECORD
+    try:
+        written = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None
+    except (OSError, ValueError) as unreadable:
+        return {
+            "unreadable": f"{type(unreadable).__name__}: {unreadable}",
+            "path": str(path),
+        }
+    if not isinstance(written, Mapping):
+        return {"unreadable": "the record is not an object", "path": str(path)}
+    if written.get("schema") != UNRESOLVED_HOST_SCHEMA:
+        return {
+            "unreadable": f"the record is stamped {written.get('schema')!r}, "
+            f"which this reader does not know",
+            "path": str(path),
+        }
+    resolved = written.get("resolved")
+    if isinstance(resolved, Mapping) and resolved.get("cleanup_confirmed") is True:
+        return None
+    return written
+
+
 @dataclass(frozen=True)
 class GuestImage:
     """What was booted, named so that two runs can be told apart.
@@ -192,6 +262,8 @@ class AgenticV2MicroVMBackend(AgenticV2FixtureBackend):
         budget_caps: Mapping[str, Any] | None = None,
         policy: Mapping[str, Any] = REQUIRED_MICROVM_POLICY,
         interpreter_binaries: Mapping[str, str] | None = None,
+        host_state_dir: str | Path | None = None,
+        task_id: str | None = None,
         **_: Any,
     ):
         super().__init__(root=root, profile=profile, budget_caps=budget_caps)
@@ -206,6 +278,14 @@ class AgenticV2MicroVMBackend(AgenticV2FixtureBackend):
         self.interpreter_binaries = dict(interpreter_binaries or INTERPRETERS)
         self._boot_one_command = boot_one_command
         self.boots: list[dict[str, Any]] = []
+        self.task_id = task_id
+        # Where a host this run could not give back is written down, and the
+        # one piece of state here that is meant to outlive the object. It is
+        # passed in rather than derived — ``root`` is this *attempt's*
+        # directory, so ``root.parent`` would be a different place on a retry
+        # and, under pytest, a directory shared with every other test in the
+        # session. A caller that wants the record across tasks says where.
+        self.host_state_dir = None if host_state_dir is None else Path(host_state_dir)
 
     # -- identity ---------------------------------------------------------
 
@@ -377,12 +457,102 @@ class AgenticV2MicroVMBackend(AgenticV2FixtureBackend):
         was. The first one is enough: once the host is not free it does not
         become free again by itself, and a later leak adds nothing to the
         decision being made here.
+
+        This reading is *this object's* calls only, which is one task's worth:
+        the stage script builds a backend per task. The half that reaches the
+        next task is :meth:`_a_host_left_unresolved_on_disk`.
         """
         for record in self.boots:
             machine = record.get("machine") or {}
             if machine.get("host_left_running") is True:
                 return record
         return None
+
+    def _a_host_left_unresolved_on_disk(self) -> Mapping[str, Any] | None:
+        """A host an earlier task left running, read back from the run's own disk.
+
+        The in-memory reading above cannot see across tasks, and not because it
+        was written carelessly: the object it lives on is constructed once per
+        task, so by the time the next task's first boot is decided, the record
+        of the leak has been garbage collected along with the backend that made
+        it. The missing thing was a lifetime, not a branch — no amount of
+        checking ``self.boots`` reaches a list that no longer exists.
+
+        So the fact is also written to a file in a directory the caller names,
+        and read back from there. That is what survives the backend being
+        rebuilt, and it is what survives the process ending and a resumed run
+        starting a new one.
+
+        ``None`` here is not the same as "the host is free". It is "no record
+        of a leak was found", and when no ``host_state_dir`` was given it is
+        "there was nowhere to look". The caller that cares about the difference
+        is the one that passed the directory.
+
+        The reading itself is :func:`read_the_unresolved_host`, module level,
+        because the stage script has to get the same answer before it lets a
+        task start at all — and two implementations of "is the host still
+        dirty" stay in agreement for about one change.
+        """
+        return read_the_unresolved_host(self.host_state_dir)
+
+    def _write_down_the_unresolved_host(self, record: Mapping[str, Any]) -> None:
+        """Put a host this run could not give back where the next task will look.
+
+        Called only when the boot that just finished left a machine running.
+        Written once — the first leak is the one that matters, and a second
+        would only move the blame off the task that caused it.
+
+        A failure to write is recorded in the boot record rather than raised.
+        The boot has already happened by this point and its result belongs to
+        the task; what a raise would change is not whether the host is dirty
+        but whether the task that paid for the work gets to keep it. The
+        same-task guard still fires on ``self.boots`` either way, so the run
+        still stops — it just stops without the record reaching the next
+        process, which is exactly what the field says.
+        """
+        if self.host_state_dir is None:
+            record["unresolved_host_record"] = None
+            record["unresolved_host_record_error"] = (
+                "no host_state_dir was given, so the leak is recorded for this "
+                "task only and cannot reach the next one"
+            )
+            return
+        path = self.host_state_dir / UNRESOLVED_HOST_RECORD
+        machine = record.get("machine") or {}
+        try:
+            if path.exists():
+                record["unresolved_host_record"] = str(path)
+                return
+            self.host_state_dir.mkdir(parents=True, exist_ok=True)
+            path.write_text(
+                json.dumps(
+                    {
+                        "schema": UNRESOLVED_HOST_SCHEMA,
+                        "task_id": self.task_id,
+                        "call": record.get("call"),
+                        "vm_id": machine.get("vm_id"),
+                        "outcome": machine.get("outcome"),
+                        "left_alone_because": machine.get("left_alone_because"),
+                        "cannot_rule_out": machine.get("cannot_rule_out"),
+                        "guest_last_seen_running": machine.get(
+                            "guest_last_seen_running"
+                        ),
+                        "guest_confirmed_stopped": machine.get(
+                            "guest_confirmed_stopped"
+                        ),
+                        "stop_signal_sent": machine.get("stop_signal_sent"),
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+        except OSError as failed:
+            record["unresolved_host_record"] = None
+            record["unresolved_host_record_error"] = f"{type(failed).__name__}: {failed}"
+            return
+        record["unresolved_host_record"] = str(path)
 
     def exec_run(self, arguments: Mapping[str, Any]) -> Mapping[str, Any]:
         """Boot one machine, run one command in it, and read back what it did.
@@ -417,6 +587,28 @@ class AgenticV2MicroVMBackend(AgenticV2FixtureBackend):
                     ),
                     "booted": False,
                     "host_left_running_by_call": left_running.get("call"),
+                }
+            )
+            return {"ok": False, "error_type": "compute_cleanup_failed"}
+
+        unresolved = self._a_host_left_unresolved_on_disk()
+        if unresolved is not None:
+            self.boots.append(
+                {
+                    "call": len(self.boots),
+                    "refused_before_launch": (
+                        "task {} left a machine running on this host ({}) and "
+                        "no cleanup has been recorded since, so the host is "
+                        "not free for another boot".format(
+                            unresolved.get("task_id"),
+                            unresolved.get("outcome")
+                            or unresolved.get("unreadable")
+                            or "no outcome recorded",
+                        )
+                    ),
+                    "booted": False,
+                    "host_left_unresolved_by_task": unresolved.get("task_id"),
+                    "host_left_unresolved_record": dict(unresolved),
                 }
             )
             return {"ok": False, "error_type": "compute_cleanup_failed"}
@@ -489,6 +681,13 @@ class AgenticV2MicroVMBackend(AgenticV2FixtureBackend):
         record["output_files"] = self._keep_the_output(
             record["call"], reading, machine=machine
         )
+        if machine.get("host_left_running") is True:
+            # Written before the record is filed and before the result goes
+            # back, so that a process that ends here — a crash, a cancel, the
+            # wall clock running out — still leaves the next one something to
+            # find. The result itself is unchanged: the command did what it
+            # did, and the task keeps it.
+            self._write_down_the_unresolved_host(record)
         self.boots.append(record)
         return reading["result"]
 

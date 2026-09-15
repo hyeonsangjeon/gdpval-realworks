@@ -83,6 +83,9 @@ from core.agentic_v2_manifest_binding import (  # noqa: E402
     bind_stage,
     binding_record,
 )
+from core.agentic_v2_microvm_backend import (  # noqa: E402
+    read_the_unresolved_host,
+)
 from core.agentic_v2_preregistration import STAGE_SIZES, STOP_RULES  # noqa: E402
 from core.agentic_v2_reference_staging import (  # noqa: E402
     MODEL_INPUT_PREFIX,
@@ -1238,24 +1241,84 @@ def main() -> int:
         def cancel_requested() -> bool:
             return bool(wrong_model_answered())
 
-        def stop_when(after_task: str):
-            differed = wrong_model_answered()
-            if not differed:
-                return None
-            return StoppedEarly(
-                rule_index=0,
-                rule=STOP_RULES[0],
-                detail=(
-                    f"the plan pins {pinned_model!r} and a reply came back "
-                    f"named {', '.join(repr(name) for name in differed)}. "
-                    "Every result after this point would belong to a model "
-                    "the pre-registration does not describe"
-                ),
-                after_task=after_task,
-            )
-
         workspaces = into / "workspaces"
         workspaces.mkdir(parents=True, exist_ok=True)
+        # The run's own directory, not a task's. Passed to every backend by
+        # name so that a host one task could not give back is still on disk
+        # when the next task's backend is built — and still there when a
+        # resumed run builds one in a new process. Deriving it from the task
+        # root would put it inside the thing that changes.
+        host_state = into / "host_state"
+
+        def a_host_left_unresolved() -> Mapping[str, Any] | None:
+            """Whether some task left a machine running that nobody stopped.
+
+            Read from the run's own directory rather than from a backend,
+            because the backend that saw the leak was built for that task and
+            is gone by the time this matters. The same file is what a resumed
+            run reads in a new process.
+            """
+            return read_the_unresolved_host(host_state)
+
+        def stopped_by_an_unresolved_host(task_id: str) -> "StoppedEarly | None":
+            left = a_host_left_unresolved()
+            if left is None:
+                return None
+            return StoppedEarly(
+                rule_index=7,
+                rule=STOP_RULES[7],
+                detail=(
+                    "task {} finished having left a machine running on this "
+                    "host ({}), and no cleanup has been recorded since. That "
+                    "task's own result stands -- it was paid for and it is "
+                    "kept -- but anything run after it would share a host "
+                    "this run does not have to itself".format(
+                        left.get("task_id"),
+                        left.get("outcome")
+                        or left.get("unreadable")
+                        or "no outcome recorded",
+                    )
+                ),
+                after_task=task_id,
+            )
+
+        def stop_when(after_task: str):
+            differed = wrong_model_answered()
+            if differed:
+                return StoppedEarly(
+                    rule_index=0,
+                    rule=STOP_RULES[0],
+                    detail=(
+                        f"the plan pins {pinned_model!r} and a reply came back "
+                        f"named {', '.join(repr(name) for name in differed)}. "
+                        "Every result after this point would belong to a model "
+                        "the pre-registration does not describe"
+                    ),
+                    after_task=after_task,
+                )
+            # Asked after the task's row has been written, so the task that
+            # leaked the host still has its result, its files and its costs.
+            # A task finishing normally is not a failure just because the
+            # machine it used outlived it; what it is, is the last task this
+            # run may do.
+            return stopped_by_an_unresolved_host(after_task)
+
+        def admit_task(before_task: str):
+            """The same question, asked before a task costs anything.
+
+            ``stop_when`` alone would already stop the run, and on its own is
+            enough to keep a second task off a dirty host *within one process*.
+            It is not enough across one: a resumed run starts with an empty
+            journal of this session's leaks and would begin at the next task
+            without ever asking. This is asked before the backend is built and
+            before the first model call, so the refusal costs nothing.
+
+            Nothing here clears the record. Re-admission needs cleanup to have
+            been confirmed on the host and written down, or a different host --
+            never this code deciding that enough has probably changed.
+            """
+            return stopped_by_an_unresolved_host(before_task)
+
         stagings: list[TaskStaging] = []
         attempts_staged: dict[str, int] = {}
 
@@ -1305,7 +1368,10 @@ def main() -> int:
                     "failure here is not the model's either"
                 )
             return choice.backend_class(
-                root=task_root, **choice.extra_kwargs, **kwargs
+                root=task_root,
+                host_state_dir=host_state,
+                **choice.extra_kwargs,
+                **kwargs,
             )
 
         # Opened before the factory that writes into it, and before the first
@@ -1414,6 +1480,7 @@ def main() -> int:
             collect_into=into / "deliverables",
             receipt_for=receipt_for,
             stop_when=stop_when,
+            admit_task=admit_task,
             on_task=lambda task_id, row: print(
                 # `status`, not a `success` key -- the row is a report row and
                 # has never carried one, so the old `row.get("success")` read

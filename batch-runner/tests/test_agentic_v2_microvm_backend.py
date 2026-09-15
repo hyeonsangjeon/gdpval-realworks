@@ -35,13 +35,17 @@ from core.agentic_v2_contract import (
     AgenticV2Profile,
 )
 from core.agentic_v2_exec_boot import EXEC_RECORD_DIR, INTERPRETERS
+from core.agentic_v2_first_boot import OUTCOME_STARTED_AND_NOT_IDENTIFIED
 from core.agentic_v2_fixture_backend import AgenticV2FixtureBackend
 from core.agentic_v2_microvm import REQUIRED_MICROVM_POLICY
 from core.agentic_v2_microvm_backend import (
     BACKEND_ID,
     MANIFEST_COMMAND_FOR_INTERPRETER,
+    UNRESOLVED_HOST_RECORD,
+    UNRESOLVED_HOST_SCHEMA,
     AgenticV2MicroVMBackend,
     GuestImage,
+    read_the_unresolved_host,
 )
 from core.agentic_v2_substrate import AgenticV2SubstrateManifest
 
@@ -506,6 +510,303 @@ class TestAHostThisRunLeftRunningIsNotBootedOnAgain:
         assert backend.exec_run(_ok())["ok"] is True
         assert len(launcher.calls) == 2
         assert all(record["booted"] is True for record in backend.boots)
+        backend.close()
+
+
+class TestAHostLeftRunningOutlivesTheBackendThatLeftIt:
+    """The same fact, written where the next task's backend will find it.
+
+    The class above stops a second command inside one task. It cannot do more
+    than that, and not through any fault of its own: ``self.boots`` belongs to
+    an object the stage script builds once per task, so by the time the next
+    task decides whether to boot, the list that knew about the leak has been
+    collected along with the backend that made it. The missing piece was a
+    lifetime, not a branch.
+
+    So the leak is also written to a file in a directory the *run* owns. That
+    is what survives the backend being rebuilt, and what survives this process
+    ending and a resumed run starting a new one.
+
+    Two things are kept apart throughout. Whether the task's work is good is
+    about the command; whether the host is free afterwards is about the host.
+    A task whose command exited 0 in a machine that then would not go keeps its
+    result, its files and its costs — it is simply the last task this run may
+    do.
+    """
+
+    def _record(self, backend):
+        return json.loads(
+            (backend.host_state_dir / UNRESOLVED_HOST_RECORD).read_text(
+                encoding="utf-8"
+            )
+        )
+
+    def test_a_machine_known_to_be_running_is_written_where_the_next_task_looks(
+        self, tmp_path
+    ):
+        # Known running: a signal went out and the process was still there
+        # afterwards. Nothing about that is ambiguous.
+        backend = _backend(
+            tmp_path,
+            launcher=Launcher(outcome="overran_and_did_not_stop", stdout="4"),
+            host_state_dir=tmp_path / "host_state",
+            task_id="task-one",
+        )
+        result = backend.exec_run(_ok())
+
+        # The task's own answer is untouched. It ran, it exited, it is kept.
+        assert result["ok"] is True
+        assert backend.boots[0]["booted"] is True
+        assert backend.boots[0]["machine"]["host_left_running"] is True
+
+        written = self._record(backend)
+        assert written["schema"] == UNRESOLVED_HOST_SCHEMA
+        assert written["task_id"] == "task-one"
+        assert written["outcome"] == "overran_and_did_not_stop"
+        assert "resolved" not in written
+        backend.close()
+
+    def test_a_machine_whose_liveness_is_unknown_is_written_down_the_same_way(
+        self, tmp_path
+    ):
+        # The other half of the pair, and the reason this is not one test. Here
+        # the launcher ran and this run never got a process it could name, so
+        # nothing it can see tells an empty host from an occupied one. That is
+        # a weaker finding than the one above and it has to reach the same
+        # place: "cannot say" is not "free".
+        backend = _backend(
+            tmp_path,
+            launcher=Launcher(outcome=OUTCOME_STARTED_AND_NOT_IDENTIFIED),
+            host_state_dir=tmp_path / "host_state",
+            task_id="task-one",
+        )
+        assert backend.exec_run(_ok())["ok"] is True
+
+        written = self._record(backend)
+        assert written["task_id"] == "task-one"
+        assert written["outcome"] == OUTCOME_STARTED_AND_NOT_IDENTIFIED
+        backend.close()
+
+    def test_the_next_tasks_backend_refuses_before_it_launches_anything(
+        self, tmp_path
+    ):
+        host_state = tmp_path / "host_state"
+        leaked = _backend(
+            tmp_path,
+            launcher=Launcher(outcome="overran_and_did_not_stop"),
+            host_state_dir=host_state,
+            task_id="task-one",
+        )
+        leaked.exec_run(_ok())
+        leaked.close()
+
+        # A different object, a different root, a different task: everything the
+        # in-memory guard can see has been thrown away.
+        after = Launcher()
+        next_task = _backend(
+            tmp_path / "second",
+            launcher=after,
+            host_state_dir=host_state,
+            task_id="task-two",
+        )
+        assert next_task.exec_run(_ok()) == {
+            "ok": False,
+            "error_type": "compute_cleanup_failed",
+        }
+        assert after.calls == [], "the next task booted onto a dirty host"
+        refusal = next_task.boots[0]
+        assert refusal["booted"] is False
+        assert refusal["host_left_unresolved_by_task"] == "task-one"
+        assert "task task-one" in refusal["refused_before_launch"]
+        assert "overran_and_did_not_stop" in refusal["refused_before_launch"]
+        next_task.close()
+
+    def test_a_record_that_cannot_be_read_refuses_too(self, tmp_path):
+        # The one state where refusing costs a task and proceeding could put a
+        # second machine on a host that already has one. A file that is there
+        # and will not parse is not permission to boot.
+        host_state = tmp_path / "host_state"
+        host_state.mkdir(parents=True)
+        (host_state / UNRESOLVED_HOST_RECORD).write_text("{ not json", encoding="utf-8")
+
+        launcher = Launcher()
+        backend = _backend(
+            tmp_path, launcher=launcher, host_state_dir=host_state, task_id="task-two"
+        )
+        assert backend.exec_run(_ok())["error_type"] == "compute_cleanup_failed"
+        assert launcher.calls == []
+        assert "JSONDecodeError" in backend.boots[0]["host_left_unresolved_record"][
+            "unreadable"
+        ]
+        backend.close()
+
+    def test_a_record_stamped_for_a_schema_this_reader_does_not_know_refuses(
+        self, tmp_path
+    ):
+        # A record written by some later version is still a record of a leak.
+        # Reading the fields it does understand and booting anyway would be the
+        # one reading of "I do not recognise this" that puts a machine on the
+        # host.
+        host_state = tmp_path / "host_state"
+        host_state.mkdir(parents=True)
+        (host_state / UNRESOLVED_HOST_RECORD).write_text(
+            json.dumps({"schema": "agentic_v2_unresolved_host/99", "task_id": "t"}),
+            encoding="utf-8",
+        )
+        launcher = Launcher()
+        backend = _backend(
+            tmp_path, launcher=launcher, host_state_dir=host_state, task_id="task-two"
+        )
+        assert backend.exec_run(_ok())["error_type"] == "compute_cleanup_failed"
+        assert launcher.calls == []
+        backend.close()
+
+    def test_a_clean_run_leaves_nothing_behind_and_the_next_task_boots(self, tmp_path):
+        # The owned positive control, and the one that fails first if this ever
+        # becomes a guard that refuses everything. Two tasks, two backends, one
+        # shared directory, both boot.
+        host_state = tmp_path / "host_state"
+        first = Launcher()
+        one = _backend(
+            tmp_path, launcher=first, host_state_dir=host_state, task_id="task-one"
+        )
+        assert one.exec_run(_ok())["ok"] is True
+        assert one.boots[0]["machine"]["host_left_running"] is False
+        one.close()
+
+        assert not (host_state / UNRESOLVED_HOST_RECORD).exists()
+
+        second = Launcher()
+        two = _backend(
+            tmp_path / "second",
+            launcher=second,
+            host_state_dir=host_state,
+            task_id="task-two",
+        )
+        assert two.exec_run(_ok())["ok"] is True
+        assert len(second.calls) == 1
+        assert two.boots[0]["booted"] is True
+        two.close()
+
+    def test_cleanup_confirmed_on_the_host_is_what_lets_a_run_start_again(
+        self, tmp_path
+    ):
+        # Re-admission exists, and it costs a deliberate act: someone stopped
+        # the machine and wrote that down. Nothing in a run writes this block,
+        # nothing here deletes a jail, and no elapsed time clears it.
+        host_state = tmp_path / "host_state"
+        host_state.mkdir(parents=True)
+        leak = {
+            "schema": UNRESOLVED_HOST_SCHEMA,
+            "task_id": "task-one",
+            "outcome": "overran_and_did_not_stop",
+        }
+        record = host_state / UNRESOLVED_HOST_RECORD
+        record.write_text(json.dumps(leak), encoding="utf-8")
+        assert read_the_unresolved_host(host_state) is not None
+
+        record.write_text(
+            json.dumps({**leak, "resolved": {"cleanup_confirmed": True}}),
+            encoding="utf-8",
+        )
+        assert read_the_unresolved_host(host_state) is None
+
+        launcher = Launcher()
+        backend = _backend(
+            tmp_path, launcher=launcher, host_state_dir=host_state, task_id="task-two"
+        )
+        assert backend.exec_run(_ok())["ok"] is True
+        assert len(launcher.calls) == 1
+        backend.close()
+
+    def test_a_claim_of_cleanup_that_is_not_the_word_true_does_not_clear_it(
+        self, tmp_path
+    ):
+        # The bounded negative control on re-admission. "true", 1 and "yes" are
+        # what a hand-edited file looks like when someone is guessing, and each
+        # of them would open the host if this read truthiness instead of the
+        # value.
+        host_state = tmp_path / "host_state"
+        host_state.mkdir(parents=True)
+        for claim in ("true", 1, "yes", None, {"cleanup_confirmed": True}):
+            (host_state / UNRESOLVED_HOST_RECORD).write_text(
+                json.dumps(
+                    {
+                        "schema": UNRESOLVED_HOST_SCHEMA,
+                        "task_id": "task-one",
+                        "resolved": {"cleanup_confirmed": claim},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            assert read_the_unresolved_host(host_state) is not None, claim
+
+    def test_the_first_leak_is_the_one_written_down(self, tmp_path):
+        # A second leak would only move the blame off the task that caused the
+        # first, and the decision it feeds is the same either way.
+        host_state = tmp_path / "host_state"
+        one = _backend(
+            tmp_path,
+            launcher=Launcher(outcome="overran_and_did_not_stop"),
+            host_state_dir=host_state,
+            task_id="task-one",
+        )
+        one.exec_run(_ok())
+        one.close()
+        two = _backend(
+            tmp_path / "second",
+            launcher=Launcher(outcome="overran_and_was_left_alone"),
+            host_state_dir=host_state,
+            task_id="task-two",
+        )
+        # Refused, so it never gets as far as leaking anything of its own.
+        two.exec_run(_ok())
+        two.close()
+        assert self._record(one)["task_id"] == "task-one"
+
+    def test_with_nowhere_to_write_the_record_says_so_and_keeps_the_result(
+        self, tmp_path
+    ):
+        # The stage script always passes a directory. A caller that does not --
+        # a test, a future caller -- gets the same behaviour it had before,
+        # plus a field saying the leak cannot reach the next task. Silence here
+        # would read exactly like a clean host.
+        backend = _backend(
+            tmp_path, launcher=Launcher(outcome="overran_and_did_not_stop")
+        )
+        assert backend.exec_run(_ok())["ok"] is True
+        assert backend.boots[0]["unresolved_host_record"] is None
+        assert "cannot reach the next one" in (
+            backend.boots[0]["unresolved_host_record_error"]
+        )
+        # The within-task guard is untouched by any of this.
+        assert backend.exec_run(_ok())["error_type"] == "compute_cleanup_failed"
+        backend.close()
+
+    def test_a_directory_that_cannot_be_written_does_not_cost_the_task_its_result(
+        self, tmp_path, monkeypatch
+    ):
+        # The boot has already happened. What raising here would change is not
+        # whether the host is dirty but whether the task that paid for the work
+        # gets to keep it, so the failure is recorded instead.
+        #
+        # Denied by monkeypatch rather than by file mode, because a suite run
+        # as root would write straight through a read-only directory and this
+        # branch would quietly stop being covered in exactly the environment
+        # where it is hardest to notice.
+        def denied(self, *_args, **_kwargs):
+            raise PermissionError(13, "Permission denied", str(self))
+
+        monkeypatch.setattr(Path, "write_text", denied)
+        backend = _backend(
+            tmp_path,
+            launcher=Launcher(outcome="overran_and_did_not_stop"),
+            host_state_dir=tmp_path / "host_state",
+            task_id="task-one",
+        )
+        assert backend.exec_run(_ok())["ok"] is True
+        assert backend.boots[0]["unresolved_host_record"] is None
+        assert "PermissionError" in backend.boots[0]["unresolved_host_record_error"]
         backend.close()
 
 
