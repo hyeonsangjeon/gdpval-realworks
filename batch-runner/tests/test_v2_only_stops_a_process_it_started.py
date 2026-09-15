@@ -28,12 +28,22 @@ anywhere near the subject, in
 reuse *inside the interval*, which is the width the second bound leaves, and no
 further.
 
-**Why not a stable handle.** ``pidfd_open(2)`` would pin identity outright.
-Measured on this box: ``OSError(38, 'Function not implemented')`` — Python
-exposes the name, this kernel (release 3.10) does not implement the call, and it
-needs 5.3. The unsupported path is rejected rather than probed for, and
-:func:`test_k1_nothing_here_depends_on_pidfd` is what holds that rejection in
-place. The process is not this process's child either — the jailer is run with
+**The handle, and where it is not available.** ``pidfd_open(2)`` pins a process
+so a descriptor cannot come to name its successor. It is taken *after* the
+interval above has admitted the number — opening one first would pin whatever
+holds the number, which is not provenance — and once it is held, the gap that
+used to sit in front of every signal is closed for all of them. Measured on this
+box: ``OSError(38, 'Function not implemented')``. Python exposes the name, this
+kernel (release 3.10) does not implement the call, and it needs 5.3.
+
+So there is a path that signals by number instead, with the start time re-read
+immediately before, and that path keeps the two-operation gap. It is not a
+silent fallback — ``stop_handle`` in the artefact says which of the two was
+used, :func:`test_k1_the_fallback_is_declared_rather_than_silent` holds that,
+and :func:`test_k1c_a_host_firecracker_validates_always_has_the_handle` holds
+the reason it does not matter on the host the guests actually run on.
+
+The process is not this process's child either — the jailer is run with
 ``--daemonize`` and Firecracker is reparented away from the launcher — so
 ``waitpid`` cannot hold the number either.
 
@@ -53,6 +63,7 @@ signalled, still be confirmed stopped and still have its jail taken down.
 from __future__ import annotations
 
 import os
+import platform
 import signal
 import subprocess
 import time
@@ -62,9 +73,13 @@ import pytest
 
 from core import agentic_v2_first_boot
 from core.agentic_v2_first_boot import (
+    BY_A_PINNED_HANDLE,
+    BY_THE_NUMBER_RECHECKED,
     CANNOT_RULE_OUT,
     OUTCOME_STARTED_AND_NOT_IDENTIFIED,
     OUTCOMES_THAT_LEAVE_THE_HOST_RUNNING,
+    PIDFD_OPEN_ARRIVED_IN,
+    PIDFD_SEND_SIGNAL_ARRIVED_IN,
     WORK_DISK_RESULTS,
     BootAbandoned,
     _clean_up_after_a_failure,
@@ -77,6 +92,9 @@ from core.agentic_v2_first_boot import (
     claim_the_jail,
     first_boot,
     the_host_was_left_running,
+)
+from core.agentic_v2_containment_readiness import (
+    OLDEST_HOST_KERNEL_FIRECRACKER_VALIDATES,
 )
 from core.agentic_v2_microvm_launch import REQUIRED_MICROVM_POLICY, build_launch_plan
 
@@ -896,23 +914,26 @@ def test_j5_a_floor_from_before_a_restart_refuses_on_the_reboot_reading(
 # --------------------------------------------------------------------------
 
 
-def test_k1_nothing_here_depends_on_pidfd(plan, tmp_path, monkeypatch, sleepers):
-    """The unsupported path is rejected, not probed for.
+def test_k1_the_fallback_is_declared_rather_than_silent(
+    plan, tmp_path, monkeypatch, sleepers
+):
+    """Without a handle the stop still happens, and it says so.
 
-    ``pidfd_open`` is the mechanism that would pin identity outright, and on
-    this kernel it answers ``ENOSYS``. The decision recorded here is that it is
-    not called at all — not tried, not caught, not branched on — because a
-    capability this module cannot exercise is not one it can depend on, and a
-    silent fallback from a failed probe is exactly the implicit unsafe path the
-    design forbids.
+    This used to assert that ``pidfd_open`` was never called at all. The reason
+    given was a good one — a silent fallback from a failed probe is the implicit
+    unsafe path the design forbids — but the conclusion drawn from it was too
+    strong. What has to be forbidden is the *silence*, not the probe: a run that
+    stopped its machine by number and a run that stopped it through a pinned
+    descriptor are carrying different evidence, and an artefact that reported
+    both the same way would be hiding that from whoever reads it.
 
-    Both names are poisoned rather than removed, so this fails loudly if a
-    future edit starts reaching for them, including on a kernel where they would
-    have worked.
+    So the fallback is exercised here by poisoning both halves of the interface,
+    and what is asserted is that the machine still stops — the over-safe
+    direction is a failure too — and that the record names which way it went.
     """
 
     def poisoned(*args, **kwargs):
-        raise AssertionError("this module must not reach for pidfd")
+        raise OSError(38, "Function not implemented")
 
     monkeypatch.setattr(os, "pidfd_open", poisoned, raising=False)
     monkeypatch.setattr(signal, "pidfd_send_signal", poisoned, raising=False)
@@ -929,6 +950,84 @@ def test_k1_nothing_here_depends_on_pidfd(plan, tmp_path, monkeypatch, sleepers)
 
     assert result["outcome"] == "stopped_by_the_deadline"
     assert (sleepers.started[-1], signal.SIGKILL) in spy.real_signals
+    assert result["stop_handle"] == BY_THE_NUMBER_RECHECKED
+
+
+def test_k1b_with_a_handle_the_signal_does_not_go_by_number(
+    plan, tmp_path, monkeypatch, sleepers
+):
+    """The path this kernel cannot run, run against stand-ins for the syscalls.
+
+    This host answers ``ENOSYS`` — :func:`test_k2_this_kernel_really_does_refuse_the_stable_handle`
+    is the measurement — so the branch that uses a descriptor is never taken by
+    any other test here, and an untaken branch is an unwritten one. The two
+    syscalls are stood in for; everything around them is real, including the
+    sleeper, the start-time reads and the confirmation.
+
+    What this does establish: when a handle is available the ``SIGKILL`` goes
+    through it and *not* through the number, so there is no second lookup
+    between deciding and acting. What it does not establish is anything about
+    how ``pidfd_send_signal`` behaves on a kernel that implements it — that is
+    not observable from here and is not claimed.
+    """
+    sent: list[tuple[int, int]] = []
+    opened: list[int] = []
+
+    def open_handle(pid, flags=0):
+        opened.append(pid)
+        # A real descriptor, so the ``os.close`` in the production path closes
+        # something rather than raising on a made-up integer.
+        return os.open(os.devnull, os.O_RDONLY)
+
+    def send(handle, signum, *args, **kwargs):
+        sent.append((opened[-1], signum))
+        os.kill(opened[-1], signum)
+
+    monkeypatch.setattr(os, "pidfd_open", open_handle, raising=False)
+    monkeypatch.setattr(signal, "pidfd_send_signal", send, raising=False)
+
+    spy = _SpyOnRealSignals()
+    monkeypatch.setattr(os, "kill", spy)
+
+    result = _boot(
+        plan,
+        tmp_path,
+        monkeypatch,
+        jailer=_a_jailer_that_starts_a_guest(plan, sleepers),
+    )
+
+    ours = sleepers.started[-1]
+    assert result["outcome"] == "stopped_by_the_deadline"
+    assert result["stop_handle"] == BY_A_PINNED_HANDLE
+    assert (ours, signal.SIGKILL) in sent
+    # The kill reached the sleeper through the stand-in, which calls the spied
+    # ``os.kill`` itself — so the number appearing in the spy is that call and
+    # not a second, independent lookup. What must not be there is a SIGKILL sent
+    # before the handle was opened.
+    assert opened and opened[0] == ours
+
+
+def test_k1c_a_host_firecracker_validates_always_has_the_handle(sleepers):
+    """Why the by-number fallback is not a hole in the supported target.
+
+    The fallback runs where ``pidfd_open`` is missing. That is this box, and it
+    is not the host the guests run on. ``pidfd_send_signal`` arrived in Linux
+    5.1 and ``pidfd_open`` in 5.3, and the oldest kernel Firecracker's own policy
+    lists is above both — so every host that clears the containment readiness
+    check has the descriptor, and the weaker path is reachable only on hosts
+    that check already reports as outside what Firecracker validates.
+
+    Asserted rather than written down, because the floor is a constant someone
+    can lower.
+    """
+    assert OLDEST_HOST_KERNEL_FIRECRACKER_VALIDATES >= PIDFD_OPEN_ARRIVED_IN
+    assert OLDEST_HOST_KERNEL_FIRECRACKER_VALIDATES >= PIDFD_SEND_SIGNAL_ARRIVED_IN
+    # And this box is below it, which is why the fallback is exercised at all.
+    here = tuple(int(part) for part in platform.release().split(".")[:2] if part.isdigit())
+    if here and here < PIDFD_OPEN_ARRIVED_IN:
+        assert getattr(os, "pidfd_open", None) is not None, (
+            "the name is expected to exist even where the syscall does not"
+        )
 
 
 def test_k2_this_kernel_really_does_refuse_the_stable_handle(sleepers):

@@ -705,6 +705,141 @@ def _still_running(pid: int) -> bool:
     return True
 
 
+BY_A_PINNED_HANDLE = "pidfd"
+"""The signal went through a descriptor pinned to one process."""
+
+BY_THE_NUMBER_RECHECKED = "number_rechecked"
+"""The signal went by number, with the start time re-read immediately before.
+
+Which leaves a gap: the re-read and the signal are two operations, and between
+them the number can be handed on. It is the narrowest the number alone allows
+and it is not zero, so the artefact records which of the two was used rather
+than reporting a stop the same way in both cases.
+"""
+
+
+PIDFD_SEND_SIGNAL_ARRIVED_IN = (5, 1)
+"""The Linux release that added ``pidfd_send_signal(2)``."""
+
+PIDFD_OPEN_ARRIVED_IN = (5, 3)
+"""The Linux release that added ``pidfd_open(2)``.
+
+Both are here so the relationship between them and
+``OLDEST_HOST_KERNEL_FIRECRACKER_VALIDATES`` can be asserted rather than
+asserted-in-prose: the oldest kernel Firecracker's own policy lists is above
+both, so a host that clears the containment readiness check has this interface
+and the by-number path below is reachable only on hosts that check already
+reports as outside what Firecracker validates. This host is one of those.
+"""
+
+
+def _a_handle_pinned_to(pid: int, started: int) -> tuple[int | None, str]:
+    """A descriptor that names one process and cannot come to name another.
+
+    ``pidfd_open(2)`` takes its argument by number, so the descriptor it hands
+    back is pinned to whatever held the number *at that instant* — which is the
+    right process if the number had not been handed on since this run admitted
+    it, and the wrong one if it had. That is why the start time is read again
+    here, while the descriptor is held: a reading that still matches says the
+    number had not moved, and from that point the descriptor keeps it from
+    moving. Every signal sent through it afterwards reaches that process or
+    fails; none of them can reach a successor.
+
+    This is not the same as the number being proof. It narrows a gap that used
+    to sit in front of *every* signal down to one, at the moment of the open,
+    and the residue there is a replacement that began inside the same clock tick
+    as the process it replaced — a process that lived under ten milliseconds.
+
+    **Where it is not available.** ``pidfd_open`` is a syscall, not a library
+    call, and an old kernel answers ``ENOSYS`` no matter what the interpreter
+    exposes. This host is one of those, so nothing in this repository's own test
+    runs takes this path. It is not a silent fallback: the caller records
+    :data:`BY_THE_NUMBER_RECHECKED` when it happens, and
+    ``OLDEST_HOST_KERNEL_FIRECRACKER_VALIDATES`` sits above the kernels that
+    introduced both halves of this interface, so a host Firecracker's own policy
+    validates always has it.
+    """
+    try:
+        handle = os.pidfd_open(pid)
+    except ProcessLookupError:
+        return None, f"process {pid} was already gone when a handle was asked for"
+    except (OSError, AttributeError) as unavailable:
+        return None, (
+            f"this kernel has no pidfd for process {pid} "
+            f"({type(unavailable).__name__}: {unavailable})"
+        )
+    if _when_that_process_started(pid) != started:
+        os.close(handle)
+        return None, (
+            f"process {pid} was handed on between this run identifying it and "
+            "taking hold of it, so the handle does not name what was admitted"
+        )
+    return handle, ""
+
+
+def _stop_the_process_this_run_identified(pid: int, started: int) -> dict[str, Any]:
+    """Send ``SIGKILL`` to a process that has already been admitted as this run's.
+
+    Admission is the caller's job and has happened before this is reached. What
+    is left is the gap between deciding and acting, and the two ways of closing
+    it are not equally good:
+
+    * through a pinned descriptor, the decision and the signal name the same
+      object, so there is nothing to close.
+    * by number, the best available is to read the start time again and signal
+      immediately after — which is what the by-number path does, and which
+      leaves the two-operation gap this function exists to report honestly.
+
+    ``already_gone`` is its own answer rather than a failure. A process that
+    ended between the decision and the signal is not an error and is not a
+    refusal; it is the machine having stopped, which is what was wanted.
+    """
+    handle, why_no_handle = _a_handle_pinned_to(pid, started)
+    if handle is not None:
+        try:
+            signal.pidfd_send_signal(handle, signal.SIGKILL)
+        except ProcessLookupError:
+            return {
+                "signalled": False,
+                "how": None,
+                "already_gone": True,
+                "refused_because": "",
+            }
+        finally:
+            os.close(handle)
+        return {
+            "signalled": True,
+            "how": BY_A_PINNED_HANDLE,
+            "already_gone": False,
+            "refused_because": "",
+        }
+    if not _still_the_same_process(pid, started):
+        # Not a refusal to act on something that is there — the thing that was
+        # there has gone, and the number either names nothing or names someone
+        # else. Either way this run's machine is stopped and nothing is sent.
+        return {
+            "signalled": False,
+            "how": None,
+            "already_gone": True,
+            "refused_because": "",
+        }
+    try:
+        os.kill(pid, signal.SIGKILL)
+    except ProcessLookupError:
+        return {
+            "signalled": False,
+            "how": None,
+            "already_gone": True,
+            "refused_because": "",
+        }
+    return {
+        "signalled": True,
+        "how": BY_THE_NUMBER_RECHECKED,
+        "already_gone": False,
+        "refused_because": why_no_handle,
+    }
+
+
 def _may_signal_now(
     pid_file: Path,
     watched: int,
@@ -1371,6 +1506,11 @@ def first_boot(
         outcome = "booted"
         stopped_by_the_deadline = False
         stop_signal_sent = False
+        # Which of the two ways the signal went, when one went. ``None`` while
+        # nothing has been sent, and it stays ``None`` when nothing is: a run
+        # that never had to stop anything did not choose a mechanism, which is a
+        # different statement from having used the weaker one.
+        stop_handle: str | None = None
         guest_confirmed_stopped: bool | None = None
         # What this run last *observed* about the writer, which is not the same
         # question as whether it sent a signal. None until something is looked
@@ -1436,14 +1576,16 @@ def first_boot(
                     outcome = "overran_and_was_left_alone"
                     left_alone_because = why_not_now
                     break
-                try:
-                    os.kill(watched, signal.SIGKILL)
-                except ProcessLookupError:
+                stop = _stop_the_process_this_run_identified(
+                    watched, watched_started_at
+                )
+                if stop["already_gone"]:
                     # It went on its own between the probe and the signal.
                     outcome = "booted"
                     guest_last_seen_running = False
                     break
                 stop_signal_sent = True
+                stop_handle = stop["how"]
                 guest_confirmed_stopped = _confirm_it_stopped(
                     watched,
                     started_at=watched_started_at,
@@ -1585,6 +1727,11 @@ def first_boot(
         # that distinguishes a guest that exited on its own — never signalled,
         # nothing to confirm — from one nobody ever looked at.
         "stop_signal_sent": stop_signal_sent,
+        # And how it went, when it went. A stop through a pinned handle and a
+        # stop by a re-read number are not the same evidence, and an artefact
+        # that reported both as ``stop_signal_sent: true`` would be hiding the
+        # difference from whoever reads it later.
+        "stop_handle": stop_handle,
         "guest_confirmed_stopped": guest_confirmed_stopped,
         "guest_last_seen_running": guest_last_seen_running,
         "command_exit_status": exit_status,
@@ -1894,6 +2041,10 @@ def _clean_up_after_a_failure(
         "pid": None,
         "pid_started_at_ticks": None,
         "signalled": False,
+        # Which way a signal went, when one did. ``None`` covers both "nothing
+        # was sent" and "nothing needed to be sent", because neither of those
+        # chose a mechanism.
+        "stop_handle": None,
         "was_running": None,
         "confirmed_stopped": None,
         "left_alone_because": None,
@@ -1968,24 +2119,41 @@ def _clean_up_after_a_failure(
                                 "it cannot show it started"
                             )
                         else:
-                            os.kill(pid, signal.SIGKILL)
-                            process["signalled"] = True
-                            stopped = _confirm_it_stopped(
-                                pid, started_at=started_at, now=now, sleep=sleep
+                            stop = _stop_the_process_this_run_identified(
+                                pid, started_at
                             )
-                            process["confirmed_stopped"] = stopped
-                            if not stopped:
-                                failures.append(
-                                    {
-                                        "what": "confirm this run's machine stopped",
-                                        "path": pid_file.as_posix(),
-                                        "error": (
-                                            "SIGKILL was sent and the process was "
-                                            f"still there {STOP_CONFIRMATION_SECONDS}s "
-                                            "later; sent is not stopped"
-                                        ),
-                                    }
+                            process["signalled"] = stop["signalled"]
+                            process["stop_handle"] = stop["how"]
+                            if stop["already_gone"]:
+                                # It ended between being identified and being
+                                # taken hold of. Nothing was sent and nothing
+                                # needed to be: the machine is stopped, which is
+                                # an observation and not an assumption.
+                                process["confirmed_stopped"] = True
+                                process["left_alone_because"] = (
+                                    "it stopped on its own between this run "
+                                    "identifying it and taking hold of it"
                                 )
+                            else:
+                                stopped = _confirm_it_stopped(
+                                    pid, started_at=started_at, now=now, sleep=sleep
+                                )
+                                process["confirmed_stopped"] = stopped
+                                if not stopped:
+                                    failures.append(
+                                        {
+                                            "what": (
+                                                "confirm this run's machine stopped"
+                                            ),
+                                            "path": pid_file.as_posix(),
+                                            "error": (
+                                                "SIGKILL was sent and the process "
+                                                "was still there "
+                                                f"{STOP_CONFIRMATION_SECONDS}s "
+                                                "later; sent is not stopped"
+                                            ),
+                                        }
+                                    )
     except Exception as failure:  # noqa: BLE001 - the docstring is the contract
         _collect("stop this run's machine", pid_file.as_posix(), failure)
 
