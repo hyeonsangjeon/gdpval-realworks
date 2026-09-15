@@ -905,3 +905,171 @@ def test_k2_this_kernel_really_does_refuse_the_stable_handle(sleepers):
                 sender(handle, 0)
     finally:
         os.close(handle)
+
+
+# --------------------------------------------------------------------------
+# L — how the unknown is published
+# --------------------------------------------------------------------------
+#
+# The launcher's new outcome does not stop at the launcher. ``read_the_boot``
+# turns a boot into what the model is told, and it branches on *membership of*
+# ``OUTCOMES_THAT_LEAVE_THE_HOST_RUNNING`` rather than on a list of names — so
+# adding a member routes it correctly for free and silently gives it a sentence
+# written about the other members. Routing together is right. Being described
+# together is not: the two older members mean "this run's machine was left
+# running", and this one means the number was still held by something this run
+# could not show was its own guest.
+#
+# These are the "unknown publication" cases. They are here rather than in
+# ``test_agentic_v2_exec_boot.py`` because what they are protecting is a
+# property of the identity repair, not of the reader.
+
+
+def _boot_that_could_not_be_identified(*, status=None) -> dict:
+    return {
+        "outcome": OUTCOME_STARTED_AND_NOT_IDENTIFIED,
+        "command_exit_status": status,
+        "results": {"/out/stdout": "", "/out/stderr": ""},
+    }
+
+
+_A_DEADLINE = {
+    "requested_seconds": 60,
+    "policy_seconds": 1200,
+    "applied_seconds": 60,
+    "capped_by_the_policy": False,
+}
+
+# Every way the grounds could claim the machine itself was ours or was running.
+# Each is a real sentence from the sibling outcomes, which is exactly why a new
+# member inheriting one of them would read as plausible.
+_CLAIMS_THIS_OUTCOME_CANNOT_MAKE = (
+    "was not stopped",
+    "it was still running when this run let go of it",
+    "was left alone",
+    "did not stop",
+)
+
+
+def test_l1_the_unknown_is_a_backend_fault_not_a_start_failure():
+    """``compute_start_failed`` would assert there was never a machine.
+
+    That is the translation ``never_started`` gets, and folding this outcome
+    into it is the mistake this whole repair exists to avoid: the jailer *did*
+    write a pid file, so something started. What is unknown is whose process
+    holds the number now.
+    """
+    from core.agentic_v2_exec_boot import read_the_boot
+
+    read = read_the_boot(_boot_that_could_not_be_identified(), deadline=_A_DEADLINE)
+
+    assert read["result"]["ok"] is False
+    assert read["result"]["error_type"] == "compute_backend_error"
+    assert read["result"]["data"] == {}
+    assert read["result"]["error_type"] != "compute_start_failed"
+
+    # And the host is still not free — the conservative direction. An unknown
+    # owner is not an absent guest.
+    assert read["host_left_running"] is True
+
+
+def test_l2_a_finished_command_keeps_its_answer_and_the_host_stays_unfree():
+    """The command's answer is the command's answer.
+
+    Identity is a question about the machine, not about the work. Throwing a
+    returncode away because the teardown could not be identified would lose a
+    real result for a reason that happened after it.
+    """
+    from core.agentic_v2_exec_boot import read_the_boot
+
+    read = read_the_boot(
+        _boot_that_could_not_be_identified(status=0), deadline=_A_DEADLINE
+    )
+
+    assert read["result"]["ok"] is True
+    assert read["result"]["data"] == {"returncode": 0}
+    assert read["host_left_running"] is True
+
+
+@pytest.mark.parametrize("status", [None, 0])
+def test_l3_the_grounds_do_not_claim_the_machine_was_ours(status):
+    """The sentence has to keep observed liveness apart from unproven ownership.
+
+    Both are true statements about this state and only one of them is about
+    *our* machine. A grounds string that says the machine was left running
+    asserts the very thing the identity check declined to assert, and it would
+    do so in the one place a human reads afterwards.
+    """
+    from core.agentic_v2_exec_boot import read_the_boot
+
+    grounds = read_the_boot(
+        _boot_that_could_not_be_identified(status=status), deadline=_A_DEADLINE
+    )["grounds"]
+
+    for claim in _CLAIMS_THIS_OUTCOME_CANNOT_MAKE:
+        assert claim not in grounds, f"grounds borrowed a sibling's claim: {claim!r}"
+
+    # What it must say instead, in both directions.
+    assert "could not show that process was its own guest" in grounds
+    assert "still holding the number" in grounds
+
+
+@pytest.mark.parametrize("status", [None, 0])
+def test_l4_the_grounds_name_the_outcome(status):
+    """Every other row of that table names itself; this one has to as well.
+
+    Not decoration. The run record keeps the grounds verbatim, and an outcome
+    that is described but never named cannot be found again by the name the
+    launcher used for it.
+    """
+    from core.agentic_v2_exec_boot import read_the_boot
+
+    read = read_the_boot(
+        _boot_that_could_not_be_identified(status=status), deadline=_A_DEADLINE
+    )
+    assert OUTCOME_STARTED_AND_NOT_IDENTIFIED in read["grounds"]
+
+
+@pytest.mark.parametrize("outcome", sorted(OUTCOMES_THAT_LEAVE_THE_HOST_RUNNING))
+def test_l5_every_member_of_the_set_names_itself_and_reports_a_live_host(outcome):
+    """The guard is over the set, not over three names I happened to think of.
+
+    A later member added to ``OUTCOMES_THAT_LEAVE_THE_HOST_RUNNING`` inherits
+    the membership branch and therefore inherits a sentence written about
+    somebody else. Parametrising over the set is what makes that arrive as a
+    red test rather than as a plausible-sounding line in a run record.
+    """
+    from core.agentic_v2_exec_boot import read_the_boot
+
+    boot = {
+        "outcome": outcome,
+        "command_exit_status": None,
+        "results": {"/out/stdout": "", "/out/stderr": ""},
+    }
+    read = read_the_boot(boot, deadline=_A_DEADLINE)
+
+    assert read["host_left_running"] is True
+    assert outcome in read["grounds"]
+    assert read["result"]["error_type"] == "compute_backend_error"
+
+
+def test_l6_the_older_members_kept_their_own_wording():
+    """The control for L3: I narrowed one member, not all of them.
+
+    ``overran_and_was_left_alone`` really does mean this run's machine was left
+    running, and its sentence should still say so. A repair that made every
+    outcome hedge would be the over-safe direction — it would describe a known
+    live guest as an unknown one.
+    """
+    from core.agentic_v2_exec_boot import read_the_boot
+
+    boot = {
+        "outcome": "overran_and_was_left_alone",
+        "command_exit_status": 0,
+        "results": {"/out/stdout": "", "/out/stderr": ""},
+    }
+    grounds = read_the_boot(boot, deadline=_A_DEADLINE)["grounds"]
+
+    assert "was not stopped" in grounds
+    assert "the host is not free" in grounds
+    assert "could not show that process was its own guest" not in grounds
