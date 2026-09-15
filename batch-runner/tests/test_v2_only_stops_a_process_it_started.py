@@ -11,14 +11,22 @@ the kernel hands out again, and a run that signals on the strength of a number
 alone is one recycled PID away from killing something it never started.
 
 **What is actually established, and what is not.** This run reads the host clock
-immediately before it starts the jailer, and compares that instant against the
-start time the kernel reports for the process the PID file names. A process that
-was already running then cannot be a machine this run launched — that is a fact
-about time and needs no guess about what the process is. A process that began
-after it *could* be this run's, which is weaker and is all that is claimed. The
-residue is one clock tick wide: on this host a process born in the same 10 ms
-tick as the reading compares equal to it. ``CANNOT_RULE_OUT`` is narrowed to
-exactly that width and no further.
+twice — immediately before it starts the jailer, and again the moment it first
+holds a number out of the PID file — and compares both against the start time
+the kernel reports for the process that number names. A process that was already
+running at the first reading cannot be a machine this run launched, and a process
+that began after the second cannot be what the number was published for. Both are
+facts about time and need no guess about what the process is. What is left is a
+process that began *while this run was launching*, which is weaker than identity
+and is all that is claimed.
+
+The first of those bounds was here on its own for a while, and on its own it
+admitted every process on the host younger than it, for the whole remaining life
+of the run — measured at forty clock ticks past the floor with no launcher
+anywhere near the subject, in
+``test_v2_ownership_is_bound_to_the_launch.py``. ``CANNOT_RULE_OUT`` now reads
+reuse *inside the interval*, which is the width the second bound leaves, and no
+further.
 
 **Why not a stable handle.** ``pidfd_open(2)`` would pin identity outright.
 Measured on this box: ``OSError(38, 'Function not implemented')`` — Python
@@ -61,8 +69,9 @@ from core.agentic_v2_first_boot import (
     BootAbandoned,
     _clean_up_after_a_failure,
     _ours_is_gone,
-    _started_after_this_run_launched,
+    _started_during_this_runs_launch,
     _still_the_same_process,
+    _the_instant_the_number_was_read,
     _the_instant_this_run_launched,
     _when_that_process_started,
     claim_the_jail,
@@ -301,7 +310,14 @@ def _a_claimed_jail(plan) -> dict:
     return claim
 
 
-def _teardown(plan, tmp_path, *, claim, launch_floor, attempted=True):
+def _teardown(
+    plan, tmp_path, *, claim, launch_floor, attempted=True, number_read_at=None
+):
+    # ``number_read_at=None`` is the ordinary shape for these cases: the failure
+    # they model lands before anything read a PID, so the teardown is the first
+    # thing to hold the number and takes its own ceiling. The sleeper the
+    # stand-in jailer starts is born inside that interval, which is where a real
+    # guest is born. A case that wants the inherited ceiling passes one.
     return _clean_up_after_a_failure(
         host_side=plan["host_side"],
         pid_file=Path(plan["host_side"]["pid_file"]),
@@ -309,6 +325,7 @@ def _teardown(plan, tmp_path, *, claim, launch_floor, attempted=True):
         launch_was_attempted=attempted,
         launch_spawned_nothing=False,
         launch_floor=launch_floor,
+        number_read_at=number_read_at,
         work_disk=tmp_path / "work.ext4",
         salvage={"returned_copy": None, "results_read": False},
         now=_Clock().now,
@@ -333,10 +350,11 @@ def test_g1_a_process_older_than_the_launch_is_refused_and_the_gap_is_named(slee
     started = _when_that_process_started(stranger)
     time.sleep(0.05)
     floor = _the_instant_this_run_launched()
+    ceiling = _the_instant_the_number_was_read()
 
     assert started is not None and started < floor["ticks_since_boot"]
 
-    identity, why_not = _started_after_this_run_launched(stranger, floor)
+    identity, why_not = _started_during_this_runs_launch(stranger, floor, ceiling)
 
     assert identity is None
     assert "already running" in why_not
@@ -349,19 +367,23 @@ def test_g2_a_process_younger_than_the_launch_is_admitted_with_its_start_time(
 ):
     """The control that stops "refuse everything" from looking like a fix.
 
-    A real guest is younger than the floor by construction, because the floor is
-    read immediately before the jailer runs. If this arm does not pass, the
-    launcher can no longer stop anything it started.
+    A real guest falls inside the interval by construction: the floor is read
+    immediately before the jailer runs, the process comes into existence during
+    that call, and the ceiling is read afterwards when the number is first held.
+    The order below is that order. If this arm does not pass, the launcher can
+    no longer stop anything it started.
     """
     floor = _the_instant_this_run_launched()
     time.sleep(0.05)
     ours = sleepers.one()
+    time.sleep(0.05)
+    ceiling = _the_instant_the_number_was_read()
 
-    identity, why_not = _started_after_this_run_launched(ours, floor)
+    identity, why_not = _started_during_this_runs_launch(ours, floor, ceiling)
 
     assert why_not == ""
     assert identity == _when_that_process_started(ours)
-    assert identity >= floor["ticks_since_boot"]
+    assert floor["ticks_since_boot"] <= identity <= ceiling["ticks_since_boot"]
 
 
 def test_g3_a_start_time_does_not_move_while_the_process_lives(sleepers):
@@ -403,57 +425,81 @@ def test_g4_a_process_that_has_gone_answers_nothing_and_is_not_the_same_one(slee
     assert _ours_is_gone(short, None) is True
 
 
-def test_g5_an_unusable_floor_refuses_and_says_which_way_it_is_unusable(sleepers):
-    """Four refusals, four different readings, none of them a fallback.
+def test_g5_an_unusable_interval_refuses_and_says_which_end_is_unusable(sleepers):
+    """Six refusals, six different readings, none of them a fallback.
 
-    The last is the crash-and-resume case: a floor carried across a host restart
-    counts ticks from a boot that is over. Every one of these returns ``None``,
-    which every caller reads as *do not signal*; there is no value of
-    ``launch_floor`` that means "skip the check".
+    Four are about the floor and two about the ceiling, and they are kept apart
+    because a missing floor and a missing ceiling are different failures of this
+    run's own record-keeping. The last floor case is the crash-and-resume one: a
+    floor carried across a host restart counts ticks from a boot that is over.
+    Every one of these returns ``None``, which every caller reads as *do not
+    signal*; there is no value of either end that means "skip the check".
     """
     ours = sleepers.one()
     good = _the_instant_this_run_launched()
+    ceiling = _the_instant_the_number_was_read()
 
-    no_floor, why_none = _started_after_this_run_launched(ours, None)
-    empty, why_empty = _started_after_this_run_launched(ours, {})
-    no_ticks, why_ticks = _started_after_this_run_launched(
-        ours, {"ticks_since_boot": None, "boot_id": good["boot_id"]}
+    no_floor, why_none = _started_during_this_runs_launch(ours, None, ceiling)
+    empty, why_empty = _started_during_this_runs_launch(ours, {}, ceiling)
+    no_ticks, why_ticks = _started_during_this_runs_launch(
+        ours, {"ticks_since_boot": None, "boot_id": good["boot_id"]}, ceiling
     )
-    rebooted, why_reboot = _started_after_this_run_launched(
+    rebooted, why_reboot = _started_during_this_runs_launch(
         ours,
         {
             "ticks_since_boot": 0,
             "boot_id": "00000000-0000-0000-0000-000000000000",
         },
+        ceiling,
+    )
+    no_ceiling, why_no_ceiling = _started_during_this_runs_launch(ours, good, None)
+    unread_ceiling, why_unread = _started_during_this_runs_launch(
+        ours, good, {"ticks_since_boot": None, "boot_id": good["boot_id"]}
     )
 
     assert (no_floor, empty, no_ticks, rebooted) == (None, None, None, None)
+    assert (no_ceiling, unread_ceiling) == (None, None)
     assert "no record of when it launched" in why_none
     assert "no record of when it launched" in why_empty
     assert "could not read the host clock" in why_ticks
     assert "has restarted since this run launched" in why_reboot
+    assert "no record of when it read that number" in why_no_ceiling
+    assert "could not read the host clock when it took that number" in why_unread
 
 
-def test_g6_the_residue_is_one_tick_and_the_claim_is_no_wider(sleepers):
+def test_g6_the_residue_is_the_launch_interval_and_the_claim_is_no_wider(sleepers):
     """What this narrows and what it does not close.
 
-    A process created immediately after the reading lands in the same clock tick
-    as the reading, so the floor separates *before this run's launch tick* from
-    *at or after it* — not *before this instant* from *after it*. That is the
-    whole of what stays unprovable, and the constant that reports it has to say
-    so, because a run that quietly widened its claim to "this is definitely our
-    process" would read identically from the outside.
+    The floor alone separated *before this run's launch* from *after it*, and
+    everything on the far side of that line was admitted — for as long as the
+    run lived, not for a tick. The first two assertions are that measurement,
+    made here against the same function every signalling path calls: a sleeper
+    started a third of a second past the floor is thirty-odd ticks clear of it,
+    which is not a granularity effect, and with a ceiling read before it was
+    born the function turns it away.
+
+    What is left is reuse inside the interval, and the constant that reports the
+    limit has to say so — a run that quietly widened its claim to "this is
+    definitely our process" would read identically from the outside.
     """
     floor = _the_instant_this_run_launched()
-    ours = sleepers.one()
-    started = _when_that_process_started(ours)
+    ceiling_before_it_existed = _the_instant_the_number_was_read()
+    time.sleep(0.3)
+    later = sleepers.one()
+    started = _when_that_process_started(later)
 
     assert started is not None
-    assert 0 <= started - floor["ticks_since_boot"] <= 1
+    assert started - floor["ticks_since_boot"] >= 20
     assert floor["clock_ticks_per_second"] == HZ
 
+    identity, why_not = _started_during_this_runs_launch(
+        later, floor, ceiling_before_it_existed
+    )
+    assert identity is None
+    assert "after this run already had that number in hand" in why_not
+
     assert "reuse" in CANNOT_RULE_OUT.lower()
-    assert "after this run's own launch" in CANNOT_RULE_OUT
+    assert "inside the interval" in CANNOT_RULE_OUT
     assert "did not fork" in CANNOT_RULE_OUT
 
 

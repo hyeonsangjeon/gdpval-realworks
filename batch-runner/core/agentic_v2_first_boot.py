@@ -32,12 +32,14 @@ the product path. That is stage D, and it gets its own change.
 from __future__ import annotations
 
 import json
+import math
 import os
 import shutil
 import signal
 import subprocess
 import time
 import uuid
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
@@ -106,22 +108,28 @@ check refuses on its own terms rather than on a bad constant.
 """
 
 CANNOT_RULE_OUT = (
-    "PID reuse by a process that began after this run's own launch. A number "
-    "read out of a PID file is checked against the instant this run started the "
-    "jailer, which turns away every process that was already running then — but "
-    "a number handed on to something born after that instant reads the same "
-    "from here. POSIX offers this code no handle on a process it did not fork, "
-    "so the window is narrowed to the life of this run rather than closed."
+    "PID reuse inside the interval in which this run was launching. A number "
+    "read out of a PID file is measured against two instants this run recorded "
+    "itself — the one taken immediately before it started the jailer, and the "
+    "one taken the moment it first held the number — and a process that began "
+    "outside that interval is turned away. A number handed to something else "
+    "born inside it reads the same from here. POSIX offers this code no handle "
+    "on a process it did not fork, so the window is narrowed to this run's own "
+    "launch rather than closed."
 )
 """What the ownership evidence below still does not establish.
 
 Recorded in the artefact rather than left out of it. An ownership verdict with
 no statement of its limit reads as proof, and this one is not proof.
 
-This sentence used to be wider: it said PID reuse outright, because nothing
-compared the number against anything. :func:`_started_after_this_run_launched`
-is what narrowed it, and the narrowing is exactly as wide as that function's
-evidence — no wider.
+This sentence has been narrowed twice, and each narrowing was exactly as wide
+as the evidence behind it — no wider. It first said PID reuse outright, because
+nothing compared the number against anything. A floor then excluded every
+process that was already running at launch, which left *anything born after the
+floor*, for the whole remaining life of the run: measured on this host, an
+unrelated child forty clock ticks past the floor was admitted with no reason
+against it. The second bound in :func:`_started_during_this_runs_launch` closes
+that, and what is left is the sentence above.
 """
 
 CLAIM_FILE_NAME = ".owned-by.json"
@@ -431,19 +439,53 @@ def _a_pid_this_may_signal(raw: Any) -> tuple[int | None, str]:
     return pid, ""
 
 
-def _the_instant_this_run_launched() -> dict[str, Any]:
+def _ticks_from_uptime(text: str, *, round_up: bool = False) -> int:
+    """``/proc/uptime``'s first field as a whole number of clock ticks.
+
+    Parsed as a decimal rather than as a float, and that is not tidiness. The
+    file prints hundredths of a second, so at 100 ticks a second the value it
+    holds is already a whole number of ticks and the conversion should not be
+    able to lose anything. Through a float it can: ``float("2454334.36") * 100``
+    is not exactly ``245433436`` for every value, and truncating whatever comes
+    out lands one tick low. Across two thousand uptime-shaped strings that was
+    eighty-four of them — about one in twenty-five, silently, and always in the
+    same direction.
+
+    One tick low is harmless at the floor and not at the ceiling: it moves the
+    upper bound below the start time of a process that really did begin before
+    the number was read, so the launch this run performed itself is turned away.
+    Measured before this was parsed exactly: twenty-nine of three hundred
+    ordinary launches refused, every one by exactly one tick.
+
+    ``round_up`` is for a host where a tick is not a hundredth of a second, so
+    the printed value falls part-way through one. The instant the file stands
+    for is then somewhere inside that tick, and an upper bound has to take the
+    whole of it. Where the division is exact — this host, and any other at 100
+    ticks a second — both settings give the same number, which is the tightest
+    interval the clock can express.
+    """
+    seconds = Decimal(text.split()[0])
+    exact = seconds * CLOCK_TICKS_PER_SECOND
+    return math.ceil(exact) if round_up else int(exact)
+
+
+def _the_host_clock_in_ticks(*, round_up: bool = False) -> dict[str, Any]:
     """The host clock, in the units a process's start time is expressed in.
 
-    Read immediately **before** the jailer is started, and for the same reason
-    ``launch_was_attempted`` is set there: it is this run's record of its own
-    control flow, not an inference drawn from the host afterwards. A floor read
-    after the launch would be later than the guest's own start and would turn
-    away the very process it exists to recognise.
+    Two readings are taken from this during a launch and they bound opposite
+    ends of the same interval, so they have to be the same reading taken twice
+    rather than two different ways of asking. ``_the_instant_this_run_launched``
+    is the first of them; the second is taken where the number is first read.
 
     ``/proc/<pid>/stat`` field 22 counts clock ticks since boot, so this counts
     the same ticks from ``/proc/uptime``. ``boot_id`` rides along because the
     tick count is meaningless across a reboot — after one, every number restarts
     and an old floor would admit anything.
+
+    ``round_up`` says which end of the interval the caller is reading, which
+    matters only where a tick is not a hundredth of a second;
+    :func:`_ticks_from_uptime` carries that and the reason the conversion is not
+    a float.
 
     Every field may be missing. A floor that could not be read is written down
     as ``None`` and read downstream as *no evidence*, which refuses; it is never
@@ -452,8 +494,8 @@ def _the_instant_this_run_launched() -> dict[str, Any]:
     ticks: int | None = None
     try:
         with open("/proc/uptime", encoding="utf-8") as uptime:
-            ticks = int(float(uptime.read().split()[0]) * CLOCK_TICKS_PER_SECOND)
-    except (OSError, ValueError, IndexError):
+            ticks = _ticks_from_uptime(uptime.read(), round_up=round_up)
+    except (OSError, ValueError, IndexError, InvalidOperation):
         pass
     boot_id: str | None = None
     try:
@@ -465,6 +507,42 @@ def _the_instant_this_run_launched() -> dict[str, Any]:
         "boot_id": boot_id,
         "clock_ticks_per_second": CLOCK_TICKS_PER_SECOND,
     }
+
+
+def _the_instant_this_run_launched() -> dict[str, Any]:
+    """The lower end of the interval, read immediately before the jailer runs.
+
+    Read **before** the launch, and for the same reason ``launch_was_attempted``
+    is set there: it is this run's record of its own control flow, not an
+    inference drawn from the host afterwards. A floor read after the launch
+    would be later than the guest's own start and would turn away the very
+    process it exists to recognise.
+    """
+    return _the_host_clock_in_ticks()
+
+
+def _the_instant_the_number_was_read() -> dict[str, Any]:
+    """The upper end of the interval, read the moment a usable PID is in hand.
+
+    A process cannot be older than the number that names it and cannot be
+    younger than the moment that number was written down, so a reading taken
+    *after* the number has been read off the file is an upper bound on the start
+    time of whatever the jailer published. It is this run's own control flow
+    again — no file timestamp is consulted, and nothing here depends on how the
+    jailer orders its fork, its exec and its write.
+
+    What this excludes is the thing the floor alone does not: a process that
+    began **after** this run already held the number. That is where a recycled
+    number lands, and it is the whole of the distance between "not older than
+    the launch" and "born during it".
+
+    Rounded up, because it is an upper bound. On this host that changes nothing
+    — a tick is a hundredth of a second and the file prints hundredths — but the
+    conversion it goes through has to be exact, and it was not: read through a
+    float, this bound landed one tick low often enough to refuse about one
+    ordinary launch in ten. :func:`_ticks_from_uptime` carries the measurement.
+    """
+    return _the_host_clock_in_ticks(round_up=True)
 
 
 def _when_that_process_started(pid: int) -> int | None:
@@ -491,46 +569,63 @@ def _when_that_process_started(pid: int) -> int | None:
         return None
 
 
-def _started_after_this_run_launched(
-    pid: int, launch_floor: Mapping[str, Any] | None
+def _started_during_this_runs_launch(
+    pid: int,
+    launch_floor: Mapping[str, Any] | None,
+    number_read_at: Mapping[str, Any] | None,
 ) -> tuple[int | None, str]:
-    """The start time of ``pid`` if this run could have started it, or why not.
+    """The start time of ``pid`` if it began during this run's launch, or why not.
 
-    **This is the whole of the identity evidence, and it is one-directional.**
-    A process that was already running when this run launched the jailer is not
-    a machine this run started — that is a fact about time, and it needs no
-    guess about what the process is. A process that began after that instant
-    *could* be this run's, which is weaker and is all that is claimed: see
-    :data:`CANNOT_RULE_OUT`, which is narrowed to exactly this width.
+    **Two bounds, and the second one is what makes this positive.** The floor is
+    read immediately before the jailer runs; the ceiling is read the moment this
+    run has a usable number in hand. A process the jailer published began after
+    the first and before the second, because the number could not have been
+    written down for a process that did not exist yet and this run did not have
+    the number before it read it. So the claim is *this process began inside the
+    interval in which this run was launching*, which is a statement about this
+    launch, rather than *this process is not older than this run*, which is a
+    statement about every other process on the host.
+
+    The difference is not decorative. One bound admits every process on the host
+    that happens to be younger than the floor — an unrelated ``sleep`` started
+    by anything at all, for the whole remaining life of the run. That was
+    measured on this host: a child born 40 clock ticks past the floor, with no
+    launcher and no jail anywhere near it, was admitted with no reason against
+    it. Adding the ceiling turns that case away while leaving the launch the
+    ceiling was read for untouched.
 
     What it refuses, in the order it refuses it:
 
-    * no floor at all — the launch never happened, or the host clock could not
-      be read at it. There is nothing to compare against, so nothing is
-      established and nothing is signalled.
+    * no floor, or no ceiling — one end of the interval is missing, so there is
+      no interval. Nothing is established and nothing is signalled. There is no
+      value meaning "skip this end".
     * a different boot id — the host restarted since this run launched. Tick
-      counts restart with it, so the floor no longer means anything.
+      counts restart with it, so neither end means anything.
     * no start time — the number names nothing readable now. That is not
       evidence of anything, including of its being gone.
-    * a start time below the floor — it was already there. This is the one that
-      turns away a recycled number, and it was measured: a sleeper created two
-      clock ticks before the reading fell below it 20 times out of 20.
+    * a start time below the floor — it was already there. Measured: a sleeper
+      created two clock ticks before the reading fell below it 20 times out of
+      20.
+    * a start time above the ceiling — it began after this run was already
+      holding the number, so it cannot be what the number was published for.
 
-    **The 10 ms this cannot see.** On this host a process created immediately
-    after the reading compares *equal* to it, 20 times out of 20 — one tick is
-    10 ms and both land in the same one. So the floor separates *before this
-    run's launch tick* from *at or after it*, not *before this instant* from
-    *after it*. A number handed to an unrelated process inside that one tick
-    reads as admissible. Nothing here closes that; ``CANNOT_RULE_OUT`` says so.
+    **What is still not established.** A number reused *inside* the interval
+    reads the same from here, and so does one that named a process which exited
+    and was replaced within it. The interval is short and it is bounded by this
+    run's own launch, which is the narrowing; it is not a proof of identity, and
+    :data:`CANNOT_RULE_OUT` is kept at exactly this width.
 
-    **Why there is no stable handle.** ``pidfd_open(2)`` would pin the identity
-    outright, and it was tried: this kernel answers ``OSError(38, 'Function not
-    implemented')``, so the call does not exist here even though Python exposes
-    the name. It is not used, not probed for at runtime, and no code path
-    behaves differently depending on whether it would work — a capability this
-    module cannot test is not one it can depend on. The process this needs to
-    identify is also not this process's child: the jailer daemonises and
-    Firecracker is reparented, so ``waitpid`` cannot hold the number either.
+    **What this leaves for the caller to carry.** The number is still only a
+    number after this returns. ``pidfd_open(2)`` would pin an identity from the
+    moment it is opened, and opening one *after* this function admits the number
+    is the right order — the interval decides whether the number may be adopted,
+    and a handle taken on the strength of that decision carries it forward.
+    Opening one first would pin whatever holds the number, which is not
+    provenance. No handle is taken yet: every caller below re-reads the start
+    time at the moment it acts, which closes the same gap only up to the instant
+    of the re-read. The process is also not this process's child — the jailer
+    daemonises and Firecracker is reparented — so ``waitpid`` cannot hold the
+    number either.
     """
     if not launch_floor:
         return None, (
@@ -543,8 +638,19 @@ def _started_after_this_run_launched(
             "this run could not read the host clock when it launched, so it has "
             "no instant to measure that process against"
         )
+    if not number_read_at:
+        return None, (
+            "this run has no record of when it read that number, so it has no "
+            "interval to measure that process against"
+        )
+    ceiling = number_read_at.get("ticks_since_boot")
+    if not isinstance(ceiling, int):
+        return None, (
+            "this run could not read the host clock when it took that number, "
+            "so it has no interval to measure that process against"
+        )
     boot_id = launch_floor.get("boot_id")
-    now_booted = _the_instant_this_run_launched().get("boot_id")
+    now_booted = _the_host_clock_in_ticks().get("boot_id")
     if boot_id is not None and now_booted is not None and boot_id != now_booted:
         return None, (
             "the host has restarted since this run launched, so no process "
@@ -560,6 +666,12 @@ def _started_after_this_run_launched(
         return None, (
             f"process {pid} was already running {floor - started} clock ticks "
             "before this run launched, so it is not a machine this run started"
+        )
+    if started > ceiling:
+        return None, (
+            f"process {pid} began {started - ceiling} clock ticks after this run "
+            "already had that number in hand, so it is not what the number was "
+            "published for"
         )
     return started, ""
 
@@ -1082,6 +1194,14 @@ def first_boot(
     # means no evidence — never "go ahead".
     launch_floor: dict[str, Any] | None = None
 
+    # The other end of that interval. Declared out here beside the floor, and
+    # not down beside the read that sets it, because the failure path below has
+    # to be able to pass on whichever of the two this run got as far as taking.
+    # A failure before the PID file is read leaves this ``None``, which is the
+    # honest answer — *this run had not yet held a number* — and is not the same
+    # statement as the floor's ``None``.
+    number_read_at: dict[str, Any] | None = None
+
     try:
         placement = place_the_images(
             plan,
@@ -1153,6 +1273,12 @@ def first_boot(
                 else:
                     watched, why_not_this_pid = _a_pid_this_may_signal(text)
                     if watched is not None:
+                        # The other end of the interval, closed here because
+                        # here is where this run first holds the number.
+                        # Anything that begins after this reading began after
+                        # the number was already taken, so it is not what the
+                        # number was published for.
+                        number_read_at = _the_instant_the_number_was_read()
                         break
             sleep(POLL_SECONDS)
 
@@ -1171,8 +1297,8 @@ def first_boot(
         watched_started_at: int | None = None
         why_not_our_process = ""
         if watched is not None:
-            watched_started_at, why_not_our_process = _started_after_this_run_launched(
-                watched, launch_floor
+            watched_started_at, why_not_our_process = _started_during_this_runs_launch(
+                watched, launch_floor, number_read_at
             )
 
         # What this run can actually say about whose process that is. Written
@@ -1224,16 +1350,18 @@ def first_boot(
                 # the machine that published it. This one is why the deadline
                 # path may signal at all.
                 "ground": (
-                    "the process it names began after this run launched the jailer"
+                    "the process it names began while this run was launching the "
+                    "jailer"
                 ),
                 "held": watched_started_at is not None,
                 "reading": (
                     why_not_our_process
                     or (
                         f"started at {watched_started_at} clock ticks since boot, "
-                        f"at or after the {launch_floor.get('ticks_since_boot')} "
-                        "this run read immediately before launching"
-                        if launch_floor
+                        f"inside the {launch_floor.get('ticks_since_boot')}–"
+                        f"{number_read_at.get('ticks_since_boot')} this run read "
+                        "immediately before launching and on taking the number"
+                        if launch_floor and number_read_at
                         else ""
                     )
                 ),
@@ -1386,6 +1514,7 @@ def first_boot(
             launch_was_attempted=launch_was_attempted,
             launch_spawned_nothing=launch_spawned_nothing,
             launch_floor=launch_floor,
+            number_read_at=number_read_at,
             work_disk=work_disk,
             salvage=salvage,
             now=now,
@@ -1440,9 +1569,11 @@ def first_boot(
             "cannot_rule_out": CANNOT_RULE_OUT,
             # The two readings the fifth ground was decided on, carried out so a
             # reader can redo the comparison instead of taking the verdict. The
-            # floor is this run's; the start time is the host's answer about the
-            # process the file named. ``None`` on either side is the refusal.
+            # interval is this run's, both ends of it; the start time is the
+            # host's answer about the process the file named. ``None`` anywhere
+            # is the refusal.
             "launch_floor": dict(launch_floor) if launch_floor else None,
+            "number_read_at": dict(number_read_at) if number_read_at else None,
             "pid_started_at_ticks": watched_started_at,
         },
         "ran_for_seconds": ran_for,
@@ -1604,6 +1735,7 @@ def _clean_up_after_a_failure(
     launch_was_attempted: bool,
     launch_spawned_nothing: bool,
     launch_floor: Mapping[str, Any] | None,
+    number_read_at: Mapping[str, Any] | None,
     work_disk: str | Path,
     salvage: dict[str, Any],
     now: Callable[[], float] = time.monotonic,
@@ -1635,25 +1767,42 @@ def _clean_up_after_a_failure(
 
     A process is signalled only when the jail is still this run's, no PID file
     was there before it launched, one appeared while it was watching, the value
-    in it is one this platform can signal, and the process it names began after
-    this run launched the jailer. The jail is the strongest of those, because the
-    plan puts the PID file *inside* the chroot — a jail this run does not hold
+    in it is one this platform can signal, and the process it names began while
+    this run was launching the jailer. The jail is the strongest of those, because
+    the plan puts the PID file *inside* the chroot — a jail this run does not hold
     contains another run's PID file and another run's work disk. The last is the
     only one about the process rather than about the file, and it is what stops a
     correct-looking jail whose PID file names a recycled number from producing a
-    real ``SIGKILL`` against a stranger. ``launch_floor`` carries it, and it is
-    required and has no default for the third time in this signature: ``None``
-    refuses, which is safe, but a caller that can forget it is a caller that will
-    pass the launch and then silently stop checking who it is stopping.
+    real ``SIGKILL`` against a stranger. ``launch_floor`` and ``number_read_at``
+    carry it between them, and both are required and have no default for the
+    third and fourth time in this signature: ``None`` is not a way to skip the
+    check, and a caller that can forget either is a caller that will pass the
+    launch and then silently stop checking who it is stopping.
+
+    The two are not the same kind of argument, though, and the difference is
+    worth stating because it is the opposite of what the pattern above suggests.
+    ``launch_floor`` has exactly one correct value — the reading taken
+    immediately before the jailer ran — and ``None`` refuses. ``number_read_at``
+    is the other end of that interval, *the moment this run first held the
+    number*, and this path may or may not be the thing that first held it. When
+    the caller has one, it is used, because it is the earlier and therefore the
+    stricter of the two available readings and because inheriting it keeps one
+    interval per number rather than one per code path. When the caller has none —
+    the failure landed before the watch loop ever read a PID — this path is the
+    first reader and takes its own, which is honest but can be much wider if the
+    failure came long after the launch. So ``None`` here means *I had not read
+    it yet*, not *do not check*; the refusing value is the one handed to
+    :func:`_started_during_this_runs_launch`, and it is never reached with
+    nothing.
 
     That check is asked *after* liveness, not before. Nothing holding the number
     means nothing of this run's is running under it, which holds without any
     identity at all; asking the other way round would turn every machine that
     ended on its own into an unidentified one and keep its jail forever.
 
-    None of that rules out PID reuse by a process that started after this run
-    launched, and this does not claim it does; see :data:`CANNOT_RULE_OUT`,
-    which goes out with the record.
+    None of that rules out PID reuse inside the interval this run was launching
+    in, and this does not claim it does; see :data:`CANNOT_RULE_OUT`, which goes
+    out with the record.
 
     Removal is gated on a second question, separate from ownership: is anything
     of this run's possibly still using this jail. Two readings answer it, and
@@ -1739,6 +1888,8 @@ def _clean_up_after_a_failure(
         "launch_was_attempted": launch_was_attempted,
         "launch_spawned_nothing": launch_spawned_nothing,
         "launch_floor": dict(launch_floor) if launch_floor else None,
+        "number_read_at": None,
+        "number_read_at_inherited": None,
         "pid_file_appeared": a_pid_file_appeared,
         "pid": None,
         "pid_started_at_ticks": None,
@@ -1774,6 +1925,22 @@ def _clean_up_after_a_failure(
                     process["left_alone_because"] = why_not
                 else:
                     process["pid"] = pid
+                    # Inherited when the caller already held this number, taken
+                    # here when it did not. Both are "the moment this run first
+                    # held it"; the difference is only which code path that was.
+                    #
+                    # Inheriting is the stricter of the two. A reading taken
+                    # here is later, and a later ceiling admits more — if the
+                    # failure being cleaned up happened long after the launch,
+                    # an interval ending here can be most of the run, which is
+                    # the width the ordinary path was measured admitting a
+                    # stranger through. Where an earlier reading exists it is
+                    # therefore the right one, and it stays right even if the
+                    # file has been rewritten since: a number published after
+                    # that instant is refused, which is the safe direction.
+                    held_at = number_read_at or _the_instant_the_number_was_read()
+                    process["number_read_at"] = dict(held_at)
+                    process["number_read_at_inherited"] = number_read_at is not None
                     running = _still_running(pid)
                     process["was_running"] = running
                     if not running:
@@ -1786,8 +1953,8 @@ def _clean_up_after_a_failure(
                         process["confirmed_stopped"] = True
                         process["left_alone_because"] = "it had already stopped"
                     else:
-                        started_at, not_ours = _started_after_this_run_launched(
-                            pid, launch_floor
+                        started_at, not_ours = _started_during_this_runs_launch(
+                            pid, launch_floor, held_at
                         )
                         process["pid_started_at_ticks"] = started_at
                         if started_at is None:

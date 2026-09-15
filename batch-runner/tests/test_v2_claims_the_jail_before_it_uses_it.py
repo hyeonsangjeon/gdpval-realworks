@@ -298,6 +298,7 @@ def test_e4_cleanup_over_a_jail_that_is_not_this_runs_touches_none_of_it(
         launch_was_attempted=False,
         launch_spawned_nothing=False,
         launch_floor=None,
+        number_read_at=None,
         work_disk=tmp_path / "work.ext4",
         salvage=salvage,
     )
@@ -1022,6 +1023,15 @@ def test_f8_the_teardown_will_not_assume_whether_a_launch_happened(plan, tmp_pat
     anything is the one taken immediately before the jailer ran, and a caller
     that forgets the argument has no way to notice it is now comparing against
     nothing.
+
+    ``number_read_at`` is the other end of that interval and is required for a
+    third reason again. Its ``None`` does not refuse — it says *nothing had read
+    a PID yet*, and the teardown then takes its own reading. That is the correct
+    behaviour and it is also why a default would be invisible: a caller that
+    forgot the argument would keep working, quietly widening every interval to
+    end whenever the teardown happened to run rather than when the run actually
+    took the number. Silence is the whole objection; there is no wrong value
+    here, only a wrong instant nobody would see.
     """
     parameters = inspect.signature(_clean_up_after_a_failure).parameters
     for name in (
@@ -1029,6 +1039,7 @@ def test_f8_the_teardown_will_not_assume_whether_a_launch_happened(plan, tmp_pat
         "launch_was_attempted",
         "launch_spawned_nothing",
         "launch_floor",
+        "number_read_at",
     ):
         assert parameters[name].default is inspect.Parameter.empty, name
         assert parameters[name].kind is inspect.Parameter.KEYWORD_ONLY, name
@@ -1082,6 +1093,7 @@ def test_f9_a_pid_file_in_a_jail_this_run_never_launched_into_is_unexplained(
         launch_was_attempted=False,
         launch_spawned_nothing=False,
         launch_floor=None,
+        number_read_at=None,
         work_disk=tmp_path / "work.ext4",
         salvage={"returned_copy": None, "results_read": False},
     )

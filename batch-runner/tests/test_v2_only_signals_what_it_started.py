@@ -70,33 +70,67 @@ def _a_stand_in_guest_with_an_identity(monkeypatch, *pids: int) -> None:
     The launcher will not signal a process it cannot show it started, and a
     number a test made up names nothing on the host — so a stand-in that only
     reports *alive* is half a guest. This supplies the other half: for the PIDs
-    named here, "when did you start" answers with the host clock read the first
-    time it is asked, which is necessarily at or after the floor the run
-    recorded just before launching.
+    named here, "when did you start" answers with a host clock reading taken
+    **while the run was launching**, which is where a real guest's start time
+    falls.
 
-    **The answer is remembered per PID, and that is the point, not an
-    optimisation.** A real process's start time never moves; answering with a
-    fresh clock reading each time would make the guest look like a different
-    process on every probe, and the launcher would correctly refuse to signal
-    it. Getting this wrong makes a working guard look broken.
+    **When that reading is taken is the whole of this helper.** The run bounds
+    ownership from both ends — a floor read immediately before the jailer runs,
+    a ceiling read the moment it first holds a number — so a stand-in stamped
+    outside that interval is not a guest this run could have started, and the
+    launcher is right to refuse it. The two hooks below are exactly those two
+    instants, and the stamp is taken *after* the floor is read and *before* the
+    ceiling is, which is the order the real events happen in. Whichever of the
+    two the code under test reaches first, the answer lands inside.
+
+    This used to stamp the clock the first time the start time was *asked for*,
+    which is after the run already holds the number — a process born after the
+    run observed it, which cannot exist. Nothing caught it, because with one
+    bound there was nothing an impossibly-late start time could fail.
+
+    **The answer is remembered, and that is the point, not an optimisation.** A
+    real process's start time never moves; answering with a fresh clock reading
+    each time would make the guest look like a different process on every probe,
+    and the launcher would correctly refuse to signal it. Getting this wrong
+    makes a working guard look broken.
 
     Only the PIDs listed. :data:`STRANGER` is deliberately never among them —
     a process this run cannot account for is exactly what it stands for.
     """
     known = set(pids)
     real = agentic_v2_first_boot._when_that_process_started
-    remembered: dict[int, int | None] = {}
+    real_floor = agentic_v2_first_boot._the_instant_this_run_launched
+    real_ceiling = agentic_v2_first_boot._the_instant_the_number_was_read
+    born: dict[str, int | None] = {}
+
+    def _born_now() -> None:
+        if "ticks" not in born:
+            reading = agentic_v2_first_boot._the_host_clock_in_ticks()
+            born["ticks"] = reading["ticks_since_boot"]
+
+    def floor() -> dict:
+        reading = real_floor()
+        _born_now()
+        return reading
+
+    def ceiling() -> dict:
+        _born_now()
+        return real_ceiling()
 
     def started(pid: int) -> int | None:
         if pid not in known:
             return real(pid)
-        if pid not in remembered:
-            now = agentic_v2_first_boot._the_instant_this_run_launched()
-            remembered[pid] = now["ticks_since_boot"]
-        return remembered[pid]
+        _born_now()
+        return born["ticks"]
 
     monkeypatch.setattr(
         "core.agentic_v2_first_boot._when_that_process_started", started
+    )
+    monkeypatch.setattr(
+        "core.agentic_v2_first_boot._the_instant_this_run_launched", floor
+    )
+    monkeypatch.setattr(
+        "core.agentic_v2_first_boot._the_instant_the_number_was_read", ceiling
     )
 
 
@@ -631,6 +665,11 @@ def test_d5_cleanup_leaves_a_jail_this_run_did_not_create_alone(
         # reading rather than ``None`` keeps ownership the only thing that can
         # produce the refusal below.
         launch_floor=_the_instant_this_run_launched(),
+        # The other end of the same interval. Like the floor above it is
+        # read before the ownership check can matter here, and ``None``
+        # says only that nothing had read a PID yet — this path would take
+        # its own reading if it got that far, which it does not.
+        number_read_at=None,
         work_disk=tmp_path / "work.ext4",
         salvage=salvage,
     )
@@ -701,7 +740,13 @@ def test_d6_ownership_is_recorded_as_evidence_both_when_it_holds_and_when_it_doe
     assert granted["owned_by_this_run"] is True
     assert len(granted["ownership_grounds"]) == 5
     assert all(g["held"] for g in granted["ownership_grounds"])
-    assert "began after this run launched" in granted["ownership_grounds"][4]["ground"]
+    # The fifth ground says *while*, not *after*. One bound would have read
+    # "after this run launched", which is true of every process on the host that
+    # is younger than the floor; what is recorded here is the interval.
+    assert (
+        "began while this run was launching"
+        in granted["ownership_grounds"][4]["ground"]
+    )
     assert granted["left_alone_because"] is None
     assert "reuse" in granted["cannot_rule_out"].lower()
 
