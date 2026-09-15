@@ -484,12 +484,14 @@ def read_the_boot(
             # in either direction. What the two routes share is weaker than that
             # and is what the sentence says: no process was named, so nothing
             # here establishes the host is free. Which route it was is in the
-            # record's ``left_alone_because``, not in this message.
+            # record's ``left_alone_because``, not in this message — but the
+            # outcome's own name is in it, because the two rows below name
+            # themselves and a run record is searched by that name.
             ran_anyway = (
                 ", though this run never got a process it could name for the "
-                "machine it ran in, so nothing here says the host is free and "
-                "the returned work disk may have been copied while something "
-                "still had it open"
+                f"machine it ran in ({outcome}), so nothing here says the host "
+                "is free and the returned work disk may have been copied while "
+                "something still had it open"
             )
         elif outcome in OUTCOMES_THAT_LEAVE_THE_HOST_RUNNING:
             # The command's answer is still the command's answer. What is *not*
@@ -532,30 +534,25 @@ def read_the_boot(
         # control flow. An absent pid file is not that evidence — the launcher
         # ran and the run simply cannot say what it left behind, which is a
         # backend that failed to report rather than a start that failed.
+        #
+        # The other route here saw more than that and still cannot say more: a
+        # process was holding the number the machine published, and the interval
+        # that would have adopted it declined. Routed exactly like the row below
+        # it, deliberately — no exit status, and a host that cannot be called
+        # free. The wording has to stay off that row's sentence either way. "It
+        # was still running when this run let go of it" is a claim about *our*
+        # machine, which is the one claim neither route establishes: on the
+        # first nothing was ever named, and on the second the liveness was
+        # observed and the ownership was not. What both routes support is the
+        # weaker sentence below, and which route it was is in the record's
+        # ``left_alone_because``.
         return answer(
             False,
             "compute_backend_error",
             {},
-            "the launcher ran and this run never got a process it could name, "
-            "so nothing here says the command ran and nothing here says the "
-            "host is free",
-        )
-    if outcome == OUTCOME_STARTED_AND_NOT_IDENTIFIED:
-        # Routed exactly like the branch below it, deliberately: no exit status
-        # and a host that cannot be called free. Only the grounds differ, and
-        # they have to. "It was still running when this run let go of it" is a
-        # claim about *our* machine; what this outcome knows is that the number
-        # was still held and that whose process held it could not be
-        # established.
-        return answer(
-            False,
-            "compute_backend_error",
-            {},
-            f"the machine ended as {outcome} — it wrote no exit status and a "
-            "process was still holding the number it published, but this run "
-            "could not show that process was its own guest, so nothing here "
-            "says the command ran, nothing was signalled, and the host is not "
-            "free",
+            f"the machine ended as {outcome!r} — the launcher ran and this run "
+            "never got a process it could name, so nothing here says the "
+            "command ran and nothing here says the host is free",
         )
     if outcome in OUTCOMES_THAT_LEAVE_THE_HOST_RUNNING:
         return answer(

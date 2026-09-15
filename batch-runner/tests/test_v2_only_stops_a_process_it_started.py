@@ -708,16 +708,23 @@ def test_h4_a_guest_that_exits_before_the_deadline_is_never_asked_for_its_identi
     assert not Path(plan["host_side"]["chroot_dir"]).exists()
 
 
-def test_h5_nothing_published_is_still_a_start_failure_and_not_an_unknown(
-    plan, tmp_path, monkeypatch
-):
-    """The vocabulary boundary, from the other side.
+def test_h5_nothing_published_is_not_a_start_failure(plan, tmp_path, monkeypatch):
+    """The vocabulary boundary, from the other side — and it is not where I put it.
 
-    ``never_started`` is reported downstream as ``compute_start_failed`` — *the
-    jailer wrote no pid file, so no machine existed to run in* — and that is
-    still exactly right when no PID file appeared. The identity gate must not
-    swallow this case into its own unknown, or a genuine start failure starts
-    leaking jails and reporting that a machine may be running.
+    An earlier version of this test asserted ``never_started`` here, on the
+    reasoning that an absent pid file means the jailer wrote nothing and so no
+    machine existed to run in. That reasoning was wrong and PR #591 reversed it:
+    ``never_started`` is reported downstream as ``compute_start_failed``, which
+    is a *finding* that nothing was put on the host, and the only evidence for
+    it is this run's own account of its control flow — the launch was never
+    reached, or the launch reported that its ``exec`` never happened. An absent
+    pid file is neither. The launcher ran; the host declined to answer.
+
+    So the boundary is the launcher, not the pid file. Nothing published means
+    this run cannot name what it left behind, the jail stays standing and the
+    host may not be treated as free. The genuine start failure — where ``exec``
+    really did not happen — keeps its own word and is covered at
+    ``test_agentic_v2_first_boot.py`` by the ``launch_spawned_nothing`` pair.
     """
     spy = _SpyOnRealSignals()
     monkeypatch.setattr(os, "kill", spy)
@@ -727,11 +734,12 @@ def test_h5_nothing_published_is_still_a_start_failure_and_not_an_unknown(
 
     result = _boot(plan, tmp_path, monkeypatch, jailer=a_jailer_publishing_nothing)
 
-    assert result["outcome"] == "never_started"
-    assert result["outcome"] not in OUTCOMES_THAT_LEAVE_THE_HOST_RUNNING
+    assert result["outcome"] == OUTCOME_STARTED_AND_NOT_IDENTIFIED
+    assert result["outcome"] in OUTCOMES_THAT_LEAVE_THE_HOST_RUNNING
+    # Still nothing is signalled — an unnamed process is not a target.
     assert spy.sent == []
     assert result["pid_file"]["pid_started_at_ticks"] is None
-    assert the_host_was_left_running(result) is False
+    assert the_host_was_left_running(result) is True
 
 
 # --------------------------------------------------------------------------
@@ -1151,12 +1159,15 @@ def test_l2_a_finished_command_keeps_its_answer_and_the_host_stays_unfree():
 
 @pytest.mark.parametrize("status", [None, 0])
 def test_l3_the_grounds_do_not_claim_the_machine_was_ours(status):
-    """The sentence has to keep observed liveness apart from unproven ownership.
+    """The sentence has to stop short of the one claim neither route supports.
 
-    Both are true statements about this state and only one of them is about
-    *our* machine. A grounds string that says the machine was left running
-    asserts the very thing the identity check declined to assert, and it would
-    do so in the one place a human reads afterwards.
+    Two routes reach this outcome. On one the launcher ran and nothing was ever
+    named; on the other something was seen holding the number the machine
+    published and the interval that would have adopted it declined — liveness
+    observed, ownership not. A grounds string that says *our* machine was left
+    running asserts the very thing the identity check declined to assert, and
+    it would do so in the one place a human reads afterwards. What both routes
+    do support is weaker, and that is what has to be there instead.
     """
     from core.agentic_v2_exec_boot import read_the_boot
 
@@ -1168,8 +1179,8 @@ def test_l3_the_grounds_do_not_claim_the_machine_was_ours(status):
         assert claim not in grounds, f"grounds borrowed a sibling's claim: {claim!r}"
 
     # What it must say instead, in both directions.
-    assert "could not show that process was its own guest" in grounds
-    assert "still holding the number" in grounds
+    assert "never got a process it could name" in grounds
+    assert "nothing here says the host is free" in grounds
 
 
 @pytest.mark.parametrize("status", [None, 0])
@@ -1230,7 +1241,7 @@ def test_l6_the_older_members_kept_their_own_wording():
 
     assert "was not stopped" in grounds
     assert "the host is not free" in grounds
-    assert "could not show that process was its own guest" not in grounds
+    assert "never got a process it could name" not in grounds
 
 
 # ---------------------------------------------------------------------------
