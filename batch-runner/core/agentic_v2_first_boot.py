@@ -31,6 +31,7 @@ the product path. That is stage D, and it gets its own change.
 
 from __future__ import annotations
 
+import errno
 import json
 import math
 import os
@@ -108,14 +109,16 @@ check refuses on its own terms rather than on a bad constant.
 """
 
 CANNOT_RULE_OUT = (
-    "PID reuse inside the interval in which this run was launching. A number "
-    "read out of a PID file is measured against two instants this run recorded "
-    "itself — the one taken immediately before it started the jailer, and the "
-    "one taken the moment it first held the number — and a process that began "
-    "outside that interval is turned away. A number handed to something else "
-    "born inside it reads the same from here. POSIX offers this code no handle "
-    "on a process it did not fork, so the window is narrowed to this run's own "
-    "launch rather than closed."
+    "A process that is confined to this run's jail but was placed there by "
+    "something other than this run's own jailer. Ownership is established by "
+    "asking where the process named in the PID file is rooted: the jail is a "
+    "directory this run created and claims exclusively, so a process whose "
+    "root is that directory was put there by this run. What that does not "
+    "separate is a second jailer invoked against the same jail by something "
+    "outside this run, which the exclusive claim is what stands against. A "
+    "start-time interval is checked alongside it and can only turn candidates "
+    "away; on its own it never established origin, because an unrelated "
+    "process born inside the interval satisfies it."
 )
 """What the ownership evidence below still does not establish.
 
@@ -569,6 +572,69 @@ def _when_that_process_started(pid: int) -> int | None:
         return None
 
 
+def _the_jail_a_process_is_confined_to(pid: int) -> tuple[str | None, str]:
+    """The directory a process has as its root, or why that could not be read.
+
+    ``/proc/<pid>/root`` is a link to the root a process actually sees. For a
+    process the jailer has ``chroot``ed it is the jail; for every ordinary
+    process on the host it is ``/``. Measured on the target host, kernel
+    ``6.17.0-1022-azure``: a child ``chroot``ed into a directory and then
+    dropped to an unprivileged uid — which is the shape the jailer produces —
+    read back as that directory, and an unrelated process spawned in the same
+    breath read back as ``/``.
+
+    **The three answers are not one answer.** A process that has gone leaves
+    nothing to read and that is ``ENOENT``; a reader without the privilege to
+    look is ``EPERM``; anything else is unknown. None of them may be taken for
+    a match, so each returns ``None`` with the reason it returns ``None``.
+    """
+    try:
+        return os.readlink(f"/proc/{pid}/root"), ""
+    except (FileNotFoundError, ProcessLookupError):
+        return None, (
+            f"the host has no process {pid} to read a root from, so there is "
+            "nothing to confine"
+        )
+    except PermissionError:
+        return None, (
+            f"this run may not read what process {pid} has as its root, so it "
+            "cannot tell whether that process is confined to its jail"
+        )
+    except OSError as unreadable:
+        code = errno.errorcode.get(unreadable.errno or 0, str(unreadable.errno))
+        return None, (
+            f"the root of process {pid} could not be read ({code}), which is "
+            "not evidence either way"
+        )
+
+
+def _confined_to_this_runs_jail(pid: int, chroot_dir: Path) -> tuple[bool, str]:
+    """Whether ``pid`` is confined to the jail this run made and holds.
+
+    **This is the positive ground, and it is positive because of what the jail
+    already is.** The jail is a directory this run created and claimed
+    exclusively — no other run may occupy it, which
+    ``test_v2_claims_the_jail_before_it_uses_it.py`` is there to keep true. A
+    process whose root is that directory was therefore put there by this run's
+    own jailer. Nothing else on the host can be confined to it.
+
+    That is a different kind of statement from the interval below, which only
+    ever said *when* something began. An unrelated process born at the right
+    moment passes the interval; it cannot be confined to a jail it was never
+    placed in. The measured negative control is exactly that process, and it is
+    turned away here on a ground that has nothing to do with the clock.
+    """
+    confined, why_not = _the_jail_a_process_is_confined_to(pid)
+    if confined is None:
+        return False, why_not
+    if confined != str(chroot_dir):
+        return False, (
+            f"process {pid} has {confined} as its root, not the jail this run "
+            f"made and holds ({chroot_dir}), so it is not this run's machine"
+        )
+    return True, ""
+
+
 def _started_during_this_runs_launch(
     pid: int,
     launch_floor: Mapping[str, Any] | None,
@@ -576,7 +642,15 @@ def _started_during_this_runs_launch(
 ) -> tuple[int | None, str]:
     """The start time of ``pid`` if it began during this run's launch, or why not.
 
-    **Two bounds, and the second one is what makes this positive.** The floor is
+    **This is a narrowing and not a proof of origin.** An earlier version of
+    this docstring called the second bound "what makes this positive", and that
+    was wrong: an unrelated process that begins inside the interval satisfies
+    both bounds. What establishes origin is
+    :func:`_confined_to_this_runs_jail`, which asks where the process is rather
+    than when it started. This test runs alongside it and can only ever turn
+    something away.
+
+    **Two bounds.** The floor is
     read immediately before the jailer runs; the ceiling is read the moment this
     run has a usable number in hand. A process the jailer published began after
     the first and before the second, because the number could not have been
@@ -611,21 +685,23 @@ def _started_during_this_runs_launch(
 
     **What is still not established.** A number reused *inside* the interval
     reads the same from here, and so does one that named a process which exited
-    and was replaced within it. The interval is short and it is bounded by this
-    run's own launch, which is the narrowing; it is not a proof of identity, and
-    :data:`CANNOT_RULE_OUT` is kept at exactly this width.
+    and was replaced within it. That residue is why this test is not the
+    ownership verdict on its own: :func:`_confined_to_this_runs_jail` is asked
+    as well, and a number handed to something else inside the interval is not
+    confined to this run's jail and is turned away there.
 
     **What this leaves for the caller to carry.** The number is still only a
-    number after this returns. ``pidfd_open(2)`` would pin an identity from the
-    moment it is opened, and opening one *after* this function admits the number
-    is the right order — the interval decides whether the number may be adopted,
-    and a handle taken on the strength of that decision carries it forward.
-    Opening one first would pin whatever holds the number, which is not
-    provenance. No handle is taken yet: every caller below re-reads the start
-    time at the moment it acts, which closes the same gap only up to the instant
-    of the re-read. The process is also not this process's child — the jailer
+    number after this returns. ``pidfd_open(2)`` pins an identity from the
+    moment it is opened, and opening one *after* both grounds admit the number
+    is the right order — they decide whether the number may be adopted, and a
+    handle taken on the strength of that decision carries it forward. Opening
+    one first would pin whatever holds the number, which is not provenance. No
+    handle is taken yet: every caller below re-reads the start time at the
+    moment it acts, which closes the same gap only up to the instant of the
+    re-read. The process is also not this process's child — the jailer
     daemonises and Firecracker is reparented — so ``waitpid`` cannot hold the
-    number either.
+    number either, which is why confinement rather than parentage is what
+    carries origin here.
     """
     if not launch_floor:
         return None, (
@@ -718,6 +794,56 @@ than reporting a stop the same way in both cases.
 """
 
 
+HANDLE_TAKEN = "taken"
+"""A handle was taken and it names the process this run admitted."""
+
+HANDLE_GONE = "gone"
+"""No handle because the process had already ended. Not a failure."""
+
+HANDLE_HANDED_ON = "handed_on"
+"""No handle because the number now names a different process."""
+
+HANDLE_UNSUPPORTED = "unsupported"
+"""No handle because this kernel or interpreter does not have the interface.
+
+``ENOSYS`` from the syscall, or the attribute missing from the interpreter.
+This is the *only* verdict that may go on to signal by number, and it may do
+so because it is a statement about the whole host rather than about one
+process: a host that answers ``ENOSYS`` has no pidfd for anything, and
+:data:`OLDEST_HOST_KERNEL_FIRECRACKER_VALIDATES` sits above the releases that
+added the interface, so such a host is already outside what Firecracker
+validates and cannot be the one a guest is booted on.
+"""
+
+HANDLE_DENIED = "denied"
+"""No handle because the kernel refused this process the right to take one.
+
+``EPERM``/``EACCES``. Distinct from :data:`HANDLE_UNSUPPORTED` and it is the
+distinction this taxonomy exists for. A kernel new enough to have the call and
+unwilling to let this run pin *that* process is saying something about the
+relationship between the two, and "signal it by number instead" answers a
+question nobody asked. Seccomp, a user namespace, and a process that is not
+this run's all arrive here, and none of them is a reason to send a weaker
+signal — so none of them does.
+"""
+
+HANDLE_UNKNOWN = "unknown"
+"""No handle, and the reason is not one of the above.
+
+Descriptor exhaustion, a kernel that answered something undocumented, an
+interpreter built against a different libc. Unknown is not permission to
+proceed; it is refused exactly like :data:`HANDLE_DENIED`, because the thing
+that is unknown is whether the process is this run's.
+"""
+
+MAY_SIGNAL_BY_NUMBER_INSTEAD = frozenset({HANDLE_UNSUPPORTED})
+"""The verdicts that allow the by-number path. Deliberately one element.
+
+Written as a set so the allowance is a piece of data a reader can check,
+rather than the shape of an ``if`` that grew an ``or``.
+"""
+
+
 PIDFD_SEND_SIGNAL_ARRIVED_IN = (5, 1)
 """The Linux release that added ``pidfd_send_signal(2)``."""
 
@@ -733,7 +859,7 @@ reports as outside what Firecracker validates. This host is one of those.
 """
 
 
-def _a_handle_pinned_to(pid: int, started: int) -> tuple[int | None, str]:
+def _a_handle_pinned_to(pid: int, started: int) -> tuple[int | None, str, str]:
     """A descriptor that names one process and cannot come to name another.
 
     ``pidfd_open(2)`` takes its argument by number, so the descriptor it hands
@@ -750,31 +876,96 @@ def _a_handle_pinned_to(pid: int, started: int) -> tuple[int | None, str]:
     and the residue there is a replacement that began inside the same clock tick
     as the process it replaced — a process that lived under ten milliseconds.
 
-    **Where it is not available.** ``pidfd_open`` is a syscall, not a library
-    call, and an old kernel answers ``ENOSYS`` no matter what the interpreter
-    exposes. This host is one of those, so nothing in this repository's own test
-    runs takes this path. It is not a silent fallback: the caller records
-    :data:`BY_THE_NUMBER_RECHECKED` when it happens, and
-    ``OLDEST_HOST_KERNEL_FIRECRACKER_VALIDATES`` sits above the kernels that
-    introduced both halves of this interface, so a host Firecracker's own policy
-    validates always has it.
+    **Where it is not available, and why that is four answers and not one.**
+    ``pidfd_open`` is a syscall, not a library call, and an old kernel answers
+    ``ENOSYS`` no matter what the interpreter exposes. This host is one of
+    those, so nothing in this repository's own test runs takes the handle path.
+
+    That case — :data:`HANDLE_UNSUPPORTED` — is the only one that goes on to
+    signal by number, and the reason is that it is a fact about the host rather
+    than about the process: a kernel without the call has no handle for
+    *anything*, and :data:`OLDEST_HOST_KERNEL_FIRECRACKER_VALIDATES` sits above
+    the releases that added both halves of the interface, so such a host is
+    already outside what Firecracker validates.
+
+    A refusal is not that. ``EPERM`` from a kernel that *has* the call is a
+    statement about this run's relationship to that particular process, and so
+    is an errno this code cannot read. Both refuse
+    (:data:`HANDLE_DENIED`, :data:`HANDLE_UNKNOWN`) rather than reaching for a
+    weaker way to send the same signal, because the question they leave open is
+    whether the process is this run's — and "I could not check" has never been
+    an answer to that. The earlier version of this function folded every
+    ``OSError`` into "this kernel has no pidfd", which on a new kernel was a
+    false statement that authorised the weaker path.
     """
     try:
         handle = os.pidfd_open(pid)
     except ProcessLookupError:
-        return None, f"process {pid} was already gone when a handle was asked for"
-    except (OSError, AttributeError) as unavailable:
-        return None, (
-            f"this kernel has no pidfd for process {pid} "
-            f"({type(unavailable).__name__}: {unavailable})"
+        return (
+            None,
+            HANDLE_GONE,
+            f"process {pid} was already gone when a handle was asked for",
+        )
+    except PermissionError as denied:
+        return (
+            None,
+            HANDLE_DENIED,
+            f"this kernel has the pidfd interface and refused this run a handle "
+            f"on process {pid} ({type(denied).__name__}: {denied})",
+        )
+    except AttributeError as missing:
+        return (
+            None,
+            HANDLE_UNSUPPORTED,
+            f"this interpreter has no pidfd for process {pid} "
+            f"({type(missing).__name__}: {missing})",
+        )
+    except OSError as failed:
+        if failed.errno == errno.ENOSYS:
+            return (
+                None,
+                HANDLE_UNSUPPORTED,
+                f"this kernel has no pidfd for process {pid} (ENOSYS: {failed})",
+            )
+        named = errno.errorcode.get(failed.errno or 0, str(failed.errno))
+        return (
+            None,
+            HANDLE_UNKNOWN,
+            f"a handle on process {pid} could not be taken and the reason is not "
+            f"one this code knows how to read ({named}: {failed})",
         )
     if _when_that_process_started(pid) != started:
         os.close(handle)
-        return None, (
+        return (
+            None,
+            HANDLE_HANDED_ON,
             f"process {pid} was handed on between this run identifying it and "
-            "taking hold of it, so the handle does not name what was admitted"
+            "taking hold of it, so the handle does not name what was admitted",
         )
-    return handle, ""
+    return handle, HANDLE_TAKEN, ""
+
+
+def _the_process_a_handle_names(handle: int) -> int | None:
+    """The PID the kernel says a descriptor is pinned to, or ``None``.
+
+    Read back out of ``/proc/self/fdinfo`` rather than remembered from the
+    number that was passed in, because the two are different claims: one is
+    what this run asked for and the other is what it got. Recording the second
+    is what makes "the signal reached the process this run meant" checkable
+    afterwards by someone who was not here.
+
+    ``None`` is *unknown*, and it is written down as unknown. It never stands
+    in for the number that was asked for, and no decision is taken on it — a
+    host where ``/proc`` cannot be read is a host where this evidence is
+    missing, which is not the same as the evidence saying yes.
+    """
+    try:
+        for line in Path(f"/proc/self/fdinfo/{handle}").read_text().splitlines():
+            if line.startswith("Pid:"):
+                return int(line.split()[1])
+    except (OSError, ValueError, IndexError):
+        return None
+    return None
 
 
 def _stop_the_process_this_run_identified(pid: int, started: int) -> dict[str, Any]:
@@ -794,8 +985,11 @@ def _stop_the_process_this_run_identified(pid: int, started: int) -> dict[str, A
     ended between the decision and the signal is not an error and is not a
     refusal; it is the machine having stopped, which is what was wanted.
     """
-    handle, why_no_handle = _a_handle_pinned_to(pid, started)
+    handle, verdict, why_no_handle = _a_handle_pinned_to(pid, started)
     if handle is not None:
+        # Read before the signal, so the evidence is what the descriptor named
+        # while it was still open and not what it named after the process went.
+        target = _the_process_a_handle_names(handle)
         try:
             signal.pidfd_send_signal(handle, signal.SIGKILL)
         except ProcessLookupError:
@@ -804,6 +998,26 @@ def _stop_the_process_this_run_identified(pid: int, started: int) -> dict[str, A
                 "how": None,
                 "already_gone": True,
                 "refused_because": "",
+                "handle_verdict": verdict,
+                "signal_target": target,
+            }
+        except OSError as refused:
+            # A descriptor that opened and will not carry a signal. Nothing is
+            # sent by number instead: the same kernel just declined this, and
+            # asking it a weaker way is not a second opinion.
+            named = errno.errorcode.get(refused.errno or 0, str(refused.errno))
+            return {
+                "signalled": False,
+                "how": None,
+                "already_gone": False,
+                "refused_because": (
+                    f"a handle on process {pid} was taken and the kernel would "
+                    f"not send through it ({named}: {refused})"
+                ),
+                "handle_verdict": HANDLE_DENIED
+                if isinstance(refused, PermissionError)
+                else HANDLE_UNKNOWN,
+                "signal_target": target,
             }
         finally:
             os.close(handle)
@@ -812,8 +1026,10 @@ def _stop_the_process_this_run_identified(pid: int, started: int) -> dict[str, A
             "how": BY_A_PINNED_HANDLE,
             "already_gone": False,
             "refused_because": "",
+            "handle_verdict": verdict,
+            "signal_target": target,
         }
-    if not _still_the_same_process(pid, started):
+    if verdict in (HANDLE_GONE, HANDLE_HANDED_ON):
         # Not a refusal to act on something that is there — the thing that was
         # there has gone, and the number either names nothing or names someone
         # else. Either way this run's machine is stopped and nothing is sent.
@@ -822,6 +1038,30 @@ def _stop_the_process_this_run_identified(pid: int, started: int) -> dict[str, A
             "how": None,
             "already_gone": True,
             "refused_because": "",
+            "handle_verdict": verdict,
+            "signal_target": None,
+        }
+    if verdict not in MAY_SIGNAL_BY_NUMBER_INSTEAD:
+        # Denied, or a reason this code cannot read. The process may well be
+        # this run's, and it may well still be running — neither is established,
+        # and a signal by number would be sent on the strength of neither. The
+        # machine is left where it is and the jail is left with it.
+        return {
+            "signalled": False,
+            "how": None,
+            "already_gone": False,
+            "refused_because": why_no_handle,
+            "handle_verdict": verdict,
+            "signal_target": None,
+        }
+    if not _still_the_same_process(pid, started):
+        return {
+            "signalled": False,
+            "how": None,
+            "already_gone": True,
+            "refused_because": "",
+            "handle_verdict": verdict,
+            "signal_target": None,
         }
     try:
         os.kill(pid, signal.SIGKILL)
@@ -831,12 +1071,16 @@ def _stop_the_process_this_run_identified(pid: int, started: int) -> dict[str, A
             "how": None,
             "already_gone": True,
             "refused_because": "",
+            "handle_verdict": verdict,
+            "signal_target": None,
         }
     return {
         "signalled": True,
         "how": BY_THE_NUMBER_RECHECKED,
         "already_gone": False,
         "refused_because": why_no_handle,
+        "handle_verdict": verdict,
+        "signal_target": pid,
     }
 
 
@@ -902,22 +1146,52 @@ def _may_signal_now(
     return True, ""
 
 
+def _has_exited_but_not_been_reaped(pid: int) -> bool:
+    """Whether ``pid`` names a process that has ended and not yet been collected.
+
+    **Measured, because the obvious readings both get this wrong.** On the
+    target host (kernel ``6.17.0-1022-azure``) a direct child killed through a
+    pinned handle and then left uncollected read back as state ``Z``, with
+    ``os.kill(pid, 0)`` still succeeding and its start time *unchanged*. Both
+    of the readings :func:`_ours_is_gone` had would therefore have said "still
+    running, and still ours" about a machine that was already dead — for as
+    long as nobody collected it.
+
+    A double-forked orphan, which is the shape ``--daemonize`` produces, was
+    collected by init immediately and never showed this. That is why the defect
+    was invisible until a direct child was measured, and why it is worth
+    reading for rather than arguing about: which shape the launcher produces is
+    a property of flags that can change.
+
+    Unreadable is not "exited". Only the literal ``Z`` counts.
+    """
+    try:
+        raw = Path(f"/proc/{pid}/stat").read_text()
+        return raw[raw.rindex(")") + 1:].split()[0] == "Z"
+    except (OSError, ValueError, IndexError):
+        return False
+
+
 def _ours_is_gone(pid: int, started_at: int | None) -> bool:
     """Whether the process this run identified has ended.
 
-    Two readings say yes and they are not the same reading. Nothing holds the
+    Three readings say yes and they are not the same reading. Nothing holds the
     number at all — then nothing of this run's is running under it, which holds
     whether or not its identity was ever established. Or something holds it with
     a different start time — then the number was recycled, and the process that
     had it is gone. The second is only available when there is an identity to
-    compare against, which is why it is not the only test.
+    compare against, which is why it is not the only test. Or the number is held
+    by a process that has exited and not been collected, which reads as alive
+    to both of the others; see :func:`_has_exited_but_not_been_reaped`.
 
-    A number still held by the same process is not gone, and neither is one
-    whose start time cannot be read while the number is still live: that is an
-    absence of evidence, and this returns ``False`` for it rather than treating
-    an unreadable host as a finished machine.
+    A number still held by the same *running* process is not gone, and neither
+    is one whose start time cannot be read while the number is still live: that
+    is an absence of evidence, and this returns ``False`` for it rather than
+    treating an unreadable host as a finished machine.
     """
     if not _still_running(pid):
+        return True
+    if _has_exited_but_not_been_reaped(pid):
         return True
     if started_at is None:
         return False
@@ -1431,10 +1705,30 @@ def first_boot(
         # different objects.
         watched_started_at: int | None = None
         why_not_our_process = ""
+        confined_to_our_jail = False
+        why_not_confined = ""
         if watched is not None:
+            confined_to_our_jail, why_not_confined = _confined_to_this_runs_jail(
+                watched, chroot_dir
+            )
             watched_started_at, why_not_our_process = _started_during_this_runs_launch(
                 watched, launch_floor, number_read_at
             )
+            # Both grounds, and the jail is the one that carries origin. A
+            # start time inside the interval is not permission to signal on its
+            # own — an unrelated process born in there reads the same — so a
+            # number that fails confinement is put back to ``None`` here rather
+            # than left for a later reader to weigh two verdicts against each
+            # other.
+            #
+            # The interval keeps the reason when it is the one that refused.
+            # Both findings are real and only one of them can be the headline;
+            # the other is in the evidence list either way, so the one that is
+            # reported is the one the reader can act on — a number that is too
+            # old to be this run's says more than a root that is not the jail.
+            if not confined_to_our_jail:
+                watched_started_at = None
+                why_not_our_process = why_not_our_process or why_not_confined
 
         # What this run can actually say about whose process that is. Written
         # down as the separate things it checked rather than as one boolean,
@@ -1501,6 +1795,21 @@ def first_boot(
                     )
                 ),
             },
+            {
+                # The ground that carries origin. The one above says only when
+                # something began, which an unrelated process can satisfy by
+                # accident; this one says where it is, and the jail is a
+                # directory this run made and claims exclusively.
+                "ground": (
+                    "the process it names is confined to the jail this run made "
+                    "and holds"
+                ),
+                "held": confined_to_our_jail,
+                "reading": (
+                    why_not_confined
+                    or f"process {watched} has {chroot_dir} as its root"
+                ),
+            },
         ]
 
         outcome = "booted"
@@ -1511,6 +1820,8 @@ def first_boot(
         # that never had to stop anything did not choose a mechanism, which is a
         # different statement from having used the weaker one.
         stop_handle: str | None = None
+        stop_handle_verdict: str | None = None
+        stop_signal_target: int | None = None
         guest_confirmed_stopped: bool | None = None
         # What this run last *observed* about the writer, which is not the same
         # question as whether it sent a signal. None until something is looked
@@ -1584,8 +1895,19 @@ def first_boot(
                     outcome = "booted"
                     guest_last_seen_running = False
                     break
+                if not stop["signalled"]:
+                    # A safe way to send it could not be had. The machine is
+                    # left running and the jail is left standing, which is the
+                    # same ending as a stranger — and for the same reason, that
+                    # this run cannot show the thing it would signal is its own.
+                    outcome = "overran_and_was_left_alone"
+                    left_alone_because = stop["refused_because"]
+                    stop_handle = None
+                    break
                 stop_signal_sent = True
                 stop_handle = stop["how"]
+                stop_handle_verdict = stop["handle_verdict"]
+                stop_signal_target = stop["signal_target"]
                 guest_confirmed_stopped = _confirm_it_stopped(
                     watched,
                     started_at=watched_started_at,
@@ -1732,6 +2054,8 @@ def first_boot(
         # that reported both as ``stop_signal_sent: true`` would be hiding the
         # difference from whoever reads it later.
         "stop_handle": stop_handle,
+        "stop_handle_verdict": stop_handle_verdict,
+        "stop_signal_target": stop_signal_target,
         "guest_confirmed_stopped": guest_confirmed_stopped,
         "guest_last_seen_running": guest_last_seen_running,
         "command_exit_status": exit_status,
@@ -2045,6 +2369,8 @@ def _clean_up_after_a_failure(
         # was sent" and "nothing needed to be sent", because neither of those
         # chose a mechanism.
         "stop_handle": None,
+        "stop_handle_verdict": None,
+        "stop_signal_target": None,
         "was_running": None,
         "confirmed_stopped": None,
         "left_alone_because": None,
@@ -2107,6 +2433,19 @@ def _clean_up_after_a_failure(
                         started_at, not_ours = _started_during_this_runs_launch(
                             pid, launch_floor, held_at
                         )
+                        # Same two grounds as the ordinary path, in the same
+                        # order of authority. Confinement is what says the
+                        # process is this run's; the interval can only turn a
+                        # candidate away. A failure being cleaned up is exactly
+                        # where the interval is widest and least worth leaning
+                        # on, so a number that is not in this run's jail is put
+                        # back to ``None`` here too.
+                        confined, why_not_confined = _confined_to_this_runs_jail(
+                            pid, chroot_dir
+                        )
+                        process["confined_to_this_runs_jail"] = confined
+                        if not confined:
+                            started_at, not_ours = None, (not_ours or why_not_confined)
                         process["pid_started_at_ticks"] = started_at
                         if started_at is None:
                             # Something is alive on that number and this run
@@ -2124,6 +2463,8 @@ def _clean_up_after_a_failure(
                             )
                             process["signalled"] = stop["signalled"]
                             process["stop_handle"] = stop["how"]
+                            process["stop_handle_verdict"] = stop["handle_verdict"]
+                            process["stop_signal_target"] = stop["signal_target"]
                             if stop["already_gone"]:
                                 # It ended between being identified and being
                                 # taken hold of. Nothing was sent and nothing
@@ -2133,6 +2474,22 @@ def _clean_up_after_a_failure(
                                 process["left_alone_because"] = (
                                     "it stopped on its own between this run "
                                     "identifying it and taking hold of it"
+                                )
+                            elif not stop["signalled"]:
+                                # No safe way to send it. Not confirmed stopped,
+                                # because it was not stopped — and the deadline
+                                # is not waited out, because there is nothing on
+                                # the way that waiting could observe arriving.
+                                process["confirmed_stopped"] = False
+                                process["left_alone_because"] = stop[
+                                    "refused_because"
+                                ]
+                                failures.append(
+                                    {
+                                        "what": "stop this run's machine",
+                                        "path": pid_file.as_posix(),
+                                        "error": stop["refused_because"],
+                                    }
                                 )
                             else:
                                 stopped = _confirm_it_stopped(

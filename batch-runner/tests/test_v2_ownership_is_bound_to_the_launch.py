@@ -41,6 +41,7 @@ end-to-end shape is wanted.
 
 from __future__ import annotations
 
+import errno
 import os
 import signal
 import subprocess
@@ -53,10 +54,23 @@ import pytest
 from core.agentic_v2_first_boot import (
     CANNOT_RULE_OUT,
     CLOCK_TICKS_PER_SECOND as HZ,
+    HANDLE_DENIED,
+    HANDLE_GONE,
+    HANDLE_HANDED_ON,
+    HANDLE_TAKEN,
+    HANDLE_UNKNOWN,
+    HANDLE_UNSUPPORTED,
+    MAY_SIGNAL_BY_NUMBER_INSTEAD,
+    _a_handle_pinned_to,
     _clean_up_after_a_failure,
+    _confined_to_this_runs_jail,
+    _has_exited_but_not_been_reaped,
+    _ours_is_gone,
     _started_during_this_runs_launch,
     _the_instant_the_number_was_read,
     _the_instant_this_run_launched,
+    _the_jail_a_process_is_confined_to,
+    _the_process_a_handle_names,
     _ticks_from_uptime,
     _when_that_process_started,
     claim_the_jail,
@@ -66,7 +80,12 @@ from core.agentic_v2_microvm_launch import build_launch_plan
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from test_v2_only_signals_what_it_started import _Clock, _Signals, _finished  # noqa: E402
+from test_v2_only_signals_what_it_started import (  # noqa: E402
+    _as_if_the_jailer_had_chrooted,
+    _Clock,
+    _finished,
+    _Signals,
+)
 
 
 A_CHILD_THAT_OUTLIVES_THE_TEST = ["sleep", "30"]
@@ -150,16 +169,28 @@ def plan(tmp_path, monkeypatch):
     )
 
 
-def _boot_over_real_processes(plan, tmp_path, monkeypatch, *, jailer, signals):
+def _boot_over_real_processes(
+    plan, tmp_path, monkeypatch, *, jailer, signals, in_the_jail=None
+):
     """``first_boot`` with the host's two edges stood in and identity left real.
 
-    The identity functions are deliberately untouched. Standing in for them is
+    The start-time functions are deliberately untouched. Standing in for them is
     what every other suite does and it is what makes this question invisible
     there.
+
+    Confinement is the one part that cannot be left real here: the run's
+    positive ground is that the process has this run's jail as its root, a
+    chroot only the real jailer can perform. ``in_the_jail`` is what the
+    stand-in jailer says it placed there, and it is per-case rather than
+    blanket — every case below that is about a refusal leaves it empty, so the
+    refusal comes from the host's own reading of ``/proc/<pid>/root``.
     """
     clock = _Clock()
     monkeypatch.setattr("core.agentic_v2_first_boot._run", jailer)
-    monkeypatch.setattr(os, "kill", signals)
+    _as_if_the_jailer_had_chrooted(
+        monkeypatch, set() if in_the_jail is None else in_the_jail
+    )
+    signals.install(monkeypatch)
     monkeypatch.setattr(
         "core.agentic_v2_first_boot.files_out_of_work_disk",
         lambda image, names, **kw: _finished(),
@@ -194,9 +225,20 @@ def _a_claimed_jail_holding(plan, pid: int) -> dict:
 
 
 def _teardown_over_real_processes(
-    plan, tmp_path, monkeypatch, *, claim, launch_floor, number_read_at, signals
+    plan,
+    tmp_path,
+    monkeypatch,
+    *,
+    claim,
+    launch_floor,
+    number_read_at,
+    signals,
+    in_the_jail=None,
 ):
-    monkeypatch.setattr(os, "kill", signals)
+    _as_if_the_jailer_had_chrooted(
+        monkeypatch, set() if in_the_jail is None else in_the_jail
+    )
+    signals.install(monkeypatch)
     clock = _Clock()
     return _clean_up_after_a_failure(
         host_side=plan["host_side"],
@@ -303,6 +345,10 @@ def test_x3_a_number_that_changed_hands_inside_the_interval_is_still_adopted(
     """
     pid_file = Path(plan["host_side"]["pid_file"])
     published = own_children.spawn()
+    # Both are in the jail, which is what makes this the residue rather than a
+    # case the jail closes: the second process satisfies every ground the first
+    # one does, including the positive one.
+    in_the_jail = {published.pid}
 
     def jailer(argv, timeout=300.0):
         pid_file.write_text(f"{published.pid}\n")
@@ -310,13 +356,19 @@ def test_x3_a_number_that_changed_hands_inside_the_interval_is_still_adopted(
         # before the run ever reads it lands. The file is rewritten before the
         # watch loop has looked at it once.
         later = own_children.spawn()
+        in_the_jail.add(later.pid)
         time.sleep(0.05)
         pid_file.write_text(f"{later.pid}\n")
         return subprocess.CompletedProcess(argv, 0, "", "")
 
     signals = _Signals(dies_after=0)
     result = _boot_over_real_processes(
-        plan, tmp_path, monkeypatch, jailer=jailer, signals=signals
+        plan,
+        tmp_path,
+        monkeypatch,
+        jailer=jailer,
+        signals=signals,
+        in_the_jail=in_the_jail,
     )
 
     adopted = own_children.started[-1].pid
@@ -348,15 +400,23 @@ def test_x4_an_ordinary_launch_over_a_real_process_is_still_this_runs(
     the process, stops it, watches it stop, and takes the jail down.
     """
 
+    in_the_jail: set[int] = set()
+
     def jailer(argv, timeout=300.0):
         child = own_children.spawn()
+        in_the_jail.add(child.pid)
         time.sleep(0.05)
         Path(plan["host_side"]["pid_file"]).write_text(f"{child.pid}\n")
         return subprocess.CompletedProcess(argv, 0, "", "")
 
     signals = _Signals(dies_after=0)
     result = _boot_over_real_processes(
-        plan, tmp_path, monkeypatch, jailer=jailer, signals=signals
+        plan,
+        tmp_path,
+        monkeypatch,
+        jailer=jailer,
+        signals=signals,
+        in_the_jail=in_the_jail,
     )
 
     ours = own_children.started[-1].pid
@@ -448,6 +508,13 @@ def test_x6_a_teardown_that_reads_the_number_first_has_the_wider_interval(
     It is also the reason the caller is made to pass the argument at all — the
     difference between the two cases is entirely in which reading is available,
     and a default would have made every teardown look like this one.
+
+    **The interval still admits this child, and this test still measures that.**
+    What has changed is that the interval is no longer what decides. The child
+    is not in this run's jail, so it is refused on that ground, and the two
+    assertions are kept apart on purpose: the first shows the opening is real
+    and as wide as it ever was, the second shows what now stands in it. Deleting
+    the first would turn a closed hole into a hole nobody remembers.
     """
     floor = _the_instant_this_run_launched()
     time.sleep(WELL_PAST_ONE_TICK)
@@ -469,9 +536,27 @@ def test_x6_a_teardown_that_reads_the_number_first_has_the_wider_interval(
     process = record["process"]
     assert process["number_read_at_inherited"] is False
     assert process["number_read_at"]["ticks_since_boot"] >= floor["ticks_since_boot"]
-    assert process["pid_started_at_ticks"] is not None
-    assert process["signalled"] is True
-    assert process["cannot_rule_out"] == CANNOT_RULE_OUT
+
+    admitted_by_the_interval, no_reason = _started_during_this_runs_launch(
+        stranger.pid, floor, process["number_read_at"]
+    )
+    assert no_reason == ""
+    assert admitted_by_the_interval is not None, (
+        "the wide interval still admits an unrelated in-window process; "
+        "if it stops, this case is no longer measuring what it was written for"
+    )
+
+    assert process["confined_to_this_runs_jail"] is False
+    assert process["pid_started_at_ticks"] is None
+    assert process["signalled"] is False
+    assert process["confirmed_stopped"] is None
+    assert "not the jail this run made and holds" in process["left_alone_because"]
+    assert signals.real_signals == []
+    assert record["all_gone"] is False
+    assert Path(plan["host_side"]["chroot_dir"]).exists(), (
+        "a jail this run cannot account for is left on disk, not removed"
+    )
+    assert stranger.poll() is None, "the stranger is still running"
 
 
 # --------------------------------------------------------------------------
@@ -552,3 +637,204 @@ def test_x8_the_ceiling_is_never_below_an_uptime_read_just_before_it(own_childre
         assert floor <= started <= ceiling, (
             "a process forked between the two readings fell outside them"
         )
+
+
+def test_x9_confinement_reads_the_host_and_answers_three_different_ways(
+    own_children, tmp_path
+):
+    """The ground the authorisation now rests on, asked of real processes.
+
+    Three readings, and they are three because collapsing any two of them is
+    how a refusal turns into a permission. A process that is running and is not
+    in the jail must be refused; a process that has gone must be refused on a
+    *different* reason, because "there is nothing there" and "there is
+    something there and it is not ours" are fixed in different places; and a
+    process that is in the jail must be admitted, or the rule would refuse the
+    guest along with everything else.
+
+    The admitted case is this test's own process against ``/``. No test can be
+    put behind a ``chroot`` — that needs ``CAP_SYS_CHROOT``, which this suite
+    does not have and must not acquire — so the jail stood in for here is the
+    root this process genuinely has. The comparison being exercised is the real
+    one: what ``/proc/<pid>/root`` says, against what the plan named.
+    """
+    ours, why_not = _confined_to_this_runs_jail(os.getpid(), Path("/"))
+    assert ours is True
+    assert why_not == ""
+
+    a_jail_it_was_never_in = tmp_path / "jail" / "firecracker" / "root"
+    a_jail_it_was_never_in.mkdir(parents=True)
+    outside, why_not = _confined_to_this_runs_jail(
+        os.getpid(), a_jail_it_was_never_in
+    )
+    assert outside is False
+    assert "not the jail this run made and holds" in why_not
+    assert str(a_jail_it_was_never_in) in why_not, (
+        "the reason has to name the jail that was expected, or a reader cannot "
+        "tell a wrong jail from an unreadable one"
+    )
+
+    stranger = own_children.spawn()
+    root, no_reason = _the_jail_a_process_is_confined_to(stranger.pid)
+    assert no_reason == ""
+    assert root == "/", (
+        "an unrelated process reads back the host's own root; if this ever "
+        "reads as a jail, confinement has stopped meaning what it says"
+    )
+
+    own_children.reap_all()
+    gone, why_not = _confined_to_this_runs_jail(stranger.pid, Path("/"))
+    assert gone is False, (
+        "a dead process must not be confined to anything — the strongest way "
+        "this could fail is by answering '/' for a number nobody holds"
+    )
+    assert "nothing to confine" in why_not
+
+
+def test_x10_a_killed_child_that_nobody_collected_is_read_as_gone(own_children):
+    """The zombie, measured here rather than argued about.
+
+    A direct child that has been signalled and not yet collected still answers
+    ``os.kill(pid, 0)`` and still reports the same start time. Both of the
+    readings that ``_ours_is_gone`` had before would therefore have said "still
+    running, and still ours" about a machine that was already dead, and the
+    launcher would have waited out its whole confirmation deadline for an exit
+    that had already happened.
+
+    The child is this test's own and is reaped in ``finally``. Nothing here
+    scans for a process or signals one it did not start.
+    """
+    child = own_children.spawn()
+    started = _when_that_process_started(child.pid)
+    assert started is not None
+
+    _REALLY_SIGNAL(child.pid, signal.SIGKILL)
+    for _ in range(100):
+        if _has_exited_but_not_been_reaped(child.pid):
+            break
+        time.sleep(0.02)
+
+    assert _has_exited_but_not_been_reaped(child.pid) is True
+    # The two older readings, taken while it is a zombie, to show why a third
+    # was needed rather than asserting that it was.
+    _REALLY_SIGNAL(child.pid, 0)
+    assert _when_that_process_started(child.pid) == started, (
+        "the start time of a zombie does not move, so a reading that compares "
+        "it cannot notice the exit"
+    )
+    assert _ours_is_gone(child.pid, started) is True
+
+
+def test_x11_every_way_of_not_getting_a_handle_keeps_its_own_name(monkeypatch):
+    """Four refusals, and only one of them may be answered by number instead.
+
+    ``unsupported`` is a statement about this kernel or this interpreter: the
+    interface is not there for anybody, so the older route is the only route
+    and taking it is not a downgrade. ``denied`` and ``unknown`` are statements
+    about *this attempt* on a kernel that has the interface — answering those by
+    number is precisely the silent weakening this taxonomy exists to stop, and
+    the earlier version of the function did exactly that by folding every
+    ``OSError`` into "this kernel has no pidfd".
+
+    The refusals are induced rather than found, because a host cannot be asked
+    to deny a handle on demand. What is being checked is the reading, which is
+    the part that was wrong.
+    """
+    for raising, expected in (
+        (OSError(errno.ENOSYS, "no such system call"), HANDLE_UNSUPPORTED),
+        (
+            AttributeError("module 'os' has no attribute 'pidfd_open'"),
+            HANDLE_UNSUPPORTED,
+        ),
+        (PermissionError(errno.EPERM, "not permitted"), HANDLE_DENIED),
+        (OSError(errno.EACCES, "permission denied"), HANDLE_DENIED),
+        (OSError(errno.EMFILE, "too many open files"), HANDLE_UNKNOWN),
+    ):
+
+        def refuse(pid, *rest, _raising=raising):
+            raise _raising
+
+        monkeypatch.setattr(os, "pidfd_open", refuse, raising=False)
+        none_taken, verdict, why_not = _a_handle_pinned_to(os.getpid(), 1)
+        assert none_taken is None
+        assert verdict == expected, f"{raising!r} was read as {verdict}"
+        assert why_not != "", "a refusal that says nothing cannot be acted on"
+
+    assert MAY_SIGNAL_BY_NUMBER_INSTEAD == frozenset({HANDLE_UNSUPPORTED}), (
+        "denied and unknown must not join this set. A kernel that has the "
+        "interface and refused this run a handle has not said the process may "
+        "be signalled some other way; it has said this run could not establish "
+        "what it was about to signal"
+    )
+
+
+def _this_kernel_hands_out_handles() -> bool:
+    """Whether ``pidfd_open`` works here, asked of this process and nothing else.
+
+    Python has had ``os.pidfd_open`` since 3.9 and will happily call a syscall
+    the kernel does not implement, so the attribute is not the answer — this
+    box answers ``ENOSYS`` and the target host answers with a descriptor. The
+    probe opens a handle on the interpreter itself and closes it immediately.
+    """
+    try:
+        handle = os.pidfd_open(os.getpid())
+    except (OSError, AttributeError):
+        return False
+    os.close(handle)
+    return True
+
+
+@pytest.mark.skipif(
+    not _this_kernel_hands_out_handles(),
+    reason=(
+        "this kernel has no pidfd_open, so a handle cannot be taken here. The "
+        "production path falls back to signalling by number, which is what "
+        "HANDLE_UNSUPPORTED authorises and test_x11 covers. Measured on the "
+        "target host (6.17.0-1022-azure), where this test does run."
+    ),
+)
+def test_x12_a_real_handle_names_one_process_and_is_dropped_when_it_would_not(
+    own_children,
+):
+    """What a handle establishes, on a kernel that actually hands one out.
+
+    The taken case is the reason the transport changed: the descriptor names
+    that PID and cannot come to name another, so a number reused between
+    identifying a process and signalling it can no longer redirect the signal.
+
+    ``handed_on`` is the same function refusing, and the assertion that matters
+    there is that the handle it opened is *closed* before it returns — a
+    descriptor kept on a process this run has just decided is not its own is
+    both a leak and a held reference to a stranger.
+    """
+    child = own_children.spawn()
+    started = _when_that_process_started(child.pid)
+    assert started is not None
+
+    handle, verdict, no_reason = _a_handle_pinned_to(child.pid, started)
+    try:
+        assert verdict == HANDLE_TAKEN
+        assert no_reason == ""
+        assert _the_process_a_handle_names(handle) == child.pid, (
+            "the kernel's own answer for what the descriptor is pinned to, not "
+            "the number this run asked with"
+        )
+    finally:
+        if handle is not None:
+            os.close(handle)
+
+    before = len(os.listdir(f"/proc/{os.getpid()}/fd"))
+    handed_on, verdict, why_not = _a_handle_pinned_to(child.pid, started + 1)
+    assert handed_on is None
+    assert verdict == HANDLE_HANDED_ON
+    assert "handed on between this run identifying it" in why_not
+    assert len(os.listdir(f"/proc/{os.getpid()}/fd")) == before, (
+        "the handle opened on a process that turned out not to be ours is "
+        "closed before the refusal is returned"
+    )
+
+    own_children.reap_all()
+    nothing, verdict, why_not = _a_handle_pinned_to(child.pid, started)
+    assert nothing is None
+    assert verdict == HANDLE_GONE
+    assert "already gone when a handle was asked for" in why_not

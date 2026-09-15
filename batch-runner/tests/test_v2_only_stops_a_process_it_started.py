@@ -10,23 +10,29 @@ This module is about the number. A PID is the one piece of a process's identity
 the kernel hands out again, and a run that signals on the strength of a number
 alone is one recycled PID away from killing something it never started.
 
-**What is actually established, and what is not.** This run reads the host clock
-twice — immediately before it starts the jailer, and again the moment it first
-holds a number out of the PID file — and compares both against the start time
-the kernel reports for the process that number names. A process that was already
-running at the first reading cannot be a machine this run launched, and a process
-that began after the second cannot be what the number was published for. Both are
-facts about time and need no guess about what the process is. What is left is a
-process that began *while this run was launching*, which is weaker than identity
-and is all that is claimed.
+**What is actually established, and what is not.** Ownership rests on where the
+process is, not on when it started. The jail is a directory this run created and
+holds an exclusive claim on, the jailer chroots the guest into it, and so a
+process whose root is that directory was put there by this run's own launch.
+That is the positive ground, and it is the one that admits a process for
+signalling.
 
-The first of those bounds was here on its own for a while, and on its own it
-admitted every process on the host younger than it, for the whole remaining life
-of the run — measured at forty clock ticks past the floor with no launcher
-anywhere near the subject, in
-``test_v2_ownership_is_bound_to_the_launch.py``. ``CANNOT_RULE_OUT`` now reads
-reuse *inside the interval*, which is the width the second bound leaves, and no
-further.
+The start-time interval is checked alongside it and can only turn candidates
+away. This run reads the host clock twice — immediately before it starts the
+jailer, and again the moment it first holds a number out of the PID file — and
+compares both against the start time the kernel reports. A process already
+running at the first reading cannot be a machine this run launched; one that
+began after the second cannot be what the number was published for. Both are
+facts about time, and neither is origin: a process born between the two readings
+with nothing to do with this run satisfies them exactly as a guest does.
+
+The floor was here on its own for a while, and on its own it admitted every
+process on the host younger than it, for the whole remaining life of the run —
+measured at forty clock ticks past the floor with no launcher anywhere near the
+subject, in ``test_v2_ownership_is_bound_to_the_launch.py``. Adding a ceiling
+narrowed that opening and was, for a time, described here as what made the
+interval positive. It was not. ``CANNOT_RULE_OUT`` now reads a process *inside
+this run's jail* that this run's jailer did not place there, and no further.
 
 **The handle, and where it is not available.** ``pidfd_open(2)`` pins a process
 so a descriptor cannot come to name its successor. It is taken *after* the
@@ -62,10 +68,12 @@ signalled, still be confirmed stopped and still have its jail taken down.
 
 from __future__ import annotations
 
+import errno
 import os
 import platform
 import signal
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -97,6 +105,12 @@ from core.agentic_v2_containment_readiness import (
     OLDEST_HOST_KERNEL_FIRECRACKER_VALIDATES,
 )
 from core.agentic_v2_microvm_launch import REQUIRED_MICROVM_POLICY, build_launch_plan
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from test_v2_only_signals_what_it_started import (  # noqa: E402
+    _as_if_the_jailer_had_chrooted,
+)
 
 HZ = _the_instant_this_run_launched()["clock_ticks_per_second"]
 
@@ -184,24 +198,70 @@ class _Clock:
 
 
 class _SpyOnRealSignals:
-    """Records what reached ``os.kill`` and then lets it happen for real.
+    """Records what reached the kernel and then lets it happen for real.
 
     A stub here would defeat the arms that matter: the pre-existing sleeper is
     alive at the end because the launcher declined to signal it, and that is
     only evidence if the signal would have landed.
+
+    **It watches both transports, and it has to.** Patching ``os.kill`` alone
+    was enough while the module only had that one way to signal. It no longer
+    does: on a kernel with ``pidfd`` the module signals through a pinned handle
+    and ``os.kill`` is never called, so a spy on ``os.kill`` records nothing and
+    every assertion about what was signalled reads an empty list. That is what
+    happened on CI — the child really was killed, and the measurement was blind
+    to it. The fix belongs here rather than in the assertions: the assertions
+    were asking the right question.
+
+    The handle is resolved back to a number through ``/proc/self/fdinfo``, whose
+    ``Pid:`` line was measured equal to the intended target on the host this
+    branch is for, so ``sent`` carries numbers whichever way the signal went.
     """
 
     def __init__(self) -> None:
         self.sent: list[tuple[int, int]] = []
+        self.by_handle: list[tuple[int, int]] = []
         self._real = os.kill
+        self._real_pidfd = getattr(signal, "pidfd_send_signal", None)
+
+    def install(self, monkeypatch) -> "_SpyOnRealSignals":
+        """Patch every way this module has of signalling, not just the old one."""
+        monkeypatch.setattr(os, "kill", self)
+        monkeypatch.setattr(
+            signal, "pidfd_send_signal", self._through_a_handle, raising=False
+        )
+        return self
 
     def __call__(self, pid, sig):
         self.sent.append((pid, sig))
         return self._real(pid, sig)
 
+    def _through_a_handle(self, handle, sig, *rest):
+        # Read before sending. Afterwards the process may be reaped and the
+        # descriptor stops naming a number, which would lose the target this
+        # exists to record.
+        pid = _the_number_behind(handle)
+        if pid is not None:
+            self.sent.append((pid, sig))
+            self.by_handle.append((pid, sig))
+        if self._real_pidfd is None:  # pragma: no cover - host without pidfd
+            raise OSError(errno.ENOSYS, "no pidfd_send_signal on this host")
+        return self._real_pidfd(handle, sig, *rest)
+
     @property
     def real_signals(self) -> list[tuple[int, int]]:
         return [(pid, sig) for pid, sig in self.sent if sig != 0]
+
+
+def _the_number_behind(handle: int) -> int | None:
+    """The PID a pidfd is pinned to, or ``None`` if that cannot be read."""
+    try:
+        for line in Path(f"/proc/self/fdinfo/{handle}").read_text().splitlines():
+            if line.startswith("Pid:"):
+                return int(line.split()[1])
+    except (OSError, ValueError, IndexError):
+        return None
+    return None
 
 
 # --------------------------------------------------------------------------
@@ -259,6 +319,9 @@ def _boot(plan, tmp_path, monkeypatch, *, jailer, clock=None):
     """
     clock = clock or _Clock()
     monkeypatch.setattr("core.agentic_v2_first_boot._run", jailer)
+    _as_if_the_jailer_had_chrooted(
+        monkeypatch, getattr(jailer, "put_in_the_jail", set())
+    )
     monkeypatch.setattr(
         "core.agentic_v2_first_boot.files_out_of_work_disk",
         lambda image, names, **kw: _finished(),
@@ -294,9 +357,11 @@ def _a_jailer_that_starts_a_guest(plan, sleepers: _Sleepers):
 
     def jailer(argv, timeout=300.0):
         pid = sleepers.one()
+        jailer.put_in_the_jail.add(pid)
         Path(plan["host_side"]["pid_file"]).write_text(f"{pid}\n")
         return subprocess.CompletedProcess(argv, 0, "", "")
 
+    jailer.put_in_the_jail = set()
     return jailer
 
 
@@ -312,10 +377,12 @@ def _a_jailer_that_publishes_then_fails(plan, pid: int):
 def _a_jailer_that_starts_a_guest_then_fails(plan, sleepers: _Sleepers):
     def jailer(argv, timeout=300.0):
         pid = sleepers.one()
+        jailer.put_in_the_jail.add(pid)
         Path(plan["host_side"]["chroot_dir"]).mkdir(parents=True, exist_ok=True)
         Path(plan["host_side"]["pid_file"]).write_text(f"{pid}\n")
         raise subprocess.TimeoutExpired(argv, 120.0)
 
+    jailer.put_in_the_jail = set()
     return jailer
 
 
@@ -485,8 +552,10 @@ def test_g5_an_unusable_interval_refuses_and_says_which_end_is_unusable(sleepers
     assert "could not read the host clock when it took that number" in why_unread
 
 
-def test_g6_the_residue_is_the_launch_interval_and_the_claim_is_no_wider(sleepers):
-    """What this narrows and what it does not close.
+def test_g6_the_residue_is_the_jail_not_the_interval_and_the_claim_is_no_wider(
+    sleepers,
+):
+    """What the interval narrows, and what it was never able to establish.
 
     The floor alone separated *before this run's launch* from *after it*, and
     everything on the far side of that line was admitted — for as long as the
@@ -496,9 +565,15 @@ def test_g6_the_residue_is_the_launch_interval_and_the_claim_is_no_wider(sleeper
     which is not a granularity effect, and with a ceiling read before it was
     born the function turns it away.
 
-    What is left is reuse inside the interval, and the constant that reports the
-    limit has to say so — a run that quietly widened its claim to "this is
-    definitely our process" would read identically from the outside.
+    **The interval is a narrowing and never was origin.** A process born between
+    the two readings with no connection to this run satisfies both ends, so
+    "inside the interval" answers *cannot be ruled out*, not *is ours*. What
+    carries origin is confinement to the jail this run created and holds a claim
+    on, and the residue left over is a process inside that jail which this run's
+    jailer did not put there. The constant has to say that and the docstring of
+    the interval function has to stop saying otherwise — an earlier version of
+    it called the upper bound "what makes this positive", which is the exact
+    overclaim this asserts against.
     """
     floor = _the_instant_this_run_launched()
     ceiling_before_it_existed = _the_instant_the_number_was_read()
@@ -516,9 +591,18 @@ def test_g6_the_residue_is_the_launch_interval_and_the_claim_is_no_wider(sleeper
     assert identity is None
     assert "after this run already had that number in hand" in why_not
 
-    assert "reuse" in CANNOT_RULE_OUT.lower()
-    assert "inside the interval" in CANNOT_RULE_OUT
-    assert "did not fork" in CANNOT_RULE_OUT
+    assert "confined to this run's jail" in CANNOT_RULE_OUT
+    assert "placed there by something other than this run's own jailer" in (
+        CANNOT_RULE_OUT
+    )
+    assert "can only turn candidates away" in CANNOT_RULE_OUT
+    assert "never established origin" in CANNOT_RULE_OUT
+
+    interval = _started_during_this_runs_launch.__doc__ or ""
+    assert "This is a narrowing and not a proof of origin." in interval, (
+        "the interval function has to keep saying what it is; it is read by the "
+        "next person deciding whether a start time is enough to signal on"
+    )
 
 
 # --------------------------------------------------------------------------
@@ -537,8 +621,7 @@ def test_h1_an_owned_guest_that_overruns_is_still_signalled_and_confirmed(
     ownership ground, which is the only one about the process rather than the
     file.
     """
-    spy = _SpyOnRealSignals()
-    monkeypatch.setattr(os, "kill", spy)
+    spy = _SpyOnRealSignals().install(monkeypatch)
 
     result = _boot(
         plan,
@@ -556,8 +639,14 @@ def test_h1_an_owned_guest_that_overruns_is_still_signalled_and_confirmed(
 
     evidence = result["pid_file"]
     assert evidence["owned_by_this_run"] is True
-    assert len(evidence["ownership_grounds"]) == 5
+    assert len(evidence["ownership_grounds"]) == 6
     assert all(g["held"] for g in evidence["ownership_grounds"])
+    # The sixth is the positive one, and it is named rather than counted: a
+    # count alone would go on passing if the ground that carries origin were
+    # dropped and a sixth of some other kind added.
+    assert [
+        g["ground"] for g in evidence["ownership_grounds"] if "confined" in g["ground"]
+    ] == ["the process it names is confined to the jail this run made and holds"]
     # The two readings that decided it are kept, and the order between them is
     # the whole of the argument: the guest started at or after the instant this
     # run launched. Read back from the record rather than from ``/proc``, which
@@ -590,8 +679,7 @@ def test_h2_a_published_pid_older_than_the_launch_is_never_signalled(
     """
     stranger = sleepers.one()
     time.sleep(0.05)
-    spy = _SpyOnRealSignals()
-    monkeypatch.setattr(os, "kill", spy)
+    spy = _SpyOnRealSignals().install(monkeypatch)
 
     result = _boot(
         plan, tmp_path, monkeypatch, jailer=_a_jailer_publishing(plan, stranger)
@@ -632,8 +720,7 @@ def test_h3_a_number_handed_on_between_the_check_and_the_signal_is_not_signalled
     exists for. Written that way it passed only while both landed inside the
     same clock tick, which on this box was 17 times in 20.
     """
-    spy = _SpyOnRealSignals()
-    monkeypatch.setattr(os, "kill", spy)
+    spy = _SpyOnRealSignals().install(monkeypatch)
 
     real_reader = agentic_v2_first_boot._when_that_process_started
     asked: list[int] = []
@@ -693,8 +780,7 @@ def test_h4_a_guest_that_exits_before_the_deadline_is_never_asked_for_its_identi
     sleepers.stop(short)
     sleepers.wait_until_gone(short)
 
-    spy = _SpyOnRealSignals()
-    monkeypatch.setattr(os, "kill", spy)
+    spy = _SpyOnRealSignals().install(monkeypatch)
 
     result = _boot(
         plan, tmp_path, monkeypatch, jailer=_a_jailer_publishing(plan, short)
@@ -726,8 +812,7 @@ def test_h5_nothing_published_is_not_a_start_failure(plan, tmp_path, monkeypatch
     really did not happen — keeps its own word and is covered at
     ``test_agentic_v2_first_boot.py`` by the ``launch_spawned_nothing`` pair.
     """
-    spy = _SpyOnRealSignals()
-    monkeypatch.setattr(os, "kill", spy)
+    spy = _SpyOnRealSignals().install(monkeypatch)
 
     def a_jailer_publishing_nothing(argv, timeout=300.0):
         return subprocess.CompletedProcess(argv, 0, "", "")
@@ -757,8 +842,7 @@ def test_j1_teardown_stops_a_process_this_run_started(
     guest this run started must still be stopped, and the failure it was
     cleaning up after must still be the failure that is raised.
     """
-    spy = _SpyOnRealSignals()
-    monkeypatch.setattr(os, "kill", spy)
+    spy = _SpyOnRealSignals().install(monkeypatch)
 
     with pytest.raises(BootAbandoned) as abandoned:
         _boot(
@@ -793,8 +877,7 @@ def test_j2_teardown_refuses_a_process_older_than_the_launch_and_keeps_the_artef
     """
     stranger = sleepers.one()
     time.sleep(0.05)
-    spy = _SpyOnRealSignals()
-    monkeypatch.setattr(os, "kill", spy)
+    spy = _SpyOnRealSignals().install(monkeypatch)
 
     with pytest.raises(BootAbandoned) as abandoned:
         _boot(
@@ -867,8 +950,7 @@ def test_j4_teardown_with_no_floor_refuses_rather_than_falling_back(
     a real cost rather than a free one.
     """
     ours = sleepers.one()
-    spy = _SpyOnRealSignals()
-    monkeypatch.setattr(os, "kill", spy)
+    spy = _SpyOnRealSignals().install(monkeypatch)
 
     claim = _a_claimed_jail(plan)
     Path(plan["host_side"]["pid_file"]).write_text(f"{ours}\n")
@@ -896,8 +978,7 @@ def test_j5_a_floor_from_before_a_restart_refuses_on_the_reboot_reading(
     reading has to name the restart rather than the process.
     """
     ours = sleepers.one()
-    spy = _SpyOnRealSignals()
-    monkeypatch.setattr(os, "kill", spy)
+    spy = _SpyOnRealSignals().install(monkeypatch)
 
     claim = _a_claimed_jail(plan)
     Path(plan["host_side"]["pid_file"]).write_text(f"{ours}\n")
@@ -946,8 +1027,7 @@ def test_k1_the_fallback_is_declared_rather_than_silent(
     monkeypatch.setattr(os, "pidfd_open", poisoned, raising=False)
     monkeypatch.setattr(signal, "pidfd_send_signal", poisoned, raising=False)
 
-    spy = _SpyOnRealSignals()
-    monkeypatch.setattr(os, "kill", spy)
+    spy = _SpyOnRealSignals().install(monkeypatch)
 
     result = _boot(
         plan,
@@ -994,8 +1074,7 @@ def test_k1b_with_a_handle_the_signal_does_not_go_by_number(
     monkeypatch.setattr(os, "pidfd_open", open_handle, raising=False)
     monkeypatch.setattr(signal, "pidfd_send_signal", send, raising=False)
 
-    spy = _SpyOnRealSignals()
-    monkeypatch.setattr(os, "kill", spy)
+    spy = _SpyOnRealSignals().install(monkeypatch)
 
     result = _boot(
         plan,

@@ -105,9 +105,18 @@ def _a_stand_in_guest_with_an_identity(monkeypatch, *pids: int) -> None:
 
     Only the PIDs listed. Anything else keeps the host's real answer, so a test
     that wants a process the run *cannot* account for simply leaves it out.
+
+    **Confinement is stood in for on the same terms.** The launcher's positive
+    ground for "this is ours" is that the process's root is the jail this run
+    made and holds, and no test process can be put behind a ``chroot`` without
+    ``CAP_SYS_CHROOT``. So for the PIDs listed here — the ones the stand-in
+    jailer claims to have started — that reading answers yes, and for every
+    other PID the host's own ``/proc/<pid>/root`` answers. A refusal therefore
+    still comes from the host rather than from this helper.
     """
     known = set(pids)
     real = agentic_v2_first_boot._when_that_process_started
+    really_confined = agentic_v2_first_boot._confined_to_this_runs_jail
     remembered: dict[int, int | None] = {}
 
     def started(pid: int) -> int | None:
@@ -118,9 +127,62 @@ def _a_stand_in_guest_with_an_identity(monkeypatch, *pids: int) -> None:
             remembered[pid] = now["ticks_since_boot"]
         return remembered[pid]
 
+    def confined(pid: int, chroot_dir):
+        if pid in known:
+            return True, ""
+        return really_confined(pid, chroot_dir)
+
     monkeypatch.setattr(
         "core.agentic_v2_first_boot._when_that_process_started", started
     )
+    monkeypatch.setattr(
+        "core.agentic_v2_first_boot._confined_to_this_runs_jail", confined
+    )
+
+
+def _records_every_signal(monkeypatch, into: list) -> list:
+    """Record what was signalled, by whichever transport carried it.
+
+    Patching ``os.kill`` alone was enough while ``os.kill`` was the only way a
+    signal left this process. It is not any more: on a kernel that has
+    ``pidfd_send_signal`` the launcher opens a handle to the PID it identified
+    and signals through that, precisely so the signal cannot land on a reused
+    number. A spy that watches one transport reads the other as silence.
+
+    That is wrong in both directions and the harmless-looking direction is the
+    dangerous one. A test asserting *that a signal was sent* fails loudly and
+    gets looked at. A test asserting ``signalled == []`` — a refusal — passes
+    while the process is being signalled behind it, which is the exact failure
+    it was written to catch.
+
+    ``into`` collects ``(pid, signal_number)`` in the order the kernel was
+    asked, with no attempt to say which transport was used; that distinction
+    belongs to the suites that are about the transport itself.
+    """
+    behind: dict[int, int] = {}
+
+    def through_os_kill(pid, sig):
+        into.append((pid, sig))
+
+    def open_a_handle(pid, *rest):
+        handle = os.open(os.devnull, os.O_RDONLY)
+        behind[handle] = pid
+        return handle
+
+    def through_a_handle(handle, sig, *rest):
+        into.append((behind[handle], sig))
+
+    monkeypatch.setattr(os, "kill", through_os_kill)
+    monkeypatch.setattr(os, "pidfd_open", open_a_handle, raising=False)
+    monkeypatch.setattr(
+        signal, "pidfd_send_signal", through_a_handle, raising=False
+    )
+    monkeypatch.setattr(
+        agentic_v2_first_boot,
+        "_the_process_a_handle_names",
+        lambda handle: behind.get(handle),
+    )
+    return into
 
 
 def _boot(plan, tmp_path, monkeypatch, *, jailer, running, results=None, reader=None):
@@ -404,10 +466,8 @@ def test_a_machine_that_overruns_is_killed_and_says_so(plan, tmp_path, monkeypat
     launcher stops the machine and records *why* it stopped, rather than
     returning the same empty result a quiet guest returns.
     """
-    killed: list[int] = []
-    monkeypatch.setattr(
-        os, "kill", lambda pid, signal_number: killed.append(pid)
-    )
+    signalled: list[tuple[int, int]] = []
+    _records_every_signal(monkeypatch, signalled)
 
     result = _boot(
         plan,
@@ -418,13 +478,13 @@ def test_a_machine_that_overruns_is_killed_and_says_so(plan, tmp_path, monkeypat
         # reports alive forever is a guest that never stopped, which is a
         # different outcome with its own test; this one is about the machine
         # that does stop when the deadline says so.
-        running=lambda pid: not killed,
+        running=lambda pid: not signalled,
         results={name: None for name in WORK_DISK_RESULTS},
     )
 
     assert result["outcome"] == "stopped_by_the_deadline"
     assert result["stopped_by_the_deadline"] is True
-    assert killed == [4242]
+    assert [pid for pid, _ in signalled] == [4242]
     assert result["ran_for_seconds"] >= result["deadline_seconds"]
 
 
@@ -934,8 +994,8 @@ def test_a_pid_file_that_was_already_there_is_not_this_runs_to_kill(
     pid_file = Path(plan["host_side"]["pid_file"])
     pid_file.parent.mkdir(parents=True, exist_ok=True)
     pid_file.write_text("1\n")  # pid 1 is running on every host there is
-    signalled = []
-    monkeypatch.setattr(os, "kill", lambda pid, sig: signalled.append((pid, sig)))
+    signalled: list[tuple[int, int]] = []
+    _records_every_signal(monkeypatch, signalled)
 
     with pytest.raises(BootRefused) as caught:
         _boot(
@@ -956,8 +1016,8 @@ def test_this_runs_own_machine_is_stopped_when_it_is_still_running(
     plan, tmp_path, monkeypatch
 ):
     """The other half of the rule: its own PID file, so its own process."""
-    signalled = []
-    monkeypatch.setattr(os, "kill", lambda pid, sig: signalled.append((pid, sig)))
+    signalled: list[tuple[int, int]] = []
+    _records_every_signal(monkeypatch, signalled)
 
     def jailer(argv, timeout=300.0):
         Path(plan["host_side"]["pid_file"]).write_text("4242\n")
