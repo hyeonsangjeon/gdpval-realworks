@@ -1562,6 +1562,31 @@ mypy는 명령이 둘이고 결과가 다르므로 둘 다 적습니다.
 넣은 이유는 워크플로 파일 주석에 적혀 있습니다 — 이 저장소에 선재 오류가 90건쯤
 있어서 전수 게이트는 처음부터 빨강이라는 것입니다.
 
+마지막으로, PR을 열었을 때 실제로 막는 관문 셋을 **열기 전에 이 상자에서 먼저**
+돌려 봤습니다. CI를 편집할 때마다 돌리지 않기 위해서입니다.
+
+| 관문 | 로컬에서 같은 명령 | 결과 |
+|---|---|---|
+| `pytest` | 백엔드 전수 | 종료 코드 0 |
+| `advance-check` | `scripts/check_execution_envelope_advance_check.py --json --skip-docker-probe --exit-on-code-and-contract-problems-only` | 종료 코드 0 |
+| `freeze-check` | `scripts/check_grader_hash_freeze.py --changed-paths … --runs …` | 종료 코드 0 |
+
+**`freeze-check`가 통과하면서 같이 말한 것이 있고, 이게 통과보다 중요합니다.**
+
+> This diff does move the grader source hash. That is fine right now, but it
+> means the next paid run has to be preceded by a fresh smoke at the new
+> fingerprint.
+
+`core/agentic_v2_first_boot.py`가 채점기 원본 지문에 들어가기 때문입니다. 지금
+초록인 이유는 **채점 실행이 하나도 떠 있지 않아서**이지 지문이 안 변해서가
+아닙니다. 두 가지가 따라옵니다.
+
+- 이 델타가 main에 들어간 뒤 **다음 유료 채점 실행 앞에는 새 지문으로 뜨는
+  smoke가 한 번 필요합니다.** 이 문서가 그걸 대신해 주지 않습니다.
+- 후속 PR을 여는 사이에 유료 채점 실행이 떠 있으면 같은 관문이 **빨강**이 됩니다.
+  그때 빨강은 이 변경의 결함이 아니라 순서 문제이고, 고치는 방법은 코드가 아니라
+  기다리는 것입니다.
+
 ### 8. 이 수리가 말하지 않는 것
 
 - **실제 게스트를 하나도 띄우지 않았습니다.** 게이트가 재는 프로세스는 진짜지만
