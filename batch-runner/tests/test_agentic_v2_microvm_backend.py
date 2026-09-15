@@ -437,6 +437,78 @@ class TestOneCallIsOneMachine:
         backend.close()
 
 
+class TestAHostThisRunLeftRunningIsNotBootedOnAgain:
+    """The ending evidence of one call has to reach the next one.
+
+    ``the_host_was_left_running`` decided this per boot and
+    ``_how_the_machine_ended`` filed the answer in every record, and until this
+    was added nothing read either. A call that leaked a machine was written
+    down and then the next call booted onto the same host anyway.
+
+    The two questions are different. Whether the command worked is about the
+    command; whether the host is free afterwards is about the host. Folding
+    them together is how a leaked machine reaches the model as an ordinary
+    success — and, worse, how the task after it gets measured on a host this
+    run no longer has to itself.
+    """
+
+    def test_a_leaked_machine_refuses_the_next_call_before_it_costs_a_boot(
+        self, tmp_path
+    ):
+        launcher = Launcher(outcome="overran_and_did_not_stop")
+        backend = _backend(tmp_path, launcher=launcher)
+        backend.exec_run(_ok())
+        assert backend.boots[0]["machine"]["host_left_running"] is True
+
+        assert backend.exec_run(_ok()) == {
+            "ok": False,
+            "error_type": "compute_cleanup_failed",
+        }
+        # Refused before launch, so it costs nothing: the launcher was called
+        # once, for the boot that leaked, and not again.
+        assert len(launcher.calls) == 1
+        backend.close()
+
+    def test_the_refusal_names_the_call_that_left_the_machine(self, tmp_path):
+        backend = _backend(
+            tmp_path, launcher=Launcher(outcome="overran_and_was_left_alone")
+        )
+        backend.exec_run(_ok())
+        backend.exec_run(_ok())
+        refusal = backend.boots[1]
+        assert refusal["booted"] is False
+        assert refusal["host_left_running_by_call"] == 0
+        # Which call, and which ending — without those the record says only
+        # that something was refused, and the reason has to be guessed later.
+        assert "call 0" in refusal["refused_before_launch"]
+        assert "overran_and_was_left_alone" in refusal["refused_before_launch"]
+        backend.close()
+
+    def test_the_error_type_is_one_the_run_driver_already_stops_on(self, tmp_path):
+        # Not a new error type. ``compute_cleanup_failed`` is already mapped to
+        # a stop reason by the conversation and already stops the whole run at
+        # the driver's rule 7, precisely because the next task would otherwise
+        # inherit a guest that was not cleaned up. That is this situation.
+        from core.agentic_v2_contract import ERROR_TYPES
+        from core.agentic_v2_conversation import _ENDS_THE_RUN
+
+        assert "compute_cleanup_failed" in ERROR_TYPES
+        assert "compute_cleanup_failed" in _ENDS_THE_RUN
+
+    def test_a_host_that_was_given_back_does_not_refuse_anything(self, tmp_path):
+        # The control. A guard that refuses everything would pass the three
+        # tests above and be worse than no guard at all, so the ordinary case
+        # is asserted here: two clean calls, two boots, nothing refused.
+        launcher = Launcher()
+        backend = _backend(tmp_path, launcher=launcher)
+        assert backend.exec_run(_ok())["ok"] is True
+        assert backend.boots[0]["machine"]["host_left_running"] is False
+        assert backend.exec_run(_ok())["ok"] is True
+        assert len(launcher.calls) == 2
+        assert all(record["booted"] is True for record in backend.boots)
+        backend.close()
+
+
 class TestTheOutputGoesWhereTheModelCanReadIt:
     def test_what_the_command_printed_lands_in_the_workspace(self, tmp_path):
         backend = _backend(tmp_path, launcher=Launcher(stdout="the answer is 4"))

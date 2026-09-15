@@ -359,6 +359,31 @@ class AgenticV2MicroVMBackend(AgenticV2FixtureBackend):
 
     # -- the one call that costs a machine --------------------------------
 
+    def _a_machine_this_session_left_running(self) -> Mapping[str, Any] | None:
+        """The first earlier call that ended without giving the host back.
+
+        ``the_host_was_left_running`` already decides this for a single boot,
+        and ``_how_the_machine_ended`` already writes the answer into every
+        record. Nothing read it. The reading was produced, filed, and then the
+        next call booted onto the same host regardless.
+
+        That gap matters because the two questions are not the same question.
+        Whether a command succeeded is about the command; whether the host is
+        free afterwards is about the host. A task can finish perfectly well and
+        still leave a machine behind, and the next task would then be measured
+        on a host that is no longer this run's alone.
+
+        Returns the record, not a bool, so the refusal can name which call it
+        was. The first one is enough: once the host is not free it does not
+        become free again by itself, and a later leak adds nothing to the
+        decision being made here.
+        """
+        for record in self.boots:
+            machine = record.get("machine") or {}
+            if machine.get("host_left_running") is True:
+                return record
+        return None
+
     def exec_run(self, arguments: Mapping[str, Any]) -> Mapping[str, Any]:
         """Boot one machine, run one command in it, and read back what it did.
 
@@ -372,7 +397,30 @@ class AgenticV2MicroVMBackend(AgenticV2FixtureBackend):
         returncode and nothing else with ``additionalProperties`` false, so the
         streams are written into the workspace where the model reads them with
         ``workspace_apply``, the same way it reads anything else.
+
+        Before any of that, the host itself is checked. An earlier call in this
+        session may have finished while leaving a machine running, and the next
+        boot would then be placed on a host this run no longer has to itself.
+        That is refused here rather than launched.
         """
+        left_running = self._a_machine_this_session_left_running()
+        if left_running is not None:
+            self.boots.append(
+                {
+                    "call": len(self.boots),
+                    "refused_before_launch": (
+                        "call {} left a machine running on this host ({}), so "
+                        "the host is not free for another boot".format(
+                            left_running.get("call"),
+                            (left_running.get("machine") or {}).get("outcome"),
+                        )
+                    ),
+                    "booted": False,
+                    "host_left_running_by_call": left_running.get("call"),
+                }
+            )
+            return {"ok": False, "error_type": "compute_cleanup_failed"}
+
         try:
             descriptor = self._open_directory(str(arguments.get("cwd", "")))
         except (FileNotFoundError, NotADirectoryError, ValueError, OSError):
