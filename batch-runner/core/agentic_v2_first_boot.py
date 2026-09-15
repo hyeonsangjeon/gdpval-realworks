@@ -330,9 +330,21 @@ def the_host_was_left_running(boot: Mapping[str, Any]) -> bool:
     answer was the alternative and it moves all three call sites at once; the
     one that matters is :func:`_destroy_unless_something_is_still_running`,
     where "still running" and "cannot say" take the same branch.
+
+    **The second clause of the return reaches a state neither of those
+    descriptions covers.** A later step rewrites ``outcome`` when the work disk
+    does not come back, and two of the outcomes above are reached by breaking
+    out of the watch loop before anything is signalled — so they arrive with
+    ``guest_confirmed_stopped`` still ``None``, and once ``outcome`` has been
+    rewritten there is no other field left holding the leak.
+    ``outcome_before_the_carriage_failed`` is where it was put aside, and
+    without reading it here a command that exits 0 in a guest that will not go,
+    on a call whose disk also fails to return, reads back as a free host.
     """
     return (
         boot.get("outcome") in OUTCOMES_THAT_LEAVE_THE_HOST_RUNNING
+        or boot.get("outcome_before_the_carriage_failed")
+        in OUTCOMES_THAT_LEAVE_THE_HOST_RUNNING
         or boot.get("guest_confirmed_stopped") is False
     )
 

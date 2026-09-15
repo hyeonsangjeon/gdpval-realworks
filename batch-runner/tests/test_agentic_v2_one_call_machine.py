@@ -21,6 +21,10 @@ from pathlib import Path
 import pytest
 
 from core.agentic_v2_exec_boot import read_the_boot
+from core.agentic_v2_first_boot import (
+    OUTCOME_STARTED_AND_NOT_IDENTIFIED,
+    the_host_was_left_running,
+)
 from core.agentic_v2_one_call_machine import (
     THE_ONE_RULE_A_CALL_MAY_TIGHTEN,
     WORKSPACE_DID_NOT_COME_BACK,
@@ -86,6 +90,32 @@ class Guest:
             check=True,
             capture_output=True,
         )
+
+
+class GuestThatIsStillRunningAfterwards(Guest):
+    """``Guest``, plus the fields a machine that was left behind carries.
+
+    ``first_boot`` reaches ``overran_and_was_left_alone`` and
+    ``started_and_could_not_be_identified`` by breaking out of the watch loop
+    before anything is signalled, so both come back with
+    ``guest_confirmed_stopped`` still ``None``. That ``None`` is why the second
+    half of ``the_host_was_left_running`` does not already cover them.
+    ``overran_and_did_not_stop`` is the other shape: a signal did go out and
+    ``_confirm_it_stopped`` answered ``False``.
+    """
+
+    def __init__(self, *, guest_confirmed_stopped=None, **rest):
+        super().__init__(**rest)
+        self.guest_confirmed_stopped = guest_confirmed_stopped
+
+    def __call__(self, plan, **handed):
+        booted = super().__call__(plan, **handed)
+        booted["guest_confirmed_stopped"] = self.guest_confirmed_stopped
+        booted["guest_last_seen_running"] = True
+        return booted
+
+
+LEFT_BEHIND_WITHOUT_A_SIGNAL = ["overran_and_was_left_alone", OUTCOME_STARTED_AND_NOT_IDENTIFIED]
 
 
 def _workspace(root: Path) -> Path:
@@ -272,6 +302,81 @@ class TestACommandWhoseFilesDidNotSurviveIsNotASuccess:
         assert booted["outcome"] == "never_started"
         result = read_the_boot(booted, deadline={"applied_seconds": 45})["result"]
         assert result["error_type"] == "compute_start_failed"
+
+
+@needs_ext4_tools
+class TestALeakedMachineIsStillLeakedWhenTheDiskDidNotComeBack:
+    """Two faults, both true at once, and only one field was carrying each.
+
+    A command can exit 0 in a guest that then refuses to go while the work disk
+    also fails to come back. Rewriting ``outcome`` for the second fault throws
+    away the only field that said the first one happened, and
+    ``the_host_was_left_running`` reads exactly that field — so a host with a
+    guest still on it gets recorded as a host that is free.
+
+    The jail is not at risk here: ``first_boot`` decides removal from its own
+    locals before this dictionary is ever handed on. What is at risk is what
+    the model is told and what the run record keeps.
+    """
+
+    def _leaked_and_lost_the_disk(self, tmp_path, outcome, *, confirmed=None):
+        guest = GuestThatIsStillRunningAfterwards(
+            status=0,
+            outcome=outcome,
+            returns_a_disk=False,
+            guest_confirmed_stopped=confirmed,
+        )
+        return _machine(tmp_path, guest)(
+            command_sh=A_COMMAND, workspace=_workspace(tmp_path), deadline_seconds=45
+        )
+
+    @pytest.mark.parametrize("outcome", LEFT_BEHIND_WITHOUT_A_SIGNAL)
+    def test_the_host_is_not_called_free_because_the_carriage_also_failed(
+        self, tmp_path, outcome
+    ):
+        booted = self._leaked_and_lost_the_disk(tmp_path, outcome)
+        assert the_host_was_left_running(booted) is True
+
+    def test_the_route_that_did_signal_is_not_what_makes_this_work(self, tmp_path):
+        # ``overran_and_did_not_stop`` carries ``guest_confirmed_stopped``
+        # False out of ``_confirm_it_stopped``, so the second half of the
+        # predicate already holds it up. Here to show that the two above are
+        # not covered the same way and that the fix is not redundant.
+        booted = self._leaked_and_lost_the_disk(
+            tmp_path, "overran_and_did_not_stop", confirmed=False
+        )
+        assert booted["guest_confirmed_stopped"] is False
+        assert the_host_was_left_running(booted) is True
+
+    def test_a_carriage_fault_on_its_own_does_not_invent_a_leak(self, tmp_path):
+        # The over-correction, and the reason the fix cannot just be "treat
+        # this outcome as occupied": nothing was left running here, and saying
+        # the host is busy would strand a host that is free.
+        booted = _machine(tmp_path, Guest(status=0, returns_a_disk=False))(
+            command_sh=A_COMMAND, workspace=_workspace(tmp_path), deadline_seconds=45
+        )
+        assert the_host_was_left_running(booted) is False
+
+    @pytest.mark.parametrize("outcome", LEFT_BEHIND_WITHOUT_A_SIGNAL)
+    def test_what_the_machine_really_ended_as_is_kept_not_discarded(
+        self, tmp_path, outcome
+    ):
+        booted = self._leaked_and_lost_the_disk(tmp_path, outcome)
+        assert booted["outcome_before_the_carriage_failed"] == outcome
+
+    @pytest.mark.parametrize("outcome", LEFT_BEHIND_WITHOUT_A_SIGNAL)
+    def test_the_carriage_fault_is_still_reported_as_the_carriage_fault(
+        self, tmp_path, outcome
+    ):
+        # Restoring the outcome in place would make ``read_the_boot`` say the
+        # workspace came back. Both faults are kept, in two different fields.
+        booted = self._leaked_and_lost_the_disk(tmp_path, outcome)
+        assert booted["outcome"] == WORKSPACE_DID_NOT_COME_BACK
+        assert booted["command_exit_status"] is None
+        assert booted["command_exit_status_before_the_carriage_failed"] == 0
+        result = read_the_boot(booted, deadline={"applied_seconds": 45})["result"]
+        assert result["ok"] is False
+        assert result["error_type"] == "compute_backend_error"
 
 
 @needs_ext4_tools

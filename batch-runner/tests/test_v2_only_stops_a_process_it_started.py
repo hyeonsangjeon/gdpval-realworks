@@ -561,31 +561,44 @@ def test_h3_a_number_handed_on_between_the_check_and_the_signal_is_not_signalled
     untouched and the jail is untouched, so every check except the start time
     still says yes — which is what makes this the arm that would pass on a
     number alone.
+
+    The guest has to be started *by the jailer*, not in the test body. A sleeper
+    made before ``_boot`` is older than the floor the run reads, so the floor
+    rejects it at publication and the run never reaches the re-read this test
+    exists for. Written that way it passed only while both landed inside the
+    same clock tick, which on this box was 17 times in 20.
     """
     spy = _SpyOnRealSignals()
     monkeypatch.setattr(os, "kill", spy)
 
-    ours = sleepers.one()
-    at_publication = _when_that_process_started(ours)
-    assert at_publication is not None
-
     real_reader = agentic_v2_first_boot._when_that_process_started
     asked: list[int] = []
+    at_publication: list[int] = []
 
     def a_number_that_gets_recycled(pid: int):
-        if pid != ours:
+        if not sleepers.started or pid != sleepers.started[-1]:
             return real_reader(pid)
         asked.append(pid)
-        # The first answer is the real one, taken when the run identified it.
+        if len(asked) == 1:
+            # The first answer is the real one, taken when the run identified
+            # it, and it is at or after the floor because the jailer started it.
+            at_publication.append(real_reader(pid))
+            return at_publication[0]
         # Every answer after that is a different process holding the number.
-        return at_publication if len(asked) == 1 else at_publication + 5
+        return at_publication[0] + 5
 
     monkeypatch.setattr(
         "core.agentic_v2_first_boot._when_that_process_started",
         a_number_that_gets_recycled,
     )
 
-    result = _boot(plan, tmp_path, monkeypatch, jailer=_a_jailer_publishing(plan, ours))
+    result = _boot(
+        plan,
+        tmp_path,
+        monkeypatch,
+        jailer=_a_jailer_that_starts_a_guest(plan, sleepers),
+    )
+    ours = sleepers.started[-1]
 
     assert len(asked) > 1, "the start time has to be re-read, or this proves nothing"
     assert spy.real_signals == []
@@ -1073,3 +1086,61 @@ def test_l6_the_older_members_kept_their_own_wording():
     assert "was not stopped" in grounds
     assert "the host is not free" in grounds
     assert "could not show that process was its own guest" not in grounds
+
+
+# ---------------------------------------------------------------------------
+# M — the outcome survives being overwritten
+#
+# ``OneCallMachine`` rewrites ``outcome`` when the work disk does not come back,
+# and it was the only field carrying the leak for the two outcomes that are
+# reached before any signal goes out. These are the predicate's side of that;
+# the seam itself is exercised in ``test_agentic_v2_one_call_machine.py``.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("outcome", sorted(OUTCOMES_THAT_LEAVE_THE_HOST_RUNNING))
+def test_m1_an_overwritten_outcome_still_reports_a_live_host(outcome):
+    """Over the set for the same reason L5 is: a new member gets this free.
+
+    A member added later is reached through the same overwrite, and a guard
+    written against two names by hand would not cover it.
+    """
+    assert (
+        the_host_was_left_running(
+            {
+                "outcome": "workspace_did_not_come_back",
+                "outcome_before_the_carriage_failed": outcome,
+                "guest_confirmed_stopped": None,
+            }
+        )
+        is True
+    )
+
+
+def test_m2_an_overwritten_ordinary_boot_is_not_turned_into_a_leak():
+    """The over-safe direction: the preserved field is read, not assumed.
+
+    A call whose carriage failed after an ordinary boot left nothing on the
+    host. Reporting it as occupied would strand a host that is free, which is
+    the mirror-image failure of the one M1 covers.
+    """
+    assert (
+        the_host_was_left_running(
+            {
+                "outcome": "workspace_did_not_come_back",
+                "outcome_before_the_carriage_failed": "booted",
+                "guest_confirmed_stopped": None,
+            }
+        )
+        is False
+    )
+
+
+def test_m3_a_record_without_the_preserved_field_is_unchanged():
+    """Every boot record written before this field existed still reads the same.
+
+    ``.get`` answers ``None`` for them and ``None`` is not in the set, so the
+    new clause cannot flip an old answer in either direction.
+    """
+    assert the_host_was_left_running({"outcome": "booted"}) is False
+    assert the_host_was_left_running({"outcome": "overran_and_did_not_stop"}) is True
