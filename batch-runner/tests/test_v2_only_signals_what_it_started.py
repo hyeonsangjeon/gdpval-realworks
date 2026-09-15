@@ -43,9 +43,11 @@ from core.agentic_v2_first_boot import (
     BootAbandoned,
     BootRefused,
     _clean_up_after_a_failure,
+    _the_instant_this_run_launched,
     first_boot,
     the_host_was_left_running,
 )
+from core import agentic_v2_first_boot
 from core.agentic_v2_microvm_backend import (
     EXEC_RECORD_DIR,
     AgenticV2MicroVMBackend,
@@ -57,6 +59,45 @@ from core.agentic_v2_substrate import AgenticV2SubstrateManifest
 
 STRANGER = 424242
 """A PID this run did not start. Never signalled, in any test here."""
+
+OURS = 4242
+"""The PID the stand-in jailer publishes, and the only one given an identity."""
+
+
+def _a_stand_in_guest_with_an_identity(monkeypatch, *pids: int) -> None:
+    """Let the invented PIDs answer the question a real guest answers.
+
+    The launcher will not signal a process it cannot show it started, and a
+    number a test made up names nothing on the host — so a stand-in that only
+    reports *alive* is half a guest. This supplies the other half: for the PIDs
+    named here, "when did you start" answers with the host clock read the first
+    time it is asked, which is necessarily at or after the floor the run
+    recorded just before launching.
+
+    **The answer is remembered per PID, and that is the point, not an
+    optimisation.** A real process's start time never moves; answering with a
+    fresh clock reading each time would make the guest look like a different
+    process on every probe, and the launcher would correctly refuse to signal
+    it. Getting this wrong makes a working guard look broken.
+
+    Only the PIDs listed. :data:`STRANGER` is deliberately never among them —
+    a process this run cannot account for is exactly what it stands for.
+    """
+    known = set(pids)
+    real = agentic_v2_first_boot._when_that_process_started
+    remembered: dict[int, int | None] = {}
+
+    def started(pid: int) -> int | None:
+        if pid not in known:
+            return real(pid)
+        if pid not in remembered:
+            now = agentic_v2_first_boot._the_instant_this_run_launched()
+            remembered[pid] = now["ticks_since_boot"]
+        return remembered[pid]
+
+    monkeypatch.setattr(
+        "core.agentic_v2_first_boot._when_that_process_started", started
+    )
 
 
 @pytest.fixture
@@ -239,6 +280,7 @@ def _boot(plan, tmp_path, monkeypatch, *, jailer, signals, reader=None, clock=No
     clock = clock or _Clock()
     monkeypatch.setattr("core.agentic_v2_first_boot._run", jailer)
     monkeypatch.setattr(os, "kill", signals)
+    _a_stand_in_guest_with_an_identity(monkeypatch, OURS)
     monkeypatch.setattr(
         "core.agentic_v2_first_boot.files_out_of_work_disk",
         reader or (lambda image, names, **kw: _finished()),
@@ -584,6 +626,11 @@ def test_d5_cleanup_leaves_a_jail_this_run_did_not_create_alone(
         # ownership as the only thing that can produce the refusal below.
         launch_was_attempted=False,
         launch_spawned_nothing=False,
+        # Read before the ownership check, so it never gets as far as mattering
+        # here — but it is required and has no default, and passing the real
+        # reading rather than ``None`` keeps ownership the only thing that can
+        # produce the refusal below.
+        launch_floor=_the_instant_this_run_launched(),
         work_disk=tmp_path / "work.ext4",
         salvage=salvage,
     )
@@ -608,9 +655,13 @@ def test_d6_ownership_is_recorded_as_evidence_both_when_it_holds_and_when_it_doe
     The falsifier written into the pre-registration was "ownership was claimed
     and the only ground was that no PID file was there". So the record has to
     carry the individual grounds *and* what stays unprovable — on both answers.
-    A run that is granted ownership still cannot rule out PID reuse: between the
-    last probe and the signal the kernel may have handed that number to someone
-    else, and nothing available here closes that window.
+    A run that is granted ownership still cannot rule out PID reuse: a number
+    handed on to a process born after this run launched reads the same from
+    here, and nothing available on this kernel closes that window.
+
+    Four of the five grounds are about the *file*; the fifth is the only one
+    about the *process*, and it is the one the deadline path needs before it
+    may signal anything.
     """
     refused = _boot(
         plan,
@@ -626,6 +677,8 @@ def test_d6_ownership_is_recorded_as_evidence_both_when_it_holds_and_when_it_doe
         True,
         True,
         False,
+        False,
+        # No PID file appeared, so there is no process to place in time either.
         False,
     ]
     assert "reuse" in evidence["cannot_rule_out"].lower()
@@ -646,8 +699,9 @@ def test_d6_ownership_is_recorded_as_evidence_both_when_it_holds_and_when_it_doe
 
     granted = owned["pid_file"]
     assert granted["owned_by_this_run"] is True
-    assert len(granted["ownership_grounds"]) == 4
+    assert len(granted["ownership_grounds"]) == 5
     assert all(g["held"] for g in granted["ownership_grounds"])
+    assert "began after this run launched" in granted["ownership_grounds"][4]["ground"]
     assert granted["left_alone_because"] is None
     assert "reuse" in granted["cannot_rule_out"].lower()
 
@@ -807,6 +861,7 @@ def test_d12_the_backend_record_still_carries_both_failures(tmp_path, monkeypatc
     machine, jail_base, host = _a_real_machine(tmp_path, monkeypatch)
     signals = _Signals(kill_raises=OverflowError("Python int too large"))
     monkeypatch.setattr(os, "kill", signals)
+    _a_stand_in_guest_with_an_identity(monkeypatch, OURS)
     monkeypatch.setattr(
         "core.agentic_v2_first_boot._run", _a_jailer_that_starts_then_dies(jail_base)
     )
@@ -974,13 +1029,14 @@ def test_p1_the_backend_record_carries_the_ownership_and_shutdown_evidence(
     below the launcher on purpose.
 
     The guest here exits on its own, which is the ordinary case, and the record
-    has to say so precisely: owned, on four grounds, with no signal sent and
+    has to say so precisely: owned, on five grounds, with no signal sent and
     therefore nothing to confirm — and with the one thing that stays unprovable
     still written down rather than rounded off to "owned".
     """
     machine, jail_base, host = _a_real_machine(tmp_path, monkeypatch)
     signals = _Signals(starts_alive=False)
     monkeypatch.setattr(os, "kill", signals)
+    _a_stand_in_guest_with_an_identity(monkeypatch, OURS)
     monkeypatch.setattr(
         "core.agentic_v2_first_boot._run", _a_jailer_that_boots_and_exits(jail_base)
     )
@@ -998,6 +1054,7 @@ def test_p1_the_backend_record_carries_the_ownership_and_shutdown_evidence(
         assert machine_record["outcome"] == "booted"
         assert machine_record["owned_by_this_run"] is True
         assert [g["held"] for g in machine_record["ownership_grounds"]] == [
+            True,
             True,
             True,
             True,
@@ -1458,6 +1515,7 @@ def test_p2_a_command_that_finished_under_a_machine_nobody_stopped_says_both(
     machine, jail_base, host = _a_real_machine(tmp_path, monkeypatch)
     signals = _SignalsThatSwapThePidFile(jail_base, dies_after=None)
     monkeypatch.setattr(os, "kill", signals)
+    _a_stand_in_guest_with_an_identity(monkeypatch, OURS)
     monkeypatch.setattr(
         "core.agentic_v2_first_boot._run", _a_jailer_that_boots_and_stays(jail_base)
     )

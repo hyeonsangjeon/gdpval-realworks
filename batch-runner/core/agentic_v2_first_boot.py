@@ -90,16 +90,38 @@ raises ``ProcessLookupError`` (it converted, and no such process exists),
 this module lets it through.
 """
 
+try:
+    CLOCK_TICKS_PER_SECOND = os.sysconf("SC_CLK_TCK") or 100
+except (OSError, ValueError, AttributeError):  # pragma: no cover - POSIX only
+    CLOCK_TICKS_PER_SECOND = 100
+"""The unit ``/proc/<pid>/stat`` counts a process's start time in.
+
+Asked of the host rather than written down as 100, because the two numbers this
+module compares — a reading from ``/proc/uptime`` and a field from
+``/proc/<pid>/stat`` — are only comparable when both are converted with the same
+value, and a wrong one would silently shift every comparison in the same
+direction. 100 on this host. The fallback is for a platform that has no
+``sysconf``; there the whole ``/proc`` reading fails anyway and the identity
+check refuses on its own terms rather than on a bad constant.
+"""
+
 CANNOT_RULE_OUT = (
-    "PID reuse. Between the last moment this run looked at that number and the "
-    "moment it signals, the kernel may have ended that process and handed the "
-    "same number to another. POSIX offers this code no way to close that "
-    "window; re-reading the file immediately before signalling narrows it."
+    "PID reuse by a process that began after this run's own launch. A number "
+    "read out of a PID file is checked against the instant this run started the "
+    "jailer, which turns away every process that was already running then — but "
+    "a number handed on to something born after that instant reads the same "
+    "from here. POSIX offers this code no handle on a process it did not fork, "
+    "so the window is narrowed to the life of this run rather than closed."
 )
 """What the ownership evidence below still does not establish.
 
 Recorded in the artefact rather than left out of it. An ownership verdict with
 no statement of its limit reads as proof, and this one is not proof.
+
+This sentence used to be wider: it said PID reuse outright, because nothing
+compared the number against anything. :func:`_started_after_this_run_launched`
+is what narrowed it, and the narrowing is exactly as wide as that function's
+evidence — no wider.
 """
 
 CLAIM_FILE_NAME = ".owned-by.json"
@@ -130,6 +152,13 @@ Taking a name atomically settles who may write into it. It does not settle what
 is happening inside it, and the distance between those two is exactly where a
 convenient inference would go: *this claim is hours old, so surely nobody is
 using it*. There is no evidence for the *surely*, so nothing acts on it.
+
+The fields here are still read by nobody, and that is deliberate — they describe
+the **launcher**, and a launcher that looks dead is not evidence about the guest.
+The guest's identity is bound elsewhere, at launch, by
+:func:`_the_instant_this_run_launched`, and it is bound for signalling only. No
+path anywhere reclaims, removes or repurposes a jail on the strength of a
+process looking stale.
 """
 
 OUTCOME_STARTED_AND_NOT_IDENTIFIED = "started_and_could_not_be_identified"
@@ -154,6 +183,15 @@ re-raised — so the ordinary path's answer here is always this one. The two sta
 which carries the two flags themselves rather than a word standing in for them.
 :func:`core.agentic_v2_exec_boot.read_the_boot` keeps its ``never_started`` row
 because records written before this change still say it.
+
+**Two routes reach this word, and they are not the same observation.** One is
+the absent PID file above. The other is a PID file that did appear, naming a
+number this run cannot show belongs to it — the deadline arrives, something is
+still running under that number, and the interval that would have adopted it
+declined. The first says nothing could be named; the second says something is
+there and its name proves nothing. Both leave the host in the state this word
+exists for, so both answer with it, and in both the jail stays standing and
+nothing is signalled.
 """
 
 OUTCOMES_THAT_LEAVE_THE_HOST_RUNNING = frozenset(
@@ -381,6 +419,152 @@ def _a_pid_this_may_signal(raw: Any) -> tuple[int | None, str]:
     return pid, ""
 
 
+def _the_instant_this_run_launched() -> dict[str, Any]:
+    """The host clock, in the units a process's start time is expressed in.
+
+    Read immediately **before** the jailer is started, and for the same reason
+    ``launch_was_attempted`` is set there: it is this run's record of its own
+    control flow, not an inference drawn from the host afterwards. A floor read
+    after the launch would be later than the guest's own start and would turn
+    away the very process it exists to recognise.
+
+    ``/proc/<pid>/stat`` field 22 counts clock ticks since boot, so this counts
+    the same ticks from ``/proc/uptime``. ``boot_id`` rides along because the
+    tick count is meaningless across a reboot — after one, every number restarts
+    and an old floor would admit anything.
+
+    Every field may be missing. A floor that could not be read is written down
+    as ``None`` and read downstream as *no evidence*, which refuses; it is never
+    filled in with a guess, and there is no value that means "skip the check".
+    """
+    ticks: int | None = None
+    try:
+        with open("/proc/uptime", encoding="utf-8") as uptime:
+            ticks = int(float(uptime.read().split()[0]) * CLOCK_TICKS_PER_SECOND)
+    except (OSError, ValueError, IndexError):
+        pass
+    boot_id: str | None = None
+    try:
+        boot_id = Path("/proc/sys/kernel/random/boot_id").read_text().strip() or None
+    except OSError:
+        pass
+    return {
+        "ticks_since_boot": ticks,
+        "boot_id": boot_id,
+        "clock_ticks_per_second": CLOCK_TICKS_PER_SECOND,
+    }
+
+
+def _when_that_process_started(pid: int) -> int | None:
+    """Clock ticks since boot at which ``pid`` began, or ``None``.
+
+    Constant for the life of a process and gone the moment it is reaped, which
+    is what makes it usable as identity: the pair ``(pid, start time)`` names one
+    process and keeps naming it, where ``pid`` alone names whoever holds the
+    number right now. Measured on this host — a start time read twice half a
+    second apart returned the same value, and a reaped process's file was gone.
+
+    Unreadable for any reason returns ``None``, and every caller reads that as
+    *no evidence*. A process owned by another user is still readable here;
+    ``/proc/<pid>/stat`` is world-readable on Linux, so a stranger's process is
+    turned away by the comparison rather than by a permission error.
+    """
+    try:
+        raw = Path(f"/proc/{pid}/stat").read_text()
+        # Field 2 is the command name and may itself contain spaces and
+        # brackets, so fields are counted from after the last ')' — where field
+        # 3 begins, putting start time at index 19.
+        return int(raw[raw.rindex(")") + 1:].split()[19])
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+def _started_after_this_run_launched(
+    pid: int, launch_floor: Mapping[str, Any] | None
+) -> tuple[int | None, str]:
+    """The start time of ``pid`` if this run could have started it, or why not.
+
+    **This is the whole of the identity evidence, and it is one-directional.**
+    A process that was already running when this run launched the jailer is not
+    a machine this run started — that is a fact about time, and it needs no
+    guess about what the process is. A process that began after that instant
+    *could* be this run's, which is weaker and is all that is claimed: see
+    :data:`CANNOT_RULE_OUT`, which is narrowed to exactly this width.
+
+    What it refuses, in the order it refuses it:
+
+    * no floor at all — the launch never happened, or the host clock could not
+      be read at it. There is nothing to compare against, so nothing is
+      established and nothing is signalled.
+    * a different boot id — the host restarted since this run launched. Tick
+      counts restart with it, so the floor no longer means anything.
+    * no start time — the number names nothing readable now. That is not
+      evidence of anything, including of its being gone.
+    * a start time below the floor — it was already there. This is the one that
+      turns away a recycled number, and it was measured: a sleeper created two
+      clock ticks before the reading fell below it 20 times out of 20.
+
+    **The 10 ms this cannot see.** On this host a process created immediately
+    after the reading compares *equal* to it, 20 times out of 20 — one tick is
+    10 ms and both land in the same one. So the floor separates *before this
+    run's launch tick* from *at or after it*, not *before this instant* from
+    *after it*. A number handed to an unrelated process inside that one tick
+    reads as admissible. Nothing here closes that; ``CANNOT_RULE_OUT`` says so.
+
+    **Why there is no stable handle.** ``pidfd_open(2)`` would pin the identity
+    outright, and it was tried: this kernel answers ``OSError(38, 'Function not
+    implemented')``, so the call does not exist here even though Python exposes
+    the name. It is not used, not probed for at runtime, and no code path
+    behaves differently depending on whether it would work — a capability this
+    module cannot test is not one it can depend on. The process this needs to
+    identify is also not this process's child: the jailer daemonises and
+    Firecracker is reparented, so ``waitpid`` cannot hold the number either.
+    """
+    if not launch_floor:
+        return None, (
+            "this run has no record of when it launched, so it has no instant "
+            "to measure that process against"
+        )
+    floor = launch_floor.get("ticks_since_boot")
+    if not isinstance(floor, int):
+        return None, (
+            "this run could not read the host clock when it launched, so it has "
+            "no instant to measure that process against"
+        )
+    boot_id = launch_floor.get("boot_id")
+    now_booted = _the_instant_this_run_launched().get("boot_id")
+    if boot_id is not None and now_booted is not None and boot_id != now_booted:
+        return None, (
+            "the host has restarted since this run launched, so no process "
+            "number from before it names anything of this run's"
+        )
+    started = _when_that_process_started(pid)
+    if started is None:
+        return None, (
+            f"the host has nothing to say about when process {pid} started, so "
+            "there is no evidence it is this run's"
+        )
+    if started < floor:
+        return None, (
+            f"process {pid} was already running {floor - started} clock ticks "
+            "before this run launched, so it is not a machine this run started"
+        )
+    return started, ""
+
+
+def _still_the_same_process(pid: int, started: int | None) -> bool:
+    """Whether ``pid`` still names the process whose start time was ``started``.
+
+    Asked again at the moment of use rather than inherited, because the number
+    is the only thing the host keeps and the number is what gets recycled. A
+    start time that has changed does not mean *something went wrong*; it means
+    the process this run identified is gone and another holds its number.
+    """
+    if started is None:
+        return False
+    return _when_that_process_started(pid) == started
+
+
 def _still_running(pid: int) -> bool:
     checked, why_not = _a_pid_this_may_signal(pid)
     if checked is None:
@@ -398,7 +582,12 @@ def _still_running(pid: int) -> bool:
 
 
 def _may_signal_now(
-    pid_file: Path, watched: int, *, chroot_dir: Path, claim: Mapping[str, Any]
+    pid_file: Path,
+    watched: int,
+    *,
+    chroot_dir: Path,
+    claim: Mapping[str, Any],
+    started_at: int | None,
 ) -> tuple[bool, str]:
     """Re-read the PID file at the moment of the signal, not before.
 
@@ -411,6 +600,13 @@ def _may_signal_now(
     says the number did not change; it does not say the jail around it is still
     this run's. Both questions are asked at the moment of the signal because
     that is the moment their answers are used.
+
+    So is the third one. ``started_at`` is the start time this run read off the
+    watched process when it decided the process could be its own, and it is
+    re-read here because the number outliving its process is the whole failure
+    this guards: the file can hold the same integer while a different process
+    holds the integer. An unestablished identity (``None``) refuses — there is
+    no reading that would make an unidentified process safe to kill.
     """
     held, why = _this_run_still_holds_it(chroot_dir, claim)
     if not held:
@@ -433,12 +629,46 @@ def _may_signal_now(
             f"the PID file now names {named_now} rather than the {watched} this run "
             "watched appear, so it was replaced and this is not ours to stop"
         )
+    if started_at is None:
+        return False, (
+            f"this run never established that process {watched} was its own, so "
+            "there is nothing here it may signal"
+        )
+    if not _still_the_same_process(watched, started_at):
+        return False, (
+            f"process {watched} is no longer the one this run identified — the "
+            "number has been handed on, and signalling it now would reach a "
+            "process this run never started"
+        )
     return True, ""
+
+
+def _ours_is_gone(pid: int, started_at: int | None) -> bool:
+    """Whether the process this run identified has ended.
+
+    Two readings say yes and they are not the same reading. Nothing holds the
+    number at all — then nothing of this run's is running under it, which holds
+    whether or not its identity was ever established. Or something holds it with
+    a different start time — then the number was recycled, and the process that
+    had it is gone. The second is only available when there is an identity to
+    compare against, which is why it is not the only test.
+
+    A number still held by the same process is not gone, and neither is one
+    whose start time cannot be read while the number is still live: that is an
+    absence of evidence, and this returns ``False`` for it rather than treating
+    an unreadable host as a finished machine.
+    """
+    if not _still_running(pid):
+        return True
+    if started_at is None:
+        return False
+    return _when_that_process_started(pid) not in (None, started_at)
 
 
 def _confirm_it_stopped(
     pid: int,
     *,
+    started_at: int | None,
     now: Callable[[], float],
     sleep: Callable[[float], None],
 ) -> bool:
@@ -449,10 +679,10 @@ def _confirm_it_stopped(
     """
     started = now()
     while now() - started < STOP_CONFIRMATION_SECONDS:
-        if not _still_running(pid):
+        if _ours_is_gone(pid, started_at):
             return True
         sleep(CONFIRMATION_POLL_SECONDS)
-    return not _still_running(pid)
+    return _ours_is_gone(pid, started_at)
 
 
 def _who_this_process_is() -> dict[str, Any]:
@@ -832,6 +1062,13 @@ def first_boot(
     # process never came into being at all. It is still not a host reading — it
     # is what the launch call itself reported back. See the call site.
     launch_spawned_nothing = False
+    # And the instant the launch happened, in the units a process's start time
+    # is counted in. Same kind of thing as the flag above and read at the same
+    # place for the same reason: this run recording its own control flow. It is
+    # what lets a PID read out of a file be measured against something instead
+    # of being taken on trust. ``None`` until the launch is reached, and ``None``
+    # means no evidence — never "go ahead".
+    launch_floor: dict[str, Any] | None = None
 
     try:
         placement = place_the_images(
@@ -852,6 +1089,10 @@ def first_boot(
         # exception too. Setting this afterwards would record exactly the window
         # it exists to close.
         launch_was_attempted = True
+        # Read here and nowhere later. A floor taken after the launch would be
+        # later than the guest's own start time and would turn away the one
+        # process this run is entitled to stop.
+        launch_floor = _the_instant_this_run_launched()
         try:
             launch = _run([jailer_binary, *plan["jailer"]["argv"]], timeout=120.0)
         except OSError as never_execed:
@@ -903,6 +1144,25 @@ def first_boot(
                         break
             sleep(POLL_SECONDS)
 
+        # Whose process that number names, asked once, here, against the instant
+        # this run launched. Asked *here* and not later because this is the
+        # closest this function ever stands to publication: the machine is
+        # normally still running, so the reading exists. A start time read after
+        # the guest has gone is not a later answer to the same question, it is
+        # no answer at all.
+        #
+        # Nothing further down gets to reconsider it: ``watched_started_at``
+        # stays ``None`` and every path that would signal reads ``None`` as no.
+        # The name is deliberately not ``why_not_ours`` — that one is reused
+        # further down for whose *jail* it is, and the two refusals are about
+        # different objects.
+        watched_started_at: int | None = None
+        why_not_our_process = ""
+        if watched is not None:
+            watched_started_at, why_not_our_process = _started_after_this_run_launched(
+                watched, launch_floor
+            )
+
         # What this run can actually say about whose process that is. Written
         # down as the separate things it checked rather than as one boolean,
         # because a verdict nobody can audit is how "the PID file was not there"
@@ -945,6 +1205,27 @@ def first_boot(
                 # evidence, and this list is offered as evidence.
                 "held": watched is not None and 0 < watched <= PID_CEILING,
             },
+            {
+                # The one ground about the process rather than about the file.
+                # The four above establish that a jail this run holds published
+                # a signallable number; none of them says the number still names
+                # the machine that published it. This one is why the deadline
+                # path may signal at all.
+                "ground": (
+                    "the process it names began after this run launched the jailer"
+                ),
+                "held": watched_started_at is not None,
+                "reading": (
+                    why_not_our_process
+                    or (
+                        f"started at {watched_started_at} clock ticks since boot, "
+                        f"at or after the {launch_floor.get('ticks_since_boot')} "
+                        "this run read immediately before launching"
+                        if launch_floor
+                        else ""
+                    )
+                ),
+            },
         ]
 
         outcome = "booted"
@@ -982,8 +1263,31 @@ def first_boot(
                 if now() - started_at < deadline_seconds:
                     sleep(POLL_SECONDS)
                     continue
+                # The deadline is here and something is still holding that
+                # number. Only now does whose process it is start to matter,
+                # and the order is not interchangeable: a guest that ended on
+                # its own never reaches this line, so asking identity any
+                # earlier would turn every ordinary boot into an unidentified
+                # one and leave its jail standing.
+                if watched_started_at is None:
+                    # A machine was launched, it is still running, and the
+                    # number it published cannot be shown to be its. That is
+                    # not ``never_started`` — something did start, and saying
+                    # otherwise would report ``compute_start_failed`` over a
+                    # host that may well have a guest on it. Nothing is
+                    # signalled and the jail stays put:
+                    # ``OUTCOME_STARTED_AND_NOT_IDENTIFIED`` is in
+                    # ``OUTCOMES_THAT_LEAVE_THE_HOST_RUNNING``, so the removal
+                    # below refuses on its own without a second rule here.
+                    outcome = OUTCOME_STARTED_AND_NOT_IDENTIFIED
+                    left_alone_because = why_not_our_process
+                    break
                 may_signal, why_not_now = _may_signal_now(
-                    pid_file, watched, chroot_dir=chroot_named, claim=claim
+                    pid_file,
+                    watched,
+                    chroot_dir=chroot_named,
+                    claim=claim,
+                    started_at=watched_started_at,
                 )
                 if not may_signal:
                     # The deadline is reached and the thing at the end of it is
@@ -1001,7 +1305,10 @@ def first_boot(
                     break
                 stop_signal_sent = True
                 guest_confirmed_stopped = _confirm_it_stopped(
-                    watched, now=now, sleep=sleep
+                    watched,
+                    started_at=watched_started_at,
+                    now=now,
+                    sleep=sleep,
                 )
                 if guest_confirmed_stopped:
                     stopped_by_the_deadline = True
@@ -1066,6 +1373,7 @@ def first_boot(
             claim=claim,
             launch_was_attempted=launch_was_attempted,
             launch_spawned_nothing=launch_spawned_nothing,
+            launch_floor=launch_floor,
             work_disk=work_disk,
             salvage=salvage,
             now=now,
@@ -1118,6 +1426,12 @@ def first_boot(
             "ownership_grounds": grounds,
             "left_alone_because": left_alone_because,
             "cannot_rule_out": CANNOT_RULE_OUT,
+            # The two readings the fifth ground was decided on, carried out so a
+            # reader can redo the comparison instead of taking the verdict. The
+            # floor is this run's; the start time is the host's answer about the
+            # process the file named. ``None`` on either side is the refusal.
+            "launch_floor": dict(launch_floor) if launch_floor else None,
+            "pid_started_at_ticks": watched_started_at,
         },
         "ran_for_seconds": ran_for,
         "deadline_seconds": deadline_seconds,
@@ -1277,6 +1591,7 @@ def _clean_up_after_a_failure(
     claim: Mapping[str, Any],
     launch_was_attempted: bool,
     launch_spawned_nothing: bool,
+    launch_floor: Mapping[str, Any] | None,
     work_disk: str | Path,
     salvage: dict[str, Any],
     now: Callable[[], float] = time.monotonic,
@@ -1307,14 +1622,26 @@ def _clean_up_after_a_failure(
     can only be wrong in the unsafe direction is not a default.
 
     A process is signalled only when the jail is still this run's, no PID file
-    was there before it launched, one appeared while it was watching, and the
-    value in it is one this platform can signal. The jail is the strongest of
-    those, because the plan puts the PID file *inside* the chroot — a jail this
-    run does not hold contains another run's PID file and another run's work
-    disk.
+    was there before it launched, one appeared while it was watching, the value
+    in it is one this platform can signal, and the process it names began after
+    this run launched the jailer. The jail is the strongest of those, because the
+    plan puts the PID file *inside* the chroot — a jail this run does not hold
+    contains another run's PID file and another run's work disk. The last is the
+    only one about the process rather than about the file, and it is what stops a
+    correct-looking jail whose PID file names a recycled number from producing a
+    real ``SIGKILL`` against a stranger. ``launch_floor`` carries it, and it is
+    required and has no default for the third time in this signature: ``None``
+    refuses, which is safe, but a caller that can forget it is a caller that will
+    pass the launch and then silently stop checking who it is stopping.
 
-    None of that rules out PID reuse, and this does not claim it does; see
-    :data:`CANNOT_RULE_OUT`, which goes out with the record.
+    That check is asked *after* liveness, not before. Nothing holding the number
+    means nothing of this run's is running under it, which holds without any
+    identity at all; asking the other way round would turn every machine that
+    ended on its own into an unidentified one and keep its jail forever.
+
+    None of that rules out PID reuse by a process that started after this run
+    launched, and this does not claim it does; see :data:`CANNOT_RULE_OUT`,
+    which goes out with the record.
 
     Removal is gated on a second question, separate from ownership: is anything
     of this run's possibly still using this jail. Two readings answer it, and
@@ -1399,8 +1726,10 @@ def _clean_up_after_a_failure(
         "jail_reading": why_not_ours,
         "launch_was_attempted": launch_was_attempted,
         "launch_spawned_nothing": launch_spawned_nothing,
+        "launch_floor": dict(launch_floor) if launch_floor else None,
         "pid_file_appeared": a_pid_file_appeared,
         "pid": None,
+        "pid_started_at_ticks": None,
         "signalled": False,
         "was_running": None,
         "confirmed_stopped": None,
@@ -1436,25 +1765,48 @@ def _clean_up_after_a_failure(
                     running = _still_running(pid)
                     process["was_running"] = running
                     if not running:
+                        # Asked before identity, and the order is load-bearing.
+                        # Nothing holds that number, so nothing of this run's is
+                        # running under it — true whether or not the process it
+                        # once named was ever identified. Asking identity first
+                        # would turn an ended machine into an unknown one, and
+                        # an unknown one keeps its jail forever.
                         process["confirmed_stopped"] = True
                         process["left_alone_because"] = "it had already stopped"
                     else:
-                        os.kill(pid, signal.SIGKILL)
-                        process["signalled"] = True
-                        stopped = _confirm_it_stopped(pid, now=now, sleep=sleep)
-                        process["confirmed_stopped"] = stopped
-                        if not stopped:
-                            failures.append(
-                                {
-                                    "what": "confirm this run's machine stopped",
-                                    "path": pid_file.as_posix(),
-                                    "error": (
-                                        "SIGKILL was sent and the process was "
-                                        f"still there {STOP_CONFIRMATION_SECONDS}s "
-                                        "later; sent is not stopped"
-                                    ),
-                                }
+                        started_at, not_ours = _started_after_this_run_launched(
+                            pid, launch_floor
+                        )
+                        process["pid_started_at_ticks"] = started_at
+                        if started_at is None:
+                            # Something is alive on that number and this run
+                            # cannot show it started it. No signal, no removal
+                            # — ``confirmed_stopped`` stays ``None``, which the
+                            # gate below reads as a refusal — and the jail stays
+                            # on disk for a person to look at.
+                            process["left_alone_because"] = (
+                                f"{not_ours} — and this run does not stop what "
+                                "it cannot show it started"
                             )
+                        else:
+                            os.kill(pid, signal.SIGKILL)
+                            process["signalled"] = True
+                            stopped = _confirm_it_stopped(
+                                pid, started_at=started_at, now=now, sleep=sleep
+                            )
+                            process["confirmed_stopped"] = stopped
+                            if not stopped:
+                                failures.append(
+                                    {
+                                        "what": "confirm this run's machine stopped",
+                                        "path": pid_file.as_posix(),
+                                        "error": (
+                                            "SIGKILL was sent and the process was "
+                                            f"still there {STOP_CONFIRMATION_SECONDS}s "
+                                            "later; sent is not stopped"
+                                        ),
+                                    }
+                                )
     except Exception as failure:  # noqa: BLE001 - the docstring is the contract
         _collect("stop this run's machine", pid_file.as_posix(), failure)
 

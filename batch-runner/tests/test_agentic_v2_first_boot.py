@@ -26,6 +26,7 @@ from pathlib import Path
 
 import pytest
 
+from core import agentic_v2_first_boot
 from core.agentic_v2_first_boot import (
     WORK_DISK_RESULTS,
     BootAbandoned,
@@ -86,6 +87,42 @@ class _Clock:
         self.t += seconds
 
 
+def _a_stand_in_guest_with_an_identity(monkeypatch, *pids: int) -> None:
+    """Let the invented PIDs answer the question a real guest answers.
+
+    The launcher will not signal a process it cannot show it started, and a
+    number a test made up names nothing on the host — so a stand-in that only
+    reports *alive* is half a guest. This supplies the other half: for the PIDs
+    named here, "when did you start" answers with the host clock read the first
+    time it is asked, which is necessarily at or after the floor the run
+    recorded just before launching.
+
+    **The answer is remembered per PID, and that is the point, not an
+    optimisation.** A real process's start time never moves; answering with a
+    fresh clock reading each time would make the guest look like a different
+    process on every probe, and the launcher would correctly refuse to signal
+    it. Getting this wrong makes a working guard look broken.
+
+    Only the PIDs listed. Anything else keeps the host's real answer, so a test
+    that wants a process the run *cannot* account for simply leaves it out.
+    """
+    known = set(pids)
+    real = agentic_v2_first_boot._when_that_process_started
+    remembered: dict[int, int | None] = {}
+
+    def started(pid: int) -> int | None:
+        if pid not in known:
+            return real(pid)
+        if pid not in remembered:
+            now = agentic_v2_first_boot._the_instant_this_run_launched()
+            remembered[pid] = now["ticks_since_boot"]
+        return remembered[pid]
+
+    monkeypatch.setattr(
+        "core.agentic_v2_first_boot._when_that_process_started", started
+    )
+
+
 def _boot(plan, tmp_path, monkeypatch, *, jailer, running, results=None, reader=None):
     """Run :func:`first_boot` with the host replaced and the clock in hand.
 
@@ -96,6 +133,7 @@ def _boot(plan, tmp_path, monkeypatch, *, jailer, running, results=None, reader=
     clock = _Clock()
     monkeypatch.setattr("core.agentic_v2_first_boot._run", jailer)
     monkeypatch.setattr("core.agentic_v2_first_boot._still_running", running)
+    _a_stand_in_guest_with_an_identity(monkeypatch, 4242)
     monkeypatch.setattr(
         "core.agentic_v2_first_boot.files_out_of_work_disk",
         reader or (lambda image, names, **kw: dict(results or {})),
