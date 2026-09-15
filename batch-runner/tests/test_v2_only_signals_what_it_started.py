@@ -553,6 +553,12 @@ def test_d5_cleanup_leaves_a_jail_this_run_did_not_create_alone(
         host_side=plan["host_side"],
         pid_file=Path(plan["host_side"]["pid_file"]),
         claim={"nonce": "a-nonce-this-jail-has-never-carried", "vm_id": plan["vm_id"]},
+        # False on purpose, and it is the weaker of the two values here. With
+        # True the launch branch would also refuse, and this test would pass
+        # even if ownership had stopped gating removal entirely. False leaves
+        # ownership as the only thing that can produce the refusal below.
+        launch_was_attempted=False,
+        launch_spawned_nothing=False,
         work_disk=tmp_path / "work.ext4",
         salvage=salvage,
     )

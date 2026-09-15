@@ -36,6 +36,7 @@ cleanup path are the production code.
 
 from __future__ import annotations
 
+import inspect
 import json
 import multiprocessing as mp
 import os
@@ -47,6 +48,7 @@ import pytest
 from core.agentic_v2_first_boot import (
     CANNOT_RULE_OUT,
     CLAIM_FILE_NAME,
+    COPY_UNVERIFIED,
     WORK_DISK_RESULTS,
     BootAbandoned,
     BootRefused,
@@ -291,6 +293,10 @@ def test_e4_cleanup_over_a_jail_that_is_not_this_runs_touches_none_of_it(
         host_side=plan["host_side"],
         pid_file=Path(plan["host_side"]["pid_file"]),
         claim={"nonce": "a-nonce-this-jail-has-never-carried", "vm_id": plan["vm_id"]},
+        # False so that ownership is the only thing refusing. See the same
+        # choice, and the same reason, in D5.
+        launch_was_attempted=False,
+        launch_spawned_nothing=False,
         work_disk=tmp_path / "work.ext4",
         salvage=salvage,
     )
@@ -633,3 +639,450 @@ def test_e11_two_processes_reaching_one_name_together_produce_one_winner(tmp_pat
         assert verdicts == ["refused", "won"], answers
         winner = next(detail for verdict, detail in answers if verdict == "won")
         assert json.loads((chroot / CLAIM_FILE_NAME).read_text())["nonce"] == winner
+
+
+# --------------------------------------------------------------------------
+# F1-F8 — what authorises removal on the failure path
+#
+# The independent review found the teardown removing the jail whenever
+# ``was_running`` came back ``None``, and prescribed ``pid_file.exists()`` as the
+# discriminator: no PID file, nothing was started, take it down. The first half
+# of that is sound and the second half is the part these tests are about. A PID
+# file that is *there* says the jailer got far enough to publish one. A PID file
+# that is *absent* says nothing, because the jailer forks and execs before it
+# publishes and a failure can land inside that window — so the same host-side
+# reading covers both "nothing ever ran" and "something started half a second
+# ago". F2 is that pair, run through the production code, with the host-side
+# evidence held identical and only the control flow changed.
+#
+# What discriminates instead is ``launch_was_attempted``: this run's record of
+# whether it reached the call, which has no window in either direction.
+# --------------------------------------------------------------------------
+
+_NO_PID_FILE = "no PID file at all"
+_AN_UNREADABLE_PID_FILE = "a PID file that cannot be read"
+
+
+def _a_launch_that_reached_the_host_and_failed(plan, publishes, *, seen=None):
+    """A jailer that was called, left ``publishes`` behind, and then failed.
+
+    Every value of ``publishes`` other than :data:`_NO_PID_FILE` is a state the
+    host can really be in while a machine is running: a file the jailer is part
+    way through writing, or one whose contents this run may not signal. The
+    failure is raised *after* the file is in place, which is the ordering that
+    matters — the run fails with a machine of its own possibly on the host.
+
+    ``seen`` takes a snapshot of the jail at the instant of the failure, so a
+    test can ask whether the teardown left it alone rather than whether it left
+    behind something that merely looks similar.
+    """
+    chroot = Path(plan["host_side"]["chroot_dir"])
+    pid_file = Path(plan["host_side"]["pid_file"])
+
+    def jailer(argv, timeout=300.0):
+        if publishes is _AN_UNREADABLE_PID_FILE:
+            pid_file.mkdir()
+        elif publishes is not _NO_PID_FILE:
+            pid_file.write_text(publishes)
+        if seen is not None:
+            seen["jail_at_failure"] = _what_is_in_it(chroot)
+        raise subprocess.TimeoutExpired(argv, 120.0)
+
+    return jailer
+
+
+def test_f1_a_failure_before_the_launch_removes_the_jail_it_claimed(
+    plan, tmp_path, monkeypatch
+):
+    """The case the teardown step exists for, and it has to keep working.
+
+    Placement fails with the jail claimed and nothing started, and the jail goes.
+    The review was right about this row; the disagreement is only over *what
+    makes it true*. It is true here because this run never reached the call that
+    starts a machine, which it knows from its own control flow — not because no
+    PID file turned up, which it would also know from a launch that had started
+    something a moment earlier. F2 separates the two.
+    """
+    chroot = Path(plan["host_side"]["chroot_dir"])
+    (tmp_path / "rootfs.ext4").unlink()
+
+    with pytest.raises(BootAbandoned) as abandoned:
+        _boot(
+            plan,
+            tmp_path,
+            monkeypatch,
+            jailer=_a_launch_that_reached_the_host_and_failed(plan, _NO_PID_FILE),
+            signals=_Signals(starts_alive=False),
+        )
+
+    teardown = abandoned.value.teardown
+    assert isinstance(abandoned.value.original, FileNotFoundError)
+    assert teardown["process"]["launch_was_attempted"] is False
+    assert teardown["process"]["jail_held_by_this_run"] is True
+    assert teardown["destroy_refused_because"] is None
+    assert teardown["all_gone"] is True
+    assert not chroot.exists()
+
+
+def test_f2_one_absent_pid_file_two_answers_and_the_difference_is_not_on_the_host(
+    plan, tmp_path, monkeypatch
+):
+    """The measurement the prescribed discriminator cannot make.
+
+    Two runs of the same production code over the same jail name. In both the
+    PID file is absent at teardown, so ``pid_file.exists()`` returns the same
+    value in both. One never reached the launch and its jail is removed; the
+    other reached it and its jail is kept. A discriminator that reads the host
+    has to give these two the same answer, and one of the two answers is wrong.
+
+    The first run is the one that removes, so the name is free for the second —
+    which is also :func:`test_e10`'s point arriving from the other direction.
+    """
+    chroot = Path(plan["host_side"]["chroot_dir"])
+    rootfs = tmp_path / "rootfs.ext4"
+    kept_bytes = rootfs.read_bytes()
+
+    rootfs.unlink()
+    with pytest.raises(BootAbandoned) as never_launched:
+        _boot(
+            plan,
+            tmp_path,
+            monkeypatch,
+            jailer=_a_launch_that_reached_the_host_and_failed(plan, _NO_PID_FILE),
+            signals=_Signals(starts_alive=False),
+        )
+
+    rootfs.write_bytes(kept_bytes)
+    rootfs.chmod(0o755)
+    with pytest.raises(BootAbandoned) as launched:
+        _boot(
+            plan,
+            tmp_path,
+            monkeypatch,
+            jailer=_a_launch_that_reached_the_host_and_failed(plan, _NO_PID_FILE),
+            signals=_Signals(starts_alive=False),
+        )
+
+    before = never_launched.value.teardown
+    after = launched.value.teardown
+
+    # Held identical: what the host had to say, and whose jail it was.
+    assert before["process"]["pid_file_appeared"] is False
+    assert after["process"]["pid_file_appeared"] is False
+    assert before["process"]["jail_held_by_this_run"] is True
+    assert after["process"]["jail_held_by_this_run"] is True
+    assert before["process"]["was_running"] is None
+    assert after["process"]["was_running"] is None
+
+    # Changed: whether this run reached the call that starts a machine.
+    assert before["process"]["launch_was_attempted"] is False
+    assert after["process"]["launch_was_attempted"] is True
+
+    # And that is the only thing the two answers can be coming from.
+    assert before["all_gone"] is True
+    assert before["destroy_refused_because"] is None
+    assert after["all_gone"] is False
+    assert "never saw a PID it could watch" in after["destroy_refused_because"]
+    assert chroot.exists()
+
+
+_NO_PID_TO_WATCH = "never saw a PID it could watch"
+_LAST_SEEN_RUNNING = "last seen running and was never confirmed stopped"
+
+
+@pytest.mark.parametrize(
+    "publishes, refused_because",
+    [
+        pytest.param(_NO_PID_FILE, _NO_PID_TO_WATCH, id="absent"),
+        pytest.param("", _NO_PID_TO_WATCH, id="empty"),
+        pytest.param("\n", _NO_PID_TO_WATCH, id="a_newline_only"),
+        pytest.param("not-a-pid", _NO_PID_TO_WATCH, id="not_a_number"),
+        pytest.param("0", _NO_PID_TO_WATCH, id="zero"),
+        pytest.param("-1", _NO_PID_TO_WATCH, id="negative"),
+        pytest.param("42", _LAST_SEEN_RUNNING, id="half_a_pid_written"),
+    ],
+)
+def test_f3_a_pid_this_run_cannot_watch_is_not_a_machine_that_stopped(
+    plan, tmp_path, monkeypatch, publishes, refused_because
+):
+    """Seven readings, one answer, and none of them is a stopped machine.
+
+    ``absent`` is the fork-to-publication window. ``empty`` and
+    ``a_newline_only`` are a file being written right now. ``zero`` and
+    ``negative`` parse as integers and are refused by
+    :func:`_a_pid_this_may_signal` for the separate reason that signalling them
+    reaches a process group; they arrive at the teardown as "no PID to watch"
+    all the same.
+
+    Six of the seven leave ``was_running`` at ``None``, which is the value the
+    removal step used to read as permission. ``None`` is not ``False``: it says
+    this run never looked at a process, not that it looked and found none.
+
+    ``half_a_pid_written`` is the seventh and it is carried here because it is
+    the row that does *not* use the new rule. A file caught mid-write can hold a
+    prefix that parses, and ``42`` does; the teardown watches it, cannot confirm
+    it stopped, and refuses through the rule that was already there. Which
+    branch each row reaches is asserted rather than left open, so an edit that
+    moved a row between the two would be visible here instead of being absorbed
+    by a shared ``all_gone is False``.
+    """
+    seen: dict[str, bytes] = {}
+    chroot = Path(plan["host_side"]["chroot_dir"])
+
+    with pytest.raises(BootAbandoned) as abandoned:
+        _boot(
+            plan,
+            tmp_path,
+            monkeypatch,
+            jailer=_a_launch_that_reached_the_host_and_failed(
+                plan, publishes, seen=seen
+            ),
+            # Alive: a PID this run *can* watch must not accidentally be
+            # confirmed stopped and take the jail down for the wrong reason.
+            signals=_Signals(starts_alive=True),
+        )
+
+    teardown = abandoned.value.teardown
+    assert teardown["process"]["launch_was_attempted"] is True
+    assert teardown["process"]["confirmed_stopped"] is not True
+    assert teardown["all_gone"] is False
+    assert refused_because in teardown["destroy_refused_because"]
+    assert chroot.exists()
+    assert _what_is_in_it(chroot) == seen["jail_at_failure"]
+
+
+def test_f4_a_pid_file_that_cannot_be_read_is_not_a_machine_that_stopped(
+    plan, tmp_path, monkeypatch
+):
+    """An unreadable PID file is the one reading that also fails the teardown.
+
+    A directory where the file should be makes ``read_text`` raise, which is
+    filed as a teardown failure — so ``clean`` is ``False`` here while it is
+    ``True`` everywhere else in this block. That is the point of separating it:
+    the refusal has to come from the removal rule and not from the cleanup
+    having given up part way through. The jail is untouched either way.
+    """
+    seen: dict[str, bytes] = {}
+    chroot = Path(plan["host_side"]["chroot_dir"])
+
+    with pytest.raises(BootAbandoned) as abandoned:
+        _boot(
+            plan,
+            tmp_path,
+            monkeypatch,
+            jailer=_a_launch_that_reached_the_host_and_failed(
+                plan, _AN_UNREADABLE_PID_FILE, seen=seen
+            ),
+            signals=_Signals(starts_alive=True),
+        )
+
+    teardown = abandoned.value.teardown
+    assert teardown["process"]["pid_file_appeared"] is True
+    assert teardown["process"]["left_alone_because"] == (
+        "the PID file could not be read"
+    )
+    assert teardown["clean"] is False
+    assert teardown["all_gone"] is False
+    assert "not a stopped machine" in teardown["destroy_refused_because"]
+    assert chroot.exists()
+    assert _what_is_in_it(chroot) == seen["jail_at_failure"]
+
+
+def test_f5_the_copy_and_the_jail_say_the_same_thing_in_one_record(
+    plan, tmp_path, monkeypatch
+):
+    """One return value, two halves, and they used to contradict each other.
+
+    On this path the salvage half already said ``unverified`` — this module's
+    own words for *nothing here can name what was writing to that disk*. The
+    removal half, in the same dictionary, took the jail down. Whichever of the
+    two was right, they could not both be, and the one that acted was the one
+    that was guessing.
+    """
+    with pytest.raises(BootAbandoned) as abandoned:
+        _boot(
+            plan,
+            tmp_path,
+            monkeypatch,
+            jailer=_a_launch_that_reached_the_host_and_failed(plan, ""),
+            signals=_Signals(starts_alive=True),
+        )
+
+    teardown = abandoned.value.teardown
+    assert teardown["salvaged"]["copy_integrity"] == COPY_UNVERIFIED
+    assert teardown["salvaged"]["copied_while_running"] is None
+    assert teardown["all_gone"] is False
+    # The copy is still taken, and it is still the only copy there will be.
+    assert Path(teardown["salvaged"]["returned_copy"]).exists()
+    assert teardown["process"]["cannot_rule_out"] == CANNOT_RULE_OUT
+
+
+@pytest.mark.parametrize(
+    "reaches_the_launch, alive, publishes, removed",
+    [
+        pytest.param(False, False, _NO_PID_FILE, True, id="never_launched"),
+        pytest.param(True, False, "4242", True, id="confirmed_stopped"),
+        pytest.param(True, True, "4242", False, id="still_running"),
+        pytest.param(True, True, _NO_PID_FILE, False, id="no_pid_to_watch"),
+    ],
+)
+def test_f6_the_whole_removal_decision_taken_through_the_real_call_path(
+    plan, tmp_path, monkeypatch, reaches_the_launch, alive, publishes, removed
+):
+    """Every row of the removal rule, produced by running the code.
+
+    The review's other finding was that the copy-integrity table's test iterated
+    a module constant and so passed under both of its mutants without ever
+    calling :func:`first_boot`. This table is the same shape and is deliberately
+    not that: each row is a real boot whose outcome the production code decides.
+
+    Two rows remove and two refuse, which is what makes the block say something.
+    A change that refused everything would leak a jail on the two ``True`` rows;
+    a change that removed everything would take a live machine's disk on the two
+    ``False`` ones.
+    """
+    chroot = Path(plan["host_side"]["chroot_dir"])
+    if not reaches_the_launch:
+        (tmp_path / "rootfs.ext4").unlink()
+
+    with pytest.raises(BootAbandoned) as abandoned:
+        _boot(
+            plan,
+            tmp_path,
+            monkeypatch,
+            jailer=_a_launch_that_reached_the_host_and_failed(plan, publishes),
+            signals=_Signals(starts_alive=alive),
+        )
+
+    teardown = abandoned.value.teardown
+    assert teardown["process"]["launch_was_attempted"] is reaches_the_launch
+    assert teardown["all_gone"] is removed
+    assert chroot.exists() is not removed
+    assert (teardown["destroy_refused_because"] is None) is removed
+
+
+def test_f7_the_new_rule_never_gets_to_speak_for_a_jail_that_is_not_ours(
+    plan, tmp_path, monkeypatch
+):
+    """Ownership answers first, and the new rule is not what is holding the line.
+
+    Every refusal in F2-F6 is this run's own jail being kept because this run
+    cannot account for its own machine. A jail that belongs to somebody else is
+    a different question with a different answer, and it is settled before a
+    launch is ever reached — so the launch counter below stays at zero and the
+    stranger's PID file is still the stranger's.
+
+    Without this, an edit that deleted the ownership gate would keep every
+    ``all_gone is False`` assertion in this file green, because the new rule
+    refuses in the same direction for an unrelated reason.
+    """
+    chroot = Path(plan["host_side"]["chroot_dir"])
+    _a_jail_that_was_already_here(plan, ownership="someone_elses")
+    before = _what_is_in_it(chroot)
+    launches = []
+
+    def counting_jailer(argv, timeout=300.0):  # pragma: no cover - must not run
+        launches.append(argv)
+        raise AssertionError("a launch was reached over another run's jail")
+
+    with pytest.raises(BootRefused) as refused:
+        _boot(
+            plan,
+            tmp_path,
+            monkeypatch,
+            jailer=counting_jailer,
+            signals=_Signals(starts_alive=True),
+        )
+
+    assert launches == []
+    assert "another run" in str(refused.value) or "did not create" in str(refused.value)
+    assert _what_is_in_it(chroot) == before
+    assert Path(plan["host_side"]["pid_file"]).read_text().strip() == str(STRANGER)
+
+
+def test_f8_the_teardown_will_not_assume_whether_a_launch_happened(plan, tmp_path):
+    """Neither value is safe to default to, so there is no default.
+
+    ``False`` permits removal, which is the direction that takes a live
+    machine's disk. ``True`` refuses the one case this step exists for and leaks
+    a jail on every failure before the launch. The predecessor of this argument
+    was ``chroot_was_already_there: bool = False`` and every caller that forgot
+    it got the answer that permits acting; the lesson is written into the
+    signature rather than into a comment.
+
+    ``launch_spawned_nothing`` is held to the same rule for a reason of its own.
+    Its unsafe value is not the one a default would pick — ``False`` only ever
+    refuses — but it is half of a pair, and a default is how one half of a pair
+    quietly stops tracking the other.
+    """
+    parameters = inspect.signature(_clean_up_after_a_failure).parameters
+    for name in ("claim", "launch_was_attempted", "launch_spawned_nothing"):
+        assert parameters[name].default is inspect.Parameter.empty, name
+        assert parameters[name].kind is inspect.Parameter.KEYWORD_ONLY, name
+
+    with pytest.raises(TypeError, match="launch_was_attempted"):
+        _clean_up_after_a_failure(
+            host_side=plan["host_side"],
+            pid_file=Path(plan["host_side"]["pid_file"]),
+            claim={"nonce": "0" * 32},
+            work_disk=tmp_path / "work.ext4",
+            salvage={},
+        )
+
+
+
+def test_f9_a_pid_file_in_a_jail_this_run_never_launched_into_is_unexplained(
+    plan, tmp_path
+):
+    """Never having started something is not a blanket permission to remove.
+
+    This is the one row of the removal table ``first_boot`` cannot reach on its
+    own. Between claiming the name and reaching the launch there is exactly one
+    step — placement — and it writes a kernel, a rootfs and a work disk, never a
+    PID file. So "this run never launched and yet a PID file is sitting in its
+    jail" has no route through ``first_boot``, and reaching it means calling the
+    teardown directly. That is not a synthetic shape:
+    ``_clean_up_after_a_failure`` has one call site and is handed exactly these
+    arguments there.
+
+    Both halves of the launch record say no machine of this run's exists, and
+    the jail still stays, because something wrote a PID into it and nothing here
+    can say what. An unexplained writer is treated the same as a known one.
+
+    The PID planted is deliberately one this platform will not signal, so the
+    branch is reached with nothing signalled and ``was_running`` still ``None`` —
+    the reading that looks most like an empty jail, arrived at from the other
+    side.
+    """
+    chroot = Path(plan["host_side"]["chroot_dir"])
+    claim = claim_the_jail(
+        chroot, vm_id=str(plan["vm_id"]), plan_sha256=str(plan["plan_sha256"])
+    )
+    (chroot / "work.ext4").write_bytes(b"whatever wrote that PID may be writing here")
+    Path(plan["host_side"]["pid_file"]).write_text("not-a-pid\n")
+    before = _what_is_in_it(chroot)
+
+    record = _clean_up_after_a_failure(
+        host_side=plan["host_side"],
+        pid_file=Path(plan["host_side"]["pid_file"]),
+        claim=claim,
+        launch_was_attempted=False,
+        launch_spawned_nothing=False,
+        work_disk=tmp_path / "work.ext4",
+        salvage={"returned_copy": None, "results_read": False},
+    )
+
+    process = record["process"]
+    assert process["jail_held_by_this_run"] is True
+    assert process["launch_was_attempted"] is False
+    assert process["pid_file_appeared"] is True
+    assert process["signalled"] is False
+    assert process["was_running"] is None
+    assert process["confirmed_stopped"] is None
+
+    # The copy and the jail agree, the way they did not before this repair.
+    assert record["salvaged"]["copy_integrity"] == COPY_UNVERIFIED
+    assert record["all_gone"] is False
+    assert "never saw a PID it could watch" in record["destroy_refused_because"]
+    assert chroot.exists()
+    assert _what_is_in_it(chroot) == before

@@ -512,9 +512,21 @@ def test_a_run_that_does_not_fail_is_the_control_for_the_ones_that_do(
     assert "after_a_failure" not in record["teardown"]
 
 
-def test_a_launcher_that_times_out_does_not_leave_the_jail_behind(
+def test_a_launcher_that_times_out_leaves_the_jail_and_says_why(
     plan, tmp_path, monkeypatch
 ):
+    """This test asserted the opposite until the independent review's F5.
+
+    A timeout means the jailer was invoked and did not come back in time. It
+    does not mean nothing started: ``--daemonize`` makes the jailer fork, so a
+    Firecracker may already have been handed off and be holding this jail's work
+    disk and socket open. No PID file turned up to name it, and an absent PID
+    file is not a stopped machine.
+
+    So the jail stays, with a reason attached, and the bytes still come out
+    first. A directory left behind can be removed by hand once the host is known
+    to be quiet; an ``rmtree`` over a live machine cannot be undone.
+    """
     chroot = Path(plan["host_side"]["chroot_dir"])
 
     with pytest.raises(BootAbandoned) as caught:
@@ -527,17 +539,45 @@ def test_a_launcher_that_times_out_does_not_leave_the_jail_behind(
             results=_finished(),
         )
 
+    teardown = caught.value.teardown
     assert isinstance(caught.value.original, subprocess.TimeoutExpired)
-    assert not chroot.exists()
-    assert caught.value.teardown["all_gone"] is True
-    assert caught.value.teardown["clean"] is True
+    assert chroot.exists()
+    assert teardown["all_gone"] is False
+    assert "never saw a PID it could watch" in teardown["destroy_refused_because"]
+    assert teardown["process"]["launch_was_attempted"] is True
+    assert teardown["process"]["pid_file_appeared"] is False
+    assert teardown["process"]["was_running"] is None
+    # Refusing to remove is not a failure of the cleanup. It is the cleanup
+    # doing what it decided to do, and the distinction is the whole of D21.
+    assert teardown["clean"] is True
     assert _returned_copy(tmp_path).exists()
 
 
-def test_a_jailer_that_is_not_installed_does_not_leave_the_jail_behind(
+def test_a_jailer_that_was_never_execed_takes_its_jail_with_it(
     plan, tmp_path, monkeypatch
 ):
-    """The images are placed before the jailer is looked for, so this one leaks."""
+    """Not the same refusal as the timeout above, and the difference is real.
+
+    Both reached the launch, so ``launch_was_attempted`` is ``True`` in both.
+    What differs is what the call reported back. A timeout says the jailer was
+    running and did not return; ``--daemonize`` means a Firecracker may already
+    have been handed off, so the jail stays. A missing binary says the ``exec``
+    never succeeded: ``subprocess`` learns that through the error pipe from the
+    child, reaps the child, and re-raises it here with ``filename`` set to the
+    executable. No jailer process ever existed, so there was nothing to hand a
+    machine off to.
+
+    That is still this run's own record of its own call and not a reading of the
+    host — which is the line this module draws — and it is the narrow claim, not
+    a general licence: an exception out of the launch does not mean nothing
+    started, and the sibling test below holds that line.
+
+    Refusing here is not the safe direction either way. ``vm_id`` is derived
+    rather than drawn, so the jail left behind is the name this run's next
+    attempt will claim, and the claim is ``exist_ok=False``. A host without the
+    jailer installed — every host in this repository — would wedge the same run
+    permanently on the first attempt.
+    """
     chroot = Path(plan["host_side"]["chroot_dir"])
 
     with pytest.raises(BootAbandoned) as caught:
@@ -550,9 +590,50 @@ def test_a_jailer_that_is_not_installed_does_not_leave_the_jail_behind(
             results=_finished(),
         )
 
+    teardown = caught.value.teardown
     assert isinstance(caught.value.original, FileNotFoundError)
+    assert teardown["process"]["launch_was_attempted"] is True
+    assert teardown["process"]["launch_spawned_nothing"] is True
+    assert teardown["process"]["pid_file_appeared"] is False
+    assert teardown["all_gone"] is True
+    assert teardown["destroy_refused_because"] is None
+    assert teardown["clean"] is True
     assert not chroot.exists()
-    assert caught.value.teardown["all_gone"] is True
+    # The bytes still came out before the jail did.
+    assert _returned_copy(tmp_path).exists()
+
+
+def test_an_error_that_is_not_about_the_binary_keeps_the_jail(
+    plan, tmp_path, monkeypatch
+):
+    """The negative control for the carve-out above, and the reason it is narrow.
+
+    ``subprocess`` can raise ``OSError`` from after the ``exec`` succeeded too —
+    a read that fails while the child is already producing output. That one
+    carries no ``filename``, because it is not about ``argv[0]``, and there is a
+    process. Matching on the exception's *type* would collapse the two cases
+    into one and authorise an ``rmtree`` over a machine that is running.
+    """
+    chroot = Path(plan["host_side"]["chroot_dir"])
+
+    with pytest.raises(BootAbandoned) as caught:
+        _boot(
+            plan,
+            tmp_path,
+            monkeypatch,
+            jailer=_raises(OSError(5, "Input/output error")),
+            running=lambda pid: False,
+            results=_finished(),
+        )
+
+    teardown = caught.value.teardown
+    assert isinstance(caught.value.original, OSError)
+    assert teardown["process"]["launch_was_attempted"] is True
+    assert teardown["process"]["launch_spawned_nothing"] is False
+    assert teardown["all_gone"] is False
+    assert "never saw a PID it could watch" in teardown["destroy_refused_because"]
+    assert teardown["clean"] is True
+    assert chroot.exists()
     assert _returned_copy(tmp_path).exists()
 
 
@@ -746,6 +827,11 @@ def test_a_removal_that_fails_carries_its_reason_not_a_bare_false(
     chroot = Path(plan["host_side"]["chroot_dir"])
 
     def jailer(argv, timeout=300.0):
+        # A PID this run can watch, and ``running`` below reports it already
+        # gone. That is the evidence that authorises removal at all — without it
+        # the cleanup refuses and this test would be asserting about a removal
+        # that was never attempted, rather than about one that failed.
+        Path(plan["host_side"]["pid_file"]).write_text("4242\n")
         # The jail's parent stops accepting removals after the images are in.
         os.chmod(chroot.parent, 0o555)
         raise subprocess.TimeoutExpired(argv, 120.0)
@@ -851,12 +937,19 @@ def test_only_the_path_the_plan_named_is_removed(plan, tmp_path, monkeypatch):
     somebody_elses.mkdir(parents=True)
     (somebody_elses / "work.ext4").write_bytes(b"another guest wrote this")
 
+    def jailer(argv, timeout=300.0):
+        # Removal has to actually happen for "only the named path" to mean
+        # anything, so this run leaves behind a PID it can watch and ``running``
+        # reports it already stopped.
+        Path(plan["host_side"]["pid_file"]).write_text("4242\n")
+        raise subprocess.TimeoutExpired(argv, 120.0)
+
     with pytest.raises(BootAbandoned):
         _boot(
             plan,
             tmp_path,
             monkeypatch,
-            jailer=_raises(subprocess.TimeoutExpired(["jailer"], 120.0)),
+            jailer=jailer,
             running=lambda pid: False,
             results=_finished(),
         )

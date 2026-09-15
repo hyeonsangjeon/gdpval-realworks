@@ -765,6 +765,22 @@ def first_boot(
         ),
     }
     grounds: list[dict[str, Any]] = []
+    # Whether this run reached the call that starts a machine. Read by the
+    # teardown handler, which is the only place that has to tell "nothing of
+    # this run's was ever started" apart from "something may be running and
+    # this run cannot see it".
+    #
+    # It is this run's own record of its own control flow, and that is the point
+    # of it. Every host-side substitute for this question is an inference:
+    # the PID file may not have been published yet, the jailer's own process may
+    # already have exited because it daemonised, and neither absence is a
+    # finding. This flag has no such window — either the call below was reached
+    # or it was not.
+    launch_was_attempted = False
+    # Narrower, and knowable for a different reason: this one says the jailer
+    # process never came into being at all. It is still not a host reading — it
+    # is what the launch call itself reported back. See the call site.
+    launch_spawned_nothing = False
 
     try:
         placement = place_the_images(
@@ -779,12 +795,47 @@ def first_boot(
         chroot_dir = Path(placement["chroot_dir"])
 
         started_at = now()
-        launch = _run([jailer_binary, *plan["jailer"]["argv"]], timeout=120.0)
+        # Set before the call and not after it, because "the call raised" is not
+        # "nothing started". A timeout means the jailer is still running; an
+        # exec that fails after the fork is reported to this process as an
+        # exception too. Setting this afterwards would record exactly the window
+        # it exists to close.
+        launch_was_attempted = True
+        try:
+            launch = _run([jailer_binary, *plan["jailer"]["argv"]], timeout=120.0)
+        except OSError as never_execed:
+            # The one launch failure that really does mean nothing started, and
+            # it is knowable here without reading the host. ``subprocess``
+            # reports a child's failed ``exec`` back to this process through an
+            # error pipe, reaps the child, and re-raises it with ``filename``
+            # set to the executable it could not run. A child that *did* exec
+            # cannot arrive in this handler at all: it returns a completed
+            # process, or it times out, and a timeout is ``TimeoutExpired``,
+            # which is not an ``OSError``.
+            #
+            # The test is deliberately the narrow one rather than the bare
+            # ``except``. An ``OSError`` that is not about ``argv[0]`` — a pipe
+            # that fails while reading output the child is already producing,
+            # say — comes from after the exec succeeded, leaves this ``False``,
+            # and is refused along with everything else this run cannot account
+            # for.
+            #
+            # This branch is neither hypothetical nor rare. It is what a host
+            # without the jailer installed does, which is every host this
+            # repository runs on today. Leaving it out costs more than a leaked
+            # directory: ``vm_id`` is derived, not drawn, so the jail left
+            # behind is the name the same run's next attempt will claim, and
+            # the claim is ``exist_ok=False``.
+            launch_spawned_nothing = never_execed.filename == jailer_binary
+            raise
 
         # ``watched`` is the only value this run will ever signal, and it is set
         # once, here, from a file that did not exist a moment ago.
         watched: int | None = None
-        why_not_this_pid = "no PID file appeared, so nothing started"
+        why_not_this_pid = (
+            "no PID file appeared within the grace window, so there is no PID "
+            "this run may signal"
+        )
         while now() - started_at < PID_FILE_GRACE_SECONDS:
             if pid_file.exists():
                 try:
@@ -945,6 +996,8 @@ def first_boot(
             host_side=host_side,
             pid_file=pid_file,
             claim=claim,
+            launch_was_attempted=launch_was_attempted,
+            launch_spawned_nothing=launch_spawned_nothing,
             work_disk=work_disk,
             salvage=salvage,
             now=now,
@@ -1134,6 +1187,8 @@ def _clean_up_after_a_failure(
     host_side: Mapping[str, Any],
     pid_file: Path,
     claim: Mapping[str, Any],
+    launch_was_attempted: bool,
+    launch_spawned_nothing: bool,
     work_disk: str | Path,
     salvage: dict[str, Any],
     now: Callable[[], float] = time.monotonic,
@@ -1173,6 +1228,41 @@ def _clean_up_after_a_failure(
     None of that rules out PID reuse, and this does not claim it does; see
     :data:`CANNOT_RULE_OUT`, which goes out with the record.
 
+    Removal is gated on a second question, separate from ownership: is anything
+    of this run's possibly still using this jail. Two readings answer it, and
+    nothing else does.
+
+    * ``launch_was_attempted`` is ``False`` — this run never reached the call
+      that starts a machine, so there is no machine of this run's to be using
+      anything. That is the case this step is *for*, and it must keep working,
+      or a failure before the launch leaks a jail every time.
+    * ``launch_spawned_nothing`` is ``True`` — the call was reached and reported
+      back that the jailer was never executed. Same conclusion as the reading
+      above, arrived at one step later, and it is what a host without the jailer
+      installed produces on every call.
+    * a PID this run watched was confirmed stopped.
+
+    Everything else refuses, including the reading that looks most like an
+    empty jail: the launch was reached and no usable PID ever turned up. That
+    is not a finding that nothing is running. The jailer forks and execs before
+    it publishes a PID file, so an absent file is consistent with a machine that
+    started a moment ago, and a file holding bytes that are not a PID is a file
+    something was in the middle of writing. ``pid_file.exists()`` is read here
+    as evidence that something *did* start, never as evidence that nothing did;
+    it has no window in the first direction and a real one in the second.
+
+    ``launch_was_attempted`` is required and has no default for the same reason
+    ``claim`` is. There is no value that is safe to assume: ``False`` permits
+    removal, which is the unsafe direction, and ``True`` refuses the one case
+    this step exists to handle.
+
+    ``launch_spawned_nothing`` is required too, for a different reason. Its
+    unsafe value is the one a default would have to pick — ``False`` here only
+    ever refuses — but the two arguments are a pair and are only meaningful read
+    together, and a default is how one of a pair silently stops tracking the
+    other. It is also the narrower of the two claims and the easier to widen by
+    accident, so a caller is made to say it.
+
     Failures are collected, never raised, and now that means **every**
     ``Exception`` rather than the two that were anticipated. This runs while
     another exception is already on its way out; anything raised from in here
@@ -1199,10 +1289,29 @@ def _clean_up_after_a_failure(
 
     # ---- 1. stop it, if it is this run's to stop -------------------------
     holds_it, why_not_ours = _this_run_still_holds_it(chroot_dir, claim)
+    # Read once, here, before anything is signalled, and read again by step 3
+    # from this variable rather than from the disk.
+    #
+    # This signal only points one way. A PID file being there at all does say
+    # the jailer got far enough to write one, so something was started; whether
+    # its contents are a PID this run may signal is a second question, and the
+    # answer to it is not evidence about the first. The converse does *not*
+    # follow. An absent PID file does not say nothing was started, because the
+    # jailer forks and execs before it publishes, and a failure that lands in
+    # this handler can land inside that window. So this variable is read as
+    # "something is definitely running" and never as "nothing is".
+    #
+    # What nothing was started *does* follow from is ``launch_was_attempted``,
+    # which is this run's own record of its own control flow rather than an
+    # inference from the host.
+    a_pid_file_appeared = holds_it and pid_file.exists()
     process: dict[str, Any] = {
         "pid_file": pid_file.as_posix(),
         "jail_held_by_this_run": holds_it,
         "jail_reading": why_not_ours,
+        "launch_was_attempted": launch_was_attempted,
+        "launch_spawned_nothing": launch_spawned_nothing,
+        "pid_file_appeared": a_pid_file_appeared,
         "pid": None,
         "signalled": False,
         "was_running": None,
@@ -1217,8 +1326,12 @@ def _clean_up_after_a_failure(
                 "names are another run's, and this run does not stop another "
                 "run's machine"
             )
-        elif not pid_file.exists():
-            process["left_alone_because"] = "no PID file appeared, so nothing started"
+        elif not a_pid_file_appeared:
+            process["left_alone_because"] = (
+                "no PID file is in this jail, so there is no PID this run may "
+                "signal. That is a reason not to signal, and it is not a "
+                "finding that nothing was started"
+            )
         else:
             try:
                 text: Any = pid_file.read_text().strip()
@@ -1307,16 +1420,60 @@ def _clean_up_after_a_failure(
             "disk with it"
         )
     elif process["was_running"] is True and process["confirmed_stopped"] is not True:
-        # The same rule the ordinary path applies, for the same reason. Step 1
-        # above either declined to signal or sent one and could not confirm it
-        # landed; either way the last thing this run observed was a live process
-        # holding this jail's work disk and socket open. Removing it here would
-        # be the failure path doing what the success path was just stopped from
-        # doing.
+        # Not the same rule the ordinary path applies, and the comment that used
+        # to say it was is the thing the independent review caught. The ordinary
+        # path asks ``outcome in OUTCOMES_THAT_LEAVE_THE_HOST_RUNNING or
+        # guest_confirmed_stopped is False``; no ``outcome`` exists here, because
+        # the run failed before one was assigned, so that vocabulary is not
+        # available and this branch is written in the two readings that are.
+        #
+        # The claim that *is* true is narrower and worth having in its place:
+        # this branch and the one below it together refuse a superset of what
+        # the ordinary path refuses. Step 1 either declined to signal or sent one
+        # and could not confirm it landed; either way the last thing this run
+        # observed was a live process holding this jail's work disk and socket
+        # open.
         refused_to_destroy = (
             "this run's own machine was last seen running and was never "
             "confirmed stopped, so removing its jail would take the disk and "
             "socket it is using with it"
+        )
+    elif (
+        (launch_was_attempted and not launch_spawned_nothing) or a_pid_file_appeared
+    ) and process["confirmed_stopped"] is not True:
+        # The gap the review found, in the state that looks most like an empty
+        # jail: this run reached the launch and never got a PID it could watch,
+        # so ``was_running`` is still None and the branch above lets it through.
+        #
+        # None is not False. It says this run never looked at a process, and the
+        # three ways of arriving here are a PID file that is absent, one that
+        # could not be read, and one holding bytes that are not a PID. The last
+        # two are a file something was in the middle of writing. The first is the
+        # window between fork and publication. None of the three is a finding
+        # that nothing is running, and the record said as much three steps ago —
+        # ``copy_integrity`` is ``unverified`` on exactly this path, which is
+        # this module's own words for "what was writing to that disk cannot be
+        # named from here". Removing the jail would be the other half of the same
+        # return value contradicting it.
+        #
+        # ``a_pid_file_appeared`` is in the condition as well as
+        # ``launch_was_attempted`` because a PID file in a jail this run claimed
+        # and never launched into is a state nothing here can explain, and an
+        # unexplained writer is treated the same as a known one.
+        #
+        # ``launch_spawned_nothing`` is the one subtraction from that, and it is
+        # subtracted from the reaching-the-launch half only. It does not soften
+        # the rule; it names a case the rule was never about. "The call raised"
+        # is not "nothing started" in general — that is why the flag above is set
+        # before the call and not after — but one launch failure does carry its
+        # own proof, because ``subprocess`` can only raise ``OSError`` about
+        # ``argv[0]`` when the ``exec`` never succeeded. A PID file still refuses
+        # even then: if something wrote one into this jail, this run's account of
+        # its own launch does not explain it, and the unexplained writer wins.
+        refused_to_destroy = (
+            "this run started something and never saw a PID it could watch, so "
+            "nothing here can say whether that machine is still writing to this "
+            "jail; an absent or unreadable PID file is not a stopped machine"
         )
     else:
         try:
