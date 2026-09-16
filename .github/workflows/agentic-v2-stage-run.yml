@@ -87,6 +87,23 @@ on:
           - paid
         default: dry-run
         required: true
+      isolation:
+        description: >-
+          fixture is the pre-registered stage-one arrangement: the model and
+          its tool choices are real and exec_run answers capability_unavailable
+          to everything. same-host produces a first-boot artefact on this
+          runner and hands it to the stage, so exec_run runs inside a guest —
+          and the job refuses outright rather than quietly falling back if the
+          runner cannot host one. capability-check stops after reading the
+          runner and reports whether same-host is possible at all; it spends
+          nothing and runs no cohort.
+        type: choice
+        options:
+          - fixture
+          - capability-check
+          - same-host
+        default: fixture
+        required: true
       run_id:
         description: >-
           Names the journal's run and namespaces every ledger call id. Leave
@@ -177,6 +194,70 @@ jobs:
           set -euo pipefail
           cd batch-runner
           pip install -r requirements.txt
+
+      # The one reading that decides whether the isolated backend and the model
+      # route can be on the same machine, taken on the machine in question
+      # rather than assumed about it.
+      #
+      # It has to be taken. Every other reading of the device in this
+      # repository stops at the filename: `inspect_microvm_readiness` asks
+      # whether the permission bits allow a read and a write, and
+      # `read_the_host` in the admission generator asks only whether the path
+      # exists. A runner where the node is present, the bits allow it and
+      # hardware virtualisation is nonetheless unavailable passes both, and the
+      # place that surfaces is the first command of a cohort already paid for.
+      # So the script opens the device and asks it to make one empty machine.
+      #
+      # Free and always printed, on every mode, because a dry run that records
+      # what the runner could do costs nothing and answers the question for
+      # whoever reads the log next. What it *gates* depends on what was asked:
+      #
+      #   fixture           report only. The pre-registered arrangement does
+      #                     not boot a guest, so the runner's answer changes
+      #                     nothing and must not fail a run that never wanted
+      #                     one.
+      #   capability-check  report only, and no cohort runs. This is the
+      #                     bounded question on its own.
+      #   same-host         gates. A runner that cannot host a guest cannot run
+      #                     what was asked for, and the honest answer is to
+      #                     stop here — for free, before the paid job starts —
+      #                     rather than run the cohort against the fixture and
+      #                     leave a reader thinking isolation was on.
+      #
+      # `--require-programs` is deliberately not passed. firecracker and jailer
+      # are absent from a bare runner image and a step installs them, so their
+      # absence here is a fact about the image and not about the machine.
+      - name: Read whether this runner could host a guest
+        id: capability
+        env:
+          ISOLATION: ${{ inputs.isolation }}
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          set +e
+          python scripts/check_runner_can_host_a_guest.py \
+            --report "$RUNNER_TEMP/runner-capability.json"
+          CAPABLE=$?
+          set -e
+          if [ "$CAPABLE" -eq 0 ]; then
+            echo "could_host_a_guest=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "could_host_a_guest=false" >> "$GITHUB_OUTPUT"
+          fi
+          if [ "$ISOLATION" = "same-host" ] && [ "$CAPABLE" -ne 0 ]; then
+            echo "::error::same-host isolation was asked for and this runner cannot host a guest. The readings above say which prerequisite failed. Nothing was spent. This job stops rather than running the cohort against the fixture backend, because a run reporting isolation it did not have would be worse than no run at all."
+            exit 1
+          fi
+
+      # Kept whatever the answer was. A reading that says no is the evidence
+      # for the finding, and it is what a later attempt gets compared against.
+      - name: Keep the capability reading
+        if: always() && hashFiles(format('{0}/runner-capability.json', runner.temp)) != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: runner-capability-${{ inputs.isolation }}
+          path: ${{ runner.temp }}/runner-capability.json
+          if-no-files-found: error
 
       # The tests that hold what a paid run rests on: that the money question
       # is answered from the plan rather than from a sentence, that the cohort
@@ -313,7 +394,11 @@ jobs:
   paid:
     name: Run the cohort — shard ${{ matrix.shard }}
     needs: free
-    if: ${{ inputs.mode == 'paid' }}
+    # `capability-check` asks one question about the runner and is answered
+    # entirely by the free job above. It must never reach here: a mode whose
+    # whole purpose is to find out whether something is possible would be a
+    # strange thing to charge for.
+    if: ${{ inputs.mode == 'paid' && inputs.isolation != 'capability-check' }}
     runs-on: ubuntu-latest
     strategy:
       # One job per piece of the cohort. For `advance_check_5` this is a matrix
@@ -644,10 +729,15 @@ jobs:
   #
   # It writes nothing, charges nothing and fetches no dataset -- the cohort
   # comes from the committed catalogue, which is the list the run was bound to.
+  #
+  # `capability-check` is excluded for the same reason the paid job excludes
+  # it: there is no stage to account for. Left in, this job would download a
+  # shard record that was never written and fail red, which reads as a broken
+  # run rather than as the deliberately empty one it is.
   collect:
     name: Did the stage run?
     needs: paid
-    if: ${{ always() && inputs.mode == 'paid' }}
+    if: ${{ always() && inputs.mode == 'paid' && inputs.isolation != 'capability-check' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:

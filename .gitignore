@@ -256,6 +256,17 @@ batch-runner/scripts/*
 # two strings and makes no network call.
 !batch-runner/scripts/check_agentic_v2_resume_inputs.py
 
+# Opens /dev/kvm and asks it to make one empty machine, which is the reading
+# that decides whether the isolated backend and the model route can live on the
+# same runner. Committed because the free job of agentic-v2-stage-run.yml calls
+# it on every dispatch and refuses a same-host run when it answers no, so an
+# absent file would be a gate that silently is not there. Every other reading of
+# the device in this repository stops at the filename -- permission bits in
+# `inspect_microvm_readiness`, `Path.exists()` in the admission generator -- and
+# a runner can pass both and still be unable to start a guest. Reads the machine
+# and one device; calls no model, installs nothing, makes no network call.
+!batch-runner/scripts/check_runner_can_host_a_guest.py
+
 # Reads the per-call cost ledger every paid shard writes and nothing until now
 # opened. Turns it into what each task cost and what the stage cost, keeping
 # apart the three populations a single number would hide: tasks the ledger has
