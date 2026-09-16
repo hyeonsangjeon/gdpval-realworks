@@ -275,6 +275,16 @@ batch-runner/scripts/*
 # snapshot, makes no network call and spends nothing.
 !batch-runner/scripts/measure_agentic_reference_files.py
 
+# Walks the isolated backend end to end on a host that can boot one, without a
+# model in it: an approval is presented, the real selector chooses, the real
+# runner check admits, and a command runs in a guest against a file staged from
+# outside it. Committed because the claim it settles -- that exec_run is wired
+# to the runner's admission and not only to a fixture -- is the precondition for
+# every paid run on this backend, and a claim whose check nobody can re-run is a
+# claim nobody can check. It calls no model and spends nothing; on a host that
+# cannot boot a guest it refuses and writes the refusal down.
+!batch-runner/scripts/run_agentic_v2_wiring_check.py
+
 
 # Experiment report HTML (skews GitHub language stats)
 batch-runner/results/*/report/report.html

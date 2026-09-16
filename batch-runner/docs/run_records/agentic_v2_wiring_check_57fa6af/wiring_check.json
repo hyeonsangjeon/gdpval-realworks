@@ -1,0 +1,814 @@
+{
+  "admitted_identity": {
+    "backend_id": "agentic-v2-microvm-v1",
+    "foundation_only": true,
+    "implementation_sha256": "75c80130eee100daa6e695cb3056cea8e0a3c178c01b04296d77381603682daa"
+  },
+  "all_passed": true,
+  "approval": "/var/tmp/gdpval-b596int/approval.json",
+  "call_one": {
+    "record": {
+      "boot_outcome": "booted",
+      "booted": true,
+      "call": 0,
+      "deadline": {
+        "applied_seconds": 60,
+        "capped_by_the_policy": false,
+        "policy_seconds": 1200,
+        "requested_seconds": 60
+      },
+      "grounds": "the guest wrote an exit status of 0",
+      "image": {
+        "digest": "sha256:ee6ef798631d3c3aeaed28658c640e6f5d021677449852bf2e1f18be5bd24edb",
+        "kernel_sha256": "b36a4a1b10f33b9cfdcde3d1a787d9c090556a3edb211cd06d1f3f9a6c7e8724",
+        "reference": "ghcr.io/hyeonsangjeon/gdpval-sandbox",
+        "rootfs_sha256": "489188004ad4eb8a90191b3b5f58eb9fb246d158535d0bc655001f438a7a32ea"
+      },
+      "machine": {
+        "cannot_rule_out": "A process that is confined to this run's jail but was placed there by something other than this run's own jailer. Ownership is established by asking where the process named in the PID file is rooted: the jail is a directory this run created and claims exclusively, so a process whose root is that directory was put there by this run. What that does not separate is a second jailer invoked against the same jail by something outside this run, which the exclusive claim is what stands against. A start-time interval is checked alongside it and can only turn candidates away; on its own it never established origin, because an unrelated process born inside the interval satisfies it.",
+        "copied_while_running": false,
+        "copy_integrity": "intact",
+        "copy_integrity_because": "the guest was observed to have stopped before the copy was taken, so nothing was writing to the disk",
+        "guest_confirmed_stopped": null,
+        "guest_last_seen_running": false,
+        "host_left_running": false,
+        "left_alone_because": null,
+        "outcome": "booted",
+        "owned_by_this_run": true,
+        "ownership_grounds": [
+          {
+            "ground": "the ownership record this run wrote is still the one in the jail",
+            "held": true,
+            "reading": "the jail still carries the ownership record this run wrote"
+          },
+          {
+            "ground": "no PID file was there before this run launched",
+            "held": true,
+            "reading": "checked against the disk before anything was placed; a run that found one there did not reach this point"
+          },
+          {
+            "ground": "a PID file appeared while this run was watching",
+            "held": true
+          },
+          {
+            "ground": "it held a value this platform can signal",
+            "held": true
+          },
+          {
+            "ground": "the process it names began while this run was launching the jailer",
+            "held": true,
+            "reading": "started at 110975 clock ticks since boot, inside the 110974\u2013110975 this run read immediately before launching and on taking the number"
+          },
+          {
+            "ground": "the process it names is confined to the jail this run made and holds",
+            "held": true,
+            "reading": "process 6541 has /srv/jailer/firecracker/b596int-wiring-57fa6af-0000/root as its root"
+          }
+        ],
+        "returned_copy": "/var/tmp/gdpval-b596int/jails/b596int-wiring-57fa6af-0000/work.ext4.returned",
+        "stop_signal_sent": false,
+        "teardown": {
+          "all_gone": true,
+          "failures": [],
+          "refused_because": null,
+          "removed": {
+            "/srv/jailer/firecracker/b596int-wiring-57fa6af-0000/root": true
+          }
+        },
+        "vm_id": "b596int-wiring-57fa6af-0000"
+      },
+      "output_files": {
+        "directory": ".gdpval/exec/0000",
+        "kept": [
+          "stdout",
+          "stderr",
+          "meta.json"
+        ],
+        "not_kept": null
+      },
+      "result": {
+        "data": {
+          "returncode": 0
+        },
+        "error_type": null,
+        "ok": true
+      },
+      "truncated": {
+        "stderr": false,
+        "stdout": false
+      }
+    },
+    "result": {
+      "data": {
+        "returncode": 0
+      },
+      "error_type": null,
+      "ok": true
+    }
+  },
+  "call_two": {
+    "record": {
+      "boot_outcome": "booted",
+      "booted": true,
+      "call": 1,
+      "deadline": {
+        "applied_seconds": 60,
+        "capped_by_the_policy": false,
+        "policy_seconds": 1200,
+        "requested_seconds": 60
+      },
+      "grounds": "the guest wrote an exit status of 0",
+      "image": {
+        "digest": "sha256:ee6ef798631d3c3aeaed28658c640e6f5d021677449852bf2e1f18be5bd24edb",
+        "kernel_sha256": "b36a4a1b10f33b9cfdcde3d1a787d9c090556a3edb211cd06d1f3f9a6c7e8724",
+        "reference": "ghcr.io/hyeonsangjeon/gdpval-sandbox",
+        "rootfs_sha256": "489188004ad4eb8a90191b3b5f58eb9fb246d158535d0bc655001f438a7a32ea"
+      },
+      "machine": {
+        "cannot_rule_out": "A process that is confined to this run's jail but was placed there by something other than this run's own jailer. Ownership is established by asking where the process named in the PID file is rooted: the jail is a directory this run created and claims exclusively, so a process whose root is that directory was put there by this run. What that does not separate is a second jailer invoked against the same jail by something outside this run, which the exclusive claim is what stands against. A start-time interval is checked alongside it and can only turn candidates away; on its own it never established origin, because an unrelated process born inside the interval satisfies it.",
+        "copied_while_running": false,
+        "copy_integrity": "intact",
+        "copy_integrity_because": "the guest was observed to have stopped before the copy was taken, so nothing was writing to the disk",
+        "guest_confirmed_stopped": null,
+        "guest_last_seen_running": false,
+        "host_left_running": false,
+        "left_alone_because": null,
+        "outcome": "booted",
+        "owned_by_this_run": true,
+        "ownership_grounds": [
+          {
+            "ground": "the ownership record this run wrote is still the one in the jail",
+            "held": true,
+            "reading": "the jail still carries the ownership record this run wrote"
+          },
+          {
+            "ground": "no PID file was there before this run launched",
+            "held": true,
+            "reading": "checked against the disk before anything was placed; a run that found one there did not reach this point"
+          },
+          {
+            "ground": "a PID file appeared while this run was watching",
+            "held": true
+          },
+          {
+            "ground": "it held a value this platform can signal",
+            "held": true
+          },
+          {
+            "ground": "the process it names began while this run was launching the jailer",
+            "held": true,
+            "reading": "started at 115372 clock ticks since boot, inside the 115371\u2013115372 this run read immediately before launching and on taking the number"
+          },
+          {
+            "ground": "the process it names is confined to the jail this run made and holds",
+            "held": true,
+            "reading": "process 6577 has /srv/jailer/firecracker/b596int-wiring-57fa6af-0001/root as its root"
+          }
+        ],
+        "returned_copy": "/var/tmp/gdpval-b596int/jails/b596int-wiring-57fa6af-0001/work.ext4.returned",
+        "stop_signal_sent": false,
+        "teardown": {
+          "all_gone": true,
+          "failures": [],
+          "refused_because": null,
+          "removed": {
+            "/srv/jailer/firecracker/b596int-wiring-57fa6af-0001/root": true
+          }
+        },
+        "vm_id": "b596int-wiring-57fa6af-0001"
+      },
+      "output_files": {
+        "directory": ".gdpval/exec/0001",
+        "kept": [
+          "stdout",
+          "stderr",
+          "meta.json"
+        ],
+        "not_kept": null
+      },
+      "result": {
+        "data": {
+          "returncode": 0
+        },
+        "error_type": null,
+        "ok": true
+      },
+      "truncated": {
+        "stderr": false,
+        "stdout": false
+      }
+    },
+    "result": {
+      "data": {
+        "returncode": 0
+      },
+      "error_type": null,
+      "ok": true
+    }
+  },
+  "cases": [
+    {
+      "case": "an approved run selects the isolated backend",
+      "detail": {
+        "backend_class": "AgenticV2MicroVMBackend",
+        "grounds": {
+          "approved_by": "repository owner, coordinator handoff 2026-09-16 01:33 UTC, item 4 \u2014 prove backend/runner wiring on gdpval-devhost-vm with a model-free scripted sequence",
+          "first_boot_artefact": "/var/tmp/gdpval-c2/c2-first-boot.json",
+          "kernel_release": "6.17.0-1022-azure",
+          "what_the_kernel_release_shows": "that this host and the artefact's host report the same release, which rules out an artefact carried over from a differently provisioned machine. It is not a host identity \u2014 two machines built from one image report the same string \u2014 and it is recorded next to the value so that nobody reads the value as more than it is"
+        },
+        "is_isolated": true
+      },
+      "passed": true
+    },
+    {
+      "case": "the runner would admit the identity selection declares",
+      "detail": {
+        "backend_id": "agentic-v2-microvm-v1",
+        "foundation_only": true,
+        "implementation_sha256": "75c80130eee100daa6e695cb3056cea8e0a3c178c01b04296d77381603682daa"
+      },
+      "passed": true
+    },
+    {
+      "case": "the backend describes itself from a verified manifest",
+      "detail": {
+        "schema_version": "1.0",
+        "sha256": "fa76625f3fc9bb46c595f7c542132facb91c824bb5e51c7db9ea2d4fcb345a1f"
+      },
+      "passed": true
+    },
+    {
+      "case": "the identity the backend reports is the identity the run admits",
+      "detail": {
+        "admitted": {
+          "backend_id": "agentic-v2-microvm-v1",
+          "foundation_only": true,
+          "implementation_sha256": "75c80130eee100daa6e695cb3056cea8e0a3c178c01b04296d77381603682daa"
+        },
+        "reported": {
+          "backend_id": "agentic-v2-microvm-v1",
+          "foundation_only": true,
+          "implementation_sha256": "75c80130eee100daa6e695cb3056cea8e0a3c178c01b04296d77381603682daa"
+        }
+      },
+      "passed": true
+    },
+    {
+      "case": "call one: exec_run came back with a returncode",
+      "detail": {
+        "data": {
+          "returncode": 0
+        },
+        "error_type": null,
+        "ok": true
+      },
+      "passed": true
+    },
+    {
+      "case": "the staged input was digested inside the guest",
+      "detail": {
+        "guest": "66cd198d4d76b0af7aec9f36fb4538c8d8216172dad40d4159dc9f16cbe8a1cf",
+        "host": "66cd198d4d76b0af7aec9f36fb4538c8d8216172dad40d4159dc9f16cbe8a1cf",
+        "tool": "sha256sum"
+      },
+      "passed": true
+    },
+    {
+      "case": "the file the guest wrote came back to the host",
+      "detail": {
+        "bytes": 4096,
+        "exists": true,
+        "expected_bytes": 4096,
+        "path": "/var/tmp/gdpval-b596int/jails3/task-one/work/out/echoed_back"
+      },
+      "passed": true
+    },
+    {
+      "case": "the command ran on the machine the plan built, not on this host",
+      "detail": {
+        "guest_reported": "2",
+        "host_cpu_count": 8,
+        "plan_vcpu_count": 2
+      },
+      "passed": true
+    },
+    {
+      "case": "the guest named its own kernel",
+      "detail": {
+        "guest_kernel_release": "6.1.141",
+        "host_kernel_release": "6.17.0-1022-azure"
+      },
+      "passed": true
+    },
+    {
+      "case": "this run's marker is the one that came back",
+      "detail": {
+        "expected": "2a6834e2774bf9f441a01bb68c80a02d",
+        "found": "2a6834e2774bf9f441a01bb68c80a02d"
+      },
+      "passed": true
+    },
+    {
+      "case": "the transcript was kept where the model would read it",
+      "detail": {
+        "directory": "/var/tmp/gdpval-b596int/jails3/task-one/work/.gdpval/exec/0000",
+        "leaves": [
+          "meta.json",
+          "stderr",
+          "stdout"
+        ]
+      },
+      "passed": true
+    },
+    {
+      "case": "call one: the guest is accounted for and the host was not left running",
+      "detail": {
+        "cannot_rule_out": "A process that is confined to this run's jail but was placed there by something other than this run's own jailer. Ownership is established by asking where the process named in the PID file is rooted: the jail is a directory this run created and claims exclusively, so a process whose root is that directory was put there by this run. What that does not separate is a second jailer invoked against the same jail by something outside this run, which the exclusive claim is what stands against. A start-time interval is checked alongside it and can only turn candidates away; on its own it never established origin, because an unrelated process born inside the interval satisfies it.",
+        "copied_while_running": false,
+        "copy_integrity": "intact",
+        "copy_integrity_because": "the guest was observed to have stopped before the copy was taken, so nothing was writing to the disk",
+        "guest_confirmed_stopped": null,
+        "guest_last_seen_running": false,
+        "host_left_running": false,
+        "left_alone_because": null,
+        "outcome": "booted",
+        "owned_by_this_run": true,
+        "ownership_grounds": [
+          {
+            "ground": "the ownership record this run wrote is still the one in the jail",
+            "held": true,
+            "reading": "the jail still carries the ownership record this run wrote"
+          },
+          {
+            "ground": "no PID file was there before this run launched",
+            "held": true,
+            "reading": "checked against the disk before anything was placed; a run that found one there did not reach this point"
+          },
+          {
+            "ground": "a PID file appeared while this run was watching",
+            "held": true
+          },
+          {
+            "ground": "it held a value this platform can signal",
+            "held": true
+          },
+          {
+            "ground": "the process it names began while this run was launching the jailer",
+            "held": true,
+            "reading": "started at 110975 clock ticks since boot, inside the 110974\u2013110975 this run read immediately before launching and on taking the number"
+          },
+          {
+            "ground": "the process it names is confined to the jail this run made and holds",
+            "held": true,
+            "reading": "process 6541 has /srv/jailer/firecracker/b596int-wiring-57fa6af-0000/root as its root"
+          }
+        ],
+        "returned_copy": "/var/tmp/gdpval-b596int/jails/b596int-wiring-57fa6af-0000/work.ext4.returned",
+        "stop_signal_sent": false,
+        "teardown": {
+          "all_gone": true,
+          "failures": [],
+          "refused_because": null,
+          "removed": {
+            "/srv/jailer/firecracker/b596int-wiring-57fa6af-0000/root": true
+          }
+        },
+        "vm_id": "b596int-wiring-57fa6af-0000"
+      },
+      "passed": true
+    },
+    {
+      "case": "call one: everything the teardown named is gone from the disk",
+      "detail": {
+        "named": [
+          "/srv/jailer/firecracker/b596int-wiring-57fa6af-0000/root"
+        ],
+        "still_there": []
+      },
+      "passed": true
+    },
+    {
+      "case": "call one: nothing was written down as an unresolved host",
+      "detail": {
+        "exists": false,
+        "path": "/var/tmp/gdpval-b596int/jails3/host-state/unresolved_host.json"
+      },
+      "passed": true
+    },
+    {
+      "case": "call two: exec_run came back with a returncode",
+      "detail": {
+        "data": {
+          "returncode": 0
+        },
+        "error_type": null,
+        "ok": true
+      },
+      "passed": true
+    },
+    {
+      "case": "a second machine was admitted and found what the first one wrote",
+      "detail": {
+        "expected": 4096,
+        "second_call_saw_bytes": "4096"
+      },
+      "passed": true
+    },
+    {
+      "case": "the first task's workspace was purged on close",
+      "detail": {
+        "work": "/var/tmp/gdpval-b596int/jails3/task-one/work"
+      },
+      "passed": true
+    },
+    {
+      "case": "next task: exec_run came back with a returncode",
+      "detail": {
+        "data": {
+          "returncode": 0
+        },
+        "error_type": null,
+        "ok": true
+      },
+      "passed": true
+    },
+    {
+      "case": "the next task was admitted onto the same host",
+      "detail": {
+        "expected": "2a6834e2774bf9f441a01bb68c80a02d",
+        "next_task_marker": "2a6834e2774bf9f441a01bb68c80a02d"
+      },
+      "passed": true
+    },
+    {
+      "case": "next task: the guest is accounted for and the host was not left running",
+      "detail": {
+        "cannot_rule_out": "A process that is confined to this run's jail but was placed there by something other than this run's own jailer. Ownership is established by asking where the process named in the PID file is rooted: the jail is a directory this run created and claims exclusively, so a process whose root is that directory was put there by this run. What that does not separate is a second jailer invoked against the same jail by something outside this run, which the exclusive claim is what stands against. A start-time interval is checked alongside it and can only turn candidates away; on its own it never established origin, because an unrelated process born inside the interval satisfies it.",
+        "copied_while_running": false,
+        "copy_integrity": "intact",
+        "copy_integrity_because": "the guest was observed to have stopped before the copy was taken, so nothing was writing to the disk",
+        "guest_confirmed_stopped": null,
+        "guest_last_seen_running": false,
+        "host_left_running": false,
+        "left_alone_because": null,
+        "outcome": "booted",
+        "owned_by_this_run": true,
+        "ownership_grounds": [
+          {
+            "ground": "the ownership record this run wrote is still the one in the jail",
+            "held": true,
+            "reading": "the jail still carries the ownership record this run wrote"
+          },
+          {
+            "ground": "no PID file was there before this run launched",
+            "held": true,
+            "reading": "checked against the disk before anything was placed; a run that found one there did not reach this point"
+          },
+          {
+            "ground": "a PID file appeared while this run was watching",
+            "held": true
+          },
+          {
+            "ground": "it held a value this platform can signal",
+            "held": true
+          },
+          {
+            "ground": "the process it names began while this run was launching the jailer",
+            "held": true,
+            "reading": "started at 119663 clock ticks since boot, inside the 119662\u2013119688 this run read immediately before launching and on taking the number"
+          },
+          {
+            "ground": "the process it names is confined to the jail this run made and holds",
+            "held": true,
+            "reading": "process 6611 has /srv/jailer/firecracker/b596int-wiring-57fa6af-0002/root as its root"
+          }
+        ],
+        "returned_copy": "/var/tmp/gdpval-b596int/jails/b596int-wiring-57fa6af-0002/work.ext4.returned",
+        "stop_signal_sent": false,
+        "teardown": {
+          "all_gone": true,
+          "failures": [],
+          "refused_because": null,
+          "removed": {
+            "/srv/jailer/firecracker/b596int-wiring-57fa6af-0002/root": true
+          }
+        },
+        "vm_id": "b596int-wiring-57fa6af-0002"
+      },
+      "passed": true
+    },
+    {
+      "case": "next task: everything the teardown named is gone from the disk",
+      "detail": {
+        "named": [
+          "/srv/jailer/firecracker/b596int-wiring-57fa6af-0002/root"
+        ],
+        "still_there": []
+      },
+      "passed": true
+    },
+    {
+      "case": "next task: nothing was written down as an unresolved host",
+      "detail": {
+        "exists": false,
+        "path": "/var/tmp/gdpval-b596int/jails3/host-state/unresolved_host.json"
+      },
+      "passed": true
+    }
+  ],
+  "host": {
+    "cpu_count": 8,
+    "hostname": "gdpval-devhost-vm",
+    "kernel_release": "6.17.0-1022-azure"
+  },
+  "image": {
+    "digest": "sha256:ee6ef798631d3c3aeaed28658c640e6f5d021677449852bf2e1f18be5bd24edb",
+    "reference": "ghcr.io/hyeonsangjeon/gdpval-sandbox"
+  },
+  "model_calls": 0,
+  "paid_runs": 0,
+  "schema": "agentic_v2_wiring_check/1",
+  "session": "b596int-wiring-57fa6af",
+  "summary": {
+    "cases": 22,
+    "passed": 22
+  },
+  "task_one_boots": [
+    {
+      "boot_outcome": "booted",
+      "booted": true,
+      "call": 0,
+      "deadline": {
+        "applied_seconds": 60,
+        "capped_by_the_policy": false,
+        "policy_seconds": 1200,
+        "requested_seconds": 60
+      },
+      "grounds": "the guest wrote an exit status of 0",
+      "image": {
+        "digest": "sha256:ee6ef798631d3c3aeaed28658c640e6f5d021677449852bf2e1f18be5bd24edb",
+        "kernel_sha256": "b36a4a1b10f33b9cfdcde3d1a787d9c090556a3edb211cd06d1f3f9a6c7e8724",
+        "reference": "ghcr.io/hyeonsangjeon/gdpval-sandbox",
+        "rootfs_sha256": "489188004ad4eb8a90191b3b5f58eb9fb246d158535d0bc655001f438a7a32ea"
+      },
+      "machine": {
+        "cannot_rule_out": "A process that is confined to this run's jail but was placed there by something other than this run's own jailer. Ownership is established by asking where the process named in the PID file is rooted: the jail is a directory this run created and claims exclusively, so a process whose root is that directory was put there by this run. What that does not separate is a second jailer invoked against the same jail by something outside this run, which the exclusive claim is what stands against. A start-time interval is checked alongside it and can only turn candidates away; on its own it never established origin, because an unrelated process born inside the interval satisfies it.",
+        "copied_while_running": false,
+        "copy_integrity": "intact",
+        "copy_integrity_because": "the guest was observed to have stopped before the copy was taken, so nothing was writing to the disk",
+        "guest_confirmed_stopped": null,
+        "guest_last_seen_running": false,
+        "host_left_running": false,
+        "left_alone_because": null,
+        "outcome": "booted",
+        "owned_by_this_run": true,
+        "ownership_grounds": [
+          {
+            "ground": "the ownership record this run wrote is still the one in the jail",
+            "held": true,
+            "reading": "the jail still carries the ownership record this run wrote"
+          },
+          {
+            "ground": "no PID file was there before this run launched",
+            "held": true,
+            "reading": "checked against the disk before anything was placed; a run that found one there did not reach this point"
+          },
+          {
+            "ground": "a PID file appeared while this run was watching",
+            "held": true
+          },
+          {
+            "ground": "it held a value this platform can signal",
+            "held": true
+          },
+          {
+            "ground": "the process it names began while this run was launching the jailer",
+            "held": true,
+            "reading": "started at 110975 clock ticks since boot, inside the 110974\u2013110975 this run read immediately before launching and on taking the number"
+          },
+          {
+            "ground": "the process it names is confined to the jail this run made and holds",
+            "held": true,
+            "reading": "process 6541 has /srv/jailer/firecracker/b596int-wiring-57fa6af-0000/root as its root"
+          }
+        ],
+        "returned_copy": "/var/tmp/gdpval-b596int/jails/b596int-wiring-57fa6af-0000/work.ext4.returned",
+        "stop_signal_sent": false,
+        "teardown": {
+          "all_gone": true,
+          "failures": [],
+          "refused_because": null,
+          "removed": {
+            "/srv/jailer/firecracker/b596int-wiring-57fa6af-0000/root": true
+          }
+        },
+        "vm_id": "b596int-wiring-57fa6af-0000"
+      },
+      "output_files": {
+        "directory": ".gdpval/exec/0000",
+        "kept": [
+          "stdout",
+          "stderr",
+          "meta.json"
+        ],
+        "not_kept": null
+      },
+      "result": {
+        "data": {
+          "returncode": 0
+        },
+        "error_type": null,
+        "ok": true
+      },
+      "truncated": {
+        "stderr": false,
+        "stdout": false
+      }
+    },
+    {
+      "boot_outcome": "booted",
+      "booted": true,
+      "call": 1,
+      "deadline": {
+        "applied_seconds": 60,
+        "capped_by_the_policy": false,
+        "policy_seconds": 1200,
+        "requested_seconds": 60
+      },
+      "grounds": "the guest wrote an exit status of 0",
+      "image": {
+        "digest": "sha256:ee6ef798631d3c3aeaed28658c640e6f5d021677449852bf2e1f18be5bd24edb",
+        "kernel_sha256": "b36a4a1b10f33b9cfdcde3d1a787d9c090556a3edb211cd06d1f3f9a6c7e8724",
+        "reference": "ghcr.io/hyeonsangjeon/gdpval-sandbox",
+        "rootfs_sha256": "489188004ad4eb8a90191b3b5f58eb9fb246d158535d0bc655001f438a7a32ea"
+      },
+      "machine": {
+        "cannot_rule_out": "A process that is confined to this run's jail but was placed there by something other than this run's own jailer. Ownership is established by asking where the process named in the PID file is rooted: the jail is a directory this run created and claims exclusively, so a process whose root is that directory was put there by this run. What that does not separate is a second jailer invoked against the same jail by something outside this run, which the exclusive claim is what stands against. A start-time interval is checked alongside it and can only turn candidates away; on its own it never established origin, because an unrelated process born inside the interval satisfies it.",
+        "copied_while_running": false,
+        "copy_integrity": "intact",
+        "copy_integrity_because": "the guest was observed to have stopped before the copy was taken, so nothing was writing to the disk",
+        "guest_confirmed_stopped": null,
+        "guest_last_seen_running": false,
+        "host_left_running": false,
+        "left_alone_because": null,
+        "outcome": "booted",
+        "owned_by_this_run": true,
+        "ownership_grounds": [
+          {
+            "ground": "the ownership record this run wrote is still the one in the jail",
+            "held": true,
+            "reading": "the jail still carries the ownership record this run wrote"
+          },
+          {
+            "ground": "no PID file was there before this run launched",
+            "held": true,
+            "reading": "checked against the disk before anything was placed; a run that found one there did not reach this point"
+          },
+          {
+            "ground": "a PID file appeared while this run was watching",
+            "held": true
+          },
+          {
+            "ground": "it held a value this platform can signal",
+            "held": true
+          },
+          {
+            "ground": "the process it names began while this run was launching the jailer",
+            "held": true,
+            "reading": "started at 115372 clock ticks since boot, inside the 115371\u2013115372 this run read immediately before launching and on taking the number"
+          },
+          {
+            "ground": "the process it names is confined to the jail this run made and holds",
+            "held": true,
+            "reading": "process 6577 has /srv/jailer/firecracker/b596int-wiring-57fa6af-0001/root as its root"
+          }
+        ],
+        "returned_copy": "/var/tmp/gdpval-b596int/jails/b596int-wiring-57fa6af-0001/work.ext4.returned",
+        "stop_signal_sent": false,
+        "teardown": {
+          "all_gone": true,
+          "failures": [],
+          "refused_because": null,
+          "removed": {
+            "/srv/jailer/firecracker/b596int-wiring-57fa6af-0001/root": true
+          }
+        },
+        "vm_id": "b596int-wiring-57fa6af-0001"
+      },
+      "output_files": {
+        "directory": ".gdpval/exec/0001",
+        "kept": [
+          "stdout",
+          "stderr",
+          "meta.json"
+        ],
+        "not_kept": null
+      },
+      "result": {
+        "data": {
+          "returncode": 0
+        },
+        "error_type": null,
+        "ok": true
+      },
+      "truncated": {
+        "stderr": false,
+        "stdout": false
+      }
+    }
+  ],
+  "task_two_boots": [
+    {
+      "boot_outcome": "booted",
+      "booted": true,
+      "call": 0,
+      "deadline": {
+        "applied_seconds": 60,
+        "capped_by_the_policy": false,
+        "policy_seconds": 1200,
+        "requested_seconds": 60
+      },
+      "grounds": "the guest wrote an exit status of 0",
+      "image": {
+        "digest": "sha256:ee6ef798631d3c3aeaed28658c640e6f5d021677449852bf2e1f18be5bd24edb",
+        "kernel_sha256": "b36a4a1b10f33b9cfdcde3d1a787d9c090556a3edb211cd06d1f3f9a6c7e8724",
+        "reference": "ghcr.io/hyeonsangjeon/gdpval-sandbox",
+        "rootfs_sha256": "489188004ad4eb8a90191b3b5f58eb9fb246d158535d0bc655001f438a7a32ea"
+      },
+      "machine": {
+        "cannot_rule_out": "A process that is confined to this run's jail but was placed there by something other than this run's own jailer. Ownership is established by asking where the process named in the PID file is rooted: the jail is a directory this run created and claims exclusively, so a process whose root is that directory was put there by this run. What that does not separate is a second jailer invoked against the same jail by something outside this run, which the exclusive claim is what stands against. A start-time interval is checked alongside it and can only turn candidates away; on its own it never established origin, because an unrelated process born inside the interval satisfies it.",
+        "copied_while_running": false,
+        "copy_integrity": "intact",
+        "copy_integrity_because": "the guest was observed to have stopped before the copy was taken, so nothing was writing to the disk",
+        "guest_confirmed_stopped": null,
+        "guest_last_seen_running": false,
+        "host_left_running": false,
+        "left_alone_because": null,
+        "outcome": "booted",
+        "owned_by_this_run": true,
+        "ownership_grounds": [
+          {
+            "ground": "the ownership record this run wrote is still the one in the jail",
+            "held": true,
+            "reading": "the jail still carries the ownership record this run wrote"
+          },
+          {
+            "ground": "no PID file was there before this run launched",
+            "held": true,
+            "reading": "checked against the disk before anything was placed; a run that found one there did not reach this point"
+          },
+          {
+            "ground": "a PID file appeared while this run was watching",
+            "held": true
+          },
+          {
+            "ground": "it held a value this platform can signal",
+            "held": true
+          },
+          {
+            "ground": "the process it names began while this run was launching the jailer",
+            "held": true,
+            "reading": "started at 119663 clock ticks since boot, inside the 119662\u2013119688 this run read immediately before launching and on taking the number"
+          },
+          {
+            "ground": "the process it names is confined to the jail this run made and holds",
+            "held": true,
+            "reading": "process 6611 has /srv/jailer/firecracker/b596int-wiring-57fa6af-0002/root as its root"
+          }
+        ],
+        "returned_copy": "/var/tmp/gdpval-b596int/jails/b596int-wiring-57fa6af-0002/work.ext4.returned",
+        "stop_signal_sent": false,
+        "teardown": {
+          "all_gone": true,
+          "failures": [],
+          "refused_because": null,
+          "removed": {
+            "/srv/jailer/firecracker/b596int-wiring-57fa6af-0002/root": true
+          }
+        },
+        "vm_id": "b596int-wiring-57fa6af-0002"
+      },
+      "output_files": {
+        "directory": ".gdpval/exec/0000",
+        "kept": [
+          "stdout",
+          "stderr",
+          "meta.json"
+        ],
+        "not_kept": null
+      },
+      "result": {
+        "data": {
+          "returncode": 0
+        },
+        "error_type": null,
+        "ok": true
+      },
+      "truncated": {
+        "stderr": false,
+        "stdout": false
+      }
+    }
+  ]
+}

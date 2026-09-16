@@ -41,6 +41,27 @@ reached by the right route. Its *wording* there ("wrote no exit status") is not
 quite right for this case, and sharpening it is a small change to D1 that is
 deliberately not made from here while D1's own tests are in flight.
 
+**The carriage does not only return that it failed — it also raises.** Every
+step of it can: the read-back shells out, the previous-contents directory is
+removed and remade, the workspace is listed, the children are moved, and a move
+that fails partway puts back what it moved aside and re-raises so a half-carriage
+is not reported as a whole one. Letting that exception out of here is not a
+neutral choice, because at that point the boot has already happened. D2 catches
+it as a launcher error, and a launcher error carries no ``teardown`` — so the
+one record naming a guest that is still on the host is replaced by a record
+saying nothing was ever launched. The absence is read as proof, and it is not
+proof: the thing that raised is downstream of the launch, not upstream of it.
+
+So a carriage that raises is reported exactly as a carriage that comes back
+empty, which is what it is, with the error kept under its own name. The boot
+record then leaves this function by the ordinary route and
+:func:`core.agentic_v2_first_boot.the_host_was_left_running` reads ``outcome``,
+``outcome_before_the_carriage_failed`` and ``guest_confirmed_stopped`` off it as
+it does for every other call. ``BaseException`` is deliberately not caught:
+:func:`core.agentic_v2_first_boot.first_boot` cleans up and re-raises
+``KeyboardInterrupt`` and ``SystemExit`` bare, and swallowing them here would
+make this the place that decides an interrupt is a workspace fault.
+
 Nothing in this module opens ``exec_run`` in the product path, changes
 ``foundation_only`` or ``production_activation``, or touches the runner's
 backend-identity check. Those are D4, each on its own.
@@ -194,13 +215,24 @@ class OneCallMachine:
         # went in, and then removes the jail. This copy is the only place the
         # guest's writes still exist.
         returned = Path(str(staged["image"]) + ".returned")
-        carried = carry_the_workspace_back(
-            image=returned, workspace=workspace, scratch=here / "back"
-        )
+        try:
+            carried = carry_the_workspace_back(
+                image=returned, workspace=workspace, scratch=here / "back"
+            )
+            returned_sha256 = work_disk_fingerprint(returned)
+        except Exception as failure:  # noqa: BLE001 - see the paragraph above
+            carried = {
+                "read_back": False,
+                "replaced": False,
+                "files": [],
+                "refused_symlinks": [],
+                "carriage_error": f"{type(failure).__name__}: {failure}",
+            }
+            returned_sha256 = None
         booted["workspace_carriage"] = carried
         booted["work_disk"] = {
             "staged_sha256": staged["sha256"],
-            "returned_sha256": work_disk_fingerprint(returned),
+            "returned_sha256": returned_sha256,
             "carried_in": staged["carried"],
         }
 
