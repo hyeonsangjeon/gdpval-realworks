@@ -711,6 +711,24 @@ class AgenticV2MicroVMBackend(AgenticV2FixtureBackend):
         try:
             descriptor = self._open_directory(str(arguments.get("cwd", "")))
         except (FileNotFoundError, NotADirectoryError, ValueError, OSError):
+            # Recorded, though nothing was launched and nothing was spent. This
+            # is the model asking the isolation to run something, and a refusal
+            # ends its attempt — so a task can reach its end having called
+            # `exec_run` and left no trace of having called it. A run record
+            # reading that list back would report a model that never asked,
+            # which is the opposite fault from a backend that could not answer
+            # and wants the opposite repair.
+            self.boots.append(
+                {
+                    "call": len(self.boots),
+                    "refused_before_launch": (
+                        "cwd {!r} is not a directory on the host".format(
+                            arguments.get("cwd", "")
+                        )
+                    ),
+                    "booted": False,
+                }
+            )
             return {"ok": False, "error_type": "path_not_directory"}
         os.close(descriptor)
 
