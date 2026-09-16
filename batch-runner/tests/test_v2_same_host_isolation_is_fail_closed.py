@@ -564,22 +564,59 @@ def test_the_action_names_the_interpreter_absolutely(boot_action: dict) -> None:
     one privileged step that does not do this runs ``install``, which is on
     ``secure_path`` on every image and needs no PATH of its own.
     """
-    privileged = 0
+    privileged = []
     for step in boot_action["runs"]["steps"]:
         run = step.get("run", "")
         for line in run.splitlines():
             stripped = line.strip()
             if not stripped.startswith("sudo ") or ".py" not in stripped:
                 continue
-            privileged += 1
+            privileged.append(step["name"])
             assert 'env "PATH=$PATH"' in stripped, step["name"]
             assert '"$PYTHON"' in stripped, step["name"]
             assert 'PYTHON="$(command -v python)"' in run, step["name"]
 
-    assert privileged == 2, (
-        "the boot and the approval, and nothing else in this action, run a "
-        "program of ours as root -- if that count changes somebody widened it"
+    # Named rather than counted. A count catches a fourth step being added and
+    # misses one being swapped for another, and the question here is which
+    # steps hold privilege, not how many.
+    assert privileged == [
+        "Read the runner again, now that the launcher is on it",
+        "Boot one guest on this runner",
+        "Write the approval this runner will admit",
+    ], (
+        "these three, and nothing else in this action, run a program of ours "
+        "as root -- if this list changes somebody widened it"
     )
+
+
+def test_the_reading_that_gates_is_taken_at_the_privilege_that_boots(
+    boot_action: dict,
+) -> None:
+    """The gate asks after the account that will open the device, not another.
+
+    Runs 35087786168 and 35088055576 both stopped on this step, on two
+    different runners, and the first of them had already answered ``yes`` to
+    the same question forty-eight seconds earlier in the same job -- the ACL
+    granted to the job's own account did not survive the steps in between,
+    while the hardware it was granted over demonstrably worked: the earlier
+    reading opened /dev/kvm and created an empty machine.
+
+    Nothing that boots is unprivileged. If this reading ever becomes so again,
+    a runner that can host a guest gets refused by a permission the boot does
+    not use -- which is not a safer failure, it is a different wrong answer,
+    and it is the reasoning already written under the approval step below.
+    """
+    steps = {step.get("name"): step for step in boot_action["runs"]["steps"]}
+    reading = steps["Read the runner again, now that the launcher is on it"]
+    boot = steps["Boot one guest on this runner"]
+
+    for step in (reading, boot):
+        assert 'sudo env "PATH=$PATH" "$PYTHON"' in step["run"], step["name"]
+
+    # Still the whole question, asked the same way. A reading that stopped
+    # opening the device would pass the line above and mean nothing.
+    assert "--require-programs" in reading["run"]
+    assert CHECK_SCRIPT in reading["run"]
 
 
 def test_the_action_asks_again_whether_the_launcher_landed(

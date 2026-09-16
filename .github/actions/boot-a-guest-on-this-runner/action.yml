@@ -96,14 +96,51 @@ runs:
     # the difference between "install said it worked" and "the launcher is
     # where the boot will look for it", and `shutil.which` is what the boot
     # uses.
+    # Root, for the same reason the two steps below are, and the reason is the
+    # one written under the gate at the bottom of this file: a gate is worth
+    # having only if the process that checks is the process that will act.
+    # Everything that touches /dev/kvm for real on a `same-host` dispatch is
+    # root -- the first boot below, and the stage itself, both `sudo env`. An
+    # unprivileged reading here asks after an account that never opens the
+    # device, and refusing on its answer is a different wrong answer, not a
+    # safer failure.
+    #
+    # Two runs say it is not hypothetical. 35087786168 and 35088055576 both
+    # stopped here, on two different runners, and in the first one the same
+    # script had already answered `yes` forty-eight seconds earlier:
+    #
+    #   11:00:16  granted: an ACL entry giving runner read and write on /dev/kvm
+    #   11:00:16  yes  /dev/kvm opened, answered API version 12, and created an
+    #                  empty machine which was closed again
+    #   11:01:04  NO   /dev/kvm is present and this process may not open it
+    #
+    # Same job, same machine, same account. The grant took -- `getfacl` printed
+    # `user:runner:rw-` -- and it did not survive the steps in between. So the
+    # runner's hardware virtualisation was never in question: it made a machine.
+    # What was in question was an ACL, which the path that actually boots does
+    # not use and cannot be stopped by.
+    #
+    # The reading is not weakened to get past this. It still opens the device
+    # and still asks it to create an empty machine; it is asked as the user who
+    # will do that for real. The device is printed first so a future failure
+    # says which of the two it was, rather than leaving the next reader to
+    # re-derive it from timestamps the way this one had to.
     - name: Read the runner again, now that the launcher is on it
       shell: bash
       run: |
         set -euo pipefail
+        ls -l /dev/kvm || true
+        getfacl -p /dev/kvm 2>/dev/null || true
         cd batch-runner
-        python scripts/check_runner_can_host_a_guest.py \
+        REPORT="$RUNNER_TEMP/runner-capability-with-programs.json"
+        PYTHON="$(command -v python)"
+        sudo env "PATH=$PATH" "$PYTHON" scripts/check_runner_can_host_a_guest.py \
           --require-programs \
-          --report "$RUNNER_TEMP/runner-capability-with-programs.json"
+          --report "$REPORT"
+        # Written by root into a directory this account owns. The rehearsal
+        # uploads it, so it is left readable by the account doing the upload --
+        # it is a reading of a machine and holds no secret.
+        sudo chmod 0644 "$REPORT"
 
     # Root, because the jailer is. It chroots, makes the device node inside the
     # jail, writes the cgroup files and only then drops to the jail account, and
