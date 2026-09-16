@@ -96,6 +96,81 @@ def test_the_dispatch_offers_the_three_arrangements_and_defaults_to_fixture(
     )
 
 
+def test_the_dispatch_offers_a_plan_and_defaults_to_the_one_that_ran(
+    workflow: dict,
+) -> None:
+    """Same reason as the input above, and the same failure if it moved.
+
+    The stage-one plan is what trial_30 ran and what the pre-registration
+    seals. A dispatch that names nothing has to keep reading it.
+    """
+    plan = workflow[True]["workflow_dispatch"]["inputs"]["plan"]
+
+    assert plan["default"] == "experiments/execution_envelope/agentic_stage_one_plan.yaml"
+    assert len(plan["options"]) == len(set(plan["options"]))
+    for option in plan["options"]:
+        assert (BATCH_RUNNER_ROOT / option).is_file(), (
+            f"the dispatch offers {option} and no such file is in the tree, so "
+            "choosing it fails on the runner rather than here"
+        )
+
+
+@pytest.mark.parametrize("job, name", [("free", "Dry run"), ("paid", "Run")])
+def test_the_plan_the_rehearsal_reads_is_the_plan_the_paid_run_reads(
+    workflow: dict, job: str, name: str
+) -> None:
+    """The free job's whole worth is that it rehearses the paid one.
+
+    If one of these two took the dispatched plan and the other took the
+    default, the dry run would pass on a plan the cohort never sees, and "the
+    dry run proved it" would mean nothing. Both read the same input, so they
+    cannot disagree about which file was read.
+    """
+    step = the_step(workflow, job, name)
+
+    assert "--plan" in step["run"], f"{job} builds its arguments without --plan"
+    assert step.get("env", {}).get("PLAN") == "${{ inputs.plan }}", (
+        f"{job} passes a --plan that does not come from the dispatch input"
+    )
+    assert '--plan "$PLAN"' in step["run"], (
+        "the value is interpolated rather than read from the environment, "
+        "which is how a path with a space in it becomes two arguments"
+    )
+
+
+def test_at_least_one_offered_plan_can_actually_be_dispatched_on_same_host(
+    workflow: dict,
+) -> None:
+    """The defect this input was added to fix, held at the dispatch surface.
+
+    ``resolve_instructions`` refuses a hand-written tool paragraph on a backend
+    nobody measured it against, and the plan that runs by default is exactly
+    that on the microVM. That refusal is correct and free, and it is also a
+    dead end if the dropdown offers nothing else: a same-host dispatch would
+    have no reachable plan at all, which is worse than the defect it prevents.
+    """
+    from core.agentic_v2_instructions import InstructionsRefused, resolve_instructions
+    from core.agentic_v2_stage_one_budget import load_stage_one_plan
+
+    offered = workflow[True]["workflow_dispatch"]["inputs"]["plan"]["options"]
+
+    usable = []
+    for option in offered:
+        try:
+            resolve_instructions(
+                load_stage_one_plan(BATCH_RUNNER_ROOT / option),
+                "AgenticV2MicroVMBackend",
+            )
+        except InstructionsRefused:
+            continue
+        usable.append(option)
+
+    assert usable, (
+        "every plan the dispatch offers is refused on the isolated backend, so "
+        f"a same-host run cannot be started at all. Offered: {offered}"
+    )
+
+
 def test_the_free_job_takes_the_reading(workflow: dict) -> None:
     """A guard nobody calls is the defect this repository keeps rediscovering."""
     step = the_step(workflow, "free", "Read whether this runner could host a guest")

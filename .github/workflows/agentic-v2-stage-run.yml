@@ -39,6 +39,19 @@ name: Agentic Sandbox V2 — Stage Run
 # the boot-id check in `scripts/write_isolation_approval.py` refuses an artefact
 # that was.
 #
+# Opening `exec_run` is not the same as telling the model it is open, and the
+# `plan` input is there because those two came apart. The plan that runs by
+# default writes its own tool paragraph, measured against the fixture, which
+# says `exec_run` refuses every time and that no commands run here. On
+# `same-host` that is false. It is also the kind of false that costs the most:
+# a model told there is no shell does not ask for one, so the cohort finishes,
+# every task has a deliverable, and the deliverables are what a model produces
+# when it believes it cannot run anything -- charged in full and indistinguishable
+# from a result about the isolated backend. `resolve_instructions` refuses that
+# pairing in the free job before anything is reached, and the corrected plan --
+# same stages, same amounts, not a second approval -- derives the paragraph from
+# whichever backend is mounted instead of asserting one.
+#
 # One consequence, stated plainly rather than buried. The jailer requires root
 # -- it chroots, mknods the device into the jail, writes cgroups and then drops
 # to the jail account -- and `first_boot` execs it in-process, so on a
@@ -134,6 +147,23 @@ on:
           - capability-check
           - same-host
         default: fixture
+        required: true
+      plan:
+        description: >-
+          Which plan file the run reads. The default is the pre-registered
+          stage-one plan and writes its own tool paragraph by hand — a
+          paragraph measured against the fixture, which says exec_run refuses
+          every time and that no commands run. On same-host that is false:
+          exec_run boots a guest and runs the command. The corrected plan
+          derives the list from whichever backend is mounted, so it is right on
+          both; it prices the same stages at the same amounts and is not a
+          second approval. A same-host dispatch of the default plan is refused
+          for free by the dry run below.
+        type: choice
+        options:
+          - experiments/execution_envelope/agentic_stage_one_plan.yaml
+          - experiments/execution_envelope/agentic_corrected_harness_plan.yaml
+        default: experiments/execution_envelope/agentic_stage_one_plan.yaml
         required: true
       run_id:
         description: >-
@@ -506,11 +536,13 @@ jobs:
       - name: Dry run
         env:
           ISOLATION: ${{ inputs.isolation }}
+          PLAN: ${{ inputs.plan }}
           APPROVAL: ${{ runner.temp }}/isolation-approval.json
         run: |
           set -euo pipefail
           cd batch-runner
           ARGS=(--stage '${{ inputs.stage }}' --dry-run
+                --plan "$PLAN"
                 --parquet "$RUNNER_TEMP/gdpval-pinned/data/train-00000-of-00001.parquet")
           if [ "$ISOLATION" = "same-host" ]; then
             if [ ! -f "$APPROVAL" ]; then
@@ -854,11 +886,13 @@ jobs:
           RUN_ID: ${{ inputs.run_id }}
           SHARD: ${{ matrix.shard }}
           ISOLATION: ${{ inputs.isolation }}
+          PLAN: ${{ inputs.plan }}
           APPROVAL: ${{ runner.temp }}/isolation-approval.json
         run: |
           set -euo pipefail
           cd batch-runner
           ARGS=(--stage "$STAGE" --shard "$SHARD" \
+                --plan "$PLAN" \
                 --into "$GITHUB_WORKSPACE/agentic-v2-run" \
                 --parquet "$RUNNER_TEMP/gdpval-pinned/data/train-00000-of-00001.parquet")
           if [ -n "$RUN_ID" ]; then
