@@ -170,6 +170,101 @@ def _how_the_machine_ended(boot: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def _what_a_failed_launch_left_behind(
+    teardown: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """Say whether a launch that *raised* may have left a machine of ours up.
+
+    The ordinary path answers this from a boot record. A launch that came apart
+    never produced one, so the same question has to be answered from the
+    teardown the failure carries — and until now it was not answered at all.
+    The record kept ``launcher_error`` and no ``machine``, so
+    ``host_left_running`` was never computed, and a launch that failed with a
+    guest still up was indistinguishable, to both guards, from one that failed
+    having started nothing.
+
+    Every branch turns on a *positive* fact about this run's own launch, asked
+    in the order the teardown establishes them — liveness before identity, the
+    way ``_clean_up_after_a_failure`` asks them. Two of the branches are
+    positive controls pointing the other way: a launch known to have started
+    nothing, and a process confirmed stopped, must not be written down as a
+    host left running, because a record that exists refuses the *next* task
+    before it reaches a model.
+
+    ``all_gone`` is deliberately not consulted. It is ``False`` for three
+    unrelated reasons — the claim was lost to another run, a machine may still
+    be up, or ``rmtree`` failed on a directory — so keying on it would turn an
+    ordinary file-removal failure into a permanent run-wide refusal. For a
+    related reason the answer does not turn on ``jail_held_by_this_run``: a jail
+    now held by somebody else says nothing about whether *this* run's process is
+    still up, and the record written here refuses this run's own next boot
+    rather than reaching for anyone else's machine.
+
+    A failure carrying no teardown is not a machine this run started.
+    ``first_boot`` raises those *before* its launch block — an unusable plan, or
+    a jail name already taken — refusals about the plan and about the claim,
+    which its own docstring keeps apart from findings about a machine. That is
+    recorded as the absence it is, under ``launch_facts``, and claims nothing in
+    either direction.
+
+    ``vm_id`` is ``None`` throughout: it is derived by the launcher and read off
+    a boot record, and a launch that raised produced none. The jail it would
+    have named is in ``teardown["process"]["pid_file"]``, which the boot record
+    keeps.
+    """
+    if teardown is None:
+        return {
+            "launch_facts": "none: the failure carried no teardown",
+            "outcome": "launch_failed_before_anything_started",
+            "vm_id": None,
+            "left_alone_because": (
+                "the failure carried no teardown, so the launch block was never "
+                "entered and there is no machine of this run's to account for"
+            ),
+            "cannot_rule_out": None,
+            "stop_signal_sent": None,
+            "guest_confirmed_stopped": None,
+            "guest_last_seen_running": None,
+            "host_left_running": False,
+        }
+
+    process = teardown.get("process") or {}
+    reading = {
+        "launch_facts": "read from the teardown the failure carried",
+        "vm_id": None,
+        "left_alone_because": process.get("left_alone_because"),
+        "cannot_rule_out": process.get("cannot_rule_out"),
+        "stop_signal_sent": process.get("signalled"),
+        "guest_confirmed_stopped": process.get("confirmed_stopped"),
+        "guest_last_seen_running": process.get("was_running"),
+    }
+
+    if process.get("confirmed_stopped") is True:
+        # Stopped is stopped. Whether the directory came off the disk is a
+        # separate outcome and an infrastructure error in its own right; it is
+        # not grounds for telling the next task a process is running.
+        reading["outcome"] = "launch_failed_after_the_process_was_confirmed_stopped"
+        reading["host_left_running"] = False
+    elif process.get("was_running") is True:
+        reading["outcome"] = "launch_failed_with_the_process_still_running"
+        reading["host_left_running"] = True
+    elif process.get("launch_was_attempted") is not True:
+        reading["outcome"] = "launch_failed_before_anything_started"
+        reading["host_left_running"] = False
+    elif (
+        process.get("launch_spawned_nothing") is True
+        and process.get("pid_file_appeared") is not True
+    ):
+        # The one launch failure that carries its own proof: the jailer never
+        # exec'd, so the child was reaped before it became anything.
+        reading["outcome"] = "launch_failed_without_starting_anything"
+        reading["host_left_running"] = False
+    else:
+        reading["outcome"] = "launch_failed_and_what_it_started_is_unaccounted_for"
+        reading["host_left_running"] = True
+    return reading
+
+
 def read_the_unresolved_host(
     host_state_dir: str | Path | None,
 ) -> Mapping[str, Any] | None:
@@ -656,12 +751,31 @@ class AgenticV2MicroVMBackend(AgenticV2FixtureBackend):
             # above they read as one event, and a launch that failed leaving a
             # chroot on the disk becomes indistinguishable from a launch that
             # failed and cleaned up after itself. So both are kept, under their
-            # own keys, whenever the failure carries them.
+            # own keys, whenever the failure carries them. Each is kept on its
+            # own terms, so that a failure carrying one and not the other keeps
+            # the one it has — and so that what is written down below and what
+            # is decided below rest on the same object.
             teardown = getattr(failure, "teardown", None)
             original = getattr(failure, "original", None)
-            if teardown is not None and original is not None:
+            if original is not None:
                 gave_up["original_error"] = f"{type(original).__name__}: {original}"
+            if teardown is not None:
                 gave_up["teardown"] = dict(teardown)
+            # And the third question the two above do not answer: whether a
+            # machine of ours may still be up. Until this was asked here, a
+            # launch that came apart produced no `machine` key at all, so
+            # `host_left_running` was never computed on this path and neither
+            # guard could see it — the one failure most likely to leave a guest
+            # behind was the one failure that never wrote it down.
+            machine = _what_a_failed_launch_left_behind(teardown)
+            gave_up["machine"] = machine
+            if machine.get("host_left_running") is True:
+                # Written before the record is filed and before the error goes
+                # back, for the reason the ordinary path gives: a process that
+                # ends here still leaves the next one something to find. The
+                # error itself is unchanged, and so is what this call already
+                # cost.
+                self._write_down_the_unresolved_host(gave_up)
             self.boots.append(gave_up)
             return {"ok": False, "error_type": "compute_backend_error"}
 

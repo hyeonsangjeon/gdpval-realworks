@@ -1031,3 +1031,442 @@ class TestTheRealPathWhenTheBootComesApart:
             assert [p for p in jail_base.rglob("*") if p.is_file()] == []
         finally:
             backend.close()
+
+
+def _abandoned(process, **teardown):
+    """A real ``BootAbandoned`` carrying a teardown, as ``first_boot`` raises it."""
+    from core.agentic_v2_first_boot import BootAbandoned
+
+    body = {
+        "after_a_failure": True,
+        "removed": [],
+        "all_gone": True,
+        "destroy_refused_because": None,
+        "failures": [],
+        "clean": True,
+        "process": process,
+        "salvaged": {},
+    }
+    body.update(teardown)
+    return BootAbandoned(
+        original=RuntimeError("the run came apart"), teardown=body
+    )
+
+
+def _raises(failure):
+    def launcher(**_):
+        raise failure
+
+    return launcher
+
+
+class TestALaunchThatCameApartSaysWhetherAMachineMayStillBeUp:
+    """A launch that raised is the failure most likely to leave a guest behind.
+
+    It was also, until this suite, the one failure that never wrote one down.
+    The record built on that path carried ``launcher_error`` and no ``machine``,
+    so ``host_left_running`` was never computed and neither the in-session guard
+    nor the on-disk one could see it. The boot that *returned* was covered by
+    ``TestAHostLeftRunningOutlivesTheBackendThatLeftIt`` above; the boot that
+    *raised* was not covered by anything.
+
+    What follows is one pair, five ways: a launch that failed, and what the next
+    admission is allowed to conclude from it. Two of the five point the other
+    way on purpose. A guard that refuses everything protects nothing, so a
+    launch that positively started nothing, and a process positively confirmed
+    stopped, have to come out of here clean — otherwise the first host without
+    the jailer installed, which is every host in this repository, would refuse
+    every run forever.
+    """
+
+    def test_a_process_still_running_when_the_launch_failed_is_written_down(
+        self, tmp_path
+    ):
+        host_state = tmp_path / "host_state"
+        backend = _backend(
+            tmp_path,
+            launcher=_raises(
+                _abandoned(
+                    {
+                        "launch_was_attempted": True,
+                        "launch_spawned_nothing": False,
+                        "pid_file_appeared": True,
+                        "was_running": True,
+                        "confirmed_stopped": False,
+                        "signalled": True,
+                        "left_alone_because": "it would not stop",
+                        "cannot_rule_out": "a guest still running in it",
+                    },
+                    all_gone=False,
+                    destroy_refused_because="the machine may still be running",
+                )
+            ),
+            host_state_dir=host_state,
+            task_id="task-one",
+        )
+        try:
+            assert backend.exec_run(_ok()) == {
+                "ok": False,
+                "error_type": "compute_backend_error",
+            }
+            record = backend.boots[0]
+            assert record["machine"]["host_left_running"] is True
+            assert record["machine"]["guest_last_seen_running"] is True
+
+            # What the next task will actually read, through the real reader.
+            written = read_the_unresolved_host(host_state)
+            assert written["schema"] == UNRESOLVED_HOST_SCHEMA
+            assert written["task_id"] == "task-one"
+            assert written["outcome"] == "launch_failed_with_the_process_still_running"
+            assert written["cannot_rule_out"] == "a guest still running in it"
+
+            # The failure the model is told about, and the evidence, are both
+            # kept. Neither is traded for the other.
+            assert record["launcher_error"].startswith("BootAbandoned")
+            assert record["teardown"]["destroy_refused_because"]
+        finally:
+            backend.close()
+
+    def test_a_launch_that_got_far_enough_to_be_unaccounted_for_is_written_down(
+        self, tmp_path
+    ):
+        """Not known live. Not known to have started nothing. That is enough."""
+        host_state = tmp_path / "host_state"
+        backend = _backend(
+            tmp_path,
+            launcher=_raises(
+                _abandoned(
+                    {
+                        "launch_was_attempted": True,
+                        "launch_spawned_nothing": False,
+                        "pid_file_appeared": False,
+                        "was_running": None,
+                        "confirmed_stopped": False,
+                    }
+                )
+            ),
+            host_state_dir=host_state,
+            task_id="task-one",
+        )
+        try:
+            backend.exec_run(_ok())
+            assert backend.boots[0]["machine"]["host_left_running"] is True
+            written = read_the_unresolved_host(host_state)
+            assert (
+                written["outcome"]
+                == "launch_failed_and_what_it_started_is_unaccounted_for"
+            )
+            # Nothing is claimed about a guest that was never seen.
+            assert written["guest_last_seen_running"] is None
+            assert written["vm_id"] is None
+        finally:
+            backend.close()
+
+    def test_a_process_confirmed_stopped_is_not_a_host_left_running(self, tmp_path):
+        """The control that keeps a file-removal failure from stopping a run.
+
+        ``all_gone`` is ``False`` here and ``failures`` is not empty, because
+        the directory did not come off the disk. That is an infrastructure
+        problem and it stays in the record as one. It is not a running process,
+        and a guard that read it as one would refuse every task after the first
+        ``rmtree`` that lost a race.
+        """
+        host_state = tmp_path / "host_state"
+        backend = _backend(
+            tmp_path,
+            launcher=_raises(
+                _abandoned(
+                    {
+                        "launch_was_attempted": True,
+                        "launch_spawned_nothing": False,
+                        "pid_file_appeared": True,
+                        "was_running": False,
+                        "confirmed_stopped": True,
+                        "left_alone_because": "it had already stopped",
+                    },
+                    all_gone=False,
+                    clean=False,
+                    failures=[["rmtree", "/jail/firecracker/x", "Directory not empty"]],
+                    destroy_refused_because=None,
+                )
+            ),
+            host_state_dir=host_state,
+            task_id="task-one",
+        )
+        try:
+            backend.exec_run(_ok())
+            record = backend.boots[0]
+            assert record["machine"]["host_left_running"] is False
+            assert (
+                record["machine"]["outcome"]
+                == "launch_failed_after_the_process_was_confirmed_stopped"
+            )
+            assert read_the_unresolved_host(host_state) is None
+            assert not (host_state / UNRESOLVED_HOST_RECORD).exists()
+
+            # The removal failure is still an accurate thing that happened.
+            assert record["teardown"]["all_gone"] is False
+            assert record["teardown"]["failures"]
+        finally:
+            backend.close()
+
+    def test_a_failure_carrying_no_teardown_claims_no_machine_either_way(
+        self, tmp_path
+    ):
+        """``first_boot`` raises these before its launch block ever runs.
+
+        An unusable plan, or a jail whose name another run already holds. The
+        second is the one that matters: writing a host down there would refuse
+        this run over a machine belonging to somebody else. So the absence of
+        launch facts is recorded as an absence, and it claims nothing in either
+        direction.
+        """
+        host_state = tmp_path / "host_state"
+        backend = _backend(
+            tmp_path,
+            launcher=_raises(RuntimeError("the jailer is not installed")),
+            host_state_dir=host_state,
+            task_id="task-one",
+        )
+        try:
+            backend.exec_run(_ok())
+            machine = backend.boots[0]["machine"]
+            assert machine["host_left_running"] is False
+            assert machine["outcome"] == "launch_failed_before_anything_started"
+            assert machine["launch_facts"] == "none: the failure carried no teardown"
+            assert read_the_unresolved_host(host_state) is None
+        finally:
+            backend.close()
+
+    def test_the_real_module_failing_on_a_host_with_no_jailer_writes_nothing_down(
+        self, tmp_path, monkeypatch
+    ):
+        """The positive control, through the real ``first_boot``.
+
+        No stand-in exception and no synthetic teardown: a real plan, a real
+        jail, real placement, and the real launch failing the way it fails on a
+        host without firecracker installed — which is every host that runs this
+        repository's tests. The jailer never exec'd, so nothing of ours started,
+        and the next task has to be allowed to run. If this one ever writes a
+        record, the whole suite stops itself on the first task.
+        """
+        import functools
+        import os as os_module
+
+        from core.agentic_v2_microvm_launch import build_launch_plan
+        from core.agentic_v2_one_call_machine import OneCallMachine
+
+        host = tmp_path / "host"
+        host.mkdir()
+        for name in ("firecracker", "vmlinux", "rootfs.ext4"):
+            image = host / name
+            image.write_bytes(b"not really an image, but a readable file")
+            image.chmod(0o755)
+        jail_base = tmp_path / "jail"
+        monkeypatch.setattr(os_module, "chown", lambda *a, **k: None)
+
+        placed: dict = {}
+
+        def no_jailer_on_this_host(argv, timeout=300.0):
+            chroot = jail_base / "firecracker"
+            placed["jails"] = (
+                sorted(p.name for p in chroot.iterdir()) if chroot.exists() else []
+            )
+            raise FileNotFoundError(2, "No such file or directory", argv[0])
+
+        monkeypatch.setattr("core.agentic_v2_first_boot._run", no_jailer_on_this_host)
+
+        host_state = tmp_path / "host_state"
+        backend = _backend(
+            tmp_path,
+            launcher=OneCallMachine(
+                kernel=host / "vmlinux",
+                rootfs=host / "rootfs.ext4",
+                firecracker_binary=host / "firecracker",
+                uid=997,
+                gid=997,
+                vcpu_count=1,
+                cgroup_version=2,
+                scratch=tmp_path / "scratch",
+                build_plan=functools.partial(build_launch_plan, chroot_base=jail_base),
+            ),
+            host_state_dir=host_state,
+            task_id="task-one",
+        )
+        try:
+            assert backend.exec_run(_ok()) == {
+                "ok": False,
+                "error_type": "compute_backend_error",
+            }
+            # The failure really did land after placement, so the verdict below
+            # is about a launch that was actually reached.
+            assert placed["jails"], "the jail was never built; nothing was placed"
+
+            machine = backend.boots[0]["machine"]
+            assert machine["outcome"] == "launch_failed_without_starting_anything"
+            assert machine["host_left_running"] is False
+            assert read_the_unresolved_host(host_state) is None
+
+            # And the next call on the same backend is not refused either.
+            assert backend.exec_run(_ok())["error_type"] == "compute_backend_error"
+            assert "refused_before_launch" not in backend.boots[1]
+        finally:
+            backend.close()
+
+
+class TestALaunchThatCameApartStopsTheNextTaskBeforeItCostsAnything:
+    """The other half of the pair: what the record does once it exists.
+
+    The cases above end at the file. This one starts a real run, lets a real
+    backend fail its launch with a machine possibly still up, and asks whether
+    the *next* task gets as far as a model call. The wiring is the shipped
+    wiring -- ``run_manifest`` asks ``admit_task`` at :376, before it builds a
+    runner at :389 -- so a refusal here is a refusal before anything is spent.
+
+    One seam, named: ``admit_task`` itself is a closure nested inside the stage
+    script's ``main()`` and cannot be imported. The copy below is the shape at
+    ``run_agentic_v2_stage.py:1306``, which returns what
+    ``stopped_by_an_unresolved_host`` (:1263) builds. Everything upstream of it
+    is real: the exception, the backend, the write, the reader, the driver.
+    """
+
+    @staticmethod
+    def _admit(host_state):
+        from core.agentic_v2_preregistration import STOP_RULES
+        from core.agentic_v2_run_driver import StoppedEarly
+
+        def admit_task(before_task: str):
+            left = read_the_unresolved_host(host_state)
+            if left is None:
+                return None
+            return StoppedEarly(
+                rule_index=7,
+                rule=STOP_RULES[7],
+                detail="task {} left a machine running ({})".format(
+                    left.get("task_id"), left.get("outcome") or "no outcome recorded"
+                ),
+                after_task=before_task,
+            )
+
+        return admit_task
+
+    def _run(self, tmp_path, host_state, tasks, *, journal, charged, built):
+        from core.agentic_v2_run_driver import TaskToRun, run_manifest
+
+        def runner_factory(task):
+            built.append(task.task_id)
+            return _RunnerThatFailsItsLaunch(tmp_path, host_state, task.task_id, charged)
+
+        return run_manifest(
+            [TaskToRun(task_id=t, prompt="do the thing") for t in tasks],
+            run_id="a596-run",
+            runner_factory=runner_factory,
+            journal_path=tmp_path / journal,
+            collect_into=tmp_path / "collected",
+            admit_task=self._admit(host_state),
+        )
+
+    def test_the_task_after_a_failed_launch_never_reaches_a_model(self, tmp_path):
+        host_state = tmp_path / "host_state"
+        charged: list[str] = []
+        built: list[str] = []
+
+        outcome = self._run(
+            tmp_path,
+            host_state,
+            ["task-one", "task-two"],
+            journal="journal.jsonl",
+            charged=charged,
+            built=built,
+        )
+
+        # The task that paid keeps what it paid for; the one after it is not
+        # built, not prompted, not charged.
+        assert charged == ["task-one"]
+        assert built == ["task-one"]
+        assert len(outcome.rows) == 1
+
+        assert outcome.stopped is not None
+        assert outcome.stopped.after_task == "task-two"
+        assert "task-one" in outcome.stopped.detail
+        # The operator is told which of the five findings this was.
+        assert (
+            "launch_failed_and_what_it_started_is_unaccounted_for"
+            in outcome.stopped.detail
+        )
+
+    def test_a_resumed_run_with_an_empty_journal_is_refused_the_same_way(
+        self, tmp_path
+    ):
+        """The reason the record is a file and not a field on the backend.
+
+        A resumed process has no memory of the leak: its journal of this
+        session's failures is empty and the in-session guard has nothing in it.
+        The host_state directory is what crosses, and it rides in and out of the
+        run on the artifact the workflow already uploads.
+        """
+        host_state = tmp_path / "host_state"
+        first: list[str] = []
+        self._run(
+            tmp_path,
+            host_state,
+            ["task-one", "task-two"],
+            journal="journal.jsonl",
+            charged=first,
+            built=[],
+        )
+        assert first == ["task-one"]
+
+        charged: list[str] = []
+        built: list[str] = []
+        outcome = self._run(
+            tmp_path,
+            host_state,
+            ["task-three"],
+            journal="resumed.jsonl",
+            charged=charged,
+            built=built,
+        )
+        assert charged == []
+        assert built == []
+        assert outcome.rows == []
+        assert outcome.stopped is not None
+        assert outcome.stopped.after_task == "task-three"
+
+
+class _RunnerThatFailsItsLaunch:
+    """A task whose one command comes apart in the launcher, with a mock model.
+
+    The model is a seam and so is the boot -- there is no /dev/kvm here. The
+    backend, its exception path, the write and the reader are not.
+    """
+
+    def __init__(self, tmp_path, host_state, task_id, charged):
+        self.backend = _backend(
+            tmp_path / task_id,
+            launcher=_raises(
+                _abandoned(
+                    {
+                        "launch_was_attempted": True,
+                        "launch_spawned_nothing": False,
+                        "pid_file_appeared": False,
+                        "was_running": None,
+                        "confirmed_stopped": False,
+                    }
+                )
+            ),
+            host_state_dir=host_state,
+            task_id=task_id,
+        )
+        self.charged = charged
+
+    def run(self, prompt, refs, occupation, *, run_id, condition_name, task_id):
+        self.charged.append(task_id)
+        tool_result = self.backend.exec_run(_ok())
+        self.backend.close()
+        return {
+            "success": True,
+            "deliverable_text": f"a mock model answer after {tool_result['error_type']}",
+            "files": [],
+            "usage": {"input_tokens": 10, "output_tokens": 10},
+        }
