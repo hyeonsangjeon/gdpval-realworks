@@ -46,25 +46,45 @@ FIRST_BOOT = BATCH_RUNNER_ROOT / "scripts" / "run_agentic_c2_first_boot.py"
 
 
 def an_archive(
-    at: Path, members: dict[str, bytes], *, directory: str = "release-v1.13.1-x86_64"
+    at: Path,
+    members: dict[str, bytes | tuple[bytes, int]],
+    *,
+    directory: str = "release-v1.13.1-x86_64",
 ) -> Path:
-    """Write a tarball shaped the way upstream ships one."""
+    """Write a tarball shaped the way upstream ships one.
+
+    A member is either bytes, which lands runnable the way a program does, or a
+    ``(bytes, mode)`` pair for the things shipped beside a program that are not
+    one.
+    """
     with tarfile.open(at, "w:gz") as archive:
-        for name, payload in members.items():
+        for name, entry in members.items():
+            payload, mode = entry if isinstance(entry, tuple) else (entry, 0o755)
             info = tarfile.TarInfo(f"{directory}/{name}" if directory else name)
             info.size = len(payload)
-            info.mode = 0o755
+            info.mode = mode
             archive.addfile(info, io.BytesIO(payload))
     return at
 
 
 def the_usual_archive(at: Path) -> Path:
+    """What v1.13.1 actually contains, in the shape it contains it.
+
+    Every program is shipped twice -- the binary, and its detached debug
+    symbols under the same name with ``.debug`` on the end and without the
+    executable bit. Leaving the symbols out of this fixture is what let an
+    installer that could not tell the two apart pass every test here and then
+    refuse the real release on a runner.
+    """
     return an_archive(
         at,
         {
             "firecracker-v1.13.1-x86_64": b"the launcher",
+            "firecracker-v1.13.1-x86_64.debug": (b"where the launcher hurts", 0o644),
             "jailer-v1.13.1-x86_64": b"the thing that confines it",
+            "jailer-v1.13.1-x86_64.debug": (b"where it hurts", 0o644),
             "seccompiler-bin-v1.13.1-x86_64": b"not asked for",
+            "SHA256SUMS": (b"not asked for either", 0o644),
         },
     )
 
@@ -259,7 +279,7 @@ def test_an_archive_missing_a_program_is_a_sentence_not_a_keyerror(
         tmp_path / "source.tgz", {"firecracker-v1.13.1-x86_64": b"alone"}
     )
 
-    with pytest.raises(ReleaseRefused, match="looking for one jailer"):
+    with pytest.raises(ReleaseRefused, match="looking for one runnable jailer"):
         unpack_programs(tarball, tmp_path / "bin")
 
 
@@ -274,8 +294,84 @@ def test_an_archive_offering_two_of_a_program_is_refused(tmp_path: Path) -> None
         },
     )
 
-    with pytest.raises(ReleaseRefused, match="looking for one firecracker"):
+    with pytest.raises(ReleaseRefused, match="looking for one runnable firecracker"):
         unpack_programs(tarball, tmp_path / "bin")
+
+
+def test_the_symbols_shipped_beside_a_program_are_not_mistaken_for_it(
+    tmp_path: Path,
+) -> None:
+    """The failure this test exists for was observed, not imagined.
+
+    Run 35082237811 refused v1.13.1 on a GitHub runner -- the release laid out
+    exactly as upstream publishes it -- because the prefix ``firecracker-``
+    matched both the binary and its ``.debug`` symbols and two is not one. The
+    programs are told apart by the executable bit rather than by the suffix,
+    because the suffix is the part upstream is free to change again.
+    """
+    tarball = an_archive(
+        tmp_path / "source.tgz",
+        {
+            "firecracker-v1.13.1-x86_64": b"the launcher",
+            "firecracker-v1.13.1-x86_64.debug": (b"symbols", 0o644),
+            "jailer-v1.13.1-x86_64": b"the jailer",
+            "jailer-v1.13.1-x86_64.debug": (b"symbols too", 0o644),
+        },
+    )
+
+    found = unpack_programs(tarball, tmp_path / "bin")
+
+    assert found["firecracker"]["came_from"].endswith("firecracker-v1.13.1-x86_64")
+    assert found["jailer"]["came_from"].endswith("jailer-v1.13.1-x86_64")
+    assert (tmp_path / "bin" / "firecracker").read_bytes() == b"the launcher"
+    assert (tmp_path / "bin" / "jailer").read_bytes() == b"the jailer"
+
+
+def test_the_digest_recorded_is_the_programs_and_not_the_symbols(
+    tmp_path: Path,
+) -> None:
+    """Taking the wrong member of the pair would still produce a digest.
+
+    Both files are real and both hash to something, so a record that named the
+    symbols would look exactly as complete as one that named the binary. The
+    check is that the digest is of what will actually be exec'd.
+    """
+    tarball = the_usual_archive(tmp_path / "source.tgz")
+
+    found = unpack_programs(tarball, tmp_path / "bin")
+
+    for program, payload in (
+        ("firecracker", b"the launcher"),
+        ("jailer", b"the thing that confines it"),
+    ):
+        assert found[program]["sha256"] == hashlib.sha256(payload).hexdigest()
+        assert found[program]["size_bytes"] == len(payload)
+
+
+def test_a_program_shipped_without_the_executable_bit_is_refused_and_named(
+    tmp_path: Path,
+) -> None:
+    """The mode is upstream's to change too, so this has to fail readably.
+
+    If a later release stops marking the binary runnable, the prefix still
+    matches and the mode filter then finds nothing. Reporting only the empty
+    list would send whoever reads it looking for a member that is right there.
+    """
+    tarball = an_archive(
+        tmp_path / "source.tgz",
+        {
+            "firecracker-v1.13.1-x86_64": (b"not marked runnable", 0o644),
+            "jailer-v1.13.1-x86_64": b"the other program",
+        },
+    )
+
+    with pytest.raises(ReleaseRefused) as refusal:
+        unpack_programs(tarball, tmp_path / "bin")
+
+    said = str(refusal.value)
+    assert "looking for one runnable firecracker" in said
+    assert "not runnable, so not considered" in said
+    assert "firecracker-v1.13.1-x86_64" in said
 
 
 def test_a_member_name_cannot_choose_where_it_is_written(tmp_path: Path) -> None:

@@ -142,6 +142,17 @@ def unpack_programs(tarball: Path, into: Path) -> dict[str, dict[str, Any]]:
     step rather than as a sentence. So each program is found by the prefix its
     name has always had, and it is an error for a prefix to match none or more
     than one.
+
+    The prefix alone is not enough. v1.13.1 ships each program twice: the
+    binary at mode 0755 and its detached debug symbols, same name with
+    ``.debug`` on the end, at 0644. Both answer to the prefix, so a prefix
+    match by itself finds two of everything and this function refuses a release
+    that is laid out exactly the way it is supposed to be. What tells them
+    apart is not the suffix -- naming the suffix here would be guessing at the
+    next one upstream adds -- but that only one of the two is a program: the
+    executable bit is what the launcher needs and what the symbols do not have.
+    So the prefix chooses the candidates and the mode chooses among them, and
+    it is still an error to end up with none or more than one.
     """
     into.mkdir(parents=True, exist_ok=True)
     with tarfile.open(tarball, "r:gz") as archive:
@@ -150,16 +161,26 @@ def unpack_programs(tarball: Path, into: Path) -> dict[str, dict[str, Any]]:
         ]
         found: dict[str, dict[str, Any]] = {}
         for program in PROGRAMS:
-            matches = [
+            by_name = [
                 member
                 for member in members
                 if Path(member.name).name.startswith(f"{program}-")
             ]
+            matches = [member for member in by_name if member.mode & 0o111]
             if len(matches) != 1:
+                shipped_alongside = [
+                    m.name for m in by_name if not m.mode & 0o111
+                ]
                 raise ReleaseRefused(
-                    f"looking for one {program} in {tarball.name} found "
-                    f"{[m.name for m in matches]}. The archive is not laid out "
-                    "the way this release was"
+                    f"looking for one runnable {program} in {tarball.name} "
+                    f"found {[m.name for m in matches]}. The archive is not "
+                    "laid out the way this release was"
+                    + (
+                        f" (not runnable, so not considered: "
+                        f"{shipped_alongside})"
+                        if shipped_alongside
+                        else ""
+                    )
                 )
             member = matches[0]
             extracted = archive.extractfile(member)
