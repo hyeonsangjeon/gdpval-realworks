@@ -1246,8 +1246,16 @@ def _a_handle_whose_start_time_reads_back(value, monkeypatch, *, opened):
 
     ``value`` receives the real reading for the same PID, so a caller can ask
     for "one tick later" without knowing what the real one is.
+
+    Since 2026-09-16 the reading taken after the handle comes back through the
+    reference this run pinned rather than from ``/proc/<pid>`` by number, so the
+    stand-in stands where the reading now is as well as where it was. ``value``
+    answering ``None`` is a line that would not read at all, and that arrives as
+    :data:`PINNED_UNREADABLE` rather than as a missing number — the two are what
+    ``k1e`` and ``k1f`` are here to keep apart.
     """
     real = agentic_v2_first_boot._when_that_process_started
+    real_reading = agentic_v2_first_boot._what_the_pinned_reference_still_says
 
     def open_handle(pid, flags=0):
         opened.append(pid)
@@ -1257,9 +1265,25 @@ def _a_handle_whose_start_time_reads_back(value, monkeypatch, *, opened):
         truth = real(pid)
         return value(truth) if opened else truth
 
+    def through_the_reference(pinned):
+        standing, truth, why = real_reading(pinned)
+        answered = value(truth)
+        if answered is None:
+            return (
+                agentic_v2_first_boot.PINNED_UNREADABLE,
+                None,
+                "EACCES: [Errno 13] Permission denied",
+            )
+        return standing, answered, why
+
     monkeypatch.setattr(os, "pidfd_open", open_handle, raising=False)
     monkeypatch.setattr(
         agentic_v2_first_boot, "_when_that_process_started", reading
+    )
+    monkeypatch.setattr(
+        agentic_v2_first_boot,
+        "_what_the_pinned_reference_still_says",
+        through_the_reference,
     )
 
 

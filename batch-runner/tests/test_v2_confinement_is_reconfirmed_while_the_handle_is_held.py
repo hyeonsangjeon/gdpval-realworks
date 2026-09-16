@@ -1,4 +1,4 @@
-"""Identity is re-asked where it cannot go stale: inside the pinned interval.
+"""Identity is re-asked of a process, through a reference that names only it.
 
 **The gap this closes.** Confinement to this run's jail was established once, at
 admission, and never again. Everything after it re-read *numbers* — the claim
@@ -8,18 +8,27 @@ time after ``pidfd_open`` and called that identity. Two processes created in the
 same clock tick share that value, so the recheck could pass for a process this
 run never started.
 
-**Why one more numeric check would not have fixed it.** Every reading taken
-before the descriptor exists can go stale between being read and being used;
-adding a fourth adds a fourth thing that can go stale. What changes the answer is
-*where* the question is asked. ``pidfd_open`` makes the kernel hold the process's
-``struct pid``, so for as long as the descriptor is open that PID number cannot
-be given to anything else. A confinement reading taken after the handle is held
-and verified is therefore a reading about the process the handle names — not
-about whoever holds the number by the time the signal goes.
+**Why one more numeric check would not have fixed it, and why the first attempt
+at this file was wrong about how.** Every reading taken from a number can go
+stale between being read and being used; adding a fourth adds a fourth thing
+that can go stale. The first version of this file said the fix was to ask inside
+the interval where ``pidfd_open`` holds the number — that ``struct pid`` being
+pinned meant the *number* was pinned. It does not. ``free_pid`` returns the
+number to the allocator with ``idr_remove`` when the process is reaped, and only
+afterwards drops the reference the descriptor is holding, so a held descriptor
+keeps a process addressable without keeping its number from being handed on.
+The descriptor and the number are two different guarantees.
 
-So the reading moved into ``_a_handle_pinned_to``, after the handle, and both
-stop paths get it because both come through
-``_stop_the_process_this_run_identified``.
+What makes the reading answerable is a reference this run opens on
+``/proc/<pid>`` *before* it takes the handle. An open ``/proc`` directory holds
+the process's ``struct pid`` on its inode and resolves every later read through
+that, never through the number again. So: opened at t1, handle taken at t2, read
+at t3. A read that answers at t3 says the reference's process had not been
+reaped by t3; a process holds its number until it is reaped; a number has one
+holder at a time; therefore the process the handle was given at t2 is that same
+process. Confinement read through the reference is a reading about the process
+the handle names. ``d7`` below asserts that ordering, because reversing it
+destroys the argument while leaving every verdict looking the same.
 
 **Liveness is still asked first,** and this file's ``d4`` is why. Measured here
 while writing it: a child killed and not yet collected keeps its start time, is
@@ -34,12 +43,13 @@ host where nothing was wrong.
 ``ENOSYS`` (measured, kernel ``3.10.102``), so the real handle path never runs.
 Every case below stands a descriptor in for it, which makes this evidence about
 the *seam* — the order of the questions, which verdict each answer produces, and
-what is or is not sent — and not about the kernel's behaviour. Two things are
-therefore out of reach and are named rather than approximated: that the kernel
-really does freeze the number while the descriptor is open, and that
-``pidfd_send_signal`` reaches the process the descriptor names. Both belong to a
-host that has the call, and are the delta handed to B's runner. No test here
-signals a process it did not create.
+what is or is not sent — and not about the kernel's behaviour. The kernel's side
+of the argument is established from its source and named here rather than
+approximated by a test: that a reaped process's number returns to the allocator,
+and that ``pidfd_send_signal`` reaches the process the descriptor names. No
+descriptor this file opens demonstrates either. Both belong to a host that has
+the call, and are the delta handed to B's runner. No test here signals a process
+it did not create, and no test here makes a number be reused.
 """
 
 from __future__ import annotations
@@ -60,10 +70,17 @@ from core.agentic_v2_first_boot import (
     HANDLE_GONE,
     HANDLE_NOT_SHOWN_TO_BE_OURS,
     HANDLE_TAKEN,
+    HANDLE_UNKNOWN,
+    PINNED_ENDED,
+    PINNED_STILL_RUNNING,
+    PINNED_UNREADABLE,
     _a_handle_pinned_to,
+    _a_proc_reference_pinned_to,
     _confined_to_this_runs_jail,
     _has_exited_but_not_been_reaped,
     _stop_the_process_this_run_identified,
+    _the_directory_a_process_has_as_its_root,
+    _what_the_pinned_reference_still_says,
     _when_that_process_started,
 )
 
@@ -407,24 +424,38 @@ def test_d6_the_reading_is_taken_after_the_handle_and_not_before(
     """The ordering, asserted directly rather than inferred from a verdict.
 
     ``d2`` shows that a mismatch refuses. It does not by itself show that the
-    reading was taken *inside* the pinned interval — a version that read
-    confinement first and opened the handle afterwards would produce the same
-    verdict and the same absence of a signal, and would be the racy arrangement
-    this change exists to avoid.
+    reading was taken *through this run's own reference* — a version that read
+    confinement from the path, before or after the handle, would produce the
+    same verdict and the same absence of a signal, and would be the racy
+    arrangement this change exists to avoid.
+
+    The reference has to come first of the three. Everything the pinned reading
+    is worth rests on the reference being older than the handle: opened
+    afterwards, it names whoever holds the number by then, which is the question
+    being asked rather than an answer to it. That is why ``reference`` is
+    asserted in the first position and not merely asserted to be present.
     """
     order: list[str] = []
     real_open = os.pidfd_open
+    real_pin = agentic_v2_first_boot._a_proc_reference_pinned_to
     real_read = agentic_v2_first_boot._confined_to_this_runs_jail
+
+    def pinning(pid):
+        order.append("reference")
+        return real_pin(pid)
 
     def opening(pid, flags=0):
         order.append("handle")
         return real_open(pid, flags)
 
-    def reading(pid, chroot_dir):
+    def reading(pid, chroot_dir, **named):
         order.append("confinement")
-        return real_read(pid, chroot_dir)
+        return real_read(pid, chroot_dir, **named)
 
     monkeypatch.setattr(os, "pidfd_open", opening, raising=False)
+    monkeypatch.setattr(
+        agentic_v2_first_boot, "_a_proc_reference_pinned_to", pinning
+    )
     monkeypatch.setattr(
         agentic_v2_first_boot, "_confined_to_this_runs_jail", reading
     )
@@ -439,9 +470,113 @@ def test_d6_the_reading_is_taken_after_the_handle_and_not_before(
         child.pid, started, chroot_dir=someone_elses
     )
 
-    assert order == ["handle", "confinement"], (
-        "the number has to be frozen before it is asked about; read first and "
-        "the answer is about whoever held the number at the time of the read"
+    assert order == ["reference", "handle", "confinement"], (
+        "the reference has to be older than the handle or it cannot say who "
+        "held the number when the handle was taken, and the confinement reading "
+        "has to go through it or it is one more question about a number"
     )
     assert the_handle.sent == []
     assert the_handle.by_number == []
+
+
+def test_d7_a_reference_that_outlived_its_process_says_ended_not_elsewhere(
+    own_children,
+):
+    """The successor case, arranged by reaping rather than by churning numbers.
+
+    This is the falsifier that sank the first version of this change. It claimed
+    the kernel would not hand the number on while the descriptor was open;
+    ``free_pid`` does hand it on, at ``release_task``, before the descriptor's
+    reference is dropped. So the question is what the *reference* does once its
+    process is reaped, and the answer has to be that it stops answering — not
+    that it starts answering about whoever holds the number now.
+
+    Nothing here makes a number be reused: that would need PID churn or a
+    ``pid_max`` change, neither of which this file is allowed to do, and neither
+    of which is necessary. What has to hold is the weaker, sufficient property —
+    that a stale reference produces *no* facts, so there are no facts about a
+    successor for it to produce. Measured on this host rather than argued:
+    reads through it raise ``ESRCH``.
+    """
+    child = own_children.spawn()
+    pinned, verdict, why = _a_proc_reference_pinned_to(child.pid)
+    assert pinned is not None, f"{verdict}: {why}"
+    try:
+        alive, started, _ = _what_the_pinned_reference_still_says(pinned)
+        assert alive == PINNED_STILL_RUNNING
+        assert started is not None
+
+        # Reaped by the fixture's own means: this file started the child, so it
+        # is this file that ends and collects it.
+        _REALLY_SIGNAL(child.pid, signal.SIGKILL)
+        child.wait(timeout=10)
+
+        after, started_after, _ = _what_the_pinned_reference_still_says(pinned)
+        assert after == PINNED_ENDED, (
+            "a reference whose process has been collected must report the "
+            "process as ended. Reporting it unreadable would keep the jail on a "
+            "host where nothing is left to confine"
+        )
+        assert started_after is None
+
+        root, why_not_root = _the_directory_a_process_has_as_its_root(
+            child.pid, pinned=pinned
+        )
+        assert root is None, (
+            "and it must yield no root at all. A root read back here would be "
+            "the successor's, and this run would have recorded it as a fact "
+            "about the process its handle names"
+        )
+        assert why_not_root != ""
+    finally:
+        os.close(pinned)
+
+
+def test_d8_a_reference_that_cannot_be_read_is_unknown_and_nothing_is_sent(
+    own_children, the_handle, monkeypatch
+):
+    """Unreadable stays unresolved, on the one path that could collapse it.
+
+    ``PINNED_UNREADABLE`` is every way the reference can fail that is not the
+    process ending: a ``/proc`` this run may not read, a line it cannot parse, an
+    errno it does not recognise. Each of them is a reason to know less, and none
+    of them is a reason to say the machine stopped. The wrong answer here is
+    cheap to write and expensive to have: ``HANDLE_GONE`` would report a stop
+    that did not happen and drop the jail behind it.
+
+    The seam is patched rather than the condition arranged, because arranging a
+    genuinely unreadable ``/proc`` for a process this file owns would need a
+    privilege change on the host. What is under test is the routing.
+    """
+    child = own_children.spawn()
+    started = _when_that_process_started(child.pid)
+    assert started is not None
+
+    monkeypatch.setattr(
+        agentic_v2_first_boot,
+        "_what_the_pinned_reference_still_says",
+        lambda pinned: (PINNED_UNREADABLE, None, "EACCES: [Errno 13] denied"),
+    )
+
+    stop = _stop_the_process_this_run_identified(
+        child.pid, started, chroot_dir=Path("/")
+    )
+
+    assert stop["handle_verdict"] == HANDLE_UNKNOWN
+    assert stop["signalled"] is False
+    assert stop["already_gone"] is False, (
+        "unknown is not gone. Calling it gone tells the caller the machine "
+        "stopped and lets the jail be removed under a process that may be in it"
+    )
+    assert "EACCES" in stop["refused_because"]
+
+    assert the_handle.opened == [child.pid], (
+        "the reference is read after the handle is taken, so the handle exists "
+        "to be closed on this path"
+    )
+    assert the_handle.sent == []
+    assert the_handle.by_number == []
+    assert the_handle.every_handle_is_closed(), (
+        "refusing on this branch must not leak the descriptor it refused on"
+    )
+    assert child.poll() is None

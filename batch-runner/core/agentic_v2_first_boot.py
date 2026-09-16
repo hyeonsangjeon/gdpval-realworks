@@ -572,7 +572,9 @@ def _when_that_process_started(pid: int) -> int | None:
         return None
 
 
-def _the_jail_a_process_is_confined_to(pid: int) -> tuple[str | None, str]:
+def _the_jail_a_process_is_confined_to(
+    pid: int, *, pinned: int | None = None
+) -> tuple[str | None, str]:
     """How ``/proc/<pid>/root`` *renders*, or why it could not be read.
 
     **A rendering is not an identity, and on the real jailer the two differ.**
@@ -599,9 +601,16 @@ def _the_jail_a_process_is_confined_to(pid: int) -> tuple[str | None, str]:
     nothing to read and that is ``ENOENT``; a reader without the privilege to
     look is ``EPERM``; anything else is unknown. None of them may be taken for
     a match, so each returns ``None`` with the reason it returns ``None``.
+
+    ``pinned`` is an open ``/proc/<pid>`` directory to read through instead of
+    the path. See :func:`_a_proc_reference_pinned_to` for why a caller that has
+    one must pass it: the path is a number and the number can be handed on,
+    where the open directory stays with the process it was opened on.
     """
     try:
-        return os.readlink(f"/proc/{pid}/root"), ""
+        if pinned is None:
+            return os.readlink(f"/proc/{pid}/root"), ""
+        return os.readlink("root", dir_fd=pinned), ""
     except (FileNotFoundError, ProcessLookupError):
         return None, (
             f"the host has no process {pid} to read a root from, so there is "
@@ -621,7 +630,7 @@ def _the_jail_a_process_is_confined_to(pid: int) -> tuple[str | None, str]:
 
 
 def _the_directory_a_process_has_as_its_root(
-    pid: int,
+    pid: int, *, pinned: int | None = None
 ) -> tuple[tuple[int, int] | None, str]:
     """Which directory ``pid`` has as its root, as an identity rather than a name.
 
@@ -638,12 +647,24 @@ def _the_directory_a_process_has_as_its_root(
     A device and inode pair cannot be satisfied by anything except the one
     directory this run made.
 
+    **Whose root, though.** Spelled as a path, ``/proc/<pid>/root`` is resolved
+    from the number every time it is walked, so after the process behind it has
+    been reaped the same path can land on a successor's root. ``pinned`` is an
+    already-open ``/proc/<pid>`` directory to walk from instead, and it stays
+    with the process it was opened on for as long as it is held:
+    :func:`_a_proc_reference_pinned_to` carries the argument. A caller holding
+    one must pass it; the path form is kept for admission, which has no handle
+    and no interval to be inside of.
+
     **The three answers are not one answer**, and they are the same three as
-    above: gone is ``ENOENT``, unprivileged is ``EPERM``, anything else is
-    unknown, and none of the three is a match.
+    above: gone is ``ENOENT`` or ``ESRCH``, unprivileged is ``EPERM``, anything
+    else is unknown, and none of the three is a match.
     """
     try:
-        seen = os.stat(f"/proc/{pid}/root/.")
+        if pinned is None:
+            seen = os.stat(f"/proc/{pid}/root/.")
+        else:
+            seen = os.stat("root/.", dir_fd=pinned)
     except (FileNotFoundError, ProcessLookupError):
         return None, (
             f"the host has no process {pid} to read a root from, so there is "
@@ -663,7 +684,9 @@ def _the_directory_a_process_has_as_its_root(
     return (seen.st_dev, seen.st_ino), ""
 
 
-def _confined_to_this_runs_jail(pid: int, chroot_dir: Path) -> tuple[bool, str]:
+def _confined_to_this_runs_jail(
+    pid: int, chroot_dir: Path, *, pinned: int | None = None
+) -> tuple[bool, str]:
     """Whether ``pid`` is confined to the jail this run made and holds.
 
     **This is the positive ground, and it is positive because of what the jail
@@ -687,8 +710,15 @@ def _confined_to_this_runs_jail(pid: int, chroot_dir: Path) -> tuple[bool, str]:
     deadline could not fire, the jail could not be removed, and the two call
     sites that stop a machine were both dead. The directory is asked for
     instead, and a directory answers the same whichever namespace spells it.
+
+    **Asked of a process, not of a number, wherever the caller can manage it.**
+    ``pinned`` is an open ``/proc/<pid>`` directory, and passing it makes both
+    reads below go through that one reference rather than through the number
+    twice. Admission does not have one and does not need one — it is not inside
+    any interval and has nothing to be told apart from. The stop path does have
+    one, and for it the difference is the whole point of the parameter.
     """
-    here, why_not = _the_directory_a_process_has_as_its_root(pid)
+    here, why_not = _the_directory_a_process_has_as_its_root(pid, pinned=pinned)
     if here is None:
         return False, why_not
     try:
@@ -700,7 +730,9 @@ def _confined_to_this_runs_jail(pid: int, chroot_dir: Path) -> tuple[bool, str]:
             f"read ({code}), so nothing can be shown to be confined to it"
         )
     if here != (jail.st_dev, jail.st_ino):
-        rendered, _unreadable = _the_jail_a_process_is_confined_to(pid)
+        rendered, _unreadable = _the_jail_a_process_is_confined_to(
+            pid, pinned=pinned
+        )
         return False, (
             f"process {pid} has a root that is not the jail this run "
             f"made and holds ({chroot_dir}) — /proc/{pid}/root renders as "
@@ -936,12 +968,19 @@ time in clock ticks — a number two processes can share, one having replaced th
 other inside a single tick.
 
 It is asked here and nowhere else because here is the only place it can be asked
-and mean anything. ``pidfd_open`` makes the kernel hold a reference to the
-process's ``struct pid``, so for as long as the descriptor is open the number
-cannot be handed to anything new. A confinement read taken inside that interval
-is therefore a reading *about the process the handle names*, not about whoever
-holds a number by the time the answer comes back. Taken outside it — in
-:func:`_may_signal_now`, say — the same read would be one more racy number.
+and mean anything. What makes it answerable is not the handle by itself.
+``pidfd_open`` makes the kernel hold a reference to the process's ``struct pid``
+— and that is a weaker thing than it was once written down as here. ``free_pid``
+returns the *number* to the allocator when the process is reaped, and only then
+drops the reference the descriptor is holding, so a held descriptor does not
+keep the number from being handed on. What makes the reading answerable is the
+reference this run pins to ``/proc/<pid>`` *before* the handle is taken, which
+goes on answering about the process it was opened on:
+:func:`_a_proc_reference_pinned_to` carries the argument. A confinement read
+taken through that reference is a reading *about the process the handle names*,
+not about whoever holds a number by the time the answer comes back. Taken
+outside it — in :func:`_may_signal_now`, say — the same read would be one more
+racy number.
 
 **Two findings share it, and the sentence carries which.** A process positively
 confined somewhere else, and a confinement this run could not read at all. They
@@ -982,24 +1021,244 @@ one of those.
 """
 
 
+PINNED_STILL_RUNNING = "still_running"
+"""Read through the pinned reference: the process is there and has not ended."""
+
+PINNED_ENDED = "ended"
+"""Read through the pinned reference: the process has ended.
+
+Both halves of ending are this one answer. A process that has exited and not yet
+been collected still holds its number — ``free_pid`` runs at ``release_task``,
+not at exit — so the reference still reads, and what it reads is a state
+character of ``Z``. A process that has been collected does not read at all, and
+the reference answers ``ESRCH``. Either way there is nothing left to stop and
+nothing left confined to the jail, which is the one thing the caller needs.
+"""
+
+PINNED_UNREADABLE = "unreadable"
+"""Read through the pinned reference: it did not answer, and why is not known.
+
+Not ended. A reference that cannot be read cannot be used to say the process
+behind it is gone, and this module never lets unreadable collapse into dead.
+"""
+
+A_STAT_LINE_FITS_IN = 8192
+"""Bytes to read from ``/proc/<pid>/stat``. Generous: the real line is ~300.
+
+Sized rather than read-to-EOF because the read goes through an already-open
+directory and a fixed-size read has no second syscall to go wrong in. A process
+name can hold almost anything, including newlines and parentheses, which is why
+the parse below works backwards from the *last* ``)`` rather than splitting on
+whitespace from the front.
+"""
+
+THE_READS_THAT_GO_THROUGH_THE_REFERENCE = (os.open, os.stat, os.readlink)
+"""The three calls this module asks of a pinned ``/proc`` directory.
+
+``os.open`` for the stat line, ``os.stat`` for the root's identity, and
+``os.readlink`` for the sentence that names it. All three take ``dir_fd`` on
+Linux; the interpreter is asked rather than assumed, because a build where one
+of them does not is a build where the reference cannot be read at all and the
+binding this module rests on does not exist. That is stated and refused, not
+worked around — a fallback to reading by number is the thing being removed.
+"""
+
+
+def _the_reference_can_be_read_here() -> bool:
+    """Whether this interpreter can read through an open directory at all.
+
+    Measured on the host rather than inferred from the platform name. Every
+    caller of this treats ``False`` as a reason to refuse, never as a reason to
+    fall back to reading ``/proc/<pid>`` by path.
+    """
+    return all(
+        call in os.supports_dir_fd for call in THE_READS_THAT_GO_THROUGH_THE_REFERENCE
+    )
+
+
+def _the_process_table_is_mounted() -> bool:
+    """Whether this host answers for processes at all, asked of a number that must exist.
+
+    ``/proc/self`` names the asking process, so on a host with ``/proc`` mounted
+    it is there by construction. Its absence is not a fact about any one process
+    — it says the file system that would have answered is not present — and that
+    is the point: it separates *this number has no process* from *no number
+    here has a process*, which arrive as the same ``ENOENT``.
+
+    Asked only on the error path, and only to turn a death back into an unknown.
+    Nothing decides to signal on the strength of it.
+    """
+    try:
+        os.close(os.open("/proc/self", os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC))
+    except OSError:
+        return False
+    return True
+
+
+def _a_proc_reference_pinned_to(pid: int) -> tuple[int | None, str, str]:
+    """An open ``/proc/<pid>`` that goes on naming this process, or a verdict.
+
+    **What this is for.** ``/proc/<pid>`` spelled as a *path* is resolved from
+    the number on every walk, so two reads of the same path can be answered by
+    two different processes. Opened once, it is not: ``proc_pid_make_inode``
+    takes a reference to the process's ``struct pid`` and hangs it on the inode,
+    and ``get_proc_task`` resolves every later read through *that*, never
+    through the number again. So an open ``/proc/<pid>`` directory is a handle
+    on a process in the same sense a pidfd is, and reads taken through it are
+    reads about that one process.
+
+    **Why it is opened before the pidfd and not after.** This reference is what
+    makes the two objects provably the same process. Open it at t1, take the
+    pidfd at t2, read through it at t3: a read that succeeds at t3 says the
+    reference's process had not been reaped by t3, and a process holds its
+    number from birth until it is reaped, so it held the number across the whole
+    of t1 to t3 — which contains t2. A number has one holder at a time, so the
+    process the pidfd was given at t2 is that same process. Reverse the order
+    and the argument is gone: a reference opened *after* the handle says nothing
+    about who held the number when the handle was taken.
+
+    **Three answers, as everywhere else here.** Gone, not permitted, and unknown
+    are three findings. The verdict returned is the one the caller should carry
+    if it cannot get its reference, and the sentence beside it says why.
+    """
+    if not _the_reference_can_be_read_here():
+        return (
+            None,
+            HANDLE_UNSUPPORTED,
+            f"this interpreter cannot read through an open directory, so a "
+            f"reference to process {pid} could be opened and never read, and "
+            "nothing about that process could be told apart from a successor's",
+        )
+    try:
+        return (
+            os.open(f"/proc/{pid}", os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC),
+            "",
+            "",
+        )
+    except (FileNotFoundError, ProcessLookupError):
+        if not _the_process_table_is_mounted():
+            # The same errno, and not the same finding. A host with no /proc
+            # answers ENOENT for every number alike, so reading this one as a
+            # death would report every machine stopped and take down the jail
+            # behind each of them. It is the most expensive way to be wrong
+            # that this function has, and it costs one open to rule out.
+            return (
+                None,
+                HANDLE_UNKNOWN,
+                f"/proc/{pid} is not there and neither is /proc/self, so this "
+                "host is not answering for any process and nothing can be told "
+                "about this one",
+            )
+        return (
+            None,
+            HANDLE_GONE,
+            f"process {pid} was already gone when this run reached for a "
+            "reference to it, so there is nothing to stop",
+        )
+    except PermissionError as denied:
+        return (
+            None,
+            HANDLE_DENIED,
+            f"this run may not open /proc/{pid}, so it cannot hold anything to "
+            f"that process and cannot tell it apart from a successor "
+            f"({type(denied).__name__}: {denied})",
+        )
+    except OSError as failed:
+        named = errno.errorcode.get(failed.errno or 0, str(failed.errno))
+        return (
+            None,
+            HANDLE_UNKNOWN,
+            f"/proc/{pid} could not be opened and the reason is not one this "
+            f"code knows how to read ({named}: {failed})",
+        )
+
+
+def _what_the_pinned_reference_still_says(
+    pinned: int,
+) -> tuple[str, int | None, str]:
+    """Standing and start time, both out of one read through the reference.
+
+    One read rather than two because two reads of the same thing can disagree,
+    and because ``/proc/<pid>/stat`` already carries both: field 3 is the state
+    character and field 22 is the start time in clock ticks. Taken through
+    ``pinned``, they are facts about the process the reference was opened on.
+
+    Returns the standing (:data:`PINNED_STILL_RUNNING`, :data:`PINNED_ENDED` or
+    :data:`PINNED_UNREADABLE`), the start time if the line could be read at all,
+    and a sentence for the unreadable case.
+
+    The start time comes back even for a process that has ended but not been
+    collected, which is deliberate: that is exactly the case where the caller
+    still wants to check the start time it was given before deciding the process
+    it is looking at is the one it launched.
+    """
+    try:
+        line = os.open("stat", os.O_RDONLY, dir_fd=pinned)
+    except (FileNotFoundError, ProcessLookupError):
+        return PINNED_ENDED, None, ""
+    except OSError as unreadable:
+        named = errno.errorcode.get(unreadable.errno or 0, str(unreadable.errno))
+        return PINNED_UNREADABLE, None, f"{named}: {unreadable}"
+    try:
+        raw = os.read(line, A_STAT_LINE_FITS_IN).decode("utf-8", "replace")
+    except OSError as unreadable:
+        named = errno.errorcode.get(unreadable.errno or 0, str(unreadable.errno))
+        return PINNED_UNREADABLE, None, f"{named}: {unreadable}"
+    finally:
+        os.close(line)
+
+    try:
+        after_the_name = raw[raw.rindex(")") + 1 :].split()
+        state = after_the_name[0]
+        started = int(after_the_name[19])
+    except (ValueError, IndexError):
+        return (
+            PINNED_UNREADABLE,
+            None,
+            "the stat line read through this run's own reference did not have "
+            "the shape this code knows how to read",
+        )
+    if state in ("Z", "X"):
+        return PINNED_ENDED, started, ""
+    return PINNED_STILL_RUNNING, started, ""
+
+
 def _a_handle_pinned_to(
     pid: int, started: int, *, chroot_dir: Path
 ) -> tuple[int | None, str, str]:
-    """A descriptor that names one process and cannot come to name another.
+    """A descriptor that names one process, and a reference that proves which.
 
     ``pidfd_open(2)`` takes its argument by number, so the descriptor it hands
     back is pinned to whatever held the number *at that instant* — which is the
     right process if the number had not been handed on since this run admitted
-    it, and the wrong one if it had. That is why the start time is read again
-    here, while the descriptor is held: a reading that still matches says the
-    number had not moved, and from that point the descriptor keeps it from
-    moving. Every signal sent through it afterwards reaches that process or
-    fails; none of them can reach a successor.
+    it, and the wrong one if it had. Every signal sent through it afterwards
+    reaches that process or fails; none of them can reach a successor. What the
+    descriptor does *not* do is tell its holder which process that is, and it
+    does not stop the number moving on afterwards: ``free_pid`` returns the
+    number to the allocator when the process is reaped and drops the
+    descriptor's reference only after that. The descriptor goes on naming its
+    own process; ``/proc/<number>`` can come to name a different one. Those are
+    two different guarantees and this function needs both.
 
-    This is not the same as the number being proof. It narrows a gap that used
-    to sit in front of *every* signal down to one, at the moment of the open,
-    and the residue there is a replacement that began inside the same clock tick
-    as the process it replaced — a process that lived under ten milliseconds.
+    **So the binding is made here, in an order, before anything is read.** A
+    reference to ``/proc/<pid>`` is opened first, the handle is taken second,
+    and every reading is taken through the reference third. A reading that
+    answers at the third step says the reference's process had not been reaped
+    by then; a process holds its number from birth until it is reaped; so it
+    held the number across the whole span, which contains the moment the handle
+    was taken. One number has one holder, so the process the handle was given is
+    that same process. Whether it is still running, when it started, and what
+    its root is are then facts about the process the handle names. The order is
+    what does this, not the descriptor — see :func:`_a_proc_reference_pinned_to`,
+    which is why it is opened where it is.
+
+    This is not the same as the number being proof, and the readings below do
+    two different jobs. The reference ties every reading to the process the
+    handle names. The start time, read back through that reference and compared
+    with the one admission recorded, is the only thing that ties *that* process
+    back to the one this run launched — the reference is opened here, at
+    stopping time, so it cannot speak for anything that happened before it. Two
+    processes can share a start time, which is why the jail is asked about too.
 
     **Where it is not available, and why every one of those answers refuses.**
     ``pidfd_open`` is a syscall, not a library call, and an old kernel answers
@@ -1024,23 +1283,26 @@ def _a_handle_pinned_to(
     has no pidfd", which on a new kernel was a false statement that authorised
     the weaker path.
 
-    **An unreadable start time is not a handover.** Reading it back is how the
-    open is checked, and ``_when_that_process_started`` answers ``None`` for
-    every way that reading can fail. Treating ``None`` as "different from what
-    was admitted" put those failures in :data:`HANDLE_HANDED_ON`, whose meaning
-    to the caller is *the machine is not there any more* — so a ``/proc`` this
-    run could not read reported a stop that had not happened. They are split
-    here: a value that reads back and differs is a handover, and no value at all
-    is :data:`HANDLE_UNKNOWN`.
+    **An unreadable reference is not a handover, and it is not a death.** The
+    reading taken through the reference can fail, and every way it can fail that
+    is not the process ending is :data:`HANDLE_UNKNOWN`: a ``/proc`` this run
+    may not read, a line it cannot parse, an errno it does not recognise.
+    Folding those into :data:`HANDLE_HANDED_ON` — whose meaning to the caller is
+    *the machine is not there any more* — reported a stop that had not happened,
+    and folding them into :data:`HANDLE_GONE` would report the same thing by a
+    different name. They stay apart: a start time that reads back and differs is
+    a handover, a reference that says the process has ended is
+    :data:`HANDLE_GONE`, and anything else unreadable is unknown. Unknown keeps
+    the jail.
 
     **The start time was never enough on its own, and this is where the rest of
     it goes.** A start time is a count of clock ticks since boot, so two
-    processes can share one; the residue named above — a replacement born inside
-    the same tick — is a process the equality check cannot tell from the
-    original. What can tell them apart is where they are: the jail is a
-    directory this run created and claimed exclusively, so being confined to it
-    is not something a stranger can arrive at by being born at the right moment.
-    That question is asked once at admission and, until 2026-09-16, never again.
+    processes can share one, and a replacement born inside the same tick as the
+    process it replaced is one the equality check cannot tell from the original.
+    What can tell them apart is where they are: the jail is a directory this run
+    created and claimed exclusively, so being confined to it is not something a
+    stranger can arrive at by being born at the right moment. That question is
+    asked once at admission and, until 2026-09-16, never again.
 
     ``chroot_dir`` is required and has no default, so a caller that has not
     thought about which jail it means gets a ``TypeError`` rather than a signal.
@@ -1050,10 +1312,10 @@ def _a_handle_pinned_to(
 
     **Why here and not in :func:`_may_signal_now`.** Adding the same read there
     would add a third number to re-check in a place where the answer can go
-    stale before it is used. Here the descriptor is already open, and an open
-    descriptor is the kernel holding the process's ``struct pid``: the number
-    cannot be handed on while it is held. The reading taken between the open and
-    the signal is therefore about the process that will receive the signal.
+    stale before it is used: ``_may_signal_now`` holds no reference and is
+    inside no interval, so what it would re-read is a number and nothing more.
+    Here the reference is open and the handle is taken, and the reading between
+    them and the signal is about the process that will receive it.
 
     **The direction this can fail in.** The recheck can turn a signal into a
     refusal or into "already gone"; it cannot turn a refusal into a signal.
@@ -1061,90 +1323,112 @@ def _a_handle_pinned_to(
     So a host where the pinning guarantee is weaker than documented is no worse
     off than it was, and a host where it holds gets the guarantee.
     """
+    # Before the handle, and this order is the whole argument. A reference taken
+    # afterwards would say nothing about who held the number at the moment the
+    # handle was taken; taken before, a reading that still answers proves the
+    # number did not move across the open. See _a_proc_reference_pinned_to.
+    pinned, no_reference, why_no_reference = _a_proc_reference_pinned_to(pid)
+    if pinned is None:
+        return None, no_reference, why_no_reference
     try:
-        handle = os.pidfd_open(pid)
-    except ProcessLookupError:
-        return (
-            None,
-            HANDLE_GONE,
-            f"process {pid} was already gone when a handle was asked for",
-        )
-    except PermissionError as denied:
-        return (
-            None,
-            HANDLE_DENIED,
-            f"this kernel has the pidfd interface and refused this run a handle "
-            f"on process {pid} ({type(denied).__name__}: {denied})",
-        )
-    except AttributeError as missing:
-        return (
-            None,
-            HANDLE_UNSUPPORTED,
-            f"this interpreter has no pidfd for process {pid} "
-            f"({type(missing).__name__}: {missing})",
-        )
-    except OSError as failed:
-        if failed.errno == errno.ENOSYS:
+        try:
+            handle = os.pidfd_open(pid)
+        except ProcessLookupError:
+            return (
+                None,
+                HANDLE_GONE,
+                f"process {pid} was already gone when a handle was asked for",
+            )
+        except PermissionError as denied:
+            return (
+                None,
+                HANDLE_DENIED,
+                f"this kernel has the pidfd interface and refused this run a "
+                f"handle on process {pid} ({type(denied).__name__}: {denied})",
+            )
+        except AttributeError as missing:
             return (
                 None,
                 HANDLE_UNSUPPORTED,
-                f"this kernel has no pidfd for process {pid} (ENOSYS: {failed})",
+                f"this interpreter has no pidfd for process {pid} "
+                f"({type(missing).__name__}: {missing})",
             )
-        named = errno.errorcode.get(failed.errno or 0, str(failed.errno))
-        return (
-            None,
-            HANDLE_UNKNOWN,
-            f"a handle on process {pid} could not be taken and the reason is not "
-            f"one this code knows how to read ({named}: {failed})",
+        except OSError as failed:
+            if failed.errno == errno.ENOSYS:
+                return (
+                    None,
+                    HANDLE_UNSUPPORTED,
+                    f"this kernel has no pidfd for process {pid} "
+                    f"(ENOSYS: {failed})",
+                )
+            named = errno.errorcode.get(failed.errno or 0, str(failed.errno))
+            return (
+                None,
+                HANDLE_UNKNOWN,
+                f"a handle on process {pid} could not be taken and the reason "
+                f"is not one this code knows how to read ({named}: {failed})",
+            )
+
+        # One read through the reference, carrying both answers, so that the two
+        # cannot disagree with each other the way two reads of a number can.
+        standing, started_now, why_unreadable = (
+            _what_the_pinned_reference_still_says(pinned)
         )
-    started_now = _when_that_process_started(pid)
-    if started_now is None:
-        # Not a finding. ``_when_that_process_started`` returns ``None`` for
-        # every unreadable ``/proc`` — a process that ended, a ``/proc`` this
-        # run may not read, a line it could not parse — and none of those says
-        # the number was handed on. Folding them into HANDLE_HANDED_ON told the
-        # caller "gone or someone else's", which is the one verdict that makes
-        # the caller stop *without* keeping the jail. Unknown keeps the jail.
-        os.close(handle)
-        return (
-            None,
-            HANDLE_UNKNOWN,
-            f"a handle on process {pid} was taken and its start time could not "
-            "be read back, so whether it is still the process this run "
-            "admitted is unknown",
+        if standing == PINNED_UNREADABLE:
+            # Not a finding, and in particular not a death. Every way this read
+            # can fail that is not the process ending lands here: a /proc this
+            # run may not read, a line it cannot parse, an errno it does not
+            # recognise. Calling any of them gone would report a stop that has
+            # not happened and drop the jail behind it.
+            os.close(handle)
+            return (
+                None,
+                HANDLE_UNKNOWN,
+                f"a handle on process {pid} was taken and the reference this "
+                f"run pinned to it could not be read ({why_unreadable}), so "
+                "whether it is still the process this run admitted is unknown",
+            )
+        if started_now is not None and started_now != started:
+            # The reference and the handle are the same process; this says that
+            # process is not the one admission recorded. A reaped process has no
+            # start time to compare, and is answered by the branch below instead
+            # — nothing here is folded into a handover for being unreadable.
+            os.close(handle)
+            return (
+                None,
+                HANDLE_HANDED_ON,
+                f"process {pid} was handed on between this run identifying it "
+                "and taking hold of it, so the handle does not name what was "
+                "admitted",
+            )
+        # Liveness before identity, the same order both stop paths already use
+        # and for the same reason: a machine that ended on its own is not an
+        # unidentified one. A guest that ends here is the ordinary ending, and a
+        # confinement read cannot be taken for it at all — an ended process has
+        # no root to walk into — so asking identity first would file every
+        # machine that stopped on its own as a stranger.
+        if standing == PINNED_ENDED:
+            os.close(handle)
+            return (
+                None,
+                HANDLE_GONE,
+                f"process {pid} ended while this run held a reference to it, so "
+                "there is nothing confined to the jail any more and nothing to "
+                "stop",
+            )
+        # Identity, now that there is something to have an identity. This is the
+        # reading admission took once and nothing has retaken since; here it is
+        # retaken through the reference, which is what makes it a reading about
+        # the process the handle names rather than about a number.
+        confined, why_not_confined = _confined_to_this_runs_jail(
+            pid, chroot_dir, pinned=pinned
         )
-    if started_now != started:
-        os.close(handle)
-        return (
-            None,
-            HANDLE_HANDED_ON,
-            f"process {pid} was handed on between this run identifying it and "
-            "taking hold of it, so the handle does not name what was admitted",
-        )
-    # Liveness before identity, the same order both stop paths already use and
-    # for the same reason: a machine that ended on its own is not an unidentified
-    # one. Asked while the handle is held, so "nothing holds that number" cannot
-    # mean "something else holds it now" — the kernel is keeping the number for
-    # this descriptor. A guest that ends here is the ordinary ending, and a
-    # confinement read cannot be taken for it at all — an uncollected process has
-    # no root to walk into — so asking identity first would file every machine
-    # that stopped on its own as a stranger.
-    if not _still_running(pid) or _has_exited_but_not_been_reaped(pid):
-        os.close(handle)
-        return (
-            None,
-            HANDLE_GONE,
-            f"process {pid} ended while this run held a handle on it, so there "
-            "is nothing confined to the jail any more and nothing to stop",
-        )
-    # Identity, now that there is something to have an identity. This is the
-    # reading that admission took once and nothing has retaken since; here it is
-    # retaken inside the interval where the number cannot move.
-    confined, why_not_confined = _confined_to_this_runs_jail(pid, chroot_dir)
-    if not confined:
-        os.close(handle)
-        return (None, HANDLE_NOT_SHOWN_TO_BE_OURS, why_not_confined)
-    return handle, HANDLE_TAKEN, ""
+        if not confined:
+            os.close(handle)
+            return (None, HANDLE_NOT_SHOWN_TO_BE_OURS, why_not_confined)
+        return handle, HANDLE_TAKEN, ""
+    finally:
+        os.close(pinned)
 
 
 def _the_process_a_handle_names(handle: int) -> int | None:

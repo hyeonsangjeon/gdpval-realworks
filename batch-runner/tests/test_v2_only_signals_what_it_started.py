@@ -103,9 +103,12 @@ def _a_stand_in_guest_with_an_identity(monkeypatch, *pids: int) -> None:
     real_floor = agentic_v2_first_boot._the_instant_this_run_launched
     real_ceiling = agentic_v2_first_boot._the_instant_the_number_was_read
     real_confinement = agentic_v2_first_boot._confined_to_this_runs_jail
+    real_reference = agentic_v2_first_boot._a_proc_reference_pinned_to
+    real_reading = agentic_v2_first_boot._what_the_pinned_reference_still_says
     born: dict[str, int | None] = {}
+    pinned_to: dict[int, int] = {}
 
-    def confined(pid: int, chroot_dir) -> tuple[bool, str]:
+    def confined(pid: int, chroot_dir, **named) -> tuple[bool, str]:
         """"Are you inside this run's jail" — the other half of being a guest.
 
         A real guest is put in the jail by the jailer, which needs privileges a
@@ -119,7 +122,7 @@ def _a_stand_in_guest_with_an_identity(monkeypatch, *pids: int) -> None:
         """
         if pid in known:
             return True, ""
-        return real_confinement(pid, chroot_dir)
+        return real_confinement(pid, chroot_dir, **named)
 
     def _born_now() -> None:
         if "ticks" not in born:
@@ -141,8 +144,54 @@ def _a_stand_in_guest_with_an_identity(monkeypatch, *pids: int) -> None:
         _born_now()
         return born["ticks"]
 
+    def a_reference(pid: int) -> tuple[int | None, str, str]:
+        """"Is there something to pin to you" — the third question a guest answers.
+
+        Since 2026-09-16 the stop path opens ``/proc/<pid>`` before it asks for
+        a handle, so that everything it reads afterwards is a reading about one
+        process rather than about a number. A number a test made up has no
+        ``/proc`` entry; left real, that open answers ``ENOENT`` and the run
+        reads a simulated live guest as a process that has already gone. That
+        would be a true reading of this host and a false one of the guest the
+        test is describing, and it would take the jail down behind it.
+
+        The descriptor handed back is a real one, for the same reason
+        :meth:`_Signals._open_a_handle` hands back a real one: the code under
+        test closes what it pins, and a number nothing opened fails that close
+        with ``EBADF``, so a reference this run forgets to release still shows
+        up as a leak rather than as an error in the stand-in.
+
+        Anything not named here is pinned for real, so a stranger still meets
+        the host's own answer.
+        """
+        if pid not in known:
+            return real_reference(pid)
+        reference = os.open(os.devnull, os.O_RDONLY)
+        pinned_to[reference] = pid
+        return reference, "", ""
+
+    def through_the_reference(pinned: int) -> tuple[str, int | None, str]:
+        """What that reference still says: alive, and born when the guest was.
+
+        Liveness for these PIDs is the simulation's to answer and it answers it
+        through ``os.kill``, which is where every test here has always driven
+        it. This says *still running* so that the reading does not become a
+        second, disagreeing source of the same fact.
+        """
+        pid = pinned_to.get(pinned)
+        if pid is None:
+            return real_reading(pinned)
+        return agentic_v2_first_boot.PINNED_STILL_RUNNING, started(pid), ""
+
     monkeypatch.setattr(
         "core.agentic_v2_first_boot._when_that_process_started", started
+    )
+    monkeypatch.setattr(
+        "core.agentic_v2_first_boot._a_proc_reference_pinned_to", a_reference
+    )
+    monkeypatch.setattr(
+        "core.agentic_v2_first_boot._what_the_pinned_reference_still_says",
+        through_the_reference,
     )
     monkeypatch.setattr(
         "core.agentic_v2_first_boot._the_instant_this_run_launched", floor
@@ -176,10 +225,10 @@ def _as_if_the_jailer_had_chrooted(monkeypatch, in_the_jail) -> None:
     """
     real_confinement = agentic_v2_first_boot._confined_to_this_runs_jail
 
-    def confined(pid: int, chroot_dir) -> tuple[bool, str]:
+    def confined(pid: int, chroot_dir, **named) -> tuple[bool, str]:
         if pid in in_the_jail:
             return True, ""
-        return real_confinement(pid, chroot_dir)
+        return real_confinement(pid, chroot_dir, **named)
 
     monkeypatch.setattr(
         "core.agentic_v2_first_boot._confined_to_this_runs_jail", confined

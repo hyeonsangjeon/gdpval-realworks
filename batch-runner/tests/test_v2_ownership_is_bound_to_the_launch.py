@@ -62,6 +62,7 @@ from core.agentic_v2_first_boot import (
     HANDLE_UNKNOWN,
     HANDLE_UNSUPPORTED,
     NO_VERDICT_MAY_SIGNAL_BY_NUMBER,
+    PINNED_UNREADABLE,
     _a_handle_pinned_to,
     _clean_up_after_a_failure,
     _confined_to_this_runs_jail,
@@ -745,7 +746,9 @@ def _a_number_this_kernel_cannot_have_assigned() -> int:
     return ceiling + 1
 
 
-def test_x11_every_way_of_not_getting_a_handle_keeps_its_own_name(monkeypatch):
+def test_x11_every_way_of_not_getting_a_handle_keeps_its_own_name(
+    monkeypatch, own_children
+):
     """Each way of not getting a handle keeps its own name, and none is a way through.
 
     The names still matter and are still worth telling apart, because they are
@@ -765,7 +768,18 @@ def test_x11_every_way_of_not_getting_a_handle_keeps_its_own_name(monkeypatch):
     The refusals are induced rather than found, because a host cannot be asked
     to deny a handle on demand. What is being checked is the reading, which is
     the part that was wrong.
+
+    **The subject is a live child rather than an impossible number.** It used to
+    be a number above ``pid_max``, on the reasoning that a number nothing can
+    hold is the safest thing to aim a stop at. Since 2026-09-16 the first thing
+    the stop path does is open ``/proc/<pid>``, and for a number nothing holds
+    that open fails — so the run ends at *gone* before any of the five refusals
+    below is reached, and the loop would have been checking one answer five
+    times. A child this test started has a ``/proc`` entry, so the induced
+    refusal is what the reading actually meets. It is also the harder case:
+    nothing may be sent to it, and it is still alive at the end to say so.
     """
+    subject = own_children.spawn()
     for raising, expected in (
         (OSError(errno.ENOSYS, "no such system call"), HANDLE_UNSUPPORTED),
         (
@@ -791,12 +805,11 @@ def test_x11_every_way_of_not_getting_a_handle_keeps_its_own_name(monkeypatch):
         # And the reading is carried through to the act. This used to be a
         # statement about a set of verdicts allowed to fall back; a set is a
         # description of the code and this is the code doing it.
-        unassignable = _a_number_this_kernel_cannot_have_assigned()
         _, _, why_for_that_number = _a_handle_pinned_to(
-            unassignable, 1, chroot_dir=Path("/")
+            subject.pid, 1, chroot_dir=Path("/")
         )
         stop = _stop_the_process_this_run_identified(
-            unassignable, 1, chroot_dir=Path("/")
+            subject.pid, 1, chroot_dir=Path("/")
         )
         assert stop["signalled"] is False, (
             f"{verdict} sent a signal. A kernel that has no interface, or one "
@@ -811,6 +824,24 @@ def test_x11_every_way_of_not_getting_a_handle_keeps_its_own_name(monkeypatch):
         )
         assert stop["refused_because"] == why_for_that_number != ""
         assert stop["handle_verdict"] == verdict
+        assert subject.poll() is None, (
+            f"{verdict} was a refusal and the subject stopped anyway, so "
+            "something reached it that the refusal was supposed to prevent"
+        )
+
+    # Gone is the sixth way of not getting a handle, and it is the one way that
+    # is a finding about the process rather than about this run's reach. It has
+    # to keep its own name too, because it is the only one of the six the
+    # caller may act on by taking the jail down.
+    monkeypatch.undo()
+    _, no_such_process, why_gone = _a_handle_pinned_to(
+        _a_number_this_kernel_cannot_have_assigned(), 1, chroot_dir=Path("/")
+    )
+    assert no_such_process == HANDLE_GONE, (
+        "a number this kernel cannot have assigned holds no process, and "
+        "saying so is not the same as saying this run could not look"
+    )
+    assert why_gone != ""
 
     assert NO_VERDICT_MAY_SIGNAL_BY_NUMBER is True, (
         "the flag says in prose what the loop above just checked. It replaced "
@@ -899,29 +930,38 @@ def test_x12_a_real_handle_names_one_process_and_is_dropped_when_it_would_not(
 
 
 def _a_handle_that_opens_and_a_start_time_that_answers(value, monkeypatch):
-    """Take the handle, then answer the start-time re-read with ``value``.
+    """Take the handle, then answer the reference's reading with ``value``.
 
-    This box hands out no ``pidfd``, so the two readings after the handle is
-    open — the ones that decide between ``unknown`` and ``handed on`` — are
-    unreachable here without standing in for ``pidfd_open``. What is stood in
-    for is only the *taking* of the handle; the reading that follows is the
-    real function, answering what ``value`` computes from the real one, and the
-    branch under test is production code either way.
+    This box hands out no ``pidfd``, so the reading after the handle is open —
+    the one that decides between ``unknown`` and ``handed on`` — is unreachable
+    here without standing in for ``pidfd_open``. What is stood in for is only
+    the *taking* of the handle; the reading that follows is the real function,
+    answering what ``value`` computes from the real one, and the branch under
+    test is production code either way.
+
+    Since 2026-09-16 that reading goes through the pinned reference rather than
+    through ``/proc/<pid>`` by number, so this stands where the reading now is.
+    ``value`` returning ``None`` stands for a line that would not read at all,
+    which is a different standing and not merely a different number — the two
+    are what this helper's callers are there to keep apart.
     """
     opened: list[int] = []
-    real = agentic_v2_first_boot._when_that_process_started
+    real = agentic_v2_first_boot._what_the_pinned_reference_still_says
 
     def open_handle(pid, flags=0):
         opened.append(pid)
         return os.open(os.devnull, os.O_RDONLY)
 
-    def reading(pid):
-        truth = real(pid)
-        return value(truth) if opened else truth
+    def reading(pinned):
+        standing, truth, why = real(pinned)
+        answered = value(truth)
+        if answered is None:
+            return PINNED_UNREADABLE, None, "EACCES: [Errno 13] Permission denied"
+        return standing, answered, why
 
     monkeypatch.setattr(os, "pidfd_open", open_handle, raising=False)
     monkeypatch.setattr(
-        agentic_v2_first_boot, "_when_that_process_started", reading
+        agentic_v2_first_boot, "_what_the_pinned_reference_still_says", reading
     )
     return opened
 
@@ -934,9 +974,14 @@ def test_x13_a_start_time_that_will_not_read_is_unknown_not_a_handover(
     Both arrive at the same line — the start time read back after the handle is
     open does not equal the one that was admitted — and until 2026-09-15 both
     left it as ``HANDLE_HANDED_ON``. Only one of them is a finding about the
-    process. ``_when_that_process_started`` answers ``None`` whenever the
-    reading fails at all, and a reading that failed says nothing about who owns
-    the number.
+    process. The reading answers with no number at all whenever it fails, and a
+    reading that failed says nothing about who owns the number.
+
+    Since 2026-09-16 that reading comes back through the reference this run
+    pinned rather than from ``/proc/<pid>`` by number, so *unreadable* has a
+    standing of its own — :data:`PINNED_UNREADABLE` — instead of being inferred
+    from a missing number. The two findings are further apart in the code than
+    they were, and this test is what says they still end apart.
 
     The cost of merging them was not in the name. ``HANDLE_HANDED_ON`` reaches
     the caller as ``already_gone``, which is the answer that means *stopped* —
@@ -962,7 +1007,10 @@ def test_x13_a_start_time_that_will_not_read_is_unknown_not_a_handover(
         "a reading that failed was reported as the process having stopped"
     )
     assert unreadable["signal_target"] is None
-    assert "could not be read back" in unreadable["refused_because"]
+    assert (
+        "the reference this run pinned to it could not be read"
+        in unreadable["refused_because"]
+    )
 
     monkeypatch.undo()
 
