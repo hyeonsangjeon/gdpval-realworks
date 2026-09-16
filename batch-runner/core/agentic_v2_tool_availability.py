@@ -23,6 +23,15 @@ methods buys the same guarantee without putting anything in the record --
 fixture's tools for real and asks the microVM's the way it can be asked without
 a machine.
 
+**Two questions, two paragraphs.** The list answers "which tools refuse". It
+does not answer "which of the ones that do not refuse can produce the file the
+task asked for", and that second question has its own wrong answer sitting in
+the plans: ``workspace_apply`` is declared ``works`` on both backends, and its
+``content`` is typed ``string`` by the contract, so it cannot write a ``.xlsx``,
+a ``.pdf``, a ``.pptx`` or an image. Four of the five deliverables in
+``advance_check_5`` are exactly those. :func:`how_files_get_made` is the second
+paragraph and :data:`FILE_ROUTE_PLACEHOLDER` is how a plan asks for it.
+
 **Read by the stage runner, and only where a plan asks.** The instruction text
 is a pinned condition of trial_30, and changing it means a new plan file and a
 new run id rather than an edit in place. :func:`apply_tool_availability` is
@@ -35,12 +44,29 @@ this and names the exact bytes that went to the model.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping, Sequence
+
+from core.agentic_v2_contract import TOOL_SCHEMAS
 
 #: A plan asks for a derived list by putting this in its instruction text.
 #: Absent, the text is returned unchanged -- which is what keeps the pinned
 #: instructions of an already-run stage exactly as they were.
 PLACEHOLDER = "{{TOOL_AVAILABILITY}}"
+
+#: A plan asks for the route to a file by putting this in its instruction text.
+#: Same opt-in rule as :data:`PLACEHOLDER`, and separate from it because the two
+#: answer different questions. The list says which tools refuse; this says which
+#: of the ones that do not refuse can produce the deliverable the task asked
+#: for, which is not derivable from the list alone -- ``workspace_apply`` is
+#: declared ``works`` on both backends and is the tool that cannot write four of
+#: the five formats ``advance_check_5`` hands in.
+FILE_ROUTE_PLACEHOLDER = "{{HOW_FILES_GET_MADE}}"
+
+#: A plan asks what is left of an input it cannot decode. Same opt-in rule
+#: again. Separate from the two above because it is about the files the model
+#: was given rather than the ones it produces, and it belongs in a different
+#: part of the prompt.
+READ_ROUTE_PLACEHOLDER = "{{READING_WHAT_IS_NOT_TEXT}}"
 
 #: True of both backends, because it is not a property of either. Any result
 #: that is not ``ok: true`` raises ``_EndTheRun`` in ``agentic_v2_runner.py``,
@@ -303,6 +329,145 @@ def contradicted_sentences(instructions: str, backend: Any) -> tuple[str, ...]:
         if named:
             found.append(sentence.strip().rstrip(".") + ".")
     return tuple(found)
+def _write_content_ceiling() -> int:
+    """The byte width the contract puts on a ``workspace_apply`` write.
+
+    Read out of :data:`core.agentic_v2_contract.TOOL_SCHEMAS` rather than
+    written here, so the number in front of the model is the number its call is
+    validated against. A second copy of ``1048576`` in a docstring is a number
+    that goes stale silently.
+    """
+    for branch in TOOL_SCHEMAS["workspace_apply"]["oneOf"]:
+        properties = branch.get("properties", {})
+        operation = properties.get("operation", {})
+        if "write" in operation.get("enum", ()):
+            return int(properties["content"]["maxLength"])
+    raise LookupError(
+        "workspace_apply has no write branch in TOOL_SCHEMAS. The paragraph "
+        "below describes a call that the contract no longer accepts"
+    )
+
+
+def _content_is_a_string() -> bool:
+    """Whether a write can carry anything but text.
+
+    The decisive fact, and the reason this module has a second paragraph. The
+    contract types ``content`` as ``string``; there is no ``content_base64``,
+    no encoding argument, and the backend's write ends in
+    ``str(arguments["content"]).encode("utf-8")``. So a write cannot carry the
+    bytes of a ``.xlsx``, and a model told to produce one with it is being told
+    to do something the schema will not let it do.
+    """
+    for branch in TOOL_SCHEMAS["workspace_apply"]["oneOf"]:
+        properties = branch.get("properties", {})
+        if "write" in properties.get("operation", {}).get("enum", ()):
+            fields = set(properties)
+            return properties["content"].get("type") == "string" and not (
+                fields & {"content_base64", "encoding", "bytes"}
+            )
+    return False
+
+
+def _runs_a_command_of_your_choosing(backend: Any) -> bool:
+    """Whether `backend` will run something the model wrote.
+
+    Keyed off the same table the refusal list is built from, and therefore off
+    the same test that holds that table against the real methods. ``partly`` is
+    not enough: on the fixture ``exec_run`` serves one fixed argv, which runs a
+    command but not one the model chose.
+    """
+    for entry in availability_for(backend):
+        if entry.tool == "exec_run":
+            return entry.verdict == "works"
+    return False
+
+
+def how_files_get_made(backend: Any) -> str:
+    """Which tool can produce the deliverable, on this backend.
+
+    The tool list says what refuses. It does not say that the one tool declared
+    to work everywhere -- ``workspace_apply`` -- writes text and only text, and
+    a model reading the list alone has no reason to think otherwise. Four of the
+    five formats in ``advance_check_5`` are binary, so on that cohort the
+    difference between this paragraph and no paragraph is four deliverables.
+
+    Derived, not written: the ceiling and the string-typing come from
+    :data:`core.agentic_v2_contract.TOOL_SCHEMAS`, and whether a command can be
+    run comes from the refusal table. Nothing here names a library or an
+    interpreter. What the image carries is the image's fact, the model has
+    ``capabilities_query`` to ask it, and a list hard-coded here would be the
+    same kind of claim as the hand-written paragraph this module replaced --
+    true of the image it was written against and silently false of the next one.
+    """
+    ceiling = _write_content_ceiling()
+    lines = [
+        "Deliverables are real files in your working directory. Which tool "
+        "makes one depends on the format.",
+        "",
+    ]
+
+    if _content_is_a_string():
+        lines.append(
+            f"workspace_apply, operation write, takes `content` as a string -- "
+            f"up to {ceiling:,} bytes, and there is no argument on it that "
+            "carries bytes. So it writes what can be typed: Markdown, CSV, "
+            "HTML, JSON, source code."
+        )
+    else:
+        lines.append(
+            "workspace_apply, operation write, carries something other than "
+            "text; check its schema before assuming what it will take."
+        )
+
+    if _runs_a_command_of_your_choosing(backend):
+        lines.append(
+            "A spreadsheet, a PDF, a slide deck or an image cannot be typed, "
+            "so they are not made that way. They are made by a program: "
+            "exec_run, with an `interpreter` and a `script`, writing the file "
+            "into your working directory. Files a command leaves there are the "
+            "same files finalize collects."
+        )
+        lines.append(
+            "Ask capabilities_query what this machine has before you depend on "
+            "a library being in it."
+        )
+    else:
+        lines.append(
+            "Nothing here runs a program you wrote, so a format that cannot be "
+            "typed cannot be produced in this run. If the task asks for one, "
+            "hand in what you can type and say in it which part was asked for "
+            "and could not be made. Do not hand in a text file named as though "
+            "it were the format that was asked for."
+        )
+
+    return "\n".join(lines)
+
+
+def reading_what_is_not_text(backend: Any) -> str:
+    """Whether the original of a non-text input is reachable, on this backend.
+
+    The plan's input section is right that ``workspace_apply(read)`` decodes
+    UTF-8 and fails on a spreadsheet, and right to say so -- without it a model
+    retries the same call. What it cannot say on its own is what follows from
+    that, because what follows differs: where a command can run, the original is
+    still reachable and the converter's text version is a fallback rather than
+    the only way in; where none can, the text version is the whole of it.
+
+    One sentence either way, and never empty. A placeholder that resolves to
+    nothing leaves a blank line where a paragraph was, and the blank line is
+    indistinguishable from a plan that forgot to say anything.
+    """
+    if _runs_a_command_of_your_choosing(backend):
+        return (
+            "The original is still reachable, though: a program can open what "
+            "the reader cannot. If the work needs what the converter dropped, "
+            "read the file in inputs/ with exec_run rather than settling for "
+            "the text version."
+        )
+    return (
+        "Nothing here runs a program over it either, so where a text version "
+        "exists it is the whole of what you can see of that file."
+    )
 
 
 def unverified_claims(backend: Any) -> tuple[ToolAvailability, ...]:
@@ -331,13 +496,58 @@ def unverified_claims(backend: Any) -> tuple[ToolAvailability, ...]:
     )
 
 
-def apply_tool_availability(instructions: str, backend: Any) -> str:
-    """Substitute the derived list into `instructions`, if it asks for one.
+#: Every placeholder a plan may opt into: what an operator would call it, and
+#: what fills it. Iterated rather than chained by hand so that adding a fourth
+#: is one entry and not a branch some caller forgets.
+#:
+#: The name sits beside its builder rather than in a second table. A refusal
+#: about width has to say which paragraph made the text wider, and two tables
+#: keyed the same way drift in exactly the way that answer must not.
+SUBSTITUTIONS: Mapping[str, tuple[str, Callable[[Any], str]]] = {
+    PLACEHOLDER: ("the tool list", tool_availability_paragraph),
+    FILE_ROUTE_PLACEHOLDER: ("the file route", how_files_get_made),
+    READ_ROUTE_PLACEHOLDER: ("the reading route", reading_what_is_not_text),
+}
 
-    A string without :data:`PLACEHOLDER` comes back identical, which is the
-    property the pinned plans rely on: adding this call to the stage runner
-    must not change a single byte of what an already-run stage sent.
+
+def placeholders_in(instructions: str) -> tuple[str, ...]:
+    """Which placeholders `instructions` asks to have filled, in a fixed order.
+
+    Separate from the substitution so a caller can record what a plan asked for
+    without rendering it -- the run record wants the names, not the prose.
     """
-    if PLACEHOLDER not in instructions:
-        return instructions
-    return instructions.replace(PLACEHOLDER, tool_availability_paragraph(backend))
+    return tuple(name for name in SUBSTITUTIONS if name in instructions)
+
+
+def named_placeholders(names: Sequence[str]) -> str:
+    """`names` as an operator would say them, for a message about them.
+
+    ``{{TOOL_AVAILABILITY}}`` is what to search the plan file for and "the tool
+    list" is what it is; a refusal that has to be read quickly wants the second.
+    The placeholder itself is not lost -- the run record carries it verbatim
+    under ``substituted``.
+    """
+    said = [SUBSTITUTIONS[name][0] for name in names]
+    if len(said) <= 1:
+        return "".join(said)
+    return ", ".join(said[:-1]) + " and " + said[-1]
+
+
+def apply_tool_availability(instructions: str, backend: Any) -> str:
+    """Substitute the derived paragraphs into `instructions`, where it asks.
+
+    A string with no placeholder in it comes back identical, which is the
+    property the pinned plans rely on: adding this call to the stage runner
+    must not change a single byte of what an already-run stage sent. Each
+    placeholder is independent, so a plan that asks for the tool list and not
+    the file route gets exactly what it asked for.
+
+    The backend is resolved once per placeholder present and not at all when
+    none is, so a plan that opts out of both is never asked which backend it is
+    on. :func:`core.agentic_v2_instructions.resolve_instructions` looks that up
+    separately and on every path, which is where an unknown backend is refused.
+    """
+    for name in placeholders_in(instructions):
+        _, build = SUBSTITUTIONS[name]
+        instructions = instructions.replace(name, build(backend))
+    return instructions
