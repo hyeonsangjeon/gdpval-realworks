@@ -396,3 +396,193 @@ class TestTheRecordSaysWhatWasBootedAndWhatWasLeft:
             command_sh=A_COMMAND, workspace=_workspace(tmp_path), deadline_seconds=45
         )
         assert machine.record[0]["teardown"] == {"all_gone": True}
+
+
+class TestACarriageThatRaisesIsStillACarriageThatFailed:
+    """The same fault, arriving as an exception instead of as a return value.
+
+    Every step of ``carry_the_workspace_back`` can raise: it shells out to read
+    the disk, removes and remakes the previous-contents directory, lists the
+    workspace, moves the children, and re-raises after putting back a
+    half-carriage. Before this, all of that left ``__call__`` uncaught — and by
+    then the boot has already happened.
+
+    What that costs is not the traceback. D2 catches a launcher error and reads
+    it for a ``teardown`` to say what was left behind; an exception from here
+    carries none, so the record becomes *nothing was ever launched*. The
+    absence is read as proof and it is not proof, because the thing that raised
+    is downstream of the launch. A guest still sitting on the host is then a
+    guest nothing in the run record names.
+
+    So the cases below are the ones already written for a carriage that returns
+    empty, asked again of a carriage that throws. They are expected to give the
+    same answers, which is the whole claim.
+    """
+
+    class Broke(OSError):
+        """What the real function raises out of ``shutil`` — an ``OSError``."""
+
+    def _carriage_that_raises(self, monkeypatch):
+        def refuse(**_handed):
+            raise self.Broke("previous: Not a directory")
+
+        monkeypatch.setattr(
+            "core.agentic_v2_one_call_machine.carry_the_workspace_back", refuse
+        )
+
+    def _call(self, tmp_path, monkeypatch, guest):
+        self._carriage_that_raises(monkeypatch)
+        workspace = _workspace(tmp_path)
+        booted = _machine(tmp_path, guest)(
+            command_sh=A_COMMAND, workspace=workspace, deadline_seconds=45
+        )
+        return workspace, booted
+
+    def _leaked(self, tmp_path, monkeypatch, outcome, *, confirmed=None):
+        return self._call(
+            tmp_path,
+            monkeypatch,
+            GuestThatIsStillRunningAfterwards(
+                status=0, outcome=outcome, guest_confirmed_stopped=confirmed
+            ),
+        )[1]
+
+    def test_the_exception_does_not_leave_the_call(self, tmp_path, monkeypatch):
+        _workspace_, booted = self._call(tmp_path, monkeypatch, Guest(status=0))
+        assert booted["outcome"] == WORKSPACE_DID_NOT_COME_BACK
+
+    def test_why_it_failed_is_kept_rather_than_thrown_away(
+        self, tmp_path, monkeypatch
+    ):
+        # Swallowing the exception is only defensible if the reason survives it.
+        _workspace_, booted = self._call(tmp_path, monkeypatch, Guest(status=0))
+        assert booted["workspace_carriage"]["carriage_error"] == (
+            "Broke: previous: Not a directory"
+        )
+        assert booted["workspace_carriage"]["replaced"] is False
+
+    def test_the_returncode_is_withheld_and_the_real_one_kept(
+        self, tmp_path, monkeypatch
+    ):
+        _workspace_, booted = self._call(tmp_path, monkeypatch, Guest(status=0))
+        assert booted["command_exit_status"] is None
+        assert booted["command_exit_status_before_the_carriage_failed"] == 0
+
+    def test_the_model_is_told_the_backend_failed(self, tmp_path, monkeypatch):
+        _workspace_, booted = self._call(tmp_path, monkeypatch, Guest(status=0))
+        result = read_the_boot(booted, deadline={"applied_seconds": 45})["result"]
+        assert result["ok"] is False
+        assert result["error_type"] == "compute_backend_error"
+
+    def test_the_session_keeps_the_files_it_already_had(self, tmp_path, monkeypatch):
+        workspace, _booted = self._call(tmp_path, monkeypatch, Guest(status=0))
+        assert (workspace / "job" / "started_with.txt").read_text() == "turn one\n"
+
+    def test_there_is_no_fingerprint_for_a_disk_that_was_not_read(
+        self, tmp_path, monkeypatch
+    ):
+        _workspace_, booted = self._call(tmp_path, monkeypatch, Guest(status=0))
+        assert booted["work_disk"]["returned_sha256"] is None
+        assert len(booted["work_disk"]["staged_sha256"]) == 64
+
+    @pytest.mark.parametrize("outcome", LEFT_BEHIND_WITHOUT_A_SIGNAL)
+    def test_the_host_is_not_called_free_because_the_carriage_threw(
+        self, tmp_path, monkeypatch, outcome
+    ):
+        # The defect this is for. Before the fix the record that reached D2 was
+        # a launcher error with no teardown, and a launcher error with no
+        # teardown is classified as a launch that started nothing.
+        booted = self._leaked(tmp_path, monkeypatch, outcome)
+        assert the_host_was_left_running(booted) is True
+
+    @pytest.mark.parametrize("outcome", LEFT_BEHIND_WITHOUT_A_SIGNAL)
+    def test_what_the_machine_really_ended_as_is_kept(
+        self, tmp_path, monkeypatch, outcome
+    ):
+        booted = self._leaked(tmp_path, monkeypatch, outcome)
+        assert booted["outcome_before_the_carriage_failed"] == outcome
+        assert booted["outcome"] == WORKSPACE_DID_NOT_COME_BACK
+
+    def test_the_route_that_did_signal_is_covered_too(self, tmp_path, monkeypatch):
+        booted = self._leaked(
+            tmp_path, monkeypatch, "overran_and_did_not_stop", confirmed=False
+        )
+        assert the_host_was_left_running(booted) is True
+
+    def test_a_carriage_that_threw_does_not_invent_a_leak(self, tmp_path, monkeypatch):
+        # The over-correction: a thrown carriage is not evidence about the
+        # machine, and reporting the host occupied would strand a free one.
+        _workspace_, booted = self._call(tmp_path, monkeypatch, Guest(status=0))
+        assert the_host_was_left_running(booted) is False
+
+    def test_a_machine_that_never_started_keeps_its_own_outcome(
+        self, tmp_path, monkeypatch
+    ):
+        _workspace_, booted = self._call(
+            tmp_path, monkeypatch, Guest(status=None, outcome="never_started")
+        )
+        assert booted["outcome"] == "never_started"
+        assert "command_exit_status_before_the_carriage_failed" not in booted
+
+    def test_the_call_is_still_written_into_the_record(self, tmp_path, monkeypatch):
+        self._carriage_that_raises(monkeypatch)
+        machine = _machine(tmp_path, Guest(status=0))
+        machine(
+            command_sh=A_COMMAND, workspace=_workspace(tmp_path), deadline_seconds=45
+        )
+        assert machine.record[0]["outcome"] == WORKSPACE_DID_NOT_COME_BACK
+        assert machine.record[0]["carriage"]["replaced"] is False
+
+    def test_an_interrupt_is_not_turned_into_a_workspace_fault(
+        self, tmp_path, monkeypatch
+    ):
+        # ``first_boot`` cleans up and re-raises KeyboardInterrupt and
+        # SystemExit bare. If this caught BaseException it would be the place
+        # that decided an interrupt was a carriage failure.
+        def interrupt(**_handed):
+            raise KeyboardInterrupt
+
+        monkeypatch.setattr(
+            "core.agentic_v2_one_call_machine.carry_the_workspace_back", interrupt
+        )
+        with pytest.raises(KeyboardInterrupt):
+            _machine(tmp_path, Guest(status=0))(
+                command_sh=A_COMMAND,
+                workspace=_workspace(tmp_path),
+                deadline_seconds=45,
+            )
+
+
+@needs_ext4_tools
+class TestTheRealCarriageReallyDoesRaise:
+    """The hypothesis above, asked of the real function rather than a stand-in.
+
+    Without this the guard stands against an exception nobody has seen. The
+    failure arranged here is an ordinary one — the scratch directory a carriage
+    keeps the workspace's previous contents in is a file — and it reaches
+    ``shutil.rmtree`` after the disk has been read and before anything is
+    moved, so the workspace is left whole and the exception is the real
+    function's own.
+    """
+
+    def test_the_machine_survives_a_failure_it_did_not_stage(self, tmp_path):
+        # The per-call directory name is settled by the session and the counter,
+        # so the first call of "task-abc" can have its scratch prepared for it.
+        back = tmp_path / "scratch" / "task-abc-0000" / "back"
+        back.mkdir(parents=True)
+        (back / "previous").write_text("not a directory\n", encoding="utf-8")
+
+        workspace = _workspace(tmp_path)
+        booted = _machine(tmp_path, Guest(status=0, wrote={"job/a.txt": "a\n"}))(
+            command_sh=A_COMMAND, workspace=workspace, deadline_seconds=45
+        )
+
+        # NotADirectoryError is a name no stand-in in this file produces, so it
+        # is the real carriage that raised and the guard that caught it.
+        assert booted["workspace_carriage"]["carriage_error"].startswith(
+            "NotADirectoryError"
+        )
+        assert booted["outcome"] == WORKSPACE_DID_NOT_COME_BACK
+        assert booted["command_exit_status_before_the_carriage_failed"] == 0
+        assert (workspace / "job" / "started_with.txt").read_text() == "turn one\n"
+
