@@ -474,16 +474,33 @@ def test_the_same_question_is_asked_at_the_privilege_that_will_ask_it(
     """The one thing about the sudo arrangement the free job cannot rehearse.
 
     It has no federated session to acquire against. So the paid job asks -- for
-    a token and no model call -- before the dataset and well before task one.
+    a token and no model call -- well before task one.
+
+    And it asks *last* among the things that use the session. Acquiring a token
+    makes the CLI rewrite its own cache, and a file rewritten by root in a
+    directory owned by the job's account comes back root-owned; an unprivileged
+    step reaching for the session afterwards would fail on a permission error
+    that has nothing to do with the route it was checking. Ordering is the
+    whole mitigation, so the ordering is the thing to hold still.
     """
     step = the_step(workflow, "paid", "Verify the same-host run can reach that session")
 
     assert step["if"] == "${{ inputs.isolation == 'same-host' }}"
     assert "sudo env" in step["run"]
     assert "--verify-session" in step["run"]
-    assert where(workflow, "paid", "Verify the same-host run can reach that session") < where(
-        workflow, "paid", "Run"
+
+    asks_as_root = where(
+        workflow, "paid", "Verify the same-host run can reach that session"
     )
+    assert asks_as_root < where(workflow, "paid", "Run")
+    for unprivileged in (
+        "Verify Azure OIDC session identity",
+        "Validate the Azure AI route",
+    ):
+        assert where(workflow, "paid", unprivileged) < asks_as_root, (
+            f"{unprivileged!r} uses the session as the job's own account and "
+            "runs after root has touched the CLI's cache directory"
+        )
 
 
 # ── what the run leaves behind ────────────────────────────────────────────

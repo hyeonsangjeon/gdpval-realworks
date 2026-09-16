@@ -692,44 +692,6 @@ jobs:
           cd batch-runner
           python scripts/azure_oidc_identity_preflight.py --verify-session
 
-      # The same question, asked as the account that will ask it for real.
-      #
-      # `same-host` runs the stage under `sudo`, and the session `azure/login`
-      # leaves behind belongs to the job's own account: `DefaultAzureCredential`
-      # finds no secret in the environment and no federated token file, falls
-      # through to the CLI credential, and the CLI reads `AZURE_CONFIG_DIR` or
-      # `$HOME/.azure`. A root process has a different `$HOME`, so it would look
-      # in `/root/.azure`, find nothing, and fail -- after the run had started.
-      #
-      # `AZURE_CONFIG_DIR` is handed across so it looks in the one directory the
-      # login actually wrote. Nothing is copied and nothing leaves the box: the
-      # session stays where `azure/login` put it, and root on this machine could
-      # read that path with or without being told about it. What is gained is
-      # that the boundary is one named directory a reader can see, rather than
-      # the job's whole home.
-      #
-      # This costs a token acquisition and no model call, and it is the one
-      # thing about the sudo arrangement that the free job cannot rehearse --
-      # the free job has no session to acquire against. So it is asked here,
-      # before the dataset and well before the first turn, and a failure is a
-      # red step with nothing charged.
-      - name: Verify the same-host run can reach that session
-        if: ${{ inputs.isolation == 'same-host' }}
-        env:
-          AZURE_AI_EXPECTED_CLIENT_ID: ${{ vars.AZURE_AI_EXPECTED_CLIENT_ID }}
-          AZURE_AI_EXPECTED_TENANT_ID: ${{ vars.AZURE_AI_EXPECTED_TENANT_ID }}
-          AZURE_AI_EXPECTED_SUBSCRIPTION_ID: ${{ vars.AZURE_AI_EXPECTED_SUBSCRIPTION_ID }}
-        run: |
-          set -euo pipefail
-          cd batch-runner
-          PYTHON="$(command -v python)"
-          sudo env "PATH=$PATH" \
-            "AZURE_CONFIG_DIR=${AZURE_CONFIG_DIR:-$HOME/.azure}" \
-            "AZURE_AI_EXPECTED_CLIENT_ID=$AZURE_AI_EXPECTED_CLIENT_ID" \
-            "AZURE_AI_EXPECTED_TENANT_ID=$AZURE_AI_EXPECTED_TENANT_ID" \
-            "AZURE_AI_EXPECTED_SUBSCRIPTION_ID=$AZURE_AI_EXPECTED_SUBSCRIPTION_ID" \
-            "$PYTHON" scripts/azure_oidc_identity_preflight.py --verify-session
-
       # Fetched the same way as in the free job above, for the reason given
       # there: the default cache is a farm of symlinks the staging code refuses
       # to follow, so the files a task is told to open would never arrive.
@@ -773,6 +735,54 @@ jobs:
           set -euo pipefail
           cd batch-runner
           python scripts/azure_ai_route_preflight.py
+
+      # The same question, asked as the account that will ask it for real.
+      #
+      # `same-host` runs the stage under `sudo`, and the session `azure/login`
+      # leaves behind belongs to the job's own account: `DefaultAzureCredential`
+      # finds no secret in the environment and no federated token file, falls
+      # through to the CLI credential, and the CLI reads `AZURE_CONFIG_DIR` or
+      # `$HOME/.azure`. A root process has a different `$HOME`, so it would look
+      # in `/root/.azure`, find nothing, and fail -- after the run had started.
+      #
+      # `AZURE_CONFIG_DIR` is handed across so it looks in the one directory the
+      # login actually wrote. Nothing is copied and nothing leaves the box: the
+      # session stays where `azure/login` put it, and root on this machine could
+      # read that path with or without being told about it. What is gained is
+      # that the boundary is one named directory a reader can see, rather than
+      # the job's whole home.
+      #
+      # This costs a token acquisition and no model call, and it is the one
+      # thing about the sudo arrangement that the free job cannot rehearse --
+      # the free job has no session to acquire against. So it is asked here,
+      # well before the first turn, and a failure is a red step with nothing
+      # charged.
+      #
+      # Why it is *here* rather than beside the unprivileged identity check it
+      # mirrors. Acquiring a token makes the CLI write: it refreshes its MSAL
+      # cache, and a file rewritten by root in a directory owned by the job's
+      # account comes back root-owned. Every unprivileged use of the session is
+      # above this line -- the identity check and the route validation both --
+      # so the first process to touch that directory as root is the last one
+      # that needs it as anything else. Ordering is the whole mitigation; there
+      # is no copy, no second config directory and no chown of a credential
+      # store.
+      - name: Verify the same-host run can reach that session
+        if: ${{ inputs.isolation == 'same-host' }}
+        env:
+          AZURE_AI_EXPECTED_CLIENT_ID: ${{ vars.AZURE_AI_EXPECTED_CLIENT_ID }}
+          AZURE_AI_EXPECTED_TENANT_ID: ${{ vars.AZURE_AI_EXPECTED_TENANT_ID }}
+          AZURE_AI_EXPECTED_SUBSCRIPTION_ID: ${{ vars.AZURE_AI_EXPECTED_SUBSCRIPTION_ID }}
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          PYTHON="$(command -v python)"
+          sudo env "PATH=$PATH" \
+            "AZURE_CONFIG_DIR=${AZURE_CONFIG_DIR:-$HOME/.azure}" \
+            "AZURE_AI_EXPECTED_CLIENT_ID=$AZURE_AI_EXPECTED_CLIENT_ID" \
+            "AZURE_AI_EXPECTED_TENANT_ID=$AZURE_AI_EXPECTED_TENANT_ID" \
+            "AZURE_AI_EXPECTED_SUBSCRIPTION_ID=$AZURE_AI_EXPECTED_SUBSCRIPTION_ID" \
+            "$PYTHON" scripts/azure_oidc_identity_preflight.py --verify-session
 
       # ── Has a sibling already found out this run is not what it says? ──
       #
