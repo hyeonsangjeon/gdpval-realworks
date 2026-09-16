@@ -14,7 +14,7 @@ that go out, with their digest. The runner sends ``resolved.text``, prints
 ``resolved.sha256``, and writes :meth:`ResolvedInstructions.identity` into the
 run record. There is no second path, so there is nothing to drift.
 
-Three refusals live here, all of them before any money is spent.
+Five refusals live here, all of them before any money is spent.
 
 **An unknown backend is refused, whether or not the plan asks for a derived
 list.** Guessing is the failure this whole mechanism exists to stop, and
@@ -22,6 +22,27 @@ list.** Guessing is the failure this whole mechanism exists to stop, and
 wearing a different hat: the run record would still name a class whose refusals
 nobody has checked. :func:`core.agentic_v2_tool_availability.availability_for`
 raises, and that raise is allowed through.
+
+**A hand-written tool paragraph is refused on a backend it was not measured
+against.** A known backend is not the same thing as a described one. The plan
+that runs by default writes its own paragraph, and that paragraph says
+``exec_run`` refuses every time and that no commands run here -- true of the
+fixture it was measured on, false of the microVM, where ``exec_run`` boots a
+machine and runs the command. The failure has no symptom: a model told there is
+no shell does not ask for one, the cohort completes, and the record reads like
+a result about the isolated backend. So the two are kept apart by
+:data:`core.agentic_v2_tool_availability.DESCRIBED_BY_HAND_AND_CHECKED`, and a
+plan carrying :data:`PLACEHOLDER` is exempt because its list is derived from
+the backend that is actually mounted.
+
+**A plan that derives its list and then contradicts it in prose is refused.**
+This is the mistake the refusal above invites: it says to put the placeholder
+in, and the quickest way to do that is to paste it under the paragraph that was
+already there. The model would then be sent both, hand-written half first, with
+nothing to tell it which half describes the backend it is on. Unlike the others
+this one reads prose, so a wording nobody anticipated gets through -- it is a
+second line rather than the thing that holds, because a plan without the
+placeholder is refused structurally whatever it says.
 
 **Empty instructions are refused when the plan meant to have some.** The runner
 reads ``plan.get("instructions") or ""``, an expression that cannot fail: a plan
@@ -48,9 +69,11 @@ from pathlib import Path
 from typing import Any, Mapping, Optional
 
 from core.agentic_v2_tool_availability import (
+    DESCRIBED_BY_HAND_AND_CHECKED,
     PLACEHOLDER,
     apply_tool_availability,
     backend_name,
+    contradicted_sentences,
     unverified_claims,
 )
 
@@ -165,6 +188,62 @@ def resolve_instructions(
         plan_characters=len(raw),
         unverified=unverified,
     )
+
+    if not resolved.derived and name not in DESCRIBED_BY_HAND_AND_CHECKED:
+        quoted = contradicted_sentences(raw, name)
+        saying = (
+            "\n\nWhat it would send, and what this backend does:\n"
+            + "\n".join(f"  - {sentence}" for sentence in quoted)
+            if quoted
+            else ""
+        )
+        raise InstructionsRefused(
+            f"the plan writes its own tool paragraph and is about to send it "
+            f"to a model sitting on {name}. That paragraph has been held "
+            "against the backends it describes in "
+            "tests/test_the_standing_instructions_fit_neither_backend.py, and "
+            f"{name} is not one of them. A hand-written list is a claim nobody "
+            "can check at the moment it is sent; the wrong one does not fail, "
+            "it produces a full cohort of work done the way a model works when "
+            "it believes it cannot run anything, at full price, with nothing "
+            "in the record to say so."
+            f"{saying}"
+            "\n\nEither dispatch a plan whose instructions carry "
+            f"{PLACEHOLDER}, which is built from this backend's own list -- "
+            "experiments/execution_envelope/agentic_corrected_harness_plan."
+            "yaml is that plan and prices the same stages at the same amounts "
+            f"-- or measure this paragraph against {name} and add the name to "
+            "DESCRIBED_BY_HAND_AND_CHECKED."
+        )
+
+    if resolved.derived:
+        # The mistake the refusal above invites. It says to put the placeholder
+        # in, and the quickest way to do that is to paste it under the
+        # paragraph that was already there -- which produces a plan that both
+        # derives the list and contradicts it, in the same breath, with the
+        # hand-written half first.
+        #
+        # Unlike the refusal above this one reads prose, and prose is not a
+        # reliable input: a wording nobody anticipated gets through. It is
+        # worth having anyway because it is not the only thing standing here
+        # -- a plan without the placeholder is refused structurally whatever it
+        # says -- and because the case it catches is the one a reader of the
+        # message above is most likely to create. It is not a guarantee that a
+        # derived plan asserts nothing false, and nothing should be built on it
+        # as if it were.
+        alsoSaid = contradicted_sentences(raw, name)
+        if alsoSaid:
+            raise InstructionsRefused(
+                "the plan asks for a derived tool list and then contradicts it "
+                "in its own words. The model would be sent both, with the "
+                "hand-written half first, and has no way to tell which one "
+                f"describes {name}."
+                "\n\nThe sentences, and what this backend does:\n"
+                + "\n".join(f"  - {sentence}" for sentence in alsoSaid)
+                + f"\n\nDelete them. {PLACEHOLDER} already says what this "
+                "backend serves and refuses, in that backend's own terms, and "
+                "it is the half that is checked against the real methods."
+            )
 
     if priced_characters is not None and resolved.characters > priced_characters:
         over = resolved.characters - priced_characters

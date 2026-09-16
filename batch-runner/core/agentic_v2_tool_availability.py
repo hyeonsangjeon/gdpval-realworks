@@ -227,6 +227,84 @@ def tool_availability_paragraph(backend: Any) -> str:
     return "\n".join(lines)
 
 
+#: The one backend whose refusals a plan is allowed to describe in its own
+#: words. Not a preference between the two, and not a statement that the
+#: fixture matters more.
+#:
+#: A plan that carries :data:`PLACEHOLDER` is safe on any backend, because the
+#: list is then built from :data:`AVAILABILITY_BY_BACKEND` for whichever one is
+#: mounted. A plan that writes the paragraph by hand is making an unverifiable
+#: claim, and the only hand-written paragraph in this repository was measured
+#: against the fixture -- ``tests/test_the_standing_instructions_fit_neither_
+#: backend.py`` holds every sentence of it against both backends and finds it
+#: wrong about each, in opposite directions.
+#:
+#: On the microVM the error runs the expensive way. The paragraph names
+#: ``exec_run`` among three tools that "refuse in this run, every time", and
+#: adds "No commands run here. There is no shell, no Python". On that backend
+#: ``exec_run`` boots a machine and runs the command. A model told there is no
+#: shell does not ask for one, so a cohort would be paid for in full, come back
+#: with every task done the way a model does work when it cannot run anything,
+#: and read as a result about the isolated backend. Nothing in the record would
+#: contradict it.
+#:
+#: Adding a name here is not a formality. It says someone held that backend's
+#: real methods against the words in the plan, the way that test file does.
+DESCRIBED_BY_HAND_AND_CHECKED = frozenset({"AgenticV2FixtureBackend"})
+
+#: How a plan says, in prose, that a tool will not serve.
+#:
+#: Used only to quote the offending sentence back in a refusal that has already
+#: been decided on other grounds. Deliberately not the thing that decides:
+#: prose is not a reliable input, a wording nobody anticipated would slip past
+#: this tuple, and a check that can be got round by rephrasing is worse than no
+#: check because it reads like one.
+#:
+#: Every marker here is about the environment. Modals of inability -- ``cannot``,
+#: ``will not`` -- are deliberately absent, and not because they are rare. These
+#: paragraphs are addressed to the model in the second person, so those words
+#: attach to the reader at least as often as to a tool: the stage-one plan's
+#: "If you cannot do the task, say why in the summary and call finalize anyway"
+#: names a tool and denies nothing about it. Quoting that sentence under the
+#: heading "what this backend does" would be worse than quoting nothing, because
+#: an operator checking it would find the check wrong rather than the plan. The
+#: cost of leaving them out is a refusal that carries no examples, which still
+#: refuses.
+_REFUSAL_IN_PROSE = (
+    "refuse",
+    "unavailable",
+    "no commands run",
+    "there is no shell",
+)
+
+
+def contradicted_sentences(instructions: str, backend: Any) -> tuple[str, ...]:
+    """Sentences of `instructions` that call a tool `backend` serves refused.
+
+    Best-effort and says so. Whitespace is flattened first because the claim
+    this was written for straddles a line break in the plan file -- the tool
+    names are on the line after the word ``capability_unavailable`` -- so
+    anything matching line by line finds nothing at all.
+
+    Returns the sentences rather than the tool names: an operator about to
+    spend money is better served by the words that would have gone to the model
+    than by a list of identifiers they then have to go and find.
+    """
+    serves = {
+        entry.tool for entry in availability_for(backend) if entry.verdict != "refuses"
+    }
+    flat = " ".join(instructions.split())
+    found = []
+    for sentence in flat.split(". "):
+        lowered = sentence.lower()
+        if not any(marker in lowered for marker in _REFUSAL_IN_PROSE):
+            continue
+        named = sorted(tool for tool in serves if tool in sentence)
+        if named:
+            found.append(sentence.strip().rstrip(".") + ".")
+    return tuple(found)
+
+
 def unverified_claims(backend: Any) -> tuple[ToolAvailability, ...]:
     """The tools `backend` is declared to serve that nobody here has run.
 
