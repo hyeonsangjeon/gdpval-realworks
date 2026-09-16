@@ -925,6 +925,35 @@ positive finding that the number now names something else, and it lets the
 caller treat this run's machine as stopped. Unknown does not.
 """
 
+HANDLE_NOT_SHOWN_TO_BE_OURS = "not_shown_to_be_ours"
+"""A handle was taken, and the process it names is not shown to be this run's.
+
+The verdict that closes the gap this taxonomy used to leave open. Every verdict
+above is about *acquiring* the handle; this one is about what the handle turned
+out to be holding. Confinement to this run's jail was established once, at
+admission, and from then until the signal the only thing re-read was a start
+time in clock ticks — a number two processes can share, one having replaced the
+other inside a single tick.
+
+It is asked here and nowhere else because here is the only place it can be asked
+and mean anything. ``pidfd_open`` makes the kernel hold a reference to the
+process's ``struct pid``, so for as long as the descriptor is open the number
+cannot be handed to anything new. A confinement read taken inside that interval
+is therefore a reading *about the process the handle names*, not about whoever
+holds a number by the time the answer comes back. Taken outside it — in
+:func:`_may_signal_now`, say — the same read would be one more racy number.
+
+**Two findings share it, and the sentence carries which.** A process positively
+confined somewhere else, and a confinement this run could not read at all. They
+are different evidence and they are not collapsed: ``refused_because`` holds the
+message :func:`_confined_to_this_runs_jail` composed, which distinguishes gone,
+not-permitted and unreadable-for-another-reason. What they have in common is the
+only thing the verdict claims — that nothing here shows the process is this
+run's — and neither of them is :data:`HANDLE_GONE`, which is asked first and
+separately, and is the one answer that lets a caller treat the machine as
+stopped.
+"""
+
 NO_VERDICT_MAY_SIGNAL_BY_NUMBER = True
 """There is no verdict that sends ``SIGKILL`` to a bare number. Declared.
 
@@ -953,7 +982,9 @@ one of those.
 """
 
 
-def _a_handle_pinned_to(pid: int, started: int) -> tuple[int | None, str, str]:
+def _a_handle_pinned_to(
+    pid: int, started: int, *, chroot_dir: Path
+) -> tuple[int | None, str, str]:
     """A descriptor that names one process and cannot come to name another.
 
     ``pidfd_open(2)`` takes its argument by number, so the descriptor it hands
@@ -1001,6 +1032,34 @@ def _a_handle_pinned_to(pid: int, started: int) -> tuple[int | None, str, str]:
     run could not read reported a stop that had not happened. They are split
     here: a value that reads back and differs is a handover, and no value at all
     is :data:`HANDLE_UNKNOWN`.
+
+    **The start time was never enough on its own, and this is where the rest of
+    it goes.** A start time is a count of clock ticks since boot, so two
+    processes can share one; the residue named above — a replacement born inside
+    the same tick — is a process the equality check cannot tell from the
+    original. What can tell them apart is where they are: the jail is a
+    directory this run created and claimed exclusively, so being confined to it
+    is not something a stranger can arrive at by being born at the right moment.
+    That question is asked once at admission and, until 2026-09-16, never again.
+
+    ``chroot_dir`` is required and has no default, so a caller that has not
+    thought about which jail it means gets a ``TypeError`` rather than a signal.
+    Both the deadline and the cleanup after a failure reach this through
+    :func:`_stop_the_process_this_run_identified`, which is why there is one
+    contract here and not two.
+
+    **Why here and not in :func:`_may_signal_now`.** Adding the same read there
+    would add a third number to re-check in a place where the answer can go
+    stale before it is used. Here the descriptor is already open, and an open
+    descriptor is the kernel holding the process's ``struct pid``: the number
+    cannot be handed on while it is held. The reading taken between the open and
+    the signal is therefore about the process that will receive the signal.
+
+    **The direction this can fail in.** The recheck can turn a signal into a
+    refusal or into "already gone"; it cannot turn a refusal into a signal.
+    Nothing reaches :data:`HANDLE_TAKEN` that would not have reached it before.
+    So a host where the pinning guarantee is weaker than documented is no worse
+    off than it was, and a host where it holds gets the guarantee.
     """
     try:
         handle = os.pidfd_open(pid)
@@ -1062,6 +1121,29 @@ def _a_handle_pinned_to(pid: int, started: int) -> tuple[int | None, str, str]:
             f"process {pid} was handed on between this run identifying it and "
             "taking hold of it, so the handle does not name what was admitted",
         )
+    # Liveness before identity, the same order both stop paths already use and
+    # for the same reason: a machine that ended on its own is not an unidentified
+    # one. Asked while the handle is held, so "nothing holds that number" cannot
+    # mean "something else holds it now" — the kernel is keeping the number for
+    # this descriptor. A guest that ends here is the ordinary ending, and a
+    # confinement read cannot be taken for it at all — an uncollected process has
+    # no root to walk into — so asking identity first would file every machine
+    # that stopped on its own as a stranger.
+    if not _still_running(pid) or _has_exited_but_not_been_reaped(pid):
+        os.close(handle)
+        return (
+            None,
+            HANDLE_GONE,
+            f"process {pid} ended while this run held a handle on it, so there "
+            "is nothing confined to the jail any more and nothing to stop",
+        )
+    # Identity, now that there is something to have an identity. This is the
+    # reading that admission took once and nothing has retaken since; here it is
+    # retaken inside the interval where the number cannot move.
+    confined, why_not_confined = _confined_to_this_runs_jail(pid, chroot_dir)
+    if not confined:
+        os.close(handle)
+        return (None, HANDLE_NOT_SHOWN_TO_BE_OURS, why_not_confined)
     return handle, HANDLE_TAKEN, ""
 
 
@@ -1088,7 +1170,9 @@ def _the_process_a_handle_names(handle: int) -> int | None:
     return None
 
 
-def _stop_the_process_this_run_identified(pid: int, started: int) -> dict[str, Any]:
+def _stop_the_process_this_run_identified(
+    pid: int, started: int, *, chroot_dir: Path
+) -> dict[str, Any]:
     """Send ``SIGKILL`` to a process that has already been admitted as this run's.
 
     Admission is the caller's job and has happened before this is reached. What
@@ -1111,8 +1195,18 @@ def _stop_the_process_this_run_identified(pid: int, started: int) -> dict[str, A
     reached only from a *positive* finding — ``ProcessLookupError`` from
     ``pidfd_open``, or a start time that reads back as a different value — never
     from a reading this run could not take.
+
+    ``chroot_dir`` is this run's jail, and it is required because the identity
+    question is asked again once the handle is held; see
+    :func:`_a_handle_pinned_to`. Both callers — the deadline and the cleanup
+    after a failed launch — come through here, which is how they end up with one
+    contract rather than two that drift apart. The verdict that answer can
+    produce, :data:`HANDLE_NOT_SHOWN_TO_BE_OURS`, is deliberately not in the
+    ``already_gone`` pair below: nothing about it says the machine stopped.
     """
-    handle, verdict, why_no_handle = _a_handle_pinned_to(pid, started)
+    handle, verdict, why_no_handle = _a_handle_pinned_to(
+        pid, started, chroot_dir=chroot_dir
+    )
     if handle is not None:
         # Read before the signal, so the evidence is what the descriptor named
         # while it was still open and not what it named after the process went.
@@ -1168,14 +1262,14 @@ def _stop_the_process_this_run_identified(pid: int, started: int) -> dict[str, A
             "handle_verdict": verdict,
             "signal_target": None,
         }
-    # Denied, unsupported, or a reason this code cannot read. None of the three
-    # establishes that the number still names this run's process, and that is
-    # the only fact a signal by number would have to stand on. Unsupported used
-    # to be excepted here on the grounds that it describes the host rather than
-    # the process — true, and beside the point: a host with no way to pin a
-    # process has not thereby shown the number is still the right one. The
-    # machine is left where it is and the jail is left with it, which is what
-    # lets a later reader see that this run did not finish clearing up.
+    # Denied, unsupported, not shown to be ours, or a reason this code cannot
+    # read. None of the four establishes that the number still names this run's
+    # process, and that is the only fact a signal by number would have to stand
+    # on. Unsupported used to be excepted here on the grounds that it describes
+    # the host rather than the process — true, and beside the point: a host with
+    # no way to pin a process has not thereby shown the number is still the right
+    # one. The machine is left where it is and the jail is left with it, which is
+    # what lets a later reader see that this run did not finish clearing up.
     return {
         "signalled": False,
         "how": None,
@@ -1212,6 +1306,19 @@ def _may_signal_now(
     this guards: the file can hold the same integer while a different process
     holds the integer. An unestablished identity (``None``) refuses — there is
     no reading that would make an unidentified process safe to kill.
+
+    **The fourth question is deliberately not asked here.** Whether the process
+    is still *inside* the jail is a different question from whether the jail is
+    still this run's, and it is answered in :func:`_a_handle_pinned_to` instead.
+    Not because it does not belong at the moment of the signal — it does — but
+    because this is not yet that moment. Every reading taken here is taken
+    before the descriptor is opened, so each one can go stale in the gap between
+    being read and being used; adding a fourth would add a fourth thing that can
+    go stale, which is not the same as adding a fourth thing that is true. Once
+    the handle is open the kernel is holding the process's ``struct pid`` and
+    that gap closes, so that is where the confinement reading is taken and where
+    it means what it says. Moving it here would make it look answered and leave
+    it racy.
     """
     held, why = _this_run_still_holds_it(chroot_dir, claim)
     if not held:
@@ -1990,7 +2097,7 @@ def first_boot(
                     left_alone_because = why_not_now
                     break
                 stop = _stop_the_process_this_run_identified(
-                    watched, watched_started_at
+                    watched, watched_started_at, chroot_dir=chroot_named
                 )
                 if stop["already_gone"]:
                     # It went on its own between the probe and the signal.
@@ -2569,7 +2676,7 @@ def _clean_up_after_a_failure(
                             )
                         else:
                             stop = _stop_the_process_this_run_identified(
-                                pid, started_at
+                                pid, started_at, chroot_dir=chroot_dir
                             )
                             process["signalled"] = stop["signalled"]
                             process["stop_handle"] = stop["how"]

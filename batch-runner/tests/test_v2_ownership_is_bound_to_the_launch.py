@@ -781,7 +781,9 @@ def test_x11_every_way_of_not_getting_a_handle_keeps_its_own_name(monkeypatch):
             raise _raising
 
         monkeypatch.setattr(os, "pidfd_open", refuse, raising=False)
-        none_taken, verdict, why_not = _a_handle_pinned_to(os.getpid(), 1)
+        none_taken, verdict, why_not = _a_handle_pinned_to(
+            os.getpid(), 1, chroot_dir=Path("/")
+        )
         assert none_taken is None
         assert verdict == expected, f"{raising!r} was read as {verdict}"
         assert why_not != "", "a refusal that says nothing cannot be acted on"
@@ -790,8 +792,12 @@ def test_x11_every_way_of_not_getting_a_handle_keeps_its_own_name(monkeypatch):
         # statement about a set of verdicts allowed to fall back; a set is a
         # description of the code and this is the code doing it.
         unassignable = _a_number_this_kernel_cannot_have_assigned()
-        _, _, why_for_that_number = _a_handle_pinned_to(unassignable, 1)
-        stop = _stop_the_process_this_run_identified(unassignable, 1)
+        _, _, why_for_that_number = _a_handle_pinned_to(
+            unassignable, 1, chroot_dir=Path("/")
+        )
+        stop = _stop_the_process_this_run_identified(
+            unassignable, 1, chroot_dir=Path("/")
+        )
         assert stop["signalled"] is False, (
             f"{verdict} sent a signal. A kernel that has no interface, or one "
             "that has it and refused this run a handle, has not said the "
@@ -857,7 +863,9 @@ def test_x12_a_real_handle_names_one_process_and_is_dropped_when_it_would_not(
     started = _when_that_process_started(child.pid)
     assert started is not None
 
-    handle, verdict, no_reason = _a_handle_pinned_to(child.pid, started)
+    handle, verdict, no_reason = _a_handle_pinned_to(
+        child.pid, started, chroot_dir=Path("/")
+    )
     try:
         assert verdict == HANDLE_TAKEN
         assert no_reason == ""
@@ -870,7 +878,9 @@ def test_x12_a_real_handle_names_one_process_and_is_dropped_when_it_would_not(
             os.close(handle)
 
     before = len(os.listdir(f"/proc/{os.getpid()}/fd"))
-    handed_on, verdict, why_not = _a_handle_pinned_to(child.pid, started + 1)
+    handed_on, verdict, why_not = _a_handle_pinned_to(
+        child.pid, started + 1, chroot_dir=Path("/")
+    )
     assert handed_on is None
     assert verdict == HANDLE_HANDED_ON
     assert "handed on between this run identifying it" in why_not
@@ -880,7 +890,9 @@ def test_x12_a_real_handle_names_one_process_and_is_dropped_when_it_would_not(
     )
 
     own_children.reap_all()
-    nothing, verdict, why_not = _a_handle_pinned_to(child.pid, started)
+    nothing, verdict, why_not = _a_handle_pinned_to(
+        child.pid, started, chroot_dir=Path("/")
+    )
     assert nothing is None
     assert verdict == HANDLE_GONE
     assert "already gone when a handle was asked for" in why_not
@@ -940,7 +952,9 @@ def test_x13_a_start_time_that_will_not_read_is_unknown_not_a_handover(
     opened = _a_handle_that_opens_and_a_start_time_that_answers(
         lambda truth: None, monkeypatch
     )
-    unreadable = _stop_the_process_this_run_identified(child.pid, started)
+    unreadable = _stop_the_process_this_run_identified(
+        child.pid, started, chroot_dir=Path("/")
+    )
     assert opened == [child.pid], "the handle was never taken, so nothing was tested"
     assert unreadable["handle_verdict"] == HANDLE_UNKNOWN
     assert unreadable["signalled"] is False
@@ -955,7 +969,9 @@ def test_x13_a_start_time_that_will_not_read_is_unknown_not_a_handover(
     opened = _a_handle_that_opens_and_a_start_time_that_answers(
         lambda truth: (truth or 0) + 1, monkeypatch
     )
-    handed_on = _stop_the_process_this_run_identified(child.pid, started)
+    handed_on = _stop_the_process_this_run_identified(
+        child.pid, started, chroot_dir=Path("/")
+    )
     assert opened == [child.pid]
     assert handed_on["handle_verdict"] == HANDLE_HANDED_ON
     assert handed_on["signalled"] is False
