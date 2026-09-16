@@ -573,15 +573,27 @@ def _when_that_process_started(pid: int) -> int | None:
 
 
 def _the_jail_a_process_is_confined_to(pid: int) -> tuple[str | None, str]:
-    """The directory a process has as its root, or why that could not be read.
+    """How ``/proc/<pid>/root`` *renders*, or why it could not be read.
 
-    ``/proc/<pid>/root`` is a link to the root a process actually sees. For a
-    process the jailer has ``chroot``ed it is the jail; for every ordinary
-    process on the host it is ``/``. Measured on the target host, kernel
-    ``6.17.0-1022-azure``: a child ``chroot``ed into a directory and then
-    dropped to an unprivileged uid — which is the shape the jailer produces —
-    read back as that directory, and an unrelated process spawned in the same
-    breath read back as ``/``.
+    **A rendering is not an identity, and on the real jailer the two differ.**
+    ``/proc/<pid>/root`` is a link to the root a process actually sees, but the
+    kernel can only spell it as a path the *reader* could walk. The jailer does
+    not merely ``chroot``: it unshares a mount namespace and ``pivot_root``s,
+    so from the host the jail is the root of a tree that is not in the reader's
+    namespace, and the link renders as ``/`` — the same string an ordinary
+    unjailed process gives.
+
+    Measured on the target host, kernel ``6.17.0-1022-azure``, against a real
+    jailed ``firecracker`` (``c2-deadline``, 2026-09-15): the link read ``/``
+    while ``/proc/<pid>/mountinfo`` named the jail and the process sat in its
+    own mount namespace. An earlier version of this docstring recorded the
+    opposite from a stand-in that ``chroot``ed without unsharing — a stand-in
+    that did not have the property being relied on.
+
+    So this is kept for the one thing it can still do: show a reader what was
+    seen. The verdict is taken from
+    :func:`_the_directory_a_process_has_as_its_root`, which compares the
+    directory instead of the name of it.
 
     **The three answers are not one answer.** A process that has gone leaves
     nothing to read and that is ``ENOENT``; a reader without the privilege to
@@ -608,6 +620,49 @@ def _the_jail_a_process_is_confined_to(pid: int) -> tuple[str | None, str]:
         )
 
 
+def _the_directory_a_process_has_as_its_root(
+    pid: int,
+) -> tuple[tuple[int, int] | None, str]:
+    """Which directory ``pid`` has as its root, as an identity rather than a name.
+
+    ``/proc/<pid>/root`` cannot be *rendered* across a mount namespace, but it
+    can still be *walked*: ``/proc/<pid>/root/.`` resolves through the link into
+    whatever that process holds as its root, in that process's own tree, and
+    lands on the directory itself. Two paths naming one directory agree on
+    ``(st_dev, st_ino)`` however each of them is spelled, and no two directories
+    share a pair.
+
+    **This is a tightening as well as a repair.** A string could be satisfied by
+    a different directory that happens to carry the same path in another
+    namespace — which is precisely the namespace this question is asked across.
+    A device and inode pair cannot be satisfied by anything except the one
+    directory this run made.
+
+    **The three answers are not one answer**, and they are the same three as
+    above: gone is ``ENOENT``, unprivileged is ``EPERM``, anything else is
+    unknown, and none of the three is a match.
+    """
+    try:
+        seen = os.stat(f"/proc/{pid}/root/.")
+    except (FileNotFoundError, ProcessLookupError):
+        return None, (
+            f"the host has no process {pid} to read a root from, so there is "
+            "nothing to confine"
+        )
+    except PermissionError:
+        return None, (
+            f"this run may not walk into what process {pid} has as its root, "
+            "so it cannot tell whether that process is confined to its jail"
+        )
+    except OSError as unreadable:
+        code = errno.errorcode.get(unreadable.errno or 0, str(unreadable.errno))
+        return None, (
+            f"the root of process {pid} could not be read ({code}), which is "
+            "not evidence either way"
+        )
+    return (seen.st_dev, seen.st_ino), ""
+
+
 def _confined_to_this_runs_jail(pid: int, chroot_dir: Path) -> tuple[bool, str]:
     """Whether ``pid`` is confined to the jail this run made and holds.
 
@@ -623,14 +678,34 @@ def _confined_to_this_runs_jail(pid: int, chroot_dir: Path) -> tuple[bool, str]:
     moment passes the interval; it cannot be confined to a jail it was never
     placed in. The measured negative control is exactly that process, and it is
     turned away here on a ground that has nothing to do with the clock.
+
+    **Asked of the directory, not of its name.** The first version of this
+    compared ``/proc/<pid>/root`` against ``str(chroot_dir)``, and on a real
+    jailer that comparison can never hold: the jailer ``pivot_root``s into its
+    own mount namespace, so the link renders as ``/`` for every jailed machine.
+    Measured, that turned every overrunning guest into an unidentified one — the
+    deadline could not fire, the jail could not be removed, and the two call
+    sites that stop a machine were both dead. The directory is asked for
+    instead, and a directory answers the same whichever namespace spells it.
     """
-    confined, why_not = _the_jail_a_process_is_confined_to(pid)
-    if confined is None:
+    here, why_not = _the_directory_a_process_has_as_its_root(pid)
+    if here is None:
         return False, why_not
-    if confined != str(chroot_dir):
+    try:
+        jail = os.stat(chroot_dir)
+    except OSError as unreadable:
+        code = errno.errorcode.get(unreadable.errno or 0, str(unreadable.errno))
         return False, (
-            f"process {pid} has {confined} as its root, not the jail this run "
-            f"made and holds ({chroot_dir}), so it is not this run's machine"
+            f"the jail this run made and holds ({chroot_dir}) could not be "
+            f"read ({code}), so nothing can be shown to be confined to it"
+        )
+    if here != (jail.st_dev, jail.st_ino):
+        rendered, _unreadable = _the_jail_a_process_is_confined_to(pid)
+        return False, (
+            f"process {pid} has a root that is not the jail this run "
+            f"made and holds ({chroot_dir}) — /proc/{pid}/root renders as "
+            f"{rendered or 'nothing readable'} and resolves to a different "
+            "directory, so it is not this run's machine"
         )
     return True, ""
 
