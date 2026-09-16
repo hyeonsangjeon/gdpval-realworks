@@ -329,6 +329,8 @@ def contradicted_sentences(instructions: str, backend: Any) -> tuple[str, ...]:
         if named:
             found.append(sentence.strip().rstrip(".") + ".")
     return tuple(found)
+
+
 def _write_content_ceiling() -> int:
     """The byte width the contract puts on a ``workspace_apply`` write.
 
