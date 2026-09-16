@@ -195,6 +195,28 @@ jobs:
           cd batch-runner
           pip install -r requirements.txt
 
+      # Being allowed to use the device, before being asked about it.
+      #
+      # Run 35072131325 read this runner and found the node present, the
+      # processor reporting vmx and the kernel well above what Firecracker
+      # validates against -- and the open refused with Permission denied. That
+      # is the ordinary Ubuntu arrangement: udev ships /dev/kvm as root:kvm 0660
+      # and the account a job runs as is not in the kvm group.
+      #
+      # Which makes it a prerequisite a step can satisfy rather than a fact
+      # about the machine, so it is satisfied here and the reading below is
+      # taken afterwards. Not on a `fixture` dispatch: that arrangement boots no
+      # guest, and a dispatch that predates this input should touch nothing it
+      # did not touch before.
+      #
+      # It grants and it does not decide. A grant that failed to take shows up
+      # in the reading as a refusal, which is the answer either way.
+      - name: Let this job open the hardware virtualisation device
+        if: ${{ inputs.isolation != 'fixture' }}
+        run: |
+          set -euo pipefail
+          bash batch-runner/scripts/allow_this_job_to_open_kvm.sh
+
       # The one reading that decides whether the isolated backend and the model
       # route can be on the same machine, taken on the machine in question
       # rather than assumed about it.
@@ -251,8 +273,15 @@ jobs:
 
       # Kept whatever the answer was. A reading that says no is the evidence
       # for the finding, and it is what a later attempt gets compared against.
+      #
+      # Conditioned on the step above having run, not on the file existing.
+      # `hashFiles()` only sees inside `GITHUB_WORKSPACE`, so a condition on the
+      # report's path under `RUNNER_TEMP` is always the empty string and this
+      # step always skips — which is what happened on the first dispatch, run
+      # 35072131325, where the reading was taken and then not kept. Written down
+      # because the failure is silent: a skipped upload is green.
       - name: Keep the capability reading
-        if: always() && hashFiles(format('{0}/runner-capability.json', runner.temp)) != ''
+        if: always() && steps.capability.outcome != 'skipped'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: runner-capability-${{ inputs.isolation }}

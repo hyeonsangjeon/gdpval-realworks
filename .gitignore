@@ -267,6 +267,16 @@ batch-runner/scripts/*
 # and one device; calls no model, installs nothing, makes no network call.
 !batch-runner/scripts/check_runner_can_host_a_guest.py
 
+# Adds an ACL entry letting the job's own account open /dev/kvm, which on the
+# stock Ubuntu runner image is root:kvm 0660 and therefore closed to it. A
+# supplementary group cannot fix that from inside a running process, so the
+# grant has to happen here rather than in a useradd. Committed because
+# agentic-v2-stage-run.yml calls it before taking the capability reading, and
+# because the narrow grant is the point: the widely circulated recipe is
+# `chmod 0666`, which opens the device to every account on the machine. Grants
+# one permission and reports it; decides nothing, boots nothing, calls no model.
+!batch-runner/scripts/allow_this_job_to_open_kvm.sh
+
 # Reads the per-call cost ledger every paid shard writes and nothing until now
 # opened. Turns it into what each task cost and what the stage cost, keeping
 # apart the three populations a single number would hide: tasks the ledger has

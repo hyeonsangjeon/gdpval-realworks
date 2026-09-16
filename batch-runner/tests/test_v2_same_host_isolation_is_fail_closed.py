@@ -105,6 +105,63 @@ def test_the_free_reading_does_not_gate_on_what_a_step_installs(
     assert "--require-programs" not in step["run"]
 
 
+# ── the permission the runner image withholds ─────────────────────────────
+
+
+def test_the_device_is_granted_before_it_is_asked_about(workflow: dict) -> None:
+    """A reading taken before the grant answers a question nobody asked.
+
+    Run 35072131325 found /dev/kvm present on ubuntu-24.04 and the open refused
+    with Permission denied, because udev ships the node as root:kvm 0660 and
+    the account a job runs as is not in the kvm group. Granting after the
+    reading would leave the gate refusing a runner that could in fact host.
+    """
+    steps = [step.get("name") for step in workflow["jobs"]["free"]["steps"]]
+
+    grant = steps.index("Let this job open the hardware virtualisation device")
+    reading = steps.index("Read whether this runner could host a guest")
+    assert grant < reading
+
+
+def test_a_fixture_dispatch_has_its_permissions_left_alone(workflow: dict) -> None:
+    """That arrangement boots no guest, so it needs nothing widened."""
+    step = the_step(
+        workflow, "free", "Let this job open the hardware virtualisation device"
+    )
+
+    assert step["if"] == "${{ inputs.isolation != 'fixture' }}"
+
+
+def test_the_grant_is_narrow_and_is_not_the_recipe_that_circulates() -> None:
+    """``chmod 0666`` opens the device to every account on the machine."""
+    script = (
+        BATCH_RUNNER_ROOT / "scripts" / "allow_this_job_to_open_kvm.sh"
+    ).read_text(encoding="utf-8")
+
+    commands = [
+        line for line in script.splitlines() if not line.lstrip().startswith("#")
+    ]
+    assert not any("0666" in line or "a+rw" in line for line in commands)
+    assert any("setfacl" in line for line in commands)
+
+
+def test_the_grant_never_decides_whether_the_runner_is_capable() -> None:
+    """It exits 0 on failure so that the probe, not the grant, is the gate."""
+    script = (
+        BATCH_RUNNER_ROOT / "scripts" / "allow_this_job_to_open_kvm.sh"
+    ).read_text(encoding="utf-8")
+
+    exits = {
+        line.split()[1]
+        for line in script.splitlines()
+        if line.strip().startswith("exit ")
+    }
+    assert exits == {"0"}, (
+        "a grant that failed is reported by the reading below it; failing here "
+        "would stop a fixture run for a permission it never needed"
+    )
+
+
 # ── what happens when the answer is no ────────────────────────────────────
 
 
@@ -143,6 +200,25 @@ def test_the_reading_is_kept_whatever_it_said(workflow: dict) -> None:
 
     assert step["if"].startswith("always()")
     assert step["with"]["if-no-files-found"] == "error"
+
+
+def test_keeping_the_reading_does_not_ask_hashfiles_about_runner_temp(
+    workflow: dict,
+) -> None:
+    """``hashFiles()`` only sees inside ``GITHUB_WORKSPACE``.
+
+    Asked about a path under ``RUNNER_TEMP`` it answers the empty string on
+    every runner, so the condition is never true and the step silently skips.
+    Run 35072131325 took the reading and then did not keep it, and the job was
+    green either way, which is the shape of failure that survives a review.
+    """
+    step = the_step(workflow, "free", "Keep the capability reading")
+
+    assert "hashFiles" not in step["if"]
+    assert "steps.capability.outcome" in step["if"], (
+        "the upload follows the step that writes the file, so that a run which "
+        "never reached the reading does not go red for not having one"
+    )
 
 
 def test_asking_whether_it_is_possible_never_reaches_the_job_that_spends(
