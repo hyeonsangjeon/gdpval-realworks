@@ -44,6 +44,56 @@ from scripts import install_pinned_firecracker as installer  # noqa: E402
 
 FIRST_BOOT = BATCH_RUNNER_ROOT / "scripts" / "run_agentic_c2_first_boot.py"
 
+#: Every file ``firecracker-v1.13.1-x86_64.tgz`` actually contains, read off
+#: ``tar tzvf`` of the downloaded asset rather than imagined.
+#:
+#: The first version of this fixture named three binaries and no ``.debug``,
+#: and that guess is what put a refusal into a job. The second named five of
+#: the twenty-four, which is enough to reproduce that failure and not enough to
+#: describe the release: upstream ships *six* programs here, and the four
+#: nobody installs carry the same executable bit and the same debug companion
+#: as the two that are. A rule that sorts programs from symbols is a rule about
+#: that whole population, so the population is what it gets tested against.
+THE_RELEASE_AS_SHIPPED = (
+    "C3-v1.13.1.json",
+    "LICENSE",
+    "NOTICE",
+    "SHA256SUMS",
+    "T2-v1.13.1.json",
+    "T2A-v1.13.1.json",
+    "T2CL-v1.13.1.json",
+    "T2S-v1.13.1.json",
+    "THIRD-PARTY",
+    "V1N1-v1.13.1.json",
+    "cpu-template-helper-v1.13.1-x86_64",
+    "cpu-template-helper-v1.13.1-x86_64.debug",
+    "firecracker-v1.13.1-x86_64",
+    "firecracker-v1.13.1-x86_64.debug",
+    "firecracker_spec-v1.13.1.yaml",
+    "jailer-v1.13.1-x86_64",
+    "jailer-v1.13.1-x86_64.debug",
+    "rebase-snap-v1.13.1-x86_64",
+    "rebase-snap-v1.13.1-x86_64.debug",
+    "seccomp-filter-v1.13.1-x86_64.json",
+    "seccompiler-bin-v1.13.1-x86_64",
+    "seccompiler-bin-v1.13.1-x86_64.debug",
+    "snapshot-editor-v1.13.1-x86_64",
+    "snapshot-editor-v1.13.1-x86_64.debug",
+)
+
+#: Which of those upstream ships at 0644 rather than 0755, off the same reading.
+#: Six programs are executable; the detached symbols, the CPU templates and the
+#: licences are not.
+#:
+#: Spelled as a rule over the listing rather than a second hand-written list,
+#: so adding a member above cannot silently leave it claiming to be a program.
+NOT_RUNNABLE = frozenset(
+    name
+    for name in THE_RELEASE_AS_SHIPPED
+    if name.endswith((".debug", ".json", ".yaml"))
+    or name in {"LICENSE", "NOTICE", "SHA256SUMS", "THIRD-PARTY"}
+)
+
 
 def an_archive(
     at: Path,
@@ -75,16 +125,25 @@ def the_usual_archive(at: Path) -> Path:
     executable bit. Leaving the symbols out of this fixture is what let an
     installer that could not tell the two apart pass every test here and then
     refuse the real release on a runner.
+
+    All twenty-four members, not the handful this file happens to look at. The
+    two the installer wants carry known payloads so a test can say which file
+    landed; everything else carries its own name, which makes a wrong member
+    show up in an assertion as the thing it is rather than as a length.
     """
+    known = {
+        "firecracker-v1.13.1-x86_64": b"the launcher",
+        "jailer-v1.13.1-x86_64": b"the thing that confines it",
+    }
     return an_archive(
         at,
         {
-            "firecracker-v1.13.1-x86_64": b"the launcher",
-            "firecracker-v1.13.1-x86_64.debug": (b"where the launcher hurts", 0o644),
-            "jailer-v1.13.1-x86_64": b"the thing that confines it",
-            "jailer-v1.13.1-x86_64.debug": (b"where it hurts", 0o644),
-            "seccompiler-bin-v1.13.1-x86_64": b"not asked for",
-            "SHA256SUMS": (b"not asked for either", 0o644),
+            name: (
+                (known.get(name, f"not asked for: {name}".encode()), 0o644)
+                if name in NOT_RUNNABLE
+                else known.get(name, f"not asked for: {name}".encode())
+            )
+            for name in THE_RELEASE_AS_SHIPPED
         },
     )
 
@@ -325,6 +384,45 @@ def test_the_symbols_shipped_beside_a_program_are_not_mistaken_for_it(
     assert found["jailer"]["came_from"].endswith("jailer-v1.13.1-x86_64")
     assert (tmp_path / "bin" / "firecracker").read_bytes() == b"the launcher"
     assert (tmp_path / "bin" / "jailer").read_bytes() == b"the jailer"
+
+
+def test_the_fixture_carries_the_mode_split_the_release_has(tmp_path: Path) -> None:
+    """The rule reads the executable bit, so the fixture has to carry real ones.
+
+    Not a test of ``unpack_programs`` -- a test of the thing every other test in
+    this file trusts. A fixture that stamps 0755 on all twenty-four members
+    passes an installer that ignores the mode entirely, and that installer is
+    the one that refused the real release on a runner. So the two counts are
+    asserted against the archive this file actually writes.
+
+    Six and eighteen are read off ``tar tzvf`` of the pinned asset. They are
+    upstream's numbers, not a property of the code under test: if a future
+    release ships a seventh program, this is the test that says so, and the
+    listing above is what has to be re-read.
+    """
+    tarball = the_usual_archive(tmp_path / "source.tgz")
+
+    with tarfile.open(tarball, "r:gz") as archive:
+        members = [m for m in archive.getmembers() if m.isfile()]
+
+    runnable = [m for m in members if m.mode & 0o111]
+    beside_them = [m for m in members if not m.mode & 0o111]
+
+    assert len(members) == 24, "the whole archive, not a sample of it"
+    assert len(runnable) == 6, sorted(Path(m.name).name for m in runnable)
+    assert len(beside_them) == 18, sorted(Path(m.name).name for m in beside_them)
+
+    # The four programs nobody installs are the interesting half of this: they
+    # are runnable and they are not what the pin asks for, which is the case a
+    # five-member fixture could not present at all.
+    assert {Path(m.name).name for m in runnable} == {
+        "cpu-template-helper-v1.13.1-x86_64",
+        "firecracker-v1.13.1-x86_64",
+        "jailer-v1.13.1-x86_64",
+        "rebase-snap-v1.13.1-x86_64",
+        "seccompiler-bin-v1.13.1-x86_64",
+        "snapshot-editor-v1.13.1-x86_64",
+    }
 
 
 def test_the_digest_recorded_is_the_programs_and_not_the_symbols(
