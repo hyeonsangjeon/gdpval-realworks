@@ -67,12 +67,31 @@ def now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _boot_id() -> str | None:
+    """A fresh UUID every time this machine starts, or None if unpublished.
+
+    Recorded so that whoever consumes this artefact can tell it was written
+    here. ``kernel_release`` cannot show that: two machines provisioned from
+    one image report the same string, which is precisely the case on GitHub's
+    runners -- runs 35072131325 and 35072747069 were different machines and
+    both said ``6.17.0-1022-azure``. Read as a reading, not asserted: a kernel
+    that does not publish one leaves this None and the consumer refuses.
+    """
+    try:
+        return Path("/proc/sys/kernel/random/boot_id").read_text(
+            encoding="utf-8"
+        ).strip() or None
+    except OSError:
+        return None
+
+
 def read_the_host() -> dict[str, Any]:
     """The readings the plan depends on, taken rather than assumed."""
     unified = Path("/sys/fs/cgroup/cgroup.controllers").exists()
     kvm = Path("/dev/kvm")
     return {
         "read_at": now(),
+        "boot_id": _boot_id(),
         "cgroup_version": 2 if unified else 1,
         "cgroup_evidence": (
             "/sys/fs/cgroup/cgroup.controllers exists"
