@@ -495,3 +495,103 @@ def test_the_backend_records_a_call_it_refused_on_the_path_check():
         "def exec_run("
     )[1]
     assert "self.boots.append(" in refusal.split("_open_directory(")[1]
+
+
+# ── and that it says whether the records survived ─────────────────────────
+
+
+class _Carried:
+    """A backend that has been closed, holding what its ``close()`` lifted out.
+
+    Two attributes rather than one because the backend keeps two: what came out
+    and, separately, what stopped coming out. A helper that collapsed them into
+    a single list could not express the case these tests exist for -- nothing
+    carried, for a reason.
+    """
+
+    def __init__(self, *carried: str, failed: str | None = None) -> None:
+        self.exec_records_carried = list(carried)
+        self.exec_records_not_carried = failed
+
+
+def test_the_files_are_counted_by_call_as_well_as_by_file():
+    """Three files over two calls is two calls, not three.
+
+    A call keeps up to three leaves, so a file count sitting beside
+    ``exec_run_calls`` reads as though more happened than did. Both numbers are
+    reported because neither answers the other's question.
+    """
+    runner = _load_runner()
+
+    counted = runner.exec_record_carriage(
+        [
+            _Carried(".gdpval/exec/0000/stdout", ".gdpval/exec/0000/stderr"),
+            _Carried(".gdpval/exec/0001/stdout"),
+        ]
+    )
+
+    assert counted["files_carried_out"] == 3
+    assert counted["calls_with_records"] == 2
+    assert counted["not_carried_because"] is None
+
+
+def test_a_run_that_lost_its_records_is_not_reported_as_one_that_made_none():
+    """The distinction the artifact could not make, and the reason for the key.
+
+    Both of these carried nothing. One ran nothing; the other ran something and
+    the copy failed. A reader with only the file count sees one fact, goes
+    looking at the plan and the instruction paragraph, and never learns that
+    the evidence existed and was dropped on the way out.
+    """
+    runner = _load_runner()
+
+    ran_nothing = runner.exec_record_carriage([_Carried()])
+    lost_it = runner.exec_record_carriage(
+        [_Carried(failed=".gdpval/exec/0000/stdout: OSError: [Errno 5] I/O error")]
+    )
+
+    assert ran_nothing["files_carried_out"] == lost_it["files_carried_out"] == 0
+    assert ran_nothing["not_carried_because"] is None
+    assert "OSError" in lost_it["not_carried_because"]
+    assert ran_nothing != lost_it
+
+
+def test_a_backend_that_cannot_answer_makes_the_carriage_unknown():
+    """Same rule as the census, and the live case is the fixture backend.
+
+    ``_Backend`` here answers ``boots`` and nothing about exec records, which
+    is exactly the fixture's shape: it serves ``exec_run`` and writes no
+    transcript. Summing over it and reporting the smaller total would publish a
+    zero that means "nobody looked" under a key that reads as "nothing ran".
+    """
+    runner = _load_runner()
+
+    assert runner.exec_record_carriage([_Backend(_entered())]) is None
+    assert (
+        runner.exec_record_carriage(
+            [_Carried(".gdpval/exec/0000/stdout"), _Backend(_entered())]
+        )
+        is None
+    )
+
+
+def test_no_backends_is_nothing_carried_rather_than_unknown():
+    """A run that built no backend ran no command. That is answered, not unknown."""
+    runner = _load_runner()
+
+    assert runner.exec_record_carriage([]) == {
+        "files_carried_out": 0,
+        "calls_with_records": 0,
+        "not_carried_because": None,
+    }
+
+
+def test_the_record_asks_the_backends_what_they_carried():
+    """Pinned at the call site, for the reason the census is.
+
+    A constant here would satisfy every test above and restore the defect in a
+    new place: a record reporting what it was told rather than what happened.
+    """
+    source = RUNNER_PATH.read_text("utf-8")
+
+    assert '"exec_records": exec_record_carriage(backends_built),' in source

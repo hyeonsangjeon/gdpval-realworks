@@ -16,6 +16,18 @@ a machine came up and went down again — was simply not there.
 It matters most where it is least visible. The run record now says how many
 guests booted; these files are what a reader checks that against. A boot that
 failed leaves its evidence here and nowhere else.
+
+**And the flag alone did not do it.** The second half of this file was written
+after run 35111267647 came back with ``include-hidden-files`` set and still no
+transcripts in it. ``_keep_the_output`` writes the records where the *model*
+can read them, which is inside ``work/`` — and ``work/`` is what ``close()``
+destroys, in a ``finally`` at the end of every ``run()``, before the driver has
+even seen the result. Each task's directory reached the upload step empty, and
+an empty directory is not archived either. So the fix above was necessary and,
+by itself, inert: there was nothing left under ``workspaces/`` to include,
+hidden or not. ``close()`` now lifts the records one level up, out of ``work/``
+and into the task's own root, keeping the hidden path so that the flag is what
+carries them.
 """
 from __future__ import annotations
 
@@ -28,8 +40,18 @@ import yaml
 BATCH_RUNNER_ROOT = Path(__file__).resolve().parents[1]
 if str(BATCH_RUNNER_ROOT) not in sys.path:
     sys.path.insert(0, str(BATCH_RUNNER_ROOT))
+if str(BATCH_RUNNER_ROOT / "tests") not in sys.path:
+    sys.path.insert(0, str(BATCH_RUNNER_ROOT / "tests"))
 
+from core.agentic_v2_contract import (  # noqa: E402
+    TOOL_CONTRACT_VERSION,
+    AgenticV2Profile,
+)
 from core.agentic_v2_exec_boot import EXEC_RECORD_DIR  # noqa: E402
+from core.agentic_v2_microvm_backend import AgenticV2MicroVMBackend  # noqa: E402
+from core.agentic_v2_substrate import AgenticV2SubstrateManifest  # noqa: E402
+
+import test_agentic_v2_microvm_backend as microvm_fixtures  # noqa: E402
 
 WORKFLOW = (
     BATCH_RUNNER_ROOT.parent / ".github" / "workflows" / "agentic-v2-stage-run.yml"
@@ -130,3 +152,192 @@ def test_the_meta_beside_each_stream_is_what_the_census_is_checked_against():
         "guest_confirmed_stopped",
     ):
         assert f'"{answer}"' in keeper, f"meta.json no longer carries {answer}"
+
+
+# ---------------------------------------------------------------------------
+# The other half: there has to be something left for the flag to keep
+# ---------------------------------------------------------------------------
+
+#: What a command that did the work prints. Not empty, because an empty stdout
+#: copied out and an absent stdout look the same on disk and the whole point of
+#: these files is telling one from the other.
+A_COMMAND_THAT_RAN = "rows written: 412\n"
+
+
+def _a_backend(root: Path) -> AgenticV2MicroVMBackend:
+    return AgenticV2MicroVMBackend(
+        root=root,
+        profile=AgenticV2Profile(
+            tool_contract_version=TOOL_CONTRACT_VERSION,
+            policy_profile_id="offline-full-v1",
+            foundation_only=True,
+        ),
+        image=microvm_fixtures.AN_IMAGE,
+        boot_one_command=microvm_fixtures.Launcher(),
+        substrate_manifest=AgenticV2SubstrateManifest.load(
+            microvm_fixtures.MANIFEST_PATH
+        ),
+    )
+
+
+def _a_call_that_booted(backend: AgenticV2MicroVMBackend, call: int = 0) -> dict:
+    """One ``exec_run``'s worth of records, written the way the backend does.
+
+    Through ``_keep_the_output`` rather than by hand: the property under test is
+    that what that method writes survives, and a test that wrote the files
+    itself would keep passing after the writer moved them somewhere else.
+    """
+    reading = {
+        "stdout": A_COMMAND_THAT_RAN,
+        "stderr": "",
+        "boot_outcome": "exited",
+        "deadline": 120,
+        "truncated": False,
+        "result": {"returncode": 0},
+        "grounds": "the command ran to completion",
+    }
+    machine = {
+        "host_left_running": False,
+        "guest_confirmed_stopped": True,
+        "copy_integrity": "ok",
+        "copy_integrity_because": None,
+    }
+    record = {"call": call, "booted": True, "machine": machine}
+    record["output_files"] = backend._keep_the_output(call, reading, machine=machine)
+    backend.boots.append(record)
+    return record
+
+
+def test_the_records_outlive_the_workspace_they_were_written_in(tmp_path):
+    """The defect run 35111267647 actually had, at the level it lived at.
+
+    Before the fix this left an empty directory: ``include-hidden-files`` was
+    already ``true`` on that run and there was nothing under it to include.
+    """
+    task_root = tmp_path / "workspaces" / "a-task-attempt-1"
+    backend = _a_backend(task_root)
+    _a_call_that_booted(backend)
+
+    backend.close()
+
+    kept = sorted(
+        str(path.relative_to(task_root)) for path in task_root.rglob("*") if path.is_file()
+    )
+    assert kept == [
+        f"{EXEC_RECORD_DIR}/0000/meta.json",
+        f"{EXEC_RECORD_DIR}/0000/stderr",
+        f"{EXEC_RECORD_DIR}/0000/stdout",
+    ], "the exec records did not survive the purge, so the artifact gets none"
+    assert (
+        task_root / EXEC_RECORD_DIR / "0000" / "stdout"
+    ).read_text("utf-8") == A_COMMAND_THAT_RAN
+
+
+def test_the_purge_still_takes_the_whole_workspace(tmp_path):
+    """Isolation is the claim under test; this must not have bought evidence with it.
+
+    A change that kept the records by not purging would pass the test above and
+    be the wrong fix — so what the model could reach is checked separately from
+    what survives.
+    """
+    task_root = tmp_path / "workspaces" / "a-task-attempt-1"
+    backend = _a_backend(task_root)
+    _a_call_that_booted(backend)
+    (backend.work / "deliverable.xlsx").write_bytes(b"PK\x03\x04")
+    work = backend.work
+
+    backend.close()
+
+    assert not work.exists(), "close() left the model's workspace on disk"
+
+
+def test_only_what_the_backend_itself_wrote_is_carried_out(tmp_path):
+    """Nothing walks a directory the model can write to.
+
+    ``.gdpval/exec`` is inside the workspace, so the model can put things there
+    — including a symlink. Copying that tree by walking it would put whatever it
+    pointed at into an artifact a reader takes for guest output. The leaves come
+    from :attr:`boots`, which lists what this backend wrote, so a file the
+    backend never recorded is left to be purged with everything else.
+    """
+    task_root = tmp_path / "workspaces" / "a-task-attempt-1"
+    backend = _a_backend(task_root)
+    _a_call_that_booted(backend)
+    backend._write_bytes(f"{EXEC_RECORD_DIR}/0000/planted", b"not the guest's output")
+    backend._write_bytes(f"{EXEC_RECORD_DIR}/9999/stdout", b"a call that never was")
+
+    backend.close()
+
+    carried = sorted(
+        str(path.relative_to(task_root)) for path in task_root.rglob("*") if path.is_file()
+    )
+    assert f"{EXEC_RECORD_DIR}/0000/planted" not in carried
+    assert f"{EXEC_RECORD_DIR}/9999/stdout" not in carried
+    assert backend.exec_records_carried == [
+        f"{EXEC_RECORD_DIR}/0000/stdout",
+        f"{EXEC_RECORD_DIR}/0000/stderr",
+        f"{EXEC_RECORD_DIR}/0000/meta.json",
+    ]
+
+
+def test_a_run_that_booted_nothing_carries_nothing_and_says_so(tmp_path):
+    """The two zeros, told apart on the object rather than from the artifact.
+
+    An artifact with no transcripts in it means either that no command ran or
+    that the copy lost them, and last time there was no way to tell from the
+    outside. ``exec_records_carried`` empty with ``exec_records_not_carried``
+    ``None`` is the first; a reason string is the second.
+    """
+    backend = _a_backend(tmp_path / "workspaces" / "a-task-attempt-1")
+
+    backend.close()
+
+    assert backend.exec_records_carried == []
+    assert backend.exec_records_not_carried is None
+
+
+def test_a_copy_that_fails_still_purges_and_leaves_a_reason(tmp_path, monkeypatch):
+    """The purge is not conditional on the evidence being saved.
+
+    Keeping a workspace alive because its transcripts could not be copied would
+    trade the property under test for a record of it.
+    """
+    task_root = tmp_path / "workspaces" / "a-task-attempt-1"
+    backend = _a_backend(task_root)
+    _a_call_that_booted(backend)
+    work = backend.work
+
+    def fails(*_args, **_kwargs):
+        raise OSError("no space left on device")
+
+    monkeypatch.setattr(backend, "_carry_the_exec_records_out", fails)
+    backend.close()
+
+    assert not work.exists(), "a failed copy stopped the purge"
+    assert backend.exec_records_not_carried is not None
+    assert "no space left on device" in backend.exec_records_not_carried
+
+
+def test_the_destination_is_still_hidden_so_the_upload_flag_still_carries_it(tmp_path):
+    """Couples this half back to the first, which is otherwise dead weight.
+
+    The records could have been lifted to an ordinary name and would then reach
+    the archive with no flag at all — and the four tests above would be
+    guarding an input nothing needed, which a later reader would rightly
+    delete. Keeping the dot keeps them load-bearing.
+    """
+    task_root = tmp_path / "workspaces" / "a-task-attempt-1"
+    backend = _a_backend(task_root)
+    _a_call_that_booted(backend)
+
+    backend.close()
+
+    assert backend.exec_records_carried, (
+        "nothing was carried out, so this would pass on an empty list and say "
+        "nothing about where the records ended up"
+    )
+    for relative in backend.exec_records_carried:
+        assert Path(relative).parts[0].startswith("."), (
+            f"{relative} is no longer hidden; include-hidden-files is not what "
+            "keeps it in the archive and the tests above say otherwise"
+        )

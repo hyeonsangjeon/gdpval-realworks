@@ -279,8 +279,18 @@ def isolated_environment_note(
                 else [
                     "one microVM per exec_run call, destroyed when the "
                     "command returned",
+                    # Where, not just whether. This sentence was already here
+                    # when run 35111267647 asserted it over an artifact that
+                    # held none of them. The list describes the run, so the
+                    # claim was true — and unverifiable by anyone holding the
+                    # artifact, because the records are written inside the
+                    # workspace and the workspace is purged at close. `close()`
+                    # now lifts them out, and the path is named here because a
+                    # reader who cannot find them has no way to tell a run that
+                    # kept nothing from a run that kept them somewhere else.
                     "the exit status, stdout and stderr of every command "
-                    "that ran",
+                    "that ran, one directory per call under .gdpval/exec in "
+                    "that task's workspace directory in the run artifact",
                 ]
             ),
             "the files workspace_apply wrote, and the deliverables collected",
