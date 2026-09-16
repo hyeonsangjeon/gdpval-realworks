@@ -615,7 +615,24 @@ def _flag_value(script: str, flag: str) -> str | None:
 #: `tests/test_run_agentic_v2_stage.py` to the free job's pytest step made it
 #: see a step that invoked the stage with no `--parquet`. The test failed
 #: correctly, about the wrong step.
-INVOKES_THE_STAGE = re.compile(r"python\s+scripts/run_agentic_v2_stage\.py")
+#:
+#: The `scripts/` prefix is what keeps the test file out, and `python` used to
+#: be required in front of it as well. That stopped being true when a
+#: `same-host` dispatch began running the stage as
+#: `"${RUN[@]}" scripts/run_agentic_v2_stage.py`, with the interpreter chosen
+#: further up the block. A detector insisting on the literal word stopped
+#: seeing the paid job at all -- not with a failure, but by quietly counting
+#: one job where it expects two, which is the same shape of wrongness as the
+#: paragraph above.
+#:
+#: What replaces it is a statement about shells rather than about tools: a line
+#: that runs a *module* is running that module, and any path on it is an
+#: argument to something else. `python -m mypy scripts/run_agentic_v2_stage.py`
+#: type-checks the stage; it does not run it, and it has no business fetching a
+#: dataset first.
+INVOKES_THE_STAGE = re.compile(
+    r"(?m)^(?!\s*#)(?!.*\s-m\s).*(?:^|[\s\"'])scripts/run_agentic_v2_stage\.py"
+)
 
 
 def _stage_invocations(blocks: list[str]) -> list[str]:
