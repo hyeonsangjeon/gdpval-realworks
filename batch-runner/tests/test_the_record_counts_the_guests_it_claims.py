@@ -279,6 +279,32 @@ def test_an_uncounted_run_is_not_reported_as_an_unexercised_one():
     assert "nothing ran in a guest" not in " ".join(unknown["what_was_not_real"])
 
 
+def test_an_uncounted_run_is_not_reported_as_an_exercised_one_either():
+    """The other half of the same correction, in the two lists this time.
+
+    ``None`` was folded in with the boots everywhere except the headline
+    sentence, so a run nobody counted read exactly like a six-of-six one: it
+    denied that the isolation was among the things that were not real, and
+    listed one microVM per call among the things that were. Both of those are
+    assertions, and an uncounted run supports neither.
+
+    So ``None`` is kept off both lists rather than moved from one to the other.
+    That is the whole of what is knowable: a reader who quotes any single line
+    of this note gets told nobody looked, and nothing tells them which way.
+    """
+    unknown = isolated_environment_note(PROFILE, census=None)
+    booted = isolated_environment_note(PROFILE, census=_census(asked=6, booted=6))
+
+    not_real = " ".join(unknown["what_was_not_real"])
+    assert "nothing about the isolation" not in not_real
+    assert "nothing counted whether it did" in not_real
+    assert not_real != " ".join(booted["what_was_not_real"])
+
+    real = " ".join(unknown["what_was_real"])
+    assert "one microVM per exec_run call" not in real
+    assert "stdout and stderr of every command" not in real
+
+
 def test_a_run_that_booted_says_how_many_rather_than_that_it_did():
     """A number can be checked against the ledger and a boolean cannot."""
     note = isolated_environment_note(PROFILE, census=_census(asked=14, booted=12))
@@ -344,10 +370,58 @@ def test_the_fixture_reports_none_booted_whatever_it_is_handed():
         PROFILE, census=_census(asked=99, booted=99, left_running=99)
     )
 
-    assert note["exec_run_calls"] == 0
     assert note["guests_that_actually_booted"] == 0
     assert note["guests_that_left_a_machine_running"] == 0
-    assert note["guest_booted"] is False
+    assert note["exec_run_calls"] is None
+    assert note["backend_boots_guests"] is False
+
+
+def test_the_fixture_does_not_report_zero_calls_over_an_exec_run_it_serves():
+    """Zero here is a measurement nobody took, and it routes to the wrong repair.
+
+    The two guest counts above are zero because the fixture has no launcher, so
+    the answer is knowable without counting. ``exec_run`` is not like that: the
+    fixture serves ``fixture-upper SOURCE DESTINATION``, advertises it in its
+    own capabilities, and really writes the file -- a fixture cohort can make
+    calls that succeed. Nothing counts them, because ``boot_census`` reads
+    ``boots`` and the fixture has none.
+
+    Writing ``0`` there is the constant this whole change deletes, arriving
+    through one of its own keys, and it fails in the expensive direction: by
+    the diagnosis these tests exist to protect, no calls means the model never
+    asked, which sends a reader to the plan and the instruction paragraph over
+    a run where it did ask and was served.
+    """
+    runner = _load_runner()
+
+    note = runner.environment_note(PROFILE)
+
+    assert note["exec_run_calls"] is None
+
+
+def test_the_fixture_record_does_not_call_an_exec_run_it_serves_a_refusal():
+    """``what_was_not_real`` contradicted the verdict two keys above it.
+
+    The record carried ``exec_run: partly`` in ``tool_availability`` and, in
+    plain language underneath, that ``exec_run`` "answered
+    capability_unavailable to everything". Only one of those can be true, and
+    the prose is the half a reader takes at face value -- it is written out in
+    full precisely so it can be quoted, while the verdict is one word in a
+    list. So the false half is the one that travels.
+    """
+    runner = _load_runner()
+
+    note = runner.environment_note(PROFILE)
+
+    not_real = " ".join(note["what_was_not_real"])
+    assert "capability_unavailable to everything" not in not_real
+    assert "fixture-upper" in not_real
+    assert "refuses every other argv" in not_real
+
+    served = [
+        entry for entry in note["tool_availability"] if entry["tool"] == "exec_run"
+    ]
+    assert served and served[0]["verdict"] == "partly"
 
 
 @pytest.mark.parametrize(

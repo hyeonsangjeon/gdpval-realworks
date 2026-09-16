@@ -753,7 +753,7 @@ def test_the_isolated_note_says_the_browser_got_worse_not_better(tmp_path):
     note = isolated_environment_note({"policy_profile_id": "offline-full-v1"})
 
     assert note["backend"] == AgenticV2MicroVMBackend.__name__
-    assert note["guest_booted"] is True
+    assert note["backend_boots_guests"] is True
     assert note["exec_run_open"] is True
     not_real = " ".join(note["what_was_not_real"])
     assert "open_local" in not_real

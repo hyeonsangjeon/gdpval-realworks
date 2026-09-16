@@ -400,14 +400,25 @@ def environment_note(
         return written(profile, census=census)
     return {
         "backend": backend.__name__,
-        "guest_booted": False,
+        "backend_boots_guests": False,
         "exec_run_open": False,
-        # Zeroes, not None, and not passed in. The fixture has no launcher to
-        # call: its ``exec_run`` upper-cases a file or refuses, so no count
-        # taken over it could come back anything else. Reporting the caller's
-        # argument here would let a wrong one make the fixture look like it
-        # booted something, which is the failure these keys exist to catch.
-        "exec_run_calls": 0,
+        # None of the three is the caller's argument. Echoing it here would let
+        # a wrong one make the fixture look like it booted something, which is
+        # the failure these keys exist to catch.
+        #
+        # The two guest counts are zero and the call count is not, and the
+        # difference is the point. The fixture has no launcher, so no census
+        # taken over it could report a guest. But its ``exec_run`` is served:
+        # ``fixture-upper SOURCE DESTINATION`` is advertised in this backend's
+        # own capabilities and really does write a file, so a fixture cohort
+        # can make calls that succeed. Nothing counts them -- ``boot_census``
+        # reads ``boots``, which the fixture has not got -- and writing ``0``
+        # for a number nobody took is the constant this change exists to
+        # delete, arriving through one of its own keys. It is also the more
+        # expensive direction: by the diagnosis two keys above, no calls means
+        # the model never asked, which sends a reader to the plan and the
+        # instruction paragraph over a run where it did ask and was served.
+        "exec_run_calls": None,
         "guests_that_actually_booted": 0,
         "guests_that_left_a_machine_running": 0,
         "policy_profile_id": profile.get("policy_profile_id"),
@@ -427,7 +438,16 @@ def environment_note(
         ],
         "what_was_not_real": [
             "the isolation: no guest booted and nothing ran in one",
-            "exec_run, which answered capability_unavailable to everything",
+            # Not "refused everything", which this line used to say and which
+            # the verdict two keys above contradicts: tool_availability carries
+            # exec_run as ``partly``, because the fixture serves exactly one
+            # command. Only one of the two can be true, and the prose is the
+            # half that travels -- it is spelled out so it can be quoted, where
+            # the verdict is one word in a list. A reader taking the shorter
+            # sentence reads a cohort's successful calls as refusals.
+            "exec_run as a way to run a command: it serves fixture-upper "
+            "SOURCE DESTINATION, which upper-cases a file on the host, and "
+            "refuses every other argv",
         ],
         "so_the_honest_sentence_is": (
             "a real model drove a real tool loop and wrote real files, with "

@@ -181,9 +181,12 @@ def _the_honest_sentence(census: Mapping[str, int] | None) -> str:
 #: them, and a record that let someone infer otherwise would be the expensive
 #: kind of wrong.
 #:
-#: ``guest_booted`` and ``exec_run_open`` are constants here and are meant to
-#: be. They say what this backend *is* — it boots, and its ``exec_run`` serves
-#: — which is a property of the class and true before any task runs.
+#: ``backend_boots_guests`` and ``exec_run_open`` are constants here and are
+#: meant to be. They say what this backend *is* — it boots, and its ``exec_run``
+#: serves — which is a property of the class and true before any task runs.
+#: The first was called ``guest_booted`` until it came to sit beside
+#: ``guests_that_actually_booted``, where a true constant and a measured count
+#: read as the same kind of answer and disagree in every unexercised run.
 #:
 #: What they are not is a reading of the run, and the sentence underneath them
 #: used to be written as though they were: "a guest that really booted ... The
@@ -218,9 +221,19 @@ def isolated_environment_note(
         else census.get("guests_that_left_a_machine_running", 0)
     )
 
-    # ``None`` belongs with the counts that booted, not with zero: an uncounted
-    # run is not a run that is known to have entered no guest.
-    if booted != 0:
+    # Three states, not two. ``None`` is not zero — an uncounted run is not a
+    # run known to have entered no guest — and it is not a boot either, so it
+    # gets its own line in both lists below. The record then neither claims the
+    # isolation was exercised nor denies it, which is the only thing a run
+    # nobody counted supports. Folded in with the boots, as it was, the
+    # assertive list read "nothing about the isolation" for a run where nobody
+    # looked.
+    if booted is None:
+        about_the_isolation = (
+            "not known for the isolation: this is the backend that boots, and "
+            "nothing counted whether it did on this run"
+        )
+    elif booted != 0:
         about_the_isolation = (
             "nothing about the isolation: this is the backend that boots"
         )
@@ -238,7 +251,7 @@ def isolated_environment_note(
 
     return {
         "backend": AgenticV2MicroVMBackend.__name__,
-        "guest_booted": True,
+        "backend_boots_guests": True,
         "exec_run_open": True,
         "exec_run_calls": asked,
         "guests_that_actually_booted": booted,
@@ -256,8 +269,13 @@ def isolated_environment_note(
             "the model, the deployment and the charge for every call",
             "the tool choices the model made, turn by turn",
             *(
+                # ``None`` is dropped here with zero and kept out of the denial
+                # above, which is the only pair that says nothing either way. A
+                # list headed "what was real" is an assertion, so an uncounted
+                # run cannot be on it; the line it gets instead says nobody
+                # looked.
                 []
-                if booted == 0
+                if booted is None or booted == 0
                 else [
                     "one microVM per exec_run call, destroyed when the "
                     "command returned",
