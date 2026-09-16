@@ -72,6 +72,10 @@ if REPOSITORY_ROOT not in sys.path:
 
 from core.azure_ai_clients import (  # noqa: E402
     PROJECT_ENDPOINT_ENV,
+    REQUIRE_EXPECTED_IDENTITIES_ENV,
+    ROUTE_PROFILE_ENV,
+    AzureAIRouteSettings,
+    AzureAIWorkload,
     EndpointKind,
     classify_endpoint,
 )
@@ -499,6 +503,96 @@ def _remediation(rung: RoleCandidate) -> list[str]:
     ]
 
 
+def which_workloads_this_role_gates(
+    env: Mapping[str, str],
+) -> dict[str, Any]:
+    """Say which workloads the missing project role actually stops.
+
+    The verdict above answers "is the role held", and on its own that reads as
+    a statement about the whole repository. It is not one. The missing role
+    gates a resource, and only the workloads whose route resolves to *that*
+    resource are stopped by it; the rest are addressed to the account-scoped
+    direct-v1 endpoint, which a role this identity already holds serves.
+
+    That distinction is the difference between two opposite and equally wrong
+    conclusions. Read as a blanket block, ``role_missing_and_an_owner_must_
+    grant_it`` says a paid V2 stage cannot be dispatched -- and it can, because
+    the stage leases ``inference``, which resolves to direct-v1. Read as
+    harmless, it invites the Code Interpreter arm, which is the arm exp032 lost
+    all five of its tasks to with http 403 after the token check ahead of it
+    passed.
+
+    The split is not written down here. Each workload is put through
+    :meth:`AzureAIRouteSettings.select`, the same call the paid path makes, so
+    a change to the routing rule shows up in this report rather than leaving a
+    copy of the old rule behind to be believed.
+
+    Two overlays, and what each costs. The profile is taken from the
+    environment when it is there and otherwise from ``project-ci``, which is
+    the profile the pinned plan fixes and the one the rest of this report
+    already names. ``AZURE_AI_REQUIRE_EXPECTED_IDENTITIES`` is forced off,
+    because the diagnostic's own workflow sets it while deliberately not
+    setting the expected-account variables -- naming them in a step's ``env:``
+    would print the account and project names into a public log. Turning it off
+    narrows what this section claims to the routing rule alone: it says where a
+    workload is addressed, never that the endpoint is the one the plan meant.
+    That second question is asked on the paid path, before any call, by
+    ``check_route_is_the_one_the_plan_fixed``.
+
+    The real environment is passed through rather than replaced, so
+    ``_reject_static_azure_credential_env`` still sees whatever is actually
+    set.
+    """
+    gated: list[str] = []
+    ungated: list[dict[str, str]] = []
+    unroutable: list[dict[str, str]] = []
+
+    overlaid = {
+        **env,
+        ROUTE_PROFILE_ENV: env.get(ROUTE_PROFILE_ENV, "").strip() or "project-ci",
+        REQUIRE_EXPECTED_IDENTITIES_ENV: "0",
+    }
+    try:
+        settings = AzureAIRouteSettings.from_env(overlaid)
+    except Exception as broke:  # noqa: BLE001 - reported, never raised onward
+        return {
+            "workloads_gated_by_the_missing_role": [],
+            "workloads_the_missing_role_does_not_gate": [],
+            "workloads_with_no_route": [],
+            "not_measured_because": (
+                "the route could not be built from this environment, so which "
+                f"workloads the role gates was not measured ({broke!r})"
+            ),
+        }
+
+    for workload in AzureAIWorkload:
+        try:
+            selection = settings.select(workload)
+        except Exception as broke:  # noqa: BLE001 - a route that refuses is a finding
+            unroutable.append({"workload": workload.value, "because": str(broke)})
+            continue
+        if selection.endpoint.kind is EndpointKind.PROJECT:
+            gated.append(workload.value)
+        else:
+            ungated.append(
+                {
+                    "workload": workload.value,
+                    "endpoint_kind": selection.endpoint.kind.value,
+                }
+            )
+
+    return {
+        "workloads_gated_by_the_missing_role": sorted(gated),
+        "workloads_the_missing_role_does_not_gate": sorted(
+            ungated, key=lambda entry: entry["workload"]
+        ),
+        "workloads_with_no_route": sorted(
+            unroutable, key=lambda entry: entry["workload"]
+        ),
+        "not_measured_because": None,
+    }
+
+
 def diagnose(
     env: Mapping[str, str], *, runner: AzRunner
 ) -> dict[str, Any]:
@@ -534,6 +628,16 @@ def diagnose(
         "forbidden_roles_held": [],
         "principal_can_assign_roles": None,
         "read_failures": [],
+        # Replaced below once the roles have been read. Seeded so that a report
+        # which stops earlier -- a control-plane read that never completed, say
+        # -- still carries the key, saying it was not measured rather than
+        # saying nothing is gated.
+        "workloads": {
+            "workloads_gated_by_the_missing_role": [],
+            "workloads_the_missing_role_does_not_gate": [],
+            "workloads_with_no_route": [],
+            "not_measured_because": "the diagnosis stopped before this was read",
+        },
         "verdict": "unmeasured",
         # The account and project names live inside the endpoint secret rather
         # than in a variable of their own, so redaction of the whole endpoint
@@ -634,6 +738,7 @@ def diagnose(
         report["principal_can_assign_roles"] = permits_role_assignment(definitions)
 
     report["read_failures"] = problems
+    report["workloads"] = which_workloads_this_role_gates(env)
 
     if not missing:
         report["verdict"] = "least_privilege_role_already_held"
@@ -686,6 +791,53 @@ _VERDICT_LINES: Mapping[str, str] = {
 }
 
 
+def _workload_lines(report: Mapping[str, Any]) -> list[str]:
+    """How far the verdict above reaches, in the reader's terms.
+
+    Printed directly under the verdict rather than at the end, because the
+    verdict is the line that gets quoted and the scope of it is the part that
+    gets lost.
+    """
+    workloads = report.get("workloads") or {}
+    unmeasured = workloads.get("not_measured_because")
+    if unmeasured:
+        return [f"what this role gates: not measured -- {unmeasured}", ""]
+
+    gated = list(workloads.get("workloads_gated_by_the_missing_role") or ())
+    ungated = list(workloads.get("workloads_the_missing_role_does_not_gate") or ())
+    unroutable = list(workloads.get("workloads_with_no_route") or ())
+
+    lines = ["what this role gates, and what it does not:"]
+    if gated:
+        lines.append(
+            "  stopped by it        : "
+            + ", ".join(f"{name} -> project" for name in gated)
+        )
+    else:
+        lines.append("  stopped by it        : none of the typed workloads")
+    if ungated:
+        lines.append(
+            "  addressed elsewhere  : "
+            + ", ".join(
+                f"{entry['workload']} -> {entry['endpoint_kind']}"
+                for entry in ungated
+            )
+        )
+    if unroutable:
+        lines.append("  no route at all      :")
+        lines.extend(
+            f"    - {entry['workload']}: {entry['because']}" for entry in unroutable
+        )
+    lines.append("")
+    lines.append(
+        "A workload addressed elsewhere is not waiting on this role. A "
+        "workload stopped by it is refused with http 403 after the token "
+        "check ahead of it passes, which is what it did to exp032."
+    )
+    lines.append("")
+    return lines
+
+
 def render(report: Mapping[str, Any]) -> str:
     """Turn the diagnosis into text a public log can carry."""
     lines: list[str] = [
@@ -699,6 +851,8 @@ def render(report: Mapping[str, Any]) -> str:
         _VERDICT_LINES.get(str(report.get("verdict")), _VERDICT_LINES["unmeasured"]),
         "",
     ]
+
+    lines.extend(_workload_lines(report))
 
     held = list(report.get("roles_held") or ())
     if held:
