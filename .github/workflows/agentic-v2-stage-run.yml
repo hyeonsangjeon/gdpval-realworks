@@ -993,12 +993,35 @@ jobs:
       # and because a directory of seventeen indistinguishable `-run` archives
       # is not a record of anything. The name says which piece it is and of
       # what, so a missing one is visible from the list alone.
+      #
+      # `include-hidden-files` because everything a guest wrote is under a dot.
+      # The backend keeps each `exec_run`'s stdout, stderr and a `meta.json`
+      # holding that call's boot outcome, result, grounds, `host_left_running`,
+      # `copy_integrity` and `guest_confirmed_stopped` -- and it keeps them at
+      # `EXEC_RECORD_DIR`, which is `.gdpval/exec`. The pinned action defaults
+      # this input to `false`, so every one of those files was being dropped
+      # from the archive: the streams a command produced inside a guest, and
+      # the only per-call record of whether a machine came up and went down
+      # again, on a run that had already been paid for.
+      #
+      # Nothing else under `agentic-v2-run/` is hidden -- the journal, the
+      # ledger and the run record are all plain names -- so this input adds
+      # exactly the exec records and whatever hidden path the model chose to
+      # write in its own workspace, which is its output and already the point
+      # of this artifact. Each stream is capped at `MOST_OUTPUT_BYTES`, so the
+      # archive grows by at most two megabytes per `exec_run` call.
+      #
+      # It matters most on the runs where it is least visible. The record's
+      # census says how many guests booted; these files are what a reader
+      # checks that against, and a failed boot leaves its evidence here and
+      # nowhere else.
       - name: Keep the record, the journal and what was written
         if: ${{ always() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: agentic-v2-${{ inputs.stage }}-shard-${{ env.SHARD_SLUG }}
           path: agentic-v2-run/
+          include-hidden-files: true
           if-no-files-found: warn
 
       # What this shard's own machine was shown to be, kept separately from
