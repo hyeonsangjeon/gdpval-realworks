@@ -1,0 +1,172 @@
+name: Boot a guest on this runner and admit it
+description: >
+  Install the pinned launcher, boot one Firecracker guest under the jailer on
+  the runner this is running on, and write the approval that admits the stage
+  onto it. Produces the proof and consumes it in one place, so nothing is
+  carried between hosts.
+
+# Why this is an action rather than four steps written twice.
+#
+# The free job's job is to rehearse, for nothing, what the paid job will do
+# with money on it. A rehearsal that is a *copy* of the real thing stops being
+# a rehearsal the first time somebody edits one copy: the free leg then passes
+# and tells you about an arrangement the paid leg no longer has. Both jobs call
+# this, so "the dry run proved it" means the thing it sounds like.
+#
+# It grants no privilege of its own. Two of its steps run under `sudo` because
+# the jailer requires root and `first_boot` execs it in-process; the rest run
+# as the job's own account. Nothing here reads a secret, and this whole action
+# runs before `azure/login` in the paid job, so there is no federated session on
+# the machine while it works.
+
+inputs:
+  artefact:
+    description: Where the first-boot record is written.
+    required: true
+  approval:
+    description: >
+      Where the isolation approval is written, if the selector accepts it. Not
+      written at all if it would not, which is the point of the step.
+    required: true
+  scratch:
+    description: >
+      Where each call stages its work disk and reads the guest's writes back.
+      Outside the checkout on purpose: a jail built under GITHUB_WORKSPACE ends
+      up in `git status` and in the uploaded artifact.
+    required: false
+    default: /var/tmp/gdpval-v2-scratch
+  workdir:
+    description: Where the guest kernel, rootfs and OCI layers are built.
+    required: false
+    default: /var/tmp/gdpval-v2-first-boot
+  approved-by:
+    description: >
+      Who admitted this run. A dispatch rather than a person, so the record
+      names something a reader can go and open.
+    required: true
+  session:
+    description: >
+      The run id the launcher names its jails under. Given here only so the
+      selector has something to accept; the stage passes its own.
+    required: true
+  vcpu-count:
+    description: >
+      Processors per guest. The same number for the proof boot and for the
+      calls, so the thing that was shown to boot is the thing that will run.
+    required: false
+    default: '2'
+  install-report:
+    description: Where the release record -- both digests -- is written.
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    # Fetched by pin and checked against the digest published beside it. The
+    # script says plainly what that does and does not establish: upstream signs
+    # nothing, so this catches a truncated download and not a substituted one.
+    #
+    # The layout and the privileged line are deliberately two steps. Putting
+    # files in a directory needs nothing; putting them on the program search
+    # path needs root, and it is one line a reader of the log can see.
+    - name: Install the pinned launcher programs
+      shell: bash
+      env:
+        REPORT: ${{ inputs.install-report }}
+      run: |
+        set -euo pipefail
+        cd batch-runner
+        ARGS=(--into "$RUNNER_TEMP/firecracker-pinned")
+        if [ -n "$REPORT" ]; then
+          ARGS+=(--report "$REPORT")
+        fi
+        python scripts/install_pinned_firecracker.py "${ARGS[@]}"
+        sudo install -m 0755 -t /usr/local/bin \
+          "$RUNNER_TEMP/firecracker-pinned/firecracker" \
+          "$RUNNER_TEMP/firecracker-pinned/jailer"
+
+    # The same reading the free job already takes, taken again now that the
+    # programs are on the machine, and this time with `--require-programs`.
+    #
+    # It is not a repeat. The first reading deliberately leaves the programs
+    # out, because their absence from a bare runner image is a fact about the
+    # image; this one is the only place that asks whether the install above
+    # actually took. Asking here rather than trusting the step's exit code is
+    # the difference between "install said it worked" and "the launcher is
+    # where the boot will look for it", and `shutil.which` is what the boot
+    # uses.
+    - name: Read the runner again, now that the launcher is on it
+      shell: bash
+      run: |
+        set -euo pipefail
+        cd batch-runner
+        python scripts/check_runner_can_host_a_guest.py \
+          --require-programs \
+          --report "$RUNNER_TEMP/runner-capability-with-programs.json"
+
+    # Root, because the jailer is. It chroots, makes the device node inside the
+    # jail, writes the cgroup files and only then drops to the jail account, and
+    # `core/agentic_v2_first_boot.py` execs it directly rather than through
+    # anything that could acquire privilege on its way past.
+    #
+    # `sudo` resets PATH to `secure_path`, which does not include the interpreter
+    # `setup-python` put on this job's PATH. So the interpreter is named
+    # absolutely and PATH is handed across explicitly -- the boot itself resolves
+    # firecracker and jailer with `shutil.which`, and /usr/local/bin is on
+    # `secure_path` either way.
+    #
+    # This writes the artefact everything below rests on, and it is the step
+    # that can honestly fail: a runner that opens /dev/kvm can still turn out
+    # not to boot a guest, and that answer is worth having here, for free,
+    # rather than on task one of a cohort.
+    - name: Boot one guest on this runner
+      shell: bash
+      env:
+        ARTEFACT: ${{ inputs.artefact }}
+        WORKDIR: ${{ inputs.workdir }}
+        VCPU_COUNT: ${{ inputs.vcpu-count }}
+      run: |
+        set -euo pipefail
+        cd batch-runner
+        PYTHON="$(command -v python)"
+        sudo env "PATH=$PATH" "$PYTHON" scripts/run_agentic_c2_first_boot.py \
+          --workdir "$WORKDIR" \
+          --artefact "$ARTEFACT" \
+          --vcpu-count "$VCPU_COUNT"
+
+    # The gate, and the only thing between a dispatch that asked for isolation
+    # and a run that quietly used the fixture.
+    #
+    # Root for the same reason the stage will be root: a gate is worth having
+    # only if the process that checks is the process that will act. The images
+    # the step above wrote are root-owned, and an unprivileged check would
+    # refuse a kernel the stage can read perfectly well -- a false refusal that
+    # stops a good run is not a safer failure, it is a different wrong answer.
+    #
+    # Nothing is written unless `select_backend` -- the same function the stage
+    # calls -- accepts the document first. A file that exists is a file the next
+    # step passes along.
+    - name: Write the approval this runner will admit
+      shell: bash
+      env:
+        ARTEFACT: ${{ inputs.artefact }}
+        APPROVAL: ${{ inputs.approval }}
+        SCRATCH: ${{ inputs.scratch }}
+        APPROVED_BY: ${{ inputs.approved-by }}
+        SESSION: ${{ inputs.session }}
+        VCPU_COUNT: ${{ inputs.vcpu-count }}
+      run: |
+        set -euo pipefail
+        cd batch-runner
+        PYTHON="$(command -v python)"
+        sudo env "PATH=$PATH" "$PYTHON" scripts/write_isolation_approval.py \
+          --first-boot-artefact "$ARTEFACT" \
+          --scratch "$SCRATCH" \
+          --approved-by "$APPROVED_BY" \
+          --session "$SESSION" \
+          --vcpu-count "$VCPU_COUNT" \
+          --into "$APPROVAL"
+        # Readable by the job's own account so the evidence upload below can
+        # keep it. It admits a run; it is not a credential, and it holds none.
+        sudo chmod 0644 "$APPROVAL"

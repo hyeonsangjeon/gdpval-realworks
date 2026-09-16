@@ -12,14 +12,42 @@ name: Agentic Sandbox V2 — Stage Run
 # environment at all: asked on this repository's own dev box, every one of the
 # thirteen variables the route reads is unset.
 #
-# What this is, before anyone reads a number off it. The backend is
-# `AgenticV2FixtureBackend`. The model is real, the tool choices are real, the
-# files it writes are real, and the deliverables kept at the end are the ones it
-# wrote. The isolation is not real: no guest boots and `exec_run` answers
-# `capability_unavailable` to everything. That is what the pre-registration
-# fixes for stage one, so a run that opened it would be a different experiment
-# from the one registered. `environment_note` in the runner writes the weaker
-# true sentence into the record, so it travels with the results.
+# What this is, before anyone reads a number off it. The model is real, the
+# tool choices are real, the files it writes are real, and the deliverables kept
+# at the end are the ones it wrote. Whether the *isolation* is real depends on
+# what the dispatch asked for, and the two arrangements must never be confused:
+#
+#   isolation: fixture    the backend is `AgenticV2FixtureBackend`. No guest
+#     (the default)       boots and `exec_run` answers `capability_unavailable`
+#                         to everything. That is what the pre-registration
+#                         fixes for stage one, so a run that opened it would be
+#                         a different experiment from the one registered.
+#                         `environment_note` in the runner writes the weaker
+#                         true sentence into the record, so it travels with the
+#                         results.
+#   isolation: same-host  the backend is `AgenticV2MicroVMBackend`, and every
+#                         `exec_run` boots one Firecracker guest under the
+#                         jailer on this runner and destroys it afterwards.
+#                         Admitted by an approval this job produced, from a
+#                         guest this job booted, on this boot of this machine.
+#
+# The second is why `--isolated-approval` exists and why it was never passed
+# until now. The model route lives where the federated session is and the guest
+# lives where the hardware virtualisation is; those used to be two machines, and
+# a first-boot artefact is host-bound on purpose. Both halves fit on one runner,
+# which is the whole of the arrangement: nothing is carried between hosts, and
+# the boot-id check in `scripts/write_isolation_approval.py` refuses an artefact
+# that was.
+#
+# One consequence, stated plainly rather than buried. The jailer requires root
+# -- it chroots, mknods the device into the jail, writes cgroups and then drops
+# to the jail account -- and `first_boot` execs it in-process, so on a
+# `same-host` dispatch the run step itself is run under `sudo`. That is a real
+# change of posture and it is confined to that dispatch: a `fixture` run is
+# unchanged, down to the command line. What it does not change is who can reach
+# the credential. Root on this box could already read anything the job holds,
+# and `azure/login` runs *after* the guest has booted, so nothing in the boot
+# path is even on the machine at the same time as a federated session.
 #
 # Three milestones, deliberately not merged. *The environment is ready* is not
 # *the tasks ran* is not *the results are marked*. This workflow can only reach
@@ -33,8 +61,11 @@ name: Agentic Sandbox V2 — Stage Run
 #     it names — none is a rate and none prices another stage. The runner
 #     refuses a stage the plan has not priced by name, and refuses a priced
 #     stage whose cohort has grown past its amount, for free, in the job below.
-#   * It does not open anything. `exec_run` stays shut and no file in the
-#     repository is changed by a run.
+#   * It does not open anything on a `fixture` dispatch. `exec_run` stays shut,
+#     and no file in the repository is changed by a run in any arrangement. On
+#     `same-host` `exec_run` does open -- onto a guest, never onto this runner
+#     -- which is the one sentence in this block that the isolation input
+#     changes.
 #   * It does not publish. The record and the deliverables leave as artifacts,
 #     not as a commit. Nothing here reaches data/grades or the dashboard.
 #   * It does not pay for marking. Running the thirty and the two hundred and
@@ -87,6 +118,23 @@ on:
           - paid
         default: dry-run
         required: true
+      isolation:
+        description: >-
+          fixture is the pre-registered stage-one arrangement: the model and
+          its tool choices are real and exec_run answers capability_unavailable
+          to everything. same-host produces a first-boot artefact on this
+          runner and hands it to the stage, so exec_run runs inside a guest —
+          and the job refuses outright rather than quietly falling back if the
+          runner cannot host one. capability-check stops after reading the
+          runner and reports whether same-host is possible at all; it spends
+          nothing and runs no cohort.
+        type: choice
+        options:
+          - fixture
+          - capability-check
+          - same-host
+        default: fixture
+        required: true
       run_id:
         description: >-
           Names the journal's run and namespaces every ledger call id. Leave
@@ -134,7 +182,13 @@ jobs:
   free:
     name: Dry run
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # A bound, not a budget. A `fixture` dispatch has never come near twenty
+    # minutes and still does not; the extra is for `same-host`, which pulls the
+    # guest image, builds two ext4 filesystems and boots a machine twice before
+    # it reaches the dry run. Raised rather than made conditional because a
+    # timeout cannot be an expression here, and because an upper bound that is
+    # never approached costs nothing.
+    timeout-minutes: 45
     outputs:
       # The matrix the paid job fans out over. Worked out here rather than
       # written into the matrix by hand, so it cannot disagree with the timeout
@@ -177,6 +231,99 @@ jobs:
           set -euo pipefail
           cd batch-runner
           pip install -r requirements.txt
+
+      # Being allowed to use the device, before being asked about it.
+      #
+      # Run 35072131325 read this runner and found the node present, the
+      # processor reporting vmx and the kernel well above what Firecracker
+      # validates against -- and the open refused with Permission denied. That
+      # is the ordinary Ubuntu arrangement: udev ships /dev/kvm as root:kvm 0660
+      # and the account a job runs as is not in the kvm group.
+      #
+      # Which makes it a prerequisite a step can satisfy rather than a fact
+      # about the machine, so it is satisfied here and the reading below is
+      # taken afterwards. Not on a `fixture` dispatch: that arrangement boots no
+      # guest, and a dispatch that predates this input should touch nothing it
+      # did not touch before.
+      #
+      # It grants and it does not decide. A grant that failed to take shows up
+      # in the reading as a refusal, which is the answer either way.
+      - name: Let this job open the hardware virtualisation device
+        if: ${{ inputs.isolation != 'fixture' }}
+        run: |
+          set -euo pipefail
+          bash batch-runner/scripts/allow_this_job_to_open_kvm.sh
+
+      # The one reading that decides whether the isolated backend and the model
+      # route can be on the same machine, taken on the machine in question
+      # rather than assumed about it.
+      #
+      # It has to be taken. Every other reading of the device in this
+      # repository stops at the filename: `inspect_microvm_readiness` asks
+      # whether the permission bits allow a read and a write, and
+      # `read_the_host` in the admission generator asks only whether the path
+      # exists. A runner where the node is present, the bits allow it and
+      # hardware virtualisation is nonetheless unavailable passes both, and the
+      # place that surfaces is the first command of a cohort already paid for.
+      # So the script opens the device and asks it to make one empty machine.
+      #
+      # Free and always printed, on every mode, because a dry run that records
+      # what the runner could do costs nothing and answers the question for
+      # whoever reads the log next. What it *gates* depends on what was asked:
+      #
+      #   fixture           report only. The pre-registered arrangement does
+      #                     not boot a guest, so the runner's answer changes
+      #                     nothing and must not fail a run that never wanted
+      #                     one.
+      #   capability-check  report only, and no cohort runs. This is the
+      #                     bounded question on its own.
+      #   same-host         gates. A runner that cannot host a guest cannot run
+      #                     what was asked for, and the honest answer is to
+      #                     stop here — for free, before the paid job starts —
+      #                     rather than run the cohort against the fixture and
+      #                     leave a reader thinking isolation was on.
+      #
+      # `--require-programs` is deliberately not passed. firecracker and jailer
+      # are absent from a bare runner image and a step installs them, so their
+      # absence here is a fact about the image and not about the machine.
+      - name: Read whether this runner could host a guest
+        id: capability
+        env:
+          ISOLATION: ${{ inputs.isolation }}
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          set +e
+          python scripts/check_runner_can_host_a_guest.py \
+            --report "$RUNNER_TEMP/runner-capability.json"
+          CAPABLE=$?
+          set -e
+          if [ "$CAPABLE" -eq 0 ]; then
+            echo "could_host_a_guest=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "could_host_a_guest=false" >> "$GITHUB_OUTPUT"
+          fi
+          if [ "$ISOLATION" = "same-host" ] && [ "$CAPABLE" -ne 0 ]; then
+            echo "::error::same-host isolation was asked for and this runner cannot host a guest. The readings above say which prerequisite failed. Nothing was spent. This job stops rather than running the cohort against the fixture backend, because a run reporting isolation it did not have would be worse than no run at all."
+            exit 1
+          fi
+
+      # Kept whatever the answer was. A reading that says no is the evidence
+      # for the finding, and it is what a later attempt gets compared against.
+      #
+      # Conditioned on the step above having run, not on the file existing.
+      # `hashFiles()` only sees inside `GITHUB_WORKSPACE`, so a condition on the
+      # report's path under `RUNNER_TEMP` is always the empty string and this
+      # step always skips — which is what happened on the first dispatch, run
+      # 35072131325, where the reading was taken and then not kept. Written down
+      # because the failure is silent: a skipped upload is green.
+      - name: Keep the capability reading
+        if: always() && steps.capability.outcome != 'skipped'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: runner-capability-${{ inputs.isolation }}
+          path: ${{ runner.temp }}/runner-capability.json
+          if-no-files-found: error
 
       # The tests that hold what a paid run rests on: that the money question
       # is answered from the plan rather than from a sentence, that the cohort
@@ -297,23 +444,92 @@ jobs:
           MATRIX="$(python scripts/plan_agentic_v2_shards.py --stage "$STAGE")"
           echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
 
+      # ── The same-host arrangement, rehearsed for nothing ────────────────
+      #
+      # The paid job runs exactly this, from the same action, before it logs
+      # in. Doing it here first means the expensive half of a `same-host`
+      # dispatch -- the install, the boot, the admission -- is answered on a
+      # free runner, and a dispatch that cannot work never reaches the job that
+      # spends.
+      #
+      # What it does not rehearse, said so nobody reads the green tick as more
+      # than it is: this runner is not that runner. The proof is host-bound by
+      # design and the paid job makes its own, on its own boot, which is the
+      # whole reason the boot id is checked. A pass here says the arrangement
+      # works on a runner of this image; it does not admit anything over there.
+      - name: Boot a guest and admit it, on this runner
+        if: ${{ inputs.isolation == 'same-host' }}
+        uses: ./.github/actions/boot-a-guest-on-this-runner
+        with:
+          artefact: ${{ runner.temp }}/first-boot.json
+          approval: ${{ runner.temp }}/isolation-approval.json
+          install-report: ${{ runner.temp }}/firecracker-install.json
+          approved-by: >-
+            dry run of ${{ github.workflow }} — run ${{ github.run_id }}
+            attempt ${{ github.run_attempt }} at ${{ github.sha }}
+          session: dry-run-${{ github.run_id }}
+
+      # Kept whatever happened, and kept separately from the paid job's. These
+      # are the readings that say what this runner turned out to be, and a
+      # failed attempt's evidence is the thing a later attempt gets compared
+      # against.
+      - name: Keep what the rehearsal found
+        if: ${{ always() && inputs.isolation == 'same-host' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: same-host-rehearsal
+          path: |
+            ${{ runner.temp }}/first-boot.json
+            ${{ runner.temp }}/isolation-approval.json
+            ${{ runner.temp }}/firecracker-install.json
+            ${{ runner.temp }}/runner-capability-with-programs.json
+          if-no-files-found: warn
+
       # Where the reference files come from is derived from `--parquet`, so the
       # prompts and the files a task opens can only ever be one revision. This
       # is also the step that catches a dataset fetched the wrong way: it
       # refuses before the paid job below is allowed to start.
+      #
+      # `--isolated-approval` is passed on a `same-host` dispatch, and passing
+      # it is free: `select_backend` is called before the dry run returns and
+      # before any client exists, so the admission -- the artefact, the kernel
+      # release, the re-hashed images, the backend actually constructed -- is
+      # exercised here in full. It is the one part of the isolated path a job
+      # that spends nothing can reach.
+      #
+      # The guard is not decoration. If the step above were ever skipped,
+      # removed or silently failed, an unguarded `--isolated-approval` pointing
+      # at nothing would fail with a file error, and a bare `[ -f ]` would drop
+      # the flag and dry-run the fixture instead -- which is the exact
+      # substitution this whole arrangement exists to prevent. So the absence of
+      # the file on a `same-host` dispatch is an error with a sentence on it.
       - name: Dry run
+        env:
+          ISOLATION: ${{ inputs.isolation }}
+          APPROVAL: ${{ runner.temp }}/isolation-approval.json
         run: |
           set -euo pipefail
           cd batch-runner
-          python scripts/run_agentic_v2_stage.py \
-            --stage '${{ inputs.stage }}' --dry-run \
-            --parquet "$RUNNER_TEMP/gdpval-pinned/data/train-00000-of-00001.parquet"
+          ARGS=(--stage '${{ inputs.stage }}' --dry-run
+                --parquet "$RUNNER_TEMP/gdpval-pinned/data/train-00000-of-00001.parquet")
+          if [ "$ISOLATION" = "same-host" ]; then
+            if [ ! -f "$APPROVAL" ]; then
+              echo "::error::same-host isolation was asked for and $APPROVAL is not there. The step that writes it either did not run or refused, and its output above says which. This job stops rather than dry-running the fixture and reporting that the isolated path was checked."
+              exit 1
+            fi
+            ARGS+=(--isolated-approval "$APPROVAL")
+          fi
+          python scripts/run_agentic_v2_stage.py "${ARGS[@]}"
 
   # ── The run that spends ─────────────────────────────────────────────────
   paid:
     name: Run the cohort — shard ${{ matrix.shard }}
     needs: free
-    if: ${{ inputs.mode == 'paid' }}
+    # `capability-check` asks one question about the runner and is answered
+    # entirely by the free job above. It must never reach here: a mode whose
+    # whole purpose is to find out whether something is possible would be a
+    # strange thing to charge for.
+    if: ${{ inputs.mode == 'paid' && inputs.isolation != 'capability-check' }}
     runs-on: ubuntu-latest
     strategy:
       # One job per piece of the cohort. For `advance_check_5` this is a matrix
@@ -425,6 +641,40 @@ jobs:
           cd batch-runner
           pip install -r requirements.txt
 
+      # ── The isolated backend, on this machine, before there is a session ──
+      #
+      # Placed here on purpose, above `azure/login`. The boot pulls an image,
+      # builds two filesystems and runs a privileged launcher, and there is no
+      # reason for any of that to happen on a box that is already holding a
+      # federated session. When this finishes, the machine has a guest it has
+      # been shown to be able to boot and no credential at all; the login below
+      # then adds the credential to a machine that is already proven.
+      #
+      # One guest proof per shard, because one runner per shard. The artefact
+      # is host-bound and the boot id is checked, so a shard cannot be handed a
+      # sibling's proof even by accident -- which is the property that makes
+      # seventeen parallel jobs safe to run this way.
+      #
+      # `allow_this_job_to_open_kvm.sh` runs here too. The free job's grant was
+      # on the free job's runner; this is a different machine.
+      - name: Let this job open the hardware virtualisation device
+        if: ${{ inputs.isolation == 'same-host' }}
+        run: |
+          set -euo pipefail
+          bash batch-runner/scripts/allow_this_job_to_open_kvm.sh
+
+      - name: Boot a guest and admit it, on this runner
+        if: ${{ inputs.isolation == 'same-host' }}
+        uses: ./.github/actions/boot-a-guest-on-this-runner
+        with:
+          artefact: ${{ runner.temp }}/first-boot.json
+          approval: ${{ runner.temp }}/isolation-approval.json
+          install-report: ${{ runner.temp }}/firecracker-install.json
+          approved-by: >-
+            ${{ github.workflow }} — run ${{ github.run_id }} attempt
+            ${{ github.run_attempt }} shard ${{ matrix.shard }} at ${{ github.sha }}
+          session: ${{ github.run_id }}-shard-${{ matrix.shard }}
+
       - name: Azure Login (OIDC)
         uses: azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca # v3.0.1
         with:
@@ -485,6 +735,54 @@ jobs:
           set -euo pipefail
           cd batch-runner
           python scripts/azure_ai_route_preflight.py
+
+      # The same question, asked as the account that will ask it for real.
+      #
+      # `same-host` runs the stage under `sudo`, and the session `azure/login`
+      # leaves behind belongs to the job's own account: `DefaultAzureCredential`
+      # finds no secret in the environment and no federated token file, falls
+      # through to the CLI credential, and the CLI reads `AZURE_CONFIG_DIR` or
+      # `$HOME/.azure`. A root process has a different `$HOME`, so it would look
+      # in `/root/.azure`, find nothing, and fail -- after the run had started.
+      #
+      # `AZURE_CONFIG_DIR` is handed across so it looks in the one directory the
+      # login actually wrote. Nothing is copied and nothing leaves the box: the
+      # session stays where `azure/login` put it, and root on this machine could
+      # read that path with or without being told about it. What is gained is
+      # that the boundary is one named directory a reader can see, rather than
+      # the job's whole home.
+      #
+      # This costs a token acquisition and no model call, and it is the one
+      # thing about the sudo arrangement that the free job cannot rehearse --
+      # the free job has no session to acquire against. So it is asked here,
+      # well before the first turn, and a failure is a red step with nothing
+      # charged.
+      #
+      # Why it is *here* rather than beside the unprivileged identity check it
+      # mirrors. Acquiring a token makes the CLI write: it refreshes its MSAL
+      # cache, and a file rewritten by root in a directory owned by the job's
+      # account comes back root-owned. Every unprivileged use of the session is
+      # above this line -- the identity check and the route validation both --
+      # so the first process to touch that directory as root is the last one
+      # that needs it as anything else. Ordering is the whole mitigation; there
+      # is no copy, no second config directory and no chown of a credential
+      # store.
+      - name: Verify the same-host run can reach that session
+        if: ${{ inputs.isolation == 'same-host' }}
+        env:
+          AZURE_AI_EXPECTED_CLIENT_ID: ${{ vars.AZURE_AI_EXPECTED_CLIENT_ID }}
+          AZURE_AI_EXPECTED_TENANT_ID: ${{ vars.AZURE_AI_EXPECTED_TENANT_ID }}
+          AZURE_AI_EXPECTED_SUBSCRIPTION_ID: ${{ vars.AZURE_AI_EXPECTED_SUBSCRIPTION_ID }}
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          PYTHON="$(command -v python)"
+          sudo env "PATH=$PATH" \
+            "AZURE_CONFIG_DIR=${AZURE_CONFIG_DIR:-$HOME/.azure}" \
+            "AZURE_AI_EXPECTED_CLIENT_ID=$AZURE_AI_EXPECTED_CLIENT_ID" \
+            "AZURE_AI_EXPECTED_TENANT_ID=$AZURE_AI_EXPECTED_TENANT_ID" \
+            "AZURE_AI_EXPECTED_SUBSCRIPTION_ID=$AZURE_AI_EXPECTED_SUBSCRIPTION_ID" \
+            "$PYTHON" scripts/azure_oidc_identity_preflight.py --verify-session
 
       # ── Has a sibling already found out this run is not what it says? ──
       #
@@ -555,6 +853,8 @@ jobs:
           STAGE: ${{ inputs.stage }}
           RUN_ID: ${{ inputs.run_id }}
           SHARD: ${{ matrix.shard }}
+          ISOLATION: ${{ inputs.isolation }}
+          APPROVAL: ${{ runner.temp }}/isolation-approval.json
         run: |
           set -euo pipefail
           cd batch-runner
@@ -567,14 +867,73 @@ jobs:
             # same journal name would be two writers on one file.
             ARGS+=(--run-id "$RUN_ID-shard-$SHARD_SLUG")
           fi
+
+          # Both the flag and the account depend on which arrangement was
+          # dispatched, and they are decided together because they are one
+          # decision. `fixture` runs exactly as it always has, down to the
+          # command line: no flag, no sudo, no mention of any of this.
+          RUN=(python)
+          if [ "$ISOLATION" = "same-host" ]; then
+            # Fail closed, and loudly. The alternative -- appending the flag
+            # only when the file happens to be there -- would turn a guest that
+            # did not boot into a run that quietly used the fixture and charged
+            # for a cohort. Every task would pass. Nothing would say why.
+            if [ ! -f "$APPROVAL" ]; then
+              echo "::error::same-host isolation was dispatched and there is" \
+                   "no approval at $APPROVAL. The boot step above either did" \
+                   "not run or declined to write one. Refusing to start: a" \
+                   "run without this flag is a fixture run, and this one" \
+                   "would be charged like an isolated one."
+              exit 1
+            fi
+            ARGS+=(--isolated-approval "$APPROVAL")
+            # Root, because the jailer is, and because `first_boot` execs it
+            # inside this process rather than handing it to something that
+            # could acquire privilege on the way.
+            #
+            # Every variable that crosses the boundary is named here. `sudo`
+            # resets PATH and drops the rest of the environment, so this list
+            # is the whole of what the stage will see -- which is the point of
+            # writing it out rather than reaching for `-E`. AZURE_CONFIG_DIR
+            # points at the session `azure/login` wrote and is the only reason
+            # the credential resolves at all; the step above proved it does.
+            #
+            # Nothing here is a secret. The endpoint arrives in the
+            # environment either way, and the guest sees none of it: it gets a
+            # work disk and nothing else.
+            RUN=(sudo env "PATH=$PATH" \
+                 "AZURE_CONFIG_DIR=${AZURE_CONFIG_DIR:-$HOME/.azure}" \
+                 "AZURE_AI_ROUTE_PROFILE=$AZURE_AI_ROUTE_PROFILE" \
+                 "FOUNDRY_PROJECT_ENDPOINT=$FOUNDRY_PROJECT_ENDPOINT" \
+                 "AZURE_AI_REQUIRE_EXPECTED_IDENTITIES=$AZURE_AI_REQUIRE_EXPECTED_IDENTITIES" \
+                 "AZURE_AI_EXPECTED_DIRECT_ACCOUNT=$AZURE_AI_EXPECTED_DIRECT_ACCOUNT" \
+                 "AZURE_AI_EXPECTED_PROJECT_ACCOUNT=$AZURE_AI_EXPECTED_PROJECT_ACCOUNT" \
+                 "AZURE_AI_EXPECTED_PROJECT_NAME=$AZURE_AI_EXPECTED_PROJECT_NAME" \
+                 "$(command -v python)")
+          fi
+
           # `set +e` on purpose. A cohort where the model failed some tasks, or
           # stopped at a ceiling, is a finding this run exists to collect --
           # and money was spent reaching it either way. The record has to be
           # uploaded before the exit code is allowed to end the job, so it is
           # captured here and re-raised at the end.
           set +e
-          python scripts/run_agentic_v2_stage.py "${ARGS[@]}"
-          echo "stage_exit=$?" >> "$GITHUB_OUTPUT"
+          "${RUN[@]}" scripts/run_agentic_v2_stage.py "${ARGS[@]}"
+          STAGE_EXIT=$?
+          set -e
+          # Written before anything else can fail. The step below re-raises it,
+          # and a missing value there is read as "possibly charged" -- true, but
+          # much less useful than the number.
+          echo "stage_exit=$STAGE_EXIT" >> "$GITHUB_OUTPUT"
+
+          # A root-written record still uploads -- the files are world-readable
+          # -- but it is owned by an account that is not this job's, and the
+          # collect step and anything else downstream would be reading someone
+          # else's files. Handed back here, where the reason is next to it.
+          if [ "$ISOLATION" = "same-host" ] \
+             && [ -d "$GITHUB_WORKSPACE/agentic-v2-run" ]; then
+            sudo chown -R "$(id -u):$(id -g)" "$GITHUB_WORKSPACE/agentic-v2-run"
+          fi
 
       # Before the report, and `always()`, because an unrecorded spend is the
       # one outcome with no way back. Cost missing is partial, never zero.
@@ -606,6 +965,32 @@ jobs:
         with:
           name: agentic-v2-${{ inputs.stage }}-shard-${{ env.SHARD_SLUG }}
           path: agentic-v2-run/
+          if-no-files-found: warn
+
+      # What this shard's own machine was shown to be, kept separately from
+      # what the model did on it.
+      #
+      # `always()` for the same reason as the record above: the case worth
+      # having this for is the one where the boot or the admission failed, and
+      # a step that only ran on success would be silent exactly then. The
+      # approval is absent on that path by design -- nothing writes one it
+      # would not stand behind -- so `warn` is the honest setting.
+      #
+      # The name deliberately does not begin `agentic-v2-<stage>-shard-`. That
+      # prefix is a pattern a sibling shard downloads to find out whether
+      # anybody halted the run, and handing the coverage check a bundle of
+      # boot artefacts to read as stage records would be a needless way to
+      # break it.
+      - name: Keep what this runner was shown to be
+        if: ${{ always() && inputs.isolation == 'same-host' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: same-host-proof-shard-${{ env.SHARD_SLUG }}
+          path: |
+            ${{ runner.temp }}/first-boot.json
+            ${{ runner.temp }}/isolation-approval.json
+            ${{ runner.temp }}/firecracker-install.json
+            ${{ runner.temp }}/runner-capability-with-programs.json
           if-no-files-found: warn
 
       # This reports on one shard, and says so. A green job here means this
@@ -644,10 +1029,15 @@ jobs:
   #
   # It writes nothing, charges nothing and fetches no dataset -- the cohort
   # comes from the committed catalogue, which is the list the run was bound to.
+  #
+  # `capability-check` is excluded for the same reason the paid job excludes
+  # it: there is no stage to account for. Left in, this job would download a
+  # shard record that was never written and fail red, which reads as a broken
+  # run rather than as the deliberately empty one it is.
   collect:
     name: Did the stage run?
     needs: paid
-    if: ${{ always() && inputs.mode == 'paid' }}
+    if: ${{ always() && inputs.mode == 'paid' && inputs.isolation != 'capability-check' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:

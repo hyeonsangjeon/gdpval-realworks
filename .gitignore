@@ -256,6 +256,49 @@ batch-runner/scripts/*
 # two strings and makes no network call.
 !batch-runner/scripts/check_agentic_v2_resume_inputs.py
 
+# Opens /dev/kvm and asks it to make one empty machine, which is the reading
+# that decides whether the isolated backend and the model route can live on the
+# same runner. Committed because the free job of agentic-v2-stage-run.yml calls
+# it on every dispatch and refuses a same-host run when it answers no, so an
+# absent file would be a gate that silently is not there. Every other reading of
+# the device in this repository stops at the filename -- permission bits in
+# `inspect_microvm_readiness`, `Path.exists()` in the admission generator -- and
+# a runner can pass both and still be unable to start a guest. Reads the machine
+# and one device; calls no model, installs nothing, makes no network call.
+!batch-runner/scripts/check_runner_can_host_a_guest.py
+
+# Adds an ACL entry letting the job's own account open /dev/kvm, which on the
+# stock Ubuntu runner image is root:kvm 0660 and therefore closed to it. A
+# supplementary group cannot fix that from inside a running process, so the
+# grant has to happen here rather than in a useradd. Committed because
+# agentic-v2-stage-run.yml calls it before taking the capability reading, and
+# because the narrow grant is the point: the widely circulated recipe is
+# `chmod 0666`, which opens the device to every account on the machine. Grants
+# one permission and reports it; decides nothing, boots nothing, calls no model.
+!batch-runner/scripts/allow_this_job_to_open_kvm.sh
+
+# Fetches the pinned Firecracker release -- v1.13.1, the tag every launcher flag
+# in core/agentic_v2_microvm_launch.py was read from -- checks it against the
+# digest published beside it, and lays firecracker and jailer out under the
+# names shutil.which is asked for. Committed because the same-host path of
+# agentic-v2-stage-run.yml installs them on a runner that ships neither, and
+# because the pin is the point: the recipe that circulates fetches whichever
+# release is newest, which would move the binaries under a launcher written
+# against a particular one. Reaches the network for two files, needs no
+# privilege, boots nothing and calls no model.
+!batch-runner/scripts/install_pinned_firecracker.py
+
+# Writes the document that admits a run onto a real guest -- but only after
+# handing it to the same select_backend the paid stage will call and getting
+# the isolated backend back. Committed because agentic-v2-stage-run.yml's
+# same-host path has no other way to produce one, and because the order is the
+# safeguard: a file that exists is a file a later step passes along, so an
+# approval that would be refused on task one is refused here instead, before
+# azure/login and before the ledger opens. Also refuses an artefact whose boot
+# id is not this boot, which is the check that keeps proof from being carried
+# between hosts. Reads a file and hashes two images; spends nothing.
+!batch-runner/scripts/write_isolation_approval.py
+
 # Reads the per-call cost ledger every paid shard writes and nothing until now
 # opened. Turns it into what each task cost and what the stage cost, keeping
 # apart the three populations a single number would hide: tasks the ledger has
