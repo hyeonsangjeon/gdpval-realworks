@@ -53,6 +53,7 @@ from core.agentic_v2_contract import TOOL_SCHEMAS, AgenticV2Profile  # noqa: E40
 from core.agentic_v2_fixture_backend import AgenticV2FixtureBackend  # noqa: E402
 from core.agentic_v2_instructions import resolve_instructions  # noqa: E402
 from core.agentic_v2_tool_availability import (  # noqa: E402
+    A_FILE_THAT_CANNOT_BE_MADE,
     FILE_ROUTE_PLACEHOLDER,
     PLACEHOLDER,
     READ_ROUTE_PLACEHOLDER,
@@ -215,6 +216,38 @@ def test_each_backend_is_told_the_route_that_exists_on_it():
     assert "cannot be produced in this run" in on_fixture
     for library in ("openpyxl", "reportlab", "python-pptx", "pptx", "matplotlib"):
         assert library not in on_microvm and library not in on_fixture
+
+
+def test_neither_backend_is_left_free_to_hand_in_a_mislabelled_text_file():
+    """The one instruction that belongs on both, and was on one.
+
+    The fixture branch had it because there the reasoning is unavoidable:
+    nothing runs, so the binary cannot be made, so say so rather than faking
+    it. On the microVM the same end is reached one step further along -- the
+    model is told to ask ``capabilities_query`` before depending on a library,
+    and a no there leaves it at exactly the same place with nothing said about
+    it. That branch is the one the paid cohort runs on.
+
+    Forward-looking rather than observed: all five tasks in run 35111267647
+    finished with ``deliverable_files_count: 0``, so no mislabelled file was
+    handed in. Nothing was handed in at all.
+    """
+    for backend in (MICROVM, FIXTURE):
+        paragraph = how_files_get_made(backend)
+        assert A_FILE_THAT_CANNOT_BE_MADE in paragraph, (
+            f"{backend} is told how to make the file and not what to do when "
+            "it cannot be made. A text file under a binary's name counts as a "
+            "deliverable produced and grades as an attempt"
+        )
+        assert paragraph.rstrip().endswith(A_FILE_THAT_CANNOT_BE_MADE), (
+            f"{backend} carries the instruction somewhere other than after the "
+            "route it is the fallback from"
+        )
+
+    # Written once, so the two cannot drift into saying different things about
+    # the same file. Read out of the module rather than spelled here, because a
+    # copy in the test is the drift it exists to stop.
+    assert A_FILE_THAT_CANNOT_BE_MADE.count("named as though it were") == 1
 
 
 def test_the_reading_paragraph_is_never_empty_and_never_the_same_twice():

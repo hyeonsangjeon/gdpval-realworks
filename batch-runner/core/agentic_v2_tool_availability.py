@@ -79,6 +79,25 @@ A_REFUSAL_ENDS_THE_TASK = (
     "refusing, and do not call one in a way this list says it will not serve."
 )
 
+#: Also true of both backends, and for two different reasons, which is why it
+#: is written once rather than on the branch where the reason is obvious.
+#:
+#: Where nothing runs, the format cannot be made at all. Where a command runs,
+#: it can still be that the image does not carry what the format needs -- and
+#: that second case is reachable only on the backend the paid cohort uses. A
+#: model is told there to ask ``capabilities_query`` before depending on a
+#: library; it was not told what to do when the answer is no.
+#:
+#: A deliverable named ``.xlsx`` that holds text is worse than a missing one.
+#: A missing file is visible in the file count; a mislabelled one is counted as
+#: a file produced, reaches a grader as an attempt, and the run reads as having
+#: done work it did not do.
+A_FILE_THAT_CANNOT_BE_MADE = (
+    "If the format cannot be made, hand in what you can type and say in it "
+    "which part was asked for and could not be made. Do not hand in a text "
+    "file named as though it were the format that was asked for."
+)
+
 
 #: How a verdict below was established. ``executed`` means a test really calls
 #: the method and observes the answer. ``asserted`` means the verdict was read
@@ -400,6 +419,13 @@ def how_files_get_made(backend: Any) -> str:
     ``capabilities_query`` to ask it, and a list hard-coded here would be the
     same kind of claim as the hand-written paragraph this module replaced --
     true of the image it was written against and silently false of the next one.
+
+    The branches differ in the route and end the same way, on
+    :data:`A_FILE_THAT_CANNOT_BE_MADE`. Having that only where nothing runs is
+    the reading of "cannot" a backend with a real interpreter invites and the
+    one it cannot afford: ``capabilities_query`` answering no is exactly the
+    moment a model needs to be told not to write the text under the binary's
+    name, and it is reachable only there.
     """
     ceiling = _write_content_ceiling()
     lines = [
@@ -436,11 +462,14 @@ def how_files_get_made(backend: Any) -> str:
     else:
         lines.append(
             "Nothing here runs a program you wrote, so a format that cannot be "
-            "typed cannot be produced in this run. If the task asks for one, "
-            "hand in what you can type and say in it which part was asked for "
-            "and could not be made. Do not hand in a text file named as though "
-            "it were the format that was asked for."
+            "typed cannot be produced in this run."
         )
+
+    # Last on both branches, because it is what to do when the route above ran
+    # out -- and on the microVM the route runs out one step further along, at
+    # an image that does not carry the library rather than at a backend that
+    # runs nothing.
+    lines.append(A_FILE_THAT_CANNOT_BE_MADE)
 
     return "\n".join(lines)
 
