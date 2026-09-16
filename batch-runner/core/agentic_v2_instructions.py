@@ -74,6 +74,8 @@ from core.agentic_v2_tool_availability import (
     apply_tool_availability,
     backend_name,
     contradicted_sentences,
+    named_placeholders,
+    placeholders_in,
     unverified_claims,
 )
 
@@ -109,6 +111,17 @@ class ResolvedInstructions:
     ``text`` is the string handed to the provider verbatim. ``sha256`` is over
     its UTF-8 bytes, so two runs claiming the same conditions can be held
     against each other by comparing one hex string instead of two paragraphs.
+
+    ``derived`` and ``asked_for`` are deliberately not the same question, and
+    collapsing one into the other re-opens a refusal. ``derived`` is about the
+    tool *list* alone -- whether :data:`PLACEHOLDER` was there -- because that
+    is what the two refusals below turn on: a plan whose list is hand-written
+    is refused on a backend nobody measured it against. ``asked_for`` is every
+    placeholder the plan spelt, and there are others now that substitute
+    paragraphs about routes rather than about which tools serve. A plan asking
+    only for a route paragraph has still written its own tool list by hand, so
+    it must still be refused, and it would not be if ``derived`` meant "asked
+    for something".
     """
 
     text: str
@@ -116,6 +129,7 @@ class ResolvedInstructions:
     derived: bool
     plan_characters: int
     unverified: tuple[str, ...]
+    asked_for: tuple[str, ...] = ()
 
     @property
     def characters(self) -> int:
@@ -139,6 +153,7 @@ class ResolvedInstructions:
             "characters": self.characters,
             "derived_for_backend": self.backend,
             "derived": self.derived,
+            "substituted": list(self.asked_for),
             "plan_characters": self.plan_characters,
             "declared_but_never_run_here": list(self.unverified),
         }
@@ -181,12 +196,17 @@ def resolve_instructions(
         )
 
     text = apply_tool_availability(raw, name)
+    asked_for = placeholders_in(raw)
     resolved = ResolvedInstructions(
         text=text,
         backend=name,
+        # Not `bool(asked_for)`. See ResolvedInstructions: the two refusals
+        # below turn on whether the tool *list* was derived, and a plan that
+        # asked only for a route paragraph has still written its list by hand.
         derived=PLACEHOLDER in raw,
         plan_characters=len(raw),
         unverified=unverified,
+        asked_for=asked_for,
     )
 
     if not resolved.derived and name not in DESCRIBED_BY_HAND_AND_CHECKED:
@@ -247,11 +267,14 @@ def resolve_instructions(
 
     if priced_characters is not None and resolved.characters > priced_characters:
         over = resolved.characters - priced_characters
-        how = (
-            "after the tool list was substituted in"
-            if resolved.derived
-            else "as written in the plan"
-        )
+        # `asked_for`, not `resolved.derived`: this message is about where the
+        # extra characters came from, and a plan can go over on a paragraph it
+        # asked for without having derived its tool list.
+        if asked_for:
+            was = "was" if len(asked_for) == 1 else "were"
+            how = f"after {named_placeholders(asked_for)} {was} substituted in"
+        else:
+            how = "as written in the plan"
         raise InstructionsRefused(
             f"the instructions are {resolved.characters} characters {how}, and "
             f"the cost figures were worked out at {priced_characters}: "

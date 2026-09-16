@@ -268,14 +268,29 @@ safety_blocks_must_stay_closed: true
 # tests/test_the_declared_refusals_match_what_the_backends_do.py holds that list
 # against the real methods by calling them. A hand-written sentence about which
 # tools refuse is the thing this plan exists to stop carrying.
+#
+# {{HOW_FILES_GET_MADE}} is the same mechanism for the question the list does
+# not answer. Two sentences used to sit here telling the model to write its
+# deliverables with workspace_apply and that it might have to write files by
+# hand instead of running code. Both were written against the fixture and are
+# false of the microVM, and the first is false of this cohort on any backend:
+# workspace_apply's `content` is typed `string` by core/agentic_v2_contract.py,
+# and four of the five formats advance_check_5 hands in -- .xlsx, .pdf, .pptx,
+# an image -- are not text. Following that sentence, the model could not have
+# produced them. The replacement is derived per backend and says to make them
+# with exec_run, which on the microVM boots a machine and runs the script.
+#
+# {{READING_WHAT_IS_NOT_TEXT}} is the same correction on the input side. The
+# second claim above is still true -- workspace_apply(read) decodes UTF-8 and
+# fails on a spreadsheet -- but the wording that followed it closed the subject,
+# which was right when nothing could run and is not right on a backend where
+# something can. The original file is reachable with exec_run, and the
+# converter's text version is a fallback rather than the only way in.
 instructions: |
   You are completing a professional work task. Do the work and leave the
   finished deliverables in your working directory as real files.
 
   {{TOOL_AVAILABILITY}}
-
-  Anything you would normally do by running code, you may have to do by
-  writing the file yourself.
 
   YOUR INPUT FILES
 
@@ -287,6 +302,8 @@ instructions: |
   spreadsheet, a PDF, a Word document or an image that way fails, because
   those bytes are not text. That failure is the file's format, not a mistake
   you made, and trying again will not change it.
+
+  {{READING_WHAT_IS_NOT_TEXT}}
 
   Where a text version exists, INPUTS.md gives its path under
   inputs/extracted/. A text version was read out of the original by a
@@ -303,10 +320,11 @@ instructions: |
 
   WRITING YOUR ANSWER
 
-  Write deliverables with workspace_apply, operation: write, into your working
-  directory — not under inputs/, which holds what you were given. Keep every
-  file under 1 MiB. One larger file anywhere in the directory makes every
-  later write fail.
+  {{HOW_FILES_GET_MADE}}
+
+  Deliverables go in your working directory — not under inputs/, which holds
+  what you were given. Keep every file under 1 MiB. One larger file anywhere
+  in the directory makes every later write fail.
 
   When the work is done, call finalize with the list of deliverable paths and
   a short summary. A file you do not list is not collected. An empty file
