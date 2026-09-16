@@ -947,3 +947,150 @@ def test_the_diagnostic_never_reaches_for_the_inference_path():
         "code_interpreter",
     ):
         assert forbidden not in source, forbidden
+
+
+# -------------------------------------------------------------------------
+# How far the verdict reaches
+# -------------------------------------------------------------------------
+#
+# The verdict is one string and it gets quoted on its own. Read as a blanket
+# block it says a paid stage cannot be dispatched, which is wrong -- the stage
+# leases `inference`, and under this profile `inference` is addressed to the
+# account-scoped direct-v1 endpoint that a held role already serves. Read as
+# harmless it invites the arm that exp032 lost five tasks on. These tests pin
+# the distinction to the routing rule rather than to a sentence about it.
+
+
+def _an_account_with_no_reaching_role():
+    """The live shape: a role at account scope, and no rung of the ladder.
+
+    Same answer the diagnostic returned on runs 34347345143 and 35053114735 --
+    a reachable account, one role held, and the least-privilege ladder unmet.
+    """
+    return FakeAz(
+        resources=_resources(),
+        assignments=[
+            _assignment(
+                role="Cognitive Services OpenAI User",
+                definition_id="5e0bd9bd-7b93-4f28-af87-19fc36ad61bd",
+                scope=ACCOUNT_SCOPE,
+            )
+        ],
+        definitions=[_reader_definition()],
+    )
+
+
+def _gates(**updates: str):
+    return diagnostic.which_workloads_this_role_gates(_env(**updates))
+
+
+def test_the_missing_role_stops_the_project_routed_workload_only():
+    measured = _gates()
+    assert measured["not_measured_because"] is None
+    assert measured["workloads_gated_by_the_missing_role"] == ["code-interpreter"]
+
+
+def test_the_workload_a_paid_stage_leases_is_not_waiting_on_this_role():
+    """`inference` is what `run_agentic_v2_stage.py` asks the router for.
+
+    If this ever flips to the project endpoint, a paid dispatch stops being
+    safe to make on a held account-scope role alone, and the report has to say
+    so before anyone reads the verdict as being about the whole repository.
+    """
+    elsewhere = {
+        entry["workload"]: entry["endpoint_kind"]
+        for entry in _gates()["workloads_the_missing_role_does_not_gate"]
+    }
+    assert elsewhere["inference"] == "direct-v1"
+    assert "inference" not in _gates()["workloads_gated_by_the_missing_role"]
+
+
+def test_every_typed_workload_is_accounted_for_exactly_once():
+    """A workload dropped from all three lists would read as ungated.
+
+    Silence and "not gated" are the same shape in the rendered report, so the
+    split has to be total. It is checked against the enum rather than a list
+    written here, which is what makes a new workload a red test in the commit
+    that adds it rather than an omission nobody sees.
+    """
+    from core.azure_ai_clients import AzureAIWorkload
+
+    measured = _gates()
+    seen = (
+        list(measured["workloads_gated_by_the_missing_role"])
+        + [e["workload"] for e in measured["workloads_the_missing_role_does_not_gate"]]
+        + [e["workload"] for e in measured["workloads_with_no_route"]]
+    )
+    assert sorted(seen) == sorted(member.value for member in AzureAIWorkload)
+    assert len(seen) == len(set(seen)), "a workload was filed under two headings"
+
+
+def test_a_route_that_cannot_be_built_says_so_rather_than_reporting_none_gated():
+    """Empty lists mean "measured, and nothing is gated". This is not that."""
+    measured = diagnostic.which_workloads_this_role_gates({})
+    assert measured["workloads_gated_by_the_missing_role"] == []
+    assert measured["not_measured_because"]
+    assert "not measured" in measured["not_measured_because"]
+
+
+def test_the_identity_assertion_is_switched_off_without_touching_the_caller():
+    """The diagnostic's own workflow sets the flag and omits the variables.
+
+    It omits them on purpose: a step's `env:` names are reprinted in the step
+    header, and those two variables carry the account and project names. So the
+    routing question has to be answerable with the flag off -- and the caller's
+    mapping has to come back unchanged, because the same mapping is what the
+    rest of the diagnosis reads.
+    """
+    environment = _env(AZURE_AI_REQUIRE_EXPECTED_IDENTITIES="1")
+    before = dict(environment)
+    measured = diagnostic.which_workloads_this_role_gates(environment)
+    assert measured["not_measured_because"] is None
+    assert environment == before
+
+
+def test_the_report_says_what_the_role_gates_before_it_lists_the_roles():
+    """Placed under the verdict, because that is the line that gets quoted."""
+    code, output = _run_main([], _an_account_with_no_reaching_role())
+    assert code == 0
+    assert "what this role gates, and what it does not:" in output
+    assert output.index("what this role gates") < output.index(
+        "roles this identity holds"
+    )
+    assert "inference -> direct-v1" in output
+
+
+def test_the_scope_of_the_verdict_survives_the_json_form_too():
+    code, output = _run_main(["--json"], _an_account_with_no_reaching_role())
+    assert code == 0
+    measured = json.loads(output)["workloads"]
+    assert measured["workloads_gated_by_the_missing_role"] == ["code-interpreter"]
+    assert measured["not_measured_because"] is None
+
+
+def test_a_route_error_cannot_publish_an_identifier_through_the_new_section(
+    monkeypatch,
+):
+    """This section is the one place an arbitrary exception string enters the
+    report, and the log it goes to is public and cannot be unpublished.
+
+    The error text is not sanitised at the point it is caught. It does not need
+    to be: the whole body goes through `redact` and then through
+    `leaked_placeholders`, which fails the run closed rather than printing a
+    report that still carries an identifier. This test pins that the new text
+    is inside that net and not beside it, by making the failure carry the one
+    value that must never appear.
+    """
+    from core import azure_ai_clients
+
+    def refuse(_env):
+        raise ValueError(f"cannot classify {ENDPOINT}")
+
+    monkeypatch.setattr(
+        azure_ai_clients.AzureAIRouteSettings, "from_env", staticmethod(refuse)
+    )
+    code, output = _run_main([], _an_account_with_no_reaching_role())
+    assert code == 0
+    for secret in _every_secret():
+        assert secret not in output
+    assert "not measured" in output
