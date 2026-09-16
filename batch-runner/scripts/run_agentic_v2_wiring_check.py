@@ -361,12 +361,35 @@ def _judge_first_call(
 
 
 def _judge_cleanup(backend, *, host_state: Path, cases: Cases, label: str) -> None:
+    """Did this call leave a machine on the host?
+
+    ``guest_confirmed_stopped`` carries three states and only one of them is a
+    fault. :func:`core.agentic_v2_first_boot.the_host_was_left_running` keys on
+    ``is False`` -- a signal went out and the process was still there -- and
+    deliberately does not treat ``None`` as a leak, because a guest that ends on
+    its own is never signalled and so has nothing to confirm. Demanding ``True``
+    here asks a command that finished inside its deadline for a fact that path
+    does not produce, which is a defect in the question rather than an answer
+    about the host.
+
+    So the guest must be accounted for by one of the two routes that actually
+    end it: a signal went out and was confirmed, or no signal was needed and the
+    run also saw it not running. A signal that went out and was not confirmed
+    still fails, and ``host_left_running`` is still required to be ``False``
+    on top of either route.
+    """
     record = _boot_record(backend)
     machine = record.get("machine") or {}
+    confirmed = machine.get("guest_confirmed_stopped")
+    ended_on_its_own = (
+        machine.get("stop_signal_sent") is False
+        and machine.get("guest_last_seen_running") is False
+    )
     cases.record(
-        f"{label}: the guest was confirmed stopped and the host was not left running",
-        machine.get("guest_confirmed_stopped") is True
-        and machine.get("host_left_running") is False,
+        f"{label}: the guest is accounted for and the host was not left running",
+        machine.get("host_left_running") is False
+        and confirmed is not False
+        and (confirmed is True or ended_on_its_own),
         machine,
     )
     named, still_there = _paths_the_teardown_says_it_removed(machine)
