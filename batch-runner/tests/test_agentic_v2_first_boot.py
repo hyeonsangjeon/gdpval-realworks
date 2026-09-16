@@ -117,7 +117,10 @@ def _a_stand_in_guest_with_an_identity(monkeypatch, *pids: int) -> None:
     known = set(pids)
     real = agentic_v2_first_boot._when_that_process_started
     really_confined = agentic_v2_first_boot._confined_to_this_runs_jail
+    really_pinned = agentic_v2_first_boot._a_proc_reference_pinned_to
+    really_read = agentic_v2_first_boot._what_the_pinned_reference_still_says
     remembered: dict[int, int | None] = {}
+    pinned_to: dict[int, int] = {}
 
     def started(pid: int) -> int | None:
         if pid not in known:
@@ -127,16 +130,56 @@ def _a_stand_in_guest_with_an_identity(monkeypatch, *pids: int) -> None:
             remembered[pid] = now["ticks_since_boot"]
         return remembered[pid]
 
-    def confined(pid: int, chroot_dir):
+    def confined(pid: int, chroot_dir, **named):
         if pid in known:
             return True, ""
-        return really_confined(pid, chroot_dir)
+        return really_confined(pid, chroot_dir, **named)
+
+    def a_reference(pid: int) -> tuple[int | None, str, str]:
+        """"Is there something to pin to you" — the third question a guest answers.
+
+        Since 2026-09-16 the stop path opens ``/proc/<pid>`` before it asks for
+        a handle, so that what it reads afterwards is a reading about one
+        process rather than about a number. A number a test made up has no
+        ``/proc`` entry; left real, that open answers ``ENOENT`` and a simulated
+        live guest reads as a process that has already gone — true of this host,
+        false of the guest the test is describing.
+
+        The descriptor is a real one so that the close the code under test does
+        is a real close, and a reference it forgets to release still shows up as
+        a leak rather than as an error in the stand-in. Anything not named here
+        is pinned for real.
+        """
+        if pid not in known:
+            return really_pinned(pid)
+        reference = os.open(os.devnull, os.O_RDONLY)
+        pinned_to[reference] = pid
+        return reference, "", ""
+
+    def through_the_reference(pinned: int) -> tuple[str, int | None, str]:
+        """What that reference still says: alive, and born when the guest was.
+
+        Liveness for these PIDs is answered through ``os.kill``, which is where
+        every test here drives it. This says *still running* so that the reading
+        does not become a second, disagreeing source of the same fact.
+        """
+        pid = pinned_to.get(pinned)
+        if pid is None:
+            return really_read(pinned)
+        return agentic_v2_first_boot.PINNED_STILL_RUNNING, started(pid), ""
 
     monkeypatch.setattr(
         "core.agentic_v2_first_boot._when_that_process_started", started
     )
     monkeypatch.setattr(
         "core.agentic_v2_first_boot._confined_to_this_runs_jail", confined
+    )
+    monkeypatch.setattr(
+        "core.agentic_v2_first_boot._a_proc_reference_pinned_to", a_reference
+    )
+    monkeypatch.setattr(
+        "core.agentic_v2_first_boot._what_the_pinned_reference_still_says",
+        through_the_reference,
     )
 
 
