@@ -473,10 +473,12 @@ def test_a_plan_with_no_timeout_fails_rather_than_running_without_one():
 def test_the_record_says_the_isolation_was_not_exercised():
     note = runner.environment_note({"policy_profile_id": "offline-full-v1"})
 
-    assert note["guest_booted"] is False
+    assert note["backend_boots_guests"] is False
     assert note["exec_run_open"] is False
     assert "no guest booted" in " ".join(note["what_was_not_real"])
-    assert "capability_unavailable" in " ".join(note["what_was_not_real"])
+    # Not "refused everything". The fixture serves ``fixture-upper``, and this
+    # list is the half of the record a reader takes at face value.
+    assert "refuses every other argv" in " ".join(note["what_was_not_real"])
 
 
 def test_the_record_carries_the_weaker_true_sentence_ready_to_be_quoted():

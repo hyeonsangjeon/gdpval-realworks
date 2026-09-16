@@ -51,7 +51,7 @@ import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any, Iterable, Mapping, Sequence
 
 BATCH_RUNNER_ROOT = Path(__file__).resolve().parents[1]
 if str(BATCH_RUNNER_ROOT) not in sys.path:
@@ -380,7 +380,12 @@ BACKEND_IN_USE = AgenticV2FixtureBackend
 #: because the record is what a reader three months from now will have. A run
 #: whose isolation was a fixture and whose record does not say so is a result
 #: that will eventually be described as something it was not.
-def environment_note(profile: dict, backend: type | None = None) -> dict:
+def environment_note(
+    profile: dict,
+    backend: type | None = None,
+    *,
+    census: Mapping[str, int] | None = None,
+) -> dict:
     backend = backend or BACKEND_IN_USE
     if backend is not AgenticV2FixtureBackend:
         written = HANDWRITTEN_NOTES.get(backend.__name__)
@@ -392,11 +397,30 @@ def environment_note(profile: dict, backend: type | None = None) -> dict:
                 "written by hand per backend rather than adapted. Write them "
                 "for this one before running it."
             )
-        return written(profile)
+        return written(profile, census=census)
     return {
         "backend": backend.__name__,
-        "guest_booted": False,
+        "backend_boots_guests": False,
         "exec_run_open": False,
+        # None of the three is the caller's argument. Echoing it here would let
+        # a wrong one make the fixture look like it booted something, which is
+        # the failure these keys exist to catch.
+        #
+        # The two guest counts are zero and the call count is not, and the
+        # difference is the point. The fixture has no launcher, so no census
+        # taken over it could report a guest. But its ``exec_run`` is served:
+        # ``fixture-upper SOURCE DESTINATION`` is advertised in this backend's
+        # own capabilities and really does write a file, so a fixture cohort
+        # can make calls that succeed. Nothing counts them -- ``boot_census``
+        # reads ``boots``, which the fixture has not got -- and writing ``0``
+        # for a number nobody took is the constant this change exists to
+        # delete, arriving through one of its own keys. It is also the more
+        # expensive direction: by the diagnosis two keys above, no calls means
+        # the model never asked, which sends a reader to the plan and the
+        # instruction paragraph over a run where it did ask and was served.
+        "exec_run_calls": None,
+        "guests_that_actually_booted": 0,
+        "guests_that_left_a_machine_running": 0,
         "policy_profile_id": profile.get("policy_profile_id"),
         "tool_availability": [
             {
@@ -414,7 +438,16 @@ def environment_note(profile: dict, backend: type | None = None) -> dict:
         ],
         "what_was_not_real": [
             "the isolation: no guest booted and nothing ran in one",
-            "exec_run, which answered capability_unavailable to everything",
+            # Not "refused everything", which this line used to say and which
+            # the verdict two keys above contradicts: tool_availability carries
+            # exec_run as ``partly``, because the fixture serves exactly one
+            # command. Only one of the two can be true, and the prose is the
+            # half that travels -- it is spelled out so it can be quoted, where
+            # the verdict is one word in a list. A reader taking the shorter
+            # sentence reads a cohort's successful calls as refusals.
+            "exec_run as a way to run a command: it serves fixture-upper "
+            "SOURCE DESTINATION, which upper-cases a file on the host, and "
+            "refuses every other argv",
         ],
         "so_the_honest_sentence_is": (
             "a real model drove a real tool loop and wrote real files, with "
@@ -422,6 +455,65 @@ def environment_note(profile: dict, backend: type | None = None) -> dict:
             "This is not evidence that the sandbox contains anything."
         ),
     }
+
+
+def boot_census(backends: Sequence[Any]) -> dict[str, int] | None:
+    """What the run asked of the isolation and what it got, or ``None``.
+
+    Three numbers rather than one, because ``len(backend.boots)`` is not the
+    number of guests. ``AgenticV2MicroVMBackend`` appends a record there for
+    every ``exec_run`` call, and four of those paths never start a machine at
+    all -- a cwd that is not a directory, a call refused because an earlier one
+    left a host occupied, a call refused because a previous *task* did, and a
+    launcher that came apart. Counting the list and calling the total "guests"
+    would have overstated it by exactly the calls that failed, which is the
+    kind of wrong this whole change exists to remove.
+
+    So the list is read rather than measured:
+
+    ``exec_run_calls``
+        every record. How many times the model asked the isolation to run
+        something.
+    ``guests_that_actually_booted``
+        the records with ``booted`` true. How many times a machine started.
+    ``guests_that_left_a_machine_running``
+        the records whose ``machine`` says ``host_left_running``. Whether the
+        host was clean afterwards, which no other line of the run record
+        answers.
+
+    The gap between the first two is the diagnosis when a run comes back with
+    no guests in it. Zero calls means the model never asked -- a plan or an
+    instruction paragraph problem. Calls without guests means it asked and the
+    backend could not; those are opposite faults with opposite repairs, and a
+    single number cannot tell them apart.
+
+    ``host_left_running`` is tested with ``is True`` rather than by demanding
+    ``False``. A record with no ``machine`` is a call that never reached a
+    launcher, and reading its absence as a leak would report one on exactly
+    the calls that started nothing.
+
+    ``None`` when any backend cannot answer, rather than skipping it and
+    returning smaller numbers. A partial count presented as a total is the same
+    class of error as the constant this replaces, just quieter. An empty list
+    is zeroes and not ``None``: a run that built no backend ran no command, and
+    that is answered rather than unknown.
+    """
+    counted = {
+        "exec_run_calls": 0,
+        "guests_that_actually_booted": 0,
+        "guests_that_left_a_machine_running": 0,
+    }
+    for backend in backends:
+        boots = getattr(backend, "boots", None)
+        if boots is None:
+            return None
+        for record in boots:
+            counted["exec_run_calls"] += 1
+            if record.get("booted") is True:
+                counted["guests_that_actually_booted"] += 1
+            if (record.get("machine") or {}).get("host_left_running") is True:
+                counted["guests_that_left_a_machine_running"] += 1
+    return counted
 
 
 def readable_path(path: Path) -> str:
@@ -1322,6 +1414,18 @@ def main() -> int:
         stagings: list[TaskStaging] = []
         attempts_staged: dict[str, int] = {}
 
+        # Every backend this run built, kept so the record can count what they
+        # did rather than declare it. The alternative is a running total
+        # incremented somewhere, which cannot work: a backend's boots happen
+        # after it is handed over, so the only moment a count is right is the
+        # end, and by then a total nobody kept is unrecoverable.
+        #
+        # One object per attempt. `AgenticV2MicroVMBackend` is rebuilt for
+        # every task -- `root=task_root` below -- so this is the whole
+        # population, and the guests of a task that has finished are not
+        # reachable through any other one.
+        backends_built: list[Any] = []
+
         def backend_factory(**kwargs):
             """One root per attempt, with that attempt's own copy of the inputs.
 
@@ -1367,12 +1471,14 @@ def main() -> int:
                     f"  {task_id}  has files and can open none of them; a "
                     "failure here is not the model's either"
                 )
-            return choice.backend_class(
+            built = choice.backend_class(
                 root=task_root,
                 host_state_dir=host_state,
                 **choice.extra_kwargs,
                 **kwargs,
             )
+            backends_built.append(built)
+            return built
 
         # Opened before the factory that writes into it, and before the first
         # model call rather than after the first finished task. The reservation
@@ -1551,7 +1657,11 @@ def main() -> int:
             },
             pinned_model=pinned_model,
         ),
-        "environment": environment_note(profile, choice.backend_class),
+        "environment": environment_note(
+            profile,
+            choice.backend_class,
+            census=boot_census(backends_built),
+        ),
         "route_fingerprint": (
             rehearsal_is_not_a_run()
             if rehearsing is not None
