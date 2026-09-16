@@ -882,13 +882,23 @@ def test_x12_a_real_handle_names_one_process_and_is_dropped_when_it_would_not(
     """What a handle establishes, on a kernel that actually hands one out.
 
     The taken case is the reason the transport changed: the descriptor names
-    that PID and cannot come to name another, so a number reused between
+    that process and cannot come to name another, so a number reused between
     identifying a process and signalling it can no longer redirect the signal.
+    That is a guarantee about the *process* the descriptor holds and not about
+    the number, which is free to be handed on as soon as the process is reaped.
 
     ``handed_on`` is the same function refusing, and the assertion that matters
     there is that the handle it opened is *closed* before it returns — a
     descriptor kept on a process this run has just decided is not its own is
     both a leak and a held reference to a stranger.
+
+    The reaped case ends before a handle is ever asked for. Since 2026-09-16 the
+    function opens a reference on ``/proc/<pid>`` first, and for a process that
+    has already been reaped that open is the step that fails — so the refusal
+    names the reference rather than the handle. Both moments exist and they are
+    not the same finding: this one is a process that was gone before the run
+    reached for anything, and the other is one that died in the gap between the
+    reference opening and the handle being taken.
     """
     child = own_children.spawn()
     started = _when_that_process_started(child.pid)
@@ -926,7 +936,59 @@ def test_x12_a_real_handle_names_one_process_and_is_dropped_when_it_would_not(
     )
     assert nothing is None
     assert verdict == HANDLE_GONE
+    assert "already gone when this run reached for a reference to it" in why_not
+    assert "when a handle was asked for" not in why_not, (
+        "a process reaped before the call begins fails at the reference and "
+        "never reaches pidfd_open, so the other 'already gone' — the one for a "
+        "process that died in the gap between the reference and the handle — "
+        "would be naming a moment that did not happen here"
+    )
+
+
+def test_x14_a_process_that_dies_between_the_reference_and_the_handle_says_so(
+    monkeypatch, own_children
+):
+    """The other "already gone", and the only way left to reach it.
+
+    Since the reference is opened first, a process reaped before this run asked
+    for anything fails *there* and never reaches ``pidfd_open`` — ``x12`` above
+    is what says so. That leaves the refusal at the handle naming a genuinely
+    narrower event: a process that was alive when the reference was taken and
+    gone a moment later. It is a race, and nothing can arrange it on purpose.
+
+    So it is arranged here. The child is real and alive, the reference is the
+    real one opened on it, and only the *taking* of the handle is stood in for —
+    which is also the only way this box reaches the line at all. Both refusals
+    mean the machine is gone and both are ``HANDLE_GONE``; what differs is when
+    this run found out, and a record naming one while meaning the other points
+    at the wrong moment of the run.
+    """
+
+    def died_in_the_gap(pid, flags=0):
+        raise ProcessLookupError("No such process")
+
+    monkeypatch.setattr(os, "pidfd_open", died_in_the_gap, raising=False)
+
+    child = own_children.spawn()
+    started = _when_that_process_started(child.pid)
+    assert started is not None
+
+    before = len(os.listdir(f"/proc/{os.getpid()}/fd"))
+    nothing, verdict, why_not = _a_handle_pinned_to(
+        child.pid, started, chroot_dir=Path("/")
+    )
+    assert nothing is None
+    assert verdict == HANDLE_GONE
     assert "already gone when a handle was asked for" in why_not
+    assert "reached for a reference to it" not in why_not, (
+        "the reference opened here, on a live child, so this is the later of "
+        "the two moments — saying otherwise would place the finding before an "
+        "open that succeeded"
+    )
+    assert len(os.listdir(f"/proc/{os.getpid()}/fd")) == before, (
+        "the reference opened before the handle is closed on the way out of "
+        "this refusal, the same as on every other path that returns"
+    )
 
 
 def _a_handle_that_opens_and_a_start_time_that_answers(value, monkeypatch):
