@@ -254,6 +254,40 @@ Dashboard implementation details are in [`src/README.md`](src/README.md).
 
 ---
 
+## Per-task cost records
+
+Each task can carry two cost figures. They are recorded on different artifacts,
+and neither is part of the other:
+
+| Figure | Where it is recorded | Which run writes it |
+|---|---|---|
+| `problem_solving_cost` | Inference and report artifacts | The run that produces the deliverable |
+| `grading_cost` | Grade artifacts | The run that grades it |
+
+They answer different questions and are reported separately. This repository
+does not publish a combined figure.
+
+Dashboard aggregation reads the grade files directly in `data/grades/` and
+nothing below that directory. The subdirectories serve other purposes:
+
+| Directory | What it holds | Why aggregation skips it |
+|---|---|---|
+| `_diagnostic/` | Grade records from a run narrowed to a subset, or re-run at a moved fingerprint | Retained as evidence, and deliberately outside the published grade data |
+| `_shards/` | Partial records from a sharded run | Merged into that run's file in `data/grades/` |
+| `_repeats/` | Deliberate repeats of a run | Repeats the same tasks by design |
+| `_validation/` | Comparison and decision records behind grading choices | Not grade records |
+| `_progress/` | Resume state written beside a grade file while it runs | Not grade records |
+
+Because each of these either duplicates a file that is already read or is not a
+grade record, walking `data/grades/` recursively would count tasks more than
+once. Read these paths directly when you need the underlying evidence.
+
+The `cost-receipt-v1` contract, its states, and the rules for which values may
+be quoted are in
+[`tasks/0828_friday/TASK_PER_TASK_COST_RECEIPTS.md`](tasks/0828_friday/TASK_PER_TASK_COST_RECEIPTS.md).
+
+---
+
 ## Develop and verify
 
 Dashboard checks require Git, Bash, Python 3, and Node.js 20 or newer:

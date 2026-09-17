@@ -12,6 +12,37 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Added
+- **The two per-task cost figures, and the grade directory layout, are
+  documented in the public READMEs.** `README.md` and `README_KR.md` gain a
+  `Per-task cost records` / `태스크별 비용 기록` section between the dashboard
+  and development sections. It states where each figure is recorded —
+  `problem_solving_cost` on inference and report artifacts, `grading_cost` on
+  grade artifacts — that neither is part of the other and no combined figure is
+  published, and that dashboard aggregation reads the grade files directly in
+  `data/grades/` and nothing below that directory.
+
+  Five subdirectory names carry the reason each is skipped. `_diagnostic/` is
+  retained as evidence and deliberately outside the published grade data;
+  `_shards/` is already merged into that run's file in `data/grades/`;
+  `_repeats/` repeats the same tasks by design; `_validation/` and `_progress/`
+  hold records that are not grades. The section says a recursive walk of
+  `data/grades/` would count tasks more than once, and points at
+  `tasks/0828_friday/TASK_PER_TASK_COST_RECEIPTS.md` for the `cost-receipt-v1`
+  contract. It quotes no directory count, task count, or cost figure, so it does
+  not go stale as the corpus grows.
+
+  **This documents existing behaviour and changes none of it.** No aggregation
+  code, schema, workflow, or test was touched, so a `_diagnostic` grade is still
+  not aggregated and the section does not claim otherwise. Verified by resolving
+  both new relative links against the working tree and by `git diff --check`; no
+  test suite, model call, or workflow run was involved.
+
+  Remaining: `scripts/aggregate-grades.mjs` still performs a one-level scan, so
+  closing that gap — and with it surfacing a diagnostic run's `grading_cost` —
+  is separate work. `problem_solving_cost` is absent from
+  `batch-runner/schemas/grade.schema.json`, so such a change could not recover
+  it from a grade file.
+
 - **The run-place comparison has a specification.**
   `docs/experiments/EXP030-032_SPECIFICATION.md`, the fourth document in a
   directory that already held `EXP013-016`, `EXP017-020` and `EXP021-024`. It is
