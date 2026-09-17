@@ -1079,23 +1079,20 @@ def test_the_walk_still_fails_a_payload_that_landed_on_the_wrong_side(
 
 
 def test_the_six_sealed_files_on_disk_are_still_sealed():
-    """Against the real repository, not a fixture.
+    """Keep the six on-disk payload seals and their durable voucher documents.
 
-    Every test above builds the tree it queries, so all of them would keep
-    passing if the seals in this repository moved or the walk stopped reaching
-    them. This is the one that reads what is actually on disk -- including the
-    185-task gold ceiling, the corpus's clearest instance of the defect.
+    Fixture-based tests cannot detect lost seals in the actual repository,
+    including the 185-task gold ceiling. ``documents_asserting`` reports only
+    documents whose digests match the current payload bytes, so the expected
+    durable voucher set catches a document left asserting an obsolete digest.
 
-    Five of these six were unsealed and backfilled. A seal that moves is still
-    a seal: the payload changed, and every document that stated its digest
-    states the new one, so the same six files come back refused. What this
-    catches is the half-done version. ``documents_asserting`` reports only the
-    documents whose digest matches the bytes on disk, so a document left
-    behind does not fail loudly -- it silently drops out of this set while
-    continuing to assert a hash nothing in the tree has. That is strictly
-    worse than never having moved the seal, and it is exactly what happened on
-    the first pass here: ``CHANGELOG.md`` vanished from the set below and this
-    assertion is the only thing that said so.
+    Five payloads were previously unsealed and backfilled; their durable
+    vouchers must continue to match the rewritten bytes. ``CHANGELOG.md``
+    was missed during that update, which this assertion caught.
+
+    ``tasks/LATEST_TASK_RESULT/README.md`` is a rolling record. When it no
+    longer asserts a sealed digest, its absence is not a dropped voucher and
+    must not require restoring obsolete history.
     """
     sealed = {
         backfill._display(path): backfill.documents_asserting(path)
@@ -1113,16 +1110,17 @@ def test_the_six_sealed_files_on_disk_are_still_sealed():
         "data/grades/_validation/PR3_REPEAT_VARIATION.md",
         "scripts/__tests__/test_analyze_grade_run.py",
         "scripts/__tests__/test_sol_max_anchor_selection.py",
-        "tasks/LATEST_TASK_RESULT/README.md",
         # 327 quotes the 185-task gold ceiling's digest as the receipt for the
         # 31 audio-routed items it counts. Naming the payload is the point of
         # that document, so it joins the list of things to move with the seal.
         "tasks/rebuilding_grading_task/327-thirty-one-items-that-listened.md",
         "tasks/rebuilding_grading_task/PR3_FULL_GOLD_CORPUS.md",
     }, (
-        "a document dropped out of the voucher set. It did not stop asserting "
-        "a digest -- it is asserting one no file in this tree has. Find which "
-        "payload it names and move that digest too."
+        "the durable voucher document set changed. Check that each required "
+        "voucher still asserts the current digest of the payload it names. "
+        "A rolling latest-result record that no longer asserts a digest is "
+        "not a required voucher; do not restore obsolete history to satisfy "
+        "this set."
     )
 
 

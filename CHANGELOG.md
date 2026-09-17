@@ -424,6 +424,15 @@ entries land under a fresh dated heading the day they merge to `main`.
   file is the decision the pin asks to see.
 
 ### Fixed
+- Corrected the durable-voucher expectation exposed by CI run `35258893231`.
+  The sealed-payload test no longer requires `tasks/LATEST_TASK_RESULT/README.md`
+  once that rolling record stops asserting a digest. Its docstring and error
+  text now distinguish that case from a missing durable voucher. The six
+  sealed payloads and every durable voucher path remain required. The failing
+  selector ran once and reported `1 passed in 4.30s`; the `grading_cost`
+  implementation and its earlier regression result are unchanged. The
+  combined change covers six files.
+
 - Fixed HF publication source binding for optional per-task `grading_cost`.
   The canonical result projector and publication identity now retain the
   source receipt. Report-side changes, removal, injection, and null receipts

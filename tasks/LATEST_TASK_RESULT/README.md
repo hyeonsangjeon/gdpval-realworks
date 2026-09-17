@@ -12,11 +12,12 @@ The change starts from immutable main
 `/ai-work/copilot/.worktrees/gdpval-realworks-b-grading-cost-source-binding-20260918`.
 The preservation checkout and the earlier B worktree were not changed.
 
-Exactly five files change:
+Exactly six files differ from the immutable main base:
 
 - `batch-runner/core/result_projection.py`
 - `batch-runner/core/hf_publication.py`
 - `batch-runner/tests/test_hf_publication.py`
+- `scripts/__tests__/test_a_denominator_thrown_away_is_still_recoverable.py`
 - `CHANGELOG.md`
 - `tasks/LATEST_TASK_RESULT/README.md`
 
@@ -34,12 +35,30 @@ report receipts are rejected. Genuine legacy absence and source null still
 project to an absent report key. Unrelated report metadata remains allowed.
 The receipt comes from the source result, never from `self_report.json`.
 
+The HF implementation and its regression are unchanged in the CI follow-up.
 No pricing, aggregation, receipt arithmetic, schema, diagnostic-publication
-policy, or unrelated validation code changed.
+policy, or unrelated runtime validation changed.
+
+### CI Contract Correction
+
+CI run [35258893231](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/35258893231)
+failed in
+`scripts/__tests__/test_a_denominator_thrown_away_is_still_recoverable.py::test_the_six_sealed_files_on_disk_are_still_sealed`.
+Its expected voucher set still required `tasks/LATEST_TASK_RESULT/README.md`
+after that rolling record stopped asserting the sealed digest. The CI failure
+showed only that path missing from the actual document set.
+
+The correction removes only that path from the expected set and revises the
+test's docstring and error text. The six sealed payload assertion, the
+gold-ceiling guard, and every durable voucher path remain unchanged. The
+rolling record stays concise; no obsolete history or sealed digest was
+restored. This follow-up edits only the script test and the two completion
+records.
 
 ### Verification
 
-The single targeted regression ran once from the new worktree:
+The original grading-cost selector ran once before implementation commit
+`bdfa4e36fc1fe69d30bbc4f727fb5a2f82ccf5cd`:
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider batch-runner/tests/test_hf_publication.py::test_publication_binds_optional_grading_cost_to_source
@@ -52,24 +71,39 @@ replacement with null, null injection into an absent source, receipt injection
 into a null source, and null injection into a null source. All seven rejected
 cases assert `api.calls == []` using the existing `FakeApi` fixture.
 
+That selector was not rerun for the CI correction. Its source and test files
+retain the implementation commit's bytes.
+
+The failing CI selector ran exactly once for this correction:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider scripts/__tests__/test_a_denominator_thrown_away_is_still_recoverable.py::test_the_six_sealed_files_on_disk_are_still_sealed
+```
+
+The result was `1 passed in 4.30s`.
+
 ```bash
 git diff --check c36c722350f5cdfd629b4c82b17a856b537700f4
 ```
 
-The diff check passed. The source and test files were not changed after the
-targeted run. Only the completion records were written afterward. No full
-suite, real HF upload, paid model call, Azure operation, or workflow dispatch
-was run. These results do not establish full-suite or real-HF behavior.
+The diff check passed. The corrected script test was not changed after its
+targeted run; only the completion and PR records were updated afterward. No
+full suite, real HF upload, paid model call, Azure operation, workflow
+dispatch, or Project #5 edit was performed locally. The CI failure log was
+read once; no fresh CI result is claimed, and no CI polling was performed.
+These results do not establish full-suite or real-HF behavior.
 
 ### Reviewed-Head Status and Remaining Work
 
-No head for this change has received an independent immutable-HEAD review.
-That review and the required CI evidence remain pending. No approval is
-claimed, and no CI run was requested or polled during this task.
+The leader specified the correction against immutable head
+`bdfa4e36fc1fe69d30bbc4f727fb5a2f82ccf5cd`. The correction still needs review
+at its new immutable HEAD and fresh CI evidence. No reviewed correction HEAD
+or approval is claimed.
 
 ### Skills
 
-The complete available skill catalog was inspected before repository work.
+The complete skill catalog inspection from implementation was reused for the
+CI correction, not repeated.
 Neither `python-fact-grounded-coding` nor another matching Python/code skill
 was available in this session, so no Python/code skill invocation is claimed.
 The implementation follows the existing #610 pattern.
