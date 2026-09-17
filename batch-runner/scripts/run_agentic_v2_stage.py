@@ -535,6 +535,15 @@ def exec_record_carriage(backends: Sequence[Any]) -> dict[str, Any] | None:
     call keeps up to three leaves -- stdout, stderr, the meta -- and the number
     worth reading beside ``exec_run_calls`` is calls, not leaves.
 
+    The backend it came from is part of that key. ``_keep_the_output`` numbers
+    the directory within its own task -- ``f"{EXEC_RECORD_DIR}/{call:04d}"``,
+    no task component -- and ``backends_built`` holds one backend per task, so
+    a bare directory set collapses every task's call ``0000`` into one. On the
+    five-task shape of run 35111267647 that reported 6 for 26 calls, beside a
+    file count of 78 that no six calls could produce. ``exec_run_calls``, the
+    number this sits next to, is the run-wide total, so the undercount reads
+    as the loss this function was added to rule out.
+
     ``not_carried_because`` is the *last* failure recorded and not all of them:
     the backend keeps one string, and a later failure overwrites an earlier
     one. It says something was lost and hints at what. It is not a count, and a
@@ -546,18 +555,20 @@ def exec_record_carriage(backends: Sequence[Any]) -> dict[str, Any] | None:
     ``None`` rather than a zero nobody measured.
     """
     carried: list[str] = []
+    calls: set[tuple[int, str]] = set()
     not_carried: str | None = None
-    for backend in backends:
+    for index, backend in enumerate(backends):
         moved = getattr(backend, "exec_records_carried", None)
         if moved is None:
             return None
         carried.extend(moved)
+        calls.update((index, entry.rsplit("/", 1)[0]) for entry in moved)
         reason = getattr(backend, "exec_records_not_carried", None)
         if reason is not None:
             not_carried = reason
     return {
         "files_carried_out": len(carried),
-        "calls_with_records": len({entry.rsplit("/", 1)[0] for entry in carried}),
+        "calls_with_records": len(calls),
         "not_carried_because": not_carried,
     }
 

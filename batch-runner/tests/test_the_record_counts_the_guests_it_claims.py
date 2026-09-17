@@ -535,6 +535,32 @@ def test_the_files_are_counted_by_call_as_well_as_by_file():
     assert counted["not_carried_because"] is None
 
 
+def test_two_tasks_that_both_ran_one_command_are_two_calls():
+    """The directory is numbered within its task, so the task has to be in the key.
+
+    ``_keep_the_output`` builds ``.gdpval/exec/0000`` with no task component and
+    there is one backend per task, so counting bare directories makes every
+    task's first call the same call. The test above misses it by handing the two
+    backends different numbers; this one gives them the same number, which is
+    what a cohort actually looks like.
+
+    The number is read beside run-wide ``exec_run_calls``. Undercounting it says
+    the transcripts were lost -- the reading this whole function exists to stop
+    a reader from making when nothing was lost at all.
+    """
+    runner = _load_runner()
+
+    counted = runner.exec_record_carriage(
+        [
+            _Carried(".gdpval/exec/0000/stdout", ".gdpval/exec/0000/stderr"),
+            _Carried(".gdpval/exec/0000/stdout", ".gdpval/exec/0000/stderr"),
+        ]
+    )
+
+    assert counted["files_carried_out"] == 4
+    assert counted["calls_with_records"] == 2
+
+
 def test_a_run_that_lost_its_records_is_not_reported_as_one_that_made_none():
     """The distinction the artifact could not make, and the reason for the key.
 
