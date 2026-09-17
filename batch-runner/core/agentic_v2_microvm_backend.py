@@ -22,6 +22,11 @@ overridden away:
 - ``exec_run`` boots instead of upper-casing a file.
 - ``environment_resolve``, ``environment_activate`` and ``browser_run`` refuse.
 - the fixture's package catalogue is emptied, so nothing can advertise it.
+- ``close`` lifts the exec records out of the workspace before the fixture's
+  own purge takes it. That one is not about making a fixture production-shaped:
+  the purge is inherited unchanged and still destroys everything, but on this
+  backend the workspace is also where a guest's output was written down, and it
+  was being destroyed along with it.
 
 A test pins the exact set of inherited public methods. Without it, a convenience
 added to the fixture years from now would silently become a production
@@ -373,6 +378,14 @@ class AgenticV2MicroVMBackend(AgenticV2FixtureBackend):
         self.interpreter_binaries = dict(interpreter_binaries or INTERPRETERS)
         self._boot_one_command = boot_one_command
         self.boots: list[dict[str, Any]] = []
+        # What `close()` managed to lift out of the workspace before purging
+        # it, and what it could not. Kept on the object because the backend
+        # outlives its own workspace — `run_agentic_v2_stage.py` holds every
+        # one it built, the same way `boot_census` reads `boots` — so a run
+        # record can say whether the transcripts in the artifact are all of
+        # them. See `close()`.
+        self.exec_records_carried: list[str] = []
+        self.exec_records_not_carried: str | None = None
         self.task_id = task_id
         # Where a host this run could not give back is written down, and the
         # one piece of state here that is meant to outlive the object. It is
@@ -479,6 +492,11 @@ class AgenticV2MicroVMBackend(AgenticV2FixtureBackend):
         Here the image belongs in it too: an identical workspace under a
         different guest is not the same state, and a resume that treated it as
         one would carry a run across a change it should have noticed.
+
+        The terminal result goes through the parent's
+        :meth:`_terminal_result_digest` rather than being hashed here. Hashing
+        it here was the whole defect: ``canonical_sha256`` is ``json.dumps``
+        and a finalized result carries the deliverables' bytes.
         """
         root_mode, entries, _ = self._workspace_snapshot()
         return canonical_sha256(
@@ -490,9 +508,7 @@ class AgenticV2MicroVMBackend(AgenticV2FixtureBackend):
                 "entries": entries,
                 "active_locks": sorted(self._active_locks),
                 "boots": len(self.boots),
-                "terminal_result_sha256": (
-                    canonical_sha256(self._result) if self._result is not None else None
-                ),
+                "terminal_result_sha256": self._terminal_result_digest(),
             }
         )
 
@@ -874,6 +890,91 @@ class AgenticV2MicroVMBackend(AgenticV2FixtureBackend):
                 break
             written["kept"].append(leaf)
         return written
+
+    # -- what survives the purge -------------------------------------------
+
+    def close(self) -> None:
+        """Lift the exec records out of the workspace, then purge as usual.
+
+        ``_keep_the_output`` writes each call's streams where the *model* can
+        read them, which means inside ``work/`` -- and ``work/`` is what
+        ``close()`` destroys. The parent purges it in a ``finally`` at the end
+        of every ``run()``, before the driver has even seen the result
+        (``core.agentic_v2_run_driver``'s module docstring says so in as many
+        words), so by the time anything uploads an artifact those files have
+        been gone for a while.
+
+        That is why run 35111267647 came back with no transcripts in it. PR
+        #604 read the absence correctly as far as it went -- the records are
+        hidden and ``actions/upload-artifact`` was dropping hidden paths -- and
+        set ``include-hidden-files``, which was necessary and, on its own, did
+        nothing at all: there was no longer anything under ``workspaces/`` to
+        include, hidden or not. Each task's directory reached the upload step
+        empty, and an empty directory is not archived either.
+
+        So the copy goes one level up, out of ``work/`` and into the task's own
+        root, at the same ``.gdpval/exec/NNNN/`` path it had. Three properties
+        are worth naming because each was a choice:
+
+        *The purge is not weakened.* ``work/`` is destroyed exactly as before,
+        in a ``finally``, whatever this does or fails to do. Isolation is the
+        claim under test and a change that records more evidence by keeping the
+        workspace alive would be answering a different question.
+
+        *Nothing walks the model's directory tree.* The leaves are read back
+        from :attr:`boots`, which lists what this backend itself wrote, and
+        each is read through the same descriptor-validated path the model's own
+        reads take. A run that walked ``.gdpval/exec`` would be walking a
+        directory the model can write to, and a symlink planted there would
+        copy whatever it pointed at into an artifact somebody later reads as
+        guest output.
+
+        *The destination stays hidden.* It could have been an ordinary name,
+        which would have survived the upload with no flag at all. Keeping the
+        dot keeps #604 load-bearing rather than leaving a workflow input that
+        nothing needs and a later reader would delete as dead.
+        """
+        if not self.closed:
+            try:
+                self._carry_the_exec_records_out()
+            except Exception as failure:  # pragma: no cover - defensive
+                self.exec_records_not_carried = f"{type(failure).__name__}: {failure}"
+        super().close()
+
+    def _carry_the_exec_records_out(self) -> None:
+        """Copy each kept stream to ``root/.gdpval/exec/NNNN/`` before the purge.
+
+        Records what it moved on :attr:`exec_records_carried` rather than only
+        on disk, so that "the run produced no transcripts" can be told apart
+        from "the run produced transcripts and this lost them" without going
+        and looking -- which is the distinction the artifact could not make
+        last time.
+        """
+        for record in self.boots:
+            kept = record.get("output_files") or {}
+            directory = str(kept.get("directory") or "")
+            if not directory:
+                continue
+            for leaf in kept.get("kept") or ():
+                relative = f"{directory}/{leaf}"
+                try:
+                    content = self._read_bytes(relative)
+                except Exception as failure:
+                    self.exec_records_not_carried = (
+                        f"{relative}: {type(failure).__name__}: {failure}"
+                    )
+                    continue
+                destination = (self.root / relative).resolve()
+                # Every part of `relative` is this class's own text -- the call
+                # number and one of three fixed leaf names -- so this cannot
+                # currently escape. Checked anyway, because the cost is one
+                # comparison and the failure it would catch is silently writing
+                # outside the run's directory.
+                if self.root not in destination.parents:
+                    continue
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.write_bytes(content)
+                self.exec_records_carried.append(relative)
 
     # -- what this cannot do ----------------------------------------------
 

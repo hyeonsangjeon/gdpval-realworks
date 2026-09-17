@@ -333,6 +333,29 @@ entries land under a fresh dated heading the day they merge to `main`.
   file is the decision the pin asks to see.
 
 ### Fixed
+- **The count of calls that kept a transcript collapsed every task's first
+  call into one.** `exec_record_carriage` is new in the same change that lifts
+  the guests' transcripts out of the workspace before the purge takes them, and
+  it reported `calls_with_records` by deduplicating the directory part of every
+  carried path. Those paths are numbered inside their own task —
+  `_keep_the_output` builds `f"{EXEC_RECORD_DIR}/{call:04d}"` with no task
+  component — and `backends_built` holds one backend per task, so call `0000`
+  of task 1 and call `0000` of task 5 were the same key.
+
+  On the shape of run `35111267647` — five tasks, 26 `exec_run` calls — the
+  function reports **6**, beside `files_carried_out: 78`. A call keeps at most
+  three leaves, so six calls could not have produced 78 files; the two numbers
+  in the same dictionary contradict each other. The field is written to be read
+  next to run-wide `boot_census.exec_run_calls`, which is 26, so a reader would
+  conclude 20 calls lost their transcripts when none did. That is the
+  misreading this function was added to remove, arriving with its sign
+  reversed.
+
+  The key is now `(backend index, directory)`. The existing test missed the
+  collision because it gave its two backends *different* call numbers, `0000`
+  and `0001`; `test_two_tasks_that_both_ran_one_command_are_two_calls` gives
+  them the same number and pins 2.
+
 - **Two failures that said exactly why were both recorded as "no reason
   given".** Run `34528903950` ended three of five tasks. One was refused for
   rate and was recorded as `rate_limited`. The other two ended with

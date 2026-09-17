@@ -140,11 +140,34 @@ class AgenticV2FixtureBackend:
             "budget_caps": self.budget_caps,
             "entries": entries,
             "active_locks": sorted(self._active_locks),
-            "terminal_result_sha256": (
-                canonical_sha256(_result_identity(self._result))
-                if self._result is not None else None
-            ),
+            "terminal_result_sha256": self._terminal_result_digest(),
         })
+
+    def _terminal_result_digest(self) -> str | None:
+        """The finalized result, reduced to something that can be hashed.
+
+        ``finalize`` puts the deliverables' *bytes* into ``_result``, and
+        ``canonical_sha256`` is ``json.dumps``. Handing it the result as it
+        stands raises ``TypeError`` on the first deliverable of any kind, so
+        this reduction is not tidiness -- it is what makes the value
+        expressible at all.
+
+        It is a method rather than the expression it replaces because a
+        subclass that overrides ``state_sha256`` and rebuilds the dictionary
+        has to remember it, and one did not. ``AgenticV2MicroVMBackend`` hashed
+        ``self._result`` directly, which is unreachable on the fixture every
+        test runs on -- the fixture's ``finalize`` is this one, and this one
+        normalised. On the first run that ever reached a real guest it meant
+        every task that handed in a file had its successful ``finalize``
+        overwritten with ``invalid_backend_state`` by
+        ``core.agentic_v2_tools``, its disposition recorded as a runner defect,
+        and its deliverables dropped. A task that handed in *nothing* was
+        unaffected, because an empty ``files`` list encodes cleanly: the defect
+        fired only on success.
+        """
+        if self._result is None:
+            return None
+        return canonical_sha256(_result_identity(self._result))
 
     def workspace_state_sha256(self) -> str:
         _, entries, _ = self._workspace_snapshot()

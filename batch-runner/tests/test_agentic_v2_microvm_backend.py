@@ -305,7 +305,6 @@ class TestTheFixtureUnderneathStaysUnderneath:
         inherited_on_purpose = {
             "best_result",
             "capabilities_query",
-            "close",
             "expected_capabilities",
             "finalize",
             # Reads the same host-side tree `workspace_apply` writes to and

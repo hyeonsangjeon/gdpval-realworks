@@ -516,6 +516,63 @@ def boot_census(backends: Sequence[Any]) -> dict[str, int] | None:
     return counted
 
 
+def exec_record_carriage(backends: Sequence[Any]) -> dict[str, Any] | None:
+    """How much of what the guests wrote reached the artifact, or ``None``.
+
+    :func:`boot_census` above answers whether anything ran. This answers
+    whether the proof of it survived, and the two are not one question. Run
+    35111267647 booted 26 guests and shipped an artifact holding three files,
+    none of them a transcript. From outside, a run that ran no command and a
+    run that ran 26 and lost every record of them look the same.
+
+    ``AgenticV2MicroVMBackend.close`` lifts each kept stream out of the
+    workspace before the inherited purge takes it, and writes down both halves
+    of how that went. Both halves are needed here. An empty carriage with no
+    reason is a run that ran nothing; an empty carriage *with* a reason is a
+    run whose evidence was lost, and those send a reader to different places.
+
+    ``calls_with_records`` counts directories rather than files because one
+    call keeps up to three leaves -- stdout, stderr, the meta -- and the number
+    worth reading beside ``exec_run_calls`` is calls, not leaves.
+
+    The backend it came from is part of that key. ``_keep_the_output`` numbers
+    the directory within its own task -- ``f"{EXEC_RECORD_DIR}/{call:04d}"``,
+    no task component -- and ``backends_built`` holds one backend per task, so
+    a bare directory set collapses every task's call ``0000`` into one. On the
+    five-task shape of run 35111267647 that reported 6 for 26 calls, beside a
+    file count of 78 that no six calls could produce. ``exec_run_calls``, the
+    number this sits next to, is the run-wide total, so the undercount reads
+    as the loss this function was added to rule out.
+
+    ``not_carried_because`` is the *last* failure recorded and not all of them:
+    the backend keeps one string, and a later failure overwrites an earlier
+    one. It says something was lost and hints at what. It is not a count, and a
+    reader who treats it as one will understate the loss.
+
+    ``None`` on the same rule as the census -- a backend that cannot answer
+    makes the answer unknown rather than smaller. The fixture backend is one of
+    those: nothing there writes an exec record, so a fixture cohort reports
+    ``None`` rather than a zero nobody measured.
+    """
+    carried: list[str] = []
+    calls: set[tuple[int, str]] = set()
+    not_carried: str | None = None
+    for index, backend in enumerate(backends):
+        moved = getattr(backend, "exec_records_carried", None)
+        if moved is None:
+            return None
+        carried.extend(moved)
+        calls.update((index, entry.rsplit("/", 1)[0]) for entry in moved)
+        reason = getattr(backend, "exec_records_not_carried", None)
+        if reason is not None:
+            not_carried = reason
+    return {
+        "files_carried_out": len(carried),
+        "calls_with_records": len(calls),
+        "not_carried_because": not_carried,
+    }
+
+
 def readable_path(path: Path) -> str:
     """Relative to the batch-runner root when it can be, absolute when not.
 
@@ -1662,6 +1719,11 @@ def main() -> int:
             choice.backend_class,
             census=boot_census(backends_built),
         ),
+        # Whether the transcripts in the artifact are all of them. The census
+        # inside the note above says how many guests ran; this says how many
+        # left a readable record behind, and run 35111267647 is the proof those
+        # are different numbers -- it booted 26 and shipped none of them.
+        "exec_records": exec_record_carriage(backends_built),
         "route_fingerprint": (
             rehearsal_is_not_a_run()
             if rehearsing is not None
