@@ -254,6 +254,44 @@ Dashboard implementation details are in [`src/README.md`](src/README.md).
 
 ---
 
+## Per-task cost records
+
+Each task can carry two cost figures. They are recorded on different artifacts,
+and neither is part of the other:
+
+| Figure | Where it is recorded | Which run writes it |
+|---|---|---|
+| `problem_solving_cost` | Inference and report artifacts | The run that produces the deliverable |
+| `grading_cost` | Grade artifacts | The run that grades it |
+
+They answer different questions and are reported separately. This repository
+does not publish a combined figure.
+
+Dashboard aggregation reads the grade files directly in `data/grades/` and
+nothing below that directory. The subdirectories are skipped for reasons that
+differ by directory:
+
+| Directory | What it holds | Why aggregation skips it |
+|---|---|---|
+| `_diagnostic/` | Grade records from a run narrowed to a subset, or re-run at a moved fingerprint | Real grade evidence, kept out of the published grade data by policy |
+| `_shards/` | Per-shard grade records from a sharded run | Real grades whose tasks can also appear in a file that is already read |
+| `_repeats/` | Grade records from deliberate repeats of a run | Real grades that cover the same tasks again by design |
+| `_validation/` | Comparison and decision records behind grading choices | Not grade data |
+| `_progress/` | Resume state written beside a grade file while it runs | Not grade data |
+
+Only the last two fall outside the grade format. A `_diagnostic/` record is a
+real grade and separate evidence, excluded by what this repository publishes
+rather than by what the file contains. `_shards/` and `_repeats/` are real
+grades for tasks that can be counted elsewhere as well, so combining them with
+the files in `data/grades/` can count a task more than once. Read any of these
+paths directly when you need the evidence they hold.
+
+The `cost-receipt-v1` contract, its states, and the rules for which values may
+be quoted are in
+[`tasks/0828_friday/TASK_PER_TASK_COST_RECEIPTS.md`](tasks/0828_friday/TASK_PER_TASK_COST_RECEIPTS.md).
+
+---
+
 ## Develop and verify
 
 Dashboard checks require Git, Bash, Python 3, and Node.js 20 or newer:

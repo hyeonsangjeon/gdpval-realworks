@@ -12,6 +12,47 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Added
+- **The two per-task cost figures, and the grade directory layout, are
+  documented in the public READMEs.** `README.md` and `README_KR.md` gain a
+  `Per-task cost records` / `태스크별 비용 기록` section between the dashboard
+  and development sections. It states where each figure is recorded —
+  `problem_solving_cost` on inference and report artifacts, `grading_cost` on
+  grade artifacts — that neither is part of the other and no combined figure is
+  published, and that dashboard aggregation reads the grade files directly in
+  `data/grades/` and nothing below that directory.
+
+  Five subdirectory names carry the reason each is skipped, and the reasons are
+  not the same. `_diagnostic/` holds real grade evidence kept out of the
+  published grade data by policy; `_shards/` and `_repeats/` hold real grades
+  whose tasks can be counted elsewhere as well; `_validation/` and `_progress/`
+  hold records that are not grade data. The section says that combining the
+  subdirectories with the files in `data/grades/` can count a task more than
+  once, and points at `tasks/0828_friday/TASK_PER_TASK_COST_RECEIPTS.md` for the
+  `cost-receipt-v1` contract. It quotes no directory count, task count, or cost
+  figure, so it does not go stale as the corpus grows.
+
+  **This documents existing behaviour and changes none of it.** No aggregation
+  code, schema, workflow, or test was touched, so a `_diagnostic` grade is still
+  not aggregated and the section does not claim otherwise. Verified by resolving
+  both new relative links against the working tree and by `git diff --check`; no
+  test suite, model call, or workflow run was involved.
+
+  Keeping `_diagnostic/` out of the published grade data is the accepted policy
+  here, not a defect this change defers. The one-level scan in
+  `scripts/aggregate-grades.mjs` is what keeps those records out, and nothing
+  here asks for it to be made recursive. The next implementation is a different
+  problem and belongs to B: binding the `problem_solving_cost` receipt a run
+  already produces to Hugging Face self-report validation. No code for it is
+  touched here. `problem_solving_cost` does not appear in
+  `batch-runner/schemas/grade.schema.json`, so a grade file is not where that
+  figure comes from.
+
+  Reviewed content head `409c47418e2bd1f87a95c112b4f44a5a88a9bf60`. That review
+  found this entry and both READMEs giving one reason for all five
+  subdirectories, and stating that a sharded run's records are already merged.
+  Both are corrected above. A final delta review of the corrected wording is
+  still pending.
+
 - **The run-place comparison has a specification.**
   `docs/experiments/EXP030-032_SPECIFICATION.md`, the fourth document in a
   directory that already held `EXP013-016`, `EXP017-020` and `EXP021-024`. It is
@@ -383,6 +424,11 @@ entries land under a fresh dated heading the day they merge to `main`.
   file is the decision the pin asks to see.
 
 ### Fixed
+- Fixed HF publication validation dropping the canonical per-task
+  `problem_solving_cost` receipt. Self-report receipts now require matching
+  presence and value before any HF API call, while preserving legacy source
+  absence and null-to-absence projection.
+
 - **Check microVM transcript bytes before evidence carriage.**
   `AgenticV2MicroVMBackend` stores each output leaf's SHA-256 in its host record
   and checks the exact bytes read for carriage against that hash.
@@ -8346,4 +8392,3 @@ PR2 (tool-calling grader rewrite) and PR3 (validation gates) tracked in `tasks/r
   Smoke YAMLs (`exp997` / `exp998` / `exp999`) sit higher at 12×–16× in the
   worst case, but their `sample_size` of 2–3 tasks bounds total wall-clock
   / spend impact to negligible levels. No YAML changes are required.
-
