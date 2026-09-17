@@ -2,90 +2,101 @@
 
 - Updated: 2026-09-17
 
-## Current Task: Per-Task Cost Records In The Public READMEs
+## Current Task: HF Problem-Solving Cost Source Binding
 
 ### Scope and Result
 
-The change touches four files: `README.md`, `README_KR.md`, `CHANGELOG.md`, and
-this record. No code, schema, workflow, test, or data file is modified.
+Implementation head: `541c4ea843a1615eb8395860c80c6276ac27652f`.
 
-Both READMEs gain one section between the dashboard and development sections:
-`Per-task cost records` in English, `태스크별 비용 기록` in Korean. It documents
-an existing contract rather than announcing a change.
+The changes relative to main `23c09fe9ce821e00fd49461aa9aeb756fe5b3aae` are
+limited to `batch-runner/core/hf_publication.py`,
+`batch-runner/tests/test_hf_publication.py`, `CHANGELOG.md`, and this record.
+Only the two completion records were edited during integration. The core and
+test remain at the implementation head, and `README.md` and `README_KR.md`
+retain the main baseline's bytes unchanged.
 
-- `problem_solving_cost` is recorded on inference and report artifacts;
-  `grading_cost` is recorded on grade artifacts. Neither is part of the other,
-  and the repository publishes no combined figure.
-- Dashboard aggregation reads the grade files directly in `data/grades/` and
-  nothing below that directory.
-- The skip reason differs by subdirectory: three distinct reasons cover the five
-  names.
-- `_diagnostic/` holds grade records from a run narrowed to a subset, or re-run
-  at a moved fingerprint. Those are real grades and separate evidence, kept out
-  of the published grade data by policy rather than by what the file contains.
-  The section does not claim they are aggregated.
-- `_shards/` and `_repeats/` hold real grades for tasks that can also appear in
-  a file that is already read, so combining them with the files in
-  `data/grades/` can count a task more than once. The section does not claim a
-  sharded run's records are already merged into that run's file.
-- `_validation/` and `_progress/` are the only two outside the grade format:
-  comparison and decision records behind grading choices, and resume state
-  written beside a grade file while it runs.
+`load_publication_identity` now retains the canonical `problem_solving_cost`
+receipt returned by `project_result_row` in `PublicationTaskResult`.
+`_task_report_projection` includes that optional receipt, and self-report
+validation compares its presence and JSON value before any HF API call. No
+pricing, cost aggregation, or schema changes were added.
 
-Each section closes with a relative link to
-`tasks/0828_friday/TASK_PER_TASK_COST_RECEIPTS.md`, which carries the
-`cost-receipt-v1` contract. No directory count, task count, or cost figure is
-quoted, so the section does not go stale as the corpus grows.
+Matching receipts and genuine legacy absence pass validation. Missing or null
+source receipts still project to an absent report key; a report-side null is
+not treated as absence. Changed, removed, or injected receipts raise
+`ValueError` before publication. Every rejected regression case asserts
+`api.calls == []`.
 
 ### Verification
 
-- Both new relative links resolve against the working tree:
-  `tasks/0828_friday/TASK_PER_TASK_COST_RECEIPTS.md` exists and is the file the
-  sections describe. Neither link carries an anchor.
-- `git diff --check` passed on the full four-file diff.
-- No test suite, model call, Azure query, workflow dispatch, or dashboard build
-  was run. This change modifies no input to any of them.
-- Reviewed content head: `409c47418e2bd1f87a95c112b4f44a5a88a9bf60`. That review
-  found the earlier wording giving one skip reason for all five subdirectories,
-  and stating that a sharded run's records are already merged into that run's
-  file. Both are corrected above. A final delta review of the corrected wording
-  is still pending, so this change is not recorded as approved.
-- The behaviour described was read at `main`
-  `f78fe743c4f6f8b0bacc4598115c9c4bd40e000e`, the commit this branch starts
-  from.
+The following targeted selector ran once during implementation, from the
+repository root:
 
-### Skills
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider batch-runner/tests/test_hf_publication.py::test_publication_binds_optional_problem_solving_cost_to_source
+```
 
-The available skill catalog was checked once. `/repo-readiness` was applied
-first for public-repo delivery and set the section's placement in the later
-contract layer rather than the opening layers, its use of existing repository
-terms instead of new coinages, and the requirement to state what is excluded
-beside what is published. `/im-not-ai-en` was applied to the English prose and
-`humanize-korean` to the Korean prose, preserving paths, identifiers, and every
-exclusion statement.
+- The result was `8 passed in 2.53s`. The cases cover unchanged, changed,
+  removed, and injected receipts, legacy absence, source null projecting to
+  absence, a receipt replaced with null, and an injected null.
+- `git diff --check` passed during implementation. For record integration,
+  `git diff --check 23c09fe9ce821e00fd49461aa9aeb756fe5b3aae` passed, and one
+  scope inspection confirmed the four-file diff and unchanged README bytes.
+- No pytest or CI rerun was requested during record integration. The regression
+  used FakeApi; no real HF upload, paid model call, Azure operation, or workflow
+  dispatch was performed. No full suite was run.
+
+### Skills and Compatibility Decision
+
+The integration pass inspected the available skill catalog once and reused
+`/im-not-ai-en` for the English completion records. Implementation used
+`python-fact-grounded-coding` to keep the change grounded in the existing
+projector and the targeted regression.
+
+The required `extreme-reasoner` was attempted once during implementation but
+failed because the requested model was unsupported (`model_not_supported`).
+Compatibility was assessed locally against the existing projector: source
+absence stays absent, and report-side presence or value drift is rejected.
 
 `experiment-design`, `experiment-report-en`, and `experiment-report-ko` are not
-applicable: this documents an existing contract and reports no new experiment.
-UI and animation skills were not used because the change has no UI work.
-
-The corrective pass checked the catalog again and applied the same three
-skills' guidelines to the changed wording. They were not re-invoked: the harness
-had already loaded them from this session's earlier runs.
+applicable to this deterministic validation fix. UI and animation skills were
+not used because the change has no UI work.
 
 ### Remaining Work
 
-A final delta review of the corrected wording before this lands.
+Code review remains pending, including A's final review of the record-integration
+delta. Required CI checks on the integrated changes remain outside this local
+validation. The targeted result does not establish full-suite or real-HF
+behaviour.
 
-Keeping `_diagnostic/` out of the published grade data is the accepted policy
-here, not a defect this change defers. The one-level scan in
-`scripts/aggregate-grades.mjs` is what keeps those records out, and nothing here
-asks for it to be made recursive.
+---
 
-The next implementation is a different problem and belongs to B: binding the
-`problem_solving_cost` receipt a run already produces to Hugging Face
-self-report validation. No code for it is touched here. `problem_solving_cost`
-does not appear in `batch-runner/schemas/grade.schema.json`, so a grade file is
-not where that figure comes from.
+## Preserved Prior Result: Per-Task Cost Records In The Public READMEs (2026-09-17)
+
+Reviewed head: `aaf554684b8c2e2a95d27f2941e8613b59b48964`.
+
+The prior task changed `README.md`, `README_KR.md`, `CHANGELOG.md`, and this
+record to document the existing `cost-receipt-v1` contract. It added the
+`Per-task cost records` and `태스크별 비용 기록` sections between the dashboard
+and development sections, without changing code, schemas, workflows, tests, or
+data.
+
+- `problem_solving_cost` belongs to inference and report artifacts;
+  `grading_cost` belongs to grade artifacts. Neither includes the other, and
+  no combined figure is published.
+- Dashboard aggregation reads only grade files directly in `data/grades/`.
+  `_diagnostic/` holds real grade evidence intentionally excluded from the
+  published grade data. That exclusion is accepted policy, not a discovery
+  defect or deferred implementation task.
+- `_shards/` and `_repeats/` can contain tasks also counted elsewhere; combining
+  them with the flat grade files can double count tasks. `_validation/` and
+  `_progress/` contain comparison, decision, or resume records rather than
+  grade data. The contract does not claim that sharded records are already
+  merged into a run's grade file.
+- Prior validation resolved both new relative links to
+  `tasks/0828_friday/TASK_PER_TASK_COST_RECEIPTS.md` and passed
+  `git diff --check` on the four documentation files. No test suite, model
+  call, Azure query, workflow dispatch, or dashboard build was run.
 
 ---
 

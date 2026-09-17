@@ -424,6 +424,11 @@ entries land under a fresh dated heading the day they merge to `main`.
   file is the decision the pin asks to see.
 
 ### Fixed
+- Fixed HF publication validation dropping the canonical per-task
+  `problem_solving_cost` receipt. Self-report receipts now require matching
+  presence and value before any HF API call, while preserving legacy source
+  absence and null-to-absence projection.
+
 - **Check microVM transcript bytes before evidence carriage.**
   `AgenticV2MicroVMBackend` stores each output leaf's SHA-256 in its host record
   and checks the exact bytes read for carriage against that hash.
@@ -8387,4 +8392,3 @@ PR2 (tool-calling grader rewrite) and PR3 (validation gates) tracked in `tasks/r
   Smoke YAMLs (`exp997` / `exp998` / `exp999`) sit higher at 12×–16× in the
   worst case, but their `sample_size` of 2–3 tasks bounds total wall-clock
   / spend impact to negligible levels. No YAML changes are required.
-
