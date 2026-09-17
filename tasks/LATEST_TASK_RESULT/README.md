@@ -2,75 +2,119 @@
 
 - Updated: 2026-09-17
 
-## Current Task: Transcript Byte Integrity
+## Current Task: Per-Task Cost Records In The Public READMEs
 
 ### Scope and Result
 
-The change touches only transcript output creation and evidence carriage in
-`batch-runner/core/agentic_v2_microvm_backend.py`, one regression test in
-`batch-runner/tests/test_transcript_bytes_match_the_host_record.py`, and these
-completion records in `CHANGELOG.md` and `tasks/LATEST_TASK_RESULT/README.md`.
+The change touches four files: `README.md`, `README_KR.md`, `CHANGELOG.md`, and
+this record. No code, schema, workflow, test, or data file is modified.
 
-At output creation, the backend records each leaf's SHA-256 in the host-owned
-`boots[*].output_files.sha256` mapping. During carriage, it hashes the exact byte
-buffer returned by `_read_bytes` and compares that hash with the recorded
-digest. It does not reopen a source path that the model can change. An
-overwritten leaf is not copied into evidence or added to `exec_records_carried`;
-its path and `transcript_sha256_mismatch` are recorded in
-`exec_records_not_carried`. Unchanged output bytes are retained. The existing
-`close()` and workspace purge logic are unchanged.
+Both READMEs gain one section between the dashboard and development sections:
+`Per-task cost records` in English, `태스크별 비용 기록` in Korean. It documents
+an existing contract rather than announcing a change.
 
-The completion records retain the run-place specification entries and summarize
-the immediately prior run-place result below. The specification itself is
-unchanged by this reconciliation.
+- `problem_solving_cost` is recorded on inference and report artifacts;
+  `grading_cost` is recorded on grade artifacts. Neither is part of the other,
+  and the repository publishes no combined figure.
+- Dashboard aggregation reads the grade files directly in `data/grades/` and
+  nothing below that directory.
+- The skip reason differs by subdirectory: three distinct reasons cover the five
+  names.
+- `_diagnostic/` holds grade records from a run narrowed to a subset, or re-run
+  at a moved fingerprint. Those are real grades and separate evidence, kept out
+  of the published grade data by policy rather than by what the file contains.
+  The section does not claim they are aggregated.
+- `_shards/` and `_repeats/` hold real grades for tasks that can also appear in
+  a file that is already read, so combining them with the files in
+  `data/grades/` can count a task more than once. The section does not claim a
+  sharded run's records are already merged into that run's file.
+- `_validation/` and `_progress/` are the only two outside the grade format:
+  comparison and decision records behind grading choices, and resume state
+  written beside a grade file while it runs.
 
-### Reviewed Dependency
-
-The implementation depends on the reviewed #606 HEAD
-`60045f8366997eeee2c47a2793f982ab68071702`. The recorded regression result was
-obtained with that reviewed implementation, the backend change, and its single
-test.
+Each section closes with a relative link to
+`tasks/0828_friday/TASK_PER_TASK_COST_RECEIPTS.md`, which carries the
+`cost-receipt-v1` contract. No directory count, task count, or cost figure is
+quoted, so the section does not go stale as the corpus grows.
 
 ### Verification
 
-The existing targeted run used this command from `batch-runner/`:
-
-```bash
-PYTHONDONTWRITEBYTECODE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 /usr/bin/python3 -m pytest -p no:cacheprovider tests/test_transcript_bytes_match_the_host_record.py::test_overwritten_transcript_bytes_are_excluded_but_clean_records_survive
-```
-
-- Before the fix, the test reported `1 failed`: the overwritten
-  `.gdpval/exec/0000/stdout` still appeared in the evidence directory.
-- After the fix, the same test reported `1 passed in 0.36s`.
-- The test replaces stdout with different bytes of the same length, then
-  restores the source after its bytes have been read. It therefore checks the
-  copied buffer, not a later reading of the source path. It also pins the hashes
-  stored at creation, preservation of the other output files, workspace
-  deletion, and repeated `close()` behavior.
-- `git diff --check` passed during the implementation pass. The backend and test
-  remain byte-identical to those verified versions.
-- This completion-record reconciliation does not rerun the regression. Its
-  validation is limited to `git diff --check` and one focused inspection of
-  the final four-file diff.
-- The launcher is an offline fixture. This change did not boot a real guest,
-  call a model, run the full suite, query Azure, or update a GitHub project.
+- Both new relative links resolve against the working tree:
+  `tasks/0828_friday/TASK_PER_TASK_COST_RECEIPTS.md` exists and is the file the
+  sections describe. Neither link carries an anchor.
+- `git diff --check` passed on the full four-file diff.
+- No test suite, model call, Azure query, workflow dispatch, or dashboard build
+  was run. This change modifies no input to any of them.
+- Reviewed content head: `409c47418e2bd1f87a95c112b4f44a5a88a9bf60`. That review
+  found the earlier wording giving one skip reason for all five subdirectories,
+  and stating that a sharded run's records are already merged into that run's
+  file. Both are corrected above. A final delta review of the corrected wording
+  is still pending, so this change is not recorded as approved.
+- The behaviour described was read at `main`
+  `f78fe743c4f6f8b0bacc4598115c9c4bd40e000e`, the commit this branch starts
+  from.
 
 ### Skills
 
-The available skill catalog was checked once for this reconciliation.
-`/im-not-ai-en` was applied only to edited English completion-record prose,
-preserving dates, paths, commands, the reviewed SHA, results, and limitations.
+The available skill catalog was checked once. `/repo-readiness` was applied
+first for public-repo delivery and set the section's placement in the later
+contract layer rather than the opening layers, its use of existing repository
+terms instead of new coinages, and the requirement to state what is excluded
+beside what is published. `/im-not-ai-en` was applied to the English prose and
+`humanize-korean` to the Korean prose, preserving paths, identifiers, and every
+exclusion statement.
 
-`experiment-design`, `experiment-report-en`, and `experiment-report-ko` are not applicable: this is a deterministic runtime bug fix with one regression test, not an experiment.
+`experiment-design`, `experiment-report-en`, and `experiment-report-ko` are not
+applicable: this documents an existing contract and reports no new experiment.
+UI and animation skills were not used because the change has no UI work.
 
-UI and animation skills were not used because the change has no UI or animation
-work.
+The corrective pass checked the catalog again and applied the same three
+skills' guidelines to the changed wording. They were not re-invoked: the harness
+had already loaded them from this session's earlier runs.
 
 ### Remaining Work
 
-Review the four-file patch before landing it. Full-suite and real-guest
-validation remain outside this change's scope; the single regression does not
-establish those broader results.
+A final delta review of the corrected wording before this lands.
+
+Keeping `_diagnostic/` out of the published grade data is the accepted policy
+here, not a defect this change defers. The one-level scan in
+`scripts/aggregate-grades.mjs` is what keeps those records out, and nothing here
+asks for it to be made recursive.
+
+The next implementation is a different problem and belongs to B: binding the
+`problem_solving_cost` receipt a run already produces to Hugging Face
+self-report validation. No code for it is touched here. `problem_solving_cost`
+does not appear in `batch-runner/schemas/grade.schema.json`, so a grade file is
+not where that figure comes from.
+
+---
+
+## Preserved Prior Result: Transcript Byte Integrity (2026-09-17)
+
+The prior task changed transcript output creation and evidence carriage in
+`batch-runner/core/agentic_v2_microvm_backend.py`, with one regression test in
+`batch-runner/tests/test_transcript_bytes_match_the_host_record.py`.
+
+- At output creation the backend records each leaf's SHA-256 in the host-owned
+  `boots[*].output_files.sha256` mapping. During carriage it hashes the exact
+  byte buffer returned by `_read_bytes` and compares it with that digest,
+  without reopening a source path the model can change.
+- An overwritten leaf is not copied into evidence or added to
+  `exec_records_carried`; its path and `transcript_sha256_mismatch` go into
+  `exec_records_not_carried`. Unchanged output bytes are retained, and the
+  existing `close()` and workspace purge logic are unchanged.
+- The implementation depends on the reviewed #606 HEAD
+  `60045f8366997eeee2c47a2793f982ab68071702`.
+- The targeted run reported `1 failed` before the fix and `1 passed in 0.36s`
+  after it. The test replaces stdout with different bytes of the same length and
+  restores the source after the bytes have been read, so it checks the copied
+  buffer rather than a later reading of the source path.
+- The launcher is an offline fixture. That task did not boot a real guest, call
+  a model, run the full suite, query Azure, or update a GitHub project.
+
+Full-suite and real-guest validation were left outside that change's scope; its
+single regression does not establish those broader results. This documentation
+task does not address them.
 
 ---
 
