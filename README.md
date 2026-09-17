@@ -268,19 +268,23 @@ They answer different questions and are reported separately. This repository
 does not publish a combined figure.
 
 Dashboard aggregation reads the grade files directly in `data/grades/` and
-nothing below that directory. The subdirectories serve other purposes:
+nothing below that directory. The subdirectories are skipped for reasons that
+differ by directory:
 
 | Directory | What it holds | Why aggregation skips it |
 |---|---|---|
-| `_diagnostic/` | Grade records from a run narrowed to a subset, or re-run at a moved fingerprint | Retained as evidence, and deliberately outside the published grade data |
-| `_shards/` | Partial records from a sharded run | Merged into that run's file in `data/grades/` |
-| `_repeats/` | Deliberate repeats of a run | Repeats the same tasks by design |
-| `_validation/` | Comparison and decision records behind grading choices | Not grade records |
-| `_progress/` | Resume state written beside a grade file while it runs | Not grade records |
+| `_diagnostic/` | Grade records from a run narrowed to a subset, or re-run at a moved fingerprint | Real grade evidence, kept out of the published grade data by policy |
+| `_shards/` | Per-shard grade records from a sharded run | Real grades whose tasks can also appear in a file that is already read |
+| `_repeats/` | Grade records from deliberate repeats of a run | Real grades that cover the same tasks again by design |
+| `_validation/` | Comparison and decision records behind grading choices | Not grade data |
+| `_progress/` | Resume state written beside a grade file while it runs | Not grade data |
 
-Because each of these either duplicates a file that is already read or is not a
-grade record, walking `data/grades/` recursively would count tasks more than
-once. Read these paths directly when you need the underlying evidence.
+Only the last two fall outside the grade format. A `_diagnostic/` record is a
+real grade and separate evidence, excluded by what this repository publishes
+rather than by what the file contains. `_shards/` and `_repeats/` are real
+grades for tasks that can be counted elsewhere as well, so combining them with
+the files in `data/grades/` can count a task more than once. Read any of these
+paths directly when you need the evidence they hold.
 
 The `cost-receipt-v1` contract, its states, and the rules for which values may
 be quoted are in

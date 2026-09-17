@@ -18,14 +18,19 @@ an existing contract rather than announcing a change.
   and the repository publishes no combined figure.
 - Dashboard aggregation reads the grade files directly in `data/grades/` and
   nothing below that directory.
+- The skip reason differs by subdirectory: three distinct reasons cover the five
+  names.
 - `_diagnostic/` holds grade records from a run narrowed to a subset, or re-run
-  at a moved fingerprint. It is retained as evidence and deliberately outside
-  the published grade data. The section does not claim those records are
-  aggregated.
-- `_shards/`, `_repeats/`, `_validation/`, and `_progress/` are processing and
-  control paths, each with its skip reason stated. Because they either duplicate
-  a file that is already read or hold records that are not grades, a recursive
-  walk of `data/grades/` would count tasks more than once.
+  at a moved fingerprint. Those are real grades and separate evidence, kept out
+  of the published grade data by policy rather than by what the file contains.
+  The section does not claim they are aggregated.
+- `_shards/` and `_repeats/` hold real grades for tasks that can also appear in
+  a file that is already read, so combining them with the files in
+  `data/grades/` can count a task more than once. The section does not claim a
+  sharded run's records are already merged into that run's file.
+- `_validation/` and `_progress/` are the only two outside the grade format:
+  comparison and decision records behind grading choices, and resume state
+  written beside a grade file while it runs.
 
 Each section closes with a relative link to
 `tasks/0828_friday/TASK_PER_TASK_COST_RECEIPTS.md`, which carries the
@@ -40,8 +45,12 @@ quoted, so the section does not go stale as the corpus grows.
 - `git diff --check` passed on the full four-file diff.
 - No test suite, model call, Azure query, workflow dispatch, or dashboard build
   was run. This change modifies no input to any of them.
-- No review of this change exists yet, so no reviewed head is recorded. The
-  behaviour described was read at `main`
+- Reviewed content head: `409c47418e2bd1f87a95c112b4f44a5a88a9bf60`. That review
+  found the earlier wording giving one skip reason for all five subdirectories,
+  and stating that a sharded run's records are already merged into that run's
+  file. Both are corrected above. A final delta review of the corrected wording
+  is still pending, so this change is not recorded as approved.
+- The behaviour described was read at `main`
   `f78fe743c4f6f8b0bacc4598115c9c4bd40e000e`, the commit this branch starts
   from.
 
@@ -59,14 +68,24 @@ exclusion statement.
 applicable: this documents an existing contract and reports no new experiment.
 UI and animation skills were not used because the change has no UI work.
 
+The corrective pass checked the catalog again and applied the same three
+skills' guidelines to the changed wording. They were not re-invoked: the harness
+had already loaded them from this session's earlier runs.
+
 ### Remaining Work
 
-Review the four-file diff before landing it. The documented gap is unchanged by
-this PR: `scripts/aggregate-grades.mjs` still performs a one-level scan, so a
-`_diagnostic` grade's `grading_cost` remains outside the published grade data.
-Closing that is separate code work. `problem_solving_cost` is absent from
-`batch-runner/schemas/grade.schema.json`, so such a change could not recover it
-from a grade file.
+A final delta review of the corrected wording before this lands.
+
+Keeping `_diagnostic/` out of the published grade data is the accepted policy
+here, not a defect this change defers. The one-level scan in
+`scripts/aggregate-grades.mjs` is what keeps those records out, and nothing here
+asks for it to be made recursive.
+
+The next implementation is a different problem and belongs to B: binding the
+`problem_solving_cost` receipt a run already produces to Hugging Face
+self-report validation. No code for it is touched here. `problem_solving_cost`
+does not appear in `batch-runner/schemas/grade.schema.json`, so a grade file is
+not where that figure comes from.
 
 ---
 

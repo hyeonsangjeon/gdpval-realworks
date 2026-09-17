@@ -21,15 +21,15 @@ entries land under a fresh dated heading the day they merge to `main`.
   published, and that dashboard aggregation reads the grade files directly in
   `data/grades/` and nothing below that directory.
 
-  Five subdirectory names carry the reason each is skipped. `_diagnostic/` is
-  retained as evidence and deliberately outside the published grade data;
-  `_shards/` is already merged into that run's file in `data/grades/`;
-  `_repeats/` repeats the same tasks by design; `_validation/` and `_progress/`
-  hold records that are not grades. The section says a recursive walk of
-  `data/grades/` would count tasks more than once, and points at
-  `tasks/0828_friday/TASK_PER_TASK_COST_RECEIPTS.md` for the `cost-receipt-v1`
-  contract. It quotes no directory count, task count, or cost figure, so it does
-  not go stale as the corpus grows.
+  Five subdirectory names carry the reason each is skipped, and the reasons are
+  not the same. `_diagnostic/` holds real grade evidence kept out of the
+  published grade data by policy; `_shards/` and `_repeats/` hold real grades
+  whose tasks can be counted elsewhere as well; `_validation/` and `_progress/`
+  hold records that are not grade data. The section says that combining the
+  subdirectories with the files in `data/grades/` can count a task more than
+  once, and points at `tasks/0828_friday/TASK_PER_TASK_COST_RECEIPTS.md` for the
+  `cost-receipt-v1` contract. It quotes no directory count, task count, or cost
+  figure, so it does not go stale as the corpus grows.
 
   **This documents existing behaviour and changes none of it.** No aggregation
   code, schema, workflow, or test was touched, so a `_diagnostic` grade is still
@@ -37,11 +37,21 @@ entries land under a fresh dated heading the day they merge to `main`.
   both new relative links against the working tree and by `git diff --check`; no
   test suite, model call, or workflow run was involved.
 
-  Remaining: `scripts/aggregate-grades.mjs` still performs a one-level scan, so
-  closing that gap — and with it surfacing a diagnostic run's `grading_cost` —
-  is separate work. `problem_solving_cost` is absent from
-  `batch-runner/schemas/grade.schema.json`, so such a change could not recover
-  it from a grade file.
+  Keeping `_diagnostic/` out of the published grade data is the accepted policy
+  here, not a defect this change defers. The one-level scan in
+  `scripts/aggregate-grades.mjs` is what keeps those records out, and nothing
+  here asks for it to be made recursive. The next implementation is a different
+  problem and belongs to B: binding the `problem_solving_cost` receipt a run
+  already produces to Hugging Face self-report validation. No code for it is
+  touched here. `problem_solving_cost` does not appear in
+  `batch-runner/schemas/grade.schema.json`, so a grade file is not where that
+  figure comes from.
+
+  Reviewed content head `409c47418e2bd1f87a95c112b4f44a5a88a9bf60`. That review
+  found this entry and both READMEs giving one reason for all five
+  subdirectories, and stating that a sharded run's records are already merged.
+  Both are corrected above. A final delta review of the corrected wording is
+  still pending.
 
 - **The run-place comparison has a specification.**
   `docs/experiments/EXP030-032_SPECIFICATION.md`, the fourth document in a
