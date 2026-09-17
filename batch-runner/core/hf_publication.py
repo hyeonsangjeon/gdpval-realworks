@@ -115,6 +115,7 @@ class PublicationTaskResult:
     instruction: object = ""
     reference_file_urls: object = field(default_factory=list)
     error: object = None
+    problem_solving_cost: dict | None = None
 
     def __post_init__(self) -> None:
         if self.files_count is _DEFAULT_FILES_COUNT:
@@ -581,6 +582,7 @@ def load_publication_identity(
             instruction=(projected["instruction"] or "")[:2000],
             reference_file_urls=projected["reference_file_urls"],
             error=projected["error"],
+            problem_solving_cost=projected.get("problem_solving_cost"),
         ))
 
     return PublicationIdentity(
@@ -873,7 +875,7 @@ def _json_values_equal(left: object, right: object) -> bool:
 
 
 def _task_report_projection(result: PublicationTaskResult) -> dict:
-    return {
+    projected = {
         "task_id": result.task_id,
         "sector": result.sector,
         "occupation": result.occupation,
@@ -891,6 +893,9 @@ def _task_report_projection(result: PublicationTaskResult) -> dict:
         "reference_file_urls": result.reference_file_urls,
         "deliverable_files": list(result.deliverable_files),
     }
+    if result.problem_solving_cost is not None:
+        projected["problem_solving_cost"] = result.problem_solving_cost
+    return projected
 
 
 def _publication_summary(results: tuple[PublicationTaskResult, ...]) -> dict:
@@ -1012,7 +1017,15 @@ def _validate_self_report_payload(
     ):
         if not isinstance(report_row, dict):
             raise ValueError("self_report.json result row is invalid")
-        for key, value in _task_report_projection(expected).items():
+        projected = _task_report_projection(expected)
+        if ("problem_solving_cost" in report_row) != (
+            "problem_solving_cost" in projected
+        ):
+            raise ValueError(
+                "self_report.json task result projection mismatch: "
+                "problem_solving_cost"
+            )
+        for key, value in projected.items():
             if key in report_row and _json_values_equal(report_row[key], value):
                 continue
             if key == "status":
