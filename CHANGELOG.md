@@ -424,6 +424,16 @@ entries land under a fresh dated heading the day they merge to `main`.
   file is the decision the pin asks to see.
 
 ### Fixed
+
+- Bind HF publication's optional top-level `cost_summary` to canonical per-task
+  receipts. Validation reuses `build_cost_summaries` and
+  `successful_deliverable_count`, checks key presence and exact JSON, and rejects
+  changed, removed, injected, or null summaries before any HF API call. Legacy
+  source absence and null receipts still produce no summary. The single targeted
+  regression reported `8 passed in 0.56s`; all five rejected cases assert no API
+  calls. Pricing, receipt arithmetic, and diagnostic-publication policy are
+  unchanged.
+
 - Corrected the durable-voucher expectation exposed by CI run `35258893231`.
   The sealed-payload test no longer requires `tasks/LATEST_TASK_RESULT/README.md`
   once that rolling record stops asserting a digest. Its docstring and error
