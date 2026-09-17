@@ -116,6 +116,7 @@ class PublicationTaskResult:
     reference_file_urls: object = field(default_factory=list)
     error: object = None
     problem_solving_cost: dict | None = None
+    grading_cost: dict | None = None
 
     def __post_init__(self) -> None:
         if self.files_count is _DEFAULT_FILES_COUNT:
@@ -583,6 +584,7 @@ def load_publication_identity(
             reference_file_urls=projected["reference_file_urls"],
             error=projected["error"],
             problem_solving_cost=projected.get("problem_solving_cost"),
+            grading_cost=projected.get("grading_cost"),
         ))
 
     return PublicationIdentity(
@@ -895,6 +897,8 @@ def _task_report_projection(result: PublicationTaskResult) -> dict:
     }
     if result.problem_solving_cost is not None:
         projected["problem_solving_cost"] = result.problem_solving_cost
+    if result.grading_cost is not None:
+        projected["grading_cost"] = result.grading_cost
     return projected
 
 
@@ -1018,13 +1022,11 @@ def _validate_self_report_payload(
         if not isinstance(report_row, dict):
             raise ValueError("self_report.json result row is invalid")
         projected = _task_report_projection(expected)
-        if ("problem_solving_cost" in report_row) != (
-            "problem_solving_cost" in projected
-        ):
-            raise ValueError(
-                "self_report.json task result projection mismatch: "
-                "problem_solving_cost"
-            )
+        for key in ("problem_solving_cost", "grading_cost"):
+            if (key in report_row) != (key in projected):
+                raise ValueError(
+                    f"self_report.json task result projection mismatch: {key}"
+                )
         for key, value in projected.items():
             if key in report_row and _json_values_equal(report_row[key], value):
                 continue

@@ -24,6 +24,10 @@ def project_result_row(task_meta: dict, result: dict) -> dict:
         result.get("problem_solving_cost"),
         f"result projection problem_solving_cost for {task_id}",
     )
+    grading_cost = project_cost_receipt(
+        result.get("grading_cost"),
+        f"result projection grading_cost for {task_id}",
+    )
 
     row = {
         "task_id": task_id,
@@ -61,4 +65,6 @@ def project_result_row(task_meta: dict, result: dict) -> dict:
     # gain a null field that reads like a recorded zero downstream.
     if cost is not None:
         row["problem_solving_cost"] = cost
+    if grading_cost is not None:
+        row["grading_cost"] = grading_cost
     return row

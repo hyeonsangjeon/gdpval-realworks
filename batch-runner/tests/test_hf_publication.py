@@ -2365,6 +2365,106 @@ def test_publication_binds_optional_problem_solving_cost_to_source(
         assert api.calls == []
 
 
+@pytest.mark.parametrize(
+    ("source_cost", "report_cost", "accepted"),
+    [
+        pytest.param("free", "free", True, id="unchanged-receipt"),
+        pytest.param("free", "not_run", False, id="changed-receipt"),
+        pytest.param("free", "absent", False, id="removed-receipt"),
+        pytest.param("absent", "free", False, id="injected-receipt"),
+        pytest.param("absent", "absent", True, id="legacy-absence"),
+        pytest.param("null", "absent", True, id="source-null-projects-absent"),
+        pytest.param("free", "null", False, id="receipt-replaced-with-null"),
+        pytest.param("absent", "null", False, id="injected-null"),
+        pytest.param("null", "free", False, id="source-null-injected-receipt"),
+        pytest.param("null", "null", False, id="source-null-injected-null"),
+    ],
+)
+def test_publication_binds_optional_grading_cost_to_source(
+    tmp_path, source_cost, report_cost, accepted,
+):
+    receipts = {
+        "free": CostReceipt.free().as_dict(),
+        "not_run": CostReceipt.not_run().as_dict(),
+        "null": None,
+    }
+    prepared_path, inference_path, prepared = _write_pipeline_identity(tmp_path)
+    inference = json.loads(inference_path.read_text(encoding="utf-8"))
+    source_row = inference["results"][0]
+    source_row["deliverable_files"] = []
+    source_row["deliverable_file_records"] = []
+    if source_cost != "absent":
+        source_row["grading_cost"] = receipts[source_cost]
+    inference["result_fingerprint"] = inference_result_fingerprint(inference)
+    inference_path.write_text(json.dumps(inference), encoding="utf-8")
+    identity = load_publication_identity(
+        prepared_path, inference_path, **_narrative_identity_kwargs(),
+    )
+    report_data = {
+        "results": [
+            project_result_row(task, result)
+            for task, result in zip(
+                prepared["tasks"], inference["results"], strict=True,
+            )
+        ],
+    }
+    expected_cost = project_cost_receipt(source_row.get("grading_cost"))
+    assert report_data["results"][0].get("grading_cost") == expected_cost
+    assert identity.results[0].grading_cost == expected_cost
+    assert identity.results[1].grading_cost is None
+    assert "grading_cost" not in identity.results[0].as_dict()
+    task_results, error_tasks = _build_task_results(report_data)
+    assert ("grading_cost" in task_results[0]) == (expected_cost is not None)
+    task_results[0]["report_note"] = "not part of the source identity"
+    if report_cost == "absent":
+        task_results[0].pop("grading_cost", None)
+    else:
+        task_results[0]["grading_cost"] = project_cost_receipt(
+            receipts[report_cost]
+        )
+    root = _upload_root(
+        tmp_path,
+        provenance_task_ids=identity.ordered_task_ids,
+        report_overrides={
+            "prepared_fingerprint": identity.prepared_fingerprint,
+            "result_fingerprint": identity.result_fingerprint,
+            "ordered_task_ids": list(identity.ordered_task_ids),
+            "summary": _compute_summary(report_data),
+            "task_results": task_results,
+            "error_tasks": error_tasks,
+        },
+    )
+    provenance = build_inference_provenance({
+        **inference,
+        "source_repo_id": identity.repo_id,
+    })
+    (root / "inference_provenance.json").write_text(
+        json.dumps(provenance), encoding="utf-8"
+    )
+    api = FakeApi()
+    expectation = (
+        nullcontext()
+        if accepted
+        else pytest.raises(
+            ValueError,
+            match="task result projection mismatch: grading_cost",
+        )
+    )
+    with expectation:
+        publication = publish_dataset(
+            identity.repo_id,
+            root,
+            token="token",
+            expected_head="a" * 40,
+            identity=identity,
+            api=api,
+        )
+    if accepted:
+        assert publication.oid == "b" * 40
+    else:
+        assert api.calls == []
+
+
 def test_load_publication_identity_binds_exact_step1_step2_scope(tmp_path):
     prepared_path, inference_path, prepared = _write_pipeline_identity(tmp_path)
 
