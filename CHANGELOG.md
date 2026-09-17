@@ -12,6 +12,56 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Added
+- **The run-place comparison has a specification.**
+  `docs/experiments/EXP030-032_SPECIFICATION.md`, the fourth document in a
+  directory that already held `EXP013-016`, `EXP017-020` and `EXP021-024`. It is
+  written after the fact and says so: the three experiment files were written on
+  2026-08-25 and the five-task advance check ran on 2026-09-01. Every condition
+  names the file that fixes it, and where the repository records no answer the
+  document says so rather than supplying one.
+
+  **The advance check did not pass its own criteria, and the document leads with
+  that.** exp030, a separate Python process on the server, finished 3 of 5;
+  exp031, a Docker container, 4 of 5; exp032, the Azure code interpreter, 0 of
+  5. The plan requires that "all five tasks finish in all three run places
+  without an error" and adds that "scores are not looked at". Seven of the
+  fifteen runs finished, so the advance conditions for moving to the thirty-task
+  stage are not satisfied.
+
+  exp032's zero is not a performance result. Every one of its five calls was
+  refused with http 403 by the project route, so no task reached execution. The
+  plan already draws the distinction for a place it excludes — leaving one out
+  "records that the place could not run, which is a different statement from
+  *the place performed badly*" — and the document applies the same reading to a
+  place that ran and was refused at the door.
+
+  Three limits are recorded at the same length as the findings, because each one
+  is structural rather than a matter of collecting more runs.
+  `core/shared_first_request.py`'s `UNCONTROLLED_DIFFERENCES` keeps six
+  differences after the three request texts were made byte-identical, and the
+  free check reports `pure_run_place_effect_is_measurable` as false while any
+  remain. No repeat of any single run place is recorded anywhere the document
+  inspected, so the one-task gap between exp030 and exp031 has nothing to be
+  measured against and no ordering of the two is supportable. And the plan's own
+  comment says two places are left out on purpose and then lists five, which the
+  document marks `[needs verification]` rather than resolving in either
+  direction.
+
+  The document states no sector or occupation count, so it cannot reintroduce
+  the "11 sectors / 55 occupations" that `tasks/TASK_DOCS_CLEANUP_KR_EXP.md`
+  exists to remove; its three siblings carry the corrected 9 and 44. Nothing in
+  the repository enumerates `docs/experiments/`, so a fourth file there changes
+  no census.
+
+- **`tasks/LATEST_TASK_RESULT/README.md` no longer reports that the advance
+  check has not run.** Its entry of 2026-08-25 recorded "the run did not happen,
+  and nothing was spent" and "Amount spent: $0.00". That was accurate when it
+  was written and was overtaken by the 2026-09-01 run. The entry is preserved as
+  a prior result under a dated note rather than rewritten, because what it
+  records about the tenant investigation and the deployment-name hole is still
+  the account of that work. What the 2026-09-01 run cost is not recorded in any
+  file inspected here, so no amount replaces the zero.
+
 - **The thirty-task stage of the Codex-against-Foundry sequence.**
   `experiments/exp034_codex_foundry_trial30.yaml`. `exp033` is left exactly as
   it is: a stage is a separate run with its own record, not an edit to the
