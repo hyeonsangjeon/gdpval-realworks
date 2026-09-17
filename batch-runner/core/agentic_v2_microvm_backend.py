@@ -63,6 +63,7 @@ that and not as a model that could not do the work.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from dataclasses import dataclass
@@ -861,7 +862,12 @@ class AgenticV2MicroVMBackend(AgenticV2FixtureBackend):
         position to notice, so the evidence goes where they are.
         """
         where = f"{EXEC_RECORD_DIR}/{call:04d}"
-        written: dict[str, Any] = {"directory": where, "kept": [], "not_kept": None}
+        written: dict[str, Any] = {
+            "directory": where,
+            "kept": [],
+            "sha256": {},
+            "not_kept": None,
+        }
         payloads = {
             "stdout": reading["stdout"].encode("utf-8"),
             "stderr": reading["stderr"].encode("utf-8"),
@@ -888,6 +894,7 @@ class AgenticV2MicroVMBackend(AgenticV2FixtureBackend):
             except Exception as failure:
                 written["not_kept"] = f"{type(failure).__name__}: {failure}"
                 break
+            written["sha256"][leaf] = hashlib.sha256(content).hexdigest()
             written["kept"].append(leaf)
         return written
 
@@ -962,6 +969,12 @@ class AgenticV2MicroVMBackend(AgenticV2FixtureBackend):
                 except Exception as failure:
                     self.exec_records_not_carried = (
                         f"{relative}: {type(failure).__name__}: {failure}"
+                    )
+                    continue
+                expected_sha256 = (kept.get("sha256") or {}).get(leaf)
+                if hashlib.sha256(content).hexdigest() != expected_sha256:
+                    self.exec_records_not_carried = (
+                        f"{relative}: transcript_sha256_mismatch"
                     )
                     continue
                 destination = (self.root / relative).resolve()

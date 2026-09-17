@@ -1,12 +1,81 @@
 # Latest Task Result
 
+- Updated: 2026-09-17
+
+## Current Task: Transcript Byte Integrity
+
+### Scope and Result
+
+The change touches only transcript output creation and evidence carriage in
+`batch-runner/core/agentic_v2_microvm_backend.py`, one regression test in
+`batch-runner/tests/test_transcript_bytes_match_the_host_record.py`, and these
+completion records in `CHANGELOG.md` and `tasks/LATEST_TASK_RESULT/README.md`.
+
+At output creation, the backend records each leaf's SHA-256 in the host-owned
+`boots[*].output_files.sha256` mapping. During carriage, it hashes the exact byte
+buffer returned by `_read_bytes` and compares that hash with the recorded
+digest. It does not reopen a source path that the model can change. An
+overwritten leaf is not copied into evidence or added to `exec_records_carried`;
+its path and
+`transcript_sha256_mismatch` are recorded in `exec_records_not_carried`.
+Unchanged output bytes are retained. The existing `close()` and workspace purge
+logic are unchanged.
+
+### Reviewed Dependency
+
+The implementation depends on the reviewed #606 HEAD
+`60045f8366997eeee2c47a2793f982ab68071702`. The recorded regression result was
+obtained with that reviewed implementation, the backend change, and its single
+test.
+
+### Verification
+
+The existing targeted run used this command from `batch-runner/`:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 /usr/bin/python3 -m pytest -p no:cacheprovider tests/test_transcript_bytes_match_the_host_record.py::test_overwritten_transcript_bytes_are_excluded_but_clean_records_survive
+```
+
+- Before the fix, the test reported `1 failed`: the overwritten
+  `.gdpval/exec/0000/stdout` still appeared in the evidence directory.
+- After the fix, the same test reported `1 passed in 0.36s`.
+- The test replaces stdout with different bytes of the same length, then
+  restores the source after its bytes have been read. It therefore checks the
+  copied buffer, not a later reading of the source path. It also pins the hashes
+  stored at creation, preservation of the other output files, workspace
+  deletion, and repeated `close()` behavior.
+- `git diff --check` passed during the implementation pass. The backend and test
+  remain byte-identical to those verified versions. Neither the test nor that
+  diff check was repeated for this completion record.
+- The launcher is an offline fixture. This change did not boot a real guest,
+  call a model, run the full suite, query Azure, or update a GitHub project.
+
+### Skills
+
+The skill catalog was checked once. `/im-not-ai-en` was applied to the English
+completion record and changelog entry, preserving the SHA, paths, command,
+results, and validation limits.
+
+`experiment-design`, `experiment-report-en`, and `experiment-report-ko` are not applicable: this is a deterministic runtime bug fix with one regression test, not an experiment.
+
+UI and animation skills were not used because the change has no UI or animation
+work.
+
+### Remaining Work
+
+Review the four-file patch before landing it. Full-suite and real-guest
+validation remain outside this change's scope; the single regression does not
+establish those broader results.
+
+---
+
+## Preserved Prior Result: Advance Check Attempt, and Pinning the Azure Resource
+
 - Updated: 2026-08-25
 - Status: the five-task advance check **did not run and cost nothing.** It is
   blocked on access to the Azure account it is pinned to, which sits in a
   different Azure tenant from the one signed in here. While investigating that,
   a real hole in the comparison's own design was found and closed
-
-## Current Task: Advance Check Attempt, and Pinning the Azure Resource
 
 ### Task
 
