@@ -383,6 +383,16 @@ entries land under a fresh dated heading the day they merge to `main`.
   file is the decision the pin asks to see.
 
 ### Fixed
+- **Check microVM transcript bytes before evidence carriage.**
+  `AgenticV2MicroVMBackend` stores each output leaf's SHA-256 in its host record
+  and checks the exact bytes read for carriage against that hash.
+  Overwritten leaves are excluded and recorded as `transcript_sha256_mismatch`.
+  Normal output bytes are retained, and workspace deletion is unchanged.
+  The single offline regression reproduced the defect (`1 failed`), then
+  reported `1 passed in 0.36s` after the fix; it was not rerun for this record.
+  The reviewed dependency is #606 HEAD
+  `60045f8366997eeee2c47a2793f982ab68071702`.
+
 - **The count of calls that kept a transcript collapsed every task's first
   call into one.** `exec_record_carriage` is new in the same change that lifts
   the guests' transcripts out of the workspace before the purge takes them, and

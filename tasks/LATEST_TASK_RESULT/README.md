@@ -1,106 +1,123 @@
 # Latest Task Result
 
 - Updated: 2026-09-17
-- Status: the EXP030-032 run-place comparison now has a written specification,
-  and the entry below it has been marked where it went out of date. The
-  five-task advance check **did run**, on 2026-09-01, and **did not meet its own
-  success criteria**: seven of the fifteen runs finished where the plan requires
-  all fifteen
 
-## Current Task: A Specification for the Run-Place Comparison
+## Current Task: Transcript Byte Integrity
 
-### Task
+### Scope and Result
 
-Write the design document the EXP030-032 series never had, from the files that
-pin each condition, and mark the entry below it, which still reported that the
-advance check had not run.
+The change touches only transcript output creation and evidence carriage in
+`batch-runner/core/agentic_v2_microvm_backend.py`, one regression test in
+`batch-runner/tests/test_transcript_bytes_match_the_host_record.py`, and these
+completion records in `CHANGELOG.md` and `tasks/LATEST_TASK_RESULT/README.md`.
 
-### Result
+At output creation, the backend records each leaf's SHA-256 in the host-owned
+`boots[*].output_files.sha256` mapping. During carriage, it hashes the exact byte
+buffer returned by `_read_bytes` and compares that hash with the recorded
+digest. It does not reopen a source path that the model can change. An
+overwritten leaf is not copied into evidence or added to `exec_records_carried`;
+its path and `transcript_sha256_mismatch` are recorded in
+`exec_records_not_carried`. Unchanged output bytes are retained. The existing
+`close()` and workspace purge logic are unchanged.
 
-**Added `docs/experiments/EXP030-032_SPECIFICATION.md`**, 280 lines, the fourth
-document in a directory that already held `EXP013-016`, `EXP017-020` and
-`EXP021-024`. It records the design after the fact and says so: the three
-experiment files were written on 2026-08-25 and the advance check ran on
-2026-09-01.
+The completion records retain the run-place specification entries and summarize
+the immediately prior run-place result below. The specification itself is
+unchanged by this reconciliation.
 
-**The advance check ran, and did not pass its own criteria.** The three files
-ran five tasks each. exp030, a separate Python process on the server, finished 3
-of 5; exp031, a Docker container, 4 of 5; exp032, the Azure code interpreter, 0
-of 5. The plan requires that "all five tasks finish in all three run places
-without an error" and adds that "scores are not looked at". Seven of the fifteen
-runs finished, so the advance conditions for moving to the thirty-task stage are
-not satisfied.
+### Reviewed Dependency
 
-**exp032's zero records a place that could not run**, which is a different
-statement from a place that performed badly. Every one of its five calls was
-refused with http 403 by the project route, so no task reached execution.
-`step2_run_inference._require_code_interpreter_route_profile` refuses the mode
-until the Azure connection setting names the project route, which the experiment
-file records as correct behaviour and explicitly not to be worked around.
-
-**The document states what it cannot support at the same length as what it
-can.** Three limits are written down rather than implied:
-
-- `core/shared_first_request.py`'s `UNCONTROLLED_DIFFERENCES` keeps **six**
-  differences after the three request texts were made byte-identical, and the
-  free check reports `pure_run_place_effect_is_measurable` as **false** while
-  any remain. All six are tabulated with what each could do to a result.
-- **Repeat variability was never measured.** All three files pin
-  `resume_max_rounds: 0` and no repeat count, and searching the plan of record
-  for repeat, rerun, variability, noise and spread returns only unrelated
-  matches. The one-task gap between exp030 and exp031 therefore has nothing to
-  be measured against, and no ordering of the two is supportable.
-- **One inconsistency in the plan is flagged rather than resolved.** Its comment
-  says two places are left out on purpose and then lists five excluded
-  candidates. The document marks this `[needs verification]` instead of choosing
-  between the sentence and the list.
-
-**A superseded claim below was annotated, not deleted.** The entry now kept as a
-prior result reported "the run did not happen, and nothing was spent" and
-"Amount spent: $0.00". That held on 2026-08-25 and was overtaken by the
-2026-09-01 run. Its text is left as written, under a dated note. What that run
-cost is **not recorded** in any file inspected here, so no amount is stated.
+The implementation depends on the reviewed #606 HEAD
+`60045f8366997eeee2c47a2793f982ab68071702`. The recorded regression result was
+obtained with that reviewed implementation, the backend change, and its single
+test.
 
 ### Verification
 
-- Structure: 8 tables, each with a consistent column count and a well-formed
-  separator row; code fences balanced; the one internal anchor resolves.
-- Facts: the number, date and URL inventories are identical between the frozen
-  structural checkpoint and the delivered file, and every changed sentence is
-  individually accounted for in a change ledger.
-- One defect was found in the draft by its own audit and repaired before
-  delivery: a sentence mixed the per-place denominator, 5, with the run-total
-  denominator, 15, contradicting the document's own declaration of "5 tasks per
-  run place, 15 runs in total".
-- Scope: documentation only. A repository-wide code search returns a single
-  reference to `docs/experiments/`, in a task note rather than in code, so
-  nothing enumerates the directory and no census changes.
-- Counts: the document states no sector or occupation figure, so it cannot
-  reintroduce the "11 sectors / 55 occupations" that
-  `tasks/TASK_DOCS_CLEANUP_KR_EXP.md` exists to remove. Its three siblings carry
-  the corrected 9 sectors / 44 occupations / 220 tasks.
-- The user's own working folder and its pending changes were not touched. Both
-  files were written to a remote branch through the GitHub API; no local git
-  write was issued.
+The existing targeted run used this command from `batch-runner/`:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 /usr/bin/python3 -m pytest -p no:cacheprovider tests/test_transcript_bytes_match_the_host_record.py::test_overwritten_transcript_bytes_are_excluded_but_clean_records_survive
+```
+
+- Before the fix, the test reported `1 failed`: the overwritten
+  `.gdpval/exec/0000/stdout` still appeared in the evidence directory.
+- After the fix, the same test reported `1 passed in 0.36s`.
+- The test replaces stdout with different bytes of the same length, then
+  restores the source after its bytes have been read. It therefore checks the
+  copied buffer, not a later reading of the source path. It also pins the hashes
+  stored at creation, preservation of the other output files, workspace
+  deletion, and repeated `close()` behavior.
+- `git diff --check` passed during the implementation pass. The backend and test
+  remain byte-identical to those verified versions.
+- This completion-record reconciliation does not rerun the regression. Its
+  validation is limited to `git diff --check` and one focused inspection of
+  the final four-file diff.
+- The launcher is an offline fixture. This change did not boot a real guest,
+  call a model, run the full suite, query Azure, or update a GitHub project.
+
+### Skills
+
+The available skill catalog was checked once for this reconciliation.
+`/im-not-ai-en` was applied only to edited English completion-record prose,
+preserving dates, paths, commands, the reviewed SHA, results, and limitations.
+
+`experiment-design`, `experiment-report-en`, and `experiment-report-ko` are not applicable: this is a deterministic runtime bug fix with one regression test, not an experiment.
+
+UI and animation skills were not used because the change has no UI or animation
+work.
 
 ### Remaining Work
 
-- **The thirty-task stage is not unlocked.** The advance check's success
-  criteria are not met, and the plan fixes that condition before anything is
-  spent at the larger size.
-- **exp032 is still refused at the door.** Until the Azure connection setting
-  names the project route, the third run place cannot start, and comparing the
-  two that can run answers a different question from the approved one.
-- **Repeat variability is still unmeasured.** Until one run place is run more
-  than once, no ordering of exp030 and exp031 is supportable.
-- **The plan's excluded-places count is unresolved.** Settling whether the
-  sentence or the list is stale needs a reading of the written specification
-  that comment refers to.
-- **What the 2026-09-01 run cost is unrecorded.** No file inspected here states
-  an amount for it.
-- `CLAUDE.md` still states "11 sectors, 55 occupations" where the repository's
-  verified figures are 9 and 44. Held for a separate change, because that file
-  is read first by every agent.
+Review the four-file patch before landing it. Full-suite and real-guest
+validation remain outside this change's scope; the single regression does not
+establish those broader results.
+
+---
+
+## Preserved Prior Result: Run-Place Specification (2026-09-17)
+
+The prior task added the 280-line
+`docs/experiments/EXP030-032_SPECIFICATION.md`, the fourth specification beside
+`EXP013-016`, `EXP017-020`, and `EXP021-024`. It documents the design after the
+fact: the experiment files were written on 2026-08-25 and the advance check ran
+on 2026-09-01.
+
+- exp030, a separate server Python process, finished 3 of 5 tasks; exp031, a
+  Docker container, 4 of 5; exp032, the Azure code interpreter, 0 of 5. Seven of
+  fifteen runs finished. The plan requires that "all five tasks finish in all
+  three run places without an error" and says "scores are not looked at". The
+  advance criteria for the thirty-task stage were not met.
+- Every exp032 call was refused with HTTP 403 by the project route before task
+  execution. This is inability to run, not a performance result.
+  `step2_run_inference._require_code_interpreter_route_profile` intentionally
+  refuses the mode until the Azure connection setting names the project route;
+  the experiment file says not to work around that guard.
+- `core/shared_first_request.py` retains six `UNCONTROLLED_DIFFERENCES` after
+  the three request texts were made byte-identical. The specification tabulates
+  each difference and its possible effect. The free check reports
+  `pure_run_place_effect_is_measurable` as false while any remain.
+- All three files pin `resume_max_rounds: 0` without a repeat count. No repeat
+  variability was measured, so the one-task gap between exp030 and exp031 does
+  not support an ordering. The plan also says two places are excluded but lists
+  five; that inconsistency remains `[needs verification]`.
+- The specification states no sector or occupation count. Its siblings carry
+  the corrected 9 sectors / 44 occupations / 220 tasks. `CLAUDE.md` still states
+  "11 sectors, 55 occupations"; that correction was left for a separate change.
+- The 2026-08-25 advance-check result is retained under the dated note below.
+  Its "$0.00" is not the series total after the 2026-09-01 run, whose cost was
+  not recorded in the files inspected for the specification.
+
+The prior verification covered eight consistently formed tables, balanced code
+fences, one resolving internal anchor, identical number/date/URL inventories,
+and a sentence change ledger. It caught and corrected a draft denominator
+mix-up between 5 tasks per run place and 15 runs in total. No code enumerated
+`docs/experiments/`, so no census changed. That documentation-only task used
+remote GitHub API writes and left the user's working folder untouched. These
+are the prior recorded checks, not new validation runs.
+
+The advance criteria, exp032 route setting, repeat variability, excluded-places
+count, run cost, and stale `CLAUDE.md` counts were left unresolved. This
+transcript-integrity task does not address them.
 
 ---
 
