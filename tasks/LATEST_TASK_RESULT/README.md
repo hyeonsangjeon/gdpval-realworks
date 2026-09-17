@@ -16,10 +16,13 @@ At output creation, the backend records each leaf's SHA-256 in the host-owned
 buffer returned by `_read_bytes` and compares that hash with the recorded
 digest. It does not reopen a source path that the model can change. An
 overwritten leaf is not copied into evidence or added to `exec_records_carried`;
-its path and
-`transcript_sha256_mismatch` are recorded in `exec_records_not_carried`.
-Unchanged output bytes are retained. The existing `close()` and workspace purge
-logic are unchanged.
+its path and `transcript_sha256_mismatch` are recorded in
+`exec_records_not_carried`. Unchanged output bytes are retained. The existing
+`close()` and workspace purge logic are unchanged.
+
+The completion records retain the run-place specification entries and summarize
+the immediately prior run-place result below. The specification itself is
+unchanged by this reconciliation.
 
 ### Reviewed Dependency
 
@@ -45,16 +48,18 @@ PYTHONDONTWRITEBYTECODE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 /usr/bin/python3 -m p
   stored at creation, preservation of the other output files, workspace
   deletion, and repeated `close()` behavior.
 - `git diff --check` passed during the implementation pass. The backend and test
-  remain byte-identical to those verified versions. Neither the test nor that
-  diff check was repeated for this completion record.
+  remain byte-identical to those verified versions.
+- This completion-record reconciliation does not rerun the regression. Its
+  validation is limited to `git diff --check` and one focused inspection of
+  the final four-file diff.
 - The launcher is an offline fixture. This change did not boot a real guest,
   call a model, run the full suite, query Azure, or update a GitHub project.
 
 ### Skills
 
-The skill catalog was checked once. `/im-not-ai-en` was applied to the English
-completion record and changelog entry, preserving the SHA, paths, command,
-results, and validation limits.
+The available skill catalog was checked once for this reconciliation.
+`/im-not-ai-en` was applied only to edited English completion-record prose,
+preserving dates, paths, commands, the reviewed SHA, results, and limitations.
 
 `experiment-design`, `experiment-report-en`, and `experiment-report-ko` are not applicable: this is a deterministic runtime bug fix with one regression test, not an experiment.
 
@@ -69,13 +74,61 @@ establish those broader results.
 
 ---
 
-## Preserved Prior Result: Advance Check Attempt, and Pinning the Azure Resource
+## Preserved Prior Result: Run-Place Specification (2026-09-17)
 
-- Updated: 2026-08-25
-- Status: the five-task advance check **did not run and cost nothing.** It is
-  blocked on access to the Azure account it is pinned to, which sits in a
-  different Azure tenant from the one signed in here. While investigating that,
-  a real hole in the comparison's own design was found and closed
+The prior task added the 280-line
+`docs/experiments/EXP030-032_SPECIFICATION.md`, the fourth specification beside
+`EXP013-016`, `EXP017-020`, and `EXP021-024`. It documents the design after the
+fact: the experiment files were written on 2026-08-25 and the advance check ran
+on 2026-09-01.
+
+- exp030, a separate server Python process, finished 3 of 5 tasks; exp031, a
+  Docker container, 4 of 5; exp032, the Azure code interpreter, 0 of 5. Seven of
+  fifteen runs finished. The plan requires that "all five tasks finish in all
+  three run places without an error" and says "scores are not looked at". The
+  advance criteria for the thirty-task stage were not met.
+- Every exp032 call was refused with HTTP 403 by the project route before task
+  execution. This is inability to run, not a performance result.
+  `step2_run_inference._require_code_interpreter_route_profile` intentionally
+  refuses the mode until the Azure connection setting names the project route;
+  the experiment file says not to work around that guard.
+- `core/shared_first_request.py` retains six `UNCONTROLLED_DIFFERENCES` after
+  the three request texts were made byte-identical. The specification tabulates
+  each difference and its possible effect. The free check reports
+  `pure_run_place_effect_is_measurable` as false while any remain.
+- All three files pin `resume_max_rounds: 0` without a repeat count. No repeat
+  variability was measured, so the one-task gap between exp030 and exp031 does
+  not support an ordering. The plan also says two places are excluded but lists
+  five; that inconsistency remains `[needs verification]`.
+- The specification states no sector or occupation count. Its siblings carry
+  the corrected 9 sectors / 44 occupations / 220 tasks. `CLAUDE.md` still states
+  "11 sectors, 55 occupations"; that correction was left for a separate change.
+- The 2026-08-25 advance-check result is retained under the dated note below.
+  Its "$0.00" is not the series total after the 2026-09-01 run, whose cost was
+  not recorded in the files inspected for the specification.
+
+The prior verification covered eight consistently formed tables, balanced code
+fences, one resolving internal anchor, identical number/date/URL inventories,
+and a sentence change ledger. It caught and corrected a draft denominator
+mix-up between 5 tasks per run place and 15 runs in total. No code enumerated
+`docs/experiments/`, so no census changed. That documentation-only task used
+remote GitHub API writes and left the user's working folder untouched. These
+are the prior recorded checks, not new validation runs.
+
+The advance criteria, exp032 route setting, repeat variability, excluded-places
+count, run cost, and stale `CLAUDE.md` counts were left unresolved. This
+transcript-integrity task does not address them.
+
+---
+
+## Preserved Prior Result: Advance Check Attempt, and Pinning the Azure Resource (2026-08-25)
+
+> **Overtaken in part, 2026-09-17.** This entry reports that the advance check
+> could not run and that nothing was spent, which held when it was written. The
+> three experiment files record that on 2026-09-01 they ran five tasks each,
+> finishing 3 of 5, 4 of 5 and 0 of 5, so models were called and the "$0.00"
+> below is no longer the series total. What that run cost is not recorded in any
+> file inspected here. Everything below is left as written.
 
 ### Task
 
