@@ -14,7 +14,12 @@ import pytest
 from huggingface_hub import CommitOperationAdd, CommitOperationDelete
 
 import core.hf_publication as hf_publication
-from core.cost_projection import project_cost_receipt
+from core.cost_projection import (
+    COST_LEDGER_PUBLICATION_PATH,
+    project_cost_ledger_reference,
+    project_cost_receipt,
+    stage_cost_ledger,
+)
 from core.cost_receipts import CostReceipt
 from core.hf_publication import (
     PublicationFileRecord,
@@ -221,7 +226,7 @@ class FakeApi:
         return SimpleNamespace(sha=self.head)
 
 
-def _identity() -> PublicationIdentity:
+def _identity(*, cost_ledger: dict | None = None) -> PublicationIdentity:
     return PublicationIdentity(
         experiment_id="exp-test",
         repo_id="owner/repository",
@@ -233,6 +238,7 @@ def _identity() -> PublicationIdentity:
         expected_narrative_model="gpt-5.6-sol",
         expected_narrative_reasoning_effort="max",
         expected_narrative_runtime_fingerprint="d" * 64,
+        cost_ledger=cost_ledger,
     )
 
 
@@ -1667,14 +1673,16 @@ def _cost_ledger_root(tmp_path: Path, *, declare=True, body=b'{"task_id": "task-
 
 def test_publication_carries_a_declared_cost_ledger(tmp_path):
     api = FakeApi()
-    root, _ = _cost_ledger_root(tmp_path)
+    root, digest = _cost_ledger_root(tmp_path)
 
     publish_dataset(
         "owner/repository",
         root,
         token="token",
         expected_head="a" * 40,
-        identity=_identity(),
+        identity=_identity(cost_ledger={
+            "path": "cost_ledger.jsonl", "sha256": digest,
+        }),
         api=api,
     )
 
@@ -1707,7 +1715,7 @@ def test_publication_rejects_an_undeclared_cost_ledger(tmp_path):
 def test_publication_rejects_a_declared_cost_ledger_that_is_missing(tmp_path):
     # The other direction: readers would chase a receipt that never shipped.
     api = FakeApi()
-    root, _ = _cost_ledger_root(tmp_path)
+    root, digest = _cost_ledger_root(tmp_path)
     (root / "cost_ledger.jsonl").unlink()
 
     with pytest.raises(ValueError, match="declares a cost ledger that is missing"):
@@ -1716,7 +1724,9 @@ def test_publication_rejects_a_declared_cost_ledger_that_is_missing(tmp_path):
             root,
             token="token",
             expected_head="a" * 40,
-            identity=_identity(),
+            identity=_identity(cost_ledger={
+                "path": "cost_ledger.jsonl", "sha256": digest,
+            }),
             api=api,
         )
 
@@ -1725,7 +1735,7 @@ def test_publication_rejects_a_declared_cost_ledger_that_is_missing(tmp_path):
 
 def test_publication_rejects_a_cost_ledger_whose_bytes_drifted(tmp_path):
     api = FakeApi()
-    root, _ = _cost_ledger_root(tmp_path)
+    root, digest = _cost_ledger_root(tmp_path)
     (root / "cost_ledger.jsonl").write_bytes(b'{"task_id": "task-2"}\n')
 
     with pytest.raises(ValueError, match="does not match self_report.json"):
@@ -1734,7 +1744,9 @@ def test_publication_rejects_a_cost_ledger_whose_bytes_drifted(tmp_path):
             root,
             token="token",
             expected_head="a" * 40,
-            identity=_identity(),
+            identity=_identity(cost_ledger={
+                "path": "cost_ledger.jsonl", "sha256": digest,
+            }),
             api=api,
         )
 
@@ -1746,24 +1758,27 @@ def test_publication_rejects_a_cost_ledger_declared_under_another_path(tmp_path)
     # the file it is published — or deleted — as.
     api = FakeApi()
     body = b'{"task_id": "task-1"}\n'
+    digest = hashlib.sha256(body).hexdigest()
     root = _upload_root(
         tmp_path,
         report_overrides={
             "cost_ledger": {
                 "path": "self_report.json",
-                "sha256": hashlib.sha256(body).hexdigest(),
+                "sha256": digest,
             }
         },
     )
     (root / "cost_ledger.jsonl").write_bytes(body)
 
-    with pytest.raises(ValueError, match="must be published as cost_ledger.jsonl"):
+    with pytest.raises(ValueError, match="cost ledger source mismatch"):
         publish_dataset(
             "owner/repository",
             root,
             token="token",
             expected_head="a" * 40,
-            identity=_identity(),
+            identity=_identity(cost_ledger={
+                "path": "cost_ledger.jsonl", "sha256": digest,
+            }),
             api=api,
         )
 
@@ -2586,6 +2601,120 @@ def test_publication_binds_optional_cost_summary_to_source(
         assert publication.oid == "b" * 40
     else:
         assert api.calls == []
+
+
+@pytest.mark.parametrize(
+    ("source_ledger", "report_ledger", "accepted"),
+    [
+        pytest.param("source", "source", True, id="unchanged-reference-and-bytes"),
+        pytest.param(
+            "source", "replacement", False, id="changed-reference-and-bytes",
+        ),
+        pytest.param("source", "absent", False, id="removed-reference-and-ledger"),
+        pytest.param("absent", "absent", True, id="legacy-absence"),
+        pytest.param(
+            "absent", "replacement", False, id="injected-reference-and-bytes",
+        ),
+        pytest.param("source", "null", False, id="reference-replaced-with-null"),
+        pytest.param("absent", "null", False, id="injected-null"),
+        pytest.param("null", "absent", True, id="source-null-projects-absent"),
+    ],
+)
+def test_publication_binds_optional_cost_ledger_to_source(
+    tmp_path, source_ledger, report_ledger, accepted,
+):
+    bodies = {
+        "source": b'{"task_id": "task-1"}\n',
+        "replacement": b'{"task_id": "task-2"}\n',
+    }
+    references = {
+        name: {
+            "path": f"cost_ledger_{name}.jsonl",
+            "sha256": hashlib.sha256(body).hexdigest(),
+        }
+        for name, body in bodies.items()
+    }
+    prepared_path, inference_path, prepared = _write_pipeline_identity(tmp_path)
+    inference = json.loads(inference_path.read_text(encoding="utf-8"))
+    inference["results"][0]["deliverable_files"] = []
+    inference["results"][0]["deliverable_file_records"] = []
+    if source_ledger == "source":
+        inference["cost_ledger"] = references["source"]
+        (tmp_path / references["source"]["path"]).write_bytes(bodies["source"])
+    elif source_ledger == "null":
+        inference["cost_ledger"] = None
+    inference["result_fingerprint"] = inference_result_fingerprint(inference)
+    inference_path.write_text(json.dumps(inference), encoding="utf-8")
+    identity = load_publication_identity(
+        prepared_path, inference_path, **_narrative_identity_kwargs(),
+    )
+    expected_reference = project_cost_ledger_reference(
+        inference.get("cost_ledger")
+    )
+    assert identity.cost_ledger == expected_reference
+    report_data = {
+        "results": [
+            project_result_row(task, result)
+            for task, result in zip(
+                prepared["tasks"], inference["results"], strict=True,
+            )
+        ],
+    }
+    task_results, error_tasks = _build_task_results(report_data)
+    root = _upload_root(
+        tmp_path,
+        provenance_task_ids=identity.ordered_task_ids,
+        report_overrides={
+            "prepared_fingerprint": identity.prepared_fingerprint,
+            "result_fingerprint": identity.result_fingerprint,
+            "ordered_task_ids": list(identity.ordered_task_ids),
+            "summary": _compute_summary(report_data),
+            "task_results": task_results,
+            "error_tasks": error_tasks,
+        },
+    )
+    report_path = root / "self_report.json"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    if report_ledger in references:
+        reference = references[report_ledger]
+        (tmp_path / reference["path"]).write_bytes(bodies[report_ledger])
+        report["cost_ledger"] = stage_cost_ledger(reference, tmp_path, root)
+        assert report["cost_ledger"] == {
+            "path": COST_LEDGER_PUBLICATION_PATH,
+            "sha256": reference["sha256"],
+        }
+        staged_bytes = (root / COST_LEDGER_PUBLICATION_PATH).read_bytes()
+        assert hashlib.sha256(staged_bytes).hexdigest() == reference["sha256"]
+    elif report_ledger == "null":
+        report["cost_ledger"] = None
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+    provenance = build_inference_provenance({
+        **inference,
+        "source_repo_id": identity.repo_id,
+    })
+    (root / "inference_provenance.json").write_text(
+        json.dumps(provenance), encoding="utf-8"
+    )
+    api = FakeApi()
+    expectation = (
+        nullcontext()
+        if accepted
+        else pytest.raises(ValueError, match="cost ledger source mismatch")
+    )
+    with expectation:
+        publication = publish_dataset(
+            identity.repo_id,
+            root,
+            token="token",
+            expected_head="a" * 40,
+            identity=identity,
+            api=api,
+        )
+    if accepted:
+        assert publication.oid == "b" * 40
+    else:
+        assert api.calls == []
+    assert identity.cost_ledger == expected_reference
 
 
 def test_load_publication_identity_binds_exact_step1_step2_scope(tmp_path):

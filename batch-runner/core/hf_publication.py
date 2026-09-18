@@ -151,6 +151,7 @@ class PublicationIdentity:
     expected_narrative_model: str | None = None
     expected_narrative_reasoning_effort: str | None = None
     expected_narrative_runtime_fingerprint: str | None = None
+    cost_ledger: dict | None = None
 
     def submitter_rows(self) -> list[dict]:
         return [result.as_dict() for result in self.results]
@@ -606,6 +607,7 @@ def load_publication_identity(
         expected_narrative_runtime_fingerprint=(
             expected_narrative_runtime_fingerprint
         ),
+        cost_ledger=project_cost_ledger_reference(inference.get("cost_ledger")),
     )
 
 
@@ -1078,6 +1080,16 @@ def _validate_self_report_payload(
         and not _json_values_equal(payload["cost_summary"], cost_summary)
     ):
         raise ValueError("self_report.json cost summary mismatch")
+
+    cost_ledger = identity.cost_ledger
+    if cost_ledger is not None:
+        # Step 6 publishes the source ledger under this fixed name.
+        cost_ledger = {**cost_ledger, "path": COST_LEDGER_PATH}
+    if ("cost_ledger" in payload) != (cost_ledger is not None) or (
+        cost_ledger is not None
+        and not _json_values_equal(payload["cost_ledger"], cost_ledger)
+    ):
+        raise ValueError("self_report.json cost ledger source mismatch")
 
 
 def _validate_self_report_path(
