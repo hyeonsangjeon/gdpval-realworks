@@ -425,6 +425,15 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Bind HF publication's optional top-level `cost_ledger` reference to the
+  canonical inference source. Validation checks key presence and exact JSON
+  before staged-file validation and any HF API call, so replacing both the
+  report reference and ledger bytes no longer passes. Source absence and null
+  still require an absent report key. The fixed `cost_ledger.jsonl` publication
+  path and existing byte/digest validation are unchanged. The single targeted
+  regression reported `8 passed in 0.51s`; all five rejected cases assert no
+  API calls.
+
 - Bind HF publication's optional top-level `cost_summary` to canonical per-task
   receipts. Validation reuses `build_cost_summaries` and
   `successful_deliverable_count`, checks key presence and exact JSON, and rejects
