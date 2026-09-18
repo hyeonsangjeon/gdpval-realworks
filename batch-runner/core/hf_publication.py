@@ -30,8 +30,12 @@ from core.result_fingerprint import (
     validate_inference_result_fingerprint,
 )
 from core.result_projection import project_result_row
-from core.cost_projection import COST_LEDGER_PUBLICATION_PATH
-from core.cost_projection import project_cost_ledger_reference
+from core.cost_projection import (
+    COST_LEDGER_PUBLICATION_PATH,
+    build_cost_summaries,
+    project_cost_ledger_reference,
+    successful_deliverable_count,
+)
 from core.repository_identity import validate_hf_dataset_repo_id
 from core.repository_identity import validate_experiment_id
 
@@ -939,6 +943,21 @@ def _publication_summary(results: tuple[PublicationTaskResult, ...]) -> dict:
         raise ValueError("inference report summary values are invalid") from exc
 
 
+def _publication_cost_summaries(results: tuple[PublicationTaskResult, ...]) -> dict:
+    rows = [
+        {
+            **_task_report_projection(result),
+            # The report's 300-character excerpt is not the full deliverable.
+            "deliverable_text": result.deliverable_text,
+        }
+        for result in results
+    ]
+    return build_cost_summaries(
+        rows,
+        successful_deliverables=successful_deliverable_count(rows),
+    )
+
+
 def _validate_self_report_payload(
     payload: object,
     identity: PublicationIdentity,
@@ -1052,6 +1071,13 @@ def _validate_self_report_payload(
     ]
     if not _json_values_equal(payload.get("error_tasks"), expected_errors):
         raise ValueError("self_report.json error task projection mismatch")
+
+    cost_summary = _publication_cost_summaries(identity.results)
+    if ("cost_summary" in payload) != bool(cost_summary) or (
+        cost_summary
+        and not _json_values_equal(payload["cost_summary"], cost_summary)
+    ):
+        raise ValueError("self_report.json cost summary mismatch")
 
 
 def _validate_self_report_path(

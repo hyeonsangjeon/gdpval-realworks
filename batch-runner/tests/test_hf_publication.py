@@ -36,7 +36,11 @@ from core.inference_manifest import (
 from core.prepared_fingerprint import prepared_fingerprint
 from core.result_fingerprint import inference_result_fingerprint
 from core.result_projection import project_result_row
-from step6_report import _build_task_results, _compute_summary
+from step6_report import (
+    _build_task_results,
+    _compute_cost_summaries,
+    _compute_summary,
+)
 
 
 class FakeApi:
@@ -322,6 +326,7 @@ def _upload_root(
             "error_tasks",
             "narrative",
             "cost_ledger",
+            "cost_summary",
         }:
             report[key] = value
         else:
@@ -2316,6 +2321,7 @@ def test_publication_binds_optional_problem_solving_cost_to_source(
     assert identity.results[0].problem_solving_cost == (
         report_data["results"][0].get("problem_solving_cost")
     )
+    cost_summaries = _compute_cost_summaries(report_data)
     if report_cost == "absent":
         task_results[0].pop("problem_solving_cost", None)
     else:
@@ -2332,6 +2338,7 @@ def test_publication_binds_optional_problem_solving_cost_to_source(
             "summary": _compute_summary(report_data),
             "task_results": task_results,
             "error_tasks": error_tasks,
+            **({"cost_summary": cost_summaries} if cost_summaries else {}),
         },
     )
     provenance = build_inference_provenance({
@@ -2414,6 +2421,7 @@ def test_publication_binds_optional_grading_cost_to_source(
     assert identity.results[1].grading_cost is None
     assert "grading_cost" not in identity.results[0].as_dict()
     task_results, error_tasks = _build_task_results(report_data)
+    cost_summaries = _compute_cost_summaries(report_data)
     assert ("grading_cost" in task_results[0]) == (expected_cost is not None)
     task_results[0]["report_note"] = "not part of the source identity"
     if report_cost == "absent":
@@ -2432,6 +2440,7 @@ def test_publication_binds_optional_grading_cost_to_source(
             "summary": _compute_summary(report_data),
             "task_results": task_results,
             "error_tasks": error_tasks,
+            **({"cost_summary": cost_summaries} if cost_summaries else {}),
         },
     )
     provenance = build_inference_provenance({
@@ -2449,6 +2458,120 @@ def test_publication_binds_optional_grading_cost_to_source(
             ValueError,
             match="task result projection mismatch: grading_cost",
         )
+    )
+    with expectation:
+        publication = publish_dataset(
+            identity.repo_id,
+            root,
+            token="token",
+            expected_head="a" * 40,
+            identity=identity,
+            api=api,
+        )
+    if accepted:
+        assert publication.oid == "b" * 40
+    else:
+        assert api.calls == []
+
+
+@pytest.mark.parametrize(
+    ("source_costs", "report_summary", "accepted"),
+    [
+        pytest.param("both", "unchanged", True, id="unchanged-both-fields"),
+        pytest.param("both", "changed", False, id="changed-value"),
+        pytest.param("both", "absent", False, id="removed-summary"),
+        pytest.param("absent", "absent", True, id="legacy-absence"),
+        pytest.param("absent", "injected", False, id="injected-summary"),
+        pytest.param("both", "null", False, id="summary-replaced-with-null"),
+        pytest.param("absent", "null", False, id="injected-null"),
+        pytest.param("null", "absent", True, id="source-null-projects-absent"),
+    ],
+)
+def test_publication_binds_optional_cost_summary_to_source(
+    tmp_path, source_costs, report_summary, accepted,
+):
+    prepared_path, inference_path, prepared = _write_pipeline_identity(tmp_path)
+    inference = json.loads(inference_path.read_text(encoding="utf-8"))
+    source_rows = inference["results"]
+    source_rows[0]["deliverable_files"] = []
+    source_rows[0]["deliverable_file_records"] = []
+    source_rows[0]["deliverable_text"] = " " * 300 + "current text"
+    source_rows[1].update(
+        status="success", deliverable_text=" \t\n", error="",
+    )
+    for row in source_rows:
+        if source_costs != "absent":
+            for field in ("problem_solving_cost", "grading_cost"):
+                row[field] = (
+                    CostReceipt.free().as_dict() if source_costs == "both" else None
+                )
+    inference["result_fingerprint"] = inference_result_fingerprint(inference)
+    inference_path.write_text(json.dumps(inference), encoding="utf-8")
+    identity = load_publication_identity(
+        prepared_path, inference_path, **_narrative_identity_kwargs(),
+    )
+    report_data = {
+        "results": [
+            project_result_row(task, result)
+            for task, result in zip(
+                prepared["tasks"], source_rows, strict=True,
+            )
+        ],
+    }
+    cost_summaries = _compute_cost_summaries(report_data)
+    if source_costs == "both":
+        assert set(cost_summaries) == {"problem_solving_cost", "grading_cost"}
+        # Two successes, but only one full, non-blank text deliverable. Its
+        # report excerpt is blank, so neither success count nor excerpt works.
+        assert all(
+            summary["successful_deliverables"] == 1
+            for summary in cost_summaries.values()
+        )
+    else:
+        assert cost_summaries == {}
+    task_results, error_tasks = _build_task_results(report_data)
+    report_overrides = {
+        "prepared_fingerprint": identity.prepared_fingerprint,
+        "result_fingerprint": identity.result_fingerprint,
+        "ordered_task_ids": list(identity.ordered_task_ids),
+        "summary": _compute_summary(report_data),
+        "task_results": task_results,
+        "error_tasks": error_tasks,
+    }
+    if report_summary in {"unchanged", "changed"}:
+        if report_summary == "changed":
+            cost_summaries["grading_cost"]["known_cost_usd"] = 0.5
+        report_overrides["cost_summary"] = cost_summaries
+    elif report_summary == "injected":
+        report_overrides["cost_summary"] = _compute_cost_summaries({
+            "results": [
+                {
+                    **row,
+                    "problem_solving_cost": CostReceipt.free().as_dict(),
+                    "grading_cost": CostReceipt.free().as_dict(),
+                }
+                for row in report_data["results"]
+            ],
+        })
+    elif report_summary == "null":
+        report_overrides["cost_summary"] = None
+    root = _upload_root(
+        tmp_path,
+        provenance_task_ids=identity.ordered_task_ids,
+        report_overrides=report_overrides,
+    )
+    provenance = build_inference_provenance({
+        **inference,
+        "source_repo_id": identity.repo_id,
+    })
+    (root / "inference_provenance.json").write_text(
+        json.dumps(provenance), encoding="utf-8"
+    )
+    api = FakeApi()
+    expectation = (
+        nullcontext()
+        if accepted
+        else pytest.raises(ValueError, match="self_report.json cost summary mismatch")
     )
     with expectation:
         publication = publish_dataset(
