@@ -8278,8 +8278,9 @@ Codex CLI/harness라는 두 구성 묶음의 완료·품질·시간·비용 기�
 오프라인 dispatch-plan compiler는 immutable main
 `2a1ecaf7d6a6f18ba21add7884414d041bc1b5d8`에서 시작했습니다. 이를 재사용하는
 pinned grading-plan compiler의 시작점은
-`5c3a69278a8f005db8ea0aed72d13d20909c57df`입니다. `grading.source_sha`도 이
-시작점을 기록하며, 실제 검토 대상 바이트는 source pins와 기존 grader helper의
+`5c3a69278a8f005db8ea0aed72d13d20909c57df`입니다. V2 grading-input materializer는
+`641eee488ad6cd9a7bc33d0beeab061dcae8f52b`에서 시작합니다. `base_sha`와
+`grading.source_sha`는 이번 시작점을 기록하며, 실제 검토 대상 바이트는 source pins와 기존 grader helper의
 `template_source_sha256`으로 고정합니다. 시작 SHA만으로 새 코드의 신원을
 증명했다고 하지 않습니다. grader 설정·과제·입력·반복·한도는 유지합니다.
 사전등록 파일은
@@ -8411,15 +8412,16 @@ ABBA 순서는 한 방향의 시간 경과 영향을 줄이기 위한 고정 순
   로컬 직렬화의 `xhigh`와 실제 배포가 받은 요청·제공한 capability는 구분합니다.
   API에 묻는 유료 probe를 무료 검증으로 부르지 않습니다.
 - `comparison_materialization_and_workflow_gates_not_wired`: 아래 두 compiler는
-  추론과 pinned grading의 오프라인 설정·인자를 만들지만 실제 checkout·설정·입력·
-  deliverable 배치나 workflow 관문은 연결하지 않습니다. V2 결과의 canonical
-  step2 입력 변환과 실제 inference publication identity도 아직 필요합니다.
+  추론과 pinned grading의 오프라인 설정·인자를 만듭니다. 별도 승인된 inference
+  신원 문서가 있으면 V2 결과와 deliverable을 canonical step8 입력으로 배치할 수
+  있지만, Codex 입력·deliverable 검증, checkout/config 배치, workflow 관문은
+  연결하지 않습니다. 실제 inference publication 신원 문서의 발급도 외부 gate입니다.
 - `comparison_usage_and_tariff_evidence_unverified`: 이 비교에서 실제 모델·usage와
   비용 단위가 연결되는 증거는 아직 없습니다. 가격 누락만을 새 지출 차단 규칙으로
   삼지는 않으며, 기존 record-only 정책과 unknown/null/partial 기록을 유지합니다.
 
-무료 검사기는 원천 파일 **22개**의 지문을 먼저 확인합니다. #618의 21개에
-`step8_grade.py`를 추가했습니다. 그 파일의 기존 `compute_grader_source_hash`는
+무료 검사기는 원천 파일 **23개**의 지문을 먼저 확인합니다. #619의 22개에
+`gpt54_v2_grading_input.py`를 추가했습니다. `step8_grade.py`의 기존 `compute_grader_source_hash`는
 모든 `core/**/*.py`, grade schema, requirements include graph, inference download
 script, 두 prompt, 원본 grading config의 경로·바이트까지 함께 고정합니다.
 이 closure의 지문도 manifest와 대조하므로 rubric loader 등 간접 의존성이 바뀌어도
@@ -8521,10 +8523,10 @@ experiment YAML인 것처럼 넘기거나 존재하지 않는 `--inference-resul
 Codex는 step2 결과를 위 파일에 쓰지만 deliverable 배치는 여전히 확인해야 합니다.
 V2는 `batch-runner/workspace/run_record.json`의 `/run/results`에 기록합니다.
 그 행의 기존 result projection과 `workspace/deliverables/deliverable_files`를
-grader 입력·upload tree로 옮기는 materialization은 **구현하지 않았습니다**.
-실제 입력을 읽어 source/task/바이트 신원을 검증하는 것도 후속 gate입니다.
+grader 입력·upload tree로 옮기는 오프라인 함수는 아래 14.5.1에서 지정합니다.
+외부에서 검증·승인한 inference 신원 문서가 없으면 파일을 쓰기 전에 거부합니다.
 CLI의 `--tasks`는 입력 순서를 보존할 뿐 요청한 순서로 재정렬하지 않으므로,
-후속 단계가 고정 순서를 확인해야 합니다.
+materializer가 고정 순서와 전체 5개 행을 먼저 확인합니다.
 
 명시적 `--tasks`/`--limit`는 기존 정책대로 diagnostic입니다. grade 경로는 각
 checkout의 `data/grades/_diagnostic/<ordered-five-task-sha256>/` 아래에 두고,
@@ -8546,6 +8548,61 @@ live identity/input, materialization/workflow gates, usage/tariff는 남습니�
 무료 selector의 parser/config 호환성은 실제 채점·모델 capability 증거가 아닙니다.
 소유자의 비교 승인도 `launch_allowed: false`, `full_220_allowed: false`를
 해제하지 않습니다.
+
+#### 14.5.1 V2 결과를 step8 로컬 입력으로 배치하는 오프라인 경계
+
+`gpt54_v2_grading_input.materialize_v2_grading_input`은 manifest를 기존
+`compile_grading_plan`으로 다시 검증하고, 전달된 typed `ComparisonGradingRunSpec`이
+두 V2 run 중 하나와 정확히 같은지 확인합니다. Codex spec이나 수정된 dict는 받지
+않습니다. ABBA 순서와 두 반복, 다섯 task의 ID·순서·prompt 지문, grader 계약은
+변하지 않습니다. combined dispatch/grading document의 exact-match 검사에도
+이 함수명이 포함됩니다.
+
+입력은 해당 spec, manifest, 실제 `run_record.json`, V2의
+`workspace/deliverables` 경로, 별도의 inference identity JSON, **외부에서 승인한
+그 문서의 SHA256**, 아직 존재하지 않는 destination입니다. 문서 안의
+`verified: true`나 run record가 스스로 주장하는 digest를 승인으로 취급하지
+않습니다. 기존 HF downloader의 `verified-sidecar` 표지도 만들어 붙이지 않습니다.
+외부 발급자가 실제 inference repo/revision과 해당 바이트의 관계를 검증해야 하며,
+이 함수는 그 승인된 binding과의 일치만 확인합니다.
+
+별도 identity 문서는 아래 필드를 정확히 가집니다. 지문은 소문자 SHA256이며,
+JSON 지문은 기존 compiler의 sorted-key UTF-8 canonical JSON을 사용합니다.
+
+| 필드 | 고정하는 대상 |
+|---|---|
+| `source_repo_id`, `source_revision` | canonical owner/repo와 immutable inference HF revision. dataset repo/revision 또는 이번 Git base로 대체 불가 |
+| `run_id`, `condition`, `repeat`, `task_ids` | 해당 V2 spec과 순서까지 동일한 5개 task |
+| `producer_results_path`, `producer_rows_pointer` | spec의 `run_record.json` 경로와 `/run/results` |
+| `manifest_sha256`, `grading_plan_sha256` | manifest와 combined dispatch/grading plan의 canonical digest |
+| `config_sha256`, `source_pins_sha256` | 줄바꿈을 추가하지 않은 generated V2 config bytes와 canonical source pin map |
+| `run_record_sha256` | 실제 producer record 파일의 바이트 |
+| `deliverables` | task 순서의 `{task_id, files}` 배열. `files`는 원래 파일 순서의 `{path, size, sha256}` 배열 |
+
+producer의 기존 manifest binding helper로 task 내용·metadata를 대조하고, 실제
+plan-file path/digest와 chosen settings도 확인합니다. 이것은 선언과 수집된 출력의
+검증이며, live model capability나 실행 당시 입력 reference 바이트의 증명은 아닙니다.
+행 누락·중복·순서 변경, rehearsal/resume/stopped run, 실패·부분 행의 success
+위장, 다른 task 소유 파일, 누락·추가 파일/과제, symlink/path escape/hardlink와
+이미 존재하는 destination은 거부합니다. 완료된 error 행은 삭제하거나 success로
+바꾸지 않고 그대로 남깁니다. 비용은 기존 projector를 거치며 absent와 present-null,
+partial 이유를 유지합니다. unknown 금액을 0으로 채우지 않습니다.
+
+모든 입력을 검증하고 읽은 바이트를 고정한 뒤 destination의 임시 형제 디렉터리에
+`batch-runner/workspace/step2_inference_results.json`과
+`batch-runner/workspace/upload/deliverable_files/<task_id>`만 씁니다. 기존 파일
+validator로 staging을 확인하고 Linux `renameat2(RENAME_NOREPLACE)`로 원자적으로
+설치합니다. 기존 빈 디렉터리와의 경합도 덮어쓰지 않으며, 이 primitive가 없으면
+안전하지 않은 rename으로 대체하지 않습니다. 실패한 임시 tree는 정리합니다.
+step8의 실제 `load_local_inference_results`와 `resolve_source_inference_identity`
+및 ordered task filter가 이 JSON을 그대로 읽습니다. 원본 record·deliverable·
+과거 ledger와 sealed evidence는 수정하지 않습니다.
+
+이 destination은 **입력 bundle**이며 실행 가능한 checkout이 아닙니다. Codex 입력과
+deliverable 검증, checkout/config materialization, workflow gate, served capability,
+native caps, live identity/input bytes, usage/tariff 증거는 여전히 필요합니다. Copilot
+provider/auth도 공식 runtime 인계 계약이 없어 blocked 상태이며 대체 경로를 넣지
+않습니다. `launch_allowed`와 `full_220_allowed`는 계속 false입니다.
 
 ### 14.6 판정, 중단 규칙, 검토 경계
 

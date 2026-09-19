@@ -1,8 +1,8 @@
-# Preregistered targets consumed by the offline dispatch/grading-plan compilers.
+# Preregistered targets for the offline compilers and V2 input materializer.
 # Generated entrypoint configs are review artifacts, not launch authorization.
 # The free preflight deliberately refuses paid launch on the pinned source.
 plan_version: gpt54-sandboxv2-codex-comparison-v1
-base_sha: 5c3a69278a8f005db8ea0aed72d13d20909c57df
+base_sha: 641eee488ad6cd9a7bc33d0beeab061dcae8f52b
 comparison: configuration_bundle
 paid_comparison_approved: true
 launch_enabled: false
@@ -56,7 +56,7 @@ shared: &shared
   grading:
     config: batch-runner/grading_configs/default_v2_sol_max.yaml
     # Starting source provenance; reviewed bytes are bound by pins and closure.
-    source_sha: 5c3a69278a8f005db8ea0aed72d13d20909c57df
+    source_sha: 641eee488ad6cd9a7bc33d0beeab061dcae8f52b
     # Existing helper's full closure with the ORIGINAL template path/bytes.
     # Not the eventual source hash of a materialized, revision-pinned config.
     template_source_sha256: c10ea303f212bab87ea6303cb41ee51e21430e6bc35df7a69b9a63d265f3a241
@@ -109,7 +109,8 @@ runs:
 # Seal the reviewed templates and the boundaries on which the refusal rests.
 # These are file bytes, not a claim to have checked live inputs or a deployment.
 source_pins:
-  batch-runner/gpt54_comparison_preflight.py: 503a3bd36f998b8d288e9c40f0ab0277b549ca7374bb3ea3e7819388e9c8476e
+  batch-runner/gpt54_comparison_preflight.py: e5f680b6f6f55e44ff0a593e910124d8041442844df63b26dbfe68a367c32c5b
+  batch-runner/gpt54_v2_grading_input.py: e18b5a9770349a73ca17444f9dbe4a54e71b9c58d6b42dcf9888144dc392006c
   batch-runner/step8_grade.py: ec23fc941aa0edb54e2858750cc1df5a6a6954a1732cd3f3197d9f9b4b3c18f4
   batch-runner/core/config.py: 483d8ad94ddb78b2a11b8712737ceea1e6b4d3696a8f16fabb84f747a786b48c
   batch-runner/core/agentic_v2_preregistration.py: 02ac15ef8483ac367796feb1fcbadf90a27062c2bf5b3147b75b7e17a0c089e0
