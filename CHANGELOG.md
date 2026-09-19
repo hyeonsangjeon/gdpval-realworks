@@ -12,6 +12,19 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Added
+- **Preregistered the GPT-5.4 Sandbox V2–Codex configuration-bundle comparison.**
+  The plan fixes the existing `advance_check_5` task order and fingerprints,
+  shared model/`xhigh` targets, technical limits, grading and result contracts,
+  and two repeats per condition in V2–Codex–Codex–V2 order. It reuses the
+  existing task selector and V2 ceiling calculation, preserves record-only
+  costs and unknown/partial receipts, and adds no paid execution path.
+  One free parametrized selector passed all 23 cases. A valid configuration
+  still returns `launch_allowed: false`: the pinned adapters do not transmit
+  the required effort or enforce comparable Codex call/token limits, live
+  identity and input bytes remain unverified, and dispatch/pinned grading are
+  not wired to this contract. The specification lists residual differences;
+  it makes no environment-only causal claim or launch-readiness claim.
+
 - **The two per-task cost figures, and the grade directory layout, are
   documented in the public READMEs.** `README.md` and `README_KR.md` gain a
   `Per-task cost records` / `태스크별 비용 기록` section between the dashboard

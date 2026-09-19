@@ -7,6 +7,12 @@
   Azure 연결과 입력 파일 등 비용 외 실행 조건입니다. 최신 결정은 13.27장에 있습니다.
 - 관련 GitHub Project: hyeonsangjeon/projects/5 — 카드 "같은 GPT 모델의 실행 환경별 성능 비교"
 
+2026-09-19 현재 범위는 **14장: GPT-5.4 Sandbox V2–Codex 구성 묶음 비교**입니다.
+소유자는 두 조건을 두 번씩 비교하는 유료 실행을 승인했지만, 이번 변경은
+설정·명세 사전등록뿐입니다. 현재 코드는 공통 최고 reasoning effort와 실행 한도를
+강제할 수 없어 실행을 차단합니다. 1–13장은 당시의 설계·실행 기록으로 보존하며,
+과거 실행이나 무료 검사의 통과를 이번 비교의 준비 완료로 읽지 않습니다.
+
 ---
 
 ## 1. 이 문서가 답하는 질문
@@ -8249,3 +8255,170 @@ main에 들어가도 **아무 표시도 안 났습니다.**
   CI는 이걸 "실패"가 아니라 **`확인하지 않음`**으로 적습니다 — 열쇠를 안 준
   기계는 그 설정을 반증한 게 아니라 **본 적이 없는** 겁니다.
 - **무료 CI 초록불은 유료 실행 허가가 아니고, 환경 준비 완료도 아닙니다.**
+
+## 14. GPT-5.4 Sandbox V2–Codex 구성 묶음 비교 사전등록 (2026-09-19)
+
+### 14.1 이번 비교로 결정할 것과 지금 멈추는 이유
+
+질문은 같은 Foundry GPT-5.4에 같은 작업과 자원 한도를 주었을 때 **Sandbox V2와
+Codex CLI/harness라는 두 구성 묶음의 완료·품질·시간·비용 기록이 어떻게
+달라지는가**입니다. 이후 어느 구성을 더 조사할지 판단하는 최소 비교이지,
+다섯 작업으로 모든 업무의 우승자를 정하는 실험은 아닙니다.
+
+첫 요청의 시스템·개발자 지시문과 도구 정의가 같다고 검증할 수 없으므로
+`comparison: configuration_bundle`로 등록합니다. 의도한 개입은 실행 하니스와
+환경이지만 여러 요소가 함께 바뀝니다. **실행 환경만의 인과효과라고 주장하지
+않습니다.** 기존 세 환경의 첫 요청을 맞추는 `shared_first_request` 경로를 이 두
+하니스도 사용한다고 간주하지 않습니다.
+
+기준은 immutable main `96b181e1128039891f2cbbd9c26af9701e7e8e22`입니다.
+사전등록 파일은
+`batch-runner/experiments/execution_envelope/gpt54_sandboxv2_codex_comparison.yaml`,
+무료 검사기는 `batch-runner/gpt54_comparison_preflight.py`입니다. 새 실행 프레임워크,
+모델 호출, 채점, VM/guest 실행, Azure 조회 또는 workflow dispatch를 추가하지 않습니다.
+
+소유자의 유료 비교 승인은 기록하되 `launch_enabled: false`를 유지합니다.
+현재 두 어댑터는 목표 effort를 전달하지 않으며 Codex의 내부 모델 호출 수도 같은
+한도로 강제하지 못합니다. **설정값이 같은 것과 실제 요청·제한이 같은 것은 다릅니다.**
+무료 검사가 통과해도 이 소스에서 유료 비교를 시작할 수 없습니다.
+
+### 14.2 두 조건에 고정하는 목표값
+
+두 조건은 YAML의 같은 `shared` 값을 참조합니다. 검사기는 조건끼리만 비교하지 않고
+기존 원천 계획·카탈로그·공통 함수에서 읽은 기대값과 각각 대조합니다. 두 조건을
+동시에 더 낮은 effort로 바꾸는 것도 거절합니다.
+
+- 모델: Foundry account `hjeon-fdpo-foundry-eus2`, deployment `gpt-5.4`,
+  `direct-v1` 경로, 요구 응답 모델 `gpt-5.4`, reasoning effort `xhigh`.
+  자동 모델 전환이나 effort 하향 대체는 금지합니다.
+  [GPT-5.4 공식 문서](https://developers.openai.com/api/docs/models/gpt-5.4)와
+  [Codex 설정 문서](https://developers.openai.com/codex/config-reference/)가
+  `xhigh`를 지원값으로 명시합니다. 이것은 해당 Foundry 배포와 현재 어댑터가
+  실제로 지원한다는 확인이 아닙니다. 배포 이름만으로 동일성을 인정하지 않고,
+  지출 전 양쪽의 실제 endpoint·deployment·모델 버전/snapshot을 대조해야 합니다.
+- 작업: 기존 점수 비참조 규칙 `select_advance_check_tasks`의 `advance_check_5`
+  순서를 그대로 사용합니다. `02aa1805-c658-4069-8a6a-02dec146063a`,
+  `0112fc9b-c3b2-4084-8993-5a4abb1f54f1`,
+  `2ea2e5b5-257f-42e6-a7dc-93763f28b19d`,
+  `3baa0009-5a60-4ae8-ae99-4955cb328ff3`,
+  `0818571f-5ff7-4d39-9d2c-ced5ae44299e`입니다.
+  `openai/gdpval@11e7900cdcac61bc4daf59e65feb238acda98fbf`의 parquet,
+  카탈로그, 각 canonical prompt, 두 reference 파일의 지문을 기존 계획에서
+  가져옵니다. 실제 다운로드한 파일·작업 본문의 지문 대조는 실행 전 필수이며,
+  이번 무료 검사는 저장소의 선언값과 원천 파일만 읽습니다.
+- 한도: 수정된 V2 계획의 `ceilings_from`을 재사용합니다. 작업당 모델 turn/call
+  각각 최대 9, 요청당 출력 최대 8,192 tokens, 총 입력 최대 737,280 tokens,
+  총 출력 최대 73,728 tokens, 최대 1,200초, 같은 요청 반복 최대 2입니다.
+  작업당 시도 1회, provider request/stream 재시도 0회, Self-QA와 resume 0회입니다.
+  Codex의 논리 turn을 모델 호출 1회로 세지 않습니다. 양쪽에서 같은 단위로
+  실제 강제되는 증거가 없으면 실행하지 않습니다.
+- 채점: 기준 커밋의 `default_v2_sol_max.yaml`, prompt `v2.2`, judge
+  `gpt-5.6-sol`/`max`, 작업당 채점 pass 1회입니다. 기존 시각·청각 판정 설정과
+  채점기 내부 retry 규칙도 같은 파일을 사용합니다. 실행용 사본은
+  `rubric.revision`을 위 dataset revision에 고정해야 합니다. 원본의 `main`을
+  그대로 해석하는 것은 허용하지 않습니다. 채점기 소스와 프롬프트도 같은
+  immutable revision을 써야 하며, 이번 변경은 채점 코드를 수정하지 않습니다.
+- 결과·비용: 공통 `project_result_row`, 기존 grade schema와 `cost-receipt-v1`을
+  유지합니다. `record_cost_findings_only`, 금액 상한 `null`은 승인된 기존 정책이며
+  비용을 0으로 만들거나 새 예산 상한을 정한다는 뜻이 아닙니다. 해결·채점 영수증,
+  ledger 원문과 지문, usage·가격 누락 사유를 보존합니다. 미가격·미확인 사용량과
+  실패한 작업의 비용도 `null`/partial로 남기며 총액에서 조용히 누락하지 않습니다.
+
+### 14.3 네 번의 실행과 조건 내 변동
+
+| 순서 | 고정 run ID | 조건 | 반복 | 작업 수 |
+|---|---|---|---|---|
+| 1 | `gpt54_v2_codex_v1_v2_r1` | Agentic Sandbox V2 | 1 | 5 |
+| 2 | `gpt54_v2_codex_v1_codex_r1` | Codex CLI/harness | 1 | 5 |
+| 3 | `gpt54_v2_codex_v1_codex_r2` | Codex CLI/harness | 2 | 5 |
+| 4 | `gpt54_v2_codex_v1_v2_r2` | Agentic Sandbox V2 | 2 | 5 |
+
+모든 행은 같은 다섯 작업을 같은 순서로 수행합니다. 각 실행은 새 세션, 작업 디렉터리,
+ledger namespace를 사용하고 이전 답변이나 결과물을 다음 반복에 넘기지 않습니다.
+총 20개 task-condition 관측이며, 30개·220개로 자동 확대하지 않습니다.
+ABBA 순서는 한 방향의 시간 경과 영향을 줄이기 위한 고정 순서일 뿐,
+부하·캐시·provider 변화를 없앴다는 증거가 아닙니다.
+
+조건마다 두 번은 조건 내 흔들림을 보기 위한 최소 반복입니다. 작업별 두 관측값과
+범위를 먼저 보이고, 같은 task ID의 조건 간 차이를 그 옆에 둡니다. 좋은 실행만
+고르거나 두 반복을 독립적인 작업 10개로 세지 않습니다. 현재 점수로 입력을 다시
+고르지 않고, 한 조건에 유리한 별도 prompt나 reference 가공을 추가하지 않습니다.
+이 다섯 작업의 결과를 전체 GDPVal이나 다른 고객의 업무로 일반화하지 않습니다.
+
+### 14.4 실행 전에 공개할 잔여 차이
+
+아래는 공통 제어값을 실제로 강제한 뒤에도 남는 구성 차이입니다. 값과 버전은
+최종 실행 manifest에 적으며 모르는 것은 미확인으로 남깁니다.
+
+1. **첫 요청과 sampling**: V2의 지시문·사용자 입력·도구 schema와 Codex 내장
+   시스템/개발자 지시문·workspace 설명이 다릅니다. Codex 템플릿의 temperature와
+   seed는 실제 요청값을 보장하지 않습니다. 첫 요청 원문과 지문, 실제 전달 설정을
+   보존하며 동일하다는 주장을 하지 않습니다.
+2. **대화와 도구 루프**: V2의 faithful replay·전용 tool contract·한 요청당 도구
+   호출 방식과 Codex의 native loop·history·compaction·tool scheduling이 다릅니다.
+3. **입력의 제시 방식**: V2의 reference staging/추출과 Codex workspace 파일 탐색이
+   다릅니다. 원본 파일 바이트가 같아도 모델에 제시된 내용까지 같지는 않습니다.
+   원본과 가공 후 manifest를 구분해 보존해야 합니다.
+4. **실행·격리 환경**: V2 same-host microVM과 Codex workspace sandbox의 파일시스템,
+   패키지·renderer, 네트워크 정책, 프로세스·이미지·host 버전이 다릅니다. 실행 전에
+   실제 목록을 고정하고, 확인하지 못한 실행 장소를 준비 완료로 기록하지 않습니다.
+5. **usage 관측 단위**: V2의 요청별 기록과 Codex 논리 turn 단위 usage가 다릅니다.
+   두 값 모두를 단순히 모델 호출 수라고 비교하지 않습니다. native 단위와 수집
+   경계를 함께 적고, 알 수 없는 호출·토큰·가격을 0으로 채우지 않습니다.
+6. **시간에 따라 바뀌는 외부 조건**: host 부하·스케줄링·provider cache·서비스 drift와
+   채점 변동은 완전히 통제되지 않습니다. 시작/끝 시각과 실행 환경을 기록합니다.
+   채점 설정을 고정해도 판정자가 맞고 재현 가능하다는 검증을 대신하지 않습니다.
+
+### 14.5 해소해야 하는 실행 차단 조건
+
+다음은 받아들이고 측정할 잔여 차이가 아니라, 지출 전에 해소해야 할 불일치입니다.
+
+- `v2_reasoning_effort_unwired`: `AzureFoundryVoice.next_turn`의 실제 payload에
+  reasoning effort가 없습니다. YAML에 `xhigh`를 적는 것만으로는 전달되지 않습니다.
+- `codex_reasoning_effort_unwired`: `CodexProviderSettings.config_overrides`와
+  `CodexAgentRunner.start_thread`가 effort를 전달하지 않습니다.
+- `codex_native_model_call_and_token_limits_unenforced`: Codex 논리 turn 안의 모델
+  호출 수와 토큰 한도를 V2와 같은 단위로 강제하는 연결이 없습니다.
+- `live_deployment_identity_and_input_bytes_not_verified`: 실제 Foundry 배포의
+  버전·capability, 양쪽 직렬화 요청의 `xhigh`, 다운로드한 입력 바이트는 이번에
+  확인하지 않았습니다. API에 묻는 유료 probe를 무료 검증으로 부르지 않습니다.
+- `comparison_dispatch_and_pinned_grading_not_wired`: 기존 두 workflow는 이번
+  사전등록 파일을 실행 설정으로 소비하지 않습니다. 공통 한도·재시도·단일 시도와
+  고정 rubric revision을 반영한 실행용 사본 및 지출 전 관문 연결이 필요합니다.
+
+무료 검사기는 원천 파일 11개의 지문을 확인하고, 계획의 canonical JSON 지문을
+반환합니다. `configuration_valid: true`와 `launch_allowed: false`는 함께 나올 수
+있으며 CLI는 **항상 종료 코드 2**를 반환합니다. 현재 코드를 실행할 수 없다는
+판정입니다. 이 검사기가 아직 기존 유료 workflow 앞에 연결된 것은 아니므로,
+저장소의 모든 지출 경로를 막는 안전장치라고 주장하지 않습니다.
+
+따라서 **이 PR을 merge한 직후 요구 조건대로 실행할 수 있는 유료 명령은 없습니다.**
+추후 별도 검토에서 어댑터·한도·입력/모델 검증을 연결하고 새 immutable HEAD와
+source pins로 사전등록을 갱신해야 합니다. 재사용할 진입점은
+`.github/workflows/agentic-v2-stage-run.yml`과 `.github/workflows/batch-run.yml`입니다.
+기존 템플릿을 그대로 dispatch하거나 effort를 낮추어 대신 실행하지 않습니다.
+
+### 14.6 판정, 중단 규칙, 검토 경계
+
+관측은 task별 완료 여부·실패 단계, 고정 rubric의 점수, wall time, native turn과
+모델·도구 호출의 관측 단위, 원문 usage와 비용 영수증입니다. 점수는 해당 판정자의
+출력이지 절대적 품질의 정답이 아닙니다. 실패·누락은 분모에서 빼거나 0점/0원으로
+바꾸지 않고 따로 보입니다. 이번 최소 실행은 채점기 정확도·안정성 검증이 아닙니다.
+
+어느 조건이 낫다는 사전 수치 문턱은 승인되지 않았습니다. 조건 간 차이가 반복 내
+변동과 구분되지 않거나 작업별 방향이 엇갈리면 우열을 결론내리지 않습니다.
+모델·effort·입력·한도·grader 동일성이 깨지면 비교 자체를 유효하다고 해석하지
+않습니다. 이 조건들은 기대한 결론을 포기하게 하는 반증·중단 기준입니다.
+
+지출 전 parity/identity 검사에서 미확인 또는 불일치면 첫 유료 호출 전에 멈춥니다.
+실행 중에도 모델/입력 drift, 한도 강제 실패, receipt 원문 손실을 발견하면 다음
+유료 호출 전에 중단하고 이미 생긴 기록을 보존합니다. 가격 누락만으로는
+record-only 정책을 바꾸지 않되 그 총액을 확정하지 않습니다. 계획한 네 실행이
+끝나면 멈추며 실패를 감추는 추가 반복·재채점·자동 확대는 하지 않습니다.
+
+`experiment-design`에 따라 비교 질문, 움직이는 축, 최소 반복, 판정자 한계,
+설정과 강제의 차이, 측정 단위, 입력 선택, 중단 규칙, 재사용 범위를 고정했습니다.
+이번 단일 무료 selector는 두 조건과 의도적으로 바꾼 계획을 검사할 뿐, 모델·채점·
+VM 또는 Azure를 실행하지 않습니다. 검증 명령과 실제 결과는 검증 후
+`tasks/LATEST_TASK_RESULT/README.md`에 기록합니다. 현재 변경에 대한 immutable-HEAD
+리뷰와 CI 판단은 아직 남아 있으며, 승인·실험 성적·준비 완료를 주장하지 않습니다.
