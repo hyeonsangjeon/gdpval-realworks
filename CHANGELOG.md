@@ -604,6 +604,20 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Require registered GPT-5.4 Codex Step 2 and Sandbox V2 runs to verify local
+  checkout lineage before provider/auth/client or free voice-safety setup.
+  The read-only gate reuses existing ready, reservation and bundle contracts;
+  it checks canonical marker bytes, the exact detached commit/tree, run identity
+  and quarantine absence without requiring an external source worktree.
+  Runtime Git calls use only bounded local `rev-parse` with a fixed environment.
+  Registered IDs cannot bypass the gate by removing their controls or using the
+  other harness. Non-comparison absent/null behavior is unchanged. The source
+  set still has 31 pins. The sole targeted offline selector reported
+  `50 passed in 69.18s (0:01:09)`. External inference identity approval, native
+  result-bundle support, workflow deployment, served capability, native caps,
+  wire consumption and usage/tariff evidence remain outstanding. Both launch
+  flags remain false; historical evidence is unchanged.
+
 - Reduce PR #626's input-bundle selector preparation cost after Backend Tests
   run `35454998454`, job `105928601144`, was cancelled at 91% by its 45-minute
   timeout without a reported test failure. A module-scoped fixture now builds
