@@ -226,8 +226,12 @@ def _requirements_closure(batch_root: Path, entry: Path) -> list[Path]:
     return ordered
 
 
-def compute_grader_source_hash(config_path: str | Path, config: dict) -> str:
-    batch_root = _batch_runner_root()
+def compute_grader_source_hash(
+    config_path: str | Path, config: dict, *, batch_root: Path | None = None,
+) -> str:
+    # Offline plans can bind the same source closure without changing cwd.
+    # Runtime callers retain the existing source-root and byte-hashing rules.
+    batch_root = _batch_runner_root() if batch_root is None else batch_root.resolve()
     core_root = batch_root / "core"
     if core_root.is_symlink() or not core_root.is_dir():
         raise ValueError("grader source directory is missing or symlinked: core")

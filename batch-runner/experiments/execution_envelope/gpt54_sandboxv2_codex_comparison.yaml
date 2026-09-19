@@ -1,8 +1,8 @@
-# Preregistered targets consumed by the offline dispatch-plan compiler.
+# Preregistered targets consumed by the offline dispatch/grading-plan compilers.
 # Generated entrypoint configs are review artifacts, not launch authorization.
 # The free preflight deliberately refuses paid launch on the pinned source.
 plan_version: gpt54-sandboxv2-codex-comparison-v1
-base_sha: 2a1ecaf7d6a6f18ba21add7884414d041bc1b5d8
+base_sha: 5c3a69278a8f005db8ea0aed72d13d20909c57df
 comparison: configuration_bundle
 paid_comparison_approved: true
 launch_enabled: false
@@ -55,17 +55,22 @@ shared: &shared
     resume_max_rounds: 0
   grading:
     config: batch-runner/grading_configs/default_v2_sol_max.yaml
-    source_sha: 96b181e1128039891f2cbbd9c26af9701e7e8e22
+    # Starting source provenance; reviewed bytes are bound by pins and closure.
+    source_sha: 5c3a69278a8f005db8ea0aed72d13d20909c57df
+    # Existing helper's full closure with the ORIGINAL template path/bytes.
+    # Not the eventual source hash of a materialized, revision-pinned config.
+    template_source_sha256: c10ea303f212bab87ea6303cb41ee51e21430e6bc35df7a69b9a63d265f3a241
     rubric_revision: 11e7900cdcac61bc4daf59e65feb238acda98fbf
     prompt_version: v2.2
     judge_model: gpt-5.6-sol
     judge_effort: max
-    # A run-specific copy must pin rubric.revision, never resolve mutable main.
+    # One step8 invocation per inference run; not an unused grader config knob.
     grades_per_task: 1
   results:
     projector: core.result_projection.project_result_row
     receipt_schema: cost-receipt-v1
     grade_schema: batch-runner/schemas/grade.schema.json
+    grade_schema_version: '1.4'
     missing_or_unpriced_usage: preserve_null_and_partial_reasons
   cost:
     policy: record_cost_findings_only
@@ -104,7 +109,8 @@ runs:
 # Seal the reviewed templates and the boundaries on which the refusal rests.
 # These are file bytes, not a claim to have checked live inputs or a deployment.
 source_pins:
-  batch-runner/gpt54_comparison_preflight.py: 82af9f1ef7930902f0c3486c8ddf59acffb99d86f33da02607b3989e81609be2
+  batch-runner/gpt54_comparison_preflight.py: 503a3bd36f998b8d288e9c40f0ab0277b549ca7374bb3ea3e7819388e9c8476e
+  batch-runner/step8_grade.py: ec23fc941aa0edb54e2858750cc1df5a6a6954a1732cd3f3197d9f9b4b3c18f4
   batch-runner/core/config.py: 483d8ad94ddb78b2a11b8712737ceea1e6b4d3696a8f16fabb84f747a786b48c
   batch-runner/core/agentic_v2_preregistration.py: 02ac15ef8483ac367796feb1fcbadf90a27062c2bf5b3147b75b7e17a0c089e0
   batch-runner/core/execution_envelope_tasks.py: dd934314ce447b78efa45ad9d349f198d1e429531eccdf430106b87335dc2ea0

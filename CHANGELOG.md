@@ -13,6 +13,20 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Compile four offline grading specifications from the GPT-5.4 dispatch plan,
+  preserving its ABBA order, five-task cohort, and isolated checkouts. Each
+  specification binds the real `step8_grade.py` arguments, input paths,
+  revision-pinned grader config, and grade/receipt output templates. The
+  preflight checks 22 source pins and the existing grader source-closure hash,
+  then compares any supplied combined dispatch/grading document exactly.
+  One targeted selector reported `36 passed in 22.79s`, with subprocess,
+  network, authentication, and grader construction forbidden. This closes
+  offline pinned-grading artifact/source binding only. Launch and 220-task
+  progression remain false; input materialization, verified inference identity,
+  served capability, native caps, workflow gates, and usage/tariff evidence
+  remain outstanding. Production grader defaults, schemas, and historical
+  ledgers are unchanged.
+
 - Compile the GPT-5.4 comparison manifest into four immutable offline run
   specifications in V2 r1, Codex r1, Codex r2, V2 r2 order. The compiler reuses
   the existing templates and parsers to produce canonical JSON configs and
