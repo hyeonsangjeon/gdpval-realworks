@@ -8273,9 +8273,10 @@ Codex CLI/harness라는 두 구성 묶음의 완료·품질·시간·비용 기�
 
 최초 사전등록 기준은 immutable main
 `96b181e1128039891f2cbbd9c26af9701e7e8e22`입니다. Codex 요청 설정 전달을
-추가한 기준은 `a5ed62bd55471c0fd8bdd637c9312315a17ebf4b`이고, 이번 V2
-effort 전달의 immutable main 기준은
-`34b3327d8a9beda58754efbf88e6bbf6d643cc60`입니다. source 경계를 이 기준으로
+추가한 기준은 `a5ed62bd55471c0fd8bdd637c9312315a17ebf4b`이고, V2 effort
+전달의 기준은 `34b3327d8a9beda58754efbf88e6bbf6d643cc60`입니다. 이번
+오프라인 dispatch-plan compiler는 immutable main
+`2a1ecaf7d6a6f18ba21add7884414d041bc1b5d8`에서 시작합니다. source 경계를
 갱신하되 기존 grader revision과 과제·입력·반복·한도는 바꾸지 않습니다.
 사전등록 파일은
 `batch-runner/experiments/execution_envelope/gpt54_sandboxv2_codex_comparison.yaml`,
@@ -8403,18 +8404,19 @@ ABBA 순서는 한 방향의 시간 경과 영향을 줄이기 위한 고정 순
   버전·capability와 다운로드한 입력 바이트는 이번에 확인하지 않았습니다.
   로컬 직렬화의 `xhigh`와 실제 배포가 받은 요청·제공한 capability는 구분합니다.
   API에 묻는 유료 probe를 무료 검증으로 부르지 않습니다.
-- `comparison_dispatch_and_pinned_grading_not_wired`: 기존 두 workflow는 이번
-  사전등록 파일을 실행 설정으로 소비하지 않습니다. 공통 한도·재시도·단일 시도와
-  고정 rubric revision을 반영한 실행용 사본 및 지출 전 관문 연결이 필요합니다.
+- `comparison_pinned_grading_not_wired`: 아래 compiler가 사전등록을 기존
+  추론 진입점용 설정·인자로 변환하지만, 고정 rubric revision으로 채점하는
+  연결은 구현하지 않습니다. workflow와 지출 전 관문도 연결하지 않습니다.
 - `comparison_usage_and_tariff_evidence_unverified`: 이 비교에서 실제 모델·usage와
   비용 단위가 연결되는 증거는 아직 없습니다. 가격 누락만을 새 지출 차단 규칙으로
   삼지는 않으며, 기존 record-only 정책과 unknown/null/partial 기록을 유지합니다.
 
-무료 검사기는 원천 파일 17개의 지문을 확인합니다. 기존 15개에 V2 stage 진입점
-`scripts/run_agentic_v2_stage.py`와 그 plan reader인
-`core/agentic_v2_stage_one_budget.py`를 추가했습니다. 계획의 canonical JSON
-지문과 실제 어댑터가 쓰는 helper의 V2 Responses 필드·Codex override도 반환합니다.
-잘못된 계획은 어느 쪽 요청 증거도 반환하지 않습니다.
+무료 검사기는 원천 파일 21개의 지문을 먼저 확인합니다. 기존 17개에 compiler를
+포함하는 `gpt54_comparison_preflight.py`, 소스 기준 경로를 정하는
+`core/config.py`, seal helper인 `core/agentic_v2_preregistration.py`, cohort
+selector인 `core/execution_envelope_tasks.py`를 추가했습니다. 계획의 canonical
+JSON 지문과 실제 어댑터 helper의 V2 Responses 필드·Codex override도 반환합니다.
+잘못된 계획은 요청 증거나 compiled plan을 반환하지 않습니다.
 `configuration_valid: true`와 `launch_allowed: false`는 함께 나올 수
 있으며 CLI는 **항상 종료 코드 2**를 반환합니다. 현재 코드를 실행할 수 없다는
 판정입니다. 이 검사기가 아직 기존 유료 workflow 앞에 연결된 것은 아니므로,
@@ -8425,6 +8427,45 @@ ABBA 순서는 한 방향의 시간 경과 영향을 줄이기 위한 고정 순
 source pins로 사전등록을 갱신해야 합니다. 재사용할 진입점은
 `.github/workflows/agentic-v2-stage-run.yml`과 `.github/workflows/batch-run.yml`입니다.
 기존 템플릿을 그대로 dispatch하거나 effort를 낮추어 대신 실행하지 않습니다.
+
+#### 오프라인 dispatch-plan 경계
+
+`compile_dispatch_plan(manifest)`는 검증된 manifest에서 불변 typed run spec
+4개를 만듭니다. 순서는 **V2 r1 → Codex r1 → Codex r2 → V2 r2**이며 run id,
+5개 task id/order, provider/model/xhigh, 반복 번호와 조건을 바꿀 수 없습니다.
+입력·reference 지문, 한도, grader, 결과·비용 계약은 `shared_controls`에 원문
+값으로 보존합니다. JSON 설정은 기존 YAML reader가 그대로 읽을 수 있고,
+키 순서와 호스트 경로·시간·환경변수에 의존하지 않는 UTF-8 bytes로 직렬화합니다.
+
+- V2: 기존 corrected template에서 model의 `xhigh`, direct-v1 계정 선언,
+  고정 task id와 timeout/retry/replay 값을 반영합니다. 진입점은
+  `scripts/run_agentic_v2_stage.py`이며 `--stage advance_check_5`, 명시적인
+  `--plan`, `--parquet`, `--dataset-root`, `--run-id`, `--into` 인자를 보존합니다.
+- Codex: 기존 exp033 template에서 experiment id, task id/order, model/xhigh,
+  1200초 timeout, 추가 retry/resume 0을 반영합니다. 기존 `ExperimentConfig`
+  parser로 검사하며, `step1_prepare_tasks.py --config` 다음
+  `step2_run_inference.py --condition condition_a --max-retries 0
+  --resume-max-rounds 0 --no-resume`의 인자를 데이터로 반환합니다.
+
+각 run은 `comparison-runs/<run_id>` 아래의 **별도 reviewed-source checkout**을
+요구합니다. `source_base_sha`는 시작점이고, 실제 사본은 새 reviewed HEAD의
+source pins를 만족해야 합니다. 기존 batch 진입점은 cwd가 아니라 소스 위치로
+workspace를 정하므로 같은 checkout에서 cwd만 바꾸는 것은 반복 격리가 아닙니다.
+각 checkout의 `data/gdpval-local`에 같은 고정 snapshot을 놓고,
+`batch-runner/comparison-run.json`을 설정으로 쓰는 계약입니다. compiler는
+checkout·설정·입력 파일을 만들거나 읽어 검증하는 실행기가 아닙니다.
+
+기존 preflight는 compiled plan과 그 지문을 출력하고, `--dispatch-plan`으로
+받은 문서가 manifest에서 다시 만든 계획과 정확히 같은지도 검사합니다. 설정
+내용, argv, 반복, 경로, source pins, control 또는 launch flag가 달라지면
+거부합니다. subprocess·모델·VM·Azure·HF·workflow·credential 접근은 없습니다.
+
+이 변경이 해소하는 것은 **dispatch artifact 생성과 source-binding**뿐입니다.
+기존 template의 safety/cost 코드는 그대로이며 복사된 과거 budget 기록은 이번
+비교의 승인이나 새 가격 정책이 아닙니다. 실제 materialization, workflow 관문,
+live input/identity 검증, native caps, pinned grading, usage/tariff 확인은
+여전히 별도 작업입니다. `launch_allowed`와 `full_220_allowed`는 항상 false이고
+CLI는 항상 2로 끝납니다. 역사적 입력·ledger·sealed evidence는 고치지 않습니다.
 
 ### 14.6 판정, 중단 규칙, 검토 경계
 
@@ -8446,7 +8487,7 @@ record-only 정책을 바꾸지 않되 그 총액을 확정하지 않습니다. 
 
 `experiment-design`에 따라 비교 질문, 움직이는 축, 최소 반복, 판정자 한계,
 설정과 강제의 차이, 측정 단위, 입력 선택, 중단 규칙, 재사용 범위를 고정했습니다.
-이번 무료 검증은 V2 요청 경로와 두 조건의 사전등록 selector를 한 pytest 명령으로
-검사할 뿐, 모델·채점·VM 또는 Azure를 실행하지 않습니다. 검증 명령과 실제 결과는 검증 후
+이번 무료 검증은 compiler/preflight를 직접 판정하는 단일 selector만 실행하며,
+모델·채점·VM 또는 Azure를 실행하지 않습니다. 검증 명령과 실제 결과는 검증 후
 `tasks/LATEST_TASK_RESULT/README.md`에 기록합니다. 현재 변경에 대한 immutable-HEAD
 리뷰와 CI 판단은 아직 남아 있으며, 승인·실험 성적·준비 완료를 주장하지 않습니다.
