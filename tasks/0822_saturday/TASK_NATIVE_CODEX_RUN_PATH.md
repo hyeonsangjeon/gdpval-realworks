@@ -1482,7 +1482,8 @@ The offline checker returns both `launch_allowed: false` and
 `full_220_allowed: false`, and always exits 2, even for the valid registration.
 It rejects identity/fingerprint/control drift, model fallbacks, relays, repeat
 expansion, reuse of the 220-task grading identity, and attempts to enable the
-full run. It also checks 13 source-file pins. This is not yet a runtime gate
+full run. It also checks 14 source-file pins, including the shared
+`gpt54_comparison_preflight.py` plan reader. This is not yet a runtime gate
 in front of the repository's existing paid workflows.
 
 **No compliant paid pilot command exists immediately after this PR merges.**

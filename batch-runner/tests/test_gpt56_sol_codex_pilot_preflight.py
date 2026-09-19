@@ -14,11 +14,14 @@ from gpt56_sol_codex_pilot_preflight import (
     BASELINE,
     LAUNCH_BLOCKERS,
     PLAN,
+    REQUIRED_SOURCES,
     ROOT,
     inspect_plan,
     load_plan,
     main,
 )
+
+PLAN_READER_SOURCE = "batch-runner/gpt54_comparison_preflight.py"
 
 
 @pytest.mark.parametrize(
@@ -61,6 +64,14 @@ from gpt56_sol_codex_pilot_preflight import (
         (("results", "missing_or_unpriced_usage"), "zero"),
         (("cost", "use_foundry_or_openai_tariff_for_copilot"), True),
         (("source_pins",), {}),
+        pytest.param(
+            ("source_pins", PLAN_READER_SOURCE), "remove_pin",
+            id="plan-reader-pin-required",
+        ),
+        pytest.param(
+            ("source_pins", PLAN_READER_SOURCE), "0" * 64,
+            id="plan-reader-digest-checked",
+        ),
         (("launch_enabled",), True),
     ],
 )
@@ -72,12 +83,21 @@ def test_gpt56_sol_copilot_pilot_is_pinned_and_fails_closed(
         target = plan
         for key in path[:-1]:
             target = target[key]
-        target[path[-1]] = (
-            list(reversed(target[path[-1]])) if value == "reverse_tasks" else value
-        )
+        if value == "remove_pin":
+            del target[path[-1]]
+        else:
+            target[path[-1]] = (
+                list(reversed(target[path[-1]])) if value == "reverse_tasks" else value
+            )
 
     result = inspect_plan(plan)
     assert result["configuration_valid"] is (not path), result
+    if path == ("source_pins", PLAN_READER_SOURCE):
+        assert result["configuration_problems"] == [
+            "source_pin_set"
+            if value == "remove_pin"
+            else f"source_pin:{PLAN_READER_SOURCE}"
+        ]
     assert result["launch_allowed"] is False
     assert result["full_220_allowed"] is False
     assert result["launch_blockers"] == list(LAUNCH_BLOCKERS)
@@ -88,6 +108,8 @@ def test_gpt56_sol_copilot_pilot_is_pinned_and_fails_closed(
     assert json.loads(capsys.readouterr().out) == result
 
     if not path:
+        assert PLAN_READER_SOURCE in REQUIRED_SOURCES
+        assert PLAN_READER_SOURCE in plan["source_pins"]
         # These are real adapter/config checks, with no SDK or auth execution.
         baseline = ExperimentConfig.from_yaml(str(ROOT / BASELINE))
         assert baseline.validate() == []

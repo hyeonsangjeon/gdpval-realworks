@@ -37,6 +37,7 @@ REQUIRED_SOURCES = {
     GRADER,
     ENVELOPE + "gdpval_task_catalog.json",
     ENVELOPE + "advance_check_plan.yaml",
+    "batch-runner/gpt54_comparison_preflight.py",
     "batch-runner/core/experiment_config.py",
     "batch-runner/core/config.py",
     "batch-runner/core/codex_runtime_config.py",

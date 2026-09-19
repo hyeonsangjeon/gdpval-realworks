@@ -2,18 +2,25 @@
 
 - Updated: 2026-09-19 (UTC)
 
-## Current Task: GitHub Copilot GPT-5.6 Sol Codex Pilot Preregistration
+## Current Task: #615 Pilot Source-Pin Review Correction
 
 ### Scope and Outcome
 
-The five-task pilot is preregistered, but its exact route and runtime controls
-cannot yet be expressed and verified. Execution remains blocked. This work
-starts from immutable main `6ccd4ae346d302e3da0af455a3c5a72ec79a6984` on branch
-`b/gpt56-sol-codex-pilot-20260919`, in the new worktree
+The missing plan-reader pin identified in review is now included. The required source set and
+pilot YAML now pin `batch-runner/gpt54_comparison_preflight.py` at SHA-256
+`d7ad659742ba071c0067b2873e0ee8adf9e627be135c5536af10228b8ba35753`.
+The shared parser itself is unchanged. Its pin is required and its digest is
+checked, so a parser change cannot silently leave the declared source set valid.
+
+The five-task pilot remains preregistered, but its exact route and runtime
+controls cannot yet be expressed and verified. Execution remains blocked.
+The immutable main base is `6ccd4ae346d302e3da0af455a3c5a72ec79a6984`.
+This correction uses branch `b/gpt56-sol-codex-pilot-20260919` in the existing
+PR worktree
 `/ai-work/copilot/.worktrees/gdpval-realworks-b-gpt56-sol-codex-pilot-20260919`.
 The preservation checkout and prior worktrees were not changed.
 
-Exactly six files differ from that base:
+Exactly six files differ from that base; this correction stays within them:
 
 - `batch-runner/experiments/execution_envelope/gpt56_sol_copilot_codex_pilot.yaml`
 - `batch-runner/gpt56_sol_codex_pilot_preflight.py`
@@ -52,13 +59,18 @@ Sol judge shares the solver's model family. No causal ranking is claimed.
 
 ### Verification
 
-The only local selector ran once:
+The only local selector ran once on the corrected plan, checker, and test:
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider batch-runner/tests/test_gpt56_sol_codex_pilot_preflight.py::test_gpt56_sol_copilot_pilot_is_pinned_and_fails_closed
 ```
 
-Result: **`38 passed in 10.16s`**.
+Result: **`40 passed in 10.09s`**.
+
+Two focused cases remove only the shared parser's pin or replace only its
+digest. They assert `source_pin_set` and
+`source_pin:batch-runner/gpt54_comparison_preflight.py`, respectively. The
+unchanged case also asserts that the parser belongs to both pin sets.
 
 The unchanged registration validates. Model/provider/harness substitutions,
 effort/context changes, fallback flags, task/input/instruction drift, limit
@@ -72,7 +84,7 @@ The valid case also checks the real experiment/provider classes: the existing
 Foundry config validates, a Copilot provider is rejected, a synthetic
 non-Microsoft endpoint is refused, and the provider dataclass has no effort
 or context fields. No SDK, authentication command, or model client is started.
-The preflight checks 13 source-file pins and computes a canonical plan hash.
+The preflight checks 14 source-file pins and computes a canonical plan hash.
 It does not verify live Copilot capability or downloaded input bytes and is
 not wired into the existing paid workflows.
 
@@ -101,22 +113,23 @@ source boundary and pins for that implementation. Existing Foundry workflows
 or a personal Codex session are not substitutes. Then run the pilot, retain
 all evidence, and stop for the separate full-run gate.
 
-This change has not received immutable-HEAD review. No approval, CI success,
-or merge result is claimed. The next gate is leader review of the committed
-configuration/specification and automatic CI evidence. The approved paid
-pilot and full benchmark have not run in this task.
+Review of immutable HEAD `e7b0b3d008a3513492d6f4eb5a8abb61b83c3700` was
+blocked on the omitted parser pin. This correction addresses that finding;
+fresh leader review of the new committed HEAD and automatic CI evidence is
+still pending. No approval, CI success, or merge result is claimed. The
+approved paid pilot and full benchmark have not run in this task.
 
 ### Skills
 
-The available skill and repository agent catalogs were inspected once.
-`experiment-design` was applied before configuration work to fix the question,
-controls, pass/fail decision, lack of repeat evidence, residual differences,
-measurement units, grader limits, stop rules, and generalization boundary.
-`openai-docs` was used for official Sol/Codex capability references, not as
-proof of Copilot access or transport. `im-not-ai-en` was applied to English
-specification, completion, and PR wording. Protected literals and evidence
-limits were checked manually; no extra skill verification script ran under
-the one-selector limit.
+The original preregistration inspected the available skill and repository
+agent catalogs once. It used `experiment-design` for controls, decisions,
+confounds, measurement limits, and stop rules, and `openai-docs` for official
+Sol/Codex references, not proof of Copilot access. This deterministic pin
+correction changes no experiment design or model capability, so those skills
+were not reinvoked. `im-not-ai-en` was applied to the corrected English
+completion and PR wording. Protected literals and evidence limits were
+checked manually; no extra skill verification script ran under the
+one-selector limit.
 
 Experiment-report skills do not apply: no paid experimental results are
 reported. Repository-readiness, UI, and animation skills do not apply.
