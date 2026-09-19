@@ -13,6 +13,20 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Add exact run-config bundles for the GPT-5.4 comparison in caller-provided
+  disposable source checkouts. The materializer validates typed dispatch and
+  grading recipes, the combined plan, all 29 source pins and destination paths
+  before publishing four compiled files with the existing atomic no-clobber
+  writer. It publishes the ready marker last; partial trees cannot be reused.
+  V2 and Codex capture gates recheck the marker and exact file bytes before
+  provider/auth/client construction. Legacy absent/null controls retain their
+  existing behavior. The one targeted offline selector reported
+  `99 passed in 94.30s (0:01:34)`. The marker proves local config consistency,
+  not full grader provenance, actual input consumption or launch permission.
+  Checkout/data deployment, external identity approval, native result-bundle
+  support, workflow gates, served capability, native caps and usage/tariff
+  evidence remain outstanding. Both launch flags remain false.
+
 - Wire pre-execution input capture into the GPT-5.4 comparison's Sandbox V2
   path. A typed plan control and an exact r1/r2 run ID require canonical local
   input capture and immediate byte/digest verification before the existing

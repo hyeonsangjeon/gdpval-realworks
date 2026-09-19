@@ -2,7 +2,7 @@
 
 This binds local source bytes and the held TaskToRun objects. It does not prove
 served capability, later wire prompt equality, publication identity or approval.
-The Codex atomic single-file writer is reused without changing that path.
+The Codex atomic single-file writer is reused unchanged.
 """
 
 from __future__ import annotations
@@ -72,7 +72,9 @@ def _binding(
         _expected_binding, _json_object, _same, _source_snapshot, _v2_consumer,
     )
     from gpt54_v2_grading_input import _read_bytes
+    from gpt54_run_config_bundle import verify_run_config_bundle
 
+    verify_run_config_bundle(checkout=root, run_id=run_id, condition="sandbox_v2")
     dataset_root = root / DATASET_ROOT
     _assert_no_symlink_ancestors(dataset_root / "data")
     _same("dataset parquet file set", sorted(path.name for path in (dataset_root / "data").iterdir()), [PARQUET_NAME])

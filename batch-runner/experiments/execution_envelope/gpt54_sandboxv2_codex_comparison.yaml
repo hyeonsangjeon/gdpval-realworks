@@ -1,8 +1,10 @@
 # Preregistered targets for offline plans, input materializers and attestation.
 # Generated entrypoint configs are review artifacts, not launch authorization.
 # The free preflight deliberately refuses paid launch on the pinned source.
+# Both capture gates require the exact local config bundle's final ready marker.
+# Its publication does not create a checkout, stage inputs or authorize launch.
 plan_version: gpt54-sandboxv2-codex-comparison-v1
-base_sha: 871e138558c3ada8d9c3cd93de2b07b676faeab9
+base_sha: baa81d4f7ca65680c04f7f19d3a375cd60c8f39b
 comparison: configuration_bundle
 paid_comparison_approved: true
 launch_enabled: false
@@ -56,7 +58,7 @@ shared: &shared
   grading:
     config: batch-runner/grading_configs/default_v2_sol_max.yaml
     # Starting source provenance; reviewed bytes are bound by pins and closure.
-    source_sha: 871e138558c3ada8d9c3cd93de2b07b676faeab9
+    source_sha: baa81d4f7ca65680c04f7f19d3a375cd60c8f39b
     # Existing helper's full closure with the ORIGINAL template path/bytes.
     # Not the eventual source hash of a materialized, revision-pinned config.
     template_source_sha256: e1bfb2ce4ff453a65cff4bac861219ddc0945cb41a194a4437354fa361d7ddbf
@@ -115,12 +117,13 @@ runs:
 # Seal the reviewed templates and the boundaries on which the refusal rests.
 # These are file bytes, not a claim to have checked live inputs or a deployment.
 source_pins:
-  batch-runner/gpt54_comparison_preflight.py: ba68b201558088c25abcd334a62b8dc717b2de1bed4ae328026be6b82cb6d911
+  batch-runner/gpt54_comparison_preflight.py: 06ee9bcac5d07e234a1aef81a197d7bb15f5107dd27e981a830cbbf84936e592
   batch-runner/gpt54_v2_grading_input.py: 3fae995caf3d785d64fad02280d77a6853389a2ff12be2e7165e4868b4b0b830
   batch-runner/gpt54_codex_grading_input.py: a61fd74012dd588225fb77359a2e7c0880e7a10918b33f9658d2a0d78f0d58c8
   batch-runner/gpt54_prepared_input_attestation.py: 6e78388a36446317d02f80409079e3a338eced6245afc56867f5438c0183ff9a
-  batch-runner/gpt54_codex_input_capture.py: 64c9c33d4e2a553e881c752cda24ce5126e00c62b8ed0927662219d69dcfa9c5
-  batch-runner/gpt54_v2_input_capture.py: 49af9308c5c548031c2d7abb1121f51a2f66ea7239159806cfff9c95fee9dd17
+  batch-runner/gpt54_codex_input_capture.py: 4f3be0a743e07d649225eda6fb11f77edf2123221916ff9ef2aa5cba76e93871
+  batch-runner/gpt54_v2_input_capture.py: dc5aa6d9c08f0be1e5d66638d9b26e47e79028b4ce3f764add05313eac4f8b35
+  batch-runner/gpt54_run_config_bundle.py: 71b4bd5247fed0aaba827e6d6e54d1cc33b5d91c494760d996f5eb815d527b9d
   batch-runner/prepare_dataset.py: 17ccad9fe7a360daaa02329481c11f89135ca2cf107eb70355836b11fd4b2d5e
   batch-runner/step8_grade.py: ec23fc941aa0edb54e2858750cc1df5a6a6954a1732cd3f3197d9f9b4b3c18f4
   batch-runner/core/config.py: 483d8ad94ddb78b2a11b8712737ceea1e6b4d3696a8f16fabb84f747a786b48c

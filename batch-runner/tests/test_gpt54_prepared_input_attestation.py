@@ -41,6 +41,37 @@ def _write(path, value):
     path.write_bytes(_json(value) + b"\n")
 
 
+def _bundle_fixture(checkout, *, manifest, combined_plan, run, materialize=True):
+    """Supply a disposable source directory, without Git or history/data copies.
+
+    Each pinned source is a fresh regular file. The production compiler and
+    materializer still check every pin and recipe; this fixture replaces none
+    of their validation. Runtime fixtures add their existing tiny dataset.
+    """
+    import gpt54_run_config_bundle as bundle
+
+    checkout.mkdir(parents=True, exist_ok=True)
+    for name in manifest["source_pins"]:
+        target = checkout / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with target.open("xb") as stream:
+            stream.write((preflight.ROOT / name).read_bytes())
+        assert target.is_file() and not target.is_symlink()
+        assert target.stat().st_nlink == 1
+    manifest_path = checkout / bundle.MANIFEST_PATH
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    with manifest_path.open("xb") as stream:
+        stream.write(_json(manifest))
+    if not materialize:
+        return None
+    plan = preflight.compile_grading_plan(manifest)
+    grading_run = next(row for row in plan.runs if row.run_id == run.run_id)
+    return bundle.materialize_run_config_bundle(
+        run, grading_run, manifest=manifest, combined_plan=combined_plan,
+        checkout=checkout,
+    )
+
+
 def _fixture(tmp_path, monkeypatch, case):
     """Use synthetic data pins only; production has no bypass or pin override.
 
@@ -512,7 +543,7 @@ def test_prepared_input_attestation_binds_actual_bytes_without_execution(case, t
                 assert inspection["launch_allowed"] is inspection["full_220_allowed"] is False
                 assert "live_deployment_identity_and_input_bytes_not_verified" in inspection["launch_blockers"]
                 assert "comparison_materialization_and_workflow_gates_not_wired" in inspection["launch_blockers"]
-                assert len(preflight.REQUIRED_SOURCES) == 28
+                assert len(preflight.REQUIRED_SOURCES) == 29
                 assert set(inputs["manifest"]["source_pins"]) == preflight.REQUIRED_SOURCES
                 sol = preflight.load_plan(preflight.ROOT / preflight.ENVELOPE / "gpt56_sol_copilot_codex_pilot.yaml")
                 parser = "batch-runner/gpt54_comparison_preflight.py"
