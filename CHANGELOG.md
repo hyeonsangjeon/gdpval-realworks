@@ -13,6 +13,22 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Add read-only prepared-input attestation for the GPT-5.4 comparison. It
+  checks actual pinned parquet and reference bytes against the fixed five-task
+  catalog selection, four generated run configurations, two Codex prepared files,
+  and four supplied input captures in ABBA order. Existing source projections,
+  V2 binding, prepared fingerprints, reference checks, and compiled plans bind
+  the evidence. Changed inputs, unsafe file trees, missing captures, and
+  rehashed prepared drift are refused. Canonical attestation bytes and their
+  digest carry no launch authorization or inference publication identity.
+  The source set has 26 pins, including the attester and the existing Step 1
+  helper's dataset-loader dependency. One targeted offline selector reported
+  `86 passed in 49.43s`. Production defaults and historical evidence are
+  unchanged. Actual pre-execution capture wiring, consumption-time checks,
+  external identity approval, host support, deployment, native caps, workflow
+  gates, and usage/tariff evidence remain outstanding. Both launch flags stay
+  false; snapshot consistency is not proof of live consumption.
+
 - Validate and isolate existing Codex step2 results and deliverables for the
   GPT-5.4 comparison. The offline materializer binds the original JSON digest,
   result fingerprint, run/task/config identities, file bytes, and optional
