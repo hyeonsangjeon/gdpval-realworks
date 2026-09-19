@@ -21,7 +21,7 @@ from core.codex_runtime_config import CodexProviderSettings
 from core.experiment_config import CodexComparisonCapture, ExperimentConfig
 from core.prepared_fingerprint import prepared_fingerprint
 from core.result_fingerprint import inference_result_fingerprint
-from test_gpt54_prepared_input_attestation import _fixture, _identity, _json, _tree_snapshot
+from .test_gpt54_prepared_input_attestation import _fixture, _identity, _json, _tree_snapshot
 
 
 class ProviderBoundary(BaseException):
