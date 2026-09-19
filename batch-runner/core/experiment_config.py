@@ -646,6 +646,12 @@ class ExperimentConfig:
                             query_params=dict(
                                 settings_data.get("query_params") or {}
                             ),
+                            reasoning_effort=settings_data.get(
+                                "reasoning_effort"
+                            ),
+                            model_context_window=settings_data.get(
+                                "model_context_window"
+                            ),
                         )
                 except (ValueError, TypeError, AttributeError) as exc:
                     errors.append(f"execution.codex is not usable: {exc}")

@@ -19,6 +19,8 @@ from gpt54_comparison_preflight import LAUNCH_BLOCKERS, inspect_plan, load_plan,
         "retry_limit", "grader", "result_schema", "missing_repeat",
         "duplicate_repeat", "larger_cohort", "cost_policy", "launch_enabled",
         "missing_pin", "changed_pin", "environment_claim",
+        "request_effort", "request_context", "missing_request",
+        "missing_step2_pin", "changed_step2_pin",
     ],
 )
 def test_gpt54_comparison_is_fixed_and_fails_closed(change, tmp_path, capsys):
@@ -76,11 +78,29 @@ def test_gpt54_comparison_is_fixed_and_fails_closed(change, tmp_path, capsys):
         plan["source_pins"][next(iter(plan["source_pins"]))] = "0" * 64
     elif change == "environment_claim":
         plan["comparison"] = "environment_only"
+    elif change == "request_effort":
+        plan["conditions"]["codex"]["request"]["reasoning_effort"] = "high"
+    elif change == "request_context":
+        plan["conditions"]["codex"]["request"]["model_context_window"] = 1_000_000
+    elif change == "missing_request":
+        plan["conditions"]["codex"].pop("request")
+    elif change == "missing_step2_pin":
+        plan["source_pins"].pop("batch-runner/step2_run_inference.py")
+    elif change == "changed_step2_pin":
+        plan["source_pins"]["batch-runner/step2_run_inference.py"] = "0" * 64
 
     result = inspect_plan(plan)
     assert result["configuration_valid"] is (change == "unchanged"), result
     assert result["launch_allowed"] is False
     assert result["launch_blockers"] == list(LAUNCH_BLOCKERS)
+    assert result["requested_codex_config_overrides"] == (
+        ['model_reasoning_effort="xhigh"'] if change == "unchanged" else None
+    )
+    if change in {"missing_step2_pin", "changed_step2_pin"}:
+        assert result["configuration_problems"] == [
+            "source_pin_set" if change == "missing_step2_pin"
+            else "source_pin:batch-runner/step2_run_inference.py"
+        ]
 
     # Exercise the real CLI entry point in process. JSON is valid YAML, too.
     path = tmp_path / "plan.yaml"
@@ -93,11 +113,21 @@ def test_gpt54_comparison_is_fixed_and_fails_closed(change, tmp_path, capsys):
         voice_fields = {field.name for field in fields(AzureFoundryVoice)}
         assert "reasoning_effort" not in voice_fields
         provider = CodexProviderSettings(
-            endpoint="https://fixture.openai.azure.com/openai/v1/", model="gpt-5.4"
+            endpoint="https://fixture.openai.azure.com/openai/v1/", model="gpt-5.4",
+            **plan["conditions"]["codex"]["request"],
         )
         overrides = provider.config_overrides()
-        assert not any("reasoning_effort" in value for value in overrides)
+        assert overrides[-1:] == ('model_reasoning_effort="xhigh"',)
+        assert not any("model_context_window" in value for value in overrides)
         assert not any(
             "max_output_tokens" in value or "max_model_calls" in value
             for value in overrides
         )
+        assert {
+            "v2_reasoning_effort_unwired",
+            "codex_reasoning_effort_capability_unverified",
+            "codex_native_model_call_and_token_limits_unenforced",
+            "live_deployment_identity_and_input_bytes_not_verified",
+            "comparison_dispatch_and_pinned_grading_not_wired",
+            "comparison_usage_and_tariff_evidence_unverified",
+        } <= set(result["launch_blockers"])

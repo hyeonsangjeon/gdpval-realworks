@@ -71,6 +71,8 @@ def _public_codex_config(value):
         "query_params",
         "request_max_retries",
         "stream_max_retries",
+        "reasoning_effort",
+        "model_context_window",
     ):
         if key in value:
             output[key] = value[key]

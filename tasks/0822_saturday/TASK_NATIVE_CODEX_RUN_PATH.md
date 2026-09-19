@@ -1,8 +1,8 @@
 # Codex's own agent: what is officially supported, and what is still unknown
 
-The current work is the **GitHub Copilot GPT-5.6 Sol pilot preregistration**
-in section 13, added on 2026-09-19. It is blocked from execution on the pinned
-source. Sections 1–12 preserve their dated findings about the Foundry path;
+The current work adds **requested Codex reasoning and context controls** in
+section 14. The GitHub Copilot GPT-5.6 Sol pilot in section 13 remains blocked
+from execution. Sections 1–12 preserve their dated findings about the Foundry path;
 they are not evidence that the requested Copilot route exists.
 
 - Written: 2026-08-25
@@ -1347,7 +1347,10 @@ paid run must be preceded by a fresh smoke at the new fingerprint.
 The owner selected GitHub Copilot GPT-5.6 Sol through the Codex harness, with
 reasoning Max and Long context 1M. The owner approved the eventual pilot and
 full benchmark, but this unit only preregisters the five-task gate for leader
-review. Its immutable base is `6ccd4ae346d302e3da0af455a3c5a72ec79a6984`.
+review. Its original immutable base was
+`6ccd4ae346d302e3da0af455a3c5a72ec79a6984`. Section 14 refreshes the source
+boundary to `a5ed62bd55471c0fd8bdd637c9312315a17ebf4b`; the original grader
+revision, task inputs, limits, and result contracts remain unchanged.
 
 The contract is
 `batch-runner/experiments/execution_envelope/gpt56_sol_copilot_codex_pilot.yaml`.
@@ -1367,13 +1370,15 @@ Failure or unverifiable identity stops progression and leaves the failed rows
 in the record. There is no score threshold or extra paid repetition invented
 for this gate.
 
-### Exact identity, not an alias or a client-side context setting
+### Exact identity and requested client settings
 
 The requested identity is `github_copilot` / `gpt-5.6-sol`, Codex SDK and CLI
 `0.147.0`, `reasoning_effort: max`, and `context_tier: long` with the label
-`Long (1M)`. `nominal_context_tokens: 1000000` records that requested tier;
-it is neither a measured server limit nor a `model_context_window` override.
-The verified route, served model ID, and context window remain null.
+`Long (1M)`. `nominal_context_tokens: 1000000` records that requested tier.
+The separate `codex_request` block now asks the client for
+`model_reasoning_effort="max"` and `model_context_window=1000000`. Neither the
+tier label nor the client setting measures a server limit. The verified route,
+served model ID, and context window remain null.
 
 [OpenAI's GPT-5.6 Sol model page](https://developers.openai.com/api/docs/models/gpt-5.6-sol)
 documents `max` and a 1,050,000-token API context window. The
@@ -1448,8 +1453,8 @@ All of these differences must remain visible:
 |---|---|---|
 | Inference model | Foundry GPT-5.4 | GitHub Copilot GPT-5.6 Sol, not Fast |
 | Route and identity | Microsoft endpoint and Azure token command | Unimplemented Copilot endpoint/auth/entitlement mapping |
-| Effort | Not explicitly passed by the Codex adapter | Max required and not yet wired |
-| Context | No long-context tier pinned in the experiment | Long 1M required and not yet verified |
+| Effort | Not explicitly passed by the historical experiment | Max requested in client config; served capability unverified |
+| Context | No long-context tier pinned in the experiment | Long 1M requested with a 1,000,000-token client setting; served tier unverified |
 | Cohort and order | 220 tasks in the full-run order | Fixed score-free five in advance-check order |
 | Scheduling | Up to ten relay legs | No relay or automatic escalation |
 | Billing and errors | Foundry usage/tariff and retry classification | Copilot units, tariff, quota/error behavior unverified |
@@ -1474,21 +1479,23 @@ an assumed performance gain.
 
 `ExperimentConfig.validate` accepts no GitHub Copilot provider and the real
 `CodexProviderSettings` only accepts Microsoft endpoints. Its default auth
-command is Azure-specific. Neither those settings nor `start_thread` carries
-Max or a verified Long context tier. A Foundry connection cannot answer this
-pilot's identity question.
+command is Azure-specific. Optional settings now carry Max and a 1,000,000-token
+client context window through the existing configured runtime and thread path.
+They do not verify the served effort or Long tier. A Foundry connection cannot
+answer this pilot's identity question.
 
 The offline checker returns both `launch_allowed: false` and
 `full_220_allowed: false`, and always exits 2, even for the valid registration.
 It rejects identity/fingerprint/control drift, model fallbacks, relays, repeat
 expansion, reuse of the 220-task grading identity, and attempts to enable the
-full run. It also checks 14 source-file pins, including the shared
-`gpt54_comparison_preflight.py` plan reader. This is not yet a runtime gate
+full run. It also checks 16 source-file pins, including the shared
+`gpt54_comparison_preflight.py` plan reader and both preparation/inference
+forwarding boundaries. This is not yet a runtime gate
 in front of the repository's existing paid workflows.
 
 **No compliant paid pilot command exists immediately after this PR merges.**
 The reuse target is `.github/workflows/batch-run.yml` after separate reviewed
-Copilot provider wiring, request/cap verification, usage mapping, five-task
+Copilot provider wiring, served-capability/cap verification, usage mapping, five-task
 dispatch, and pilot-specific grading identity are implemented. Such changes
 need a new immutable configuration/source review; existing exp033/exp035
 Foundry dispatches and a personal `codex exec` session are not substitutes.
@@ -1502,6 +1509,51 @@ eventual benchmark. No historical ledger, grade, or sealed evidence is edited.
 
 `experiment-design` was applied before configuration, including the pass/fail
 decision, confounds, lack of repeat evidence, measurement units, judge limits,
-stop rules, and portability boundary. The single free selector and its exact
-result are recorded in `tasks/LATEST_TASK_RESULT/README.md` after validation.
+stop rules, and portability boundary. The targeted validation command and its
+exact result are recorded in `tasks/LATEST_TASK_RESULT/README.md` after validation.
 No model, grader, VM, Azure API/CLI, or paid workflow is called in this unit.
+
+## 14. Requested reasoning and context controls (2026-09-19)
+
+This wiring starts from immutable main
+`a5ed62bd55471c0fd8bdd637c9312315a17ebf4b`. It closes the client-configuration
+gap shared by the Sol pilot and the GPT-5.4 comparison. It does not implement
+a provider, credentials, capability probe, dispatcher, or paid execution path.
+
+`execution.codex.reasoning_effort` and `execution.codex.model_context_window`
+are optional. Preparation preserves explicit values, validation rejects invalid
+ones, and inference carries them unchanged into `CodexProviderSettings`.
+The existing `config_overrides` path then supplies the configured Codex client
+used by `start_thread`. No new thread API or tier-to-number fallback is added.
+The separate generic `condition_a.model.reasoning_effort` is not a fallback for
+these controls, so existing Foundry experiments do not acquire a new request.
+
+Omitted or null controls emit no new keys. The adapter accepts the requested
+effort vocabulary `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, and `max`
+without normalization. A context window must be an integer from 1 through
+`2**63 - 1`, matching the integer shape in the
+[official configuration schema](https://developers.openai.com/codex/config-schema.json).
+Booleans, numeric strings, floats, NaN, infinity, zero, negative values, and
+overflow are rejected rather than cast. This is an adapter request vocabulary,
+not evidence that every value is supported by the pinned CLI or served model.
+
+The [official configuration reference](https://developers.openai.com/codex/config-reference/)
+defines the two keys. The Sol contract generates:
+
+```toml
+model_reasoning_effort="max"
+model_context_window=1000000
+```
+
+The GPT-5.4 comparison generates only `model_reasoning_effort="xhigh"`; it
+requests no context-window override. The two offline checkers use the same
+serializer as the adapter to expose these requested overrides. Invalid plans
+produce no override evidence. Both checkers still refuse launch and exit 2.
+
+The integer context window is neither a native call/token budget nor proof of
+Long-tier entitlement. Provider and live identity/capability checks, native
+call/token caps, dispatch/grading identity, and usage/tariff evidence remain
+unresolved. Sandbox V2 still lacks effort forwarding. Task order, inputs,
+repeats, grader revisions, result schemas, record-only cost policy, and
+null/partial receipts are unchanged. A new immutable-HEAD review is required;
+no launch command becomes compliant through this change alone.

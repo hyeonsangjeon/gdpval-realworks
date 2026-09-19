@@ -41,6 +41,11 @@ PLAN_READER_SOURCE = "batch-runner/gpt54_comparison_preflight.py"
         (("identity", "automatic_fallback_allowed"), True),
         (("identity", "fallbacks"), ["gpt-6-astra"]),
         (("identity", "verified_route"), "an_unverified_claim"),
+        (("codex_request",), {}),
+        (("codex_request", "reasoning_effort"), "xhigh"),
+        (("codex_request", "model_context_window"), None),
+        (("codex_request", "model_context_window"), "1000000"),
+        (("codex_request", "model_context_window"), 999999),
         (("dataset", "tasks"), "reverse_tasks"),
         (("dataset", "tasks", 0, "prompt_sha256"), "0" * 64),
         (("dataset", "input_file_versions"), {}),
@@ -72,6 +77,14 @@ PLAN_READER_SOURCE = "batch-runner/gpt54_comparison_preflight.py"
             ("source_pins", PLAN_READER_SOURCE), "0" * 64,
             id="plan-reader-digest-checked",
         ),
+        pytest.param(
+            ("source_pins", "batch-runner/step2_run_inference.py"), "remove_pin",
+            id="step2-pin-required",
+        ),
+        pytest.param(
+            ("source_pins", "batch-runner/step2_run_inference.py"), "0" * 64,
+            id="step2-digest-checked",
+        ),
         (("launch_enabled",), True),
     ],
 )
@@ -92,15 +105,20 @@ def test_gpt56_sol_copilot_pilot_is_pinned_and_fails_closed(
 
     result = inspect_plan(plan)
     assert result["configuration_valid"] is (not path), result
-    if path == ("source_pins", PLAN_READER_SOURCE):
+    if len(path) == 2 and path[0] == "source_pins":
         assert result["configuration_problems"] == [
             "source_pin_set"
             if value == "remove_pin"
-            else f"source_pin:{PLAN_READER_SOURCE}"
+            else f"source_pin:{path[1]}"
         ]
     assert result["launch_allowed"] is False
     assert result["full_220_allowed"] is False
     assert result["launch_blockers"] == list(LAUNCH_BLOCKERS)
+    assert result["requested_codex_config_overrides"] == (
+        None if path else [
+            'model_reasoning_effort="max"', "model_context_window=1000000"
+        ]
+    )
 
     plan_path = tmp_path / "plan.yaml"
     plan_path.write_text(json.dumps(plan), encoding="utf-8")
@@ -121,6 +139,13 @@ def test_gpt56_sol_copilot_pilot_is_pinned_and_fails_closed(
                 model="gpt-5.6-sol",
             )
         provider_fields = {field.name for field in fields(CodexProviderSettings)}
-        assert not {
-            "reasoning_effort", "context_tier", "model_context_window"
-        } & provider_fields
+        assert {"reasoning_effort", "model_context_window"} <= provider_fields
+        assert "context_tier" not in provider_fields
+        assert {
+            "github_copilot_route_not_implemented",
+            "max_and_long_1m_capability_unverified",
+            "native_call_and_token_limits_unresolved",
+            "live_identity_and_input_bytes_unverified",
+            "pilot_dispatch_and_grading_identity_not_wired",
+            "copilot_usage_and_tariff_mapping_unverified",
+        } <= set(result["launch_blockers"])

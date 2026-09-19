@@ -8271,15 +8271,19 @@ Codex CLI/harness라는 두 구성 묶음의 완료·품질·시간·비용 기�
 않습니다.** 기존 세 환경의 첫 요청을 맞추는 `shared_first_request` 경로를 이 두
 하니스도 사용한다고 간주하지 않습니다.
 
-기준은 immutable main `96b181e1128039891f2cbbd9c26af9701e7e8e22`입니다.
+최초 사전등록 기준은 immutable main
+`96b181e1128039891f2cbbd9c26af9701e7e8e22`입니다. Codex 요청 설정 전달을
+추가하면서 source 경계를 `a5ed62bd55471c0fd8bdd637c9312315a17ebf4b`로
+갱신합니다. 기존 grader revision과 과제·입력·반복·한도는 바꾸지 않습니다.
 사전등록 파일은
 `batch-runner/experiments/execution_envelope/gpt54_sandboxv2_codex_comparison.yaml`,
 무료 검사기는 `batch-runner/gpt54_comparison_preflight.py`입니다. 새 실행 프레임워크,
 모델 호출, 채점, VM/guest 실행, Azure 조회 또는 workflow dispatch를 추가하지 않습니다.
 
 소유자의 유료 비교 승인은 기록하되 `launch_enabled: false`를 유지합니다.
-현재 두 어댑터는 목표 effort를 전달하지 않으며 Codex의 내부 모델 호출 수도 같은
-한도로 강제하지 못합니다. **설정값이 같은 것과 실제 요청·제한이 같은 것은 다릅니다.**
+Codex는 이제 `model_reasoning_effort="xhigh"`를 클라이언트 설정으로 전달하지만
+서버가 이를 제공했다고 검증하지는 않았습니다. V2의 effort 전달과 Codex 내부 모델
+호출 수의 동일한 한도 강제도 남아 있습니다. **설정값이 같은 것과 실제 요청·제한이 같은 것은 다릅니다.**
 무료 검사가 통과해도 이 소스에서 유료 비교를 시작할 수 없습니다.
 
 ### 14.2 두 조건에 고정하는 목표값
@@ -8375,8 +8379,10 @@ ABBA 순서는 한 방향의 시간 경과 영향을 줄이기 위한 고정 순
 
 - `v2_reasoning_effort_unwired`: `AzureFoundryVoice.next_turn`의 실제 payload에
   reasoning effort가 없습니다. YAML에 `xhigh`를 적는 것만으로는 전달되지 않습니다.
-- `codex_reasoning_effort_unwired`: `CodexProviderSettings.config_overrides`와
-  `CodexAgentRunner.start_thread`가 effort를 전달하지 않습니다.
+- `codex_reasoning_effort_capability_unverified`: Codex 조건의 `request` 블록은
+  `reasoning_effort: xhigh`, `model_context_window: null`을 명시합니다.
+  `CodexProviderSettings.config_overrides`를 거쳐 기존 runtime/thread 경로에
+  effort 요청을 전달하지만, pinned CLI와 실제 배포가 이를 제공하는지는 미확인입니다.
 - `codex_native_model_call_and_token_limits_unenforced`: Codex 논리 turn 안의 모델
   호출 수와 토큰 한도를 V2와 같은 단위로 강제하는 연결이 없습니다.
 - `live_deployment_identity_and_input_bytes_not_verified`: 실제 Foundry 배포의
@@ -8385,9 +8391,14 @@ ABBA 순서는 한 방향의 시간 경과 영향을 줄이기 위한 고정 순
 - `comparison_dispatch_and_pinned_grading_not_wired`: 기존 두 workflow는 이번
   사전등록 파일을 실행 설정으로 소비하지 않습니다. 공통 한도·재시도·단일 시도와
   고정 rubric revision을 반영한 실행용 사본 및 지출 전 관문 연결이 필요합니다.
+- `comparison_usage_and_tariff_evidence_unverified`: 이 비교에서 실제 모델·usage와
+  비용 단위가 연결되는 증거는 아직 없습니다. 가격 누락만을 새 지출 차단 규칙으로
+  삼지는 않으며, 기존 record-only 정책과 unknown/null/partial 기록을 유지합니다.
 
-무료 검사기는 원천 파일 11개의 지문을 확인하고, 계획의 canonical JSON 지문을
-반환합니다. `configuration_valid: true`와 `launch_allowed: false`는 함께 나올 수
+무료 검사기는 원천 파일 15개의 지문을 확인합니다. 추가된 네 파일은 설정 검증,
+executor, 준비 파일, 추론 단계의 전달 경계입니다. 계획의 canonical JSON 지문과
+실제 어댑터와 같은 serializer가 생성한 요청 override도 반환합니다. 잘못된 계획은
+override를 반환하지 않습니다. `configuration_valid: true`와 `launch_allowed: false`는 함께 나올 수
 있으며 CLI는 **항상 종료 코드 2**를 반환합니다. 현재 코드를 실행할 수 없다는
 판정입니다. 이 검사기가 아직 기존 유료 workflow 앞에 연결된 것은 아니므로,
 저장소의 모든 지출 경로를 막는 안전장치라고 주장하지 않습니다.
