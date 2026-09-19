@@ -2,7 +2,7 @@
 
 - Updated: 2026-09-19 (UTC)
 
-## Current Task: GPT-5.4 Run Input Bundle Materializer
+## Current Task: GPT-5.4 Run Input Bundle Materializer and CI Runtime Correction
 
 ### Scope and Outcome
 
@@ -13,6 +13,14 @@ under `data/gdpval-local`. Both V2 and Codex capture gates require verified
 config and input bundles before provider, auth, model voice or client
 construction. This closes input placement and runtime marker verification,
 not checkout creation or launch readiness.
+
+The CI correction changes test preparation only. The original 116-case
+selector took 327.95 seconds locally. At PR HEAD
+`ad93e14dff206da7aabbbd779efa9d77f414ccd9`, Backend Tests reached 91% before
+the 45-minute job timeout cancelled it without a reported test failure. The
+optimized selector retains all 116 cases and passed in 42.46 seconds. This
+reduces the local selector time by 285.49 seconds; it does not establish that
+the full CI suite now fits within its unchanged timeout.
 
 Work started from immutable main
 `a855c5a9604554499be9eed4e5eb5523e8ad95d5` in branch
@@ -41,6 +49,12 @@ Exactly sixteen files differ from the base:
 - `tasks/0822_saturday/TASK_GPT_EXECUTION_ENVELOPE_BENCHMARK.md`
 - `CHANGELOG.md`
 - `tasks/LATEST_TASK_RESULT/README.md`
+
+The correction continues in the same branch and worktree from immutable PR
+HEAD `ad93e14dff206da7aabbbd779efa9d77f414ccd9`. Its delta is exactly three
+of those files: `batch-runner/tests/test_gpt54_run_input_bundle.py`,
+`CHANGELOG.md` and this record. No production source, preregistration, source
+pin, workflow, timeout or historical artifact changes in the correction.
 
 ### Publication and Runtime Contract
 
@@ -84,16 +98,53 @@ unchanged. The Sol manifest only refreshes its shared-parser digest. The current
 source set has 30 pins. Its target evidence does not cover the whole target
 grader closure or establish later wire consumption.
 
+### Test Preparation Correction
+
+The module-scoped seed runs the existing independent oracle and real config
+materializer once for the fixed five-task data and four run configs. It retains
+file contents and documents as immutable bytes, with a frozen typed plan.
+Every case receives fresh single-link files and newly decoded mutable objects.
+The seed's tree is checked for changes at teardown. Only this selector installs
+the supplier overrides, and each case restores them afterward.
+
+The compiler still executes its real validators. YAML parsing is cached by
+exact input bytes or text and returns a deep copy; source-pin SHA256 calls
+reuse a hash only for identical bytes and return a separate hasher. The real
+grader helper computes the closure hash. Reuse requires identical arguments,
+the complete core inventory, matching path types/link counts and every
+dependency's actual bytes. Any mismatch delegates to the original helper.
+No validation verdict or mutable target snapshot is cached.
+
+The materializer, source/reference readers, target digest checks, no-clobber
+writer and runtime gates remain real. Runtime cases still execute actual
+input materialization, the Step 1 serializer, capture publication, Step 2,
+restored-checkpoint and V2 entry gates as applicable. The parametrized case
+list and existing write/refusal assertions are unchanged. Nothing is skipped
+or removed, and no production behavior changes.
+
 ### Exact Verification Evidence
 
-The following selector ran exactly once:
+The same selector ran once for the original implementation and once after
+this correction, with no broad suite or additional selector:
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider batch-runner/tests/test_gpt54_run_input_bundle.py::test_run_input_bundle_is_exact_atomic_and_gates_execution
 ```
 
-Result: **116 passed in 327.95s (0:05:27)**, exit 0. `git diff --check` and
-the staged equivalent passed. No other selector or suite was run.
+- Original implementation: **116 passed in 327.95s (0:05:27)**, exit 0.
+- CI correction: **116 passed in 42.46s**, exit 0.
+- `git diff --check` and the staged equivalent passed for the correction.
+
+The reported CI finding is run
+[`35454998454`](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/35454998454),
+job [`105928601144`](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/35454998454/job/105928601144),
+on `ad93e14dff206da7aabbbd779efa9d77f414ccd9`. Backend Tests was
+**CANCELLED at 91% / 45 minutes**, with no reported test failure. `Run tests`
+ended at the job limit; the last log named
+`test_the_partial_gold_run_cannot_read_as_final.py`. These are the supplied
+CI facts, not evidence that the last-named test failed. The workflow's
+40-minute warning remains a finding threshold, not a reason to raise its
+timeout. No workflow file was edited and no manual rerun was requested.
 
 The small temporary fixtures cover all four ABBA runs, relocation, existing or
 absent `data/`, exact input/marker bytes, unchanged source/config files, drift,
@@ -114,17 +165,27 @@ dispatch, Project edits or merge were performed.
 
 ### Immutable Review Boundary
 
-Implementation HEAD `e2d50bf057521e626c6a1ad75264b82b113105bd` contains the
-code, tests, source pins and specification that produced the result above.
+Original implementation HEAD `e2d50bf057521e626c6a1ad75264b82b113105bd`
+contains the code, tests, source pins and specification that produced the
+327.95-second result.
 `first-reviewer` reviewed the immutable boundary
 `a855c5a9604554499be9eed4e5eb5523e8ad95d5..e2d50bf057521e626c6a1ad75264b82b113105bd`.
 The verdict was `APPROVE`, with no BLOCK, MAJOR or MINOR findings and no
-second-review escalation. The reviewer did not rerun tests or execute project
-code. No implementation correction or selector rerun was needed. Only
-`CHANGELOG.md` and this record follow that HEAD and are outside the review
-boundary. Leader review and automatic CI evidence remain required. No
-carrying-PR merge result, future merge SHA/time or execution authorization is
-claimed.
+second-review escalation. That earlier approval does not cover the new
+correction HEAD.
+
+The new immutable test implementation HEAD is
+`4a05e26debacdbd5cea8df6d915a40175064998f`. A fresh read-only `first-reviewer`
+review covered
+`ad93e14dff206da7aabbbd779efa9d77f414ccd9..4a05e26debacdbd5cea8df6d915a40175064998f`.
+The verdict was `APPROVE`, with no BLOCK, MAJOR or MINOR findings and no
+second-review escalation. The reviewer confirmed cache isolation, real
+validators and unchanged case/assertion coverage without rerunning tests or
+executing project code. No further code correction or selector invocation was
+needed. Only `CHANGELOG.md` and this record follow that implementation HEAD
+and are outside its review boundary. Leader review and fresh automatic CI
+evidence remain required. No carrying-PR merge result, future merge SHA/time
+or execution authorization is claimed.
 
 ### Remaining Work
 
@@ -134,6 +195,9 @@ contracts remain unchanged. `launch_allowed` and `full_220_allowed` remain
 false. The compound materialization/workflow blocker remains because this unit
 only implements local input publication and marker verification.
 
+- Fresh automatic Backend Tests completion within the unchanged 45-minute
+  limit, followed by leader review of the corrected PR HEAD. The local timing
+  improvement is not a full-suite pass.
 - Checkout creation and actual deployment on a reviewed execution host.
 - External inference identity issuance and approval.
 - A host supporting native no-clobber result-bundle installation.
@@ -149,17 +213,22 @@ marker or capture does not establish environment-only causality.
 
 ### Skills and Roles
 
-The full skill and repository-agent catalogs were inspected once before
-editing. `experiment-design` preserved the comparison inputs, ABBA repeats,
-interpretation and stop gates. The `llm-systems-engineer` role mapped the
-runtime boundaries and supplied the bounded offline test fixtures.
-`first-reviewer` reviewed the immutable implementation read-only and found no
-blocking, major or minor issues.
+For the original implementation, the full skill and repository-agent catalogs
+were inspected once before editing. `experiment-design` preserved the
+comparison inputs, ABBA repeats, interpretation and stop gates. The
+`llm-systems-engineer` role mapped the runtime boundaries and supplied the
+bounded offline test fixtures.
+`first-reviewer` reviewed the original immutable implementation read-only.
+The CI correction uses a fresh immutable review rather than carrying that
+approval forward.
 
-`im-not-ai-en` was applied to English changelog, completion-record and PR
-wording. Commands, SHAs, counts, results and qualifications were checked
-manually to honor the selector limit instead of running an extra fidelity
-script. Experiment-report skills do not apply to software verification.
+`im-not-ai-en` was applied to the correction's English changelog,
+completion-record and PR wording. Commands, SHAs, counts, results and
+qualifications were checked manually to honor the selector limit instead of
+running an extra fidelity script. The correction changes no experiment
+condition or design, so no new
+`experiment-design` application or systems-agent delegation is needed.
+Experiment-report skills do not apply to software verification.
 Repository-readiness, UI and animation skills are unrelated. No grading
 pipeline implementation changed, so no grading-engineer work was needed.
 Workflows, `core/qa.py` and HF upload scripts are untouched, so no

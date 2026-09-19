@@ -22,7 +22,7 @@ entries land under a fresh dated heading the day they merge to `main`.
   reuse after partial failure, including failure during directory creation.
   Both runtime capture gates require matching config and input markers and
   actual bytes; legacy absent/null controls retain their existing behavior.
-  The source set has 30 pins. One targeted offline selector reported
+  The source set has 30 pins. The original targeted offline selector reported
   `116 passed in 327.95s (0:05:27)`. The marker proves local input consistency,
   not launch permission or inference identity approval. Checkout creation,
   external identity approval, native result-bundle support, workflow gates,
@@ -586,6 +586,17 @@ entries land under a fresh dated heading the day they merge to `main`.
   file is the decision the pin asks to see.
 
 ### Fixed
+
+- Reduce PR #626's input-bundle selector preparation cost after Backend Tests
+  run `35454998454`, job `105928601144`, was cancelled at 91% by its 45-minute
+  timeout without a reported test failure. A module-scoped fixture now builds
+  the independent five-task oracle and four config bundles once, then gives
+  every case fresh files and decoded documents. Byte-keyed parsing and source
+  hashing caches retain actual validators and invalidate on input drift.
+  The same 116 cases passed in `42.46s`, down from `327.95s (0:05:27)`.
+  Production behavior, assertions, runtime gates, workflows and timeouts are
+  unchanged. Fresh automatic Backend Tests evidence is still required; no
+  broad suite or manual workflow rerun was performed.
 
 - Forward an explicit Sandbox V2 `model.reasoning_effort` into the existing
   GPT-5.4 Responses request as `reasoning: {effort: xhigh}`. The optional typed
