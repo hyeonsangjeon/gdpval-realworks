@@ -36,7 +36,7 @@ from core.execution_envelope_tasks import (
 from core.experiment_config import CodexComparisonCapture, ExperimentConfig
 
 ROOT = Path(__file__).resolve().parents[1]
-BASE_SHA = "e90040962aa16572a32c64808db93b38dceeefb9"
+BASE_SHA = "871e138558c3ada8d9c3cd93de2b07b676faeab9"
 GRADER_SOURCE_SHA = BASE_SHA
 ENVELOPE = "batch-runner/experiments/execution_envelope/"
 PLAN = ROOT / ENVELOPE / "gpt54_sandboxv2_codex_comparison.yaml"
@@ -49,6 +49,7 @@ REQUIRED_SOURCES = {
     "batch-runner/gpt54_codex_grading_input.py",
     "batch-runner/gpt54_prepared_input_attestation.py",
     "batch-runner/gpt54_codex_input_capture.py",
+    "batch-runner/gpt54_v2_input_capture.py",
     "batch-runner/prepare_dataset.py",
     "batch-runner/step8_grade.py",
     "batch-runner/core/config.py",
@@ -206,6 +207,7 @@ def _configuration_problems(plan: dict[str, Any]) -> list[str]:
                 "workflow": ".github/workflows/agentic-v2-stage-run.yml",
                 "isolation": "same-host",
                 "replay_format": "faithful",
+                "input_capture": "gpt54-pre-execution-input-v1",
                 "request": {
                     "reasoning_effort": expected["model"]["reasoning_effort"],
                 },
@@ -324,6 +326,9 @@ def _compile_validated_plan(plan: dict[str, Any]) -> ComparisonDispatchPlan:
         target = plan["conditions"][condition]
         config = load_plan(ROOT / target["template"])
         if condition == "sandbox_v2":
+            from gpt54_v2_input_capture import V2ComparisonCapture
+
+            config["comparison_input_capture"] = V2ComparisonCapture(target["input_capture"]).as_dict()
             config["model"].update(
                 deployment=model["deployment"], resolved_model=model["resolved_model"],
                 **target["request"],
@@ -635,6 +640,11 @@ def inspect_plan(
         "codex_pre_execution_capture": ({
             "binding_version": "gpt54-pre-execution-input-v1",
             "required_runs": [run.run_id for run in compiled.runs if run.condition == "codex"],
+            "evidence_boundary": "local_pre_execution_snapshot_consistency",
+        } if compiled is not None else None),
+        "v2_pre_execution_capture": ({
+            "binding_version": "gpt54-pre-execution-input-v1",
+            "required_runs": [run.run_id for run in compiled.runs if run.condition == "sandbox_v2"],
             "evidence_boundary": "local_pre_execution_snapshot_consistency",
         } if compiled is not None else None),
         "launch_allowed": False,
