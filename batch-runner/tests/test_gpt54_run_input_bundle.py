@@ -476,7 +476,7 @@ def test_run_input_bundle_is_exact_atomic_and_gates_execution(case, tmp_path, mo
                 "checkout_creation": False,
                 "evidence_boundary": "local_input_bundle_consistency",
             }
-            assert len(preflight.REQUIRED_SOURCES) == 31
+            assert len(preflight.REQUIRED_SOURCES) == 34
             assert set(manifest["source_pins"]) == preflight.REQUIRED_SOURCES
             assert "comparison_materialization_and_workflow_gates_not_wired" in inspection["launch_blockers"]
         after = _tree_snapshot(root)

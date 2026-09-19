@@ -264,6 +264,7 @@ def test_the_credentialed_job_does_not_start_at_all(workflow):
     run that is red *and* has already spent.
     """
     assert workflow["jobs"]["batch-run"]["if"] == (
+        "needs.inspect-mode.result == 'success' && "
         "needs.inspect-mode.outputs.uses_agentic != 'true' && "
         "needs.inspect-mode.outputs.codex_blocked != 'true'"
     )

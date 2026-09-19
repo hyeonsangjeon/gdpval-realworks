@@ -356,7 +356,7 @@ def test_runtime_checkout_lineage_precedes_both_providers(
             "git_commands": ["rev-parse"], "external_source_worktree_required": False,
             "evidence_boundary": "local_reviewed_checkout_and_bundles",
         }
-        assert len(inputs["manifest"]["source_pins"]) == 31
+        assert len(inputs["manifest"]["source_pins"]) == 34
         assert set(inputs["manifest"]["source_pins"]) == preflight.REQUIRED_SOURCES
         assert inspection["launch_allowed"] is inspection["full_220_allowed"] is False
     else:

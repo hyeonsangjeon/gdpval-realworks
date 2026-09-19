@@ -214,7 +214,7 @@ def _assert_ready(
     assert [row["task_id"] for row in input_marker["tasks"]] == list(run.task_ids)
     assert len(run.task_ids) == 5
     assert reviewed_sha != plan.dispatch.source_base_sha
-    assert len(manifest["source_pins"]) == 31
+    assert len(manifest["source_pins"]) == 34
     assert set(manifest["source_pins"]) == preflight.REQUIRED_SOURCES
     assert _PREPARER_SOURCE in manifest["source_pins"]
     assert not ({"launch_allowed", "full_220_allowed", "approval"} & marker.keys())

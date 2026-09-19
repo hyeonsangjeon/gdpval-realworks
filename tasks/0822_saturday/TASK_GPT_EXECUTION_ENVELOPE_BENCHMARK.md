@@ -8436,16 +8436,20 @@ ABBA 순서는 한 방향의 시간 경과 영향을 줄이기 위한 고정 순
   parquet와 five-task references만 배치·검증하는 경로는 14.5.7에서 닫습니다.
   외부 reviewed SHA로 detached checkout을 만들고 두 bundle을 봉인하는 로컬
   준비기는 14.5.8에 있으며, 실제 배치·실행 승인을 대신하지 않습니다.
+  두 소유 workflow의 secret/OIDC 이전 admission 연결은 14.5.10에서 다룹니다.
+  현재 false launch flag, 외부 identity, native result-bundle host와 실제 deployment
+  검증은 남아 있으므로 이 복합 blocker를 실행 가능 상태로 바꾸지 않습니다.
 - `comparison_usage_and_tariff_evidence_unverified`: 이 비교에서 실제 모델·usage와
   비용 단위가 연결되는 증거는 아직 없습니다. 가격 누락만을 새 지출 차단 규칙으로
   삼지는 않으며, 기존 record-only 정책과 unknown/null/partial 기록을 유지합니다.
 
-무료 검사기는 원천 파일 **31개**의 지문을 먼저 확인합니다. #621의 24개에
+무료 검사기는 원천 파일 **34개**의 지문을 먼저 확인합니다. #621의 24개에
 `gpt54_prepared_input_attestation.py`와 기존 Step 1 public helper를 import할 때
 필요한 `prepare_dataset.py`, Codex capture용 `gpt54_codex_input_capture.py`,
 V2 capture용 `gpt54_v2_input_capture.py`, 설정 배치·검증용 `gpt54_run_config_bundle.py`,
 입력 배치·검증용 `gpt54_run_input_bundle.py`, detached checkout 준비용
-`gpt54_disposable_checkout.py`를 추가했습니다.
+`gpt54_disposable_checkout.py`, workflow gate용 `gpt54_workflow_gate.py`와
+두 소유 workflow `agentic-v2-stage-run.yml`, `batch-run.yml`을 추가했습니다.
 해당 loader의 다운로드 경로는 호출하지 않습니다.
 `step8_grade.py`의 기존 `compute_grader_source_hash`는
 모든 `core/**/*.py`, grade schema, requirements include graph, inference download
@@ -8644,7 +8648,7 @@ provider/auth도 공식 runtime 인계 계약이 없어 blocked 상태이며 대
 `ComparisonGradingRunSpec`이 두 Codex run 중 하나와 정확히 일치하는지 확인합니다.
 ABBA의 Codex r1/r2, 고정 5개 task ID·입력 순서, Foundry GPT-5.4/xhigh,
 grader·receipt 계약은 바꾸지 않습니다. combined dispatch/grading plan의 exact-match
-검사와 현재 31개 source pin에 이 함수가 포함됩니다. V2 spec이나 수정된 dict는 받지 않습니다.
+검사와 현재 34개 source pin에 이 함수가 포함됩니다. V2 spec이나 수정된 dict는 받지 않습니다.
 
 입력은 해당 spec, manifest, 실제 `workspace/step2_inference_results.json`, 실제
 `workspace/upload`, 별도의 inference identity JSON, **외부 승인 SHA256**, 아직 없는
@@ -8957,7 +8961,7 @@ voice/provider/auth 생성 전, Codex Step 2는 기존 provider/client 생성 �
 
 이 marker는 **로컬 config bundle 일치**만 증명합니다. prepared input의 실제 bytes,
 served capability, wire prompt equality, inference publication identity 승인이나 launch
-authorization이 아닙니다. 대상 checkout에서 확인하는 범위는 명시된 31개 source pin이며,
+authorization이 아닙니다. 대상 checkout에서 확인하는 범위는 명시된 34개 source pin이며,
 전체 grader closure는 아닙니다. 기존 `template_source_sha256` 검사는 compiler를 실행한
 checkout을 대상으로 하므로 `materialized_grader_source_hash`는 여전히 미확정입니다.
 실제 입력 확인은 기존 capture/attestation 경로에 남고,
@@ -9022,7 +9026,7 @@ reference source를 받습니다. grading run은 같은 combined plan에서 도�
 source SHA로 대체하지 않습니다. 두 값은 서로 다른 역할로 marker에 보존됩니다.
 
 쓰기 전 compiler와 같은 Git common directory인지, commit object가 실제로
-존재하는지, commit의 manifest·31 source pin bytes가 정확한지 확인합니다.
+존재하는지, commit의 manifest·34 source pin bytes가 정확한지 확인합니다.
 원본 working tree가 dirty해도 그 파일을 복사하거나 고치지 않고 commit blob을
 읽습니다. tracked symlink·gitlink, source/input/common-dir overlap, 경로 이탈,
 기존 destination 및 sidecar는 거부합니다. 실제 parquet/reference snapshot도
@@ -9118,6 +9122,58 @@ authorization을 발급하지 않습니다. 임의의 unpinned tracked 파일 �
 `status`나 concurrent filesystem writer를 막는 sandbox도 아닙니다. 외부 identity,
 native result-bundle host, 실제 workflow deployment, served capability, native caps,
 wire/usage/tariff 증거는 남으며 두 launch flag는 계속 false입니다.
+
+#### 14.5.10 두 소유 workflow의 비교 admission gate
+
+`agentic-v2-stage-run.yml`과 `batch-run.yml`은 등록된 comparison 요청을
+`comparison-admission` job에서만 받습니다. 두 job 모두 `contents: read`만
+갖고 provider/HF secrets나 OIDC 권한을 받지 않습니다. 비교 ID 또는 명시적
+review control이 있으면 기존 V2 free/paid/collect와 batch credentialed 경로는
+선택되지 않습니다. 잘못되거나 일부만 지정된 비교 요청도 일반 실행으로 빠지지
+않습니다. 일반 workflow의 inputs/defaults와 실행 step은 유지하며 batch relay는
+새 빈 입력도 전달합니다. 비교 자체에는 relay나 resume를 허용하지 않습니다.
+
+추가 입력 `comparison_reviewed_source_sha`는 호출자가 별도로 검토받은 full
+lowercase 40-hex commit SHA입니다. 입력 기본값은 빈 문자열이며 event SHA,
+`github.workflow_sha`, relay `source_sha`로 채우지 않습니다. checkout 전에
+`workflow_dispatch`, `refs/heads/main`과 reviewed/event/workflow SHA의 정확한
+일치를 검사합니다. 명시 SHA로 checkout하고 Git 인증정보를 남기지 않습니다.
+workflow가 발급하는 것은 승인이 아니라 입력 SHA와 실행 workflow commit의
+결속 검사입니다. main이 review 이후 이동했다면 새 검토 입력 없이는 진행하지 않습니다.
+
+V2 입력은 exact r1/r2 `run_id`, `advance_check_5`, `paid`, `same-host`, 기존
+corrected template와 빈 resume입니다. batch는
+`execution_envelope/gpt54_v2_codex_v1_codex_r1` 또는 r2를 받으며,
+`codex_foundry_confirmed: true`와 나머지 기존 기본값을 요구합니다. legacy의
+`wall_timeout: 290`은 비교 argv에 적용하지 않습니다. 실제 run 설정과 argv는
+compiled plan만 소유하며 네 run의 ABBA·모델·xhigh·cohort·한도는 바뀌지 않습니다.
+
+`gpt54_workflow_gate`는 frozen request와 prepared execution binding을 만듭니다.
+source checkout의 현재 HEAD·pinned bytes를 검증한 뒤 14.5.8의 실제 preparer와
+14.5.9의 in-place verifier를 호출합니다. 각 command는 compiler의 tuple 그대로이며
+cwd는 새 checkout의 `batch-runner`로만 결속됩니다. 원본 source cwd, argv 변경,
+다른 run/condition, ready/reservation/config/input drift, quarantine, attached 또는
+moving HEAD를 허용하지 않습니다. 검증에서 preparer-side marker 형식을 새로 만들거나
+source·input bytes를 다운로드하지 않습니다. 실패 경로에는 cleanup이나 재사용이 없습니다.
+
+CLI는 로컬 준비 증거와 inert argv를 출력할 수 있지만 subprocess dispatch 기능은
+없습니다. `launch_allowed=false`와 `full_220_allowed=false`를 유지하며 mandatory
+launch check에서 exit 2로 끝납니다. `paid`나 confirmation 입력, ready marker는
+이를 우회하지 못합니다. 새로운 prepare-only 또는 launch override 입력도 없습니다.
+workflow는 pinned parquet와 five-task reference bytes가 이미 로컬에 있어야 하며,
+현재의 fresh hosted checkout에는 이를 가져오는 경로를 추가하지 않습니다.
+
+무료 selector는 두 workflow YAML의 입력·job 분리·권한·순서와 임시 Git 저장소의
+실제 prepare/lineage/refusal을 검사합니다. 기존 일반 step의 canonical YAML digest는
+기준 main `1671d6d87c27894d6b1a4d75ee5e7be21170feaa`와 비교합니다. 이 검사는
+workflow를 실제 실행했다는 증거가 아닙니다. provider/client/free-safety/model,
+grader, VM, network와 유료 실행은 호출하지 않습니다.
+
+외부 inference identity 승인, native result-bundle host, 실제 deployment와 workflow
+실행, served capability, native call/token caps, wire consumption, usage/tariff는
+남습니다. 기존 V2 same-host 승인과 comparison capture의 `isolated_approval` 제약을
+연결하는 실제 실행 경계도 아직 닫지 않았습니다. 설정 묶음 비교라는 한계와 기존
+record-only/null/partial 비용 정책은 그대로입니다.
 
 ### 14.6 판정, 중단 규칙, 검토 경계
 

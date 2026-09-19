@@ -48,6 +48,11 @@ on:
         required: false
         type: boolean
         default: false
+      comparison_reviewed_source_sha:
+        description: 'GPT-5.4 comparison only: caller-reviewed full lowercase SHA, not relay source_sha. Use execution_envelope/<registered_run_id>. This does not authorize launch; leave empty for ordinary batches.'
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: write        # to commit yaml results
@@ -62,6 +67,14 @@ env:
 
 jobs:
   inspect-mode:
+    # Comparison configs do not exist until their separate checkout is prepared.
+    # Refuse them in a read-only lane before Ruby inspection or OIDC job admission.
+    if: >-
+      ${{ !(inputs.comparison_reviewed_source_sha != '' ||
+      contains(inputs.experiment_yaml, 'gpt54_v2_codex_') ||
+      contains(inputs.experiment_yaml, 'gpt54_sandboxv2_codex_comparison') ||
+      contains(inputs.experiment_yaml, 'comparison-run') ||
+      contains(inputs.experiment_yaml, 'comparison-grading')) }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -295,7 +308,7 @@ jobs:
 
   batch-run:
     needs: inspect-mode
-    if: needs.inspect-mode.outputs.uses_agentic != 'true' && needs.inspect-mode.outputs.codex_blocked != 'true'
+    if: needs.inspect-mode.result == 'success' && needs.inspect-mode.outputs.uses_agentic != 'true' && needs.inspect-mode.outputs.codex_blocked != 'true'
     # Every other mode keeps the host it has always had. codex_foundry cannot,
     # and the reason is measured rather than argued: batch-runner/docs/
     # codex_sandbox_hosts.json records ubuntu-24.04 -- what `ubuntu-latest`
@@ -321,6 +334,7 @@ jobs:
       DRY_RUN_INPUT: ${{ inputs.dry_run }}
       SANDBOX_IMAGE_DIGEST_INPUT: ${{ inputs.sandbox_image_digest }}
       CODEX_FOUNDRY_CONFIRMED_INPUT: ${{ inputs.codex_foundry_confirmed }}
+      COMPARISON_REVIEWED_SOURCE_SHA_INPUT: ${{ inputs.comparison_reviewed_source_sha }}
 
     steps:
       - name: Checkout
@@ -1166,7 +1180,8 @@ jobs:
             -f wall_timeout="$WALL_TIMEOUT_INPUT" \
             -f dry_run="$DRY_RUN_INPUT" \
             -f sandbox_image_digest="$SANDBOX_IMAGE_DIGEST" \
-            -f codex_foundry_confirmed="$CODEX_FOUNDRY_CONFIRMED_INPUT"
+            -f codex_foundry_confirmed="$CODEX_FOUNDRY_CONFIRMED_INPUT" \
+            -f comparison_reviewed_source_sha="$COMPARISON_REVIEWED_SOURCE_SHA_INPUT"
 
           echo "Relay run #$NEXT_RELAY triggered. This run will now exit."
           exit 0
@@ -1574,3 +1589,61 @@ jobs:
             batch-runner/workspace/
             batch-runner/results/
           retention-days: 30
+
+  comparison-admission:
+    name: GPT-5.4 comparison — local preparation gate only
+    if: >-
+      ${{ inputs.comparison_reviewed_source_sha != '' ||
+      contains(inputs.experiment_yaml, 'gpt54_v2_codex_') ||
+      contains(inputs.experiment_yaml, 'gpt54_sandboxv2_codex_comparison') ||
+      contains(inputs.experiment_yaml, 'comparison-run') ||
+      contains(inputs.experiment_yaml, 'comparison-grading') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Override the workflow's write/OIDC permissions before this job can start.
+    permissions:
+      contents: read
+    steps:
+      - name: Bind explicit source review to this workflow commit
+        env:
+          REVIEWED_SOURCE_SHA: ${{ inputs.comparison_reviewed_source_sha }}
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_EVENT_NAME" == 'workflow_dispatch' ]]
+          [[ "$GITHUB_REF" == 'refs/heads/main' ]]
+          [[ "$REVIEWED_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$GITHUB_SHA" == "$REVIEWED_SOURCE_SHA" ]]
+          [[ "$WORKFLOW_SHA" == "$REVIEWED_SOURCE_SHA" ]]
+
+      - name: Checkout explicitly reviewed comparison source
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ inputs.comparison_reviewed_source_sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.11'
+
+      - name: Install offline comparison gate dependencies
+        run: |
+          python3 -m pip install 'PyYAML>=6,<7' 'jsonschema>=4.21.0' \
+            pyarrow 'datasets>=2.18.0' 'huggingface-hub==1.24.0' 'pandas>=2.1.0' numpy
+
+      - name: Prepare and verify comparison checkout; refuse blocked launch
+        env:
+          COMPARISON_INPUTS: ${{ toJSON(inputs) }}
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: |
+          set -euo pipefail
+          # No relay/watchdog wrapper, source-checkout inference, credentials or
+          # data fetch. Only compiled prepared-checkout argv are bound, not run.
+          env -u PYTHONPATH python3 -I batch-runner/gpt54_workflow_gate.py \
+            --workflow batch-run --inputs-json "$COMPARISON_INPUTS" \
+            --event-name "$GITHUB_EVENT_NAME" --event-ref "$GITHUB_REF" \
+            --event-sha "$GITHUB_SHA" --workflow-sha "$WORKFLOW_SHA" \
+            --repository "$GITHUB_WORKSPACE" \
+            --destination "$RUNNER_TEMP/comparison-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" \
+            --dataset-parquet "$GITHUB_WORKSPACE/data/gdpval-local/data/train-00000-of-00001.parquet" \
+            --reference-root "$GITHUB_WORKSPACE/data/gdpval-local"
