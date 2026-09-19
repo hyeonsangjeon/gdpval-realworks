@@ -9076,11 +9076,48 @@ PYTHONPATH=batch-runner /usr/bin/python3 batch-runner/gpt54_disposable_checkout.
 materializer를 검증합니다. ABBA 네 run, five-task 순서, GPT-5.4/xhigh, 한도,
 grader/result/receipt 계약, 기존 V2/Codex 기본 동작은 바꾸지 않습니다. 증거 범위는
 `local_reviewed_checkout_and_bundles`이며 served capability, wire consumption,
-inference identity 승인이 아닙니다. runtime capture gate는 기존 두 bundle을
-계속 확인하며 새 checkout lineage/quarantine 검사를 모든 실행 경로에 연결했다는
-주장도 하지 않습니다. 외부 inference identity 승인, native result-bundle host,
+inference identity 승인이 아닙니다. 아래 14.5.9는 등록된 두 runtime 진입점에
+checkout lineage/quarantine 검사를 연결합니다. 모든 실행 경로나 workflow를
+승인한 것은 아닙니다. 외부 inference identity 승인, native result-bundle host,
 workflow gate, served capability, native caps, wire/usage/tariff 증거가 남습니다.
 `launch_allowed`와 `full_220_allowed`는 계속 false입니다.
+
+#### 14.5.9 실행 checkout 안에서 확인하는 lineage gate
+
+`gpt54_disposable_checkout.verify_runtime_checkout`은 현재 checkout,
+등록된 `run_id`, 그 runtime의 `condition`만 받습니다. 원본 source worktree
+경로를 요구하는 preparer-side verifier를 호출하거나 새 checkout을 만들지 않습니다.
+14.5.8의 ready/reservation 생성 규칙과 config/input marker 검증을 재사용합니다.
+
+Gate는 `comparison-checkout-ready.json`의 canonical bytes, full reviewed
+commit/tree SHA, sibling reservation의 exact bytes, quarantine 부재를 확인합니다.
+현재 linked-worktree의 양방향 등록과 raw detached HEAD를 확인하고 local
+`rev-parse`로 commit/tree를 대조합니다. 고정 환경과 hook/network 차단을 유지하며
+runtime에서는 다른 Git 명령을 실행하지 않습니다. 기존 bundle 검증이 실제 source
+pins·config·input bytes를 확인하고, run/condition/repeat/ABBA와 두 marker의
+size/SHA256은 새 정의 없이 원래 ready 계약에서 재구성합니다. 검증 전후의 HEAD,
+등록 경로와 marker bytes가 다르거나 quarantine이 생기면 거부합니다.
+
+Codex는 실제 Step 2의 comparison capture 검증에서, V2는 stage의 capture
+생성 전에 이 gate를 통과해야 합니다. provider/auth/client뿐 아니라 V2의 무료
+voice-safety preflight보다 앞입니다. 네 등록 ID는 다른 harness에 넘기거나 control을
+제거/null로 바꿔도 legacy no-op로 빠지지 않습니다. 각 harness가 받아들이는 control과
+run ID는 그대로이며, 비-comparison의 absent/null 기본 경로는 유지합니다.
+
+Gate는 파일을 게시·수정·복구하지 않습니다. ready/reservation/config/input marker
+누락·변조, wrong/attached/moving HEAD, 잘못된 run/condition, quarantine,
+symlink·hardlink·경로 이탈은 provider 전에 거부합니다. config/input 검증이나
+receipt 산식을 복제하지 않고, ABBA·model/effort·task cohort·한도도 바꾸지 않습니다.
+무료 selector는 임시 Git 저장소와 합성 five-task 입력만 사용하며 실제 두 진입점에서
+다음 외부 동작 직전의 sentinel로 멈춥니다. 과거 capture unit fixture의 non-Git
+경계는 명시적 double로 분리하고 새 selector에서는 실제 lineage gate를 사용합니다.
+
+이 검사는 현재 로컬 lineage와 pinned bytes의 일치 증거이며 외부 검토 결정이나
+inference identity 승인, served capability, wire-prompt equality, launch
+authorization을 발급하지 않습니다. 임의의 unpinned tracked 파일 전체를 검사하는
+`status`나 concurrent filesystem writer를 막는 sandbox도 아닙니다. 외부 identity,
+native result-bundle host, 실제 workflow deployment, served capability, native caps,
+wire/usage/tariff 증거는 남으며 두 launch flag는 계속 false입니다.
 
 ### 14.6 판정, 중단 규칙, 검토 경계
 

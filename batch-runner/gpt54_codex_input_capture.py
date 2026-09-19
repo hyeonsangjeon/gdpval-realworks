@@ -192,6 +192,11 @@ def verify_codex_input_capture(
             "condition": "condition_a", "mode": "codex_foundry", "max_retries": 0,
             "resume_max_rounds": 0, "resume": False, "wall_timeout": None,
         })
+        from gpt54_disposable_checkout import verify_runtime_checkout
+
+        verify_runtime_checkout(
+            checkout=_absolute(workspace).parent.parent, run_id=control.run_id, condition="codex",
+        )
         path, binding = _binding(control, workspace=workspace, dataset_root=dataset_root, prepared=prepared)
         expected = _canonical_json(binding).encode("utf-8")
         identity = _identity(expected)

@@ -4,6 +4,8 @@
 # Both capture gates require config and input bundle ready markers and bytes.
 # A separate local preparer requires an external reviewed SHA for a detached
 # checkout, then seals both bundles. No preparation artifact authorizes launch.
+# Registered runtimes also require the checkout-ready marker, reservation and
+# detached HEAD to agree in place, with no quarantine, before provider setup.
 plan_version: gpt54-sandboxv2-codex-comparison-v1
 base_sha: a855c5a9604554499be9eed4e5eb5523e8ad95d5
 comparison: configuration_bundle
@@ -118,15 +120,15 @@ runs:
 # Seal the reviewed templates and the boundaries on which the refusal rests.
 # These are file bytes, not a claim to have checked live inputs or a deployment.
 source_pins:
-  batch-runner/gpt54_comparison_preflight.py: d8e180863c6007b3d357275b46356f3f9f3037f4d8506b8990b8416006453ed1
+  batch-runner/gpt54_comparison_preflight.py: 255e416f54e35376743af744ac9cd3c34f0970a14e62db26eff00bbec41c3717
   batch-runner/gpt54_v2_grading_input.py: 3fae995caf3d785d64fad02280d77a6853389a2ff12be2e7165e4868b4b0b830
   batch-runner/gpt54_codex_grading_input.py: a61fd74012dd588225fb77359a2e7c0880e7a10918b33f9658d2a0d78f0d58c8
   batch-runner/gpt54_prepared_input_attestation.py: 6e78388a36446317d02f80409079e3a338eced6245afc56867f5438c0183ff9a
-  batch-runner/gpt54_codex_input_capture.py: b41063425a316de79ac466aa966d722e7820c4e04a5dfdbed876179dbb346c60
-  batch-runner/gpt54_v2_input_capture.py: bbd041c59a22beef1608d036c625c372eb6b769cc9224026ecfe5716ab72f6ca
+  batch-runner/gpt54_codex_input_capture.py: f2a31e4ffc4ed26e28e3e8bc0cb88ce6b33887cc94bb8a9d7ee1e6b6170642ec
+  batch-runner/gpt54_v2_input_capture.py: 0f1089379a68408ab72d079ed52356be6ec9c934518c541783f322477bbcc93c
   batch-runner/gpt54_run_config_bundle.py: 71b4bd5247fed0aaba827e6d6e54d1cc33b5d91c494760d996f5eb815d527b9d
   batch-runner/gpt54_run_input_bundle.py: eadbc027b91192a141737926aa723a1c2985e17038c31b7570840ee4691abe07
-  batch-runner/gpt54_disposable_checkout.py: 1fa5cbb2285ec3c7c8c106d6a3e045a80b238a35c83eeeeaeeed679200eb83d2
+  batch-runner/gpt54_disposable_checkout.py: 1674a92096f406e6cafdd9fd9da03760e5d6f920e423d0cc95573ca8dc55c808
   batch-runner/prepare_dataset.py: 17ccad9fe7a360daaa02329481c11f89135ca2cf107eb70355836b11fd4b2d5e
   batch-runner/step8_grade.py: ec23fc941aa0edb54e2858750cc1df5a6a6954a1732cd3f3197d9f9b4b3c18f4
   batch-runner/core/config.py: 483d8ad94ddb78b2a11b8712737ceea1e6b4d3696a8f16fabb84f747a786b48c
@@ -148,4 +150,4 @@ source_pins:
   batch-runner/core/experiment_config.py: 62f13891c405a6599ff883ce7cd0c06bf1ea59a422f25cecec299f4819011705
   batch-runner/core/executor.py: 0eb0060521191ceceaf08ad8201ece226ae4cd31c46c21ae64d72ae390b94d7b
   batch-runner/step1_prepare_tasks.py: 051d528c8bf5fdf122120ba88d07ae663c11fb86800fa22fbe6084f76583eee8
-  batch-runner/step2_run_inference.py: cae1754ee37251b7798ee92cadd69c7df61946d73263f376a1c71b3613533d3d
+  batch-runner/step2_run_inference.py: aa3952d1a0c698c1f3b7b2a79a681dc8d0ad3c4ccc7f47e99871d3036412e45a

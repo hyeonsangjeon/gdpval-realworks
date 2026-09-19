@@ -26,7 +26,7 @@ from gpt54_comparison_preflight import (
     _canonical_json,
     compile_grading_plan,
 )
-from gpt54_prepared_input_attestation import _identity, _same, _source_snapshot
+from gpt54_prepared_input_attestation import _identity, _json_object, _same, _source_snapshot
 from gpt54_run_config_bundle import (
     MANIFEST_PATH,
     READY_PATH as CONFIG_READY_PATH,
@@ -214,6 +214,22 @@ def _absent(destination: Path) -> None:
         raise DisposableCheckoutRefused("destination or sidecar exists; completed/partial attempts cannot be reused")
 
 
+def _registered_gitdir(root: Path, common: Path) -> Path:
+    """Read the existing linked-worktree registration, without a source path."""
+    # Bind both directions of Git's linked-worktree registration. Unlike the
+    # newer `worktree list -z`, this also works with the host's Git 2.34.1 and
+    # does not require parsing quoted, potentially newline-containing paths.
+    gitdir = _root(Path(os.fsdecode(_git(
+        root, "rev-parse", "--absolute-git-dir",
+    ).stdout.rstrip(b"\n"))))
+    if (gitdir.parent != common / "worktrees"
+            or _read_bytes(root / ".git") != b"gitdir: " + os.fsencode(gitdir) + b"\n"
+            or _read_bytes(gitdir / "gitdir") != os.fsencode(root / ".git") + b"\n"
+            or _read_bytes(gitdir / "commondir") != b"../..\n"):
+        raise DisposableCheckoutRefused("detached checkout registration mismatch")
+    return gitdir
+
+
 def _checkout_state(
     repository: Path, destination: Path, common: Path, sha: str,
     manifest: dict[str, Any], reviewed: dict[str, Any],
@@ -227,17 +243,7 @@ def _checkout_state(
     symbolic = _git(root, "symbolic-ref", "--quiet", "HEAD", ok=(0, 1))
     if symbolic.returncode != 1 or symbolic.stdout:
         raise DisposableCheckoutRefused("checkout HEAD must remain detached")
-    # Bind both directions of Git's linked-worktree registration. Unlike the
-    # newer `worktree list -z`, this also works with the host's Git 2.34.1 and
-    # does not require parsing quoted, potentially newline-containing paths.
-    gitdir = _root(Path(os.fsdecode(_git(
-        root, "rev-parse", "--absolute-git-dir",
-    ).stdout.rstrip(b"\n"))))
-    if (gitdir.parent != common / "worktrees"
-            or _read_bytes(root / ".git") != b"gitdir: " + os.fsencode(gitdir) + b"\n"
-            or _read_bytes(gitdir / "gitdir") != os.fsencode(root / ".git") + b"\n"
-            or _read_bytes(gitdir / "commondir") != b"../..\n"):
-        raise DisposableCheckoutRefused("detached checkout registration mismatch")
+    _registered_gitdir(root, common)
     if _git(root, "status", "--porcelain=v1", "--untracked-files=no", "--ignore-submodules=none").stdout:
         raise DisposableCheckoutRefused("checkout tracked tree is dirty")
     _same("checkout pinned source bytes", _sources(root, manifest), {
@@ -287,6 +293,88 @@ def _marker(
         "attestation_linkage": config["attestation_linkage"],
         "evidence_boundary": "local_reviewed_checkout_and_bundles",
     }
+
+
+def _runtime_revision(checkout: Path, sha: str, tree: str) -> tuple[Path, Path]:
+    """Read only rev-parse and local metadata; never resolve a ref as approval.
+
+    Pinned working-file bytes are checked by the existing bundle validators.
+    Avoid status/filter execution: this gate needs commit/tree identity, not
+    an unbounded revalidation of unrelated tracked files.
+    """
+    root, common = _repository(checkout)
+    gitdir = _registered_gitdir(root, common)
+    expected_head = sha.encode("ascii") + b"\n"
+    if _read_bytes(gitdir / "HEAD") != expected_head:
+        raise DisposableCheckoutRefused("runtime checkout HEAD must be the reviewed detached commit")
+    for revision, expected in (("HEAD^{commit}", sha), ("HEAD^{tree}", tree)):
+        actual = _git(root, "rev-parse", "--verify", "--end-of-options", revision).stdout
+        if actual != expected.encode("ascii") + b"\n":
+            raise DisposableCheckoutRefused("runtime checkout commit/tree differs from the ready marker")
+    if _read_bytes(gitdir / "HEAD") != expected_head:
+        raise DisposableCheckoutRefused("runtime checkout HEAD moved during verification")
+    return common, gitdir
+
+
+def verify_runtime_checkout(*, checkout: Path, run_id: str, condition: str) -> dict[str, Any]:
+    """Verify one prepared checkout in place before provider construction.
+
+    Args:
+        checkout: Current run checkout, not the preparer's external source tree.
+        run_id: Exact registered run requested by the runtime.
+        condition: The runtime's condition, either sandbox_v2 or codex.
+
+    Returns:
+        The unchanged canonical preparation marker, never launch authorization.
+
+    Raises:
+        DisposableCheckoutRefused: Missing, unsafe, quarantined or drifting local
+            lineage or bundles. This read-only gate never creates or repairs them.
+    """
+    try:
+        root = _root(checkout)
+        reservation, quarantine = _sidecars(root)
+        with _held_parents(root.parent, (root.name,)) as check_parent, _held_parents(root, (READY_PATH,)) as check_root:
+            if os.path.lexists(quarantine):
+                raise DisposableCheckoutRefused("quarantined runtime checkout cannot be used")
+            held_ready = _read_bytes(root / READY_PATH)
+            held = _json_object(held_ready)
+            sha, tree = held["reviewed_source_sha"], held["reviewed_tree_sha"]
+            if any(type(value) is not str or re.fullmatch(r"[0-9a-f]{40}", value) is None
+                   for value in (sha, tree)):
+                raise DisposableCheckoutRefused("runtime checkout requires full commit/tree identities")
+            if type(run_id) is not str or type(condition) is not str:
+                raise DisposableCheckoutRefused("exact runtime run and condition required")
+            revision = _runtime_revision(root, sha, tree)
+            manifest = yaml.safe_load(_read_bytes(root / MANIFEST_PATH))
+            plan = compile_grading_plan(manifest)
+            index = next(index for index, run in enumerate(plan.dispatch.runs) if run.run_id == run_id)
+            _same("runtime checkout condition", condition, plan.dispatch.runs[index].condition)
+            if sha == plan.dispatch.source_base_sha:
+                raise DisposableCheckoutRefused("historical source_base is not runtime source-review evidence")
+            expected_reservation = _reservation(plan, index, sha)
+            if _read_bytes(reservation) != expected_reservation:
+                raise DisposableCheckoutRefused("runtime checkout reservation mismatch")
+            marker = _marker(root, plan, index, sha, {"tree_sha": tree})
+            expected = _canonical_json(marker).encode("utf-8")
+            if held_ready != expected:
+                raise DisposableCheckoutRefused("runtime checkout-ready marker mismatch")
+            for identity in marker["bundles"].values():
+                _read_bytes(_path(root, identity["path"]), size=identity["size"], sha256=identity["sha256"])
+            if (_read_bytes(root / READY_PATH) != expected
+                    or _read_bytes(reservation) != expected_reservation):
+                raise DisposableCheckoutRefused("runtime checkout markers changed during verification")
+            if _runtime_revision(root, sha, tree) != revision:
+                raise DisposableCheckoutRefused("runtime checkout registration changed during verification")
+            if os.path.lexists(quarantine):
+                raise DisposableCheckoutRefused("runtime checkout was quarantined during verification")
+            check_parent()
+            check_root()
+            return marker
+    except DisposableCheckoutRefused:
+        raise
+    except (OSError, ValueError, TypeError, KeyError, StopIteration, AttributeError, yaml.YAMLError) as error:
+        raise DisposableCheckoutRefused("runtime checkout lineage refused") from error
 
 
 def verify_disposable_checkout(

@@ -2866,7 +2866,12 @@ def _comparison_input_gate(
     if (
         comparison_run_id is None
         and execution.get("comparison_input_capture") is None
-        and prepared.get("experiment_id") not in CodexComparisonCapture.RUN_IDS
+        # Reserve both harnesses' registered IDs without importing comparison
+        # readers on the legacy no-op path. Accepted controls stay Codex-only.
+        and prepared.get("experiment_id") not in (
+            *CodexComparisonCapture.RUN_IDS,
+            "gpt54_v2_codex_v1_v2_r1", "gpt54_v2_codex_v1_v2_r2",
+        )
     ):
         return None  # No extra file reads/imports or output fields for defaults.
     from gpt54_codex_input_capture import verify_codex_input_capture
