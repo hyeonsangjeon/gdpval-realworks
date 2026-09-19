@@ -1,6 +1,7 @@
 """One offline selector for the V2 producer-to-step8 materialization boundary."""
 
 import ctypes
+import errno
 import hashlib
 import json
 import os
@@ -123,7 +124,7 @@ def _fixture(tmp_path, manifest, plan, run, *, failures=0):
 
 
 @pytest.mark.parametrize("case", [
-    "valid_r1", "valid_r2", "terminal_error", "all_terminal_errors",
+    "valid_r1", "valid_r2", "terminal_error", "all_terminal_errors", "native_rename_boundary",
     "missing_identity", "null_identity", "unapproved_identity", "approval_mismatch", "duplicate_json_key",
     "identity_repo", "identity_revision", "identity_whitespace", "dataset_repo",
     "dataset_revision", "git_revision", "identity_binding", "identity_files",
@@ -139,8 +140,9 @@ def _fixture(tmp_path, manifest, plan, run, *, failures=0):
     "hardlink", "nonregular_file", "empty_file",
     "destination_directory", "destination_file", "destination_symlink", "destination_parent_symlink", "destination_overlap",
     "write_failure", "rename_failure", "rename_collision", "unsupported_atomic_rename",
+    "parent_replaced_at_staging", "parent_replaced_during_write",
 ])
-def test_v2_grading_input_is_bound_atomic_and_offline(case, tmp_path, monkeypatch):
+def test_v2_grading_input_is_bound_atomic_and_offline(case, tmp_path, monkeypatch, capsys):
     forbidden_calls = []
 
     def forbidden(*args, **kwargs):
@@ -159,6 +161,25 @@ def test_v2_grading_input_is_bound_atomic_and_offline(case, tmp_path, monkeypatc
     monkeypatch.setattr(grading.RubricLoader, "__init__", forbidden)
     monkeypatch.setattr(grading, "preflight_routes", forbidden)
     monkeypatch.setattr(grading, "open_cost_recorder", forbidden)
+
+    native_rename = materializer._no_replace_rename
+
+    def fixture_rename(source_fd, source, target_fd, target, flags):
+        # A single-threaded filesystem double, not proof of native atomicity.
+        # Production has no fallback to this check-then-rename operation.
+        assert source_fd == target_fd and flags == 1
+        assert not os.path.isabs(source) and not os.path.isabs(target)
+        try:
+            os.stat(target, dir_fd=target_fd, follow_symlinks=False)
+        except FileNotFoundError:
+            os.rename(source, target, src_dir_fd=source_fd, dst_dir_fd=target_fd)
+            return 0
+        ctypes.set_errno(errno.EEXIST)
+        return -1
+
+    monkeypatch.setattr(materializer, "_no_replace_rename", lambda: fixture_rename)
+    if case == "native_rename_boundary":
+        monkeypatch.setattr(materializer, "_no_replace_rename", native_rename)
 
     manifest = json.loads(json.dumps(load_plan()))
     plan = compile_grading_plan(manifest)
@@ -375,6 +396,35 @@ def test_v2_grading_input_is_bound_atomic_and_offline(case, tmp_path, monkeypatc
             raise materializer.V2GradingInputRefused("no atomic no-clobber primitive")
 
         monkeypatch.setattr(materializer, "_no_replace_rename", unsupported)
+    elif case in {"parent_replaced_at_staging", "parent_replaced_during_write"}:
+        parent = tmp_path / "output-parent"
+        parent.mkdir()
+        inputs["destination"] = parent / "installed"
+        displaced_parent = tmp_path / "original-parent"
+
+        def replace_parent():
+            parent.rename(displaced_parent)
+            parent.mkdir()
+            (parent / "preserve.txt").write_bytes(b"replacement belongs to someone else")
+
+        if case == "parent_replaced_at_staging":
+            def change_parent_after_staging(*args, **kwargs):
+                staged = track_staging(*args, **kwargs)
+                replace_parent()
+                return staged
+
+            monkeypatch.setattr(materializer.tempfile, "mkdtemp", change_parent_after_staging)
+        else:
+            write = materializer._write_file
+            writes = []
+
+            def change_parent_during_write(*args):
+                write(*args)
+                writes.append(True)
+                if len(writes) == 1:
+                    replace_parent()
+
+            monkeypatch.setattr(materializer, "_write_file", change_parent_during_write)
 
     # Binding hashes are separately approved fixture inputs, never read from a
     # self-asserted "verified" flag. Reseal malformed records to test semantics.
@@ -400,7 +450,7 @@ def test_v2_grading_input_is_bound_atomic_and_offline(case, tmp_path, monkeypatc
         inputs["inference_identity"].write_bytes(duplicate)
         inputs["approved_identity_sha256"] = hashlib.sha256(duplicate).hexdigest()
 
-    if case not in {"valid_r1", "valid_r2", "terminal_error", "all_terminal_errors"}:
+    if case not in {"valid_r1", "valid_r2", "terminal_error", "all_terminal_errors", "native_rename_boundary"}:
         with pytest.raises(materializer.V2GradingInputRefused):
             materializer.materialize_v2_grading_input(run, **inputs)
         assert forbidden_calls == []
@@ -414,13 +464,34 @@ def test_v2_grading_input_is_bound_atomic_and_offline(case, tmp_path, monkeypatc
         else:
             assert not os.path.lexists(destination)
             assert not os.path.lexists(inputs["destination"])
-        if case not in {"write_failure", "rename_failure", "rename_collision"}:
+        if case in {"parent_replaced_at_staging", "parent_replaced_during_write"}:
+            assert list(displaced_parent.iterdir()) == []
+            assert list(parent.iterdir()) == [parent / "preserve.txt"]
+            assert (parent / "preserve.txt").read_bytes() == b"replacement belongs to someone else"
+        elif case not in {"write_failure", "rename_failure", "rename_collision"}:
             assert stage_calls == []  # All input validation precedes any write.
         return
 
     before_record = inputs["run_record"].read_bytes()
     before_identity = inputs["inference_identity"].read_bytes()
-    result_path = materializer.materialize_v2_grading_input(run, **inputs)
+    try:
+        result_path = materializer.materialize_v2_grading_input(run, **inputs)
+    except materializer.V2GradingInputRefused as error:
+        if case != "native_rename_boundary":
+            raise
+        cause = error.__cause__
+        assert isinstance(cause, OSError) and cause.errno in {errno.EINVAL, errno.ENOSYS, errno.EOPNOTSUPP}
+        assert not destination.exists()
+        assert list(tmp_path.glob(".installed.tmp-*")) == []
+        assert before_record == inputs["run_record"].read_bytes()
+        assert before_identity == inputs["inference_identity"].read_bytes()
+        assert not forbidden_calls
+        with capsys.disabled():
+            print(f"\nNative RENAME_NOREPLACE unavailable (errno {cause.errno}); refused with no destination or staging residue.")
+        return
+    if case == "native_rename_boundary":
+        with capsys.disabled():
+            print("\nNative RENAME_NOREPLACE installed the validated fixture successfully.")
     assert result_path == destination / run.inference_results_path
     with monkeypatch.context() as context:
         context.chdir(destination / "batch-runner")

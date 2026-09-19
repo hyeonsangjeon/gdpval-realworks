@@ -110,7 +110,7 @@ runs:
 # These are file bytes, not a claim to have checked live inputs or a deployment.
 source_pins:
   batch-runner/gpt54_comparison_preflight.py: e5f680b6f6f55e44ff0a593e910124d8041442844df63b26dbfe68a367c32c5b
-  batch-runner/gpt54_v2_grading_input.py: e18b5a9770349a73ca17444f9dbe4a54e71b9c58d6b42dcf9888144dc392006c
+  batch-runner/gpt54_v2_grading_input.py: 149f9e69a8c9854fe78448facb866f076f197ba1ebfb560d9989c77a1fee9dc1
   batch-runner/step8_grade.py: ec23fc941aa0edb54e2858750cc1df5a6a6954a1732cd3f3197d9f9b4b3c18f4
   batch-runner/core/config.py: 483d8ad94ddb78b2a11b8712737ceea1e6b4d3696a8f16fabb84f747a786b48c
   batch-runner/core/agentic_v2_preregistration.py: 02ac15ef8483ac367796feb1fcbadf90a27062c2bf5b3147b75b7e17a0c089e0

@@ -8594,6 +8594,11 @@ partial 이유를 유지합니다. unknown 금액을 0으로 채우지 않습니
 validator로 staging을 확인하고 Linux `renameat2(RENAME_NOREPLACE)`로 원자적으로
 설치합니다. 기존 빈 디렉터리와의 경합도 덮어쓰지 않으며, 이 primitive가 없으면
 안전하지 않은 rename으로 대체하지 않습니다. 실패한 임시 tree는 정리합니다.
+생성·쓰기·정리는 열린 부모 descriptor의 `/proc/self/fd` 경로에 고정하므로 부모
+경로가 바뀌어도 다른 디렉터리에 쓰지 않습니다. Python 3.10에서도 같은 descriptor를
+유지한 채 정리합니다. native rename을 지원하지 않는 커널/파일시스템은 배치를
+거부합니다. deterministic fixture의 주입된 primitive로 확인한 변환 결과와 실제
+호스트의 native 지원 결과를 구분하며, 주입된 성공을 native 성공이라고 하지 않습니다.
 step8의 실제 `load_local_inference_results`와 `resolve_source_inference_identity`
 및 ordered task filter가 이 JSON을 그대로 읽습니다. 원본 record·deliverable·
 과거 ledger와 sealed evidence는 수정하지 않습니다.

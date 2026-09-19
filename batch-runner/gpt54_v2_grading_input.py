@@ -200,14 +200,23 @@ def _install(destination: Path, payload: dict, files: dict[str, bytes], run: Com
                 raise V2GradingInputRefused("destination parent changed")
 
         check_parent()
-        staging = Path(tempfile.mkdtemp(prefix=f".{destination.name}.tmp-", dir=parent))
+        # Use the same held parent for creation, writes, installation and
+        # cleanup. A renamed/replaced pathname must not redirect any write.
+        # This Linux fd path also supports descriptor-anchored rmtree on 3.10.
+        anchor = Path(f"/proc/self/fd/{descriptor}")
+        staging = Path(tempfile.mkdtemp(prefix=f".{destination.name}.tmp-", dir=anchor))
         check_parent()
         upload = staging / Path(run.staged_deliverables_directory).parent
         (upload / "deliverable_files").mkdir(parents=True)
         for relative, data in files.items():
             _write_file(upload / relative, data)
         _write_file(staging / run.inference_results_path, (_canonical_json(payload) + "\n").encode("utf-8"))
-        _same("staged deliverables", bind_deliverable_file_records(payload["results"], upload), payload["results"])
+        check_parent()
+        # The existing validator rejects symlink ancestors, including /proc's
+        # intentional descriptor link. Read through the checked canonical path;
+        # all writes and cleanup remain anchored to the descriptor above.
+        canonical_upload = parent / staging.name / Path(run.staged_deliverables_directory).parent
+        _same("staged deliverables", bind_deliverable_file_records(payload["results"], canonical_upload), payload["results"])
         check_parent()
         if rename(descriptor, os.fsencode(staging.name), descriptor, os.fsencode(destination.name), 1) != 0:
             number = ctypes.get_errno()
@@ -218,7 +227,7 @@ def _install(destination: Path, payload: dict, files: dict[str, bytes], run: Com
         try:
             if staging is not None:
                 # Only the private tree created by this call; never the destination.
-                shutil.rmtree(staging.name, dir_fd=descriptor)
+                shutil.rmtree(staging)
         finally:
             os.close(descriptor)
 
