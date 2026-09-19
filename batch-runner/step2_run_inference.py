@@ -3789,6 +3789,8 @@ def _run_inference_impl(
                 stream_max_retries=int(
                     codex_config.get("stream_max_retries", 0)
                 ),
+                reasoning_effort=codex_config.get("reasoning_effort"),
+                model_context_window=codex_config.get("model_context_window"),
             )
         except (ValueError, TypeError) as exc:
             # The message names the setting, never the address: this is the one

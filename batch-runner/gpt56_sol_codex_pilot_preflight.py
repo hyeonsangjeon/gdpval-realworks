@@ -16,7 +16,11 @@ from typing import Any
 import yaml
 
 from core.agentic_v2_preregistration import seal
-from core.codex_runtime_config import PINNED_CODEX_CLI_VERSION, PINNED_CODEX_SDK_VERSION
+from core.codex_runtime_config import (
+    PINNED_CODEX_CLI_VERSION,
+    PINNED_CODEX_SDK_VERSION,
+    requested_model_config_overrides,
+)
 from core.cost_receipts import RECEIPT_SCHEMA_VERSION
 from core.execution_envelope_tasks import (
     catalog_sha256,
@@ -27,7 +31,8 @@ from core.experiment_config import ExperimentConfig
 from gpt54_comparison_preflight import load_plan
 
 ROOT = Path(__file__).resolve().parents[1]
-BASE_SHA = "6ccd4ae346d302e3da0af455a3c5a72ec79a6984"
+BASE_SHA = "a5ed62bd55471c0fd8bdd637c9312315a17ebf4b"
+GRADER_SOURCE_SHA = "6ccd4ae346d302e3da0af455a3c5a72ec79a6984"
 ENVELOPE = "batch-runner/experiments/execution_envelope/"
 PLAN = ROOT / ENVELOPE / "gpt56_sol_copilot_codex_pilot.yaml"
 BASELINE = "batch-runner/experiments/exp035_codex_foundry_full220.yaml"
@@ -44,6 +49,8 @@ REQUIRED_SOURCES = {
     "batch-runner/core/codex_runner.py",
     "batch-runner/core/codex_cost.py",
     "batch-runner/core/executor.py",
+    "batch-runner/step1_prepare_tasks.py",
+    "batch-runner/step2_run_inference.py",
     "batch-runner/core/cost_receipts.py",
     "batch-runner/core/result_projection.py",
     "batch-runner/schemas/grade.schema.json",
@@ -51,7 +58,7 @@ REQUIRED_SOURCES = {
 # Findings on BASE_SHA, not editable waivers. Runtime changes need new review.
 LAUNCH_BLOCKERS = (
     "github_copilot_route_not_implemented",
-    "max_and_long_1m_not_forwarded_or_verified",
+    "max_and_long_1m_capability_unverified",
     "native_call_and_token_limits_unresolved",
     "live_identity_and_input_bytes_unverified",
     "pilot_dispatch_and_grading_identity_not_wired",
@@ -90,6 +97,10 @@ def inspect_plan(plan: dict[str, Any]) -> dict[str, Any]:
             "verified_context_tokens": None,
             "automatic_fallback_allowed": False,
             "fallbacks": [],
+        },
+        "codex_request": {
+            "reasoning_effort": "max",
+            "model_context_window": 1_000_000,
         },
         "pilot": {
             "run_id": "gpt56_sol_copilot_codex_pilot5_v1",
@@ -130,7 +141,7 @@ def inspect_plan(plan: dict[str, Any]) -> dict[str, Any]:
         },
         "grading": {
             "template": GRADER,
-            "source_sha": BASE_SHA,
+            "source_sha": GRADER_SOURCE_SHA,
             "rubric_revision": grader["rubric"]["revision"],
             "prompt_version": grader["prompt"]["version"],
             "judge_model": grader["judge"]["model"],
@@ -176,6 +187,11 @@ def inspect_plan(plan: dict[str, Any]) -> dict[str, Any]:
         "configuration_valid": not problems,
         "configuration_problems": problems,
         "plan_sha256": seal(plan),
+        # These are client requests, not proof of a served Copilot capability.
+        "requested_codex_config_overrides": (
+            list(requested_model_config_overrides(**plan["codex_request"]))
+            if not problems else None
+        ),
         "launch_allowed": False,
         "full_220_allowed": False,
         "launch_blockers": list(LAUNCH_BLOCKERS),

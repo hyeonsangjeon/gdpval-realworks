@@ -704,6 +704,8 @@ class TaskExecutor:
                     query_params=tuple(
                         sorted((opts.get("query_params") or {}).items())
                     ),
+                    reasoning_effort=opts.get("reasoning_effort"),
+                    model_context_window=opts.get("model_context_window"),
                 )
             if not isinstance(settings, CodexProviderSettings):
                 # The runner also accepts a loopback provider, which exists so

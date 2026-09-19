@@ -451,6 +451,20 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Forward explicit Codex reasoning and context-window requests through the
+  existing preparation, provider configuration, and runtime/thread path.
+  Optional typed controls produce `model_reasoning_effort="max"` and
+  `model_context_window=1000000` for the Sol contract, and
+  `model_reasoning_effort="xhigh"` for the GPT-5.4 comparison. Omitted or null
+  controls preserve the original Foundry override bytes. Invalid effort values
+  and non-integer, non-positive, or out-of-range context values are rejected
+  without coercion or fallback. Both preregistrations refresh their source pins
+  and still refuse launch: forwarding is a client request, not proof of a
+  served capability. One targeted command covering the adapter and both
+  preregistrations reported `105 passed in 22.13s`. Provider/authentication,
+  live verification, native caps, dispatch/grading, usage/tariff evidence, and
+  V2 effort wiring remain outside this change; no paid execution was added.
+
 - Pin the Sol pilot preflight's shared plan reader,
   `batch-runner/gpt54_comparison_preflight.py`, in both the required source set
   and the YAML's SHA-256 pins. Review found that the imported parser was outside

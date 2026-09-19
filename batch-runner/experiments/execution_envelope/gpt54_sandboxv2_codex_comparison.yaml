@@ -1,7 +1,7 @@
 # Preregistered targets, not a runnable V2 plan or batch experiment.
 # The free preflight deliberately refuses paid launch on the pinned source.
 plan_version: gpt54-sandboxv2-codex-comparison-v1
-base_sha: 96b181e1128039891f2cbbd9c26af9701e7e8e22
+base_sha: a5ed62bd55471c0fd8bdd637c9312315a17ebf4b
 comparison: configuration_bundle
 paid_comparison_approved: true
 launch_enabled: false
@@ -83,6 +83,10 @@ conditions:
     workflow: .github/workflows/batch-run.yml
     sdk_version: 0.147.0
     cli_version: 0.147.0
+    # Client configuration only; served effort remains unverified.
+    request:
+      reasoning_effort: xhigh
+      model_context_window: null
 
 # ABBA order limits one simple ordering confound; it does not remove time drift.
 # Fresh sessions, directories and ledger namespaces for every row. No relays or
@@ -105,5 +109,9 @@ source_pins:
   batch-runner/core/result_projection.py: 1b47c4ee0f6d050e5edd4ac5a301203ba834c8d159b1557b04d83046ca965ec6
   batch-runner/core/agentic_v2_model_voice.py: 01d2f1f082e90ca21212cc3fa0e0f93aeac23e556c245c0628bf586df9bb48b7
   batch-runner/core/agentic_v2_conversation_runner.py: 01db41662713ff92dc43a7674893309195728b9acce01ad0cf1be2e3dcdd8832
-  batch-runner/core/codex_runtime_config.py: b50b981aecb283bb849b4c469dd0692c4ac6756b76b2794ba0aa0974a9277359
+  batch-runner/core/codex_runtime_config.py: 3ef7a6bcbfe3523516068dee99f5488163cf33516d03de1c9fe42d8e2aca19b3
   batch-runner/core/codex_runner.py: a5e95775f8b5065307c625fb532677517e57217c9efc016f0135a06abd82377e
+  batch-runner/core/experiment_config.py: 77887f26a8769ec1f5344bffdd5003c8de6b1518bac69db0a346e1df9d5218ae
+  batch-runner/core/executor.py: 0eb0060521191ceceaf08ad8201ece226ae4cd31c46c21ae64d72ae390b94d7b
+  batch-runner/step1_prepare_tasks.py: 7c68b4e322ee53f0ea169b44b6372c9fb641b4c41d1c0390b4dc2826e8177915
+  batch-runner/step2_run_inference.py: 99a529f72749a3e3ab71f50af6d5850be75abaca72554e02a7846c34d622af67

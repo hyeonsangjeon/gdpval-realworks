@@ -53,7 +53,7 @@ import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Literal, Mapping, get_args
 
 from core.azure_ai_clients import (
     DIRECT_TOKEN_SCOPE,
@@ -574,6 +574,13 @@ class CodexProviderConfigurationError(ValueError):
     """A provider setting is missing, malformed, or forbidden here."""
 
 
+#: Requested client values, not evidence that a provider or pinned CLI serves
+#: every effort. Capability verification remains a separate launch boundary.
+CodexReasoningEffort = Literal[
+    "none", "minimal", "low", "medium", "high", "xhigh", "max"
+]
+
+
 #: The experiment-file key that says the address comes from this run's Azure
 #: route, the same one every other Azure caller in this repository derives.
 #: It holds ``true``, never an address and never a variable name.
@@ -663,6 +670,8 @@ def check_block_apart_from_its_address(block: Mapping[str, Any]) -> None:
         model=str(block.get("model", "")),
         provider_id=str(block.get("provider_id") or DEFAULT_PROVIDER_ID),
         query_params=dict(block.get("query_params") or {}),
+        reasoning_effort=block.get("reasoning_effort"),
+        model_context_window=block.get("model_context_window"),
     )
 
 
@@ -801,6 +810,10 @@ class CodexProviderSettings(CodexProviderLike):
     request_max_retries: int = DEFAULT_REQUEST_MAX_RETRIES
     stream_max_retries: int = DEFAULT_STREAM_MAX_RETRIES
     python_executable: str | None = None
+    #: Optional client requests. Omission preserves the existing Codex config;
+    #: neither setting verifies the served effort, context tier, or token caps.
+    reasoning_effort: CodexReasoningEffort | None = None
+    model_context_window: int | None = None
 
     def __post_init__(self) -> None:
         if not _PROVIDER_ID_PATTERN.match(self.provider_id):
@@ -865,6 +878,10 @@ class CodexProviderSettings(CodexProviderLike):
                 raise CodexProviderConfigurationError(
                     f"Codex provider {name} cannot be negative; got {value!r}"
                 )
+        requested_model_config_overrides(
+            reasoning_effort=self.reasoning_effort,
+            model_context_window=self.model_context_window,
+        )
 
     @property
     def base_url(self) -> str:
@@ -1068,6 +1085,59 @@ def provider_config_overrides(
     for key, value in sorted(dict(settings.query_params).items()):
         overrides.append(
             f"{prefix}.query_params.{key}={_toml_literal(value)}"
+        )
+    overrides.extend(requested_model_config_overrides(
+        reasoning_effort=settings.reasoning_effort,
+        model_context_window=settings.model_context_window,
+    ))
+    return tuple(overrides)
+
+
+def requested_model_config_overrides(
+    *,
+    reasoning_effort: CodexReasoningEffort | None = None,
+    model_context_window: int | None = None,
+) -> tuple[str, ...]:
+    """Validate and serialize explicit Codex client requests without a provider.
+
+    Args:
+        reasoning_effort: An exact allowed request value, or no override.
+        model_context_window: A positive signed-64-bit token count, or no
+            override. This is not a native-call or aggregate-token spend cap.
+
+    Returns:
+        Official top-level Codex config overrides; empty for both defaults.
+        Forwarding these requests is not proof of a served capability.
+
+    Raises:
+        CodexProviderConfigurationError: A value needs coercion, normalization,
+            or lies outside the supported request vocabulary/config type.
+    """
+    overrides: list[str] = []
+    if reasoning_effort is not None:
+        if (
+            not isinstance(reasoning_effort, str)
+            or reasoning_effort not in get_args(CodexReasoningEffort)
+        ):
+            raise CodexProviderConfigurationError(
+                "Codex reasoning_effort must be an exact allowed effort; "
+                f"got {reasoning_effort!r}"
+            )
+        overrides.append(
+            f"model_reasoning_effort={_toml_literal(reasoning_effort)}"
+        )
+    if model_context_window is not None:
+        if (
+            isinstance(model_context_window, bool)
+            or not isinstance(model_context_window, int)
+            or not 1 <= model_context_window <= (1 << 63) - 1
+        ):
+            raise CodexProviderConfigurationError(
+                "Codex model_context_window must be a positive signed-64-bit "
+                f"integer token count; got {model_context_window!r}"
+            )
+        overrides.append(
+            f"model_context_window={_toml_literal(model_context_window)}"
         )
     return tuple(overrides)
 
