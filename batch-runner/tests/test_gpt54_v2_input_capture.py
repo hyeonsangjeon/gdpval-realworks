@@ -4,7 +4,6 @@ import ast
 import errno
 import json
 import os
-import shutil
 import socket
 import subprocess
 import sys
@@ -24,7 +23,7 @@ from .test_gpt54_codex_input_capture import (
     ProviderBoundary, test_codex_comparison_capture_gates_real_step1_and_step2 as _codex_regression,
 )
 from .test_gpt54_prepared_input_attestation import (
-    _bundle_fixture, _fixture, _identity, _json, _tree_snapshot,
+    _bundle_fixture, _fixture, _identity, _input_bundle_fixture, _json, _tree_snapshot,
 )
 
 
@@ -35,15 +34,12 @@ def _runtime_fixture(tmp_path, monkeypatch, repeat):
     index = 0 if repeat == 1 else 3
     run = preflight.compile_grading_plan(inputs["manifest"]).dispatch.runs[index]
     root = tmp_path / run.run_id
-    dataset_root = root / writer.DATASET_ROOT
-    shutil.copytree(inputs["reference_root"], dataset_root)
-    (dataset_root / "data").mkdir()
-    shutil.copyfile(inputs["dataset_parquet"], dataset_root / "data" / writer.PARQUET_NAME)
     workspace = root / "batch-runner/workspace"
-    workspace.mkdir(parents=True)
     _bundle_fixture(
         root, manifest=inputs["manifest"], combined_plan=inputs["combined_plan"], run=run,
     )
+    _input_bundle_fixture(root, inputs=inputs, run=run)
+    workspace.mkdir(parents=True)
     monkeypatch.setattr(runner, "load_task_catalog", preflight.load_task_catalog)
     monkeypatch.setattr(runner, "catalog_sha256", preflight.catalog_sha256)
     return root, run, inputs, bindings[index], records
@@ -391,7 +387,7 @@ def test_v2_comparison_capture_gates_stage_before_provider(case, tmp_path, monke
         inspection = preflight.inspect_plan(inputs["manifest"], grading_plan=inputs["combined_plan"])
         assert inspection["configuration_valid"] is True
         assert inspection["v2_pre_execution_capture"]["required_runs"] == list(capture.V2ComparisonCapture.RUN_IDS)
-        assert len(preflight.REQUIRED_SOURCES) == 29
+        assert len(preflight.REQUIRED_SOURCES) == 30
         compiled = preflight.compile_dispatch_plan(inputs["manifest"])
         assert compiled.runs[0].config_json == compiled.runs[3].config_json
     else:
