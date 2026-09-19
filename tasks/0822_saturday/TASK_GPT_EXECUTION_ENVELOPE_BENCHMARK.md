@@ -8430,19 +8430,22 @@ ABBA 순서는 한 방향의 시간 경과 영향을 줄이기 위한 고정 순
   신원 문서와 외부 승인 SHA256이 있으면 V2 결과와 Codex canonical 결과·deliverable을
   각각 검증해 isolated step8 입력으로 배치할 수 있습니다. prepared input의
   오프라인 동등성 검사는 14.5.3에서 다룹니다. 신원 문서 발급·승인, 실제 capture와
-  소비 시점의 연결, native result-bundle no-clobber 지원 host, checkout 생성,
-  실제 배치 실행과 workflow 관문은 여전히 외부 gate입니다. 이미 준비된 disposable
+  소비 시점의 연결, native result-bundle no-clobber 지원 host, 실제 배치 실행과
+  workflow 관문은 여전히 외부 gate입니다. 이미 준비된 disposable
   checkout에 exact config bundle을 배치·검증하는 경로는 14.5.6, 로컬 pinned
   parquet와 five-task references만 배치·검증하는 경로는 14.5.7에서 닫습니다.
+  외부 reviewed SHA로 detached checkout을 만들고 두 bundle을 봉인하는 로컬
+  준비기는 14.5.8에 있으며, 실제 배치·실행 승인을 대신하지 않습니다.
 - `comparison_usage_and_tariff_evidence_unverified`: 이 비교에서 실제 모델·usage와
   비용 단위가 연결되는 증거는 아직 없습니다. 가격 누락만을 새 지출 차단 규칙으로
   삼지는 않으며, 기존 record-only 정책과 unknown/null/partial 기록을 유지합니다.
 
-무료 검사기는 원천 파일 **30개**의 지문을 먼저 확인합니다. #621의 24개에
+무료 검사기는 원천 파일 **31개**의 지문을 먼저 확인합니다. #621의 24개에
 `gpt54_prepared_input_attestation.py`와 기존 Step 1 public helper를 import할 때
 필요한 `prepare_dataset.py`, Codex capture용 `gpt54_codex_input_capture.py`,
 V2 capture용 `gpt54_v2_input_capture.py`, 설정 배치·검증용 `gpt54_run_config_bundle.py`,
-입력 배치·검증용 `gpt54_run_input_bundle.py`를 추가했습니다.
+입력 배치·검증용 `gpt54_run_input_bundle.py`, detached checkout 준비용
+`gpt54_disposable_checkout.py`를 추가했습니다.
 해당 loader의 다운로드 경로는 호출하지 않습니다.
 `step8_grade.py`의 기존 `compute_grader_source_hash`는
 모든 `core/**/*.py`, grade schema, requirements include graph, inference download
@@ -8641,7 +8644,7 @@ provider/auth도 공식 runtime 인계 계약이 없어 blocked 상태이며 대
 `ComparisonGradingRunSpec`이 두 Codex run 중 하나와 정확히 일치하는지 확인합니다.
 ABBA의 Codex r1/r2, 고정 5개 task ID·입력 순서, Foundry GPT-5.4/xhigh,
 grader·receipt 계약은 바꾸지 않습니다. combined dispatch/grading plan의 exact-match
-검사와 현재 30개 source pin에 이 함수가 포함됩니다. V2 spec이나 수정된 dict는 받지 않습니다.
+검사와 현재 31개 source pin에 이 함수가 포함됩니다. V2 spec이나 수정된 dict는 받지 않습니다.
 
 입력은 해당 spec, manifest, 실제 `workspace/step2_inference_results.json`, 실제
 `workspace/upload`, 별도의 inference identity JSON, **외부 승인 SHA256**, 아직 없는
@@ -8954,7 +8957,7 @@ voice/provider/auth 생성 전, Codex Step 2는 기존 provider/client 생성 �
 
 이 marker는 **로컬 config bundle 일치**만 증명합니다. prepared input의 실제 bytes,
 served capability, wire prompt equality, inference publication identity 승인이나 launch
-authorization이 아닙니다. 대상 checkout에서 확인하는 범위는 명시된 30개 source pin이며,
+authorization이 아닙니다. 대상 checkout에서 확인하는 범위는 명시된 31개 source pin이며,
 전체 grader closure는 아닙니다. 기존 `template_source_sha256` 검사는 compiler를 실행한
 checkout을 대상으로 하므로 `materialized_grader_source_hash`는 여전히 미확정입니다.
 실제 입력 확인은 기존 capture/attestation 경로에 남고,
@@ -9003,9 +9006,81 @@ host 절대 경로나 임의의 verified/approved flag, 외부 inference identit
 기존 absent/null 비비교 경로는 새 읽기·출력 필드 없이 그대로입니다.
 
 이 증거의 범위는 `local_input_bundle_consistency`입니다. 실제 wire 소비, served
-capability나 전체 target grader closure를 입증하지 않습니다. checkout 생성, 외부
-identity 발급·승인, native result-bundle host, workflow gate, capability/caps,
+capability나 전체 target grader closure를 입증하지 않습니다. 별도 reviewed SHA에 따른
+checkout 생성은 아래 14.5.8에서 다룹니다. 외부 inference identity 발급·승인,
+native result-bundle host, workflow gate, capability/caps,
 usage/tariff와 승인된 실제 실행은 남아 있습니다. 두 launch flag는 계속 false입니다.
+
+#### 14.5.8 Reviewed SHA의 detached disposable checkout 준비
+
+`gpt54_disposable_checkout.prepare_disposable_checkout`은 명시적 local repository,
+외부에서 검토한 lowercase full 40-hex commit SHA, 아직 없는 destination,
+정확한 typed dispatch run, manifest·combined plan, pinned parquet와 five-task
+reference source를 받습니다. grading run은 같은 combined plan에서 도출합니다.
+호출자가 제공한 SHA는 외부 검토 경계이며, 이 함수가 검토·승인을 발급하지 않습니다.
+`HEAD`·branch·tag·축약 SHA를 받지 않고 historical `source_base_sha`를 reviewed
+source SHA로 대체하지 않습니다. 두 값은 서로 다른 역할로 marker에 보존됩니다.
+
+쓰기 전 compiler와 같은 Git common directory인지, commit object가 실제로
+존재하는지, commit의 manifest·31 source pin bytes가 정확한지 확인합니다.
+원본 working tree가 dirty해도 그 파일을 복사하거나 고치지 않고 commit blob을
+읽습니다. tracked symlink·gitlink, source/input/common-dir overlap, 경로 이탈,
+기존 destination 및 sidecar는 거부합니다. 실제 parquet/reference snapshot도
+이 단계에서 검증하며 이미 준비된 bundle이 commit에 있으면 새 입력으로 채우지 않습니다.
+
+부모가 안전한 경로에 `.<destination>.comparison-checkout-reserved.json`을
+no-clobber 게시하고 destination directory를 직접 exclusive 생성합니다.
+Git이 허용하는 기존 빈 directory를 임의로 받아들이지 않습니다. 실행하는 Git
+mutation은 `worktree add --detach -- DESTINATION REVIEWED_SHA` 하나입니다.
+호출자의 Git 환경 변수는 물려받지 않고 hook·fsmonitor·submodule recursion과
+lazy fetch/transport를 막습니다. checkout filter·config include·promisor 설정은
+거부합니다. 이 보호는 해당 내부 명령에만 적용하며 개발 commit hook은 유지합니다.
+
+생성 직후 detached HEAD, exact SHA, common directory, worktree 등록, clean
+tracked tree와 pin bytes를 확인합니다. 등록 검사는 Git 2.34.1에서도 지원되는
+`rev-parse --absolute-git-dir`과 `.git`/`gitdir`/`commondir`의 양방향 경로를
+검증하며, 신형 `worktree list -z` 옵션이나 quoted path 파싱에 의존하지 않습니다.
+이후 14.5.6 config bundle, 14.5.7 input
+bundle 순서로 실제 materializer를 호출합니다. 마지막에 run-relative
+`comparison-checkout-ready.json`을 기존 atomic no-clobber writer로 게시하고
+두 bundle marker·actual bytes·HEAD를 다시 검사합니다. ready에는 run/condition/
+repeat/ABBA identity, reviewed commit/tree와 historical base, source pin map,
+plan digests, 두 bundle marker size·SHA256, prepared-input attestation linkage를
+넣습니다. host 절대 경로나 launch/external inference approval을 넣지 않습니다.
+
+예약 후 실패하면 `.<destination>.comparison-checkout-quarantine.json`과 남은
+경로를 보고하고 자동 삭제·정리·재사용·덮어쓰기를 하지 않습니다. 최종 재검증 실패로
+ready가 이미 있어도 quarantine이 우선합니다. 부모가 이동하거나 디스크 쓰기가
+실패해 quarantine 게시가 불가능하면 그 사실과 reservation/checkout 경로를
+오류에 명시합니다. retained reservation 자체로도 재시도가 거부됩니다.
+개별 파일 게시와 디렉터리 identity 검사는 checkout 전체의 원자적 트랜잭션이나
+악의적인 concurrent filesystem writer에 대한 sandbox, crash durability 보장이 아닙니다.
+운영자가 실패 경로를 수동 폐기해야 하며 성공 뒤에도 자동 실행·cleanup은 없습니다.
+
+CLI는 같은 인자를 명시적으로 받습니다. 다음은 **로컬 준비만** 하는 인터페이스이며
+이 변경에서는 실제 repository에 대해 실행하지 않습니다.
+
+```bash
+PYTHONPATH=batch-runner /usr/bin/python3 batch-runner/gpt54_disposable_checkout.py \
+  --repository /absolute/local/reviewed-repository \
+  --reviewed-source-sha REVIEWED_FULL_40_HEX_COMMIT \
+  --destination /absolute/local/absent-disposable-run \
+  --manifest /absolute/local/exact-manifest.yaml \
+  --combined-plan /absolute/local/exact-comparison-plan.json \
+  --run-id gpt54_v2_codex_v1_v2_r1 \
+  --dataset-parquet /absolute/local/pinned.parquet \
+  --reference-root /absolute/local/five-task-references
+```
+
+무료 selector는 tmp local Git repositories에서만 실제 detached checkout과 두
+materializer를 검증합니다. ABBA 네 run, five-task 순서, GPT-5.4/xhigh, 한도,
+grader/result/receipt 계약, 기존 V2/Codex 기본 동작은 바꾸지 않습니다. 증거 범위는
+`local_reviewed_checkout_and_bundles`이며 served capability, wire consumption,
+inference identity 승인이 아닙니다. runtime capture gate는 기존 두 bundle을
+계속 확인하며 새 checkout lineage/quarantine 검사를 모든 실행 경로에 연결했다는
+주장도 하지 않습니다. 외부 inference identity 승인, native result-bundle host,
+workflow gate, served capability, native caps, wire/usage/tariff 증거가 남습니다.
+`launch_allowed`와 `full_220_allowed`는 계속 false입니다.
 
 ### 14.6 판정, 중단 규칙, 검토 경계
 

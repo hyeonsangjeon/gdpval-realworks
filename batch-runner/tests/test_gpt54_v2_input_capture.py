@@ -387,7 +387,7 @@ def test_v2_comparison_capture_gates_stage_before_provider(case, tmp_path, monke
         inspection = preflight.inspect_plan(inputs["manifest"], grading_plan=inputs["combined_plan"])
         assert inspection["configuration_valid"] is True
         assert inspection["v2_pre_execution_capture"]["required_runs"] == list(capture.V2ComparisonCapture.RUN_IDS)
-        assert len(preflight.REQUIRED_SOURCES) == 30
+        assert len(preflight.REQUIRED_SOURCES) == 31
         compiled = preflight.compile_dispatch_plan(inputs["manifest"])
         assert compiled.runs[0].config_json == compiled.runs[3].config_json
     else:
