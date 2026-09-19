@@ -12,6 +12,19 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Added
+
+- Compile the GPT-5.4 comparison manifest into four immutable offline run
+  specifications in V2 r1, Codex r1, Codex r2, V2 r2 order. The compiler reuses
+  the existing templates and parsers to produce canonical JSON configs and
+  arguments for the V2 stage and Codex preparation/inference entrypoints.
+  It requires 21 source pins and binds any supplied dispatch document to the
+  manifest, including its controls, config bytes, arguments, and separate
+  checkout paths. One targeted selector reported `25 passed in 9.44s`.
+  This closes offline dispatch-plan generation only: launch and 220-task
+  progression remain false, and pinned grading, live capability/input checks,
+  native caps, workflow gates, and usage/tariff evidence remain outstanding.
+  No runtime default, historical artifact, or paid execution path changed.
+
 - **Preregistered the GitHub Copilot GPT-5.6 Sol Codex pilot.** The contract
   fixes Sol (not Fast or Astra), Max reasoning, Long 1M, and the existing
   score-free five-task order and input fingerprints. It preserves exp035's
