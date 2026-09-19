@@ -21,6 +21,7 @@ from typing import Any
 from core.agentic_v2_cost_binding import describe_run_outcome
 from core.agentic_v2_manifest_binding import ManifestRefused, bind_stage, binding_record
 from core.agentic_v2_run_report import summarise_v2_run
+from core.cost_projection import project_cost_ledger_reference
 from core.execution_envelope_tasks import load_task_catalog
 from core.inference_manifest import (
     _assert_no_symlink_ancestors,
@@ -184,7 +185,19 @@ def _write_file(path: Path, data: bytes) -> None:
         os.fsync(stream.fileno())
 
 
-def _install(destination: Path, payload: dict, files: dict[str, bytes], run: ComparisonGradingRunSpec) -> Path:
+def _install(
+    destination: Path, payload: dict, files: dict[str, bytes], run: ComparisonGradingRunSpec,
+    *, adjacent_ledger: tuple[str, bytes] | None = None,
+) -> Path:
+    # Codex may carry a producer ledger beside step2 JSON. The default leaves
+    # the V2 tree/bytes unchanged; this is one bound sidecar, not arbitrary paths.
+    if adjacent_ledger is not None:
+        ledger_name, ledger_data = adjacent_ledger
+        if ledger_name in {"", ".", "..", Path(run.inference_results_path).name} or Path(ledger_name).name != ledger_name:
+            raise V2GradingInputRefused("ledger must be a separate sibling filename")
+        _same("ledger snapshot", project_cost_ledger_reference(payload.get("cost_ledger")), {
+            "path": ledger_name, "sha256": hashlib.sha256(ledger_data).hexdigest(),
+        })
     rename = _no_replace_rename()  # Capability check before creating a temp tree.
     parent = destination.parent
     _assert_no_symlink_ancestors(parent)
@@ -211,6 +224,8 @@ def _install(destination: Path, payload: dict, files: dict[str, bytes], run: Com
         for relative, data in files.items():
             _write_file(upload / relative, data)
         _write_file(staging / run.inference_results_path, (_canonical_json(payload) + "\n").encode("utf-8"))
+        if adjacent_ledger is not None:
+            _write_file(staging / Path(run.inference_results_path).parent / ledger_name, ledger_data)
         check_parent()
         # The existing validator rejects symlink ancestors, including /proc's
         # intentional descriptor link. Read through the checked canonical path;

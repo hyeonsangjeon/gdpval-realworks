@@ -13,6 +13,22 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Validate and isolate existing Codex step2 results and deliverables for the
+  GPT-5.4 comparison. The offline materializer binds the original JSON digest,
+  result fingerprint, run/task/config identities, file bytes, and optional
+  producer ledger to a separate identity document and its externally approved
+  SHA256. It preserves raw result fields, terminal errors, and absent/null/partial
+  receipts, and reuses V2's descriptor-anchored staging and native no-clobber
+  rename. The source set now has 24 pins; the V2 installer keeps its existing
+  behavior by default. After correcting two test defects found by immutable
+  review, the single targeted selector reported `114 passed in 72.92s`, including
+  both Codex repeats and 13 existing V2 regression cases. Both native cases on
+  this NAS refused errno 22 without destination or staging residue. External
+  identity issuance, native host support, checkout/config and workflow gates,
+  capability, caps, live inputs, and usage/tariff evidence remain outstanding.
+  Launch and 220-task progression remain false. Production runtime/grader
+  defaults and historical ledgers/evidence are unchanged.
+
 - Materialize independently bound Sandbox V2 results and deliverables as
   canonical local step8 inputs for the GPT-5.4 comparison. The offline function
   reuses the dispatch/grading compilers, checks the ordered five-task scope and
