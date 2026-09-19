@@ -36,7 +36,7 @@ from core.execution_envelope_tasks import (
 from core.experiment_config import ExperimentConfig
 
 ROOT = Path(__file__).resolve().parents[1]
-BASE_SHA = "f85da3f87550abc335c9365e9bca22372747f1e4"
+BASE_SHA = "c0fdd10c384ab31ccc65cf3019c4d838f370a6a9"
 GRADER_SOURCE_SHA = BASE_SHA
 ENVELOPE = "batch-runner/experiments/execution_envelope/"
 PLAN = ROOT / ENVELOPE / "gpt54_sandboxv2_codex_comparison.yaml"
@@ -47,6 +47,8 @@ REQUIRED_SOURCES = {
     "batch-runner/gpt54_comparison_preflight.py",
     "batch-runner/gpt54_v2_grading_input.py",
     "batch-runner/gpt54_codex_grading_input.py",
+    "batch-runner/gpt54_prepared_input_attestation.py",
+    "batch-runner/prepare_dataset.py",
     "batch-runner/step8_grade.py",
     "batch-runner/core/config.py",
     "batch-runner/core/agentic_v2_preregistration.py",
