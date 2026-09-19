@@ -4,18 +4,28 @@ import json
 import os
 import stat
 import sys
+from copy import deepcopy
 from dataclasses import replace
+from functools import lru_cache
+from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
+import yaml
 
 import gpt54_codex_input_capture as writer
 import gpt54_comparison_preflight as preflight
+import gpt54_prepared_input_attestation as attester
 import gpt54_run_config_bundle as config_bundle
 import gpt54_run_input_bundle as bundle
 import step1_prepare_tasks as step1
 import step2_run_inference as step2
+import step8_grade as grading
+from core.needs_files import NeedsFilesManifest
 from core.source_identity import source_task_projection_sha256
 from scripts import run_agentic_v2_stage as runner
+from . import test_gpt54_codex_input_capture as codex_cases
+from . import test_gpt54_v2_input_capture as v2_cases
 from .test_gpt54_codex_input_capture import (
     _runtime_fixture as _codex_fixture,
     test_codex_comparison_capture_gates_real_step1_and_step2 as _codex_regression,
@@ -28,6 +38,181 @@ from .test_gpt54_v2_input_capture import (
     _runtime_fixture as _v2_fixture,
     test_v2_comparison_capture_gates_stage_before_provider as _v2_regression,
 )
+
+
+def _compiler_cache():
+    """Memoize byte-derived preparation, never a validator's verdict.
+
+    The grader closure is hashed by the real helper once. Reuse requires the
+    same arguments, complete core inventory, path types/link counts and every
+    dependency's actual bytes. Drift delegates to the real helper. Disposable
+    checkout/data reads, source-pin comparisons and all validators stay real.
+    """
+    read_yaml, hash_source = yaml.safe_load, grading.compute_grader_source_hash
+    sha256 = preflight.hashlib.sha256
+    config_path = preflight.ROOT / preflight.GRADER
+    batch_root = preflight.ROOT / "batch-runner"
+    config = preflight.load_plan(config_path)
+    config_bytes = _json(config)
+    dependencies = {}
+    read_bytes = Path.read_bytes
+
+    def observed_read(path):
+        data = read_bytes(path)
+        dependencies[path] = data
+        return data
+
+    with pytest.MonkeyPatch.context() as observe:
+        observe.setattr(Path, "read_bytes", observed_read)
+        digest = hash_source(config_path, config, batch_root=batch_root)
+
+    def source_state():
+        # Include directories and non-Python entries: the real helper refuses
+        # links anywhere in core, and a new Python file must invalidate reuse.
+        paths = set((batch_root / "core").rglob("*")) | set(dependencies)
+        paths.update(parent for path in tuple(paths) for parent in path.parents)
+        topology = []
+        try:
+            for path in sorted(paths):
+                info = path.lstat()
+                if not (stat.S_ISREG(info.st_mode) or stat.S_ISDIR(info.st_mode)):
+                    return None
+                topology.append((path, info.st_mode, info.st_nlink))
+            return tuple(topology), tuple((path, read_bytes(path)) for path in dependencies)
+        except OSError:
+            return None
+
+    sealed_state = source_state()
+    assert sealed_state is not None and dict(sealed_state[1]) == dependencies
+
+    def cached_source(config_file, value, *, batch_root=None):
+        if (config_file == config_path and batch_root == preflight.ROOT / "batch-runner"
+                and _json(value) == config_bytes and source_state() == sealed_state):
+            return digest
+        return hash_source(config_file, value, batch_root=batch_root)
+
+    @lru_cache(maxsize=128)
+    def parsed(data):
+        return read_yaml(data)
+
+    def cached_yaml(data):
+        if type(data) not in (str, bytes):
+            return read_yaml(data)
+        # Compilers edit loaded configs. Never expose the cached object itself.
+        return deepcopy(parsed(data))
+
+    @lru_cache(maxsize=128)
+    def hashed(data):
+        return sha256(data)
+
+    def install(monkeypatch):
+        monkeypatch.setattr(yaml, "safe_load", cached_yaml)
+        monkeypatch.setattr(grading, "compute_grader_source_hash", cached_source)
+        # Only the compiler's byte-keyed hashes; mutable target validators keep
+        # their original readers/hashers. Return a copy of the mutable hasher.
+        monkeypatch.setattr(preflight, "hashlib", SimpleNamespace(sha256=lambda data: hashed(data).copy()))
+
+    return install
+
+
+def _snapshot_files(root):
+    return tuple((path.relative_to(root).as_posix(), path.read_bytes())
+                 for path in sorted(root.rglob("*")) if path.is_file())
+
+
+def _copy_files(root, files):
+    """Fresh single-link files per case; no shared mutable tree or hardlinks."""
+    for name, data in files:
+        path = root / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("xb") as stream:
+            stream.write(data)
+        assert not path.is_symlink() and path.stat().st_nlink == 1
+
+
+@pytest.fixture(scope="module")
+def _input_bundle_seed(tmp_path_factory):
+    """Build the independent five-task oracle and four config bundles once.
+
+    Only immutable bytes and frozen typed plans cross case boundaries. The
+    existing runtime fixtures still call the real input materializer, Step 1
+    serializer, capture writer and Step 2/V2 gates in every applicable case.
+    """
+    root = tmp_path_factory.mktemp("run-input-bundle-seed")
+    oracle = root / "oracle"
+    oracle.mkdir()
+    with pytest.MonkeyPatch.context() as setup:
+        forbidden = _guards(setup)
+        install_cache = _compiler_cache()
+        install_cache(setup)
+        inputs, captures, prepared, projections, records = _fixture(oracle, setup, "identical")
+        plan = preflight.compile_grading_plan(inputs["manifest"])
+        oracle_files = _snapshot_files(oracle)
+        documents = _json([inputs["manifest"], inputs["combined_plan"], captures, prepared, projections, records])
+        run_roles = tuple((row.run_id, row.generated_config.relative_to(oracle),
+                           row.input_binding.relative_to(oracle),
+                           row.prepared_tasks.relative_to(oracle) if row.prepared_tasks else None)
+                          for row in inputs["runs"])
+        catalog, catalog_digest = preflight.load_task_catalog(), preflight.catalog_sha256()
+        fixture_plan = preflight.load_plan
+        rows = _json([vars(row) for row in step1.GDPValDataLoader(auto_download=False).load()])
+        needs = _json(NeedsFilesManifest.load()._data)
+        last_workspace = step1.WORKSPACE_DIR.relative_to(oracle)
+        config_files, config_markers = {}, {}
+        for run in plan.dispatch.runs:
+            checkout = root / run.run_id
+            config_markers[run.run_id] = _json(_bundle_fixture(
+                checkout, manifest=inputs["manifest"], combined_plan=inputs["combined_plan"], run=run,
+            ))
+            config_files[run.run_id] = _snapshot_files(checkout)
+        assert forbidden == []
+    original = _tree_snapshot(root)
+
+    def copy_inputs(directory, monkeypatch, case):
+        assert case == "identical"  # Invalid oracle variants must never use this seed.
+        _copy_files(directory, oracle_files)
+        manifest, combined, bindings, payloads, sources, references = json.loads(documents)
+        monkeypatch.setattr(preflight, "load_plan", lambda path=preflight.PLAN: deepcopy(fixture_plan(path)))
+        for module in (preflight, attester):
+            monkeypatch.setattr(module, "load_task_catalog", lambda: catalog)
+            monkeypatch.setattr(module, "catalog_sha256", lambda: catalog_digest)
+        monkeypatch.setenv("NEEDS_FILES_POLICY", "deliverable_only")
+
+        def dataset_loader(*, auto_download):
+            assert auto_download is False
+            return SimpleNamespace(load=lambda: [SimpleNamespace(**row) for row in json.loads(rows)])
+
+        monkeypatch.setattr(step1, "GDPValDataLoader", dataset_loader)
+        monkeypatch.setattr(NeedsFilesManifest, "load", classmethod(lambda cls: NeedsFilesManifest(json.loads(needs))))
+        monkeypatch.setattr(step1, "resolve_publication_generation", lambda experiment: "offline-fixture." + experiment)
+        monkeypatch.setattr(step1, "WORKSPACE_DIR", directory / last_workspace)
+        copied = {
+            "manifest": manifest, "combined_plan": combined,
+            "dataset_parquet": directory / "source.parquet", "reference_root": directory / "references",
+            "runs": tuple(attester.PreparedRunInputs(run_id, directory / config, directory / binding,
+                                                     directory / tasks if tasks else None)
+                          for run_id, config, binding, tasks in run_roles),
+        }
+        return copied, bindings, payloads, sources, references
+
+    def copy_config(checkout, *, manifest, combined_plan, run, materialize=True):
+        assert materialize is True
+        assert _json(manifest) == _json(json.loads(documents)[0])
+        assert _json(combined_plan) == plan.canonical_bytes()
+        assert run == next(row for row in plan.dispatch.runs if row.run_id == run.run_id)
+        _copy_files(checkout, config_files[run.run_id])
+        return json.loads(config_markers[run.run_id])
+
+    def install(monkeypatch):
+        install_cache(monkeypatch)
+        # These are fixture suppliers, not runtime/compiler validators. Other
+        # selectors get their unmodified helpers back at each case's teardown.
+        for module in (codex_cases, v2_cases):
+            monkeypatch.setattr(module, "_fixture", copy_inputs)
+            monkeypatch.setattr(module, "_bundle_fixture", copy_config)
+
+    yield SimpleNamespace(plan=plan, inputs=copy_inputs, config=copy_config, install=install)
+    assert _tree_snapshot(root) == original
 
 
 def _files(inputs, records):
@@ -232,8 +417,9 @@ def _runtime_rejection(case, tmp_path, monkeypatch):
       for change in ("missing", "extra", "forged", "reservation_missing", "config_missing", "config_forged")],
     "runtime_v2", "runtime_codex", "legacy_v2_absent_null", "legacy_codex_absent_null",
 ])
-def test_run_input_bundle_is_exact_atomic_and_gates_execution(case, tmp_path, monkeypatch):
+def test_run_input_bundle_is_exact_atomic_and_gates_execution(case, tmp_path, monkeypatch, _input_bundle_seed):
     forbidden_calls = _guards(monkeypatch)
+    _input_bundle_seed.install(monkeypatch)
     if case in {"runtime_v2", "runtime_codex", "legacy_v2_absent_null", "legacy_codex_absent_null"}:
         regression = _v2_regression if "v2" in case else _codex_regression
         regression("default_absent_and_null" if case.startswith("legacy_") else "r1", tmp_path, monkeypatch)
@@ -246,15 +432,15 @@ def test_run_input_bundle_is_exact_atomic_and_gates_execution(case, tmp_path, mo
 
     oracle_root = tmp_path / "independent-oracle"
     oracle_root.mkdir()
-    inputs, captures, _, projections, records = _fixture(oracle_root, monkeypatch, "identical")
+    inputs, captures, _, projections, records = _input_bundle_seed.inputs(oracle_root, monkeypatch, "identical")
     manifest = json.loads(_json(inputs["manifest"]))
-    plan = preflight.compile_grading_plan(manifest)
+    plan = _input_bundle_seed.plan
     index = {"codex_r1": 1, "codex_r2": 2, "v2_r2": 3, "relocated_codex": 1}.get(case, 0)
     run = plan.dispatch.runs[index]
     supplied_run = run
     combined = plan.as_dict()
     root = tmp_path / "disposable-source"
-    _bundle_fixture(root, manifest=manifest, combined_plan=combined, run=run)
+    _input_bundle_seed.config(root, manifest=manifest, combined_plan=combined, run=run)
     files = _files(inputs, records)
     source_before = _tree_snapshot(oracle_root)
     target, parquet, references = root, inputs["dataset_parquet"], inputs["reference_root"]
