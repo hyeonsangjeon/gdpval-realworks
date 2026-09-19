@@ -136,7 +136,7 @@ source_pins:
   batch-runner/core/agentic_v2_model_voice.py: 71da68598e631a43678d278c04589b978bd3c8d82d4df47ca30f90d1df4ce1a6
   batch-runner/core/agentic_v2_conversation_runner.py: 01db41662713ff92dc43a7674893309195728b9acce01ad0cf1be2e3dcdd8832
   batch-runner/core/agentic_v2_stage_one_budget.py: 56641403c043d09ef49360a473aedc22ff8fc1f863bb9746dacd9891622324f1
-  batch-runner/scripts/run_agentic_v2_stage.py: 70788356775f7dba339c65d0a2898da57a4ddd844e9cbb52da061da2988aec01
+  batch-runner/scripts/run_agentic_v2_stage.py: 3a97f33c77bfcaa199ba349e4547bec12a1949afc0dce52c38bd943206162fc9
   batch-runner/core/codex_runtime_config.py: 3ef7a6bcbfe3523516068dee99f5488163cf33516d03de1c9fe42d8e2aca19b3
   batch-runner/core/codex_runner.py: a5e95775f8b5065307c625fb532677517e57217c9efc016f0135a06abd82377e
   batch-runner/core/experiment_config.py: 62f13891c405a6599ff883ce7cd0c06bf1ea59a422f25cecec299f4819011705

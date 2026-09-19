@@ -8888,7 +8888,9 @@ native `RENAME_NOREPLACE` host 요구를 대신하지 않습니다.
 
 `run_record.request_conditions.pre_execution_input_capture`는 검증된 상대 경로·size·SHA256과
 run/condition/repeat, manifest/combined-plan/source-pin/config/source-projection linkage를
-기록합니다. 비교 record의 `plan_file`도 검증된 config digest와 상대 역할을 사용합니다.
+기록합니다. 비교 record의 `plan_file`은 검증된 config digest를 쓰되, 기존 materializer와
+같이 working-directory-relative `comparison-run.json` 경로를 유지합니다. capture 자체의
+checkout-relative 경로와 이 필드의 기준 디렉터리는 구분합니다.
 이 파일은 이후 네-run attester의 `binding_file`과 결속할 수 있는 증거이며, 전체 attestation이나
 publication identity를 미리 발급하는 것이 아닙니다. Codex capture 코드와 실행 순서는 바꾸지 않습니다.
 

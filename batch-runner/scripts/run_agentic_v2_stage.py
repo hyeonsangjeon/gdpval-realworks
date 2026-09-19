@@ -1781,7 +1781,7 @@ def main() -> int:
         # Use the verified pre-execution config digest, not a later reread or
         # host absolute path. This links a capture; it does not mint attestation.
         record["request_conditions"]["plan_file"] = {
-            "path": "batch-runner/comparison-run.json",
+            "path": "comparison-run.json",
             "sha256": verified_input_capture["attestation_linkage"]["config_sha256"],
         }
         record["request_conditions"]["pre_execution_input_capture"] = verified_input_capture

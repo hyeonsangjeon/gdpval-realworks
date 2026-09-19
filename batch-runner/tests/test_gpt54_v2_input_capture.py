@@ -379,8 +379,13 @@ def test_v2_comparison_capture_gates_stage_before_provider(case, tmp_path, monke
         assert linkage["attestation_linkage"]["config_sha256"] == _identity(config_path.read_bytes())["sha256"]
         conditions = _record_conditions(linkage)
         assert conditions["pre_execution_input_capture"] == linkage
-        assert conditions["plan_file"] == {"path": writer.CONFIG_PATH,
-                                           "sha256": linkage["attestation_linkage"]["config_sha256"]}
+        # Existing V2 materialization reads plan_file relative to the dispatch
+        # working directory, not the capture's checkout-relative namespace.
+        assert conditions["plan_file"] == {
+            "path": Path(run.config_path).relative_to(run.working_directory).as_posix(),
+            "sha256": linkage["attestation_linkage"]["config_sha256"],
+        }
+        assert conditions["plan_file"]["path"] == "comparison-run.json"
         assert attestation.as_dict()["runs"][index]["binding_file"] == identity
         assert inputs["combined_plan"]["launch_allowed"] is inputs["combined_plan"]["full_220_allowed"] is False
         inspection = preflight.inspect_plan(inputs["manifest"], grading_plan=inputs["combined_plan"])
