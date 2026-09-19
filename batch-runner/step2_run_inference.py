@@ -55,6 +55,7 @@ from core.config import (
 from core.agentic_authorization import task_request_sha256
 from core.codex_runner import RATE_LIMIT_KINDS
 from core.executor import TaskExecutor
+from core.experiment_config import CodexComparisonCapture
 from core.agentic_experiments import (
     AGENTIC_BASELINE_ID,
     AGENTIC_EXPERIMENT_IDS,
@@ -2855,11 +2856,44 @@ def _nothing_to_submit_report(results: List[dict]) -> Optional[List[str]]:
     return lines
 
 
-def validate_restored_checkpoint(condition_key: str = "condition_a") -> dict:
+def _comparison_input_gate(
+    prepared: dict, *, comparison_run_id: str | None = None,
+    condition_key: str = "condition_a", execution_mode: str | None = None,
+    max_retries: int | None = None, resume_max_rounds: int | None = None,
+    resume: bool = True, wall_timeout: int | None = None,
+) -> dict | None:
+    execution = prepared.get("execution") or {}
+    if (
+        comparison_run_id is None
+        and execution.get("comparison_input_capture") is None
+        and prepared.get("experiment_id") not in CodexComparisonCapture.RUN_IDS
+    ):
+        return None  # No extra file reads/imports or output fields for defaults.
+    from gpt54_codex_input_capture import verify_codex_input_capture
+
+    return verify_codex_input_capture(
+        prepared, workspace=WORKSPACE_DIR, dataset_root=DEFAULT_LOCAL_PATH,
+        comparison_run_id=comparison_run_id, condition_key=condition_key,
+        execution_mode=execution_mode, max_retries=max_retries,
+        resume_max_rounds=resume_max_rounds, resume=resume, wall_timeout=wall_timeout,
+    )
+
+
+def validate_restored_checkpoint(
+    condition_key: str = "condition_a", comparison_run_id: str | None = None,
+) -> dict:
     """Validate a restored relay checkpoint without constructing a model client."""
     prepared_path = WORKSPACE_DIR / "step1_tasks_prepared.json"
-    with prepared_path.open("r", encoding="utf-8") as stream:
-        prepared = json.load(stream)
+    if comparison_run_id is not None:
+        from gpt54_codex_input_capture import read_codex_prepared
+
+        prepared = read_codex_prepared(prepared_path)
+    else:
+        with prepared_path.open("r", encoding="utf-8") as stream:
+            prepared = json.load(stream)
+    # The fixed comparison forbids relay/resume. Refuse before route/auth
+    # preflight rather than attaching a new capture to old completed rows.
+    _comparison_input_gate(prepared, comparison_run_id=comparison_run_id, condition_key=condition_key)
     tasks = prepared.get("tasks")
     condition = prepared.get(condition_key)
     if not isinstance(tasks, list) or not isinstance(condition, dict):
@@ -3013,6 +3047,7 @@ def run_inference(
     resume_max_rounds: int = None,
     verbose: bool = False,
     wall_timeout: int = None,
+    comparison_run_id: str | None = None,
 ):
     with _Step2RuntimeResources() as runtime_resources:
         return _run_inference_impl(
@@ -3023,6 +3058,7 @@ def run_inference(
             resume_max_rounds=resume_max_rounds,
             verbose=verbose,
             wall_timeout=wall_timeout,
+            **({"comparison_run_id": comparison_run_id} if comparison_run_id is not None else {}),
             runtime_resources=runtime_resources,
         )
 
@@ -3035,6 +3071,7 @@ def _run_inference_impl(
     resume_max_rounds: int = None,
     verbose: bool = False,
     wall_timeout: int = None,
+    comparison_run_id: str | None = None,
     *,
     runtime_resources: _Step2RuntimeResources,
 ):
@@ -3065,8 +3102,19 @@ def _run_inference_impl(
         print(f"❌ {prepared_path} not found. Run step1_prepare_tasks.sh first.")
         sys.exit(1)
 
-    with open(prepared_path, "r", encoding="utf-8") as f:
-        prepared = json.load(f)
+    if comparison_run_id is not None:
+        from gpt54_codex_input_capture import read_codex_prepared
+
+        prepared = read_codex_prepared(prepared_path)
+    else:
+        with open(prepared_path, "r", encoding="utf-8") as f:
+            prepared = json.load(f)
+
+    verified_input_capture = _comparison_input_gate(
+        prepared, comparison_run_id=comparison_run_id, condition_key=condition_key,
+        execution_mode=execution_mode, max_retries=max_retries,
+        resume_max_rounds=resume_max_rounds, resume=resume, wall_timeout=wall_timeout,
+    )
 
     tasks = prepared["tasks"]
     condition = prepared[condition_key]
@@ -4615,6 +4663,8 @@ def _run_inference_impl(
     }
     if azure_ai_routes is not None:
         final_output["azure_ai_routes"] = azure_ai_routes
+    if verified_input_capture is not None:
+        final_output["pre_execution_input_capture"] = verified_input_capture
 
     # The audit trail the receipts above are derived from. Exported as JSONL
     # next to the results so a later step — a resume, a shard merge, a reader
@@ -4736,10 +4786,17 @@ def main():
         action="store_true",
         help="Validate restored relay progress without constructing a model client",
     )
+    parser.add_argument(
+        "--comparison-run-id", choices=CodexComparisonCapture.RUN_IDS, default=None,
+        help="Require the pinned Codex comparison input capture before provider construction",
+    )
     args = parser.parse_args()
 
     if args.validate_checkpoint_only:
-        validate_restored_checkpoint(args.condition)
+        validate_restored_checkpoint(
+            args.condition,
+            **({"comparison_run_id": args.comparison_run_id} if args.comparison_run_id is not None else {}),
+        )
         return
 
     run_inference(
@@ -4750,6 +4807,7 @@ def main():
         resume_max_rounds=args.resume_max_rounds,
         verbose=args.verbose,
         wall_timeout=args.wall_timeout,
+        **({"comparison_run_id": args.comparison_run_id} if args.comparison_run_id is not None else {}),
     )
 
 

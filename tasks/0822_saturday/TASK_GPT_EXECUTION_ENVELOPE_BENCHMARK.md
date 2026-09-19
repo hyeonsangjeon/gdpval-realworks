@@ -8283,6 +8283,8 @@ pinned grading-plan compiler의 시작점은
 materializer의 시작점은 `f85da3f87550abc335c9365e9bca22372747f1e4`입니다.
 prepared-input attestation compiler의 시작점은
 `c0fdd10c384ab31ccc65cf3019c4d838f370a6a9`입니다.
+Codex pre-execution capture wiring의 시작점은
+`e90040962aa16572a32c64808db93b38dceeefb9`입니다.
 `base_sha`와 `grading.source_sha`는 이번 시작점을 기록하며, 실제 검토 대상 바이트는 source pins와 기존 grader helper의
 `template_source_sha256`으로 고정합니다. 시작 SHA만으로 새 코드의 신원을
 증명했다고 하지 않습니다. grader 설정·과제·입력·반복·한도는 유지합니다.
@@ -8428,10 +8430,11 @@ ABBA 순서는 한 방향의 시간 경과 영향을 줄이기 위한 고정 순
   비용 단위가 연결되는 증거는 아직 없습니다. 가격 누락만을 새 지출 차단 규칙으로
   삼지는 않으며, 기존 record-only 정책과 unknown/null/partial 기록을 유지합니다.
 
-무료 검사기는 원천 파일 **26개**의 지문을 먼저 확인합니다. #621의 24개에
+무료 검사기는 원천 파일 **27개**의 지문을 먼저 확인합니다. #621의 24개에
 `gpt54_prepared_input_attestation.py`와 기존 Step 1 public helper를 import할 때
-필요한 `prepare_dataset.py`를 추가했습니다. 해당 loader의 다운로드 경로는 호출하지
-않습니다. `step8_grade.py`의 기존 `compute_grader_source_hash`는
+필요한 `prepare_dataset.py`, Codex capture용 `gpt54_codex_input_capture.py`를
+추가했습니다. 해당 loader의 다운로드 경로는 호출하지 않습니다.
+`step8_grade.py`의 기존 `compute_grader_source_hash`는
 모든 `core/**/*.py`, grade schema, requirements include graph, inference download
 script, 두 prompt, 원본 grading config의 경로·바이트까지 함께 고정합니다.
 이 closure의 지문도 manifest와 대조하므로 rubric loader 등 간접 의존성이 바뀌어도
@@ -8628,7 +8631,7 @@ provider/auth도 공식 runtime 인계 계약이 없어 blocked 상태이며 대
 `ComparisonGradingRunSpec`이 두 Codex run 중 하나와 정확히 일치하는지 확인합니다.
 ABBA의 Codex r1/r2, 고정 5개 task ID·입력 순서, Foundry GPT-5.4/xhigh,
 grader·receipt 계약은 바꾸지 않습니다. combined dispatch/grading plan의 exact-match
-검사와 현재 26개 source pin에 이 함수가 포함됩니다. V2 spec이나 수정된 dict는 받지 않습니다.
+검사와 현재 27개 source pin에 이 함수가 포함됩니다. V2 spec이나 수정된 dict는 받지 않습니다.
 
 입력은 해당 spec, manifest, 실제 `workspace/step2_inference_results.json`, 실제
 `workspace/upload`, 별도의 inference identity JSON, **외부 승인 SHA256**, 아직 없는
@@ -8759,9 +8762,10 @@ Codex task는 기존 Step 1 task JSON의 정확한 필드와 값을 사용합니
 원천 task projection·text bytes 지문·reference records가 canonical attestation에
 포함됩니다. 출력에는 launch authorization이나 inference publication identity가 없습니다.
 
-**증거의 한계:** 기존 런타임은 이 공통 pre-execution capture를 아직 저장하지 않습니다.
-이 compiler는 외부에서 제공한 capture를 실제 snapshot과 대조하며, 그 기록 시각이나
-이후 모델이 소비한 bytes를 관찰·인증하지 않습니다. V2의 기존 `binding_record`는
+**증거의 한계:** Codex 비교 경로는 아래 14.5.4의 Step 1/Step 2 연결로 capture를
+저장하고 다시 검사합니다. V2의 capture 연결은 아직 없습니다. 이 compiler 자체는
+제공된 capture를 실제 snapshot과 대조하며, 그 기록 시각이나 이후 모델이 소비한
+bytes를 관찰·인증하지 않습니다. V2의 기존 `binding_record`는
 post-run record의 일부이므로 그것만으로 실행 직전 capture를 대신할 수 없습니다.
 서로 다른 standing instruction과 Codex의 prompt wrapping/외곽 공백 처리도 그대로입니다.
 따라서 canonical task/reference equivalence이지 rendered/wire request equality나
@@ -8775,10 +8779,76 @@ compiled-plan 검사는 그대로 실행합니다. production pin이 이 synthet
 subprocess/network/provider auth/model·grader 생성과 compiler의 파일 쓰기를 금지합니다.
 
 이 변경은 prepared provenance의 오프라인 대조와 두 조건의 canonical input equivalence
-검사만 제공합니다. external inference identity 발급·승인, 실제 pre-execution capture와
-소비 시점 연결, native no-clobber 지원 host, checkout/config 실제 배치, workflow gate,
+검사만 제공합니다. external inference identity 발급·승인, V2 pre-execution capture와
+소비 시점 연결, native no-clobber 지원 bundle host, checkout/config 실제 배치, workflow gate,
 served capability, native call/token caps, usage/tariff 증거는 남습니다.
 `launch_allowed`와 `full_220_allowed`는 계속 false이며 paid 실행 명령을 추가하지 않습니다.
+
+#### 14.5.4 Codex 비교의 Step 1 capture와 Step 2 소비 직전 검사
+
+manifest의 Codex 조건은 `input_capture: gpt54-pre-execution-input-v1`을 요구합니다.
+compiler는 r1/r2 generated config에만 typed `execution.comparison_input_capture`를
+넣고, `binding_version`과 해당 `run_id` 두 키를 정확히 고정합니다. 생성된 Step 2
+argv에는 독립적인 `--comparison-run-id <run_id>`도 있습니다. prepared에서 opt-in과
+experiment ID를 함께 바꾸어 generic 경로로 우회할 수 없습니다. 등록된 r1/r2 ID에서
+control만 지우거나 null로 바꾸는 것도 거부합니다. 다른 기존 experiment의 absent/null
+설정에는 비교용 파일 읽기·capture 생성·출력 필드를 추가하지 않습니다.
+
+각 경로는 하나의 isolated run checkout 기준 역할입니다. host 절대 경로를 신원으로
+쓰지 않으며 입력 파일은 다운로드하거나 복사하지 않습니다.
+
+| 역할 | run-relative 경로 |
+| --- | --- |
+| generated Codex config | `batch-runner/comparison-run.json` |
+| exact combined dispatch/grading plan | `comparison-plan.json` |
+| Step 1 prepared JSON | `batch-runner/workspace/step1_tasks_prepared.json` |
+| canonical capture | `batch-runner/workspace/pre-execution-input.json` |
+| pinned parquet | `data/gdpval-local/data/train-00000-of-00001.parquet` |
+| 실제 소비 reference | `data/gdpval-local/reference_files/` 아래 고정 두 파일 |
+
+Step 1은 기존 serializer가 prepared JSON을 닫은 뒤 실제 파일 bytes로 capture를
+계산합니다. prepared의 `config_path`는 비교 경로에서만 `comparison-run.json`으로
+기록합니다. #622와 공유하는 source snapshot/projection 및 capture builder가 config,
+manifest/source pins/combined plan, catalog, parquet, 고정 ordered 5-task projection과
+reference size/SHA256을 대조합니다. runtime root의 `data/`에는 정확히 pinned parquet
+하나만, `reference_files/`에는 해당 cohort의 reference만 허용합니다. attester의 기존
+reference-only root 검사는 그대로 유지합니다.
+
+prepared와 capture는 각각 descriptor로 고정한 workspace 안의 private temporary file에 완전히 쓴 뒤
+원자적인 no-replace hard link로 게시하고 임시 link를 제거합니다. 성공한 파일은 link
+하나만 갖습니다. 기존 파일·디렉터리·symlink와의 충돌, 쓰기 실패, link primitive
+미지원 시 덮어쓰기나 안전하지 않은 rename fallback 없이 거부하고 임시 파일을
+정리합니다. 기존 capture가 있으면 prepared 저장 전 거부하므로 새 publication generation을
+만든 재시도도 기존 두 파일을 보존합니다. 두 파일을 한 번에 게시하는 원자성은 주장하지
+않습니다. prepared 게시 뒤 capture 검증·저장이 실패하면 완전한 prepared 파일만 남을 수
+있으며 Step 2와 재시도는 이를 덮어쓰거나 소비하지 않고 거부합니다.
+이것은 단일 파일 저장이며 materializer bundle의 native
+`RENAME_NOREPLACE` host 차단을 해제하지 않습니다.
+
+Step 2는 명시적인 비교 CLI 경로에서 첫 prepared read부터 기존 no-link verified
+reader를 사용합니다. provider/auth/client를 만들기 전에 같은 실제 bytes에서 capture를
+재계산하고 저장된 capture와 bytes·size·SHA256을 모두 대조합니다. 다시 읽은 prepared
+snapshot은 이후 실행이 사용할 held object와도 exact-match 해야 합니다. capture의
+missing/extra/null/중복 키, 비canonical bytes, config/plan/pin/task/order/reference drift,
+재계산한 prepared fingerprint로 감춘 변조, symlink/path escape/hardlink를 거부합니다.
+CLI condition/mode/retry/resume/time override도 고정 계약과 다르면 거부합니다.
+비교는 처음부터 no-resume이므로 checkpoint-only와 relay/resume 경로도 auth 전에
+거부합니다. 기존 reference staging의 소비 시 bytes 재검사는 그대로 사용합니다.
+
+최종 Step 2 JSON은 검증된 `pre_execution_input_capture`를 result fingerprint 계산 전에
+넣습니다. 이 객체는 capture의 run-relative path·size·SHA256과
+`attestation_linkage`의 run/condition/repeat, manifest/combined-plan/source-pin/config 및
+ordered source projection 지문을 보존합니다. 나중에 attester의 해당 run
+`binding_file`과 대조할 수 있지만, V2 captures가 없는 상태에서 네 실행의 attestation
+digest나 external inference identity를 발급·승인하지는 않습니다.
+
+이 연결이 입증하는 것은 provider 생성 직전 로컬 입력의 동일성입니다. served
+deployment/model/effort capability, 이후 rendered/wire request의 동일성이나 환경만의
+인과효과는 입증하지 않습니다. ABBA 네 run과 모든 한도·채점·receipt 계약은 유지합니다.
+외부 identity 승인, V2 capture, native no-clobber bundle host, checkout/config 배치,
+workflow gate, served capability, native call/token caps, usage/tariff는 남은 일입니다.
+GitHub Copilot provider/auth도 공식 인계 계약 부재로 별도 blocked 상태이며 이 변경은
+그 경로를 구현하지 않습니다. 두 launch flag는 계속 false입니다.
 
 ### 14.6 판정, 중단 규칙, 검토 경계
 

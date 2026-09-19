@@ -100,6 +100,33 @@ class OutputConfig:
     save_path: Optional[str] = None
 
 
+@dataclass(frozen=True)
+class CodexComparisonCapture:
+    """An explicit request, not launch permission or an inference identity."""
+
+    run_id: str
+    binding_version: str = "gpt54-pre-execution-input-v1"
+
+    RUN_IDS = ("gpt54_v2_codex_v1_codex_r1", "gpt54_v2_codex_v1_codex_r2")
+
+    def __post_init__(self):
+        if type(self.run_id) is not str or self.run_id not in self.RUN_IDS:
+            raise ValueError("comparison capture requires a registered Codex run id")
+        if type(self.binding_version) is not str or self.binding_version != "gpt54-pre-execution-input-v1":
+            raise ValueError("unsupported comparison capture contract")
+
+    @classmethod
+    def from_dict(cls, value):
+        if value is None:
+            return None
+        if type(value) is not dict or set(value) != {"run_id", "binding_version"}:
+            raise ValueError("comparison capture requires the exact typed control")
+        return cls(**value)
+
+    def as_dict(self):
+        return {"binding_version": self.binding_version, "run_id": self.run_id}
+
+
 @dataclass
 class ExecutionConfig:
     """Execution mode configuration (Phase 5-3)"""
@@ -128,6 +155,7 @@ class ExecutionConfig:
     # core/shared_first_request.py, including what equal wording does not
     # equalise.
     shared_first_request: bool = False
+    comparison_input_capture: Optional[CodexComparisonCapture] = None
 
 
 def _validate_preprocessors(
@@ -333,6 +361,9 @@ class ExperimentConfig:
                 and execution_data["metrics"].get("enabled") is True
                 else None
             ),
+            comparison_input_capture=CodexComparisonCapture.from_dict(
+                execution_data.get("comparison_input_capture")
+            ),
         )
 
         return cls(
@@ -450,6 +481,8 @@ class ExperimentConfig:
                 **({"agentic_v2": self.execution.agentic_v2} if self.execution.agentic_v2 is not None else {}),
                 **({"codex": self.execution.codex} if self.execution.codex is not None else {}),
                 **({"metrics": self.execution.metrics} if self.execution.metrics is not None else {}),
+                **({"comparison_input_capture": self.execution.comparison_input_capture.as_dict()}
+                   if self.execution.comparison_input_capture is not None else {}),
             },
         }
 
@@ -491,6 +524,17 @@ class ExperimentConfig:
             List of validation errors (empty if valid)
         """
         errors = []
+
+        capture = self.execution.comparison_input_capture
+        if self.experiment_id in CodexComparisonCapture.RUN_IDS and capture is None:
+            errors.append("registered Codex comparisons require an input capture")
+        if capture is not None and (
+            type(capture) is not CodexComparisonCapture
+            or capture.run_id != self.experiment_id
+            or self.execution.mode != "codex_foundry"
+            or self.condition_b is not None
+        ):
+            errors.append("comparison capture requires its exact single-condition Codex experiment")
 
         # Check required fields
         if not self.experiment_id:

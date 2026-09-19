@@ -156,7 +156,18 @@ def _fixture(tmp_path, monkeypatch, case):
             # The real producer serializes conditions/execution/tasks and calls
             # the real fingerprint helper. Only its local data suppliers above
             # are fixtures; no Step 2, client, model or download is invoked.
-            payload = step1.prepare_tasks(str(config_path))
+            # This fixture supplies captures to the offline attester, including
+            # deliberately invalid data. The new runtime writer has its own
+            # direct Step 1/Step 2 selector; do not run it while assembling this
+            # independent test oracle. Keep the real Step 1 serializer here.
+            import gpt54_codex_input_capture as capture_runtime
+
+            def store_prepared_fixture(_control, *, workspace, prepared_data, **_kwargs):
+                (workspace / "step1_tasks_prepared.json").write_bytes(prepared_data)
+
+            with monkeypatch.context() as setup:
+                setup.setattr(capture_runtime, "write_codex_prepared_and_capture", store_prepared_fixture)
+                payload = step1.prepare_tasks(str(config_path))
             prepared_path = workspace / "step1_tasks_prepared.json"
             prepared[run.run_id] = payload
             consumer = {
@@ -501,7 +512,7 @@ def test_prepared_input_attestation_binds_actual_bytes_without_execution(case, t
                 assert inspection["launch_allowed"] is inspection["full_220_allowed"] is False
                 assert "live_deployment_identity_and_input_bytes_not_verified" in inspection["launch_blockers"]
                 assert "comparison_materialization_and_workflow_gates_not_wired" in inspection["launch_blockers"]
-                assert len(preflight.REQUIRED_SOURCES) == 26
+                assert len(preflight.REQUIRED_SOURCES) == 27
                 assert set(inputs["manifest"]["source_pins"]) == preflight.REQUIRED_SOURCES
                 sol = preflight.load_plan(preflight.ROOT / preflight.ENVELOPE / "gpt56_sol_copilot_codex_pilot.yaml")
                 parser = "batch-runner/gpt54_comparison_preflight.py"

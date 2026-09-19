@@ -1,7 +1,8 @@
 """Attest captured canonical inputs, offline and without issuing an identity.
 
-The caller supplies all four pre-execution captures. Existing runtimes do not
-yet emit this cross-harness capture contract. Matching a capture to a read-only
+The caller supplies all four pre-execution captures. The comparison-only Codex
+path emits and checks its own capture; V2 capture wiring is still absent.
+Matching a capture to a read-only
 snapshot proves consistency, not when it was captured or what a later model
 request consumed. Rubrics are source provenance, never model input here.
 """
@@ -20,7 +21,7 @@ from typing import Any
 
 import pyarrow.parquet as parquet
 
-from core.agentic_v2_manifest_binding import ManifestRefused, bind_stage, binding_record
+from core.agentic_v2_manifest_binding import BoundManifest, ManifestRefused, bind_stage, binding_record
 from core.experiment_config import ExperimentConfig
 from core.inference_manifest import _assert_no_symlink_ancestors
 from core.needs_files import resolve_needs_files
@@ -35,6 +36,7 @@ from core.source_identity import (
 )
 from gpt54_comparison_preflight import (
     ComparisonRunSpec,
+    ComparisonGradingPlan,
     _canonical_json,
     catalog_sha256,
     compile_grading_plan,
@@ -92,7 +94,9 @@ def _json_object(data: bytes) -> dict[str, Any]:
     return value
 
 
-def _reference_snapshot(root: Path, versions: dict[str, str]) -> dict[str, dict]:
+def _reference_snapshot(
+    root: Path, versions: dict[str, str], *, reference_subtree: bool = False,
+) -> dict[str, dict]:
     """Read exactly a cohort-only reference tree, without following links."""
     _assert_no_symlink_ancestors(root)
     if not stat.S_ISDIR(root.lstat().st_mode):
@@ -102,8 +106,17 @@ def _reference_snapshot(root: Path, versions: dict[str, str]) -> dict[str, dict]
         relative = validate_reference_relative_path(name)
         validate_reference_record({"sha256": digest, "size": 0})
         directories.update(parent.as_posix() for parent in relative.parents)
+    # Runtime's actual dataset root also contains the pinned parquet. Only the
+    # reference_files subtree is consumed as references. The attester's default
+    # remains its original strict, reference-only root (including extra dirs).
+    scan_root = root / "reference_files" if reference_subtree else root
+    _assert_no_symlink_ancestors(scan_root)
+    if not stat.S_ISDIR(scan_root.lstat().st_mode):
+        raise PreparedInputRefused("reference scan root must be a directory")
+    if reference_subtree and any(not name.startswith("reference_files/") for name in versions):
+        raise PreparedInputRefused("reference outside the runtime reference subtree")
     found = set()
-    for current, children, files in os.walk(root, followlinks=False):
+    for current, children, files in os.walk(scan_root, followlinks=False):
         for name in children:
             path = Path(current) / name
             if not stat.S_ISDIR(path.lstat().st_mode) or path.relative_to(root).as_posix() not in directories:
@@ -180,6 +193,8 @@ def _check_prepared(
     execution["codex"] = _public_codex_config(config.execution.codex)
     if config.execution.metrics is not None:
         execution["metrics"] = config.execution.metrics
+    if config.execution.comparison_input_capture is not None:
+        execution["comparison_input_capture"] = config.execution.comparison_input_capture.as_dict()
     tasks = [
         {
             "task_id": row["task_id"], "sector": row["sector"], "occupation": row["occupation"],
@@ -218,6 +233,79 @@ def _check_prepared(
     }
 
 
+@dataclass(frozen=True)
+class _SourceSnapshot:
+    shared_binding: dict[str, Any]
+    sources: list[dict]
+    projections: list[dict]
+    references: dict[str, dict]
+    needs_files: dict[str, bool]
+    bound: BoundManifest
+
+
+def _source_snapshot(
+    plan: ComparisonGradingPlan, dataset_parquet: Path, reference_root: Path,
+    *, reference_subtree: bool = False,
+) -> _SourceSnapshot:
+    """One byte-derived source projection for both attestation and capture."""
+    dataset = json.loads(plan.dispatch.controls_json)["dataset"]
+    catalog = load_task_catalog()
+    catalog_digest = catalog_sha256()
+    task_ids = select_advance_check_tasks(catalog, catalog_fingerprint=catalog_digest).task_ids
+    _same("catalog task order", list(task_ids), [row["task_id"] for row in dataset["tasks"]])
+    parquet_data = _read_bytes(dataset_parquet, sha256=dataset["parquet_sha256"])
+    projections, needs_files = _dataset_tasks(parquet_data, task_ids)
+    bound = bind_stage(
+        dataset["cohort"], dataset_tasks=[SimpleNamespace(**row) for row in projections],
+        catalog=catalog, catalog_digest=catalog_digest,
+    )
+    dataset_key = dataset["repo_id"] + "@" + dataset["revision"]
+    versions = dict(dataset["input_file_versions"])
+    _same("dataset input version", versions.pop(dataset_key), dataset["parquet_sha256"])
+    reference_paths = [name for row in projections for name in row["reference_files"]]
+    if len(reference_paths) != len(set(reference_paths)):
+        raise PreparedInputRefused("duplicate or cross-task reference path")
+    _same("registered reference paths", sorted(reference_paths), sorted(versions))
+    references = _reference_snapshot(reference_root, versions, reference_subtree=reference_subtree)
+    sources = [
+        {
+            "projection": row, "source_projection_sha256": source_task_projection_sha256(**row),
+            "text_bytes": {key: _identity(row[key].encode("utf-8")) for key in (
+                "prompt", "rubric_json", "rubric_pretty",
+            )},
+            "reference_file_records": [{"path": name, **references[name]} for name in row["reference_files"]],
+        }
+        for row in projections
+    ]
+    shared_binding = {
+        "binding_version": "gpt54-pre-execution-input-v1",
+        "manifest_sha256": plan.dispatch.manifest_sha256,
+        "combined_plan_sha256": _identity(plan.canonical_bytes())["sha256"],
+        "source_pins_sha256": _identity(plan.dispatch.source_pins_json.encode("utf-8"))["sha256"],
+        "dataset": {
+            "repo_id": dataset["repo_id"], "revision": dataset["revision"],
+            "catalog_sha256": catalog_digest, "parquet": _identity(parquet_data),
+        },
+        "task_ids": list(task_ids),
+        "ordered_source_projection_sha256": ordered_source_projection_sha256(
+            row["source_projection_sha256"] for row in sources
+        ),
+        "needs_files_policy": "deliverable_only",
+    }
+    return _SourceSnapshot(shared_binding, sources, projections, references, needs_files, bound)
+
+
+def _expected_binding(snapshot: _SourceSnapshot, run: ComparisonRunSpec, config_data: bytes, consumer: dict) -> dict:
+    if config_data != run.config_json.encode("utf-8"):
+        raise PreparedInputRefused("generated config bytes mismatch")
+    return {
+        **snapshot.shared_binding, "run_id": run.run_id, "condition": run.condition, "repeat": run.repeat,
+        "harness": run.harness, "provider": run.provider, "model": run.model,
+        "reasoning_effort": run.reasoning_effort, "config_sha256": _identity(config_data)["sha256"],
+        "consumer": consumer,
+    }
+
+
 def compile_prepared_input_attestation(
     *, manifest: dict[str, Any], combined_plan: dict[str, Any],
     dataset_parquet: Path, reference_root: Path, runs: tuple[PreparedRunInputs, ...],
@@ -239,50 +327,11 @@ def compile_prepared_input_attestation(
                 raise PreparedInputRefused("run input is not typed")
             _same("ABBA run input", supplied.run_id, run.run_id)
 
-        shared = json.loads(plan.dispatch.controls_json)
-        dataset = shared["dataset"]
-        catalog = load_task_catalog()
-        catalog_digest = catalog_sha256()
-        task_ids = select_advance_check_tasks(catalog, catalog_fingerprint=catalog_digest).task_ids
-        _same("catalog task order", list(task_ids), [row["task_id"] for row in dataset["tasks"]])
-        parquet_data = _read_bytes(dataset_parquet, sha256=dataset["parquet_sha256"])
-        projections, needs_files = _dataset_tasks(parquet_data, task_ids)
-        bound = bind_stage(
-            dataset["cohort"], dataset_tasks=[SimpleNamespace(**row) for row in projections],
-            catalog=catalog, catalog_digest=catalog_digest,
+        snapshot = _source_snapshot(plan, dataset_parquet, reference_root)
+        shared_binding = snapshot.shared_binding
+        projections, references, needs_files, bound = (
+            snapshot.projections, snapshot.references, snapshot.needs_files, snapshot.bound,
         )
-        dataset_key = dataset["repo_id"] + "@" + dataset["revision"]
-        versions = dict(dataset["input_file_versions"])
-        _same("dataset input version", versions.pop(dataset_key), dataset["parquet_sha256"])
-        reference_paths = [name for row in projections for name in row["reference_files"]]
-        if len(reference_paths) != len(set(reference_paths)):
-            raise PreparedInputRefused("duplicate or cross-task reference path")
-        _same("registered reference paths", sorted(reference_paths), sorted(versions))
-        references = _reference_snapshot(reference_root, versions)
-        sources = [
-            {
-                "projection": row, "source_projection_sha256": source_task_projection_sha256(**row),
-                "text_bytes": {key: _identity(row[key].encode("utf-8")) for key in (
-                    "prompt", "rubric_json", "rubric_pretty",
-                )},
-                "reference_file_records": [{"path": name, **references[name]} for name in row["reference_files"]],
-            }
-            for row in projections
-        ]
-        ordered_projection = ordered_source_projection_sha256(row["source_projection_sha256"] for row in sources)
-        dataset_identity = {
-            "repo_id": dataset["repo_id"], "revision": dataset["revision"],
-            "catalog_sha256": catalog_digest, "parquet": _identity(parquet_data),
-        }
-        shared_binding = {
-            "binding_version": "gpt54-pre-execution-input-v1",
-            "manifest_sha256": plan.dispatch.manifest_sha256,
-            "combined_plan_sha256": _identity(plan.canonical_bytes())["sha256"],
-            "source_pins_sha256": _identity(plan.dispatch.source_pins_json.encode("utf-8"))["sha256"],
-            "dataset": dataset_identity, "task_ids": list(task_ids),
-            "ordered_source_projection_sha256": ordered_projection,
-            "needs_files_policy": "deliverable_only",
-        }
         run_bindings = []
         for supplied, run in zip(runs, plan.dispatch.runs):
             config_data = _read_bytes(supplied.generated_config)
@@ -319,12 +368,7 @@ def compile_prepared_input_attestation(
                     _read_bytes(supplied.prepared_tasks), run, projections, references, needs_files,
                 )
             binding_data = _read_bytes(supplied.input_binding)
-            expected_binding = {
-                **shared_binding, "run_id": run.run_id, "condition": run.condition, "repeat": run.repeat,
-                "harness": run.harness, "provider": run.provider, "model": run.model,
-                "reasoning_effort": run.reasoning_effort, "config_sha256": _identity(config_data)["sha256"],
-                "consumer": consumer,
-            }
+            expected_binding = _expected_binding(snapshot, run, config_data, consumer)
             _same("captured pre-execution input", _json_object(binding_data), expected_binding)
             run_bindings.append({
                 "binding": expected_binding, "binding_file": _identity(binding_data),
@@ -336,8 +380,10 @@ def compile_prepared_input_attestation(
             "manifest_sha256": plan.dispatch.manifest_sha256,
             "combined_plan_sha256": shared_binding["combined_plan_sha256"],
             "source_pins": json.loads(plan.dispatch.source_pins_json),
-            "dataset": dataset_identity, "task_ids": list(task_ids), "source_tasks": sources,
-            "ordered_source_projection_sha256": ordered_projection, "runs": run_bindings,
+            "dataset": shared_binding["dataset"], "task_ids": shared_binding["task_ids"],
+            "source_tasks": snapshot.sources,
+            "ordered_source_projection_sha256": shared_binding["ordered_source_projection_sha256"],
+            "runs": run_bindings,
         }))
     except PreparedInputRefused:
         raise
