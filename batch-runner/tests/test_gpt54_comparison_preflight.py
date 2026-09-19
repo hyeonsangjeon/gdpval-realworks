@@ -173,7 +173,7 @@ def test_gpt54_comparison_is_fixed_and_fails_closed(change, tmp_path, capsys):
         # Read actual adapter surfaces, not a mock declaration of readiness.
         voice_fields = {field.name: field for field in fields(AzureFoundryVoice)}
         assert voice_fields["reasoning_effort"].default is None
-        assert len(REQUIRED_SOURCES) == 26
+        assert len(REQUIRED_SOURCES) == 27
         assert set(plan["source_pins"]) == REQUIRED_SOURCES
         # Sol imports this module's plan reader. Refresh its existing digest
         # without changing its contract or running an additional selector.
@@ -234,7 +234,7 @@ def test_gpt54_offline_dispatch_plan_is_bound_and_non_executing(
     if change in {"missing_pin", "changed_pin"}:
         # Every dependency is required and digest-checked, including this
         # compiler, the shared parser, source-relative paths, and task helper.
-        assert len(REQUIRED_SOURCES) == 26
+        assert len(REQUIRED_SOURCES) == 27
         for source in REQUIRED_SOURCES:
             broken = json.loads(original)
             if change == "missing_pin":
@@ -374,12 +374,14 @@ def test_gpt54_offline_dispatch_plan_is_bound_and_non_executing(
             assert parsed.execution.codex["endpoint_from_route"] is True
             assert parsed.execution.codex["reasoning_effort"] == "xhigh"
             assert parsed.execution.codex["model_context_window"] is None
+            assert parsed.execution.comparison_input_capture.run_id == run.run_id
             assert config["condition_a"]["prompt"] == load_plan(ROOT / CODEX_TEMPLATE)["condition_a"]["prompt"]
             assert config["output"] == {"publish_to_hf": False, "submit_to_evals": False}
             assert run.commands == (
                 ("python3", "step1_prepare_tasks.py", "--config", "comparison-run.json"),
                 ("python3", "step2_run_inference.py", "--condition", "condition_a",
-                 "--max-retries", "0", "--resume-max-rounds", "0", "--no-resume"),
+                 "--max-retries", "0", "--resume-max-rounds", "0", "--no-resume",
+                 "--comparison-run-id", run.run_id),
             )
         # Check real parser option declarations without importing or running
         # either execution entrypoint, even in its dry-run mode.
@@ -462,7 +464,7 @@ def test_gpt54_pinned_grading_plan_is_bound_and_non_executing(
         assert forbidden_calls == []
 
     if change in {"missing_pin", "changed_pin"}:
-        assert len(REQUIRED_SOURCES) == 26
+        assert len(REQUIRED_SOURCES) == 27
         assert "batch-runner/step8_grade.py" in REQUIRED_SOURCES
         for source in REQUIRED_SOURCES:
             broken = json.loads(original)

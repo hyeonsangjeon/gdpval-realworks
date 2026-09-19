@@ -33,10 +33,10 @@ from core.execution_envelope_tasks import (
     load_task_catalog,
     select_advance_check_tasks,
 )
-from core.experiment_config import ExperimentConfig
+from core.experiment_config import CodexComparisonCapture, ExperimentConfig
 
 ROOT = Path(__file__).resolve().parents[1]
-BASE_SHA = "c0fdd10c384ab31ccc65cf3019c4d838f370a6a9"
+BASE_SHA = "e90040962aa16572a32c64808db93b38dceeefb9"
 GRADER_SOURCE_SHA = BASE_SHA
 ENVELOPE = "batch-runner/experiments/execution_envelope/"
 PLAN = ROOT / ENVELOPE / "gpt54_sandboxv2_codex_comparison.yaml"
@@ -48,6 +48,7 @@ REQUIRED_SOURCES = {
     "batch-runner/gpt54_v2_grading_input.py",
     "batch-runner/gpt54_codex_grading_input.py",
     "batch-runner/gpt54_prepared_input_attestation.py",
+    "batch-runner/gpt54_codex_input_capture.py",
     "batch-runner/prepare_dataset.py",
     "batch-runner/step8_grade.py",
     "batch-runner/core/config.py",
@@ -215,6 +216,7 @@ def _configuration_problems(plan: dict[str, Any]) -> list[str]:
                 "workflow": ".github/workflows/batch-run.yml",
                 "sdk_version": PINNED_CODEX_SDK_VERSION,
                 "cli_version": PINNED_CODEX_CLI_VERSION,
+                "input_capture": "gpt54-pre-execution-input-v1",
                 "request": {
                     "reasoning_effort": expected["model"]["reasoning_effort"],
                     "model_context_window": None,
@@ -364,6 +366,7 @@ def _compile_validated_plan(plan: dict[str, Any]) -> ComparisonDispatchPlan:
             config["execution"].update(
                 timeout=limits["max_seconds"], max_retries=limits["attempts_per_task"] - 1,
                 resume_max_rounds=limits["resume_max_rounds"],
+                comparison_input_capture=CodexComparisonCapture(row["run_id"], target["input_capture"]).as_dict(),
             )
             errors = ExperimentConfig.from_dict(config).validate()
             if errors:
@@ -371,7 +374,8 @@ def _compile_validated_plan(plan: dict[str, Any]) -> ComparisonDispatchPlan:
             commands = (
                 ("python3", "step1_prepare_tasks.py", "--config", "comparison-run.json"),
                 ("python3", "step2_run_inference.py", "--condition", "condition_a",
-                 "--max-retries", "0", "--resume-max-rounds", "0", "--no-resume"),
+                 "--max-retries", "0", "--resume-max-rounds", "0", "--no-resume",
+                 "--comparison-run-id", row["run_id"]),
             )
             harness = "codex"
         runs.append(ComparisonRunSpec(
@@ -628,6 +632,11 @@ def inspect_plan(
             ))
             if not problems else None
         ),
+        "codex_pre_execution_capture": ({
+            "binding_version": "gpt54-pre-execution-input-v1",
+            "required_runs": [run.run_id for run in compiled.runs if run.condition == "codex"],
+            "evidence_boundary": "local_pre_execution_snapshot_consistency",
+        } if compiled is not None else None),
         "launch_allowed": False,
         "full_220_allowed": False,
         "launch_blockers": list(LAUNCH_BLOCKERS),

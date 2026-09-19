@@ -16,8 +16,9 @@ Usage:
 import argparse
 import json
 import random
+from pathlib import Path
 
-from core.config import WORKSPACE_DIR
+from core.config import DEFAULT_LOCAL_PATH, WORKSPACE_DIR
 from core.data_loader import GDPValDataLoader
 from core.experiment_config import ExperimentConfig
 from core.needs_files import NeedsFilesManifest
@@ -208,7 +209,7 @@ def prepare_tasks(config_path: str) -> dict:
         ),
         "experiment_name": config.name,
         "description": config.description,
-        "config_path": str(config_path),
+        "config_path": "comparison-run.json" if config.execution.comparison_input_capture is not None else str(config_path),
         "source": config.data_filter.source,
         "task_scope": {
             "mode": (
@@ -244,6 +245,8 @@ def prepare_tasks(config_path: str) -> dict:
                 config.execution.codex
             )) is not None else {}),
             **({"metrics": config.execution.metrics} if config.execution.metrics is not None else {}),
+            **({"comparison_input_capture": config.execution.comparison_input_capture.as_dict()}
+               if config.execution.comparison_input_capture is not None else {}),
         },
         "total_tasks": len(task_list),
         "needs_files_count": sum(1 for t in task_list if t["needs_files"]),
@@ -256,8 +259,19 @@ def prepare_tasks(config_path: str) -> dict:
 
     # 7. Save
     output_path = WORKSPACE_DIR / "step1_tasks_prepared.json"
-    with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(output, f, indent=2, ensure_ascii=False)
+    if config.execution.comparison_input_capture is not None:
+        # Lazy: legacy runs do not import the comparison compiler, and the
+        # attester reuses this module's public config projection.
+        from gpt54_codex_input_capture import write_codex_prepared_and_capture
+
+        write_codex_prepared_and_capture(
+            config.execution.comparison_input_capture, workspace=WORKSPACE_DIR,
+            dataset_root=DEFAULT_LOCAL_PATH, config_path=Path(config_path),
+            prepared_data=json.dumps(output, indent=2, ensure_ascii=False).encode("utf-8"),
+        )
+    else:
+        with open(output_path, "w", encoding="utf-8") as f:
+            json.dump(output, f, indent=2, ensure_ascii=False)
 
     print(f"\n✅ Step 1 complete: {len(task_list)} tasks → {output_path}")
     print(f"   needs_files: {output['needs_files_count']} | text_only: {output['text_only_count']}")

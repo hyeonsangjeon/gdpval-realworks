@@ -2,7 +2,7 @@
 # Generated entrypoint configs are review artifacts, not launch authorization.
 # The free preflight deliberately refuses paid launch on the pinned source.
 plan_version: gpt54-sandboxv2-codex-comparison-v1
-base_sha: c0fdd10c384ab31ccc65cf3019c4d838f370a6a9
+base_sha: e90040962aa16572a32c64808db93b38dceeefb9
 comparison: configuration_bundle
 paid_comparison_approved: true
 launch_enabled: false
@@ -56,10 +56,10 @@ shared: &shared
   grading:
     config: batch-runner/grading_configs/default_v2_sol_max.yaml
     # Starting source provenance; reviewed bytes are bound by pins and closure.
-    source_sha: c0fdd10c384ab31ccc65cf3019c4d838f370a6a9
+    source_sha: e90040962aa16572a32c64808db93b38dceeefb9
     # Existing helper's full closure with the ORIGINAL template path/bytes.
     # Not the eventual source hash of a materialized, revision-pinned config.
-    template_source_sha256: c10ea303f212bab87ea6303cb41ee51e21430e6bc35df7a69b9a63d265f3a241
+    template_source_sha256: e1bfb2ce4ff453a65cff4bac861219ddc0945cb41a194a4437354fa361d7ddbf
     rubric_revision: 11e7900cdcac61bc4daf59e65feb238acda98fbf
     prompt_version: v2.2
     judge_model: gpt-5.6-sol
@@ -92,6 +92,9 @@ conditions:
     workflow: .github/workflows/batch-run.yml
     sdk_version: 0.147.0
     cli_version: 0.147.0
+    # Codex r1/r2 require Step 1 capture and Step 2's pre-provider byte check.
+    # This is local input evidence only; the launch blockers remain in force.
+    input_capture: gpt54-pre-execution-input-v1
     # Client configuration only; served effort remains unverified.
     request:
       reasoning_effort: xhigh
@@ -109,10 +112,11 @@ runs:
 # Seal the reviewed templates and the boundaries on which the refusal rests.
 # These are file bytes, not a claim to have checked live inputs or a deployment.
 source_pins:
-  batch-runner/gpt54_comparison_preflight.py: 5825a80234d119935bc5b7e90f9d623d0edd589403d2502f680cad5e9c1f9ab7
+  batch-runner/gpt54_comparison_preflight.py: 6a228664c80be2d0cd1ddc43346ffd922f8a8d4886d36de46552c7eded436071
   batch-runner/gpt54_v2_grading_input.py: 3fae995caf3d785d64fad02280d77a6853389a2ff12be2e7165e4868b4b0b830
   batch-runner/gpt54_codex_grading_input.py: a61fd74012dd588225fb77359a2e7c0880e7a10918b33f9658d2a0d78f0d58c8
-  batch-runner/gpt54_prepared_input_attestation.py: d64d6c780f4aa204d8958ab7539720b3265d4e473ff61b75ebb415eb6b4cdab4
+  batch-runner/gpt54_prepared_input_attestation.py: 95050fc77946334650e07399bca7a83f316789a6f9fd0891d11f59a898023937
+  batch-runner/gpt54_codex_input_capture.py: 64c9c33d4e2a553e881c752cda24ce5126e00c62b8ed0927662219d69dcfa9c5
   batch-runner/prepare_dataset.py: 17ccad9fe7a360daaa02329481c11f89135ca2cf107eb70355836b11fd4b2d5e
   batch-runner/step8_grade.py: ec23fc941aa0edb54e2858750cc1df5a6a6954a1732cd3f3197d9f9b4b3c18f4
   batch-runner/core/config.py: 483d8ad94ddb78b2a11b8712737ceea1e6b4d3696a8f16fabb84f747a786b48c
@@ -131,7 +135,7 @@ source_pins:
   batch-runner/scripts/run_agentic_v2_stage.py: 54af20b2f176204b25165b22296b3d3331948eb6af696187429dadef65aeb116
   batch-runner/core/codex_runtime_config.py: 3ef7a6bcbfe3523516068dee99f5488163cf33516d03de1c9fe42d8e2aca19b3
   batch-runner/core/codex_runner.py: a5e95775f8b5065307c625fb532677517e57217c9efc016f0135a06abd82377e
-  batch-runner/core/experiment_config.py: 77887f26a8769ec1f5344bffdd5003c8de6b1518bac69db0a346e1df9d5218ae
+  batch-runner/core/experiment_config.py: 62f13891c405a6599ff883ce7cd0c06bf1ea59a422f25cecec299f4819011705
   batch-runner/core/executor.py: 0eb0060521191ceceaf08ad8201ece226ae4cd31c46c21ae64d72ae390b94d7b
-  batch-runner/step1_prepare_tasks.py: 7c68b4e322ee53f0ea169b44b6372c9fb641b4c41d1c0390b4dc2826e8177915
-  batch-runner/step2_run_inference.py: 99a529f72749a3e3ab71f50af6d5850be75abaca72554e02a7846c34d622af67
+  batch-runner/step1_prepare_tasks.py: 051d528c8bf5fdf122120ba88d07ae663c11fb86800fa22fbe6084f76583eee8
+  batch-runner/step2_run_inference.py: cae1754ee37251b7798ee92cadd69c7df61946d73263f376a1c71b3613533d3d
