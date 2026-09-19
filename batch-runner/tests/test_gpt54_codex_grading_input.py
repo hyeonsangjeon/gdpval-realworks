@@ -269,7 +269,6 @@ def test_codex_grading_input_preserves_source_and_v2_boundary(case, tmp_path, mo
         "retried": (rows[0], "retried", True),
         "invalid_receipt": (rows[2], "problem_solving_cost", {"status": "complete"}),
         "summary_count": (payload["summary"], "total", True),
-        "producer_file_hash": (rows[0]["deliverable_file_records"][0], "sha256", "0" * 64),
         "ledger_path": (payload["cost_ledger"], "path", "../escape.jsonl"),
         "ledger_digest": (payload["cost_ledger"], "sha256", "0" * 64),
         "ledger_approval": (identity["cost_ledger"], "size", True),
@@ -307,6 +306,8 @@ def test_codex_grading_input_preserves_source_and_v2_boundary(case, tmp_path, mo
         rows[0].update(status="error", error="", deliverable_files=[])
     elif case == "missing_file_records":
         rows[0].pop("deliverable_file_records")
+    elif case == "producer_file_hash":
+        rows[0]["deliverable_file_records"][0]["sha256"] = "0" * 64
     elif case in {"file_bytes", "empty_file"}:
         first_file.write_bytes(b"changed" if case == "file_bytes" else b"")
     elif case == "file_missing":
@@ -468,7 +469,8 @@ def test_codex_grading_input_preserves_source_and_v2_boundary(case, tmp_path, mo
     assert selected[1]["problem_solving_cost"] is selected[1]["grading_cost"] is None
     assert selected[2]["problem_solving_cost"]["status"] == "partial"
     assert selected[2]["problem_solving_cost"]["estimated_cost_usd"] is None
-    assert selected[2]["problem_solving_cost"]["known_cost_usd"] is None
+    # This is the existing confirmed floor, not a claim that the total is zero.
+    assert selected[2]["problem_solving_cost"]["known_cost_usd"] == 0.0
     assert "call_reachability_unknown" in selected[2]["problem_solving_cost"]["missing_reasons"]
     output_files = [run.inference_results_path]
     if payload.get("cost_ledger") is not None:
