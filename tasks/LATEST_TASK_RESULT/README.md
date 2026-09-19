@@ -2,25 +2,28 @@
 
 - Updated: 2026-09-19 (UTC)
 
-## Current Task: GPT-5.4 Offline Dispatch-Plan Compiler
+## Current Task: GPT-5.4 Offline Pinned-Grading Plan
 
 ### Scope and Outcome
 
-`compile_dispatch_plan` now converts the existing GPT-5.4 comparison manifest
-into four frozen `ComparisonRunSpec` objects. It validates the manifest controls
-and source pins before producing canonical JSON configs and argument tuples for
-the existing V2 stage and Codex preparation/inference entrypoints. It does not
-write those files, create checkouts, authenticate, or dispatch anything.
+`compile_grading_plan` reuses `compile_dispatch_plan` to produce four frozen
+grading specifications bound to the existing `step8_grade.py` entrypoint. Each
+specification carries its inference run identity, ordered tasks, input paths,
+grader config and rubric provenance, actual CLI arguments, and isolated
+grade/receipt output templates. The preflight now emits and exact-checks a
+combined canonical dispatch/grading document. It does not create clients,
+materialize files or checkouts, or start execution.
 
 Work started from immutable main
-`2a1ecaf7d6a6f18ba21add7884414d041bc1b5d8` in branch
-`b/gpt54-offline-dispatch-plan-20260919`, at
-`/ai-work/copilot/.worktrees/gdpval-realworks-b-gpt54-offline-dispatch-plan-20260919`.
+`5c3a69278a8f005db8ea0aed72d13d20909c57df` in branch
+`b/gpt54-pinned-grading-plan-20260919`, at
+`/ai-work/copilot/.worktrees/gdpval-realworks-b-gpt54-pinned-grading-plan-20260919`.
 The preservation checkout and prior worktrees were not changed.
 
-Exactly seven files differ from that base:
+Exactly eight files differ from that base:
 
 - `batch-runner/gpt54_comparison_preflight.py`
+- `batch-runner/step8_grade.py`
 - `batch-runner/tests/test_gpt54_comparison_preflight.py`
 - `batch-runner/experiments/execution_envelope/gpt54_sandboxv2_codex_comparison.yaml`
 - `batch-runner/experiments/execution_envelope/gpt56_sol_copilot_codex_pilot.yaml`
@@ -38,67 +41,89 @@ The fixed matrix remains:
 | 4 | Sandbox V2 | 2 | `gpt54_v2_codex_v1_v2_r2` |
 
 Each row retains the same ordered `advance_check_5` tasks, Foundry GPT-5.4
-identity, and explicit `xhigh` request. The plan retains all shared input and
-reference fingerprints, limits, grading provenance, result/receipt contracts,
-and record-only cost policy. This remains a configuration-bundle comparison,
-not a claim about environment-only causality or a new experiment design.
+identity, explicit `xhigh` request, input/reference fingerprints, and inference
+limits. All four grading specs use the same grader contract and config bytes.
+Their grading ordinal is 1 because these are four distinct inference runs,
+not repeat grading of one run. Comparison repeats remain 1, 1, 2, 2. The study
+remains a configuration-bundle comparison, with no environment-only causal
+claim and no new experimental condition.
 
 ### Compilation and Compatibility Boundaries
 
-The V2 recipe supplies the existing stage entrypoint with an explicit five-task
-stage, config, parquet and reference-root paths, run ID, and output directory.
-The Codex recipe supplies `step1_prepare_tasks.py --config` followed by
-`step2_run_inference.py --condition condition_a --max-retries 0
---resume-max-rounds 0 --no-resume`. The existing experiment parser validates
-the generated Codex config without resolving a live endpoint.
+Each spec uses the dispatch run's separate reviewed-source checkout under
+`comparison-runs/<run_id>`, with `batch-runner` as the working directory. Its
+command is data only:
 
-Every row requires a separate reviewed-source checkout under
-`comparison-runs/<run_id>`. This matters because batch workspace paths follow
-the source location, not the process working directory. Each checkout uses
-`data/gdpval-local` for the fixed snapshot and
-`batch-runner/comparison-run.json` for its generated config. Creating those
-copies and verifying their live input bytes remain outside this compiler.
+```text
+python3 step8_grade.py execution_envelope/<run_id>
+  --config comparison-grading.json --source local
+  --tasks <the same five comma-separated task IDs> --limit 5
+  --shard-count 1 --shard-index 0 --run-ordinal 1
+  --source-experiment-id <run_id>
+```
 
-The preflight emits the compiled plan and its seal. Its optional
-`--dispatch-plan` input must match the plan derived from the manifest exactly.
-Changed config content, arguments, order, repeats, paths, pins, controls, or
-launch flags are rejected. Manifest key order does not change output bytes.
-The compiler reads no credentials and invokes no subprocess or runtime.
+The compiler reuses `default_v2_sol_max.yaml`, `yaml.safe_load`, and
+`validate_grading_config`. It changes only the generated copy's rubric revision
+to `11e7900cdcac61bc4daf59e65feb238acda98fbf` and rubric cache directory to
+`../data/gdpval-local`. Judge Sol/Max, prompt v2.2, tool/perception/retry settings,
+and output defaults are unchanged. The generated JSON must be materialized
+verbatim, without an added newline; its hash matches step8's `hash_config`.
 
-The required source set grows from 17 to 21 by adding the compiler/parser,
-the source-relative path constants, the seal helper, and the task selector.
-The Sol YAML changes only its existing shared-parser digest; its identity,
-16-file source set, and launch gates remain unchanged.
+The real input is `batch-runner/workspace/step2_inference_results.json`, with
+deliverables under `batch-runner/workspace/upload/deliverable_files`. Codex
+already produces the input file. V2 instead produces
+`batch-runner/workspace/run_record.json` at `/run/results`; projecting those
+rows and staging its deliverables remain explicit materialization gates.
+Experiment metadata is specified at
+`batch-runner/experiments/execution_envelope/<run_id>.yaml` for step8's existing
+loader. No invented input option or alternate V2 inference recipe is used.
 
-All Foundry provider/runtime code, execution entrypoints, original templates,
-pricing arithmetic, schemas, and historical ledgers remain byte-identical to
-the base. The generated run copies carry the comparison overrides; production
-defaults are not rewritten. V2 template safety/cost machinery is retained,
-and its historical budget records are not treated as a new comparison approval.
+Explicit task/limit arguments retain the existing diagnostic policy. Output
+templates remain under `data/grades/_diagnostic/<ordered-five-task-sha256>/`,
+with adjacent `.cost_ledger.sqlite3` and `.cost_ledger.jsonl` templates. The
+inference repository/revision and materialized-config grader source hash are
+null until verified. No dataset SHA or Git base substitutes for live inference
+identity. The existing resolver must bind those values before producing a
+final filename. Grade schema 1.4, `grading_cost`, `cost_ledger`, and
+`cost-receipt-v1` retain their existing absence/null/partial semantics.
+
+The required source set grows from 21 to 22 by adding `step8_grade.py`. Its
+existing `compute_grader_source_hash` also binds the full grader closure,
+including core modules, requirements includes, schema, prompts, inference
+download helper, and the original grader template. The new optional
+`batch_root` preserves the helper's default behavior and hash algorithm.
+`grading.source_sha` records the immutable starting provenance; the actual
+template/source closure is
+`c10ea303f212bab87ea6303cb41ee51e21430e6bc35df7a69b9a63d265f3a241`.
+That is not the eventual hash of a materialized config. The Sol YAML changes
+only its existing parser digest; its identity, 16-file pin set, and gates stay
+unchanged. Production runtime/config defaults, pricing, schemas, and all
+historical ledgers/evidence remain untouched.
 
 ### Verification
 
 The following targeted command ran once:
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider batch-runner/tests/test_gpt54_comparison_preflight.py::test_gpt54_offline_dispatch_plan_is_bound_and_non_executing
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider batch-runner/tests/test_gpt54_comparison_preflight.py::test_gpt54_pinned_grading_plan_is_bound_and_non_executing
 ```
 
-Result: `25 passed in 9.44s`.
+Result: `36 passed in 22.79s`.
 
-The selector checks the real template readers and experiment parser, all 21
-required pins and their digests, changed source bytes, exact entrypoint
-arguments against their parser declarations, canonical output stability,
-shared controls, and refusal of mutated manifests or compiled plans. Network,
-subprocess, Azure-route resolution, and provider-auth calls are forbidden by
-the fixture. The preflight CLI is exercised in process and still returns 2.
-The dependent Sol parser digest is checked without running the Sol selector.
+The selector uses the real step8 parser, grader config validator, experiment
+loader, local inference loader, task filter, and output resolver with temporary
+fixtures. It checks all 22 pins, grader-closure/config byte drift, canonical
+stability, dispatch/grading document binding, task/condition/repeat identity,
+argv, schema, and grade/receipt isolation. It also proves that omitted and
+explicit helper roots produce the same hash and that generated config changes
+are limited to the two rubric fields. Fixture-only source identities never
+enter the compiled plan.
 
-The staged diff against the immutable base passed:
-
-```bash
-git diff --cached --check 2a1ecaf7d6a6f18ba21add7884414d041bc1b5d8
-```
+Subprocess, network, provider auth, route preflight, grader/rubric-loader
+construction, typed Azure client creation, and cost-recorder construction are
+forbidden. Refusal cases assert no forbidden calls. The preflight CLI runs in
+process and still returns 2. The Sol parser digest is checked without running
+its selector. `git diff --check` and the staged implementation diff check passed.
 
 No other pytest selector, broad suite, build, standalone preflight, actual
 five-task run, 220-task run, model/grader/VM call, Azure/HF operation, live
@@ -106,34 +131,37 @@ credential lookup, workflow dispatch, or Project edit was performed.
 
 ### Immutable Review Boundary
 
-The implementation and its specification are committed at
-`f58da12cf3a835b0a37674b5e8ccd53a4715c9fe`. The read-only `first-reviewer`
+The implementation and specification are committed at
+`e9d62ffac93ff69f151e113b4d84e7e725824f0a`. The read-only `first-reviewer`
 audit compared that exact HEAD with the immutable base and returned `APPROVE`,
-with no BLOCK, MAJOR, or MINOR findings and no escalation requested. It did
-not rerun tests or invoke a runtime. No review correction or selector rerun
-was needed.
+with no BLOCK, MAJOR, or MINOR findings and no escalation requested. It ran no
+tests, preflights, clients, or network calls. No review correction or selector
+rerun was needed. The earlier grading-engineer working-diff audit also found
+no concrete blocking defect.
 
-Only this completion record and `CHANGELOG.md` were added after that review;
-the implementation, plans, tests, and specification are unchanged. This review
+Only this completion record and `CHANGELOG.md` differ from that reviewed HEAD;
+the implementation, plans, tests, and specification are unchanged. Review
 covers the offline artifact, not the deferred execution gates. Leader review
 and automatic CI evidence remain pending; this record claims neither CI
 success nor a carrying-PR merge result.
 
 ### Remaining Work
 
-Only offline dispatch artifact generation and source binding are implemented.
-The combined dispatch/grading blocker becomes
-`comparison_pinned_grading_not_wired`. The other five blockers remain:
+Only the offline artifact/source-binding portion of
+`comparison_pinned_grading_not_wired` is closed. The remaining blockers are:
 
 - `v2_reasoning_effort_capability_unverified`
 - `codex_reasoning_effort_capability_unverified`
 - `codex_native_model_call_and_token_limits_unenforced`
 - `live_deployment_identity_and_input_bytes_not_verified`
+- `comparison_materialization_and_workflow_gates_not_wired`
 - `comparison_usage_and_tariff_evidence_unverified`
 
-Actual checkout/config/input materialization, workflow execution gates, pinned
-grading, and the evidence above still need separate reviewed work. Both
-`launch_allowed` and `full_220_allowed` remain false. The compiler is not a
+Actual checkout/config/input/deliverable materialization, verified inference
+publication identity, workflow gates, and the evidence above need separate
+reviewed work. The real task filter preserves input order rather than
+reordering it from `--tasks`, so materialization must verify the fixed order.
+Both `launch_allowed` and `full_220_allowed` remain false. The compiler is not a
 guard over every paid entrypoint in the repository, and no compliant paid
 comparison command is supplied here. Unknown or unpriced usage stays
 null/partial under the existing record-only policy.
@@ -147,26 +175,26 @@ substitution, or personal OpenAI/Foundry fallback for that pilot.
 
 The full available skill catalog was inspected once before implementation.
 `experiment-design` was applied before code and plan changes. It preserved the
-fixed comparison question, configuration-bundle scope, two repeats per condition,
-input selection, measurement units, and stop boundaries, while keeping declared
-controls separate from evidence of enforcement. `im-not-ai-en` was applied to
-the English changelog, completion record, and PR wording. Protected commands,
-SHAs, counts, and uncertainty were checked manually; the owner's narrow
-validation scope took precedence over an additional fidelity-script run.
+fixed comparison question, configuration-bundle scope, repetitions, task/input
+pins, units, and stop boundaries. The consolidated grading specification and
+`tasks/grading_task` contract were read before implementation, and the required
+`grading-engineer` role audited the real CLI/config/source and receipt paths.
+The requested `first-reviewer` role reviewed the immutable implementation HEAD.
+These roles use the available engine, not an external paid model invocation.
 
-The explicitly requested `first-reviewer` role is used for the immutable-HEAD
-review, not an external model invocation. Experiment-report skills do not apply
-because no experimental outcomes are reported. Repository-readiness, UI, and
-animation skills do not apply to this existing offline compiler. No grading
-pipeline, workflow file, `core/qa.py`, or HF upload code changed, so no
-grading-engineer or extreme-reasoner step was needed. No new API/provider
-contract was introduced; existing pinned helpers are reused without a new
-documentation or authentication investigation.
+`im-not-ai-en` was applied to the English changelog, completion record, and PR
+wording. Protected commands, SHAs, counts, and uncertainty were checked manually;
+the owner's one-selector validation scope takes precedence over an additional
+fidelity-script run. Experiment-report skills do not apply because there are
+no measured experimental outcomes. Repository-readiness, UI, and animation
+skills do not apply to this existing offline compiler. Workflow files,
+`core/qa.py`, and HF upload code are unchanged, so no extreme-reasoner scope
+was created. No new API/provider or authentication contract is introduced.
 
-## Prior Result: #617 V2 Reasoning-Effort Forwarding
+## Prior Result: #618 Offline Dispatch Plan
 
-[#617](https://github.com/hyeonsangjeon/gdpval-realworks/pull/617) carried an
-explicit V2 `xhigh` value through stage validation and voice construction into
-the Responses request, preserving absent/null default bytes. Its implementation
-HEAD was `5bb3bd1d4e09499c94d3a06c163f0fd919bcd61b`, with the historical result
-`55 passed in 14.05s`. Those request selectors were not rerun in this task.
+[#618](https://github.com/hyeonsangjeon/gdpval-realworks/pull/618) compiled the
+four ABBA dispatch specs without executing them. Its reviewed implementation
+HEAD was `f58da12cf3a835b0a37674b5e8ccd53a4715c9fe`, and its final branch HEAD was
+`5ed50968146eebccd1044e95134a1ceccc98f2eb`. The historical targeted result was
+`25 passed in 9.44s`. That selector was not rerun in this task.
