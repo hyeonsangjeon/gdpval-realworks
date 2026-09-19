@@ -13,6 +13,22 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Materialize the GPT-5.4 comparison's pinned parquet and only its five-task
+  reference set in an existing disposable checkout. The materializer reuses
+  the source snapshot, config bundle and atomic no-clobber writer. It validates
+  source bytes, links, overlap and target absence before reserving the input
+  role, creates exclusive directories and files, then rechecks the bundles
+  before publishing the input-ready marker last. A retained reservation prevents
+  reuse after partial failure, including failure during directory creation.
+  Both runtime capture gates require matching config and input markers and
+  actual bytes; legacy absent/null controls retain their existing behavior.
+  The source set has 30 pins. One targeted offline selector reported
+  `116 passed in 327.95s (0:05:27)`. The marker proves local input consistency,
+  not launch permission or inference identity approval. Checkout creation,
+  external identity approval, native result-bundle support, workflow gates,
+  served capability, native caps and usage/tariff evidence remain outstanding.
+  Both launch flags remain false; historical evidence is unchanged.
+
 - Add exact run-config bundles for the GPT-5.4 comparison in caller-provided
   disposable source checkouts. The materializer validates typed dispatch and
   grading recipes, the combined plan, all 29 source pins and destination paths
