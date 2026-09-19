@@ -13,6 +13,23 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Wire pre-execution input capture into the GPT-5.4 comparison's Sandbox V2
+  path. A typed plan control and an exact r1/r2 run ID require canonical local
+  input capture and immediate byte/digest verification before the existing
+  free voice-safety preflight or provider/auth/client construction. The gate
+  binds actual plan, parquet and reference bytes to the held `TaskToRun`
+  projection, reuses the attester and Codex atomic no-clobber writer, and
+  records verified capture/attestation linkage. Drift, unsafe files, collisions,
+  nonempty workspaces and stage/shard/rehearsal overrides are refused.
+  Legacy absent/null controls and Codex capture behavior are preserved. The
+  source set has 28 pins. Immutable review found a producer/materializer path
+  mismatch; the correction retains `comparison-run.json` without weakening
+  the consumer. The same targeted selector passed on its one corrective
+  rerun: `73 passed in 57.65s` (initial run: `73 passed in 57.82s`).
+  External identity approval, native bundle-host support, deployment/workflow
+  gates, served capability, native caps, later wire consumption and usage/tariff
+  evidence remain outstanding. Both launch flags stay false.
+
 - Wire pre-execution input capture into the GPT-5.4 comparison's Codex path.
   Generated r1/r2 configs require a typed capture control and an independent
   Step 2 run ID. Step 1 binds actual prepared/config/parquet/reference bytes;
