@@ -72,6 +72,17 @@ def _bundle_fixture(checkout, *, manifest, combined_plan, run, materialize=True)
     )
 
 
+def _input_bundle_fixture(checkout, *, inputs, run):
+    """Install the independent oracle's inputs through the real materializer."""
+    import gpt54_run_input_bundle as bundle
+
+    return bundle.materialize_run_input_bundle(
+        run, manifest=inputs["manifest"], combined_plan=inputs["combined_plan"],
+        checkout=checkout, dataset_parquet=inputs["dataset_parquet"],
+        reference_root=inputs["reference_root"],
+    )
+
+
 def _fixture(tmp_path, monkeypatch, case):
     """Use synthetic data pins only; production has no bypass or pin override.
 
@@ -543,7 +554,7 @@ def test_prepared_input_attestation_binds_actual_bytes_without_execution(case, t
                 assert inspection["launch_allowed"] is inspection["full_220_allowed"] is False
                 assert "live_deployment_identity_and_input_bytes_not_verified" in inspection["launch_blockers"]
                 assert "comparison_materialization_and_workflow_gates_not_wired" in inspection["launch_blockers"]
-                assert len(preflight.REQUIRED_SOURCES) == 29
+                assert len(preflight.REQUIRED_SOURCES) == 30
                 assert set(inputs["manifest"]["source_pins"]) == preflight.REQUIRED_SOURCES
                 sol = preflight.load_plan(preflight.ROOT / preflight.ENVELOPE / "gpt56_sol_copilot_codex_pilot.yaml")
                 parser = "batch-runner/gpt54_comparison_preflight.py"
