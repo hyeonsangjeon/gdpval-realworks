@@ -451,6 +451,19 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Forward an explicit Sandbox V2 `model.reasoning_effort` into the existing
+  GPT-5.4 Responses request as `reasoning: {effort: xhigh}`. The optional typed
+  field defaults to `None`; omission and null retain the original request
+  bytes. Only the five documented GPT-5.4 effort values are accepted, without
+  coercion, normalization, or fallback, and invalid plans are refused before
+  client construction. The comparison now pins the V2 stage entry point and
+  plan reader, exposes the requested Responses fields, and replaces only the
+  V2 unwired blocker with a served-capability boundary. Launch remains blocked
+  and the four-run matrix is unchanged. One targeted command covering the
+  captured request and preregistration reported `55 passed in 14.05s`.
+  No live capability probe, cap enforcement, dispatch, grading, or paid
+  execution was added or run.
+
 - Forward explicit Codex reasoning and context-window requests through the
   existing preparation, provider configuration, and runtime/thread path.
   Optional typed controls produce `model_reasoning_effort="max"` and

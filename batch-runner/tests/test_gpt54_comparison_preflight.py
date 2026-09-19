@@ -1,5 +1,6 @@
 """The fixed comparison validates, but its current adapters must not spend."""
 
+import hashlib
 import json
 from dataclasses import fields
 
@@ -7,7 +8,14 @@ import pytest
 
 from core.agentic_v2_model_voice import AzureFoundryVoice
 from core.codex_runtime_config import CodexProviderSettings
-from gpt54_comparison_preflight import LAUNCH_BLOCKERS, inspect_plan, load_plan, main
+from gpt54_comparison_preflight import (
+    LAUNCH_BLOCKERS,
+    REQUIRED_SOURCES,
+    ROOT,
+    inspect_plan,
+    load_plan,
+    main,
+)
 
 
 @pytest.mark.parametrize(
@@ -21,6 +29,9 @@ from gpt54_comparison_preflight import LAUNCH_BLOCKERS, inspect_plan, load_plan,
         "missing_pin", "changed_pin", "environment_claim",
         "request_effort", "request_context", "missing_request",
         "missing_step2_pin", "changed_step2_pin",
+        "v2_request_effort", "v2_request_null", "v2_request_bool",
+        "missing_v2_request", "missing_v2_stage_pin", "changed_v2_stage_pin",
+        "missing_v2_plan_reader_pin", "changed_v2_plan_reader_pin",
     ],
 )
 def test_gpt54_comparison_is_fixed_and_fails_closed(change, tmp_path, capsys):
@@ -88,11 +99,34 @@ def test_gpt54_comparison_is_fixed_and_fails_closed(change, tmp_path, capsys):
         plan["source_pins"].pop("batch-runner/step2_run_inference.py")
     elif change == "changed_step2_pin":
         plan["source_pins"]["batch-runner/step2_run_inference.py"] = "0" * 64
+    elif change in {"v2_request_effort", "v2_request_null", "v2_request_bool"}:
+        plan["conditions"]["sandbox_v2"]["request"]["reasoning_effort"] = {
+            "v2_request_effort": "high", "v2_request_null": None,
+            "v2_request_bool": True,
+        }[change]
+    elif change == "missing_v2_request":
+        plan["conditions"]["sandbox_v2"].pop("request")
+    elif change in {
+        "missing_v2_stage_pin", "changed_v2_stage_pin",
+        "missing_v2_plan_reader_pin", "changed_v2_plan_reader_pin",
+    }:
+        source = (
+            "batch-runner/scripts/run_agentic_v2_stage.py"
+            if "stage_pin" in change
+            else "batch-runner/core/agentic_v2_stage_one_budget.py"
+        )
+        if change.startswith("missing_"):
+            plan["source_pins"].pop(source)
+        else:
+            plan["source_pins"][source] = "0" * 64
 
     result = inspect_plan(plan)
     assert result["configuration_valid"] is (change == "unchanged"), result
     assert result["launch_allowed"] is False
     assert result["launch_blockers"] == list(LAUNCH_BLOCKERS)
+    assert result["requested_v2_responses_fields"] == (
+        {"reasoning": {"effort": "xhigh"}} if change == "unchanged" else None
+    )
     assert result["requested_codex_config_overrides"] == (
         ['model_reasoning_effort="xhigh"'] if change == "unchanged" else None
     )
@@ -100,6 +134,14 @@ def test_gpt54_comparison_is_fixed_and_fails_closed(change, tmp_path, capsys):
         assert result["configuration_problems"] == [
             "source_pin_set" if change == "missing_step2_pin"
             else "source_pin:batch-runner/step2_run_inference.py"
+        ]
+    if change in {
+        "missing_v2_stage_pin", "changed_v2_stage_pin",
+        "missing_v2_plan_reader_pin", "changed_v2_plan_reader_pin",
+    }:
+        assert result["configuration_problems"] == [
+            "source_pin_set" if change.startswith("missing_")
+            else f"source_pin:{source}"
         ]
 
     # Exercise the real CLI entry point in process. JSON is valid YAML, too.
@@ -110,8 +152,20 @@ def test_gpt54_comparison_is_fixed_and_fails_closed(change, tmp_path, capsys):
 
     if change == "unchanged":
         # Read actual adapter surfaces, not a mock declaration of readiness.
-        voice_fields = {field.name for field in fields(AzureFoundryVoice)}
-        assert "reasoning_effort" not in voice_fields
+        voice_fields = {field.name: field for field in fields(AzureFoundryVoice)}
+        assert voice_fields["reasoning_effort"].default is None
+        assert len(REQUIRED_SOURCES) == 17
+        assert set(plan["source_pins"]) == REQUIRED_SOURCES
+        # Sol imports this module's plan reader. Refresh its existing digest
+        # without changing its contract or running an additional selector.
+        parser_source = "batch-runner/gpt54_comparison_preflight.py"
+        sol = load_plan(ROOT / (
+            "batch-runner/experiments/execution_envelope/"
+            "gpt56_sol_copilot_codex_pilot.yaml"
+        ))
+        assert sol["source_pins"][parser_source] == hashlib.sha256(
+            (ROOT / parser_source).read_bytes()
+        ).hexdigest()
         provider = CodexProviderSettings(
             endpoint="https://fixture.openai.azure.com/openai/v1/", model="gpt-5.4",
             **plan["conditions"]["codex"]["request"],
@@ -124,10 +178,11 @@ def test_gpt54_comparison_is_fixed_and_fails_closed(change, tmp_path, capsys):
             for value in overrides
         )
         assert {
-            "v2_reasoning_effort_unwired",
+            "v2_reasoning_effort_capability_unverified",
             "codex_reasoning_effort_capability_unverified",
             "codex_native_model_call_and_token_limits_unenforced",
             "live_deployment_identity_and_input_bytes_not_verified",
             "comparison_dispatch_and_pinned_grading_not_wired",
             "comparison_usage_and_tariff_evidence_unverified",
         } <= set(result["launch_blockers"])
+        assert "v2_reasoning_effort_unwired" not in result["launch_blockers"]

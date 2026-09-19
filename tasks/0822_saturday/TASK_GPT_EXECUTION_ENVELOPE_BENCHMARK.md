@@ -8273,17 +8273,20 @@ Codex CLI/harness라는 두 구성 묶음의 완료·품질·시간·비용 기�
 
 최초 사전등록 기준은 immutable main
 `96b181e1128039891f2cbbd9c26af9701e7e8e22`입니다. Codex 요청 설정 전달을
-추가하면서 source 경계를 `a5ed62bd55471c0fd8bdd637c9312315a17ebf4b`로
-갱신합니다. 기존 grader revision과 과제·입력·반복·한도는 바꾸지 않습니다.
+추가한 기준은 `a5ed62bd55471c0fd8bdd637c9312315a17ebf4b`이고, 이번 V2
+effort 전달의 immutable main 기준은
+`34b3327d8a9beda58754efbf88e6bbf6d643cc60`입니다. source 경계를 이 기준으로
+갱신하되 기존 grader revision과 과제·입력·반복·한도는 바꾸지 않습니다.
 사전등록 파일은
 `batch-runner/experiments/execution_envelope/gpt54_sandboxv2_codex_comparison.yaml`,
 무료 검사기는 `batch-runner/gpt54_comparison_preflight.py`입니다. 새 실행 프레임워크,
 모델 호출, 채점, VM/guest 실행, Azure 조회 또는 workflow dispatch를 추가하지 않습니다.
 
 소유자의 유료 비교 승인은 기록하되 `launch_enabled: false`를 유지합니다.
-Codex는 이제 `model_reasoning_effort="xhigh"`를 클라이언트 설정으로 전달하지만
-서버가 이를 제공했다고 검증하지는 않았습니다. V2의 effort 전달과 Codex 내부 모델
-호출 수의 동일한 한도 강제도 남아 있습니다. **설정값이 같은 것과 실제 요청·제한이 같은 것은 다릅니다.**
+Codex는 `model_reasoning_effort="xhigh"`를 클라이언트 설정으로, V2는
+`reasoning: {effort: xhigh}`를 Responses 요청으로 전달합니다. 서버가 이를
+제공했다고 검증하지는 않았고 Codex 내부 모델 호출 수의 동일한 한도 강제도
+남아 있습니다. **설정값이 같은 것과 실제 요청·제한이 같은 것은 다릅니다.**
 무료 검사가 통과해도 이 소스에서 유료 비교를 시작할 수 없습니다.
 
 ### 14.2 두 조건에 고정하는 목표값
@@ -8300,6 +8303,14 @@ Codex는 이제 `model_reasoning_effort="xhigh"`를 클라이언트 설정으로
   `xhigh`를 지원값으로 명시합니다. 이것은 해당 Foundry 배포와 현재 어댑터가
   실제로 지원한다는 확인이 아닙니다. 배포 이름만으로 동일성을 인정하지 않고,
   지출 전 양쪽의 실제 endpoint·deployment·모델 버전/snapshot을 대조해야 합니다.
+  V2 조건의 `request.reasoning_effort`는 실행용 stage 계획의
+  `model.reasoning_effort`로 전달할 값입니다. 이 선택적 필드는 기본값이 `None`이며,
+  생략하거나 null이면 기존 요청에 `reasoning` 키를 추가하지 않습니다. GPT-5.4
+  문서에 명시된 `none`, `low`, `medium`, `high`, `xhigh`만 정확히 허용합니다.
+  문자열 변환, 공백 제거, 대소문자 변경, 다른 effort로의 fallback은 없습니다.
+  [Responses API 문서](https://developers.openai.com/api/reference/resources/responses/methods/create)의
+  `reasoning.effort` 형식으로 직렬화하며, 기존 V2 템플릿과 과거 요청 조건은
+  바꾸지 않습니다. 사전등록을 실행용 계획으로 연결하는 dispatch 구현은 여전히 별도입니다.
 - 작업: 기존 점수 비참조 규칙 `select_advance_check_tasks`의 `advance_check_5`
   순서를 그대로 사용합니다. `02aa1805-c658-4069-8a6a-02dec146063a`,
   `0112fc9b-c3b2-4084-8993-5a4abb1f54f1`,
@@ -8377,8 +8388,11 @@ ABBA 순서는 한 방향의 시간 경과 영향을 줄이기 위한 고정 순
 
 다음은 받아들이고 측정할 잔여 차이가 아니라, 지출 전에 해소해야 할 불일치입니다.
 
-- `v2_reasoning_effort_unwired`: `AzureFoundryVoice.next_turn`의 실제 payload에
-  reasoning effort가 없습니다. YAML에 `xhigh`를 적는 것만으로는 전달되지 않습니다.
+- `v2_reasoning_effort_capability_unverified`: stage 계획의 명시적
+  `model.reasoning_effort: xhigh`가 기존 voice 생성 경로를 거쳐
+  `AzureFoundryVoice.next_turn`의 `reasoning: {effort: xhigh}`가 됩니다.
+  가짜 client가 받은 요청은 확인하지만 실제 Foundry가 이 capability를
+  제공했다는 증거는 아닙니다. 기본 요청이나 잘못된 값을 조용히 대체하지 않습니다.
 - `codex_reasoning_effort_capability_unverified`: Codex 조건의 `request` 블록은
   `reasoning_effort: xhigh`, `model_context_window: null`을 명시합니다.
   `CodexProviderSettings.config_overrides`를 거쳐 기존 runtime/thread 경로에
@@ -8386,8 +8400,9 @@ ABBA 순서는 한 방향의 시간 경과 영향을 줄이기 위한 고정 순
 - `codex_native_model_call_and_token_limits_unenforced`: Codex 논리 turn 안의 모델
   호출 수와 토큰 한도를 V2와 같은 단위로 강제하는 연결이 없습니다.
 - `live_deployment_identity_and_input_bytes_not_verified`: 실제 Foundry 배포의
-  버전·capability, 양쪽 직렬화 요청의 `xhigh`, 다운로드한 입력 바이트는 이번에
-  확인하지 않았습니다. API에 묻는 유료 probe를 무료 검증으로 부르지 않습니다.
+  버전·capability와 다운로드한 입력 바이트는 이번에 확인하지 않았습니다.
+  로컬 직렬화의 `xhigh`와 실제 배포가 받은 요청·제공한 capability는 구분합니다.
+  API에 묻는 유료 probe를 무료 검증으로 부르지 않습니다.
 - `comparison_dispatch_and_pinned_grading_not_wired`: 기존 두 workflow는 이번
   사전등록 파일을 실행 설정으로 소비하지 않습니다. 공통 한도·재시도·단일 시도와
   고정 rubric revision을 반영한 실행용 사본 및 지출 전 관문 연결이 필요합니다.
@@ -8395,10 +8410,12 @@ ABBA 순서는 한 방향의 시간 경과 영향을 줄이기 위한 고정 순
   비용 단위가 연결되는 증거는 아직 없습니다. 가격 누락만을 새 지출 차단 규칙으로
   삼지는 않으며, 기존 record-only 정책과 unknown/null/partial 기록을 유지합니다.
 
-무료 검사기는 원천 파일 15개의 지문을 확인합니다. 추가된 네 파일은 설정 검증,
-executor, 준비 파일, 추론 단계의 전달 경계입니다. 계획의 canonical JSON 지문과
-실제 어댑터와 같은 serializer가 생성한 요청 override도 반환합니다. 잘못된 계획은
-override를 반환하지 않습니다. `configuration_valid: true`와 `launch_allowed: false`는 함께 나올 수
+무료 검사기는 원천 파일 17개의 지문을 확인합니다. 기존 15개에 V2 stage 진입점
+`scripts/run_agentic_v2_stage.py`와 그 plan reader인
+`core/agentic_v2_stage_one_budget.py`를 추가했습니다. 계획의 canonical JSON
+지문과 실제 어댑터가 쓰는 helper의 V2 Responses 필드·Codex override도 반환합니다.
+잘못된 계획은 어느 쪽 요청 증거도 반환하지 않습니다.
+`configuration_valid: true`와 `launch_allowed: false`는 함께 나올 수
 있으며 CLI는 **항상 종료 코드 2**를 반환합니다. 현재 코드를 실행할 수 없다는
 판정입니다. 이 검사기가 아직 기존 유료 workflow 앞에 연결된 것은 아니므로,
 저장소의 모든 지출 경로를 막는 안전장치라고 주장하지 않습니다.
@@ -8429,7 +8446,7 @@ record-only 정책을 바꾸지 않되 그 총액을 확정하지 않습니다. 
 
 `experiment-design`에 따라 비교 질문, 움직이는 축, 최소 반복, 판정자 한계,
 설정과 강제의 차이, 측정 단위, 입력 선택, 중단 규칙, 재사용 범위를 고정했습니다.
-이번 단일 무료 selector는 두 조건과 의도적으로 바꾼 계획을 검사할 뿐, 모델·채점·
-VM 또는 Azure를 실행하지 않습니다. 검증 명령과 실제 결과는 검증 후
+이번 무료 검증은 V2 요청 경로와 두 조건의 사전등록 selector를 한 pytest 명령으로
+검사할 뿐, 모델·채점·VM 또는 Azure를 실행하지 않습니다. 검증 명령과 실제 결과는 검증 후
 `tasks/LATEST_TASK_RESULT/README.md`에 기록합니다. 현재 변경에 대한 immutable-HEAD
 리뷰와 CI 판단은 아직 남아 있으며, 승인·실험 성적·준비 완료를 주장하지 않습니다.

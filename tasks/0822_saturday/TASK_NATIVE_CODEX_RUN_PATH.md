@@ -1553,7 +1553,9 @@ produce no override evidence. Both checkers still refuse launch and exit 2.
 The integer context window is neither a native call/token budget nor proof of
 Long-tier entitlement. Provider and live identity/capability checks, native
 call/token caps, dispatch/grading identity, and usage/tariff evidence remain
-unresolved. Sandbox V2 still lacks effort forwarding. Task order, inputs,
+unresolved. The subsequent V2 request wiring described in
+[the comparison specification](TASK_GPT_EXECUTION_ENVELOPE_BENCHMARK.md)
+replaces its forwarding gap with a served-capability boundary. Task order, inputs,
 repeats, grader revisions, result schemas, record-only cost policy, and
 null/partial receipts are unchanged. A new immutable-HEAD review is required;
 no launch command becomes compliant through this change alone.

@@ -38,7 +38,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from decimal import Decimal
-from typing import Any, Mapping, Optional, Sequence
+from typing import Any, Literal, Mapping, Optional, Sequence
 
 from core.agentic_v2_contract import responses_tool_definitions
 from core.agentic_v2_conversation import (
@@ -54,6 +54,38 @@ from core.provider_refusal import classify_provider_refusal
 # A stated reason is shown to a person, not parsed, and the loop trims what it
 # keeps. Kept short here so the trimming never has to happen.
 _SHORTEST_USEFUL_NOTE = 200
+
+
+ResponsesReasoningEffort = Literal["none", "low", "medium", "high", "xhigh"]
+"""The reasoning efforts documented for GPT-5.4, not every Responses model."""
+
+REASONING_EFFORTS: tuple[ResponsesReasoningEffort, ...] = (
+    "none", "low", "medium", "high", "xhigh",
+)
+
+
+def reasoning_request_fields(
+    reasoning_effort: ResponsesReasoningEffort | None = None,
+) -> dict[str, Any]:
+    """Validate a requested effort and return its optional Responses fields.
+
+    Absence and explicit null leave the existing request unchanged. This only
+    describes what the client requests; it does not prove a deployment serves
+    that effort. Values are never cast, normalized, or replaced by a default.
+
+    Raises:
+        ValueError: If an explicit value is not a documented GPT-5.4 effort.
+    """
+    if reasoning_effort is None:
+        return {}
+    if (
+        not isinstance(reasoning_effort, str)
+        or reasoning_effort not in REASONING_EFFORTS
+    ):
+        raise ValueError(
+            f"reasoning_effort must be one of {', '.join(REASONING_EFFORTS)} or null"
+        )
+    return {"reasoning": {"effort": reasoning_effort}}
 
 
 def _why_the_call_failed(error: BaseException) -> str:
@@ -279,8 +311,10 @@ class AzureFoundryVoice:
 
     calls: list[ModelCallRecord] = field(default_factory=list)
     resolved_model: Optional[str] = field(default=None, init=False)
+    reasoning_effort: ResponsesReasoningEffort | None = None
 
     def __post_init__(self) -> None:
+        reasoning_request_fields(self.reasoning_effort)
         if not str(self.deployment).strip():
             raise ValueError("a deployment name is required to ask a model")
         if not str(self.resource).strip():
@@ -466,6 +500,7 @@ class AzureFoundryVoice:
             "parallel_tool_calls": False,
             "timeout": self.request_timeout_seconds,
         }
+        payload.update(reasoning_request_fields(self.reasoning_effort))
 
         try:
             response = self.client.responses.create(**payload)

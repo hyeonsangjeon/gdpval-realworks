@@ -1,7 +1,7 @@
 # Preregistered targets, not a runnable V2 plan or batch experiment.
 # The free preflight deliberately refuses paid launch on the pinned source.
 plan_version: gpt54-sandboxv2-codex-comparison-v1
-base_sha: a5ed62bd55471c0fd8bdd637c9312315a17ebf4b
+base_sha: 34b3327d8a9beda58754efbf88e6bbf6d643cc60
 comparison: configuration_bundle
 paid_comparison_approved: true
 launch_enabled: false
@@ -77,6 +77,9 @@ conditions:
     workflow: .github/workflows/agentic-v2-stage-run.yml
     isolation: same-host
     replay_format: faithful
+    # Forward as model.reasoning_effort in the V2 stage plan; no served proof.
+    request:
+      reasoning_effort: xhigh
   codex:
     controls: *shared
     template: batch-runner/experiments/exp033_codex_foundry_fixed5.yaml
@@ -107,8 +110,10 @@ source_pins:
   batch-runner/grading_configs/default_v2_sol_max.yaml: 12d38383d94e991d61491631d73119c89c997faaa146562f3be71d6527b195bf
   batch-runner/schemas/grade.schema.json: 9c611874c2d7aa57018eecdc86b7c0d579aaa9c29dd0df649058eec9ad5175b9
   batch-runner/core/result_projection.py: 1b47c4ee0f6d050e5edd4ac5a301203ba834c8d159b1557b04d83046ca965ec6
-  batch-runner/core/agentic_v2_model_voice.py: 01d2f1f082e90ca21212cc3fa0e0f93aeac23e556c245c0628bf586df9bb48b7
+  batch-runner/core/agentic_v2_model_voice.py: 71da68598e631a43678d278c04589b978bd3c8d82d4df47ca30f90d1df4ce1a6
   batch-runner/core/agentic_v2_conversation_runner.py: 01db41662713ff92dc43a7674893309195728b9acce01ad0cf1be2e3dcdd8832
+  batch-runner/core/agentic_v2_stage_one_budget.py: 56641403c043d09ef49360a473aedc22ff8fc1f863bb9746dacd9891622324f1
+  batch-runner/scripts/run_agentic_v2_stage.py: 54af20b2f176204b25165b22296b3d3331948eb6af696187429dadef65aeb116
   batch-runner/core/codex_runtime_config.py: 3ef7a6bcbfe3523516068dee99f5488163cf33516d03de1c9fe42d8e2aca19b3
   batch-runner/core/codex_runner.py: a5e95775f8b5065307c625fb532677517e57217c9efc016f0135a06abd82377e
   batch-runner/core/experiment_config.py: 77887f26a8769ec1f5344bffdd5003c8de6b1518bac69db0a346e1df9d5218ae
