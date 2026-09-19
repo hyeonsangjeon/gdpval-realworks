@@ -484,6 +484,7 @@ checkout and cloud access.
 | `wall_timeout` | `condition_a` Step 2 checkpoint watchdog, `0..290` minutes; `0` delegates to `execution.wall_timeout` in YAML and disables only when both are `0` | `290` | Keep the default unless debugging relay behavior |
 | `sandbox_image_digest` | Immutable sandbox image forwarded across relay legs | *(empty)* | Internal; the workflow resolves it when needed |
 | `codex_foundry_confirmed` | States that this batch may spend on the Foundry deployment. Only `execution.mode: codex_foundry` reads it; a `codex_foundry` dispatch without it fails in a job that holds no credentials | `false` | Tick it only when you mean to run a Codex batch, and only for that dispatch |
+| `comparison_reviewed_source_sha` | Caller-reviewed full lowercase 40-hex source commit SHA for GPT-5.4 comparison admission, distinct from relay `source_sha`. Does not authorize launch | *(empty)* | Set only for the exact registered comparison config; leave empty for ordinary batches |
 
 ### Three-task smoke input
 
@@ -497,6 +498,7 @@ source_sha:            <empty>
 wall_timeout:          290
 sandbox_image_digest:  <empty>
 codex_foundry_confirmed: false
+comparison_reviewed_source_sha: <empty>
 ```
 
 ### How Relay Runs Work

@@ -258,6 +258,7 @@ test('workflow input tables mirror defaults and watchdog delegation', async () =
     'wall_timeout',
     'sandbox_image_digest',
     'codex_foundry_confirmed',
+    'comparison_reviewed_source_sha',
   ]
   assert.deepEqual(Object.keys(inputs), inputNames)
   assert.deepEqual(
@@ -270,6 +271,7 @@ test('workflow input tables mirror defaults and watchdog delegation', async () =
       wall_timeout: 290,
       sandbox_image_digest: '',
       codex_foundry_confirmed: false,
+      comparison_reviewed_source_sha: '',
     },
   )
   // Off is the whole point of this one, so the default is asserted above like
