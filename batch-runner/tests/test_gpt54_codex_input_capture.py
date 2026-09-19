@@ -21,7 +21,9 @@ from core.codex_runtime_config import CodexProviderSettings
 from core.experiment_config import CodexComparisonCapture, ExperimentConfig
 from core.prepared_fingerprint import prepared_fingerprint
 from core.result_fingerprint import inference_result_fingerprint
-from .test_gpt54_prepared_input_attestation import _fixture, _identity, _json, _tree_snapshot
+from .test_gpt54_prepared_input_attestation import (
+    _bundle_fixture, _fixture, _identity, _json, _tree_snapshot,
+)
 
 
 class ProviderBoundary(BaseException):
@@ -43,11 +45,9 @@ def _runtime_fixture(tmp_path, monkeypatch, repeat):
     workspace = root / "batch-runner/workspace"
     workspace.mkdir(parents=True)
     config = root / capture.CONFIG_PATH
-    config.write_bytes(run.config_json.encode())
-    manifest = root / capture.MANIFEST_PATH
-    manifest.parent.mkdir(parents=True)
-    manifest.write_bytes(_json(inputs["manifest"]))  # JSON is accepted by the real YAML reader.
-    (root / capture.COMBINED_PLAN_PATH).write_bytes(_json(inputs["combined_plan"]))
+    _bundle_fixture(
+        root, manifest=inputs["manifest"], combined_plan=inputs["combined_plan"], run=run,
+    )
     for module in (step1, step2):
         monkeypatch.setattr(module, "WORKSPACE_DIR", workspace)
         monkeypatch.setattr(module, "DEFAULT_LOCAL_PATH", dataset_root)
@@ -369,7 +369,7 @@ def test_codex_comparison_capture_gates_real_step1_and_step2(case, tmp_path, mon
             inspection = preflight.inspect_plan(inputs["manifest"], grading_plan=inputs["combined_plan"])
             assert inspection["configuration_valid"] is True
             assert inspection["codex_pre_execution_capture"]["required_runs"] == list(CodexComparisonCapture.RUN_IDS)
-            assert len(preflight.REQUIRED_SOURCES) == 28
+            assert len(preflight.REQUIRED_SOURCES) == 29
             sol = preflight.load_plan(preflight.ROOT / preflight.ENVELOPE / "gpt56_sol_copilot_codex_pilot.yaml")
             for path in ("batch-runner/gpt54_comparison_preflight.py", "batch-runner/core/experiment_config.py",
                          "batch-runner/step1_prepare_tasks.py", "batch-runner/step2_run_inference.py"):

@@ -36,7 +36,7 @@ from core.execution_envelope_tasks import (
 from core.experiment_config import CodexComparisonCapture, ExperimentConfig
 
 ROOT = Path(__file__).resolve().parents[1]
-BASE_SHA = "871e138558c3ada8d9c3cd93de2b07b676faeab9"
+BASE_SHA = "baa81d4f7ca65680c04f7f19d3a375cd60c8f39b"
 GRADER_SOURCE_SHA = BASE_SHA
 ENVELOPE = "batch-runner/experiments/execution_envelope/"
 PLAN = ROOT / ENVELOPE / "gpt54_sandboxv2_codex_comparison.yaml"
@@ -50,6 +50,7 @@ REQUIRED_SOURCES = {
     "batch-runner/gpt54_prepared_input_attestation.py",
     "batch-runner/gpt54_codex_input_capture.py",
     "batch-runner/gpt54_v2_input_capture.py",
+    "batch-runner/gpt54_run_config_bundle.py",
     "batch-runner/prepare_dataset.py",
     "batch-runner/step8_grade.py",
     "batch-runner/core/config.py",
@@ -646,6 +647,14 @@ def inspect_plan(
             "binding_version": "gpt54-pre-execution-input-v1",
             "required_runs": [run.run_id for run in compiled.runs if run.condition == "sandbox_v2"],
             "evidence_boundary": "local_pre_execution_snapshot_consistency",
+        } if compiled is not None else None),
+        "run_config_bundle": ({
+            "bundle_version": "gpt54-run-config-bundle-v1",
+            "materializer": "gpt54_run_config_bundle.materialize_run_config_bundle",
+            "ready_marker": "comparison-bundle-ready.json",
+            "required_runs": [run.run_id for run in compiled.runs],
+            "checkout_creation": False,
+            "evidence_boundary": "local_config_bundle_consistency",
         } if compiled is not None else None),
         "launch_allowed": False,
         "full_220_allowed": False,

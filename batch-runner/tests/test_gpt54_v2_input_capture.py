@@ -23,7 +23,9 @@ from scripts import run_agentic_v2_stage as runner
 from .test_gpt54_codex_input_capture import (
     ProviderBoundary, test_codex_comparison_capture_gates_real_step1_and_step2 as _codex_regression,
 )
-from .test_gpt54_prepared_input_attestation import _fixture, _identity, _json, _tree_snapshot
+from .test_gpt54_prepared_input_attestation import (
+    _bundle_fixture, _fixture, _identity, _json, _tree_snapshot,
+)
 
 
 def _runtime_fixture(tmp_path, monkeypatch, repeat):
@@ -39,11 +41,9 @@ def _runtime_fixture(tmp_path, monkeypatch, repeat):
     shutil.copyfile(inputs["dataset_parquet"], dataset_root / "data" / writer.PARQUET_NAME)
     workspace = root / "batch-runner/workspace"
     workspace.mkdir(parents=True)
-    (root / writer.CONFIG_PATH).write_bytes(run.config_json.encode())
-    manifest_path = root / writer.MANIFEST_PATH
-    manifest_path.parent.mkdir(parents=True)
-    manifest_path.write_bytes(_json(inputs["manifest"]))
-    (root / writer.COMBINED_PLAN_PATH).write_bytes(_json(inputs["combined_plan"]))
+    _bundle_fixture(
+        root, manifest=inputs["manifest"], combined_plan=inputs["combined_plan"], run=run,
+    )
     monkeypatch.setattr(runner, "load_task_catalog", preflight.load_task_catalog)
     monkeypatch.setattr(runner, "catalog_sha256", preflight.catalog_sha256)
     return root, run, inputs, bindings[index], records
@@ -391,7 +391,7 @@ def test_v2_comparison_capture_gates_stage_before_provider(case, tmp_path, monke
         inspection = preflight.inspect_plan(inputs["manifest"], grading_plan=inputs["combined_plan"])
         assert inspection["configuration_valid"] is True
         assert inspection["v2_pre_execution_capture"]["required_runs"] == list(capture.V2ComparisonCapture.RUN_IDS)
-        assert len(preflight.REQUIRED_SOURCES) == 28
+        assert len(preflight.REQUIRED_SOURCES) == 29
         compiled = preflight.compile_dispatch_plan(inputs["manifest"])
         assert compiled.runs[0].config_json == compiled.runs[3].config_json
     else:

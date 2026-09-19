@@ -8286,7 +8286,7 @@ prepared-input attestation compiler의 시작점은
 Codex pre-execution capture wiring의 시작점은
 `e90040962aa16572a32c64808db93b38dceeefb9`입니다.
 V2 pre-execution capture wiring의 시작점은
-`871e138558c3ada8d9c3cd93de2b07b676faeab9`입니다.
+`baa81d4f7ca65680c04f7f19d3a375cd60c8f39b`입니다.
 `base_sha`와 `grading.source_sha`는 이번 시작점을 기록하며, 실제 검토 대상 바이트는 source pins와 기존 grader helper의
 `template_source_sha256`으로 고정합니다. 시작 SHA만으로 새 코드의 신원을
 증명했다고 하지 않습니다. grader 설정·과제·입력·반복·한도는 유지합니다.
@@ -8426,16 +8426,18 @@ ABBA 순서는 한 방향의 시간 경과 영향을 줄이기 위한 고정 순
   신원 문서와 외부 승인 SHA256이 있으면 V2 결과와 Codex canonical 결과·deliverable을
   각각 검증해 isolated step8 입력으로 배치할 수 있습니다. prepared input의
   오프라인 동등성 검사는 14.5.3에서 다룹니다. 신원 문서 발급·승인, 실제 capture와
-  소비 시점의 연결, native no-clobber 지원 host, 실제 checkout/config 배치,
-  workflow 관문은 여전히 외부 gate입니다.
+  소비 시점의 연결, native result-bundle no-clobber 지원 host, checkout 생성과
+  dataset/reference 배치, workflow 관문은 여전히 외부 gate입니다. 이미 준비된
+  disposable checkout에 exact config bundle을 배치하고 runtime에서 검사하는
+  경로만 14.5.6에서 닫습니다.
 - `comparison_usage_and_tariff_evidence_unverified`: 이 비교에서 실제 모델·usage와
   비용 단위가 연결되는 증거는 아직 없습니다. 가격 누락만을 새 지출 차단 규칙으로
   삼지는 않으며, 기존 record-only 정책과 unknown/null/partial 기록을 유지합니다.
 
-무료 검사기는 원천 파일 **28개**의 지문을 먼저 확인합니다. #621의 24개에
+무료 검사기는 원천 파일 **29개**의 지문을 먼저 확인합니다. #621의 24개에
 `gpt54_prepared_input_attestation.py`와 기존 Step 1 public helper를 import할 때
 필요한 `prepare_dataset.py`, Codex capture용 `gpt54_codex_input_capture.py`,
-V2 capture용 `gpt54_v2_input_capture.py`를
+V2 capture용 `gpt54_v2_input_capture.py`, 설정 배치·검증용 `gpt54_run_config_bundle.py`를
 추가했습니다. 해당 loader의 다운로드 경로는 호출하지 않습니다.
 `step8_grade.py`의 기존 `compute_grader_source_hash`는
 모든 `core/**/*.py`, grade schema, requirements include graph, inference download
@@ -8622,7 +8624,7 @@ step8의 실제 `load_local_inference_results`와 `resolve_source_inference_iden
 
 이 destination은 **입력 bundle**이며 실행 가능한 checkout이 아닙니다. Codex 입력과
 deliverable 검증은 아래 14.5.2가 맡습니다. 외부 identity 발급, native no-clobber 지원 host,
-checkout/config materialization, workflow gate, served capability, native caps,
+checkout 생성·dataset/reference 배치, workflow gate, served capability, native caps,
 live identity/input bytes, usage/tariff 증거는 여전히 필요합니다. Copilot
 provider/auth도 공식 runtime 인계 계약이 없어 blocked 상태이며 대체 경로를 넣지
 않습니다. `launch_allowed`와 `full_220_allowed`는 계속 false입니다.
@@ -8634,7 +8636,7 @@ provider/auth도 공식 runtime 인계 계약이 없어 blocked 상태이며 대
 `ComparisonGradingRunSpec`이 두 Codex run 중 하나와 정확히 일치하는지 확인합니다.
 ABBA의 Codex r1/r2, 고정 5개 task ID·입력 순서, Foundry GPT-5.4/xhigh,
 grader·receipt 계약은 바꾸지 않습니다. combined dispatch/grading plan의 exact-match
-검사와 현재 28개 source pin에 이 함수가 포함됩니다. V2 spec이나 수정된 dict는 받지 않습니다.
+검사와 현재 29개 source pin에 이 함수가 포함됩니다. V2 spec이나 수정된 dict는 받지 않습니다.
 
 입력은 해당 spec, manifest, 실제 `workspace/step2_inference_results.json`, 실제
 `workspace/upload`, 별도의 inference identity JSON, **외부 승인 SHA256**, 아직 없는
@@ -8692,7 +8694,7 @@ resolver, result fingerprint, deliverable validator와 선택된 기존 V2 회�
 selector에서 확인합니다. 이 검증은 실제 모델·채점·실험 실행이 아닙니다.
 
 이 변경은 Codex 입력 bundle 검증·격리 배치만 닫습니다. 외부 identity 발급과 prepared
-input provenance, native no-clobber 지원 host, 실제 checkout/config 배치, workflow gate,
+input provenance, native no-clobber 지원 host, checkout 생성·dataset/reference 배치, workflow gate,
 served capability, native caps, live model/input bytes, usage/tariff는 남습니다.
 `launch_allowed`와 `full_220_allowed`는 계속 false이며 새 유료 실행 명령은 없습니다.
 원본 결과·deliverable·ledger 및 과거 sealed evidence는 수정하지 않습니다.
@@ -8783,7 +8785,7 @@ subprocess/network/provider auth/model·grader 생성과 compiler의 파일 쓰�
 
 이 변경은 prepared provenance의 오프라인 대조와 두 조건의 canonical input equivalence
 검사만 제공합니다. external inference identity 발급·승인, capture 이후 실제 wire 소비의
-확인, native no-clobber 지원 bundle host, checkout/config 실제 배치, workflow gate,
+확인, native no-clobber 지원 result-bundle host, checkout 생성·dataset/reference 배치, workflow gate,
 served capability, native call/token caps, usage/tariff 증거는 남습니다.
 `launch_allowed`와 `full_220_allowed`는 계속 false이며 paid 실행 명령을 추가하지 않습니다.
 
@@ -8848,7 +8850,7 @@ attestation digest를 만들거나 external inference identity를 발급·승인
 이 연결이 입증하는 것은 provider 생성 직전 로컬 입력의 동일성입니다. served
 deployment/model/effort capability, 이후 rendered/wire request의 동일성이나 환경만의
 인과효과는 입증하지 않습니다. ABBA 네 run과 모든 한도·채점·receipt 계약은 유지합니다.
-외부 identity 승인, native no-clobber bundle host, checkout/config 배치,
+외부 identity 승인, native no-clobber result-bundle host, checkout 생성·dataset/reference 배치,
 workflow gate, served capability, native call/token caps, usage/tariff는 남은 일입니다.
 GitHub Copilot provider/auth도 공식 인계 계약 부재로 별도 blocked 상태이며 이 변경은
 그 경로를 구현하지 않습니다. 두 launch flag는 계속 false입니다.
@@ -8892,14 +8894,67 @@ run/condition/repeat, manifest/combined-plan/source-pin/config/source-projection
 같이 working-directory-relative `comparison-run.json` 경로를 유지합니다. capture 자체의
 checkout-relative 경로와 이 필드의 기준 디렉터리는 구분합니다.
 이 파일은 이후 네-run attester의 `binding_file`과 결속할 수 있는 증거이며, 전체 attestation이나
-publication identity를 미리 발급하는 것이 아닙니다. Codex capture 코드와 실행 순서는 바꾸지 않습니다.
+publication identity를 미리 발급하는 것이 아닙니다. 14.5.6의 bundle 확인 외에는
+Codex capture bytes와 실행 순서를 바꾸지 않습니다.
 
 이 연결의 증거는 **실행 직전 로컬 source snapshot과 held task의 일치**입니다. 이후 reference
 staging이나 실제 wire prompt까지 같은 bytes를 소비했다고 인증하지 않으며, served model/effort
 capability·환경만의 인과효과·launch authorization도 아닙니다. configuration-bundle 비교,
 고정 5개 과제와 ABBA 네 실행, 한도·채점·null/partial receipt 계약은 유지합니다. 외부 identity 승인,
-native bundle host, 실제 checkout/config 배치, workflow gate, served capability, native caps,
+native result-bundle host, checkout 생성·dataset/reference 배치, workflow gate, served capability, native caps,
 usage/tariff는 남은 일이고 `launch_allowed`와 `full_220_allowed`는 계속 false입니다.
+
+#### 14.5.6 기존 disposable checkout의 run config bundle
+
+`gpt54_run_config_bundle.materialize_run_config_bundle`은 호출자가 제공한 기존
+source checkout 하나와 정확한 `ComparisonRunSpec`·`ComparisonGradingRunSpec`,
+manifest·combined plan만 받습니다. Git 명령, checkout 생성·삭제, dataset/reference
+배치, subprocess dispatch는 하지 않습니다. `compile_grading_plan`을 다시 사용해
+네 run의 ABBA 순서와 선택한 run id/condition/repeat/task order를 exact-match 합니다.
+검토된 source라는 Git 상태를 자체 발급하지 않고 대상 checkout의 source pin bytes를
+직접 읽습니다. symlink·path escape·hardlink·누락 pin·변조와 모든 목적지 충돌을
+쓰기 전에 거부하며, compiler를 실행한 checkout의 pin 검사만으로 대신하지 않습니다.
+
+아래 네 파일은 기존 compiler의 UTF-8 canonical JSON bytes 그대로 저장합니다.
+기존 YAML reader가 JSON도 읽으므로 별도 설정 직렬화나 schema는 없습니다.
+
+| checkout-relative path | bytes의 출처 |
+| --- | --- |
+| `comparison-plan.json` | `ComparisonGradingPlan.canonical_bytes()` |
+| `batch-runner/comparison-run.json` | dispatch run의 `config_json` |
+| `batch-runner/comparison-grading.json` | grading run의 `grader_config_json` |
+| `batch-runner/experiments/execution_envelope/<run_id>.yaml` | grading run의 `experiment_config_json` |
+
+부모 디렉터리는 이미 존재해야 하며 descriptor로 유지합니다. 각 파일은 #623의
+`_write_no_clobber`로 완전히 쓴 임시 파일을 원자적으로 게시합니다. 모든 게시 파일과
+source bytes를 다시 확인한 뒤 root의 `comparison-bundle-ready.json`만 마지막에
+게시합니다. 중간 실패에는 완전한 일부 파일이 남을 수 있으나 ready marker가 없으므로
+실행하지 않습니다. 같은 run이나 다른 repeat의 partial tree를 재사용·덮어쓰거나
+자동 복구·삭제하지 않습니다. 이는 marker-last 프로토콜이지 여러 파일의 단일 트랜잭션이나
+crash durability 보장이 아닙니다. 결과 bundle의 native `RENAME_NOREPLACE` 요구는 별개입니다.
+
+marker는 각 파일과 source의 size/SHA256, manifest bytes, source pin map, declared base,
+ABBA index와 run/task identity를 canonical JSON으로 담습니다. prepared-input attestation
+linkage에는 version, run identity, manifest/combined-plan/source-pin/config 지문과 capture
+역할 경로만 넣습니다. 아직 만들지 않은 capture·prepared projection의 지문이나 전체
+네-run attestation SHA256을 꾸며 넣지 않습니다. marker 자신의 digest를 config에 넣는
+순환 결속도 없습니다. 경로는 run-relative이며 host 절대 경로는 identity가 아닙니다.
+
+V2/Codex 비교 capture gate는 marker가 존재하는지만 보지 않습니다. compiler가 기대하는
+문서와 모든 실제 bytes·digest를 다시 확인하므로 변경한 config와 그에 맞춘 marker hash도
+거부합니다. Codex Step 1은 prepared JSON 게시 전에도 검사합니다. V2는 safety preflight와
+voice/provider/auth 생성 전, Codex Step 2는 기존 provider/client 생성 전 검사를 유지합니다.
+기존 absent/null 비비교 control은 marker 읽기나 새 출력 필드 없이 그대로 진행합니다.
+두 V2 repeat의 config bytes는 같지만 explicit run id와 marker의 repeat identity는 다릅니다.
+
+이 marker는 **로컬 config bundle 일치**만 증명합니다. prepared input의 실제 bytes,
+served capability, wire prompt equality, inference publication identity 승인이나 launch
+authorization이 아닙니다. 대상 checkout에서 확인하는 범위는 명시된 29개 source pin이며,
+전체 grader closure는 아닙니다. 기존 `template_source_sha256` 검사는 compiler를 실행한
+checkout을 대상으로 하므로 `materialized_grader_source_hash`는 여전히 미확정입니다.
+실제 입력 확인은 기존 capture/attestation 경로에 남고,
+checkout 생성·dataset/reference 배치·외부 identity 승인·native result-bundle host·workflow
+gate·served capability·native caps·usage/tariff도 남습니다. launch flags는 계속 false입니다.
 
 ### 14.6 판정, 중단 규칙, 검토 경계
 
