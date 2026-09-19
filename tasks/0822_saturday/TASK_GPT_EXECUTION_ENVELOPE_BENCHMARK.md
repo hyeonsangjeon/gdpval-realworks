@@ -8281,6 +8281,8 @@ pinned grading-plan compiler의 시작점은
 `5c3a69278a8f005db8ea0aed72d13d20909c57df`입니다. V2 grading-input materializer는
 `641eee488ad6cd9a7bc33d0beeab061dcae8f52b`에서 시작했습니다. Codex grading-input
 materializer의 시작점은 `f85da3f87550abc335c9365e9bca22372747f1e4`입니다.
+prepared-input attestation compiler의 시작점은
+`c0fdd10c384ab31ccc65cf3019c4d838f370a6a9`입니다.
 `base_sha`와 `grading.source_sha`는 이번 시작점을 기록하며, 실제 검토 대상 바이트는 source pins와 기존 grader helper의
 `template_source_sha256`으로 고정합니다. 시작 SHA만으로 새 코드의 신원을
 증명했다고 하지 않습니다. grader 설정·과제·입력·반복·한도는 유지합니다.
@@ -8410,20 +8412,26 @@ ABBA 순서는 한 방향의 시간 경과 영향을 줄이기 위한 고정 순
   호출 수와 토큰 한도를 V2와 같은 단위로 강제하는 연결이 없습니다.
 - `live_deployment_identity_and_input_bytes_not_verified`: 실제 Foundry 배포의
   버전·capability와 다운로드한 입력 바이트는 이번에 확인하지 않았습니다.
+  아래 14.5.3은 제공된 실제 파일 snapshot과 네 run의 capture가 일치하는지
+  오프라인으로 검증합니다. 실행 직전 capture 연결과 이후 소비 시점까지의
+  동일성은 별도로 확인해야 하므로 이 복합 blocker를 삭제하지 않습니다.
   로컬 직렬화의 `xhigh`와 실제 배포가 받은 요청·제공한 capability는 구분합니다.
   API에 묻는 유료 probe를 무료 검증으로 부르지 않습니다.
 - `comparison_materialization_and_workflow_gates_not_wired`: 아래 두 compiler는
   추론과 pinned grading의 오프라인 설정·인자를 만듭니다. 별도 승인된 inference
   신원 문서와 외부 승인 SHA256이 있으면 V2 결과와 Codex canonical 결과·deliverable을
-  각각 검증해 isolated step8 입력으로 배치할 수 있습니다. 신원 문서 발급과 prepared
-  input provenance 검증, native no-clobber 지원 host, 실제 checkout/config 배치,
+  각각 검증해 isolated step8 입력으로 배치할 수 있습니다. prepared input의
+  오프라인 동등성 검사는 14.5.3에서 다룹니다. 신원 문서 발급·승인, 실제 capture와
+  소비 시점의 연결, native no-clobber 지원 host, 실제 checkout/config 배치,
   workflow 관문은 여전히 외부 gate입니다.
 - `comparison_usage_and_tariff_evidence_unverified`: 이 비교에서 실제 모델·usage와
   비용 단위가 연결되는 증거는 아직 없습니다. 가격 누락만을 새 지출 차단 규칙으로
   삼지는 않으며, 기존 record-only 정책과 unknown/null/partial 기록을 유지합니다.
 
-무료 검사기는 원천 파일 **24개**의 지문을 먼저 확인합니다. #620의 23개에
-`gpt54_codex_grading_input.py`를 추가했습니다. `step8_grade.py`의 기존 `compute_grader_source_hash`는
+무료 검사기는 원천 파일 **26개**의 지문을 먼저 확인합니다. #621의 24개에
+`gpt54_prepared_input_attestation.py`와 기존 Step 1 public helper를 import할 때
+필요한 `prepare_dataset.py`를 추가했습니다. 해당 loader의 다운로드 경로는 호출하지
+않습니다. `step8_grade.py`의 기존 `compute_grader_source_hash`는
 모든 `core/**/*.py`, grade schema, requirements include graph, inference download
 script, 두 prompt, 원본 grading config의 경로·바이트까지 함께 고정합니다.
 이 closure의 지문도 manifest와 대조하므로 rubric loader 등 간접 의존성이 바뀌어도
@@ -8620,7 +8628,7 @@ provider/auth도 공식 runtime 인계 계약이 없어 blocked 상태이며 대
 `ComparisonGradingRunSpec`이 두 Codex run 중 하나와 정확히 일치하는지 확인합니다.
 ABBA의 Codex r1/r2, 고정 5개 task ID·입력 순서, Foundry GPT-5.4/xhigh,
 grader·receipt 계약은 바꾸지 않습니다. combined dispatch/grading plan의 exact-match
-검사와 24개 source pin에 이 함수가 포함됩니다. V2 spec이나 수정된 dict는 받지 않습니다.
+검사와 현재 26개 source pin에 이 함수가 포함됩니다. V2 spec이나 수정된 dict는 받지 않습니다.
 
 입력은 해당 spec, manifest, 실제 `workspace/step2_inference_results.json`, 실제
 `workspace/upload`, 별도의 inference identity JSON, **외부 승인 SHA256**, 아직 없는
@@ -8682,6 +8690,95 @@ input provenance, native no-clobber 지원 host, 실제 checkout/config 배치, 
 served capability, native caps, live model/input bytes, usage/tariff는 남습니다.
 `launch_allowed`와 `full_220_allowed`는 계속 false이며 새 유료 실행 명령은 없습니다.
 원본 결과·deliverable·ledger 및 과거 sealed evidence는 수정하지 않습니다.
+
+#### 14.5.3 두 조건의 prepared input을 대조하는 읽기 전용 attestation
+
+`gpt54_prepared_input_attestation.compile_prepared_input_attestation`은
+`compile_grading_plan`을 다시 호출해 manifest/source pins를 검사하고, 제공된
+combined dispatch/grading plan을 canonical JSON으로 정확히 대조합니다.
+`validate_prepared_input_attestation`은 같은 실제 입력에서 다시 계산한 canonical
+bytes와 제출된 attestation bytes가 완전히 같아야 통과합니다. 함수는 파일을 쓰거나
+복사·다운로드하지 않으며, 결과 객체의 `canonical_bytes()`와 `sha256`만 반환합니다.
+기존 grader/runtime 기본값과 historical ledger/evidence는 바꾸지 않습니다.
+
+입력은 manifest, combined plan, 실제 pinned parquet, **선택된 과제의 reference만
+있는 별도 local root**, ABBA 순서의 `PreparedRunInputs` 네 개입니다. 각 run 입력은
+`run_id`, 실제 `generated_config`, 실행 직전 기록한 `input_binding` 경로를 갖습니다.
+Codex r1/r2는 각자의 실제 `step1_tasks_prepared.json`을 `prepared_tasks`로 추가하고,
+V2는 이 필드를 `None`으로 둡니다. V2 반복의 config bytes는 같지만 Codex의
+experiment ID/name과 prepared fingerprint는 반복별로 다르므로 하나를 재사용하지
+않습니다. 경로명이나 Git/dataset SHA가 파일 SHA256을 대신하지 않습니다.
+
+parquet를 single-link regular file snapshot으로 읽어 등록된 SHA256을 확인한 뒤
+`advance_check_5`의 5개 행만 읽습니다. parquet의 물리적 행 순서는 실행 순서가
+아닙니다. 실제 catalog selector가 정한 순서로 source projection을 만들고 실제 V2
+`bind_stage`와 대조합니다. 누락·중복 selected row는 거부합니다. Codex prepared와
+각 capture는 그 정확한 5개 순서를 가져야 하며 추가·누락·중복·재정렬을 거부합니다.
+
+원천에는 prompt UTF-8 bytes, sector/occupation, **원문 그대로의** rubric JSON/pretty
+bytes, ordered reference path/URL/HF URI와 기존 source projection 지문을 고정합니다.
+rubric은 provenance일 뿐 모델 입력이 아닙니다. V2의 `TaskToRun`에는 rubric이 없고
+Codex Step 1은 원문 대신 source projection 지문을 보존합니다. attester는 이 차이를
+유지하면서 prompt·taxonomy·reference의 실제 소비용 projection을 대조합니다.
+정답 파일명·내용은 output/capture/model input에 넣지 않습니다.
+
+Codex의 `needs_files`는 reference 유무가 아니라 output 정책입니다. 이번 고정 비교는
+기존 `deliverable_only` 정책으로 제한합니다. selected source의 `deliverable_files`
+존재 여부에 기존 `resolve_needs_files`를 적용하고 boolean만 검사합니다. 다른 정책의
+capture는 거부합니다. prepared의 모든 task/config metadata, 명시적 null condition,
+publication generation 문법과 기존 `prepared_fingerprint`를 검사합니다.
+fingerprint를 다시 계산해도 prompt·metadata·reference가 parquet에서 재계산한 source
+projection과 다르면 거부합니다. `config_path`는 기존 fingerprint의 제외 정책을
+그대로 따르며, 실제 제공한 config 파일 bytes는 compiled config와 별도로 exact-match
+검사합니다.
+
+reference는 기존 relative-path/record/verified-read helper로 size/SHA256을 계산하고
+manifest의 파일 지문과 비교합니다. 파일 집합도 정확해야 하며 symlink, path escape,
+hardlink, nonregular file, extra directory/reference, missing file을 거부합니다.
+파싱은 검증한 snapshot bytes에서 수행합니다. 원본 파일을 설치하거나 수정하지 않습니다.
+
+각 `input_binding`은 아래 **정확한 키 집합**의 JSON입니다. missing/null/추가 키,
+중복 JSON key, nonfinite number를 허용하지 않습니다. `verified: true` 같은 주장은
+증거나 승인으로 인정하지 않습니다.
+
+| 필드 | 검증하는 값 |
+| --- | --- |
+| `binding_version` | `gpt54-pre-execution-input-v1` |
+| `run_id`, `condition`, `repeat`, `harness`, `provider`, `model`, `reasoning_effort` | compiled ABBA run identity, Foundry GPT-5.4/xhigh |
+| `manifest_sha256`, `combined_plan_sha256`, `source_pins_sha256`, `config_sha256` | 기존 canonical JSON과 실제 generated config bytes의 SHA256 |
+| `dataset` | `repo_id`, `revision`, `catalog_sha256`, 실제 parquet의 `{sha256, size}` |
+| `task_ids`, `ordered_source_projection_sha256` | 고정 ordered 5-task scope와 기존 ordered source projection 지문 |
+| `needs_files_policy` | `deliverable_only` |
+| `consumer` — V2 | `kind: sandbox_v2_task_to_run`, 기존 `manifest_binding: binding_record(bound)`, ordered `tasks` |
+| `consumer` — Codex | `kind: codex_step1_tasks`, 실제 `prepared_fingerprint`, `publication_generation`, `prepared_file: {sha256, size}`, 실제 prepared `tasks` |
+
+V2 capture의 각 task는 `task_id`, `prompt`, `sector`, `occupation`, ordered
+`reference_files`, ordered `reference_file_records: [{path, sha256, size}]`를 갖습니다.
+Codex task는 기존 Step 1 task JSON의 정확한 필드와 값을 사용합니다. captures 자체의
+실제 size/SHA256, 각 generated config의 size/SHA256와 run-relative role, 네 run binding,
+원천 task projection·text bytes 지문·reference records가 canonical attestation에
+포함됩니다. 출력에는 launch authorization이나 inference publication identity가 없습니다.
+
+**증거의 한계:** 기존 런타임은 이 공통 pre-execution capture를 아직 저장하지 않습니다.
+이 compiler는 외부에서 제공한 capture를 실제 snapshot과 대조하며, 그 기록 시각이나
+이후 모델이 소비한 bytes를 관찰·인증하지 않습니다. V2의 기존 `binding_record`는
+post-run record의 일부이므로 그것만으로 실행 직전 capture를 대신할 수 없습니다.
+서로 다른 standing instruction과 Codex의 prompt wrapping/외곽 공백 처리도 그대로입니다.
+따라서 canonical task/reference equivalence이지 rendered/wire request equality나
+환경만의 인과효과가 아닙니다. 비교는 계속 configuration-bundle comparison입니다.
+
+단일 무료 selector는 committed 5-task prompt fixture에 synthetic rubric/reference를
+붙인 작은 parquet를 사용합니다. catalog/envelope의 신뢰 입력 seam만 test에서 바꾸고
+실제 selector, V2 binding, Step 1 직렬화, prepared/source fingerprints, reference reader,
+compiled-plan 검사는 그대로 실행합니다. production pin이 이 synthetic parquet를
+거부하는 사례도 포함합니다. 이는 실제 pinned dataset 검증이나 실험 결과가 아닙니다.
+subprocess/network/provider auth/model·grader 생성과 compiler의 파일 쓰기를 금지합니다.
+
+이 변경은 prepared provenance의 오프라인 대조와 두 조건의 canonical input equivalence
+검사만 제공합니다. external inference identity 발급·승인, 실제 pre-execution capture와
+소비 시점 연결, native no-clobber 지원 host, checkout/config 실제 배치, workflow gate,
+served capability, native call/token caps, usage/tariff 증거는 남습니다.
+`launch_allowed`와 `full_220_allowed`는 계속 false이며 paid 실행 명령을 추가하지 않습니다.
 
 ### 14.6 판정, 중단 규칙, 검토 경계
 
