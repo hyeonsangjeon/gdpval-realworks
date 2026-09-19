@@ -13,6 +13,23 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Add a local preparer for one disposable GPT-5.4 comparison checkout at an
+  explicit, externally reviewed commit. It verifies the shared Git repository,
+  full commit SHA, 31 pinned sources, exact run plan and local input bytes,
+  creates only a detached worktree, then invokes the existing config and input
+  bundle materializers. It publishes the checkout-ready marker last and
+  rechecks HEAD, both bundles and their actual bytes. Reservations and quarantine
+  records prevent reuse after failure; there is no execution or cleanup path.
+  The sole targeted offline invocation reported `14 failed, 28 passed in 9.94s`
+  because Git 2.34.1 does not support `worktree list --porcelain -z`. The
+  registration check now reads exact bidirectional linked-worktree metadata,
+  but the corrected implementation has not been rerun under the one-invocation
+  limit. Passing validation remains a CI gate. Existing capture behavior and
+  historical evidence are unchanged. External inference identity approval,
+  native result-bundle support, workflow gates, served capability, native caps,
+  wire consumption and usage/tariff evidence remain outstanding. Both launch
+  flags remain false.
+
 - Materialize the GPT-5.4 comparison's pinned parquet and only its five-task
   reference set in an existing disposable checkout. The materializer reuses
   the source snapshot, config bundle and atomic no-clobber writer. It validates
