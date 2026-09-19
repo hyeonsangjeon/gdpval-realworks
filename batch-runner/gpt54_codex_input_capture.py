@@ -64,9 +64,9 @@ def _binding(
     _same("dataset role", dataset_root.as_posix(), (root / DATASET_ROOT).as_posix())
     if config_path is not None:
         _same("config role", _absolute(config_path).as_posix(), (root / CONFIG_PATH).as_posix())
-    from gpt54_run_config_bundle import verify_run_config_bundle
+    from gpt54_run_input_bundle import verify_run_input_bundle
 
-    verify_run_config_bundle(checkout=root, run_id=control.run_id, condition="codex")
+    verify_run_input_bundle(checkout=root, run_id=control.run_id, condition="codex")
     for path in (root, workspace, dataset_root, dataset_root / "data"):
         _assert_no_symlink_ancestors(path)
     _same("dataset parquet file set", sorted(path.name for path in (dataset_root / "data").iterdir()), [PARQUET_NAME])
@@ -155,9 +155,9 @@ def write_codex_prepared_and_capture(
         root = workspace.parent.parent
         _same("workspace role", workspace.as_posix(), (root / "batch-runner/workspace").as_posix())
         _same("config role", _absolute(config_path).as_posix(), (root / CONFIG_PATH).as_posix())
-        from gpt54_run_config_bundle import verify_run_config_bundle
+        from gpt54_run_input_bundle import verify_run_input_bundle
 
-        verify_run_config_bundle(checkout=root, run_id=control.run_id, condition="codex")
+        verify_run_input_bundle(checkout=root, run_id=control.run_id, condition="codex")
         if os.path.lexists(workspace / "pre-execution-input.json"):
             raise CodexInputCaptureRefused("comparison capture already exists")
         # Never truncate an old prepared file or follow its final symlink.

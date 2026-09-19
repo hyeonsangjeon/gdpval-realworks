@@ -173,7 +173,7 @@ def test_gpt54_comparison_is_fixed_and_fails_closed(change, tmp_path, capsys):
         # Read actual adapter surfaces, not a mock declaration of readiness.
         voice_fields = {field.name: field for field in fields(AzureFoundryVoice)}
         assert voice_fields["reasoning_effort"].default is None
-        assert len(REQUIRED_SOURCES) == 29
+        assert len(REQUIRED_SOURCES) == 30
         assert set(plan["source_pins"]) == REQUIRED_SOURCES
         # Sol imports this module's plan reader. Refresh its existing digest
         # without changing its contract or running an additional selector.
@@ -234,7 +234,7 @@ def test_gpt54_offline_dispatch_plan_is_bound_and_non_executing(
     if change in {"missing_pin", "changed_pin"}:
         # Every dependency is required and digest-checked, including this
         # compiler, the shared parser, source-relative paths, and task helper.
-        assert len(REQUIRED_SOURCES) == 29
+        assert len(REQUIRED_SOURCES) == 30
         for source in REQUIRED_SOURCES:
             broken = json.loads(original)
             if change == "missing_pin":
@@ -464,7 +464,7 @@ def test_gpt54_pinned_grading_plan_is_bound_and_non_executing(
         assert forbidden_calls == []
 
     if change in {"missing_pin", "changed_pin"}:
-        assert len(REQUIRED_SOURCES) == 29
+        assert len(REQUIRED_SOURCES) == 30
         assert "batch-runner/step8_grade.py" in REQUIRED_SOURCES
         for source in REQUIRED_SOURCES:
             broken = json.loads(original)

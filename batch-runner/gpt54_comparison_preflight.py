@@ -36,7 +36,7 @@ from core.execution_envelope_tasks import (
 from core.experiment_config import CodexComparisonCapture, ExperimentConfig
 
 ROOT = Path(__file__).resolve().parents[1]
-BASE_SHA = "baa81d4f7ca65680c04f7f19d3a375cd60c8f39b"
+BASE_SHA = "a855c5a9604554499be9eed4e5eb5523e8ad95d5"
 GRADER_SOURCE_SHA = BASE_SHA
 ENVELOPE = "batch-runner/experiments/execution_envelope/"
 PLAN = ROOT / ENVELOPE / "gpt54_sandboxv2_codex_comparison.yaml"
@@ -51,6 +51,7 @@ REQUIRED_SOURCES = {
     "batch-runner/gpt54_codex_input_capture.py",
     "batch-runner/gpt54_v2_input_capture.py",
     "batch-runner/gpt54_run_config_bundle.py",
+    "batch-runner/gpt54_run_input_bundle.py",
     "batch-runner/prepare_dataset.py",
     "batch-runner/step8_grade.py",
     "batch-runner/core/config.py",
@@ -655,6 +656,17 @@ def inspect_plan(
             "required_runs": [run.run_id for run in compiled.runs],
             "checkout_creation": False,
             "evidence_boundary": "local_config_bundle_consistency",
+        } if compiled is not None else None),
+        "run_input_bundle": ({
+            "bundle_version": "gpt54-run-input-bundle-v1",
+            "materializer": "gpt54_run_input_bundle.materialize_run_input_bundle",
+            "ready_marker": "comparison-inputs-ready.json",
+            "reservation": "comparison-inputs-reserved.json",
+            "dataset_root": "data/gdpval-local",
+            "reference_scope": "advance_check_5_only",
+            "required_runs": [run.run_id for run in compiled.runs],
+            "checkout_creation": False,
+            "evidence_boundary": "local_input_bundle_consistency",
         } if compiled is not None else None),
         "launch_allowed": False,
         "full_220_allowed": False,
