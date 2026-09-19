@@ -12,6 +12,19 @@ entries land under a fresh dated heading the day they merge to `main`.
 ## [Unreleased]
 
 ### Added
+- **Preregistered the GitHub Copilot GPT-5.6 Sol Codex pilot.** The contract
+  fixes Sol (not Fast or Astra), Max reasoning, Long 1M, and the existing
+  score-free five-task order and input fingerprints. It preserves exp035's
+  declared retry/time controls and the grading, result, and null/partial cost
+  contracts, while distinguishing generic token settings from limits the
+  Codex runtime actually enforces. One free selector passed all 38 cases.
+  The valid registration still refuses both pilot launch and 220-task
+  progression: the pinned runtime has no Copilot route, Max/Long wiring,
+  verified native token/call caps, or pilot dispatch. The specification lists
+  the moving axes against the historical full-220 reference and requires
+  reviewed pilot evidence before a separate full-run gate. No paid path,
+  fallback model, tariff conversion, or historical artifact was added or changed.
+
 - **Preregistered the GPT-5.4 Sandbox V2–Codex configuration-bundle comparison.**
   The plan fixes the existing `advance_check_5` task order and fingerprints,
   shared model/`xhigh` targets, technical limits, grading and result contracts,

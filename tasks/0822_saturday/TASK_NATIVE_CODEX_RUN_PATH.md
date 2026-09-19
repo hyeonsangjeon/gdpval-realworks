@@ -1,5 +1,10 @@
 # Codex's own agent: what is officially supported, and what is still unknown
 
+The current work is the **GitHub Copilot GPT-5.6 Sol pilot preregistration**
+in section 13, added on 2026-09-19. It is blocked from execution on the pinned
+source. Sections 1–12 preserve their dated findings about the Foundry path;
+they are not evidence that the requested Copilot route exists.
+
 - Written: 2026-08-25
 - Updated: 2026-08-26 — the documentation was searched again and half of the
   open question is now answered. See section 3a.
@@ -1334,3 +1339,168 @@ paid run must be preceded by a fresh smoke at the new fingerprint.
   there is no environment expansion. That gap, then the fixed 5, then 30, then
   220. Until a task produces a file, the deliverable column stays empty and is
   reported as unconfirmed. It is not filled with a substitute.
+
+## 13. GitHub Copilot GPT-5.6 Sol five-task pilot (2026-09-19)
+
+### Decision and scope
+
+The owner selected GitHub Copilot GPT-5.6 Sol through the Codex harness, with
+reasoning Max and Long context 1M. The owner approved the eventual pilot and
+full benchmark, but this unit only preregisters the five-task gate for leader
+review. Its immutable base is `6ccd4ae346d302e3da0af455a3c5a72ec79a6984`.
+
+The contract is
+`batch-runner/experiments/execution_envelope/gpt56_sol_copilot_codex_pilot.yaml`.
+It is not a runnable batch experiment. The offline checker is
+`batch-runner/gpt56_sol_codex_pilot_preflight.py`; it reuses the existing
+experiment parser, task selector, runtime version constants, receipt contract,
+plan reader, and preregistration seal. No new execution framework is added.
+
+The pilot asks whether this exact configuration can complete the fixed tasks
+with verifiable identity, deliverables, grading provenance, and cost evidence.
+A pass means all five retain those records and the execution constraints hold.
+Unknown prices may remain explicit partial receipts under the record-only
+policy; missing usage must remain explicit evidence, never a fabricated zero.
+A pass permits leader review of the pilot evidence and a separate full-run
+configuration gate. It does not dispatch 220 tasks or establish superiority.
+Failure or unverifiable identity stops progression and leaves the failed rows
+in the record. There is no score threshold or extra paid repetition invented
+for this gate.
+
+### Exact identity, not an alias or a client-side context setting
+
+The requested identity is `github_copilot` / `gpt-5.6-sol`, Codex SDK and CLI
+`0.147.0`, `reasoning_effort: max`, and `context_tier: long` with the label
+`Long (1M)`. `nominal_context_tokens: 1000000` records that requested tier;
+it is neither a measured server limit nor a `model_context_window` override.
+The verified route, served model ID, and context window remain null.
+
+[OpenAI's GPT-5.6 Sol model page](https://developers.openai.com/api/docs/models/gpt-5.6-sol)
+documents `max` and a 1,050,000-token API context window. The
+[Codex configuration reference](https://developers.openai.com/codex/config-reference/)
+documents custom providers and the client context-window setting. Neither
+page establishes this account's GitHub Copilot model ID, entitlement, context
+tier, or transport. A client setting cannot grant a provider capability.
+
+Before any pilot call, reviewed provider evidence must bind the Copilot route,
+served Sol model/version, Max mapping, Long tier, and effective context window
+to the actual serialized request/runtime settings. No Fast variant, GPT-6
+Astra, Foundry deployment, personal OpenAI account/app, lower effort, shorter
+context, or automatic fallback is permitted. A UI label alone is not proof.
+If that evidence cannot be obtained without guessing, do not execute.
+
+### Fixed five-task contract
+
+One pilot uses the existing score-free `select_advance_check_tasks` rule,
+without repeats or reselection based on results. The order is:
+
+1. `02aa1805-c658-4069-8a6a-02dec146063a`
+2. `0112fc9b-c3b2-4084-8993-5a4abb1f54f1`
+3. `2ea2e5b5-257f-42e6-a7dc-93763f28b19d`
+4. `3baa0009-5a60-4ae8-ae99-4955cb328ff3`
+5. `0818571f-5ff7-4d39-9d2c-ced5ae44299e`
+
+The dataset is `openai/gdpval@11e7900cdcac61bc4daf59e65feb238acda98fbf`.
+The plan pins the existing parquet, catalog, canonical task prompts, and both
+reference-file hashes. It copies exp035's developer instructions unchanged.
+The free checker compares committed declarations; it does not download or
+claim to have verified the inputs that a future runner will stage.
+
+The full-220 reference is `exp035_codex_foundry_full220.yaml`. Its settings
+remain unchanged: 1,800 seconds per attempt, at most three infrastructure
+retries after the first attempt, one Codex logical turn per attempt, zero
+provider request/stream retries, no resume rounds, and no Self-QA. Each attempt
+gets a fresh session. Infrastructure retries are not experimental repeats.
+The pilot disables workflow relays and stops after five tasks.
+
+The inherited generic token settings are 16,384 for code generation, 4,096
+for QA, and 8,000 for JSON rendering. **None is a native Codex token cap.**
+The baseline adapter does not bound or enumerate model calls inside a logical
+turn, nor enforce an aggregate native input/output token limit. The plan
+preserves that missing boundary as null and refuses launch. A reviewed finite
+cap implementation/decision is needed before spending; adding a number only
+to YAML would not satisfy the contract.
+
+Grading reuses the policy blocks of
+`grading_configs/exp035_codex_foundry_full220_v2_sol_max.yaml`, pinned by its
+full file hash, with the same rubric revision, `v2.2` prompt, GPT-5.6 Sol/Max
+judge, and perception/retry policies. Grader source is pinned to this unit's
+immutable base. The baseline's `rerun_identity` must not be reused: it fixes
+220 tasks and historical inference revision
+`dc36d6837a8f0899f8bfa4d32aae9a9f6805f3b0`. A pilot-specific identity must bind
+these five ordered tasks to their new inference source before the one grading
+pass. No grading config or pipeline code is changed in this PR.
+
+Results retain `project_result_row`, grade schema `1.4`, and `cost-receipt-v1`.
+The record-only policy and null/absence distinction remain unchanged. Native
+Copilot usage and billing evidence must retain its units and missing reasons;
+Foundry/OpenAI API tariffs cannot stand in for Copilot charges. In particular,
+`usage_absent`, `usage_partial`, `price_missing`, and
+`call_reachability_unknown` are existing receipt reasons, not invitations to
+estimate a settled bill. No receipt arithmetic, price table, or schema changes.
+
+### Moving axes and limits of interpretation
+
+The historical full-220 result is a reference, not a simultaneous control.
+All of these differences must remain visible:
+
+| Axis | Existing full-220 reference | Requested pilot |
+|---|---|---|
+| Inference model | Foundry GPT-5.4 | GitHub Copilot GPT-5.6 Sol, not Fast |
+| Route and identity | Microsoft endpoint and Azure token command | Unimplemented Copilot endpoint/auth/entitlement mapping |
+| Effort | Not explicitly passed by the Codex adapter | Max required and not yet wired |
+| Context | No long-context tier pinned in the experiment | Long 1M required and not yet verified |
+| Cohort and order | 220 tasks in the full-run order | Fixed score-free five in advance-check order |
+| Scheduling | Up to ten relay legs | No relay or automatic escalation |
+| Billing and errors | Foundry usage/tariff and retry classification | Copilot units, tariff, quota/error behavior unverified |
+| Source, host, and time | Historical runner/grader artifacts | New immutable source and future host/time; environment drift must be recorded |
+
+Codex remains the intended harness at the same pinned SDK/CLI versions. Its
+developer instruction, task/reference content, declared retry/time controls,
+result contracts, and grader policy are held fixed. Provider-supplied wrapping,
+tool availability, compaction thresholds, sampling, cache behavior, package
+versions, and actual sandbox/network enforcement must still be recorded; none
+is proved identical by a shared YAML value.
+
+One pilot does not measure within-condition spread or support a model-only,
+effort-only, context-only, or route-only causal claim. The judge is itself
+GPT-5.6 Sol, now the same family as the solver, so shared biases are a further
+limit; pinning the grader does not validate it. The five format-covering tasks
+are not a population sample or evidence about another customer's account.
+The reusable items are the contract and checks, not provider entitlements or
+an assumed performance gain.
+
+### Current blockers and the post-merge boundary
+
+`ExperimentConfig.validate` accepts no GitHub Copilot provider and the real
+`CodexProviderSettings` only accepts Microsoft endpoints. Its default auth
+command is Azure-specific. Neither those settings nor `start_thread` carries
+Max or a verified Long context tier. A Foundry connection cannot answer this
+pilot's identity question.
+
+The offline checker returns both `launch_allowed: false` and
+`full_220_allowed: false`, and always exits 2, even for the valid registration.
+It rejects identity/fingerprint/control drift, model fallbacks, relays, repeat
+expansion, reuse of the 220-task grading identity, and attempts to enable the
+full run. It also checks 13 source-file pins. This is not yet a runtime gate
+in front of the repository's existing paid workflows.
+
+**No compliant paid pilot command exists immediately after this PR merges.**
+The reuse target is `.github/workflows/batch-run.yml` after separate reviewed
+Copilot provider wiring, request/cap verification, usage mapping, five-task
+dispatch, and pilot-specific grading identity are implemented. Such changes
+need a new immutable configuration/source review; existing exp033/exp035
+Foundry dispatches and a personal `codex exec` session are not substitutes.
+
+At execution time, identity, context, input, or enforced-limit drift stops the
+next paid call. Preserve all rows already produced, including failed attempts
+and partial receipts. Missing prices alone do not override record-only cost
+policy. Completing the five-task pilot stops the run; a separate reviewed
+full-run gate is required before 220, even though the owner has approved the
+eventual benchmark. No historical ledger, grade, or sealed evidence is edited.
+
+`experiment-design` was applied before configuration, including the pass/fail
+decision, confounds, lack of repeat evidence, measurement units, judge limits,
+stop rules, and portability boundary. The single free selector and its exact
+result are recorded in `tasks/LATEST_TASK_RESULT/README.md` after validation.
+No model, grader, VM, Azure API/CLI, or paid workflow is called in this unit.
