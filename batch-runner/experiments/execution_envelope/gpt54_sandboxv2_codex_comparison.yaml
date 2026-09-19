@@ -1,0 +1,109 @@
+# Preregistered targets, not a runnable V2 plan or batch experiment.
+# The free preflight deliberately refuses paid launch on the pinned source.
+plan_version: gpt54-sandboxv2-codex-comparison-v1
+base_sha: 96b181e1128039891f2cbbd9c26af9701e7e8e22
+comparison: configuration_bundle
+paid_comparison_approved: true
+launch_enabled: false
+
+shared: &shared
+  model:
+    provider: azure
+    account: hjeon-fdpo-foundry-eus2
+    deployment: gpt-5.4
+    resolved_model: gpt-5.4
+    route_profile: direct-v1
+    reasoning_effort: xhigh
+    automatic_model_switch_allowed: false
+  dataset:
+    repo_id: openai/gdpval
+    revision: 11e7900cdcac61bc4daf59e65feb238acda98fbf
+    parquet_sha256: f8422fab9b21d90c0ee5f0659842ab666d418cb8940842918f9f4b0df7ae0202
+    catalog_sha256: 5f1eca853979b2b4efe6c6ba656545c3a416da920e3faf067d52f5d8ac4ae0eb
+    cohort: advance_check_5
+    # Order and canonical prompt bytes come from the existing score-free rule.
+    tasks:
+      - task_id: 02aa1805-c658-4069-8a6a-02dec146063a
+        prompt_sha256: 8dc289aa58f05aa1f65453cb7cf975be037014305da824cef73ec7f6b8869f98
+      - task_id: 0112fc9b-c3b2-4084-8993-5a4abb1f54f1
+        prompt_sha256: b20e140c0169184998ae2c506e8aad04e1f51772527c8d2ffe10b0c32f042df5
+      - task_id: 2ea2e5b5-257f-42e6-a7dc-93763f28b19d
+        prompt_sha256: 93c975a12dba13dc194d410225bf41da3aa58e45bf9cbc963d0426b0edd2ec14
+      - task_id: 3baa0009-5a60-4ae8-ae99-4955cb328ff3
+        prompt_sha256: cd6b2d63e8d90a7058bd7d4d9ff3a94e258268b54f78ec1ff3eff467437dbf76
+      - task_id: 0818571f-5ff7-4d39-9d2c-ced5ae44299e
+        prompt_sha256: 718353295dc2778e76283739c455c4faf2c3ee18fb7e125495fd1e95e69aa6d5
+    input_file_versions:
+      openai/gdpval@11e7900cdcac61bc4daf59e65feb238acda98fbf: f8422fab9b21d90c0ee5f0659842ab666d418cb8940842918f9f4b0df7ae0202
+      reference_files/bb09ca2a9999b404d7fced9202b42949/Work Time Study - Source.xlsx: bb09ca2a9999b404d7fced9202b42949cd9f142f39554e254bac77b3686dae9e
+      reference_files/901e943a97328a661f9e704ae43eeea1/Acquisition Criteria (2).pdf: 901e943a97328a661f9e704ae43eeea167e7805385a99322f1c24f8e159125c4
+  # Reuse ceilings_from(corrected V2 plan, its chosen_settings), not new math.
+  # These are REQUIRED on both adapters; Codex does not enforce them today.
+  limits:
+    max_model_turns: 9
+    max_written_tokens_per_turn: 8192
+    max_seconds: 1200.0
+    max_model_calls: 9
+    max_input_tokens: 737280
+    max_output_tokens: 73728
+    max_repeats_of_one_request: 2
+    attempts_per_task: 1
+    request_max_retries: 0
+    stream_max_retries: 0
+    self_review_max_attempts: 0
+    resume_max_rounds: 0
+  grading:
+    config: batch-runner/grading_configs/default_v2_sol_max.yaml
+    source_sha: 96b181e1128039891f2cbbd9c26af9701e7e8e22
+    rubric_revision: 11e7900cdcac61bc4daf59e65feb238acda98fbf
+    prompt_version: v2.2
+    judge_model: gpt-5.6-sol
+    judge_effort: max
+    # A run-specific copy must pin rubric.revision, never resolve mutable main.
+    grades_per_task: 1
+  results:
+    projector: core.result_projection.project_result_row
+    receipt_schema: cost-receipt-v1
+    grade_schema: batch-runner/schemas/grade.schema.json
+    missing_or_unpriced_usage: preserve_null_and_partial_reasons
+  cost:
+    policy: record_cost_findings_only
+    approved_maximum_usd: null
+
+conditions:
+  sandbox_v2:
+    controls: *shared
+    template: batch-runner/experiments/execution_envelope/agentic_corrected_harness_plan.yaml
+    workflow: .github/workflows/agentic-v2-stage-run.yml
+    isolation: same-host
+    replay_format: faithful
+  codex:
+    controls: *shared
+    template: batch-runner/experiments/exp033_codex_foundry_fixed5.yaml
+    workflow: .github/workflows/batch-run.yml
+    sdk_version: 0.147.0
+    cli_version: 0.147.0
+
+# ABBA order limits one simple ordering confound; it does not remove time drift.
+# Fresh sessions, directories and ledger namespaces for every row. No relays or
+# reuse of historical answers as repeats. Exactly 20 task-condition observations.
+runs:
+  - {run_id: gpt54_v2_codex_v1_v2_r1, condition: sandbox_v2, repeat: 1, task_count: 5}
+  - {run_id: gpt54_v2_codex_v1_codex_r1, condition: codex, repeat: 1, task_count: 5}
+  - {run_id: gpt54_v2_codex_v1_codex_r2, condition: codex, repeat: 2, task_count: 5}
+  - {run_id: gpt54_v2_codex_v1_v2_r2, condition: sandbox_v2, repeat: 2, task_count: 5}
+
+# Seal the reviewed templates and the boundaries on which the refusal rests.
+# These are file bytes, not a claim to have checked live inputs or a deployment.
+source_pins:
+  batch-runner/experiments/execution_envelope/gdpval_task_catalog.json: 5f1eca853979b2b4efe6c6ba656545c3a416da920e3faf067d52f5d8ac4ae0eb
+  batch-runner/experiments/execution_envelope/advance_check_plan.yaml: 9ecf85f1e9eb40ddb0232baa854c10052c3e4457fe2cf174f9b34d4cbecdc26e
+  batch-runner/experiments/execution_envelope/agentic_corrected_harness_plan.yaml: 99431b9d8a6c9d2ca55abc580ce3dab67b80808be7c4c3777fb5abe7669dc8a8
+  batch-runner/experiments/exp033_codex_foundry_fixed5.yaml: 5af7bd64ec00c6ac45c6d2a2f472833b90c4920221fd61dfdc9bbc324c745763
+  batch-runner/grading_configs/default_v2_sol_max.yaml: 12d38383d94e991d61491631d73119c89c997faaa146562f3be71d6527b195bf
+  batch-runner/schemas/grade.schema.json: 9c611874c2d7aa57018eecdc86b7c0d579aaa9c29dd0df649058eec9ad5175b9
+  batch-runner/core/result_projection.py: 1b47c4ee0f6d050e5edd4ac5a301203ba834c8d159b1557b04d83046ca965ec6
+  batch-runner/core/agentic_v2_model_voice.py: 01d2f1f082e90ca21212cc3fa0e0f93aeac23e556c245c0628bf586df9bb48b7
+  batch-runner/core/agentic_v2_conversation_runner.py: 01db41662713ff92dc43a7674893309195728b9acce01ad0cf1be2e3dcdd8832
+  batch-runner/core/codex_runtime_config.py: b50b981aecb283bb849b4c469dd0692c4ac6756b76b2794ba0aa0974a9277359
+  batch-runner/core/codex_runner.py: a5e95775f8b5065307c625fb532677517e57217c9efc016f0135a06abd82377e
