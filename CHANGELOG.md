@@ -604,6 +604,22 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Route GPT-5.4 comparison requests in both owning workflows to a separate
+  admission job with read-only repository permissions, no provider secrets
+  and no OIDC grant. An explicit full reviewed SHA must match the event and
+  workflow commits before checkout. The offline helper reuses the disposable
+  checkout preparer and runtime lineage gate, binds inert commands to the
+  prepared checkout, and retains quarantine after a failed handoff. Comparison
+  requests cannot fall through to the ordinary credentialed jobs. Existing
+  input defaults and ordinary step bodies remain unchanged, apart from relay
+  forwarding of the new empty input. The source set has 34 pins. The sole
+  targeted selector reported `64 passed in 80.13s (0:01:20)`. Both launch flags
+  remain false, and the CLI refuses execution. This is offline admission and
+  refusal evidence, not a successful workflow run or launch authorization.
+  External inference identity approval, native result-bundle support, actual
+  deployment and local data provisioning, served capability, native caps,
+  wire consumption and usage/tariff evidence remain outstanding.
+
 - Require registered GPT-5.4 Codex Step 2 and Sandbox V2 runs to verify local
   checkout lineage before provider/auth/client or free voice-safety setup.
   The read-only gate reuses existing ready, reservation and bundle contracts;
