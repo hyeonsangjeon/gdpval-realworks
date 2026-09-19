@@ -36,7 +36,7 @@ from core.execution_envelope_tasks import (
 from core.experiment_config import ExperimentConfig
 
 ROOT = Path(__file__).resolve().parents[1]
-BASE_SHA = "5c3a69278a8f005db8ea0aed72d13d20909c57df"
+BASE_SHA = "641eee488ad6cd9a7bc33d0beeab061dcae8f52b"
 GRADER_SOURCE_SHA = BASE_SHA
 ENVELOPE = "batch-runner/experiments/execution_envelope/"
 PLAN = ROOT / ENVELOPE / "gpt54_sandboxv2_codex_comparison.yaml"
@@ -45,6 +45,7 @@ CODEX_TEMPLATE = "batch-runner/experiments/exp033_codex_foundry_fixed5.yaml"
 GRADER = "batch-runner/grading_configs/default_v2_sol_max.yaml"
 REQUIRED_SOURCES = {
     "batch-runner/gpt54_comparison_preflight.py",
+    "batch-runner/gpt54_v2_grading_input.py",
     "batch-runner/step8_grade.py",
     "batch-runner/core/config.py",
     "batch-runner/core/agentic_v2_preregistration.py",
@@ -543,7 +544,7 @@ def _compile_grading_plan(dispatch: ComparisonDispatchPlan) -> ComparisonGrading
             }
             producer = "batch-runner/workspace/run_record.json"
             pointer = "/run/results"
-            materialization = "project_v2_run_verify_source_identity_and_stage_deliverables"
+            materialization = "gpt54_v2_grading_input.materialize_v2_grading_input"
         errors = ExperimentConfig.from_dict(experiment).validate()
         if errors:
             raise DispatchPlanRefused("grading experiment metadata: " + "; ".join(errors))

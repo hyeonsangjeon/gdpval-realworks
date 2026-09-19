@@ -13,6 +13,20 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Materialize independently bound Sandbox V2 results and deliverables as
+  canonical local step8 inputs for the GPT-5.4 comparison. The offline function
+  reuses the dispatch/grading compilers, checks the ordered five-task scope and
+  approved inference identity, and preserves terminal errors and null/partial
+  receipts. It stages verified bytes under a held parent descriptor and requires
+  an atomic, non-overwriting directory rename. The source set now has 23 pins.
+  After review corrections for Python 3.10 cleanup and parent-path replacement,
+  the targeted selector reported `79 passed in 48.22s`. Deterministic fixtures
+  use an explicit primitive double; the separate native check on this NAS
+  refused `RENAME_NOREPLACE` with errno 22 and left no destination or staging
+  residue. Native host support and independently verified identity issuance
+  remain gates. Launch and 220-task progression stay false; production defaults
+  and historical ledgers/evidence are unchanged.
+
 - Compile four offline grading specifications from the GPT-5.4 dispatch plan,
   preserving its ABBA order, five-task cohort, and isolated checkouts. Each
   specification binds the real `step8_grade.py` arguments, input paths,
