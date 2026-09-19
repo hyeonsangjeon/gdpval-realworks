@@ -37,8 +37,9 @@ as problem-solving cost, so marking cannot be paid for out of this even by
 accident.
 
 **What is written down.** The driver's own journal, one row per task, the
-collected deliverables, and a cost receipt per task. Never a prompt, never a
-reply, never a credential — same rule as the stage A probe, for the same reason.
+collected deliverables, and a cost receipt per task. The run record contains no
+prompt, reply or credential. Opt-in GPT-5.4 comparisons separately capture the
+canonical task inputs before even the free voice-safety probes.
 """
 
 from __future__ import annotations
@@ -145,6 +146,7 @@ from core.execution_envelope_tasks import (  # noqa: E402
     catalog_sha256,
     load_task_catalog,
 )
+from gpt54_v2_input_capture import capture_v2_pre_execution_input  # noqa: E402
 
 
 class StageRefused(RuntimeError):
@@ -607,9 +609,9 @@ def shared_assumptions(plan: dict) -> CostAssumptions:
     )
 
 
-def verdict_for(plan_path: Path):
+def verdict_for(plan_path: Path, *, held_plan: dict | None = None):
     """The same free check the gate runs, run again where the money is."""
-    plan = load_stage_one_plan(plan_path)
+    plan = load_stage_one_plan(plan_path) if held_plan is None else held_plan
     try:
         reasoning_request_fields((plan.get("model") or {}).get("reasoning_effort"))
     except ValueError as refusal:
@@ -1010,13 +1012,23 @@ def main() -> int:
     run_id = args.run_id or f"agentic-v2-{args.stage}-{int(time.time())}"
 
     try:
-        plan, verdict, catalog = verdict_for(args.plan)
-        bound = bind_stage(
+        held_plan = load_stage_one_plan(args.plan)
+        captured = capture_v2_pre_execution_input(
+            held_plan, run_id=args.run_id, stage=args.stage, config_path=args.plan,
+            parquet_path=args.parquet, dataset_root=args.dataset_root, workspace=args.into,
+            shard=args.shard, dry_run=args.dry_run, rehearse=args.rehearse,
+            isolated_approval=args.isolated_approval,
+        )
+        # Comparison capture precedes even preflight's free voice-safety
+        # probes. Legacy plans retain load -> preflight -> bind and no writes.
+        plan, verdict, catalog = verdict_for(args.plan, held_plan=held_plan)
+        bound = captured[0] if captured is not None else bind_stage(
             args.stage,
             dataset_tasks=read_pinned_dataset(args.parquet),
             catalog=catalog,
             catalog_digest=catalog_sha256(),
         )
+        verified_input_capture = captured[1] if captured is not None else None
         # The snapshot the prompts were read from, so a task cannot be given a
         # prompt from one revision and a file from another.
         dataset_root = (
@@ -1765,6 +1777,14 @@ def main() -> int:
             else the_run_was_refused(refused, run_id=run_id)
         ),
     }
+    if verified_input_capture is not None:
+        # Use the verified pre-execution config digest, not a later reread or
+        # host absolute path. This links a capture; it does not mint attestation.
+        record["request_conditions"]["plan_file"] = {
+            "path": "batch-runner/comparison-run.json",
+            "sha256": verified_input_capture["attestation_linkage"]["config_sha256"],
+        }
+        record["request_conditions"]["pre_execution_input_capture"] = verified_input_capture
     if rehearsing is not None:
         record["rehearsal"] = rehearsing.as_dict()
     written = json.dumps(record, indent=2, sort_keys=True, default=str)

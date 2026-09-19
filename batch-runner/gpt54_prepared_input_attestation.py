@@ -1,8 +1,7 @@
 """Attest captured canonical inputs, offline and without issuing an identity.
 
 The caller supplies all four pre-execution captures. The comparison-only Codex
-path emits and checks its own capture; V2 capture wiring is still absent.
-Matching a capture to a read-only
+and V2 paths emit and check their own captures. Matching a capture to a read-only
 snapshot proves consistency, not when it was captured or what a later model
 request consumed. Rubrics are source provenance, never model input here.
 """
@@ -306,6 +305,34 @@ def _expected_binding(snapshot: _SourceSnapshot, run: ComparisonRunSpec, config_
     }
 
 
+def _v2_consumer(snapshot: _SourceSnapshot, bound: BoundManifest | None = None) -> dict:
+    """Share the attester's exact projection with the held V2 runtime tasks."""
+    if bound is None:
+        bound = snapshot.bound
+    _same("held V2 manifest", binding_record(bound), binding_record(snapshot.bound))
+    consumer = {
+        "kind": "sandbox_v2_task_to_run", "manifest_binding": binding_record(bound),
+        "tasks": [
+            {
+                "task_id": task.task_id, "prompt": task.prompt,
+                "sector": task.sector, "occupation": task.occupation,
+                "reference_files": list(task.reference_files),
+                "reference_file_records": [
+                    {"path": name, **snapshot.references[name]} for name in task.reference_files
+                ],
+            }
+            for task in bound.tasks
+        ],
+    }
+    # V2 uses catalog reference ordering; Codex uses parquet order. Compare
+    # the complete lists, including cardinality, against the byte projection.
+    fields = ("task_id", "prompt", "sector", "occupation", "reference_files")
+    _same("V2/Codex consumer projection",
+          [{key: task[key] for key in fields} for task in consumer["tasks"]],
+          [{key: source[key] for key in fields} for source in snapshot.projections])
+    return consumer
+
+
 def compile_prepared_input_attestation(
     *, manifest: dict[str, Any], combined_plan: dict[str, Any],
     dataset_parquet: Path, reference_root: Path, runs: tuple[PreparedRunInputs, ...],
@@ -329,8 +356,8 @@ def compile_prepared_input_attestation(
 
         snapshot = _source_snapshot(plan, dataset_parquet, reference_root)
         shared_binding = snapshot.shared_binding
-        projections, references, needs_files, bound = (
-            snapshot.projections, snapshot.references, snapshot.needs_files, snapshot.bound,
+        projections, references, needs_files = (
+            snapshot.projections, snapshot.references, snapshot.needs_files,
         )
         run_bindings = []
         for supplied, run in zip(runs, plan.dispatch.runs):
@@ -340,27 +367,7 @@ def compile_prepared_input_attestation(
             if run.condition == "sandbox_v2":
                 if supplied.prepared_tasks is not None:
                     raise PreparedInputRefused("V2 must not substitute Codex prepared inputs")
-                consumer = {
-                    "kind": "sandbox_v2_task_to_run", "manifest_binding": binding_record(bound),
-                    "tasks": [
-                        {
-                            "task_id": task.task_id, "prompt": task.prompt,
-                            "sector": task.sector, "occupation": task.occupation,
-                            "reference_files": list(task.reference_files),
-                            "reference_file_records": [
-                                {"path": name, **references[name]} for name in task.reference_files
-                            ],
-                        }
-                        for task in bound.tasks
-                    ],
-                }
-                # V2 uses catalog reference ordering; Codex uses parquet order.
-                for source, task in zip(projections, consumer["tasks"]):
-                    _same("V2/Codex consumer projection", {key: source[key] for key in (
-                        "task_id", "prompt", "sector", "occupation", "reference_files",
-                    )}, {key: task[key] for key in (
-                        "task_id", "prompt", "sector", "occupation", "reference_files",
-                    )})
+                consumer = _v2_consumer(snapshot)
             else:
                 if supplied.prepared_tasks is None:
                     raise PreparedInputRefused("Codex prepared input is required")
