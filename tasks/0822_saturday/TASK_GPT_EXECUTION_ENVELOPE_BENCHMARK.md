@@ -8276,8 +8276,12 @@ Codex CLI/harness라는 두 구성 묶음의 완료·품질·시간·비용 기�
 추가한 기준은 `a5ed62bd55471c0fd8bdd637c9312315a17ebf4b`이고, V2 effort
 전달의 기준은 `34b3327d8a9beda58754efbf88e6bbf6d643cc60`입니다. 이번
 오프라인 dispatch-plan compiler는 immutable main
-`2a1ecaf7d6a6f18ba21add7884414d041bc1b5d8`에서 시작합니다. source 경계를
-갱신하되 기존 grader revision과 과제·입력·반복·한도는 바꾸지 않습니다.
+`2a1ecaf7d6a6f18ba21add7884414d041bc1b5d8`에서 시작했습니다. 이를 재사용하는
+pinned grading-plan compiler의 시작점은
+`5c3a69278a8f005db8ea0aed72d13d20909c57df`입니다. `grading.source_sha`도 이
+시작점을 기록하며, 실제 검토 대상 바이트는 source pins와 기존 grader helper의
+`template_source_sha256`으로 고정합니다. 시작 SHA만으로 새 코드의 신원을
+증명했다고 하지 않습니다. grader 설정·과제·입력·반복·한도는 유지합니다.
 사전등록 파일은
 `batch-runner/experiments/execution_envelope/gpt54_sandboxv2_codex_comparison.yaml`,
 무료 검사기는 `batch-runner/gpt54_comparison_preflight.py`입니다. 새 실행 프레임워크,
@@ -8311,7 +8315,7 @@ Codex는 `model_reasoning_effort="xhigh"`를 클라이언트 설정으로, V2는
   문자열 변환, 공백 제거, 대소문자 변경, 다른 effort로의 fallback은 없습니다.
   [Responses API 문서](https://developers.openai.com/api/reference/resources/responses/methods/create)의
   `reasoning.effort` 형식으로 직렬화하며, 기존 V2 템플릿과 과거 요청 조건은
-  바꾸지 않습니다. 사전등록을 실행용 계획으로 연결하는 dispatch 구현은 여전히 별도입니다.
+  바꾸지 않습니다. 아래 compiler가 실행용 계획을 만들지만 실제 dispatch는 별도입니다.
 - 작업: 기존 점수 비참조 규칙 `select_advance_check_tasks`의 `advance_check_5`
   순서를 그대로 사용합니다. `02aa1805-c658-4069-8a6a-02dec146063a`,
   `0112fc9b-c3b2-4084-8993-5a4abb1f54f1`,
@@ -8333,7 +8337,9 @@ Codex는 `model_reasoning_effort="xhigh"`를 클라이언트 설정으로, V2는
   채점기 내부 retry 규칙도 같은 파일을 사용합니다. 실행용 사본은
   `rubric.revision`을 위 dataset revision에 고정해야 합니다. 원본의 `main`을
   그대로 해석하는 것은 허용하지 않습니다. 채점기 소스와 프롬프트도 같은
-  immutable revision을 써야 하며, 이번 변경은 채점 코드를 수정하지 않습니다.
+  immutable source 계약을 써야 합니다. 이번 변경은 `step8_grade.py`의 기존
+  source-hash helper에 선택적 `batch_root`만 더합니다. 생략 시 동작과 해시
+  알고리즘, production 판정·도구·perception·retry 기본값은 바꾸지 않습니다.
 - 결과·비용: 공통 `project_result_row`, 기존 grade schema와 `cost-receipt-v1`을
   유지합니다. `record_cost_findings_only`, 금액 상한 `null`은 승인된 기존 정책이며
   비용을 0으로 만들거나 새 예산 상한을 정한다는 뜻이 아닙니다. 해결·채점 영수증,
@@ -8404,18 +8410,22 @@ ABBA 순서는 한 방향의 시간 경과 영향을 줄이기 위한 고정 순
   버전·capability와 다운로드한 입력 바이트는 이번에 확인하지 않았습니다.
   로컬 직렬화의 `xhigh`와 실제 배포가 받은 요청·제공한 capability는 구분합니다.
   API에 묻는 유료 probe를 무료 검증으로 부르지 않습니다.
-- `comparison_pinned_grading_not_wired`: 아래 compiler가 사전등록을 기존
-  추론 진입점용 설정·인자로 변환하지만, 고정 rubric revision으로 채점하는
-  연결은 구현하지 않습니다. workflow와 지출 전 관문도 연결하지 않습니다.
+- `comparison_materialization_and_workflow_gates_not_wired`: 아래 두 compiler는
+  추론과 pinned grading의 오프라인 설정·인자를 만들지만 실제 checkout·설정·입력·
+  deliverable 배치나 workflow 관문은 연결하지 않습니다. V2 결과의 canonical
+  step2 입력 변환과 실제 inference publication identity도 아직 필요합니다.
 - `comparison_usage_and_tariff_evidence_unverified`: 이 비교에서 실제 모델·usage와
   비용 단위가 연결되는 증거는 아직 없습니다. 가격 누락만을 새 지출 차단 규칙으로
   삼지는 않으며, 기존 record-only 정책과 unknown/null/partial 기록을 유지합니다.
 
-무료 검사기는 원천 파일 21개의 지문을 먼저 확인합니다. 기존 17개에 compiler를
-포함하는 `gpt54_comparison_preflight.py`, 소스 기준 경로를 정하는
-`core/config.py`, seal helper인 `core/agentic_v2_preregistration.py`, cohort
-selector인 `core/execution_envelope_tasks.py`를 추가했습니다. 계획의 canonical
-JSON 지문과 실제 어댑터 helper의 V2 Responses 필드·Codex override도 반환합니다.
+무료 검사기는 원천 파일 **22개**의 지문을 먼저 확인합니다. #618의 21개에
+`step8_grade.py`를 추가했습니다. 그 파일의 기존 `compute_grader_source_hash`는
+모든 `core/**/*.py`, grade schema, requirements include graph, inference download
+script, 두 prompt, 원본 grading config의 경로·바이트까지 함께 고정합니다.
+이 closure의 지문도 manifest와 대조하므로 rubric loader 등 간접 의존성이 바뀌어도
+거부합니다. 해시 알고리즘을 새로 복사하지 않습니다. 이 값은 **원본 template의
+source closure**이며, 아직 materialize하지 않은 config의 실행 시 해시는 아닙니다.
+계획의 canonical JSON 지문과 실제 어댑터 helper의 V2 Responses 필드·Codex override도 반환합니다.
 잘못된 계획은 요청 증거나 compiled plan을 반환하지 않습니다.
 `configuration_valid: true`와 `launch_allowed: false`는 함께 나올 수
 있으며 CLI는 **항상 종료 코드 2**를 반환합니다. 현재 코드를 실행할 수 없다는
@@ -8463,9 +8473,79 @@ checkout·설정·입력 파일을 만들거나 읽어 검증하는 실행기가
 이 변경이 해소하는 것은 **dispatch artifact 생성과 source-binding**뿐입니다.
 기존 template의 safety/cost 코드는 그대로이며 복사된 과거 budget 기록은 이번
 비교의 승인이나 새 가격 정책이 아닙니다. 실제 materialization, workflow 관문,
-live input/identity 검증, native caps, pinned grading, usage/tariff 확인은
+live input/identity 검증, native caps, usage/tariff 확인은
 여전히 별도 작업입니다. `launch_allowed`와 `full_220_allowed`는 항상 false이고
 CLI는 항상 2로 끝납니다. 역사적 입력·ledger·sealed evidence는 고치지 않습니다.
+
+#### 오프라인 pinned grading-plan 경계
+
+`compile_grading_plan(manifest, dispatch_plan=...)`는 위 `compile_dispatch_plan`을
+재사용해 같은 ABBA 순서의 불변 `ComparisonGradingRunSpec` 네 개를 만듭니다.
+반환하는 `ComparisonGradingPlan`에는 dispatch 원문도 포함됩니다. 기존 preflight의
+`--grading-plan`은 이 결합 문서를 manifest에서 다시 만든 canonical JSON과
+정확히 비교합니다. manifest/control/source pin, grader config, rubric, task
+mapping/order, schema, argv, output 또는 checkout이 빠지거나 바뀌면 계획을
+거부하며 grader client를 만들지 않습니다. 실제 유료 entrypoint 전체를 감싼
+보안 관문이라는 뜻은 아닙니다.
+
+각 spec에는 run id/condition/repeat, 다섯 task id/order, 별도 checkout/cwd,
+producer 결과 경로와 JSON pointer, 정확한 grader 입력 경로, experiment/config
+바이트, grader 계약, 실제 step8 argv, grade/receipt 경로 template이 들어갑니다.
+네 spec의 grader config 바이트는 같습니다. 원본 `default_v2_sol_max.yaml`을
+수정하지 않고 사본의 `rubric.revision`을 고정 SHA로, `rubric.cache_dir`를 해당
+checkout의 `../data/gdpval-local`로 바꿉니다. judge `gpt-5.6-sol`/`max`, prompt
+`v2.2`, 도구·시각·청각·retry·output 설정은 그대로입니다. 기존 config loader인
+`yaml.safe_load`와 `validate_grading_config`를 사용합니다.
+
+step8은 config에 `grades_per_task`를 써 놓는다고 반복 수를 강제하지 않습니다.
+여기서는 각 inference run마다 step8을 한 번 가리키며, 네 argv의
+`--run-ordinal`은 모두 **1**입니다. 비교 repeat 1·1·2·2는 별도 metadata로
+보존합니다. `--force`, `--resume`, HF source, 추가 채점 pass는 넣지 않습니다.
+
+```text
+python3 step8_grade.py execution_envelope/<run_id>
+  --config comparison-grading.json --source local
+  --tasks <같은 순서의 다섯 task id, comma-separated> --limit 5
+  --shard-count 1 --shard-index 0 --run-ordinal 1
+  --source-experiment-id <run_id>
+```
+
+이것은 **실행하지 않은 argv 데이터**입니다. 같은 checkout의
+`batch-runner/experiments/execution_envelope/<run_id>.yaml`에는 step8이 실제로
+읽을 수 있는 `ExperimentConfig` metadata를 지정합니다. V2 stage plan을
+experiment YAML인 것처럼 넘기거나 존재하지 않는 `--inference-results` 옵션을
+만들지 않습니다. 채점 입력은 실제 CLI가 고정한
+`batch-runner/workspace/step2_inference_results.json`이고, deliverable은
+`batch-runner/workspace/upload/deliverable_files/<task_id>`에 있어야 합니다.
+
+Codex는 step2 결과를 위 파일에 쓰지만 deliverable 배치는 여전히 확인해야 합니다.
+V2는 `batch-runner/workspace/run_record.json`의 `/run/results`에 기록합니다.
+그 행의 기존 result projection과 `workspace/deliverables/deliverable_files`를
+grader 입력·upload tree로 옮기는 materialization은 **구현하지 않았습니다**.
+실제 입력을 읽어 source/task/바이트 신원을 검증하는 것도 후속 gate입니다.
+CLI의 `--tasks`는 입력 순서를 보존할 뿐 요청한 순서로 재정렬하지 않으므로,
+후속 단계가 고정 순서를 확인해야 합니다.
+
+명시적 `--tasks`/`--limit`는 기존 정책대로 diagnostic입니다. grade 경로는 각
+checkout의 `data/grades/_diagnostic/<ordered-five-task-sha256>/` 아래에 두고,
+원본 filename template의 config/rubric/inference/source identity를 보존합니다.
+같은 stem 옆의 `.cost_ledger.sqlite3`와 `.cost_ledger.jsonl`도 spec에 담습니다.
+기존 grade schema **1.4**, task별 `grading_cost`, top-level `cost_ledger`,
+`cost-receipt-v1` 및 null/partial semantics는 그대로입니다.
+
+아직 inference publication revision이 없으므로 최종 grade filename을 정했다고
+하지 않습니다. `inference_repo_id`, `inference_revision`, materialized config의
+`grader_source_hash`는 **null**이며, `resolution`은 blocked 상태입니다. 실제
+출력 경로는 그 값들을 검증한 뒤 기존 `resolve_grade_output_path`로 정합니다.
+dataset SHA나 Git base를 inference revision으로 대신 쓰지 않습니다. config를
+배치할 때는 compiler의 UTF-8 JSON 바이트를 줄바꿈 추가 없이 그대로 써야 합니다.
+
+이 변경으로 닫는 것은 `comparison_pinned_grading_not_wired`의 **오프라인
+artifact/source-binding** 부분뿐입니다. served V2/Codex capability, native caps,
+live identity/input, materialization/workflow gates, usage/tariff는 남습니다.
+무료 selector의 parser/config 호환성은 실제 채점·모델 capability 증거가 아닙니다.
+소유자의 비교 승인도 `launch_allowed: false`, `full_220_allowed: false`를
+해제하지 않습니다.
 
 ### 14.6 판정, 중단 규칙, 검토 경계
 
