@@ -8286,6 +8286,8 @@ prepared-input attestation compiler의 시작점은
 Codex pre-execution capture wiring의 시작점은
 `e90040962aa16572a32c64808db93b38dceeefb9`입니다.
 V2 pre-execution capture wiring의 시작점은
+`871e138558c3ada8d9c3cd93de2b07b676faeab9`입니다.
+run config bundle materializer의 시작점은
 `baa81d4f7ca65680c04f7f19d3a375cd60c8f39b`입니다.
 `base_sha`와 `grading.source_sha`는 이번 시작점을 기록하며, 실제 검토 대상 바이트는 source pins와 기존 grader helper의
 `template_source_sha256`으로 고정합니다. 시작 SHA만으로 새 코드의 신원을
