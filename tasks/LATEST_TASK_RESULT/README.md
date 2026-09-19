@@ -2,25 +2,26 @@
 
 - Updated: 2026-09-19 (UTC)
 
-## Current Task: GPT-5.4 V2 Grading-Input Materializer
+## Current Task: GPT-5.4 Codex Grading-Input Materializer
 
 ### Scope and Outcome
 
-`materialize_v2_grading_input` converts one independently bound Sandbox V2
-`run_record.json` and its deliverables into canonical local step8 inputs. It
-reuses `compile_grading_plan` and its dispatch plan, the existing result
-projector, manifest binding, source identity resolver, and deliverable
-validators. It does not execute inference or grading, materialize a checkout,
-or authorize a launch.
+`materialize_codex_grading_input` validates existing Codex step2 results and
+deliverables, then installs an isolated canonical step8 input bundle. It
+reuses the dispatch/grading compilers and #620's validation, byte snapshots,
+descriptor-anchored staging, and native no-clobber rename. It does not execute
+inference or grading, materialize a checkout, or authorize a launch.
 
 Work started from immutable main
-`641eee488ad6cd9a7bc33d0beeab061dcae8f52b` in branch
-`b/gpt54-v2-grading-input-materializer-20260919`, at
-`/ai-work/copilot/.worktrees/gdpval-realworks-b-gpt54-v2-grading-input-materializer-20260919`.
+`f85da3f87550abc335c9365e9bca22372747f1e4` in branch
+`b/gpt54-codex-grading-input-materializer-20260919`, at
+`/ai-work/copilot/.worktrees/gdpval-realworks-b-gpt54-codex-grading-input-materializer-20260919`.
 The preservation checkout and prior worktrees were not changed.
 
-Exactly nine files differ from that base:
+Exactly eleven files differ from that base:
 
+- `batch-runner/gpt54_codex_grading_input.py`
+- `batch-runner/tests/test_gpt54_codex_grading_input.py`
 - `batch-runner/gpt54_v2_grading_input.py`
 - `batch-runner/tests/test_gpt54_v2_grading_input.py`
 - `batch-runner/gpt54_comparison_preflight.py`
@@ -31,174 +32,173 @@ Exactly nine files differ from that base:
 - `CHANGELOG.md`
 - `tasks/LATEST_TASK_RESULT/README.md`
 
-### Binding and Materialization Boundaries
+### Binding and Compatibility
 
-The supplied typed `ComparisonGradingRunSpec` must exactly match a compiled V2
-run. Codex specs, altered specs, missing or changed source pins, and control
-drift are refused. The four-run order remains V2 r1, Codex r1, Codex r2, V2 r2;
-each run retains the same ordered `advance_check_5` tasks, Foundry GPT-5.4
-identity, `xhigh` request, limits, and pinned grader contract. This is still a
-configuration-bundle comparison, not an environment-only causal claim.
+The caller supplies an exact Codex `ComparisonGradingRunSpec`, manifest,
+actual step2 JSON and upload root, separate inference identity document,
+externally approved document SHA256, and absent destination. The function
+recompiles the plan and checks the run, condition, repeat, ordered five-task
+scope, producer path/pointer, manifest and combined-plan fingerprints, config
+and source pins, original JSON digest, result fingerprint, runtime/prepared
+identities, and task-owned deliverable paths, sizes, and hashes. The document
+must name a canonical inference repo and immutable revision. Dataset or Git
+provenance cannot substitute for that identity. The external issuer must
+verify publication and prepared-input provenance; this function checks only
+the approved offline binding.
 
-The caller supplies a separate inference identity document and its
-independently approved SHA256. That document binds the canonical inference
-repo/revision, run/condition/repeat, task order, producer path/pointer,
-manifest and combined grading-plan digests, config/source-pin digests, actual
-run-record bytes, and each task's deliverable paths, sizes, and hashes. A
-self-asserted verification flag is not accepted. Known dataset provenance or
-the Git base cannot substitute for inference identity. This is an offline
-check against an approved binding, not proof that a live revision exists;
-issuing and verifying that document remains an external gate.
+The real producer's `experiment_id` matches the deterministic comparison run
+ID. Its opaque `run_id` and `publication_generation` are validated and bound
+separately, without inventing a prefix requirement. The producer condition,
+model, execution mode, terminal cardinality/status, and task order must match.
+Missing, duplicate, extra, reordered, nonterminal, resumed, retried, or
+contradictory rows are refused before staging. Terminal errors remain errors.
+Unsafe paths, symlinks, hardlinks, empty/missing/extra/cross-task files, changed
+bytes, and destination collisions are refused.
 
-The function checks the producer's task-content binding, chosen settings,
-config path/digest, terminal cardinality, and run summary. Missing, duplicate,
-reordered, extra, partial, resumed, or contradictory rows are refused.
-Terminal error rows remain errors. Files must belong to their task and match
-the approved bytes. Extra task trees/files, missing files, empty successful
-deliverables, hardlinks, symlinks, traversal, and destination collisions are
-refused. Receipts pass through `project_result_row`; absent and present-null
-fields remain distinct, and unknown/partial costs never become zero.
+Raw Codex rows are validated through existing helpers, including
+`project_result_row`, but are not replaced with report projections. Absent
+and present-null receipts remain distinct. Partial reasons and original
+receipt fields survive unchanged. In the reserved-call fixture,
+`estimated_cost_usd` remains null; the existing `known_cost_usd: 0.0` is a
+confirmed floor, not a zero-cost total. No pricing or arithmetic is changed.
 
-After input validation, the function stages snapshots of the verified bytes
-in a private sibling tree. The destination is an input bundle, with only:
+The output adds the approved `source_repo_id`, `source_revision`, and
+`source_identity_document_sha256`, then recomputes its result fingerprint
+with the existing helper. Conflicting pre-existing identity fields are
+refused. Every other source field retains its JSON semantics. The original
+digest and fingerprint remain bound in the approved document. When the
+producer references `cost_ledger_condition_a.jsonl`, its separately bound
+sibling bytes are copied unchanged beside the output JSON. Absent/null
+references remain absent/null and produce no sidecar.
 
-```text
-batch-runner/workspace/step2_inference_results.json
-batch-runner/workspace/upload/deliverable_files/<task_id>/...
-```
+All input bytes are read and validated before private sibling staging. The
+bundle contains the existing `batch-runner/workspace/step2_inference_results.json`
+and `batch-runner/workspace/upload/deliverable_files/<task_id>` paths, plus the
+optional bound producer ledger. Native `renameat2(RENAME_NOREPLACE)` is required;
+there is no unsafe fallback. The real step8 local loader, source identity
+resolver, ordered task filter, result fingerprint validator, and deliverable
+validators read the fixture output.
 
-The real `load_local_inference_results`, `resolve_source_inference_identity`,
-ordered task filter, result fingerprint validator, and deliverable validators
-read the resulting fixture without an alternate schema. Creation, writes,
-and cleanup remain anchored to one open parent descriptor, including when its
-pathname is replaced. Installation requires native Linux
-`renameat2(RENAME_NOREPLACE)`; there is no unsafe overwrite fallback. Failed
-staging is cleaned up with Python 3.10-compatible operations.
-
-The GPT-5.4 required source set grows from 22 to 23 by adding the materializer.
-The combined plan binds its function name. The Sol YAML only refreshes the
-existing shared-parser digest; its 16-file source set and launch gates are
-unchanged. The grader source-closure digest remains
+The shared installer's optional ledger argument defaults to `None`. That
+default preserves V2 serialization, tree contents, descriptor anchoring,
+cleanup, and atomic-install behavior. Thirteen existing V2 cases are reused
+without weakening their assertions. The only edit to the V2 test updates the
+source-pin count from 23 to 24. The Sol YAML only refreshes its existing shared
+parser digest; its contract and launch gates are unchanged. The existing
+grader source-closure digest remains
 `c10ea303f212bab87ea6303cb41ee51e21430e6bc35df7a69b9a63d265f3a241`.
-Production runtime/grader defaults, schemas, pricing, receipt arithmetic,
-historical ledgers, and sealed evidence are unchanged.
+Production runtime/grader defaults, schemas, and historical ledgers/evidence
+are unchanged.
 
-### Verification
+### Exact Verification Evidence
 
-Only this selector was run, first on the initial implementation and once more
-after the immutable review found blocking defects:
+Only this selector was run, once initially and once after the immutable
+review confirmed two blocking test defects:
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider batch-runner/tests/test_gpt54_v2_grading_input.py::test_v2_grading_input_is_bound_atomic_and_offline
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider batch-runner/tests/test_gpt54_codex_grading_input.py::test_codex_grading_input_preserves_source_and_v2_boundary
 ```
 
 - Initial implementation, preserved at
-  `d798905ceb89b6d8116f7adeb4398eeab244bad9`: `7 failed, 69 passed in 45.47s`.
-  Native rename was unsupported on this host, and Python 3.10 rejected the
-  original cleanup API. The first review also found writes tied to a mutable
-  parent pathname and native-support assumptions in positive tests.
+  `0299a60c7971a513144ae761ca9c2f5eda3226e5`: `8 failed, 106 passed in 68.56s`.
+  Six positive cases incorrectly expected a null known-cost floor. Two error
+  fixtures eagerly indexed an empty deliverable-record list before reaching
+  the materializer.
 - Corrected implementation, committed at
-  `4a656026c81453a4b6f9a86bbe27db23deaf373b`: `79 passed in 48.22s`.
-  This was the single permitted corrective rerun. No other selector ran.
+  `373a39fd23b9adc6dc6b30db9ca03675565916b6`: `114 passed in 72.92s`.
+  This was the single permitted corrective rerun. Only those two test defects
+  changed; production implementation bytes and source pins did not change.
 
-The successful cases use an explicitly test-only, single-threaded primitive
-double to check canonical output bytes, real step8 compatibility, both V2
-repeats, preserved errors, and null/partial receipts. Failure cases check
-binding drift, unsafe/missing/extra files, collisions, write/rename failures,
-and parent replacement at staging and during writes. They assert no forbidden
-calls and verify cleanup or preservation of an existing destination.
+The selector covers both Codex repeats, preserved terminal/all-error rows,
+opaque runtime lineage, identity/pin/plan/result drift, receipt preservation,
+ledger binding, unsafe file trees, collisions, and cleanup. It also calls 13
+existing V2 regression cases within this same selector, including parent
+replacement, write/rename failure, and native capability checks. The old V2
+selector was not run separately.
 
-The separate native case reported:
+Successful deterministic installs use an explicit test-only primitive double.
+The separate native cases reported:
 
 ```text
+Codex native RENAME_NOREPLACE unavailable (errno 22); refused without residue.
 Native RENAME_NOREPLACE unavailable (errno 22); refused with no destination or staging residue.
 ```
 
-The host is Python 3.10.12 on Linux 3.10.102, with btrfs at `/tmp`. Fixture
-success is not native atomic-install success on this NAS. A materialization
-host with working native no-clobber rename support is still required.
+This NAS demonstrated safe refusal, not native installation success. A host
+with working native no-clobber support is still required. Subprocess, network,
+provider authentication, route preflight, grader/rubric-loader construction,
+typed Azure client creation, and cost-recorder construction are forbidden by
+the fixtures. No broad suite, standalone preflight, build, live call, actual
+experiment, credential lookup, workflow dispatch, or Project edit ran.
 
-Subprocess, network, provider auth, route preflight, grader/rubric-loader
-construction, typed Azure client creation, and cost-recorder construction are
-forbidden by the fixture. No standalone preflight, broad suite, build, actual
-five-task/220-task run, model/grader/VM/Azure/HF operation, credential lookup,
-workflow dispatch, or Project edit was performed.
-
-`git diff --check` against the immutable base passed. A byte comparison also
-found no changes under `batch-runner/core`, `batch-runner/step8_grade.py`,
-`batch-runner/grading_configs`, `batch-runner/schemas`, `.github/workflows`, or
-`data`.
+`git diff --check` passed. Scope inspection against the immutable base found
+no production runtime/grader, schema, workflow, historical result, or ledger
+changes. The preservation checkout remained clean at
+`ab6a001912898250a6c33d6ed7555cc50ba04c95`.
 
 ### Immutable Review Boundary
 
-The first read-only `first-reviewer` audit of
-`d798905ceb89b6d8116f7adeb4398eeab244bad9` returned `REQUEST-CHANGES`: two BLOCK
-findings for Python 3.10 cleanup and mutable-parent writes, and one MAJOR
-finding for tests that assumed native rename support. It found no additional
-high-confidence source-binding defect and requested no escalation.
+The read-only `first-reviewer` audit of
+`0299a60c7971a513144ae761ca9c2f5eda3226e5` returned `REQUEST-CHANGES` for the two
+test defects described above. It found no additional high-confidence
+implementation defect and requested no escalation. Both corrections are in
+the new commit `373a39fd23b9adc6dc6b30db9ca03675565916b6`; no commit was amended.
+The read-only corrective review of that exact HEAD returned `APPROVE`, with
+no remaining BLOCK, MAJOR, or MINOR findings and no escalation requested.
+The reviewer did not rerun tests or execute production, network, or auth paths.
 
-Those findings were corrected in the new implementation commit
-`4a656026c81453a4b6f9a86bbe27db23deaf373b`, without amending the first commit.
-The read-only review of that exact corrected HEAD returned `APPROVE`, with no
-remaining BLOCK, MAJOR, or MINOR findings and no escalation requested. It
-confirmed both blocking corrections and the separation between fixture and
-native-capability evidence. The reviewer ran no tests, preflights, clients,
-network calls, or mutations.
-
-Only this record and `CHANGELOG.md` differ from the approved implementation
-HEAD. Approval covers that HEAD, not the later records or the deferred live
-gates. Leader review and automatic CI evidence remain pending. No carrying-PR
-merge result or future merge SHA/time is claimed.
+Only this record and `CHANGELOG.md` differ from that corrected implementation
+HEAD. Approval covers that implementation only. Leader review and automatic
+CI evidence remain pending. No approval of these later records or the live
+gates, carrying-PR merge result, or future merge SHA/time is claimed.
 
 ### Remaining Work
 
-This unit implements only V2 result/deliverable conversion into step8 input.
-Both `launch_allowed` and `full_220_allowed` remain false. The following gates
-still need separate reviewed work:
+This unit closes only Codex grading-input/deliverable validation and isolated
+placement. The four-run ABBA matrix, five-task cohort, Foundry GPT-5.4 identity,
+common `xhigh` request, limits, grader, and result/receipt contracts remain
+fixed. Both `launch_allowed` and `full_220_allowed` remain false.
 
-- Externally verified inference identity issuance and approval.
-- Native no-clobber rename support on the materialization host; this NAS
-  refused it safely rather than installing the native fixture.
-- Codex input/deliverable verification and checkout/config materialization.
-- Workflow/materialization gates for the four-run comparison.
-- Served V2/Codex reasoning capability, native call/token caps, and live
-  model identity/input bytes.
-- Usage/tariff evidence under the unchanged record-only null/partial policy.
-- The separate Sol pilot's Copilot provider/auth route: no official
-  runtime-to-Codex handoff contract has been established. No guessed bridge,
-  personal OpenAI account, or Foundry substitution was added.
+- External inference identity issuance, approval, and prepared-input
+  provenance verification.
+- Native no-clobber support on the materialization host.
+- Actual checkout/config materialization and workflow gates.
+- Served V2/Codex capability, native call/token caps, and live model/input bytes.
+- Usage/tariff evidence under the existing record-only null/partial policy.
+- The separate Sol pilot's Copilot provider/auth route, blocked because no
+  official runtime-to-Codex handoff contract has been established.
 
 The generic `comparison_materialization_and_workflow_gates_not_wired` blocker
-is retained. This function does not guard every paid entrypoint, and this unit
-supplies no authorized launch command.
+remains. This unit adds no launch command, guessed authentication bridge, or
+guard for every paid entrypoint.
 
-### Skills and Review Roles
+### Skills and Roles
 
 The full available skill and repository-agent catalogs were inspected once
-before implementation. `experiment-design` was applied before code or plan
-changes to preserve the comparison question, task/input pins, repeats, units,
-configuration-bundle scope, and stop boundaries. The consolidated grading
-specification and stable `tasks/grading_task` baseline were read first. The
-required `grading-engineer` role audited producer/projection, local step8,
-deliverable, and source-identity boundaries. `first-reviewer` audited the
-immutable implementation. These roles used the available engine, not an
-external paid model invocation.
+before editing. `experiment-design` was applied before code or plan changes
+to preserve task/input pins, repeats, units, comparison scope, and stop gates.
+The consolidated grading specification and stable `tasks/grading_task`
+baseline were read first. The required `grading-engineer` role audited the
+producer, projection, identity, and local step8 boundaries. Its working-code
+audit caught the unsupported runtime-ID prefix assumption, which was removed
+before the initial selector. `first-reviewer` reviewed immutable implementation
+HEADs. These roles used the available engine, not an external paid model call.
 
 `im-not-ai-en` was applied to the English changelog, completion record, and PR
-wording. Commands, SHAs, counts, results, and uncertainty were checked manually;
+wording. Commands, SHAs, counts, results, and limitations were checked manually;
 the owner's restricted validation scope takes precedence over an additional
 fidelity-script run. Experiment-report skills do not apply because this task
-has no measured experimental outcomes. Repository-readiness, UI, and animation
-skills do not apply to the existing offline input boundary. Workflow files,
-`core/qa.py`, and HF upload code are untouched, so no extreme-reasoner scope
-was created. No API/provider authentication contract is introduced.
+reports no measured experimental outcomes. Repository-readiness, UI, and
+animation skills do not apply to this existing offline input boundary.
+Workflows, `core/qa.py`, and HF upload scripts are unchanged, so no
+extreme-reasoner scope was created.
 
-## Prior Result: #619 Offline Pinned-Grading Plan
+## Prior Result: #620 V2 Grading-Input Materializer
 
-[#619](https://github.com/hyeonsangjeon/gdpval-realworks/pull/619) compiled four
-ABBA grading specs and the combined dispatch/grading document. Its reviewed
-implementation HEAD was `e9d62ffac93ff69f151e113b4d84e7e725824f0a`, and its
-final branch HEAD was `9982ca8517aac3cbd511267c80bde686b59bfd86`. The historical
-selector `test_gpt54_pinned_grading_plan_is_bound_and_non_executing` reported
-`36 passed in 22.79s`; first-reviewer returned `APPROVE` with no findings.
-That selector was not rerun here.
+[#620](https://github.com/hyeonsangjeon/gdpval-realworks/pull/620) added the V2
+materializer reused here. Its reviewed implementation was
+`4a656026c81453a4b6f9a86bbe27db23deaf373b`, and its final branch HEAD was
+`5a550bb736648b8b085251298a262dccd58dbfd5`. Its historical selector reported
+`79 passed in 48.22s` after review corrections; first-reviewer returned
+`APPROVE`. Native installation on this NAS was refused with errno 22 without
+residue. That historical result is not a new test run.
