@@ -31,6 +31,14 @@ class ProviderBoundary(BaseException):
 
 
 def _runtime_fixture(tmp_path, monkeypatch, repeat):
+    # This capture-unit fixture deliberately has no Git lineage. The dedicated
+    # runtime-checkout selector exercises that outer gate with real temporary
+    # Git; all capture/config/input/pin/fingerprint checks below remain real.
+    def fixture_lineage(*, checkout, run_id, condition):
+        assert condition == "codex" and run_id in CodexComparisonCapture.RUN_IDS
+        return {"evidence_boundary": "capture_unit_fixture_no_git_lineage"}
+
+    monkeypatch.setattr("gpt54_disposable_checkout.verify_runtime_checkout", fixture_lineage)
     oracle = tmp_path / "oracle"
     oracle.mkdir()
     inputs, bindings, _, _, records = _fixture(oracle, monkeypatch, "identical")

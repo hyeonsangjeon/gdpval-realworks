@@ -2,189 +2,152 @@
 
 - Updated: 2026-09-19 (UTC)
 
-## Current Task: GPT-5.4 Disposable Checkout Preparer
+## Current Task: GPT-5.4 Runtime Checkout Lineage Gate
 
 ### Scope and Outcome
 
-The comparison has a local-only library and CLI for preparing one detached
-disposable checkout at a caller-supplied, externally reviewed commit. It
-validates the exact run recipe and reviewed source bytes, creates the checkout
-with `git worktree add --detach`, and invokes the existing config and input
-bundle materializers in that order. A checkout-ready marker binds the reviewed
-commit, tree, run identity and both verified bundles. This implements checkout
-creation and local bundle placement only. Validation of the corrected positive
-path remains pending; no launch readiness is claimed.
+Both registered comparison runtimes now verify the prepared checkout's local
+lineage before provider, auth or client construction. Sandbox V2 also verifies
+it before the free voice-safety preflight. The in-place helper reuses the
+preparer's ready/reservation contracts and existing config/input validators;
+it does not require the preparer's external source worktree path.
 
 Work started from immutable main
-`474f5855283a9b4e47b81821f3bc59e9b7fedde4` in branch
-`b/gpt54-disposable-checkout-preparer-20260919`, at
-`/ai-work/copilot/.worktrees/gdpval-realworks-b-gpt54-disposable-checkout-preparer-20260919`.
-The development worktree is separate from the preservation checkout and prior
-worktrees. The preparer was invoked only in temporary Git fixtures, never
-against the live repository. The existing Git author and committer identity,
-`hyeonsangjeon <wingnut0310@gmail.com>`, was retained without changing Git
-configuration or bypassing development commit hooks. No attribution trailers
-were added.
+`f89f8487f914b484e41431a22b2cb58508f74f20` in the separate development branch
+`b/gpt54-runtime-checkout-lineage-gate-20260919`. The preservation checkout and
+prior worktrees were not used for edits. The existing Git author and committer
+identity, `hyeonsangjeon <wingnut0310@gmail.com>`, was retained without changing
+Git configuration, bypassing development commit hooks or adding trailers.
 
-Exactly fifteen files differ from the immutable base:
+Exactly thirteen files differ from the immutable base:
 
 - `batch-runner/gpt54_disposable_checkout.py`
+- `batch-runner/gpt54_codex_input_capture.py`
+- `batch-runner/gpt54_v2_input_capture.py`
+- `batch-runner/step2_run_inference.py`
 - `batch-runner/gpt54_comparison_preflight.py`
 - `batch-runner/experiments/execution_envelope/gpt54_sandboxv2_codex_comparison.yaml`
 - `batch-runner/experiments/execution_envelope/gpt56_sol_copilot_codex_pilot.yaml`
-- `batch-runner/tests/test_gpt54_disposable_checkout.py`
-- `batch-runner/tests/test_gpt54_comparison_preflight.py`
-- `batch-runner/tests/test_gpt54_codex_grading_input.py`
-- `batch-runner/tests/test_gpt54_v2_grading_input.py`
+- `batch-runner/tests/test_gpt54_runtime_checkout.py`
 - `batch-runner/tests/test_gpt54_codex_input_capture.py`
 - `batch-runner/tests/test_gpt54_v2_input_capture.py`
-- `batch-runner/tests/test_gpt54_prepared_input_attestation.py`
-- `batch-runner/tests/test_gpt54_run_input_bundle.py`
 - `tasks/0822_saturday/TASK_GPT_EXECUTION_ENVELOPE_BENCHMARK.md`
 - `CHANGELOG.md`
 - `tasks/LATEST_TASK_RESULT/README.md`
 
-### Preparation and Failure Contract
+### Runtime Contract
 
-The preparer requires a local repository sharing the trusted compiler's Git
-common directory, an exact typed dispatch recipe, the manifest and combined
-grading plan, pinned local parquet/reference inputs and an absent destination.
-The source revision must be a full lowercase 40-hex commit SHA supplied by the
-caller. Refs, abbreviated SHAs, non-commit objects and the manifest's historical
-`source_base_sha` are not substitutes for external review. The tool does not
-issue or verify the external review decision itself.
+`verify_runtime_checkout` checks canonical checkout-ready bytes, the full
+reviewed commit/tree SHA, raw detached HEAD, bidirectional linked-worktree
+registration, the exact sibling reservation and quarantine absence. It
+reconstructs run/condition/repeat/ABBA and bundle identities from the existing
+compiled plan and marker contracts. Existing validators check all 31 pinned
+source files, generated configs and local input bytes. Marker, registration
+and HEAD checks are repeated before the gate returns.
 
-Before reservation, it checks source pins against reviewed commit blobs rather
-than dirty source working files. It checks the exact plan, input snapshot,
-tracked file modes, target absence and source/target separation. Links,
-path traversal, existing sidecars and generated targets are refused. Only local
-Git subprocesses are used, with a fixed environment and no hooks, filters,
-network transport, lazy fetch or inherited authentication route. The caller's
-source working tree, refs, index and configuration are not rewritten.
+The gate uses only bounded local `rev-parse` calls with the existing fixed
+environment, hook suppression and network/lazy-fetch refusal. It does not
+inherit caller credentials, invoke the external-source verifier, publish files
+or repair a checkout. Unsafe paths, links, missing or changed markers, attached
+or moving HEAD, wrong run/condition and quarantine fail closed.
 
-A no-clobber sidecar reservation precedes exclusive destination creation and
-the detached Git worktree operation. Before publishing bundles, the preparer
-checks detached HEAD, exact commit, bidirectional worktree registration, clean
-tracked files and all 31 source pins. The unchanged materializers publish the
-exact config bundle, pinned parquet and only the five-task reference set.
-After verifying both bundles, the preparer publishes
-`comparison-checkout-ready.json` last and rechecks HEAD, markers and file bytes.
-The marker uses run-relative roles and contains no launch or external inference
-identity approval.
+All four registered IDs require controls, including an ID passed to the wrong
+harness. Non-comparison absent/null paths retain their existing serialization
+and order. The two earlier non-Git capture fixtures use a labelled double only
+for the new outer lineage boundary; their config/input/capture validators
+remain real. The new selector exercises real lineage and both real runtime
+entrypoints in temporary Git fixtures. Preflight evidence and directly coupled
+source pins are updated; the source count remains 31.
 
-On failure after reservation, the preparer retains remaining paths and attempts
-to publish a quarantine sidecar. It reports the checkout, reservation and
-quarantine paths, including whether each remains and whether quarantine could
-be written. A reservation or quarantine prevents a later preparer invocation
-from adopting or overwriting the destination. Quarantine also makes the checkout
-verifier refuse a ready marker if final verification failed after publication.
-There is no cleanup or retry path. This does not promise a multi-file
-transaction, crash durability or a filesystem security sandbox.
-
-Existing V2/Codex capture code is unchanged. Its config/input marker checks do
-not by themselves enforce the new checkout lineage or quarantine sidecar;
-integration with the execution workflow gate remains outstanding. Relative
-linked-worktree metadata is unsupported and fails closed. The historical
-manifest base and grader revision remain
-`a855c5a9604554499be9eed4e5eb5523e8ad95d5`, distinct from the development base
-and the source SHA a caller must have reviewed.
+This is evidence of local lineage and pinned-byte consistency, not approval of
+external review or inference identity, served capability, wire equality or
+launch. It does not scan unrelated tracked files with `status` or prevent
+arbitrary concurrent filesystem writes. Production grader/runtime defaults,
+ABBA, model/effort, task cohort, limits, receipt policy and historical evidence
+are unchanged.
 
 ### Exact Validation Evidence
 
 The following selector was invoked exactly once:
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider batch-runner/tests/test_gpt54_disposable_checkout.py::test_disposable_checkout_is_reviewed_local_and_quarantines_failures
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider batch-runner/tests/test_gpt54_runtime_checkout.py::test_runtime_checkout_lineage_precedes_both_providers
 ```
 
-Result: `14 failed, 28 passed in 9.94s` across 42 collected cases, exit 1.
-Git 2.34.1 rejected `git worktree list --porcelain -z`. Positive paths and
-failure-injection cases that depended on that step stopped at registration
-verification. This was not a passing selector, and later positive-path
-assertions were not reached.
+Result: `50 passed in 69.18s (0:01:09)`, exit 0.
 
-The implementation now uses `git rev-parse --absolute-git-dir` and exact,
-single-link reads of the checkout's `.git` file and the registered `gitdir` and
-`commondir` files. Read-only inspection of an existing temporary fixture
-confirmed that metadata format. The corrected code has not been rerun locally,
-to preserve the one-invocation limit. Fresh passing CI evidence is still
-required. No Git manual was available locally; no fresh documentation check or
-passing regression result is attributed to the metadata inspection.
+The cases cover four ABBA successes; wrong, attached and moving HEAD;
+missing/altered ready, reservation, config and input markers; noncanonical
+ready bytes; altered member bytes; quarantine; wrong run/condition; links and
+path traversal; legacy absent/null controls; and stripped opposite-harness
+IDs. Successes stop at sentinels before Codex auth and V2 free safety, while
+refusals do not reach those sentinels. Runtime Git is restricted to the five
+expected `rev-parse` forms. Network, provider, model, grader and VM guards
+recorded no calls. Caller-source and input-oracle snapshots stayed unchanged.
 
-The new selector contains four ABBA success recipes plus refusal and failure
-cases for source SHA, plan and pin drift, dirty or attached targets, collisions,
-links, changed bundles and partial quarantine. It reuses the immutable cached
-input fixture and real materializers/validators. Its subprocess guards permit
-only bounded Git operations in temporary repositories and forbid network,
-provider, authentication, model and grader calls. These are coverage intentions,
-not a claim that all 42 cases passed.
-
-`git diff --check 474f5855283a9b4e47b81821f3bc59e9b7fedde4 HEAD` passed on the
-implementation commit. No broad suite, build, download, actual inference,
-grading, paid execution, workflow dispatch, Project edit or merge was performed.
-Workflow files, `core/qa.py`, HF upload code, production capture/grader defaults
-and historical ledger/evidence bytes are unchanged.
+`git diff --check f89f8487f914b484e41431a22b2cb58508f74f20 HEAD` passed on the
+implementation commit. Read-only digest inspection matched all comparison and
+directly coupled Sol source pins. No broad suite, build, live execution-checkout
+preparation, inference, grading, Azure/HF access, download, paid execution,
+workflow dispatch, Project edit or merge was performed. Workflow files,
+`core/qa.py` and HF upload code are unchanged.
 
 ### Immutable Review Boundary
 
-Implementation HEAD `b7f2d04de4082889950718c33fffcd6c1a1d9fcf` contains the code,
-tests, pins, specification and Git compatibility correction. A fresh read-only
-`first-reviewer` review covered
-`474f5855283a9b4e47b81821f3bc59e9b7fedde4..b7f2d04de4082889950718c33fffcd6c1a1d9fcf`.
+Implementation HEAD `0028ab2dde3b8ffea4501883d47a92cf70031b23` received a fresh
+read-only `first-reviewer` review covering
+`f89f8487f914b484e41431a22b2cb58508f74f20..0028ab2dde3b8ffea4501883d47a92cf70031b23`.
 The verdict was `APPROVE`, with no BLOCK, MAJOR or MINOR findings and no
-second-review escalation. The reviewer confirmed that all 31 source pins
-match this immutable HEAD without running tests or project code. This is a
-static code-review verdict, not passing validation or launch authorization.
+second-review escalation. Independent read-only hashing confirmed all 31
+comparison pins and both refreshed Sol pins. The reviewer ran no tests or
+project code. This is static code review, not launch authorization or proof of
+external inference identity or whole-target grader provenance.
+
 Only `CHANGELOG.md` and this record follow the reviewed implementation HEAD
-and are outside that review boundary. Leader review and fresh passing CI
+and are outside that review boundary. Leader review and fresh automatic CI
 remain required. No carrying-PR merge result, future merge SHA/time or
 execution authorization is claimed.
 
 ### Remaining Work
 
-The fixed five-task cohort, V2 r1 → Codex r1 → Codex r2 → V2 r2 order,
-Foundry GPT-5.4/xhigh requests, limits, grading and null/partial record-only
-cost contracts are unchanged. `launch_allowed` and `full_220_allowed` remain
-false. The study remains a configuration-bundle comparison.
+The fixed five-task cohort and V2 r1 → Codex r1 → Codex r2 → V2 r2 order are
+unchanged, as are Foundry GPT-5.4/xhigh requests and null/partial record-only
+cost semantics. `launch_allowed` and `full_220_allowed` remain false. The study
+remains a configuration-bundle comparison.
 
-- Fresh passing validation of the corrected implementation and leader review.
+- Leader review and fresh automatic CI for this change.
 - External inference publication identity issuance and approval.
 - A host supporting native no-clobber result-bundle installation.
-- Actual reviewed-host deployment and the workflow gate, including checkout
-  lineage and quarantine enforcement.
+- Actual workflow deployment and the workflow execution gate.
 - Served deployment/model/effort capability and native call/token caps.
-- Actual rendered/wire-request consumption and usage/tariff evidence.
+- Actual wire-request consumption and usage/tariff evidence.
 - The separate Sol pilot's GitHub Copilot provider/auth route, still blocked
   by the missing official runtime handoff contract.
-
-No marker authorizes a model, grader or 220-task run. Preparation does not
-establish served capabilities, wire-prompt equality or environment-only
-causality.
 
 ### Skills and Roles
 
 The full skill and repository-agent catalogs were inspected once before
-editing. `experiment-design` preserved the fixed comparison contract, evidence
-limits and stop gates. The `llm-systems-engineer` role supplied the bounded
-offline fixture and audited Git registration metadata. `first-reviewer` supplied
-the fresh immutable read-only review. `im-not-ai-en` was applied to the English
-changelog, completion record and PR wording without changing commands, SHAs,
-counts or qualifications.
+editing. `experiment-design` kept the comparison axes, evidence limits and
+stop gates fixed. The `llm-systems-engineer` role supplied the focused offline
+selector and bounded fixture changes. `first-reviewer` supplied the fresh
+immutable review. `im-not-ai-en` was applied to the English changelog,
+completion record and PR wording, preserving commands, SHAs, counts and
+qualifications.
 
-Experiment-report skills were not used because this task validates software;
-it does not analyze benchmark results. No grading pipeline implementation changed, so no
-grading-engineer work was needed. Workflow, core QA and HF upload files are
-untouched, so no extreme-reasoner scope was created. Repository-readiness, UI
-and animation skills are unrelated to this local preparer.
+Experiment-report skills were not used because this is software validation,
+not benchmark-result analysis. No grading implementation changed, so the
+grading-engineer role was not needed. Workflows, core QA and HF upload are
+untouched, so extreme-reasoner does not apply. Repository-readiness, UI and
+animation skills are unrelated to this runtime gate.
 
-## Prior Result: #626 Run Input Bundle Materializer
+## Prior Result: #627 Disposable Checkout Preparer
 
-[#626](https://github.com/hyeonsangjeon/gdpval-realworks/pull/626) added pinned
-five-task input publication and runtime verification of both config and input
-bundles. Its final PR HEAD was
-`a5d12efea791d6216ebf6974ba522d67ec0fe57a`. The original selector reported
-`116 passed in 327.95s`; Backend Tests was then cancelled at 91% by its
-45-minute timeout without a reported test failure. The test-fixture correction
-reported `116 passed in 42.46s`, with all 116 cases retained. Its reviewed
-correction implementation was `4a05e26debacdbd5cea8df6d915a40175064998f`.
-Those results are prior-task evidence, not validation of this preparer.
+The preparer creates one reviewed detached checkout, seals its config/input
+bundles and retains reservation/quarantine evidence after failure. The leader
+reported green checks and `FINAL-APPROVE` at
+`f5f55e226cc0643e8346857a5b18da1cf327f706`, then squash merge as
+`f89f8487f914b484e41431a22b2cb58508f74f20`. These are supplied prior facts, not
+a fresh CI query in this task. The prior record's original local result was
+`14 failed, 28 passed in 9.94s` before its Git metadata compatibility correction;
+that selector was not rerun here. The present gate adds runtime enforcement
+without turning preparation markers into launch authorization.

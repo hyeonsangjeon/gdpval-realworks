@@ -104,7 +104,10 @@ def capture_v2_pre_execution_input(
     A failed post-publication verification may leave a complete capture, never
     a partial file; retry/resume must not overwrite it or adopt an old workspace.
     """
-    if plan.get("comparison_input_capture") is None and run_id not in V2ComparisonCapture.RUN_IDS:
+    if plan.get("comparison_input_capture") is None and run_id not in (
+        *V2ComparisonCapture.RUN_IDS,
+        "gpt54_v2_codex_v1_codex_r1", "gpt54_v2_codex_v1_codex_r2",
+    ):
         return None
 
     from gpt54_codex_input_capture import (
@@ -136,6 +139,9 @@ def capture_v2_pre_execution_input(
         if workspace.exists() and (not workspace.is_dir() or any(workspace.iterdir())):
             raise V2InputCaptureRefused("comparison workspace must be new or empty; no resume")
 
+        from gpt54_disposable_checkout import verify_runtime_checkout
+
+        verify_runtime_checkout(checkout=root, run_id=run_id, condition="sandbox_v2")
         bound, binding = _binding(root, run_id, plan)
         expected = _canonical_json(binding).encode("utf-8")
         identity = _identity(expected)
