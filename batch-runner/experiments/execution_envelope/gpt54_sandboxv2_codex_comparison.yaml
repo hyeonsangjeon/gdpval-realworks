@@ -1,8 +1,8 @@
-# Preregistered targets for the offline compilers and V2 input materializer.
+# Preregistered targets for the offline compilers and input materializers.
 # Generated entrypoint configs are review artifacts, not launch authorization.
 # The free preflight deliberately refuses paid launch on the pinned source.
 plan_version: gpt54-sandboxv2-codex-comparison-v1
-base_sha: 641eee488ad6cd9a7bc33d0beeab061dcae8f52b
+base_sha: f85da3f87550abc335c9365e9bca22372747f1e4
 comparison: configuration_bundle
 paid_comparison_approved: true
 launch_enabled: false
@@ -56,7 +56,7 @@ shared: &shared
   grading:
     config: batch-runner/grading_configs/default_v2_sol_max.yaml
     # Starting source provenance; reviewed bytes are bound by pins and closure.
-    source_sha: 641eee488ad6cd9a7bc33d0beeab061dcae8f52b
+    source_sha: f85da3f87550abc335c9365e9bca22372747f1e4
     # Existing helper's full closure with the ORIGINAL template path/bytes.
     # Not the eventual source hash of a materialized, revision-pinned config.
     template_source_sha256: c10ea303f212bab87ea6303cb41ee51e21430e6bc35df7a69b9a63d265f3a241
@@ -109,8 +109,9 @@ runs:
 # Seal the reviewed templates and the boundaries on which the refusal rests.
 # These are file bytes, not a claim to have checked live inputs or a deployment.
 source_pins:
-  batch-runner/gpt54_comparison_preflight.py: e5f680b6f6f55e44ff0a593e910124d8041442844df63b26dbfe68a367c32c5b
-  batch-runner/gpt54_v2_grading_input.py: 149f9e69a8c9854fe78448facb866f076f197ba1ebfb560d9989c77a1fee9dc1
+  batch-runner/gpt54_comparison_preflight.py: 0871d6587c9c0ff8b07f71f3595c099354062dedd95bff4dbc37ae0e6f85b51d
+  batch-runner/gpt54_v2_grading_input.py: 3fae995caf3d785d64fad02280d77a6853389a2ff12be2e7165e4868b4b0b830
+  batch-runner/gpt54_codex_grading_input.py: a61fd74012dd588225fb77359a2e7c0880e7a10918b33f9658d2a0d78f0d58c8
   batch-runner/step8_grade.py: ec23fc941aa0edb54e2858750cc1df5a6a6954a1732cd3f3197d9f9b4b3c18f4
   batch-runner/core/config.py: 483d8ad94ddb78b2a11b8712737ceea1e6b4d3696a8f16fabb84f747a786b48c
   batch-runner/core/agentic_v2_preregistration.py: 02ac15ef8483ac367796feb1fcbadf90a27062c2bf5b3147b75b7e17a0c089e0

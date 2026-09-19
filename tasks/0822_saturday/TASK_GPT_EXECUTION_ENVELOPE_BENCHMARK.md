@@ -8279,8 +8279,9 @@ Codex CLI/harness라는 두 구성 묶음의 완료·품질·시간·비용 기�
 `2a1ecaf7d6a6f18ba21add7884414d041bc1b5d8`에서 시작했습니다. 이를 재사용하는
 pinned grading-plan compiler의 시작점은
 `5c3a69278a8f005db8ea0aed72d13d20909c57df`입니다. V2 grading-input materializer는
-`641eee488ad6cd9a7bc33d0beeab061dcae8f52b`에서 시작합니다. `base_sha`와
-`grading.source_sha`는 이번 시작점을 기록하며, 실제 검토 대상 바이트는 source pins와 기존 grader helper의
+`641eee488ad6cd9a7bc33d0beeab061dcae8f52b`에서 시작했습니다. Codex grading-input
+materializer의 시작점은 `f85da3f87550abc335c9365e9bca22372747f1e4`입니다.
+`base_sha`와 `grading.source_sha`는 이번 시작점을 기록하며, 실제 검토 대상 바이트는 source pins와 기존 grader helper의
 `template_source_sha256`으로 고정합니다. 시작 SHA만으로 새 코드의 신원을
 증명했다고 하지 않습니다. grader 설정·과제·입력·반복·한도는 유지합니다.
 사전등록 파일은
@@ -8413,15 +8414,16 @@ ABBA 순서는 한 방향의 시간 경과 영향을 줄이기 위한 고정 순
   API에 묻는 유료 probe를 무료 검증으로 부르지 않습니다.
 - `comparison_materialization_and_workflow_gates_not_wired`: 아래 두 compiler는
   추론과 pinned grading의 오프라인 설정·인자를 만듭니다. 별도 승인된 inference
-  신원 문서가 있으면 V2 결과와 deliverable을 canonical step8 입력으로 배치할 수
-  있지만, Codex 입력·deliverable 검증, checkout/config 배치, workflow 관문은
-  연결하지 않습니다. 실제 inference publication 신원 문서의 발급도 외부 gate입니다.
+  신원 문서와 외부 승인 SHA256이 있으면 V2 결과와 Codex canonical 결과·deliverable을
+  각각 검증해 isolated step8 입력으로 배치할 수 있습니다. 신원 문서 발급과 prepared
+  input provenance 검증, native no-clobber 지원 host, 실제 checkout/config 배치,
+  workflow 관문은 여전히 외부 gate입니다.
 - `comparison_usage_and_tariff_evidence_unverified`: 이 비교에서 실제 모델·usage와
   비용 단위가 연결되는 증거는 아직 없습니다. 가격 누락만을 새 지출 차단 규칙으로
   삼지는 않으며, 기존 record-only 정책과 unknown/null/partial 기록을 유지합니다.
 
-무료 검사기는 원천 파일 **23개**의 지문을 먼저 확인합니다. #619의 22개에
-`gpt54_v2_grading_input.py`를 추가했습니다. `step8_grade.py`의 기존 `compute_grader_source_hash`는
+무료 검사기는 원천 파일 **24개**의 지문을 먼저 확인합니다. #620의 23개에
+`gpt54_codex_grading_input.py`를 추가했습니다. `step8_grade.py`의 기존 `compute_grader_source_hash`는
 모든 `core/**/*.py`, grade schema, requirements include graph, inference download
 script, 두 prompt, 원본 grading config의 경로·바이트까지 함께 고정합니다.
 이 closure의 지문도 manifest와 대조하므로 rubric loader 등 간접 의존성이 바뀌어도
@@ -8520,7 +8522,8 @@ experiment YAML인 것처럼 넘기거나 존재하지 않는 `--inference-resul
 `batch-runner/workspace/step2_inference_results.json`이고, deliverable은
 `batch-runner/workspace/upload/deliverable_files/<task_id>`에 있어야 합니다.
 
-Codex는 step2 결과를 위 파일에 쓰지만 deliverable 배치는 여전히 확인해야 합니다.
+Codex가 이미 만든 step2 결과와 upload deliverable을 검증·격리 배치하는 경계는
+아래 14.5.2에 지정합니다.
 V2는 `batch-runner/workspace/run_record.json`의 `/run/results`에 기록합니다.
 그 행의 기존 result projection과 `workspace/deliverables/deliverable_files`를
 grader 입력·upload tree로 옮기는 오프라인 함수는 아래 14.5.1에서 지정합니다.
@@ -8604,10 +8607,81 @@ step8의 실제 `load_local_inference_results`와 `resolve_source_inference_iden
 과거 ledger와 sealed evidence는 수정하지 않습니다.
 
 이 destination은 **입력 bundle**이며 실행 가능한 checkout이 아닙니다. Codex 입력과
-deliverable 검증, checkout/config materialization, workflow gate, served capability,
-native caps, live identity/input bytes, usage/tariff 증거는 여전히 필요합니다. Copilot
+deliverable 검증은 아래 14.5.2가 맡습니다. 외부 identity 발급, native no-clobber 지원 host,
+checkout/config materialization, workflow gate, served capability, native caps,
+live identity/input bytes, usage/tariff 증거는 여전히 필요합니다. Copilot
 provider/auth도 공식 runtime 인계 계약이 없어 blocked 상태이며 대체 경로를 넣지
 않습니다. `launch_allowed`와 `full_220_allowed`는 계속 false입니다.
+
+#### 14.5.2 Codex canonical 결과·deliverable을 격리 배치하는 오프라인 경계
+
+`gpt54_codex_grading_input.materialize_codex_grading_input`은 기존
+`compile_grading_plan`으로 manifest를 다시 검증하고, 전달된 typed
+`ComparisonGradingRunSpec`이 두 Codex run 중 하나와 정확히 일치하는지 확인합니다.
+ABBA의 Codex r1/r2, 고정 5개 task ID·입력 순서, Foundry GPT-5.4/xhigh,
+grader·receipt 계약은 바꾸지 않습니다. combined dispatch/grading plan의 exact-match
+검사와 24개 source pin에 이 함수가 포함됩니다. V2 spec이나 수정된 dict는 받지 않습니다.
+
+입력은 해당 spec, manifest, 실제 `workspace/step2_inference_results.json`, 실제
+`workspace/upload`, 별도의 inference identity JSON, **외부 승인 SHA256**, 아직 없는
+destination입니다. V2와 같은 승인 경계를 사용하며 self-asserted `verified` 필드나
+dataset/Git SHA를 inference publication 신원으로 바꾸지 않습니다. 실제 publication
+신원과 실행 당시 prepared input의 provenance 검증은 외부 발급자의 책임입니다.
+
+승인 문서는 V2 문서의 run/task/plan/config/source-pin/deliverable binding과 같은
+형식을 사용하되, 아래 정확한 필드 집합으로 Codex 원본을 고정합니다.
+
+| 필드 | 고정하는 대상 |
+|---|---|
+| `source_repo_id`, `source_revision` | canonical inference owner/repo와 immutable revision. dataset repo/revision 또는 Git/grader 시작 SHA로 대체 불가 |
+| `run_id`, `condition`, `repeat`, `task_ids` | 해당 Codex spec과 순서까지 동일한 5개 task |
+| `producer_results_path`, `producer_rows_pointer` | spec의 step2 파일 경로와 `/results` |
+| `manifest_sha256`, `grading_plan_sha256` | manifest와 combined dispatch/grading plan의 canonical digest |
+| `config_sha256`, `source_pins_sha256` | generated Codex config의 정확한 UTF-8 bytes와 canonical source pin map |
+| `inference_results_sha256`, `result_fingerprint` | 원본 JSON 파일 bytes와 기존 helper로 검증한 원본 result fingerprint |
+| `producer_run_id`, `publication_generation`, `prepared_fingerprint` | producer runtime/freshness 신원과 prepared-input 지문. 외부 승인 binding 없이 추정하지 않음 |
+| `deliverables` | task 순서의 `{task_id, files}` 배열. `files`는 원래 순서의 `{path, size, sha256}` 배열 |
+| `cost_ledger` | absent/null 원본이면 null. 있으면 기존 reference의 `path`, `sha256`와 실제 bytes의 `size` |
+
+실제 step2 producer의 `experiment_id`는 계획의 deterministic run id와 같아야 합니다.
+`run_id`와 `publication_generation`은 별도의 runtime 신원이므로 실험 ID로 덮어쓰거나
+접두어를 강제하지 않습니다. 문법과 외부 승인 문서의 정확 일치를 확인합니다.
+`condition`은 config의 `condition_a.name`, `condition_identity`는 `condition_a`,
+`execution_mode`는 `codex_foundry`여야 합니다. 원본 `source`는 dataset 선언이며
+inference repo로 바꾸지 않습니다. raw step2 행에 없는 prompt/sector/reference
+metadata를 새로 만들거나 report projection으로 행을 대체하지 않습니다.
+
+기존 canonical/terminal-row/result-fingerprint validator와 deliverable validator를
+재사용합니다. 고정 5행의 누락·중복·추가·순서 drift, nonterminal/모순 status,
+resume/retry/reflection, model/config/plan 지문 불일치, 파일 records와 실제 bytes의
+차이, 추가·누락·교차 task 파일, 빈 파일, symlink/path escape/hardlink, 기존 destination은
+쓰기 전에 거부합니다. 완료된 error 행도 분모에 남기고 success로 바꾸지 않습니다.
+receipt는 기존 projector로 검증만 하며 absent/null/partial 및 원본 확장 필드를
+그대로 보존합니다. unknown 금액을 0으로 채우지 않습니다.
+
+출력에는 승인된 `source_repo_id`, `source_revision`,
+`source_identity_document_sha256`을 추가하고 기존 helper로 output
+`result_fingerprint`를 다시 계산합니다. 이미 존재하는 신원 필드가 승인과 다르면
+덮어쓰지 않고 거부합니다. 원본 fingerprint는 승인 문서에서 원본 JSON bytes와 함께
+고정되며, 나머지 모든 source 필드는 JSON 의미를 그대로 보존합니다. 원본의 optional
+`cost_ledger`가 있으면 producer의 고정 sibling `cost_ledger_condition_a.jsonl`만
+digest/size/single-link 검증 후 바이트 그대로 복사합니다. dangling reference를 만들거나
+ledger를 재계산하지 않습니다. absent/null이면 ledger를 생성하지 않습니다.
+
+모든 원본을 읽고 검증한 뒤 #620의 descriptor-anchored private sibling staging과
+native `RENAME_NOREPLACE`로 설치합니다. shared installer의 optional ledger 인자는
+기본값이 `None`이며 기존 V2 JSON·tree·실패 경계를 바꾸지 않습니다. 안전하지 않은
+fallback은 없습니다. native 지원이 없는 NAS에서는 destination이나 staging residue
+없이 거부해야 합니다. deterministic 성공 사례는 test-only primitive double을 명시하고,
+별도 native 사례로 실제 host의 지원/거부를 구분합니다. 실제 step8 loader/source identity
+resolver, result fingerprint, deliverable validator와 선택된 기존 V2 회귀를 단일 무료
+selector에서 확인합니다. 이 검증은 실제 모델·채점·실험 실행이 아닙니다.
+
+이 변경은 Codex 입력 bundle 검증·격리 배치만 닫습니다. 외부 identity 발급과 prepared
+input provenance, native no-clobber 지원 host, 실제 checkout/config 배치, workflow gate,
+served capability, native caps, live model/input bytes, usage/tariff는 남습니다.
+`launch_allowed`와 `full_220_allowed`는 계속 false이며 새 유료 실행 명령은 없습니다.
+원본 결과·deliverable·ledger 및 과거 sealed evidence는 수정하지 않습니다.
 
 ### 14.6 판정, 중단 규칙, 검토 경계
 

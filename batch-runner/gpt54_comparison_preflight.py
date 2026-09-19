@@ -36,7 +36,7 @@ from core.execution_envelope_tasks import (
 from core.experiment_config import ExperimentConfig
 
 ROOT = Path(__file__).resolve().parents[1]
-BASE_SHA = "641eee488ad6cd9a7bc33d0beeab061dcae8f52b"
+BASE_SHA = "f85da3f87550abc335c9365e9bca22372747f1e4"
 GRADER_SOURCE_SHA = BASE_SHA
 ENVELOPE = "batch-runner/experiments/execution_envelope/"
 PLAN = ROOT / ENVELOPE / "gpt54_sandboxv2_codex_comparison.yaml"
@@ -46,6 +46,7 @@ GRADER = "batch-runner/grading_configs/default_v2_sol_max.yaml"
 REQUIRED_SOURCES = {
     "batch-runner/gpt54_comparison_preflight.py",
     "batch-runner/gpt54_v2_grading_input.py",
+    "batch-runner/gpt54_codex_grading_input.py",
     "batch-runner/step8_grade.py",
     "batch-runner/core/config.py",
     "batch-runner/core/agentic_v2_preregistration.py",
@@ -513,7 +514,7 @@ def _compile_grading_plan(dispatch: ComparisonDispatchPlan) -> ComparisonGrading
             experiment = json.loads(run.config_json)
             producer = "batch-runner/workspace/step2_inference_results.json"
             pointer = "/results"
-            materialization = "verify_source_identity_and_stage_codex_deliverables"
+            materialization = "gpt54_codex_grading_input.materialize_codex_grading_input"
         else:
             stage = json.loads(run.config_json)
             # Step8 consumes ExperimentConfig metadata, not a V2 stage plan.
