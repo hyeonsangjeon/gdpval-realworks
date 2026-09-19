@@ -604,6 +604,18 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Restore PR #629's workflow-input documentation contract after `validate`
+  run `35474119808`, job `105980280399`, failed at
+  `b1f4a5da0bccc6760d2b78b0708770d35df848dd`. The onboarding test reads
+  `batch-run.yml`; its expected input list/default map and the English/Korean
+  owner tables now include `comparison_reviewed_source_sha`. Ordinary smoke
+  examples leave it empty, and the reference tables distinguish source review
+  from relay identity and launch permission. The exact failing selector passed
+  once: `1 passed, 0 failed, 0 skipped`, total `696.085328 ms`. The original
+  workflow-gate evidence remains `64 passed in 80.13s (0:01:20)` and was not
+  rerun. Workflow logic, other inputs/defaults and both false launch flags are
+  unchanged; fresh automatic CI remains required.
+
 - Route GPT-5.4 comparison requests in both owning workflows to a separate
   admission job with read-only repository permissions, no provider secrets
   and no OIDC grant. An explicit full reviewed SHA must match the event and

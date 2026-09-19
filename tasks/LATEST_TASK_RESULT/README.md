@@ -2,9 +2,15 @@
 
 - Updated: 2026-09-19 (UTC)
 
-## Current Task: GPT-5.4 Workflow Execution Gate
+## Current Task: PR #629 Workflow Input Documentation Correction
 
 ### Scope and Outcome
+
+The CI correction adds the existing `comparison_reviewed_source_sha` input
+to the onboarding contract's expected order/default map, the English/Korean
+owner tables and their adjacent smoke examples. It changes no workflow logic,
+other inputs/defaults, launch flags or runtime behavior. The workflow gate
+described below remains unchanged.
 
 Both owning workflows route registered or partially specified GPT-5.4
 comparison requests into a separate admission job. That job has read-only
@@ -22,8 +28,14 @@ worktrees were not used for edits. Existing Git author and committer identity,
 `hyeonsangjeon <wingnut0310@gmail.com>`, was retained without changing Git
 configuration, bypassing commit hooks or adding trailers.
 
-Exactly 21 files differ from the immutable base:
+Exactly 26 files differ from the immutable base. This correction changes seven
+files: the four README files, the onboarding test and the two completion records.
 
+- `README.md`
+- `README_KR.md`
+- `batch-runner/README.md`
+- `batch-runner/README_KR.md`
+- `scripts/__tests__/onboarding-contract.test.mjs`
 - `.github/workflows/agentic-v2-stage-run.yml`
 - `.github/workflows/batch-run.yml`
 - `batch-runner/gpt54_workflow_gate.py`
@@ -78,7 +90,10 @@ evidence are unchanged.
 
 ### Exact Validation Evidence
 
-The following selector was invoked exactly once:
+#### Original gate selector
+
+The following selector was invoked exactly once for the original gate and was
+not rerun for this correction:
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider batch-runner/tests/test_gpt54_workflow_gate.py::test_workflow_execution_gate
@@ -107,14 +122,52 @@ preparation, workflow dispatch, Azure/HF access, download, credential lookup,
 inference, grading, paid execution, Project edit or merge was performed.
 `grade-run`, unrelated workflows, `core/qa.py` and HF upload code are unchanged.
 
+#### CI correction selector
+
+The leader reported a code-attributable `validate` failure at PR #629 HEAD
+`b1f4a5da0bccc6760d2b78b0708770d35df848dd`, run `35474119808`, job
+`105980280399`. The failing test is
+`workflow input tables mirror defaults and watchdog delegation` in
+`scripts/__tests__/onboarding-contract.test.mjs`. Source inspection confirms
+that it reads `.github/workflows/batch-run.yml` and compares its input order
+and defaults with the four owner README tables. The new input exists in both
+owning workflows, but was missing from those expectations and tables. The
+correction preserves exact-match assertions and the empty-string default.
+
+The exact failing test was invoked once after the correction:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 node --test --test-name-pattern='^workflow input tables mirror defaults and watchdog delegation$' scripts/__tests__/onboarding-contract.test.mjs
+```
+
+Result: `1 passed, 0 failed, 0 skipped`, exit 0. The subtest took
+`514.103645 ms`; total reported duration was `696.085328 ms`.
+Node `v22.23.2` reused the already installed, lockfile-matching `yaml` version
+`2.8.2` through an ignored local dependency symlink. No dependency was downloaded
+or changed. The selector uses local fixtures and offline shell/config checks;
+it performs no workflow dispatch or provider call. No other test was rerun.
+
+`git diff --check b1f4a5da0bccc6760d2b78b0708770d35df848dd HEAD` passed on the
+correction implementation commit. The correction diff contains five files and
+eight insertions before the completion-record update. Workflow and helper bytes,
+source pins, launch flags and historical evidence are unchanged from the prior
+PR HEAD. The supplied failure is recorded here; no fresh CI result is claimed
+before the normal push.
+
 ### Immutable Review Boundary
 
-Implementation HEAD `d54df8aa4187070c261103271dd8d587639ec735` received a fresh
-read-only `first-reviewer` review against base
-`1671d6d87c27894d6b1a4d75ee5e7be21170feaa`. The verdict was `APPROVE`, with no
+Correction implementation HEAD `545e6a4309eef7286efd0fc0c9b4f639355542c4`
+received a fresh read-only `first-reviewer` review against prior PR HEAD
+`b1f4a5da0bccc6760d2b78b0708770d35df848dd`. The verdict was `APPROVE`, with no
 BLOCK, MAJOR or MINOR findings and no second-review escalation. The reviewer
-ran no tests or project code and made no network or credential calls. Approval
-covers offline admission/preparation/refusal, not deployment or paid execution.
+confirmed the five-file/eight-insertion scope, unchanged workflow behavior and
+preserved exact-match assertions. No tests or project code were executed during
+review. This is the current correction review boundary.
+
+The earlier gate implementation review at
+`d54df8aa4187070c261103271dd8d587639ec735` remains prior evidence, not approval
+of the correction. Both reviews are static code/document-contract reviews,
+not deployment evidence or paid-execution authorization.
 
 Before workflow edits, the `extreme-reasoner` role returned
 `APPROVE-WITH-CONDITIONS`: isolate comparison admission from provider secrets
@@ -123,16 +176,16 @@ preparer and verifier, and keep launch false. Its later mutable design check
 identified the outer-handoff quarantine gap; that was corrected before the
 single selector invocation. The mutable check is not immutable code approval.
 
-Only `CHANGELOG.md` and this record follow the implementation HEAD. Leader
-review and fresh automatic CI remain required. No carrying-PR merge result,
-future merge SHA/time or execution authorization is claimed.
+Only `CHANGELOG.md` and this record follow the correction implementation HEAD.
+Leader review and fresh automatic CI remain required. No carrying-PR merge
+result, future merge SHA/time or execution authorization is claimed.
 
 ### Evidence Limits and Remaining Work
 
 This gate proves local workflow-request binding and prepared-checkout
 consistency in offline fixtures. It does not issue external source review or
 inference identity approval, prove served capability or wire equality, or grant
-permission to launch. No workflow was run. The comparison jobs require pinned
+permission to launch. No comparison workflow was dispatched. The jobs require pinned
 parquet/reference bytes already on disk; a fresh hosted checkout without those
 bytes refuses, and no download path was added. Actual workflow execution is not
 implemented by the inert-command helper.
@@ -153,7 +206,8 @@ configuration-bundle comparison. Remaining gates are:
 
 ### Skills and Roles
 
-The full skill and repository-agent catalogs were inspected once before edits.
+The full skill and repository-agent catalogs were inspected once before the
+original gate edits.
 `experiment-design` kept comparison axes, evidence limits and stop gates fixed.
 `extreme-reasoner` supplied the required pre-edit cost/security/CI decision and
 bounded design check. `llm-systems-engineer` implemented the offline helper and
@@ -162,6 +216,12 @@ implementation review. These are role reviews in the available runtime, not
 claims that unavailable externally named models ran. `im-not-ai-en` was applied
 to the English changelog, completion record and PR wording; commands, SHAs,
 counts and qualifications were protected during copyediting.
+
+For this correction, `im-not-ai-en` was applied to the English additions and
+completion records, and `first-reviewer` reviewed the new immutable correction
+HEAD. Experiment design was not changed. No workflow code changed, so the
+existing `extreme-reasoner` decision boundary remains in force without a new
+workflow decision or live execution.
 
 Experiment-report skills do not apply because this is software validation,
 not benchmark-result analysis. No grading implementation changed, so the
