@@ -2,52 +2,43 @@
 
 - Updated: 2026-09-19 (UTC)
 
-## Current Task: Codex Requested Max and Long Context Wiring
+## Current Task: Sandbox V2 Requested Reasoning Effort Wiring
 
 ### Scope and Outcome
 
-Explicit Codex reasoning and context-window requests now reach generated
-configuration through the existing preparation, provider, and runtime/thread
-path. `CodexProviderSettings` has two optional typed fields,
-`reasoning_effort` and `model_context_window`, both defaulting to `None`.
-The existing `config_overrides` path supplies the configured client used by
-`start_thread`; no new provider, authentication path, or execution framework
-was added.
+Sandbox V2 now carries an explicit stage-plan `model.reasoning_effort` through
+its existing voice construction path into `AzureFoundryVoice.next_turn`.
+The new typed field defaults to `None` and is appended to preserve existing
+constructor positions. A shared pure helper validates and serializes the
+optional Responses fields; no new request framework was introduced.
 
-The Sol preregistration requests:
+The GPT-5.4 comparison declares `reasoning_effort: xhigh` in the V2 condition's
+request block. With that value in the stage plan, the captured fake-client
+request contains the following fields; its other fields remain unchanged:
 
-```toml
-model_reasoning_effort="max"
-model_context_window=1000000
+```json
+{"model":"gpt-5.4","reasoning":{"effort":"xhigh"}}
 ```
 
-The GPT-5.4 comparison requests `model_reasoning_effort="xhigh"` and no
-context-window override. Both offline checkers use the adapter's serializer
-to expose these exact requests. Invalid plans produce no override evidence.
-These are client requests, not proof that the pinned CLI or provider accepts
-them or that a model served Max, xhigh, or the Long 1M tier. A context window
-is not a native-call or aggregate-token cap.
+This is proof of a client request, not proof that the Foundry deployment served
+the requested capability. The preflight still refuses launch, and no dispatch
+connection from the comparison contract to a paid stage was added.
 
 Work started from immutable main
-`a5ed62bd55471c0fd8bdd637c9312315a17ebf4b` in branch
-`b/codex-max-long-wiring-20260919`, at
-`/ai-work/copilot/.worktrees/gdpval-realworks-b-codex-max-long-wiring-20260919`.
+`34b3327d8a9beda58754efbf88e6bbf6d643cc60` in branch
+`b/v2-reasoning-effort-wiring-20260919`, at
+`/ai-work/copilot/.worktrees/gdpval-realworks-b-v2-reasoning-effort-wiring-20260919`.
 The preservation checkout and prior worktrees were not changed.
 
-Exactly 16 files differ from that base:
+Exactly 11 files differ from that base:
 
-- `batch-runner/core/codex_runtime_config.py`
-- `batch-runner/core/experiment_config.py`
-- `batch-runner/core/executor.py`
-- `batch-runner/step1_prepare_tasks.py`
-- `batch-runner/step2_run_inference.py`
-- `batch-runner/tests/test_codex_requested_model_controls.py`
+- `batch-runner/core/agentic_v2_model_voice.py`
+- `batch-runner/scripts/run_agentic_v2_stage.py`
+- `batch-runner/tests/test_agentic_v2_model_voice.py`
 - `batch-runner/gpt54_comparison_preflight.py`
-- `batch-runner/gpt56_sol_codex_pilot_preflight.py`
 - `batch-runner/experiments/execution_envelope/gpt54_sandboxv2_codex_comparison.yaml`
 - `batch-runner/experiments/execution_envelope/gpt56_sol_copilot_codex_pilot.yaml`
 - `batch-runner/tests/test_gpt54_comparison_preflight.py`
-- `batch-runner/tests/test_gpt56_sol_codex_pilot_preflight.py`
 - `tasks/0822_saturday/TASK_GPT_EXECUTION_ENVELOPE_BENCHMARK.md`
 - `tasks/0822_saturday/TASK_NATIVE_CODEX_RUN_PATH.md`
 - `CHANGELOG.md`
@@ -55,105 +46,114 @@ Exactly 16 files differ from that base:
 
 ### Compatibility and Preregistration Boundaries
 
-Omitted and explicit-null controls emit no new overrides. The new fields are
-appended to preserve positional compatibility. Existing provider and sorted
-query overrides retain their bytes and order. The generic
-`condition_a.model.reasoning_effort` is not used as a fallback, so existing
-Foundry experiment files do not acquire a new request.
+Omission and explicit null add no `reasoning` key. Literal pre-change request
+bytes, including key order and the real tool schema, match the captured default
+request. Both existing replay modes are exercised. The historical V2 template,
+request helpers, replay logic, tool definitions, and receipt behavior are
+unchanged.
 
-Effort must be exactly one of `none`, `minimal`, `low`, `medium`, `high`,
-`xhigh`, or `max`. Context must be an integer from 1 through `2**63 - 1`.
-Wrong types, spelling/case/whitespace changes, booleans, numeric strings,
-floats, NaN, infinity, zero, negative values, and overflow are rejected
-without casts or fallback. Preparation retains explicit values unchanged;
-literal and deferred configuration validation, direct executor construction,
-and inference all use the same validation boundary.
+Effort must be exactly one of `none`, `low`, `medium`, `high`, or `xhigh`, as
+documented for [GPT-5.4](https://developers.openai.com/api/docs/models/gpt-5.4).
+The [Responses API reference](https://developers.openai.com/api/reference/resources/responses/methods/create)
+defines the nested `reasoning.effort` field. Its broader vocabulary does not
+establish GPT-5.4 support for `minimal` or `max`; this adapter rejects both.
+Case/whitespace changes, empty or unknown strings, numbers, booleans, lists,
+and mappings are also rejected without casts or fallback. The real stage
+`verdict_for` validates immediately after loading YAML, before other preflight
+checks or client construction; direct voice construction validates too.
 
-The GPT-5.4 plan pins 15 source files, and the Sol plan pins 16, including its
-shared plan reader. Both sets now cover the preparation and inference paths.
-The source boundary advances to this task's immutable base, while grader
-provenance stays at `96b181e1128039891f2cbbd9c26af9701e7e8e22` for GPT-5.4
-and `6ccd4ae346d302e3da0af455a3c5a72ec79a6984` for Sol.
-Task IDs/order, canonical content and input/reference fingerprints, repeats,
-limits, grading configuration, result schemas, record-only costs, and
-null/partial receipts are unchanged. Historical ledgers and sealed evidence
-are untouched.
+The comparison now pins 17 source files. The V2 stage entry point and its
+existing `agentic_v2_stage_one_budget.py` plan reader are newly required and
+digest-checked. Its immutable base advances to this task's starting commit;
+grader provenance remains `96b181e1128039891f2cbbd9c26af9701e7e8e22`.
+The Sol YAML changes only its existing shared-parser digest because it imports
+the GPT-5.4 plan reader. Its contract and 16-file source set are unchanged.
+
+The four five-task runs remain V2 r1, Codex r1, Codex r2, V2 r2. Task IDs/order,
+canonical content and input/reference fingerprints, limits, grader configuration,
+result schemas, record-only costs, and null/partial receipts are unchanged.
+Historical ledgers and sealed evidence are untouched.
 
 ### Verification
 
 The following targeted command ran exactly once:
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider batch-runner/tests/test_codex_requested_model_controls.py::test_codex_requested_model_controls batch-runner/tests/test_gpt54_comparison_preflight.py::test_gpt54_comparison_is_fixed_and_fails_closed batch-runner/tests/test_gpt56_sol_codex_pilot_preflight.py::test_gpt56_sol_copilot_pilot_is_pinned_and_fails_closed
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider batch-runner/tests/test_agentic_v2_model_voice.py::test_v2_requested_reasoning_effort batch-runner/tests/test_gpt54_comparison_preflight.py::test_gpt54_comparison_is_fixed_and_fails_closed
 ```
 
-Result: `105 passed in 22.13s`.
+Result: `55 passed in 14.05s` (19 V2 request cases and 36 comparison cases).
 
-The adapter selector compares literal pre-change golden bytes with and without
-query parameters, checks exact explicit overrides and invalid values, and
-exercises preparation, both configuration-validation paths, direct executor
-construction, and the real inference constructor expression. A fake SDK checks
-the existing `open_runtime` to `start_thread` path without starting a real
-process, authentication command, or model. The two preregistration selectors
-check exact requests, required source pins and digests, and the remaining
-fail-closed boundaries. Both retain `launch_allowed: false` and CLI exit 2;
-the Sol pilot also retains `full_220_allowed: false`.
+The request selector uses the real YAML loader and stage validation, executes
+the stage's original nested `voice_for` constructor extracted unchanged from
+its AST, and captures the real voice's `next_turn` request with the existing
+fake client. Unrelated cost/cohort checks are stand-ins. This does not execute
+the paid driver, authenticate, build a real client, or start a VM. Invalid
+values also exercise the real stage `main()` only through its immediate
+validation refusal, before the free accounting checks; no request is made.
+
+The comparison selector checks exact V2 and Codex request evidence, request
+drift, required pins and digests, and the unchanged launch refusal. It also
+checks the Sol YAML's refreshed parser digest without running the Sol selector.
+Every comparison case retains `launch_allowed: false` and CLI exit 2. No
+separate preflight command, Codex selector, Sol selector, or broad suite ran.
 
 ```bash
-git diff --cached --check a5ed62bd55471c0fd8bdd637c9312315a17ebf4b
+git diff --cached --check 34b3327d8a9beda58754efbf88e6bbf6d643cc60
 ```
 
 The diff check passed. Production code, plans, and tests were unchanged after
-the targeted run. No broad suite or separate preflight ran. No provider
-credentials or Copilot authentication were added. No live capability probe,
-model/grader/VM execution, Azure API/CLI operation, paid workflow, dispatch,
-Project edit, or benchmark launch was performed.
+the targeted run. No live capability probe, authentication, model/grader/VM
+execution, Azure API/CLI operation, workflow dispatch, Project edit, or paid
+experiment was performed.
 
 ### Remaining Blockers and Review Boundary
 
-Both plans remain launch-blocked. The Sol pilot still lacks the GitHub Copilot
-route and verified Max/Long capability. The comparison still lacks verified
-Codex xhigh capability and Sandbox V2 effort forwarding. Both need live
-model/input verification, native call/token caps, dispatch with the pinned
-grading identity, and usage/tariff evidence. Missing prices remain recorded
-as unknown/partial under the existing record-only policy; this change does
-not add a pricing-based spending prohibition.
+Only `v2_reasoning_effort_unwired` was replaced, with
+`v2_reasoning_effort_capability_unverified`. The other five blockers remain:
 
-There is still no compliant post-merge paid command for either plan. The
-remaining wiring requires a separate reviewed change, refreshed source pins,
-and capability/identity evidence before the approved five-task pilot or
-four-run comparison. The pilot cannot advance automatically to 220 tasks.
+- `codex_reasoning_effort_capability_unverified`
+- `codex_native_model_call_and_token_limits_unenforced`
+- `live_deployment_identity_and_input_bytes_not_verified`
+- `comparison_dispatch_and_pinned_grading_not_wired`
+- `comparison_usage_and_tariff_evidence_unverified`
+
+There is still no compliant post-merge paid comparison command. Live
+capability/identity and input evidence, native caps, dispatch/grading wiring,
+and usage/tariff evidence require separate work and a refreshed immutable
+review boundary. Missing prices remain unknown/partial under the record-only
+policy, not a new pricing-based spending prohibition. The Sol pilot's launch
+and 220-task gates are not changed by its parser-digest refresh.
 
 The immutable starting boundary is
-`a5ed62bd55471c0fd8bdd637c9312315a17ebf4b`. A bounded backend review checked
-the forwarding and preregistration changes. That is not leader approval of
-the new committed HEAD. Fresh immutable-HEAD review and automatic CI evidence
-are pending; this record claims no approval, CI success, or merge result.
+`34b3327d8a9beda58754efbf88e6bbf6d643cc60`. A bounded backend review found
+no blocker in the forwarding and preregistration delta. That is not leader
+approval of a new committed HEAD. Fresh immutable-HEAD review and automatic CI
+evidence are pending; this record claims no approval, CI success, or merge result.
 
 ### Skills and Agent Use
 
 The full available skill and repository-agent catalogs were inspected once
-before editing. The matching `llm-systems-engineer` role was applied to the
-adapter implementation and a bounded preregistration review. Its broader
-testing guidance was limited by the owner's explicit targeted-test scope.
-`openai-docs` supplied the official Codex configuration key/type references,
-not evidence of Copilot access or served capability. `experiment-design` was
-applied before configuration changes to preserve the existing study designs
-and distinguish requested settings from verified controls. `im-not-ai-en`
-was applied to the English specification, completion record, and PR wording;
-protected literals and uncertainty were checked manually without an extra
-verification-script run under the bounded validation scope.
+before editing. The matching `llm-systems-engineer` role covered implementation
+and a bounded delta review. The owner's targeted-test limit took precedence
+over its broad-suite guidance. `openai-docs` supplied the official GPT-5.4
+vocabulary and Responses request shape before editing, not live Foundry
+capability evidence. `experiment-design` preserved the comparison's existing
+conditions and distinguished a request from verified control. `im-not-ai-en`
+was applied to the English specification correction, completion record, and
+PR wording. Protected literals and uncertainty were checked manually without
+an extra fidelity-script run under the bounded validation scope.
 
 Experiment-report skills do not apply because this task reports no experiment
 results. Repository-readiness, UI, and animation skills do not apply. No
 grading pipeline, workflow, `core/qa.py`, or HF upload code changed, so no
 grading-engineer delegation or extreme-reasoner decision was required.
 
-## Prior Result: #615 Sol Pilot Source-Pin Review Correction
+## Prior Result: #616 Codex Requested Reasoning and Context Controls
 
-[#615](https://github.com/hyeonsangjeon/gdpval-realworks/pull/615) added the
-shared `gpt54_comparison_preflight.py` plan reader to the Sol pilot's required
-source set and YAML digest pins. The corrected implementation HEAD was
-`50821cdca20999ccf958f00720ead52ca24b5d93`. Its historical single-selector
-result was `40 passed in 10.09s`, with launch still blocked. That result is
-prior evidence, not the result of this task's updated selectors.
+[#616](https://github.com/hyeonsangjeon/gdpval-realworks/pull/616) added optional
+Codex reasoning and context-window forwarding while preserving default
+configuration bytes and both launch refusals. The prior recorded implementation
+HEAD was `b562fa922909d592fa90a05d7d7ec2236c0b1c32`, with
+`105 passed in 22.13s`. That historical evidence is not this task's result;
+the Codex and Sol selectors were not rerun here.

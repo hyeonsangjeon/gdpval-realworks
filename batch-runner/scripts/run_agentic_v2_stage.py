@@ -119,10 +119,13 @@ from core.agentic_v2_instructions import (  # noqa: E402
     resolve_instructions,
     unverified_note,
 )
-# The names only. `AzureFoundryVoice` is imported late, with the Azure client,
-# so that a run which never builds one never loads the SDK; this tuple is a
-# tuple of strings and the plan is checked against it before anything is built.
-from core.agentic_v2_model_voice import REPLAY_FORMATS  # noqa: E402
+# Pure plan checks: replay names and requested Responses fields need no client,
+# route, or credential. Paid client and voice construction stays below the
+# free checks, so invalid settings are refused before either can be built.
+from core.agentic_v2_model_voice import (  # noqa: E402
+    REPLAY_FORMATS,
+    reasoning_request_fields,
+)
 from core.agentic_v2_tool_availability import (  # noqa: E402
     availability_for,
 )
@@ -607,6 +610,10 @@ def shared_assumptions(plan: dict) -> CostAssumptions:
 def verdict_for(plan_path: Path):
     """The same free check the gate runs, run again where the money is."""
     plan = load_stage_one_plan(plan_path)
+    try:
+        reasoning_request_fields((plan.get("model") or {}).get("reasoning_effort"))
+    except ValueError as refusal:
+        raise StageRefused(f"model.{refusal}") from refusal
     assumptions = shared_assumptions(plan)
     catalog = load_task_catalog()
     result = run_stage_one_preflight(
@@ -1322,6 +1329,7 @@ def main() -> int:
                 request_timeout_seconds=ceilings.max_seconds,
                 prices=prices,
                 replay_format=replay_format,
+                reasoning_effort=(plan.get("model") or {}).get("reasoning_effort"),
             )
             voices_by_budget[id(budget)] = voice
             return voice

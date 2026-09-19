@@ -1,7 +1,7 @@
 """Check one preregistration offline. This module cannot launch an experiment.
 
 Exit 2 means the study must not spend, even when its configuration is valid.
-Codex can render the requested effort, but V2 effort, served capabilities and
+Both adapters can render the requested effort, but served capabilities and
 native call limits remain unverified or unwired.
 Keeping that refusal separate from configuration validity prevents a passing
 fixture from being mistaken for a verified Foundry deployment or a launch gate.
@@ -19,6 +19,7 @@ from typing import Any
 import yaml
 
 from core.agentic_v2_conversation_runner import ceilings_from
+from core.agentic_v2_model_voice import reasoning_request_fields
 from core.agentic_v2_preregistration import seal
 from core.codex_runtime_config import (
     PINNED_CODEX_CLI_VERSION,
@@ -32,7 +33,7 @@ from core.execution_envelope_tasks import (
 )
 
 ROOT = Path(__file__).resolve().parents[1]
-BASE_SHA = "a5ed62bd55471c0fd8bdd637c9312315a17ebf4b"
+BASE_SHA = "34b3327d8a9beda58754efbf88e6bbf6d643cc60"
 GRADER_SOURCE_SHA = "96b181e1128039891f2cbbd9c26af9701e7e8e22"
 ENVELOPE = "batch-runner/experiments/execution_envelope/"
 PLAN = ROOT / ENVELOPE / "gpt54_sandboxv2_codex_comparison.yaml"
@@ -49,6 +50,8 @@ REQUIRED_SOURCES = {
     "batch-runner/core/result_projection.py",
     "batch-runner/core/agentic_v2_model_voice.py",
     "batch-runner/core/agentic_v2_conversation_runner.py",
+    "batch-runner/core/agentic_v2_stage_one_budget.py",
+    "batch-runner/scripts/run_agentic_v2_stage.py",
     "batch-runner/core/codex_runtime_config.py",
     "batch-runner/core/codex_runner.py",
     "batch-runner/core/experiment_config.py",
@@ -60,7 +63,7 @@ REQUIRED_SOURCES = {
 # These are findings on BASE_SHA, not user-editable waivers. Removing a blocker
 # requires a reviewed implementation and a new contract, not an enabled flag.
 LAUNCH_BLOCKERS = (
-    "v2_reasoning_effort_unwired",
+    "v2_reasoning_effort_capability_unverified",
     "codex_reasoning_effort_capability_unverified",
     "codex_native_model_call_and_token_limits_unenforced",
     "live_deployment_identity_and_input_bytes_not_verified",
@@ -168,6 +171,9 @@ def inspect_plan(plan: dict[str, Any]) -> dict[str, Any]:
                 "workflow": ".github/workflows/agentic-v2-stage-run.yml",
                 "isolation": "same-host",
                 "replay_format": "faithful",
+                "request": {
+                    "reasoning_effort": expected["model"]["reasoning_effort"],
+                },
             },
             "codex": {
                 "controls": expected,
@@ -213,6 +219,10 @@ def inspect_plan(plan: dict[str, Any]) -> dict[str, Any]:
         "configuration_problems": problems,
         "plan_sha256": seal(plan),
         # Review evidence only: no provider or runtime is constructed here.
+        "requested_v2_responses_fields": (
+            reasoning_request_fields(**plan["conditions"]["sandbox_v2"]["request"])
+            if not problems else None
+        ),
         "requested_codex_config_overrides": (
             list(requested_model_config_overrides(
                 **plan["conditions"]["codex"]["request"]

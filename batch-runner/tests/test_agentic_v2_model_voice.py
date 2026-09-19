@@ -12,9 +12,16 @@ changed underneath it.
 
 from __future__ import annotations
 
+import ast
+import importlib.util
+import json
+import sys
 from decimal import Decimal
+from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
+import yaml
 
 from core.agentic_v2_conversation import (
     AskForTool,
@@ -25,6 +32,7 @@ from core.agentic_v2_conversation import (
 from core.agentic_v2_model_voice import (
     AzureFoundryVoice,
     ResolvedModelDisagrees,
+    reasoning_request_fields,
 )
 from core.agentic_v2_stage_one_budget import StageOneBudget
 from core.execution_envelope_cost import ModelPrice
@@ -477,3 +485,176 @@ def test_arguments_that_are_not_readable_do_not_stop_the_loop():
 
     assert isinstance(reply, AskForTool)
     assert reply.arguments == {}
+
+
+# Literal pre-change request bytes, including key order and the real tool schema.
+# A new optional control must not turn absence into an explicit model default.
+_DEFAULT_REQUEST_BYTES = (
+    b'{"model":"gpt-5.4","instructions":"do the task with the tools you are given",'
+    b'"input":[{"role":"user","content":"write a short report"}],'
+    b'"tools":[{"type":"function","name":"capabilities_query",'
+    b'"description":"Discover actual task-environment capabilities and remaining budgets.",'
+    b'"parameters":{"type":"object","properties":{"kind":{"enum":'
+    b'["commands","runtimes","packages","formats","budgets"]},'
+    b'"query":{"type":"string","maxLength":256},'
+    b'"cursor":{"type":"string","maxLength":128}},"required":["kind"],'
+    b'"additionalProperties":false},"strict":false}],"max_output_tokens":2048,'
+    b'"parallel_tool_calls":false,"timeout":120.0}'
+)
+
+
+@pytest.fixture(scope="module")
+def stage_reasoning_path():
+    """Load the real stage reader and isolate its real per-task constructor.
+
+    The nested constructor is compiled unchanged from the stage script, as in
+    the Codex request-control regression. Running main would require dataset,
+    identity and backend setup; none of those is part of this free request test.
+    """
+    root = Path(__file__).resolve().parents[1]
+    path = root / "scripts" / "run_agentic_v2_stage.py"
+    spec = importlib.util.spec_from_file_location("v2_reasoning_stage", path)
+    assert spec is not None and spec.loader is not None
+    stage = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = stage
+    spec.loader.exec_module(stage)
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    constructors = [
+        node for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef) and node.name == "voice_for"
+    ]
+    assert len(constructors) == 1
+    constructor = compile(
+        ast.Module(body=constructors, type_ignores=[]), str(path), "exec"
+    )
+    main = next(
+        node for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "main"
+    )
+    call_lines = {
+        name: [
+            node.lineno for node in ast.walk(main)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+            and node.func.id == name
+        ]
+        for name in ("verdict_for", "create_typed_azure_client")
+    }
+    assert len(call_lines["verdict_for"]) == 1
+    assert len(call_lines["create_typed_azure_client"]) == 1
+    assert call_lines["verdict_for"][0] < call_lines["create_typed_azure_client"][0]
+    return root, stage, constructor
+
+
+@pytest.mark.parametrize(
+    "controls,valid",
+    [
+        pytest.param({}, True, id="absent-default-bytes"),
+        pytest.param({"reasoning_effort": None}, True, id="null-default-bytes"),
+        *[
+            pytest.param({"reasoning_effort": effort}, True, id=f"effort-{effort}")
+            for effort in ("none", "low", "medium", "high", "xhigh")
+        ],
+        *[
+            pytest.param({"reasoning_effort": value}, False, id=f"invalid-{label}")
+            for label, value in (
+                ("empty", ""), ("case", "XHIGH"), ("space", " xhigh "),
+                ("minimal", "minimal"), ("max", "max"), ("unknown", "ultra"),
+                ("number", 1), ("float", 1.0), ("true", True), ("false", False),
+                ("list", ["xhigh"]), ("mapping", {"effort": "xhigh"}),
+            )
+        ],
+    ],
+)
+def test_v2_requested_reasoning_effort(
+    controls, valid, stage_reasoning_path, monkeypatch, tmp_path,
+):
+    """Raw YAML reaches the stage's constructor and captured Responses call."""
+    root, stage, constructor = stage_reasoning_path
+    template = root / "experiments/execution_envelope/agentic_corrected_harness_plan.yaml"
+    plan = yaml.safe_load(template.read_text(encoding="utf-8"))
+    assert "reasoning_effort" not in plan["model"]
+    plan["model"].update(controls)
+    plan_path = tmp_path / "plan.yaml"
+    plan_path.write_text(yaml.safe_dump(plan), encoding="utf-8")
+
+    # Keep the real YAML loader and effort validation. Unrelated cost/cohort
+    # preflight is a stand-in, and its first entry records validation ordering.
+    reached_free_checks = []
+
+    def assumptions_after_validation(_plan):
+        reached_free_checks.append(True)
+        return object()
+
+    monkeypatch.setattr(stage, "shared_assumptions", assumptions_after_validation)
+    monkeypatch.setattr(
+        stage, "load_task_catalog", lambda: SimpleNamespace(by_task_id=lambda: {})
+    )
+    monkeypatch.setattr(
+        stage, "run_stage_one_preflight",
+        lambda *_args, **_kwargs: SimpleNamespace(may_start=True, chosen=object()),
+    )
+    effort = controls.get("reasoning_effort")
+    client = FakeClient([a_reply()])
+    direct_settings = {
+        "client": client, "deployment": MODEL, "resource": "a-foundry-resource",
+        "budget": a_budget(), "instructions": "do the task with the tools you are given",
+        "max_output_tokens_per_turn": 2048,
+        **controls,
+    }
+    if not valid:
+        with pytest.raises(ValueError, match="reasoning_effort"):
+            reasoning_request_fields(effort)
+        with pytest.raises(ValueError, match="reasoning_effort"):
+            AzureFoundryVoice(**direct_settings)
+        with pytest.raises(stage.StageRefused, match=r"model\.reasoning_effort"):
+            stage.verdict_for(plan_path)
+        monkeypatch.setattr(
+            sys, "argv",
+            [str(root / "scripts/run_agentic_v2_stage.py"), "--stage",
+             "advance_check_5", "--plan", str(plan_path)],
+        )
+        assert stage.main() == 1
+        assert reached_free_checks == []
+        assert client.responses.calls == []
+        return
+
+    loaded, _, _ = stage.verdict_for(plan_path)
+    assert reached_free_checks == [True]
+    assert ("reasoning_effort" in loaded["model"]) == ("reasoning_effort" in controls)
+    assert loaded["model"].get("reasoning_effort") == effort
+    expected_fields = {} if effort is None else {"reasoning": {"effort": effort}}
+    assert reasoning_request_fields(effort) == expected_fields
+
+    # Omitted constructor arguments remain a no-op too, not only plan nulls.
+    direct = AzureFoundryVoice(**direct_settings)
+    direct.next_turn(a_request())
+    expected = json.loads(_DEFAULT_REQUEST_BYTES)
+    expected.update(expected_fields)
+    expected_bytes = json.dumps(expected, separators=(",", ":")).encode("utf-8")
+    if effort is None:
+        assert expected_bytes == _DEFAULT_REQUEST_BYTES
+    assert json.dumps(client.responses.calls[0], separators=(",", ":")).encode() == expected_bytes
+
+    for replay_format in ("paraphrase", "faithful"):
+        captured = FakeClient([a_reply()])
+        namespace = {
+            "AzureFoundryVoice": AzureFoundryVoice,
+            "managed": SimpleNamespace(client=captured),
+            "deployment": loaded["model"]["deployment"],
+            "resource": loaded["azure_connection"]["account"],
+            "instructions": SimpleNamespace(text=direct_settings["instructions"]),
+            "ceilings": SimpleNamespace(max_written_tokens_per_turn=2048, max_seconds=120.0),
+            "prices": {}, "replay_format": replay_format,
+            "voices_by_budget": {}, "plan": loaded,
+        }
+        exec(constructor, namespace)
+        budget = a_budget()
+        voice = namespace["voice_for"](budget)
+        assert namespace["voices_by_budget"][id(budget)] is voice
+        assert voice.reasoning_effort is loaded["model"].get("reasoning_effort")
+        reply = voice.next_turn(a_request())
+        assert isinstance(reply, GaveUp)
+        assert len(captured.responses.calls) == 1
+        payload = captured.responses.calls[0]
+        assert json.dumps(payload, separators=(",", ":")).encode() == expected_bytes
+        assert ("reasoning" in payload) == (effort is not None)
