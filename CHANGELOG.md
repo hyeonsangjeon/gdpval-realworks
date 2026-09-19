@@ -13,6 +13,22 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Wire pre-execution input capture into the GPT-5.4 comparison's Codex path.
+  Generated r1/r2 configs require a typed capture control and an independent
+  Step 2 run ID. Step 1 binds actual prepared/config/parquet/reference bytes;
+  Step 2 recomputes the canonical capture and checks its bytes and digest before
+  provider, auth, or client construction. Final results retain the verified
+  capture digest and attestation linkage before fingerprinting. Prepared and
+  capture files use atomic no-clobber publication; existing files survive a
+  refused rerun. Absent/null controls retain the legacy path. The source set
+  now has 27 pins. After immutable review identified a fixture import that
+  blocked collection, the same targeted offline selector passed on its one
+  corrective rerun: `77 passed in 94.30s`. V2 capture, external identity
+  approval, native bundle-host support, deployment/workflow gates, served
+  capability, native caps, and usage/tariff evidence remain outstanding.
+  Both launch flags stay false; a local capture is not a served-capability
+  attestation or an inference identity approval.
+
 - Add read-only prepared-input attestation for the GPT-5.4 comparison. It
   checks actual pinned parquet and reference bytes against the fixed five-task
   catalog selection, four generated run configurations, two Codex prepared files,
