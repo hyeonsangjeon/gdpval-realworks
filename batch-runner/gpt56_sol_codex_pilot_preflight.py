@@ -66,7 +66,7 @@ DISPATCH_GRADING_IDENTITY = {
     "source_base_sha": "ed6c64f0afb90b0b3a6a9e4719e44184384296ec",
     "plan_file": "foundry-pilot-identity-plan.json",
     "ready_marker": "foundry-pilot-identity-ready.json",
-    "grader_template_source_hash": "db7e9c173dbf7ac60460609a62c7757fc99ee4e42b997f0bd7eac5a964913036",
+    "grader_template_source_hash": "49f882c8b4e19d60c91130431fa06393d9da7d96b15aff25b16755136298f8bc",
     "evidence_boundary": "offline_dispatch_grading_identity",
 }
 IDENTITY_SOURCES = {
@@ -108,6 +108,20 @@ DEPLOYMENT_SOURCES = {
     "batch-runner/core/repository_identity.py",
     "batch-runner/core/agentic_experiments.py",
 }
+PRE_EXECUTION_CAPTURE = {
+    "compiler": "batch-runner/gpt56_pilot_input_capture.py",
+    "source_base_sha": "140cbf4eef59a2b3c6ee731ac3dd4c75d9e005d7",
+    "capture_file": "pilot-pre-execution-input.json",
+    "binding_version": "gpt56-pre-execution-input-v1",
+    "evidence_boundary": "prepared_request_intent_not_wire_or_served_identity",
+}
+CAPTURE_SOURCES = {
+    PRE_EXECUTION_CAPTURE["compiler"],
+    "batch-runner/core/prepared_fingerprint.py",
+    "batch-runner/core/publication_generation.py",
+    "batch-runner/core/data_loader.py",
+    "batch-runner/prepare_dataset.py",
+}
 REQUIRED_SOURCES = {
     BASELINE,
     GRADER,
@@ -132,7 +146,7 @@ REQUIRED_SOURCES = {
     "batch-runner/core/cost_receipts.py",
     "batch-runner/core/result_projection.py",
     "batch-runner/schemas/grade.schema.json",
-} | EVIDENCE_SOURCES | IDENTITY_SOURCES | INPUT_SOURCES | DEPLOYMENT_SOURCES | {CONFIG_BUNDLE["materializer"]}
+} | EVIDENCE_SOURCES | IDENTITY_SOURCES | INPUT_SOURCES | DEPLOYMENT_SOURCES | CAPTURE_SOURCES | {CONFIG_BUNDLE["materializer"]}
 # Findings on BASE_SHA, not editable waivers. Runtime changes need new review.
 LAUNCH_BLOCKERS = (
     "foundry_account_project_deployment_identity_unverified",
@@ -145,6 +159,7 @@ LAUNCH_BLOCKERS = (
     "foundry_usage_and_tariff_mapping_unverified",
     "native_sandbox_and_result_bundle_host_unverified",
     "actual_pilot_deployment_not_prepared",
+    "prepared_request_capture_unverified",
 )
 # Only these local evidence requirements may be satisfied by the intake
 # verifier. The mapping is closed, not inferred from blocker-name substrings.
@@ -163,6 +178,8 @@ INPUT_BUNDLE_BLOCKERS = ("prepared_input_bytes_unverified",)
 INPUT_REFUSAL = "pilot_input_bundle_gate_refused"
 DEPLOYMENT_BINDING_BLOCKERS = ("actual_pilot_deployment_not_prepared",)
 DEPLOYMENT_REFUSAL = "pilot_deployment_binding_gate_refused"
+CAPTURE_BLOCKERS = ("prepared_request_capture_unverified",)
+CAPTURE_REFUSAL = "pilot_pre_execution_capture_gate_refused"
 
 
 class _CLIArgumentsRefused(ValueError):
@@ -219,6 +236,7 @@ def _inspect_plan_only(plan: dict[str, Any]) -> dict[str, Any]:
         "config_bundle": CONFIG_BUNDLE,
         "input_bundle": INPUT_BUNDLE,
         "deployment_binding": DEPLOYMENT_BINDING,
+        "pre_execution_capture": PRE_EXECUTION_CAPTURE,
         "identity": {
             "provider": "azure",
             "model": "gpt-5.6-sol",
@@ -588,7 +606,7 @@ def _deployment_refusal(result: dict[str, Any] | None = None) -> dict[str, Any]:
     return result
 
 
-def inspect_plan(
+def _inspect_plan_with_deployment(
     plan: dict[str, Any], *, evidence_bundle: Path | None = None,
     reviewed_source_sha: str | None = None, as_of: str | None = None,
     identity_bundle: Path | None = None, config_bundle: Path | None = None, input_bundle: Path | None = None,
@@ -634,12 +652,67 @@ def inspect_plan(
         return _deployment_refusal(result)
 
 
+def _capture_refusal(result: dict[str, Any] | None = None) -> dict[str, Any]:
+    if result is None:
+        result = {"configuration_valid": False, "launch_blockers": list(LAUNCH_BLOCKERS)}
+    result.update({
+        "launch_allowed": False, "full_220_allowed": False,
+        "pre_execution_capture_gate": {
+            "capture_complete": False, "capture_sha256": None, "reviewed_source_sha": None,
+            "evaluated_at": None, "cleared_blockers": [], "remaining_blockers": list(result["launch_blockers"]),
+            "evidence_boundary": PRE_EXECUTION_CAPTURE["evidence_boundary"], "refusal_code": CAPTURE_REFUSAL,
+        },
+    })
+    return result
+
+
+def inspect_plan(
+    plan: dict[str, Any], *, evidence_bundle: Path | None = None,
+    reviewed_source_sha: str | None = None, as_of: str | None = None,
+    identity_bundle: Path | None = None, config_bundle: Path | None = None, input_bundle: Path | None = None,
+    deployment_binding: Path | None = None, account_resource_id_file: Path | None = None,
+    project_resource_id_file: Path | None = None, deployment_resource_id_file: Path | None = None,
+    capture_workspace: Path | None = None,
+) -> dict[str, Any]:
+    """Explicit consumption closes prepared intent only, never live wire identity."""
+    options = {"evidence_bundle": evidence_bundle, "reviewed_source_sha": reviewed_source_sha, "as_of": as_of,
+               "identity_bundle": identity_bundle, "config_bundle": config_bundle, "input_bundle": input_bundle,
+               "deployment_binding": deployment_binding, "account_resource_id_file": account_resource_id_file,
+               "project_resource_id_file": project_resource_id_file, "deployment_resource_id_file": deployment_resource_id_file}
+    if capture_workspace is None:
+        return _inspect_plan_with_deployment(plan, **options)
+    result = None
+    try:
+        result = _inspect_plan_with_deployment(plan, **options)
+        if (not result["configuration_valid"] or any(value is None for value in options.values())
+                or result.get("deployment_binding_gate", {}).get("deployment_binding_complete") is not True):
+            return _capture_refusal(result)
+        from gpt56_pilot_input_capture import PilotCaptureSources, verify_pilot_input_capture
+
+        verified = verify_pilot_input_capture(
+            PilotCaptureSources(**options), workspace=capture_workspace, dataset_root=input_bundle, plan=plan,
+        )
+        remaining = [name for name in result["launch_blockers"] if name not in CAPTURE_BLOCKERS]
+        gate = {"capture_complete": True, "capture_sha256": verified["sha256"],
+                "reviewed_source_sha": verified["reviewed_source_sha"], "evaluated_at": as_of,
+                "cleared_blockers": list(CAPTURE_BLOCKERS), "remaining_blockers": remaining,
+                "evidence_boundary": verified["evidence_boundary"]}
+        result["launch_blockers"] = remaining
+        for name in ("evidence_gate", "identity_plan_gate", "input_bundle_gate", "deployment_binding_gate"):
+            result[name]["remaining_blockers"] = remaining
+        result["pre_execution_capture_gate"] = gate
+        return result
+    except Exception:
+        return _capture_refusal(result)
+
+
 def main(argv: list[str] | None = None) -> int:
     arguments = sys.argv[1:] if argv is None else argv
     evidence_requested = False
     identity_requested = False
     input_requested = False
     deployment_requested = False
+    capture_requested = False
     # A misspelled option can conceal which mode was intended. All argument
     # errors are non-echoing; valid plan-only invocations keep their report bytes.
     parser = _SafeArgumentParser(description=__doc__)
@@ -651,10 +724,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--config-bundle", type=Path, help="Verified inert pilot configuration bundle")
     parser.add_argument("--input-bundle", type=Path, help="Published five-task local input bundle")
     parser.add_argument("--deployment-binding", type=Path, help="Published local deployment binding")
+    parser.add_argument("--capture-workspace", type=Path, help="Local Step 1 prepared request capture (not launch approval)")
     for role in ("account", "project", "deployment"):
         parser.add_argument("--" + role + "-resource-id-file", type=Path, help="Private local resource ID bytes")
     try:
         args = parser.parse_args(arguments)
+        capture_requested = args.capture_workspace is not None
         evidence_requested = any(value is not None for value in (
             args.evidence_bundle, args.reviewed_source_sha, args.as_of,
         ))
@@ -669,19 +744,20 @@ def main(argv: list[str] | None = None) -> int:
             config_bundle=args.config_bundle, input_bundle=args.input_bundle,
             deployment_binding=args.deployment_binding, account_resource_id_file=args.account_resource_id_file,
             project_resource_id_file=args.project_resource_id_file, deployment_resource_id_file=args.deployment_resource_id_file,
+            capture_workspace=args.capture_workspace,
         )
     except Exception as error:
         if isinstance(error, _CLIArgumentsRefused):
             evidence_requested = True
-        if not (evidence_requested or identity_requested or input_requested or deployment_requested) and not isinstance(error, (OSError, ValueError, KeyError, TypeError, yaml.YAMLError)):
+        if not (evidence_requested or identity_requested or input_requested or deployment_requested or capture_requested) and not isinstance(error, (OSError, ValueError, KeyError, TypeError, yaml.YAMLError)):
             raise
-        result = _deployment_refusal() if deployment_requested else _input_refusal() if input_requested else _identity_refusal() if identity_requested else _evidence_refusal() if evidence_requested else {
+        result = _capture_refusal() if capture_requested else _deployment_refusal() if deployment_requested else _input_refusal() if input_requested else _identity_refusal() if identity_requested else _evidence_refusal() if evidence_requested else {
             "configuration_valid": False,
             "launch_allowed": False,
             "full_220_allowed": False,
             "error": str(error),
         }
-    print(_canonical_json(result) if evidence_requested or identity_requested or input_requested or deployment_requested else json.dumps(result, indent=2, ensure_ascii=False))
+    print(_canonical_json(result) if evidence_requested or identity_requested or input_requested or deployment_requested or capture_requested else json.dumps(result, indent=2, ensure_ascii=False))
     return 2  # No paid pilot or 220-task run can be launched by this module.
 
 

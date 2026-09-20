@@ -55,7 +55,7 @@ from core.config import (
 from core.agentic_authorization import task_request_sha256
 from core.codex_runner import RATE_LIMIT_KINDS
 from core.executor import TaskExecutor
-from core.experiment_config import CodexComparisonCapture
+from core.experiment_config import CodexComparisonCapture, PilotInputCapture
 from core.agentic_experiments import (
     AGENTIC_BASELINE_ID,
     AGENTIC_EXPERIMENT_IDS,
@@ -2884,12 +2884,34 @@ def _comparison_input_gate(
     )
 
 
+def _pilot_input_gate(
+    prepared: dict, *, pilot_capture_sources=None, condition_key: str = "condition_a",
+    execution_mode: str | None = None, max_retries: int | None = None,
+    resume_max_rounds: int | None = None, resume: bool = True, wall_timeout: int | None = None,
+) -> dict | None:
+    execution = prepared.get("execution") or {}
+    if (pilot_capture_sources is None and execution.get("pilot_input_capture") is None
+            and prepared.get("experiment_id") != PilotInputCapture.RUN_ID):
+        return None  # Legacy absent/null: no extra imports, file reads or fields.
+    from gpt56_pilot_input_capture import verify_pilot_input_capture
+
+    return verify_pilot_input_capture(
+        pilot_capture_sources, workspace=WORKSPACE_DIR, dataset_root=DEFAULT_LOCAL_PATH,
+        prepared=prepared, condition_key=condition_key, execution_mode=execution_mode,
+        max_retries=max_retries, resume_max_rounds=resume_max_rounds, resume=resume, wall_timeout=wall_timeout,
+    )
+
+
 def validate_restored_checkpoint(
-    condition_key: str = "condition_a", comparison_run_id: str | None = None,
+    condition_key: str = "condition_a", comparison_run_id: str | None = None, *, pilot_capture_sources=None,
 ) -> dict:
     """Validate a restored relay checkpoint without constructing a model client."""
     prepared_path = WORKSPACE_DIR / "step1_tasks_prepared.json"
-    if comparison_run_id is not None:
+    if pilot_capture_sources is not None:
+        from gpt56_pilot_input_capture import read_pilot_prepared
+
+        prepared = read_pilot_prepared(prepared_path)
+    elif comparison_run_id is not None:
         from gpt54_codex_input_capture import read_codex_prepared
 
         prepared = read_codex_prepared(prepared_path)
@@ -2898,6 +2920,7 @@ def validate_restored_checkpoint(
             prepared = json.load(stream)
     # The fixed comparison forbids relay/resume. Refuse before route/auth
     # preflight rather than attaching a new capture to old completed rows.
+    _pilot_input_gate(prepared, pilot_capture_sources=pilot_capture_sources, condition_key=condition_key)
     _comparison_input_gate(prepared, comparison_run_id=comparison_run_id, condition_key=condition_key)
     tasks = prepared.get("tasks")
     condition = prepared.get(condition_key)
@@ -3053,6 +3076,7 @@ def run_inference(
     verbose: bool = False,
     wall_timeout: int = None,
     comparison_run_id: str | None = None,
+    *, pilot_capture_sources=None,
 ):
     with _Step2RuntimeResources() as runtime_resources:
         return _run_inference_impl(
@@ -3064,6 +3088,7 @@ def run_inference(
             verbose=verbose,
             wall_timeout=wall_timeout,
             **({"comparison_run_id": comparison_run_id} if comparison_run_id is not None else {}),
+            **({"pilot_capture_sources": pilot_capture_sources} if pilot_capture_sources is not None else {}),
             runtime_resources=runtime_resources,
         )
 
@@ -3078,6 +3103,7 @@ def _run_inference_impl(
     wall_timeout: int = None,
     comparison_run_id: str | None = None,
     *,
+    pilot_capture_sources=None,
     runtime_resources: _Step2RuntimeResources,
 ):
     """Run inference for all prepared tasks with multi-round resume.
@@ -3103,11 +3129,15 @@ def _run_inference_impl(
 
     # 1. Load prepared tasks
     prepared_path = WORKSPACE_DIR / "step1_tasks_prepared.json"
-    if not prepared_path.exists():
+    if pilot_capture_sources is None and not prepared_path.exists():
         print(f"❌ {prepared_path} not found. Run step1_prepare_tasks.sh first.")
         sys.exit(1)
 
-    if comparison_run_id is not None:
+    if pilot_capture_sources is not None:
+        from gpt56_pilot_input_capture import read_pilot_prepared
+
+        prepared = read_pilot_prepared(prepared_path)
+    elif comparison_run_id is not None:
         from gpt54_codex_input_capture import read_codex_prepared
 
         prepared = read_codex_prepared(prepared_path)
@@ -3115,11 +3145,19 @@ def _run_inference_impl(
         with open(prepared_path, "r", encoding="utf-8") as f:
             prepared = json.load(f)
 
-    verified_input_capture = _comparison_input_gate(
-        prepared, comparison_run_id=comparison_run_id, condition_key=condition_key,
+    verified_input_capture = _pilot_input_gate(
+        prepared, pilot_capture_sources=pilot_capture_sources, condition_key=condition_key,
         execution_mode=execution_mode, max_retries=max_retries,
         resume_max_rounds=resume_max_rounds, resume=resume, wall_timeout=wall_timeout,
     )
+    if verified_input_capture is None:
+        verified_input_capture = _comparison_input_gate(
+            prepared, comparison_run_id=comparison_run_id, condition_key=condition_key,
+            execution_mode=execution_mode, max_retries=max_retries,
+            resume_max_rounds=resume_max_rounds, resume=resume, wall_timeout=wall_timeout,
+        )
+    elif comparison_run_id is not None:
+        raise ValueError("pilot_comparison_override_refused")
 
     tasks = prepared["tasks"]
     condition = prepared[condition_key]
