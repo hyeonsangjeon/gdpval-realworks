@@ -203,7 +203,7 @@ source_pins:
   batch-runner/core/codex_runner.py: a5e95775f8b5065307c625fb532677517e57217c9efc016f0135a06abd82377e
   batch-runner/core/codex_cost.py: 1a10f4ae516fec5a7d93692e56d0727452a5fdc314c0b915647c5d3545ac0029
   batch-runner/core/executor.py: 0eb0060521191ceceaf08ad8201ece226ae4cd31c46c21ae64d72ae390b94d7b
-  batch-runner/step1_prepare_tasks.py: 6924ccadb7bf0f350bad3a99703e9a6fb3221edd674a3031df0d46944c279360
+  batch-runner/step1_prepare_tasks.py: c487fd25710155e5bbf07461dd0c3c2d806babe1a64e8ca7cd7931c50461c742
   batch-runner/step2_run_inference.py: eb3262a0915b88ae4500ef5654967ed29d3cb71d13947f810090108724ff8af3
   batch-runner/core/cost_receipts.py: 4b936516da622ceaf8cf8d5e10d2dd1b69ded831b4143557b6431a197bab9cbe
   batch-runner/core/result_projection.py: 1b47c4ee0f6d050e5edd4ac5a301203ba834c8d159b1557b04d83046ca965ec6

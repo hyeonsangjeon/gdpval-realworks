@@ -152,5 +152,5 @@ source_pins:
   batch-runner/core/codex_runner.py: a5e95775f8b5065307c625fb532677517e57217c9efc016f0135a06abd82377e
   batch-runner/core/experiment_config.py: d05fb9d84bc9c7ec203f2db769ed0570fab005044dfdce32842cc9e23bddec91
   batch-runner/core/executor.py: 0eb0060521191ceceaf08ad8201ece226ae4cd31c46c21ae64d72ae390b94d7b
-  batch-runner/step1_prepare_tasks.py: 6924ccadb7bf0f350bad3a99703e9a6fb3221edd674a3031df0d46944c279360
+  batch-runner/step1_prepare_tasks.py: c487fd25710155e5bbf07461dd0c3c2d806babe1a64e8ca7cd7931c50461c742
   batch-runner/step2_run_inference.py: eb3262a0915b88ae4500ef5654967ed29d3cb71d13947f810090108724ff8af3

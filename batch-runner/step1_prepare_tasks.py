@@ -95,7 +95,9 @@ def _prepare_tasks(config_path: str, *, pilot_capture_sources=None) -> dict:
         )
     else:
         config = ExperimentConfig.from_yaml(config_path)
-        if config.experiment_id == PilotInputCapture.RUN_ID or config.execution.pilot_input_capture is not None:
+        execution = getattr(config, "execution", None)
+        pilot_control = getattr(execution, "pilot_input_capture", None)
+        if config.experiment_id == PilotInputCapture.RUN_ID or pilot_control is not None:
             raise ValueError("pilot_capture_sources_required")
     validation_errors = config.validate()
     if validation_errors:
