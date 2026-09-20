@@ -78,6 +78,12 @@ IDENTITY_SOURCES = {
     "batch-runner/prompts/grader_judge.md",
     "batch-runner/prompts/grader_judge_v2.md",
 }
+CONFIG_BUNDLE = {
+    "materializer": "batch-runner/gpt56_pilot_config_bundle.py",
+    "source_base_sha": "1c038f8f46df3936228cbeb7bc36a0b8aef61337",
+    "ready_marker": "pilot-config-bundle-ready.json",
+    "evidence_boundary": "offline_pilot_config_bundle",
+}
 REQUIRED_SOURCES = {
     BASELINE,
     GRADER,
@@ -102,7 +108,7 @@ REQUIRED_SOURCES = {
     "batch-runner/core/cost_receipts.py",
     "batch-runner/core/result_projection.py",
     "batch-runner/schemas/grade.schema.json",
-} | EVIDENCE_SOURCES | IDENTITY_SOURCES
+} | EVIDENCE_SOURCES | IDENTITY_SOURCES | {CONFIG_BUNDLE["materializer"]}
 # Findings on BASE_SHA, not editable waivers. Runtime changes need new review.
 LAUNCH_BLOCKERS = (
     "foundry_account_project_deployment_identity_unverified",
@@ -181,6 +187,7 @@ def _inspect_plan_only(plan: dict[str, Any]) -> dict[str, Any]:
         "launch_enabled": False,
         "evidence_intake": EVIDENCE_INTAKE,
         "dispatch_grading_identity": DISPATCH_GRADING_IDENTITY,
+        "config_bundle": CONFIG_BUNDLE,
         "identity": {
             "provider": "azure",
             "model": "gpt-5.6-sol",
