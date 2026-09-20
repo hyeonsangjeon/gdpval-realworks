@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Offline Foundry pilot evidence intake, not provider attestation or launch approval",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "reviewed_source_sha", "plan_base_sha", "plan_sha256", "run_id", "evaluated_at", "requested", "claims"],
+  "properties": {
+    "schema_version": {"const": "foundry-pilot-evidence-intake-v1"},
+    "reviewed_source_sha": {"$ref": "#/$defs/commit"},
+    "plan_base_sha": {"$ref": "#/$defs/commit"},
+    "plan_sha256": {"$ref": "#/$defs/digest"},
+    "run_id": {"const": "gpt56_sol_foundry_codex_pilot5_v1"},
+    "evaluated_at": {"$ref": "#/$defs/time"},
+    "requested": {
+      "const": {"provider": "azure", "model": "gpt-5.6-sol", "harness": "codex", "reasoning_effort": "max", "model_context_window": 1000000, "credential_policy": "repository_approved_entra_only"}
+    },
+    "claims": {
+      "type": "array", "minItems": 6, "maxItems": 6,
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["role", "artifact"],
+        "properties": {
+          "role": {"enum": ["identity", "reasoning", "context", "native_caps", "usage", "tariff"]},
+          "artifact": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/file"}]}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}(?![\\s\\S])"},
+    "commit": {"type": "string", "pattern": "^[0-9a-f]{40}(?![\\s\\S])"},
+    "time": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z(?![\\s\\S])"},
+    "nullable_time": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/time"}]},
+    "positive": {"type": ["integer", "null"], "minimum": 1},
+    "count": {"type": ["integer", "null"], "minimum": 0},
+    "meter": {"type": ["string", "null"], "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?![\\s\\S])"},
+    "currency": {"enum": [null, "USD", "EUR", "GBP", "JPY", "KRW", "CAD", "AUD", "CHF", "INR", "BRL", "CNY"]},
+    "region": {"enum": [null, "eastus", "eastus2", "westus", "westus2", "westus3", "centralus", "northcentralus", "southcentralus", "westcentralus", "swedencentral", "switzerlandnorth", "westeurope", "northeurope", "francecentral", "germanywestcentral", "uksouth", "ukwest", "japaneast", "japanwest", "koreacentral", "australiaeast", "canadacentral", "eastasia", "southeastasia", "brazilsouth", "southafricanorth", "centralindia", "southindia", "uaenorth"]},
+    "file": {
+      "type": "object", "additionalProperties": false, "required": ["path", "size", "sha256"],
+      "properties": {
+        "path": {"enum": ["artifacts/identity.json", "artifacts/reasoning.json", "artifacts/context.json", "artifacts/native_caps.json", "artifacts/usage.json", "artifacts/tariff.json"]},
+        "size": {"type": "integer", "minimum": 1, "maximum": 65536},
+        "sha256": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "subject": {
+      "type": "object", "additionalProperties": false,
+      "required": ["provider", "account", "project", "deployment", "served_model", "served_model_version"],
+      "properties": {
+        "provider": {"const": "azure"},
+        "account": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/resource_identity"}]},
+        "project": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/resource_identity"}]},
+        "deployment": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/resource_identity"}]},
+        "served_model": {"enum": [null, "gpt-5.6-sol"]},
+        "served_model_version": {"type": ["string", "null"], "maxLength": 32, "pattern": "^[0-9]+([.-][0-9]+)*(?![\\s\\S])"}
+      }
+    },
+    "resource_identity": {
+      "description": "SHA256 of exact UTF-8 externally recorded resource ID bytes, without normalization. Not a file digest or identity approval.",
+      "type": "object", "additionalProperties": false, "required": ["resource_id_sha256"],
+      "properties": {"resource_id_sha256": {"$ref": "#/$defs/digest"}}
+    },
+    "reasoning": {
+      "type": "object", "additionalProperties": false, "required": ["reasoning_effort", "response_status", "response_id_sha256"],
+      "properties": {
+        "reasoning_effort": {"enum": [null, "max"]}, "response_status": {"enum": [null, "completed"]},
+        "response_id_sha256": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/digest"}]}
+      }
+    },
+    "context": {
+      "type": "object", "additionalProperties": false, "required": ["scope", "accepted_input_tokens", "accepted_output_tokens", "unit", "response_status", "response_id_sha256"],
+      "properties": {
+        "scope": {"enum": [null, "single_response"]},
+        "response_id_sha256": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/digest"}]},
+        "accepted_input_tokens": {"$ref": "#/$defs/count"}, "accepted_output_tokens": {"$ref": "#/$defs/count"},
+        "unit": {"enum": [null, "tokens"]}, "response_status": {"enum": [null, "completed"]}
+      }
+    },
+    "native_caps": {
+      "type": "object", "additionalProperties": false,
+      "required": ["scope", "enforcement", "model_calls", "input_tokens", "output_tokens", "call_unit", "token_unit"],
+      "properties": {
+        "scope": {"enum": [null, "per_attempt"]}, "enforcement": {"enum": [null, "native"]},
+        "model_calls": {"$ref": "#/$defs/positive"}, "input_tokens": {"$ref": "#/$defs/positive"}, "output_tokens": {"$ref": "#/$defs/positive"},
+        "call_unit": {"enum": [null, "calls"]}, "token_unit": {"enum": [null, "tokens"]}
+      }
+    },
+    "usage_meter": {
+      "type": "object", "additionalProperties": false, "required": ["meter_id", "quantity", "unit"],
+      "properties": {"meter_id": {"$ref": "#/$defs/meter"}, "quantity": {"$ref": "#/$defs/count"}, "unit": {"enum": [null, "tokens"]}}
+    },
+    "rate": {
+      "type": "object", "additionalProperties": false, "required": ["meter_id", "amount", "per_tokens"],
+      "properties": {
+        "meter_id": {"$ref": "#/$defs/meter"},
+        "amount": {"type": ["string", "null"], "maxLength": 32, "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?(?![\\s\\S])"},
+        "per_tokens": {"$ref": "#/$defs/positive"}
+      }
+    },
+    "usage": {
+      "type": "object", "additionalProperties": false,
+      "required": ["currency", "region", "meters", "partial_reasons"],
+      "properties": {
+        "currency": {"$ref": "#/$defs/currency"}, "region": {"$ref": "#/$defs/region"},
+        "partial_reasons": {"type": "array", "uniqueItems": true, "items": {"enum": ["usage_absent", "usage_partial", "price_missing", "call_reachability_unknown"]}},
+        "meters": {
+          "type": "object", "additionalProperties": false, "required": ["input_tokens", "cached_input_tokens", "output_tokens"],
+          "properties": {"input_tokens": {"$ref": "#/$defs/usage_meter"}, "cached_input_tokens": {"$ref": "#/$defs/usage_meter"}, "output_tokens": {"$ref": "#/$defs/usage_meter"}}
+        }
+      }
+    },
+    "tariff": {
+      "type": "object", "additionalProperties": false,
+      "required": ["currency", "region", "effective_at", "expires_at", "tariff_source", "rates"],
+      "properties": {
+        "currency": {"$ref": "#/$defs/currency"}, "region": {"$ref": "#/$defs/region"},
+        "effective_at": {"$ref": "#/$defs/nullable_time"}, "expires_at": {"$ref": "#/$defs/nullable_time"},
+        "tariff_source": {"enum": [null, "azure_price_sheet", "azure_retail_prices", "foundry_contract_schedule"]},
+        "rates": {
+          "type": "object", "additionalProperties": false, "required": ["input_tokens", "cached_input_tokens", "output_tokens"],
+          "properties": {"input_tokens": {"$ref": "#/$defs/rate"}, "cached_input_tokens": {"$ref": "#/$defs/rate"}, "output_tokens": {"$ref": "#/$defs/rate"}}
+        }
+      }
+    },
+    "artifact": {
+      "type": "object", "additionalProperties": false,
+      "required": ["role", "source_kind", "issued_at", "observed_at", "valid_until", "subject", "documented", "observed"],
+      "properties": {
+        "role": {"enum": ["identity", "reasoning", "context", "native_caps", "usage", "tariff"]},
+        "source_kind": {"enum": [null, "foundry_identity_export", "foundry_response_export", "codex_native_enforcement_export", "foundry_usage_export", "foundry_tariff_export", "documentation"]},
+        "issued_at": {"$ref": "#/$defs/nullable_time"}, "observed_at": {"$ref": "#/$defs/nullable_time"}, "valid_until": {"$ref": "#/$defs/nullable_time"},
+        "subject": {"$ref": "#/$defs/subject"}, "documented": {}, "observed": {}
+      }
+    }
+  }
+}

@@ -21,6 +21,7 @@ from gpt56_sol_codex_pilot_preflight import (
     ACTIVE_PLAN,
     BASELINE,
     ENVELOPE,
+    EVIDENCE_SOURCES,
     HISTORICAL_PLAN,
     LAUNCH_BLOCKERS,
     PLAN,
@@ -34,6 +35,7 @@ from gpt56_sol_codex_pilot_preflight import (
 
 PLAN_READER_SOURCE = "batch-runner/gpt54_comparison_preflight.py"
 ADDED_SOURCES = (
+    *sorted(EVIDENCE_SOURCES),
     HISTORICAL_PLAN,
     "batch-runner/gpt56_sol_codex_pilot_preflight.py",
     "batch-runner/core/agentic_v2_preregistration.py",
@@ -242,7 +244,7 @@ def test_gpt56_sol_foundry_pilot_is_pinned_and_fails_closed(
     if not path:
         assert main([]) == 2
         assert json.loads(capsys.readouterr().out) == result
-        assert len(REQUIRED_SOURCES) == 23
+        assert len(REQUIRED_SOURCES) == 30
         assert set(plan["source_pins"]) == REQUIRED_SOURCES
         assert PLAN_READER_SOURCE in REQUIRED_SOURCES
         assert PLAN_READER_SOURCE in plan["source_pins"]

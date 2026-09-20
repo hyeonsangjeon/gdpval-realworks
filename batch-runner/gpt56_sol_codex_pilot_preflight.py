@@ -43,6 +43,23 @@ PLAN = ROOT / ACTIVE_PLAN
 RUN_ID = "gpt56_sol_foundry_codex_pilot5_v1"
 BASELINE = "batch-runner/experiments/exp035_codex_foundry_full220.yaml"
 GRADER = "batch-runner/grading_configs/exp035_codex_foundry_full220_v2_sol_max.yaml"
+EVIDENCE_INTAKE = {
+    "schema": "batch-runner/schemas/foundry-pilot-evidence.schema.json",
+    "compiler": "batch-runner/gpt56_foundry_evidence_intake.py",
+    "source_base_sha": "d8fd52d9c75687a8e088748c589f9a9a07834a41",
+    "ready_marker": "foundry-pilot-evidence-ready.json",
+    "required_roles": ["identity", "reasoning", "context", "native_caps", "usage", "tariff"],
+    "evidence_boundary": "offline_local_consistency",
+}
+EVIDENCE_SOURCES = {
+    EVIDENCE_INTAKE["schema"],
+    EVIDENCE_INTAKE["compiler"],
+    "batch-runner/gpt54_codex_input_capture.py",
+    "batch-runner/gpt54_run_config_bundle.py",
+    "batch-runner/gpt54_v2_grading_input.py",
+    "batch-runner/core/inference_manifest.py",
+    "batch-runner/core/reference_integrity.py",
+}
 REQUIRED_SOURCES = {
     BASELINE,
     GRADER,
@@ -67,7 +84,7 @@ REQUIRED_SOURCES = {
     "batch-runner/core/cost_receipts.py",
     "batch-runner/core/result_projection.py",
     "batch-runner/schemas/grade.schema.json",
-}
+} | EVIDENCE_SOURCES
 # Findings on BASE_SHA, not editable waivers. Runtime changes need new review.
 LAUNCH_BLOCKERS = (
     "foundry_account_project_deployment_identity_unverified",
@@ -121,6 +138,7 @@ def inspect_plan(plan: dict[str, Any]) -> dict[str, Any]:
         "baseline": BASELINE,
         "owner_approved_eventual_execution": True,
         "launch_enabled": False,
+        "evidence_intake": EVIDENCE_INTAKE,
         "identity": {
             "provider": "azure",
             "model": "gpt-5.6-sol",
