@@ -1860,6 +1860,9 @@ JSON. No raw evidence, resource/response hashes, endpoints or credentials are
 included. Every evidence refusal retains all nine blockers and uses
 `foundry_evidence_gate_refused`; unverified digest/SHA/time fields remain null.
 Argument and plan-loading failures in evidence mode also use that static code.
+All CLI argument errors use the non-echoing refusal path, since a misspelled
+option cannot reliably identify the intended mode. Valid plan-only invocations
+retain their existing report bytes.
 
 An example offline invocation, not a launch command:
 

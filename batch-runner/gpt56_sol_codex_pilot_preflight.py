@@ -108,13 +108,16 @@ EVIDENCE_BLOCKER_ROLES = {
     "foundry_usage_and_tariff_mapping_unverified": ("usage", "tariff"),
 }
 EVIDENCE_REFUSAL = "foundry_evidence_gate_refused"
-EVIDENCE_OPTIONS = ("--evidence-bundle", "--reviewed-source-sha", "--as-of")
 
 
-class _EvidenceArgumentParser(argparse.ArgumentParser):
+class _CLIArgumentsRefused(ValueError):
+    """An argument error cannot safely identify the caller's intended mode."""
+
+
+class _SafeArgumentParser(argparse.ArgumentParser):
     def error(self, message: str) -> None:
         # Never repeat arguments that might contain evidence or credentials.
-        raise ValueError(EVIDENCE_REFUSAL)
+        raise _CLIArgumentsRefused(EVIDENCE_REFUSAL)
 
 
 def _registration_problems() -> list[str]:
@@ -394,28 +397,26 @@ def inspect_plan(
 
 def main(argv: list[str] | None = None) -> int:
     arguments = sys.argv[1:] if argv is None else argv
-    # Include accepted abbreviations and misspelled evidence-option suffixes
-    # in the safe error path. Legacy invocations keep their parser/output bytes.
-    evidence_requested = any(
-        argument.startswith("--") and any(
-            option.startswith(argument.partition("=")[0])
-            or argument.partition("=")[0].startswith(option)
-            for option in EVIDENCE_OPTIONS
-        ) for argument in arguments
-    )
-    parser_type = _EvidenceArgumentParser if evidence_requested else argparse.ArgumentParser
-    parser = parser_type(description=__doc__)
+    evidence_requested = False
+    # A misspelled option can conceal which mode was intended. All argument
+    # errors are non-echoing; valid plan-only invocations keep their report bytes.
+    parser = _SafeArgumentParser(description=__doc__)
     parser.add_argument("--plan", type=Path, default=PLAN)
     parser.add_argument("--evidence-bundle", type=Path, help="Published local Foundry evidence bundle")
     parser.add_argument("--reviewed-source-sha", help="Externally reviewed full 40-hex source SHA")
     parser.add_argument("--as-of", help="Externally supplied UTC time, YYYY-MM-DDTHH:MM:SSZ")
     try:
         args = parser.parse_args(arguments)
+        evidence_requested = any(value is not None for value in (
+            args.evidence_bundle, args.reviewed_source_sha, args.as_of,
+        ))
         result = inspect_plan(
             load_plan(args.plan), evidence_bundle=args.evidence_bundle,
             reviewed_source_sha=args.reviewed_source_sha, as_of=args.as_of,
         )
     except Exception as error:
+        if isinstance(error, _CLIArgumentsRefused):
+            evidence_requested = True
         if not evidence_requested and not isinstance(error, (OSError, ValueError, KeyError, TypeError, yaml.YAMLError)):
             raise
         result = _evidence_refusal() if evidence_requested else {

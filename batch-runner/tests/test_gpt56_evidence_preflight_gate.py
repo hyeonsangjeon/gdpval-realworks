@@ -348,7 +348,7 @@ def test_path_inventory_and_partial_destinations_fail_closed(plan, bundle, tmp_p
 
 @pytest.mark.parametrize("case", [
     "argument", "missing-value", "missing-group", "bad-plan", "missing-plan", "secret-artifact", "exception",
-    "--evidence-bundlee", "--reviewed-source-shaa", "--as-off", "abbreviation",
+    "--evidence-bundlee", "--evidence-bundel", "--reviewed-source-shaa", "--as-off", "abbreviation",
 ])
 def test_evidence_cli_refusals_never_echo_untrusted_values(plan, bundle, tmp_path, capsys, monkeypatch, case):
     arguments = ["--evidence-bundle", str(bundle), "--reviewed-source-sha", REVIEWED, "--as-of", AS_OF]
