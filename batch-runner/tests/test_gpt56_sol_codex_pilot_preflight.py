@@ -244,7 +244,7 @@ def test_gpt56_sol_foundry_pilot_is_pinned_and_fails_closed(
     if not path:
         assert main([]) == 2
         assert json.loads(capsys.readouterr().out) == result
-        assert len(REQUIRED_SOURCES) == 38
+        assert len(REQUIRED_SOURCES) == 43
         assert set(plan["source_pins"]) == REQUIRED_SOURCES
         assert PLAN_READER_SOURCE in REQUIRED_SOURCES
         assert PLAN_READER_SOURCE in plan["source_pins"]
@@ -310,7 +310,8 @@ def test_gpt56_sol_foundry_pilot_is_pinned_and_fails_closed(
             "foundry_served_model_version_unverified",
             "max_and_long_1m_capability_unverified",
             "native_call_and_token_limits_unresolved",
-            "live_identity_and_input_bytes_unverified",
+            "prepared_input_bytes_unverified",
+            "live_inference_identity_and_wire_unverified",
             "pilot_dispatch_and_grading_identity_not_wired",
             "foundry_usage_and_tariff_mapping_unverified",
             "native_sandbox_and_result_bundle_host_unverified",

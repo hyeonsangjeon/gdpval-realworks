@@ -19,20 +19,22 @@ from .test_gpt56_foundry_evidence_intake import (
 from .test_gpt56_sol_codex_pilot_preflight import offline_only
 
 
-# Frozen pre-gate order, independent of the production mapping and constants.
+# Closed order, independent of production constants; local inputs and live
+# consumption now retain the two parts of the former combined requirement.
 ALL_BLOCKERS = [
     "foundry_account_project_deployment_identity_unverified",
     "foundry_served_model_version_unverified",
     "max_and_long_1m_capability_unverified",
     "native_call_and_token_limits_unresolved",
-    "live_identity_and_input_bytes_unverified",
+    "prepared_input_bytes_unverified",
+    "live_inference_identity_and_wire_unverified",
     "pilot_dispatch_and_grading_identity_not_wired",
     "foundry_usage_and_tariff_mapping_unverified",
     "native_sandbox_and_result_bundle_host_unverified",
     "actual_pilot_deployment_not_prepared",
 ]
-CLEARED = [ALL_BLOCKERS[index] for index in (0, 1, 2, 3, 6)]
-REMAINING = [ALL_BLOCKERS[index] for index in (4, 5, 7, 8)]
+CLEARED = [ALL_BLOCKERS[index] for index in (0, 1, 2, 3, 7)]
+REMAINING = [ALL_BLOCKERS[index] for index in (4, 5, 6, 8, 9)]
 SENTINEL = "private-evidence-value-DO-NOT-ECHO"
 
 
@@ -184,7 +186,7 @@ def test_complete_bundle_clears_exactly_five_local_evidence_requirements(
     assert pilot.EVIDENCE_BLOCKER_ROLES == {
         ALL_BLOCKERS[0]: ("identity",), ALL_BLOCKERS[1]: ("identity",),
         ALL_BLOCKERS[2]: ("reasoning", "context"), ALL_BLOCKERS[3]: ("native_caps",),
-        ALL_BLOCKERS[6]: ("usage", "tariff"),
+        ALL_BLOCKERS[7]: ("usage", "tariff"),
     }
     assert set(CLEARED).isdisjoint(REMAINING)
     assert plan == original_plan
