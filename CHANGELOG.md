@@ -13,6 +13,43 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Correct PR #639's stale capture-verification trace and split native-host
+  cases into a fourth Backend job. The leader reported that at
+  `3d8336933ed26266332c97b3caf1235b95cb98e4`, run `35529571789`, pilot job
+  `106127662743` collected 1179 items, failed the second input-capture node,
+  reached the wire-receipt file at about 80%, and was cancelled after about
+  45:15. Core, GPT-5.4 comparison and the other reported gates succeeded.
+  The host-session constructor deliberately revalidates the capture before
+  host/auth; only the test's exact event expectation changed. Production
+  gates and final-output AST assertions are unchanged. Core retains all 20
+  exclusions and `comparison-contracts` retains the 11 GPT-5.4 files.
+  `pilot-contracts` selects the eight non-wire GPT-5.6 files, then the wire
+  file with `-k "not native_result_host"`; new `native-host-contracts` selects
+  only that file with `-k native_result_host`. The static contract requires
+  identical six-step setup, exact sorted lists, complementary node predicates,
+  complete exactly-once selection and the keyword only in the wire source.
+  The pilot step remains fail-fast, so a failed first command prevents the
+  second from running. Mandatory pre-edit `extreme-reasoner` decision:
+  APPROVE-WITH-CONDITIONS. All four jobs retain their 45-minute limits, pinned
+  actions, read-only setup and ref-scoped concurrency. The configured allowance
+  grows from 135 to 180 runner-minutes (+45, +33.3%), with another runner/setup
+  cycle; no speedup or CI headroom is established. The sole correction selector
+  selected `test_step2_and_final_output_bind_verified_capture_before_provider`
+  and `test_backend_jobs_partition_the_comparison_contracts`, and reported
+  `2 passed in 21.28s`, exit 0. The exact command is in
+  `tasks/LATEST_TASK_RESULT/README.md`. Immutable implementation HEAD:
+  `360af26eb9c8fd051c301e2463ba297c747ca198`. `llm-systems-engineer` and
+  `first-reviewer` returned read-only APPROVE verdicts with no findings.
+  The completion records are outside their implementation-review boundary.
+  The original `1 failed, 70 passed, 84 deselected in 2790.26s (0:46:30)`
+  remains distinct from this correction result. Its test-API and YAML-cache
+  corrections were not followed by a native-host rerun. No cancelled job,
+  native-host selector, contract group, full suite or manual workflow was
+  rerun. Source pins, experiment settings, launch flags and live host/wire
+  evidence boundaries are unchanged. Fresh same-final-HEAD success and
+  duration evidence are required for all four jobs; external required-check
+  settings and the existing 1,800-second caller wait are unchanged.
+
 - Split PR #638's Backend contracts into two independent family jobs while
   leaving core's executable job unchanged. Core `pytest` excludes the exact
   sorted union of 20 files; `comparison-contracts` selects only the 11 GPT-5.4
