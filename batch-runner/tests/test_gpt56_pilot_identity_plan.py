@@ -124,7 +124,7 @@ def test_canonical_recipes_bind_the_real_grader_and_exact_five_tasks(plan, monke
     assert document["evidence_linkage"] is None
     assert document["contract_sha256"] == pilot.seal(plan)
     assert document["source_pins"] == plan["source_pins"]
-    assert set(plan["source_pins"]) == pilot.REQUIRED_SOURCES and len(pilot.REQUIRED_SOURCES) == 38
+    assert set(plan["source_pins"]) == pilot.REQUIRED_SOURCES and len(pilot.REQUIRED_SOURCES) == 43
     assert document["dataset"] == plan["dataset"]
     assert document["launch_allowed"] is document["full_220_allowed"] is False
     assert document["evidence_boundary"] == "offline_dispatch_grading_identity"
@@ -258,7 +258,7 @@ def test_real_evidence_linkage_composes_exact_closed_gates(plan, linked, mode, m
         options["as_of"] = "2026-09-20T04:00:00Z"
     report = pilot.inspect_plan(plan, **options, **({} if mode == "evidence-only" else {"identity_bundle": root}))
     assert len(calls) == (1 if mode == "evidence-only" else 2)
-    remaining = REMAINING if mode == "evidence-only" else [ALL_BLOCKERS[index] for index in (4, 7, 8)]
+    remaining = REMAINING if mode == "evidence-only" else [ALL_BLOCKERS[index] for index in (4, 5, 8, 9)]
     assert report["launch_blockers"] == remaining
     assert report["evidence_gate"]["cleared_blockers"] == CLEARED
     assert report["evidence_gate"]["remaining_blockers"] == remaining

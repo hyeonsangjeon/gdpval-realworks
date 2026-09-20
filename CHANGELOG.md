@@ -31,6 +31,25 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Add an offline exact-input bundle for the fixed Foundry GPT-5.6 Sol pilot.
+  Real config/identity and source/reference validators bind the original pinned
+  parquet and only the five-task reference closure. Publication rechecks source
+  and installed bytes, uses the held-parent no-clobber primitives and writes the
+  ready marker last.
+  Partial files and reservations are retained and cannot be reused. Explicit
+  preflight consumption clears only `prepared_input_bytes_unverified`; the split
+  live inference/wire requirement, native host and actual deployment remain
+  blocked, and both launch flags stay false. The sole selector reported
+  `1 failed, 134 passed in 71.41s`, exit 1. Its YAML-whitespace drift case was
+  corrected to change the canonical run ID without a rerun; no local green
+  result is claimed. `first-reviewer` approved implementation HEAD
+  `9a87cc143fa6b2ca75eba589bcd15c795bdd55d6`, and `llm-systems-engineer` found no
+  high-confidence production blocker at that HEAD. Automatic CI must validate
+  the test-only correction. Local input consistency does not prove model
+  consumption or authorize launch. Real external evidence, live identity/wire,
+  native result hosting, deployment/execution and usage/tariff receipts remain
+  outstanding. No provider, model, grader or workflow was executed.
+
 - Materialize inert runtime, prepared-task, grading and identity-linkage files
   for the fixed Foundry GPT-5.6 Sol Codex pilot. The materializer re-verifies the
   sealed identity, active contract, source closure and optional evidence before
