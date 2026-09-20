@@ -48,6 +48,27 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Add a session-owned Codex app-server transport receipt for the registered
+  Foundry GPT-5.6 Sol five-task pilot. The hook hashes actual serialized stdin
+  bytes after write/flush, preserves native usage without invented pricing,
+  binds the verified prepared capture and upstream bundles, and requires its
+  in-process witness before task/result acceptance. Publication is no-clobber
+  and ready-last; legacy absent/null behavior remains unchanged. The pinned
+  SDK does not expose Foundry HTTP payloads or served-model identity, so those
+  fields are explicitly unavailable and
+  `live_inference_identity_and_wire_unverified` remains unresolved. All launch
+  and full-220 flags stay false. The sole local selector reported
+  `88 passed in 642.32s (0:10:42)`, exit 0, at initial implementation
+  `59aa7f00de5505e0ed5c1bff8e8ae7757ff9398a`. Both reviewers then found and
+  required a private endpoint-account/resource-evidence binding correction.
+  Reviewed implementation HEAD `89e9a33baa3b6c4b3c404f7c2c6f61798003a868`
+  received `llm-systems-engineer` and `first-reviewer` APPROVE. Its expanded
+  89-case selector was not rerun locally and still needs automatic CI evidence.
+  No live inference, provider/client, grader or manual workflow ran. Actual
+  wire/served identity, native result hosting, execution/caps and billing
+  receipts remain separate work. The exact selector and evidence limits are
+  recorded in `tasks/LATEST_TASK_RESULT/README.md`.
+
 - Bind the registered Foundry GPT-5.6 Sol pilot's real Step 1 prepared rows to
   its runtime candidate and five verified upstream bundles. The optional typed
   control is mandatory only for that run. Step 1 uses atomic no-clobber capture
