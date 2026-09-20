@@ -8,6 +8,16 @@ baseline: batch-runner/experiments/exp035_codex_foundry_full220.yaml
 owner_approved_eventual_execution: true
 launch_enabled: false
 
+# Local evidence binding only. Neither intake completion nor these source pins
+# verify Azure facts, populate the null identity fields, or authorize a launch.
+evidence_intake:
+  schema: batch-runner/schemas/foundry-pilot-evidence.schema.json
+  compiler: batch-runner/gpt56_foundry_evidence_intake.py
+  source_base_sha: d8fd52d9c75687a8e088748c589f9a9a07834a41
+  ready_marker: foundry-pilot-evidence-ready.json
+  required_roles: [identity, reasoning, context, native_caps, usage, tariff]
+  evidence_boundary: offline_local_consistency
+
 identity:
   provider: azure
   model: gpt-5.6-sol
@@ -137,7 +147,7 @@ cost:
   use_openai_or_copilot_tariff_for_foundry: false
   billing_evidence: provider_native_usage_without_invented_currency_conversion
 
-# 23 exact source files; the superseded record is sealed without refreshing it.
+# 30 exact source files; the superseded record is sealed without refreshing it.
 source_pins:
   batch-runner/experiments/exp035_codex_foundry_full220.yaml: eef6c66ca5d851b379b189e53ed27ef0d10d822fcd09a2e5a5c51acbc5d40819
   batch-runner/experiments/execution_envelope/gdpval_task_catalog.json: 5f1eca853979b2b4efe6c6ba656545c3a416da920e3faf067d52f5d8ac4ae0eb
@@ -156,9 +166,16 @@ source_pins:
   batch-runner/core/result_projection.py: 1b47c4ee0f6d050e5edd4ac5a301203ba834c8d159b1557b04d83046ca965ec6
   batch-runner/schemas/grade.schema.json: 9c611874c2d7aa57018eecdc86b7c0d579aaa9c29dd0df649058eec9ad5175b9
   batch-runner/experiments/execution_envelope/gpt56_sol_copilot_codex_pilot.yaml: 47799d3f61374679722df32c67de14f9d0d56bd6586cf7b28c10076fd41d1901
-  batch-runner/gpt56_sol_codex_pilot_preflight.py: 9d3caa5e0e897316398d3f5f369df0a5118fd59f8e7e79861506fb7ca53a68e1
+  batch-runner/gpt56_sol_codex_pilot_preflight.py: 89867b7cdedb9a649a7d93b2df4de4aa6b9971884d7a8044c7a11175d0201103
   batch-runner/core/agentic_v2_preregistration.py: 02ac15ef8483ac367796feb1fcbadf90a27062c2bf5b3147b75b7e17a0c089e0
   batch-runner/core/execution_envelope_tasks.py: dd934314ce447b78efa45ad9d349f198d1e429531eccdf430106b87335dc2ea0
   batch-runner/core/azure_ai_clients.py: f7211d1070c0b4dd7aae0204c520bc789bb84a300d061b0bdc4fc9a21738915f
   batch-runner/core/codex_azure_token.py: fa3621b2b77c35fd34e4e703359c26670b8f9fa75b7ed98d8172737cc91cfaf1
   batch-runner/requirements.txt: 34e6e3d73fce7ee2e08b7573a78ff8d3946a2b385ba07d880e56bb2c13069eba
+  batch-runner/gpt56_foundry_evidence_intake.py: 5cc0477ab6e63203bfd9836be40a06164c5138a5442427082d8c20d7dfce5d4f
+  batch-runner/schemas/foundry-pilot-evidence.schema.json: 4ef619c47a62104225c5225e0bbf20c1da744e30e27a5aafeae1e34b24389ca7
+  batch-runner/gpt54_codex_input_capture.py: f2a31e4ffc4ed26e28e3e8bc0cb88ce6b33887cc94bb8a9d7ee1e6b6170642ec
+  batch-runner/gpt54_run_config_bundle.py: 71b4bd5247fed0aaba827e6d6e54d1cc33b5d91c494760d996f5eb815d527b9d
+  batch-runner/gpt54_v2_grading_input.py: 3fae995caf3d785d64fad02280d77a6853389a2ff12be2e7165e4868b4b0b830
+  batch-runner/core/inference_manifest.py: 4187bdbf45c3bb1d9cd8059c499cfd8e6c0440795395b5f2d044528e67e1fc92
+  batch-runner/core/reference_integrity.py: 13198897c189a9276494b78ea3359fc2e623211ab2f32554b81ab9b12d9cf19e

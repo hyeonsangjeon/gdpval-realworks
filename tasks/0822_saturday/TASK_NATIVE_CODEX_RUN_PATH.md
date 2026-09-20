@@ -1613,8 +1613,9 @@ model_context_window=1000000
 They do not establish that Foundry serves Max or the requested Long 1M context,
 or that the native call/input/output token limits are enforced. Those facts
 must be verified for the exact deployment before spending. Setting a null
-identity/evidence field to a self-asserted value does not pass this contract;
-binding external evidence requires a separately reviewed configuration change.
+identity/evidence field to a self-asserted value does not pass this contract.
+Section 16 adds a separately reviewed local evidence intake. It does not fill
+these null fields or remove the provider-verification boundary.
 
 ### Fixed pilot and decision
 
@@ -1657,7 +1658,8 @@ family with the solver; pinning it does not resolve that grading bias.
 ### Offline gate and remaining work
 
 `gpt56_sol_codex_pilot_preflight.py` checks the sole active registration,
-historical retirement, exact controls and 23 source-file pins. The seven pins
+historical retirement and exact controls. The provider correction had 23
+source-file pins; section 16 extends the active set to 30. The seven pins
 added to the earlier 16 bind this checker, the historical contract, the
 catalog selector and seal helpers, the Azure route/token helpers, and the
 dependency manifest. Active cross-contract tests now read the Foundry plan;
@@ -1678,3 +1680,130 @@ The single targeted offline selector and immutable review are recorded in
 `tasks/LATEST_TASK_RESULT/README.md`. No Azure API/CLI, deployment creation,
 credential lookup, model/grader call, download, workflow dispatch or paid
 execution is part of this unit.
+
+## 16. Offline Foundry evidence intake (2026-09-20)
+
+This unit starts from immutable main
+`d8fd52d9c75687a8e088748c589f9a9a07834a41`. It binds evidence acquired by an
+operator through a separate channel. It performs no Azure, network, credential,
+model, grader or workflow operation. The active plan, fixed five tasks, grader,
+retry/turn/time limits, result projection and record-only cost policy remain
+unchanged. Both launch flags remain false, and every existing launch blocker
+remains in the preflight report.
+
+The active plan's `evidence_intake` entry pins
+`batch-runner/gpt56_foundry_evidence_intake.py` and
+`batch-runner/schemas/foundry-pilot-evidence.schema.json`. Seven additional pins
+cover those two files and the reused atomic writer, held-parent helper,
+single-link reader, path validator and reference-integrity implementation.
+The active source map has 30 entries. The historical Copilot record is unchanged.
+
+### Local input and claim vocabulary
+
+The source directory contains only `foundry-pilot-evidence-intake.json` and
+`artifacts/<role>.json` for each non-null artifact. The six roles must appear in
+this order: `identity`, `reasoning`, `context`, `native_caps`, `usage`, `tariff`.
+Each descriptor carries the artifact's exact relative path, size and SHA256.
+These hashes describe actual local files, not a Git or dataset revision.
+
+Artifacts are privacy-screened, structured JSON exports in this repository's
+closed vocabulary, not arbitrary native API responses, logs, screenshots or
+an invented Azure API format. Unknown fields and duplicate JSON keys are
+refused. The operator must exclude credentials, tokens, keys, headers, endpoint
+URLs, personal identifiers and free-form response bodies before intake. The
+compiler does not redact or rewrite an artifact; it rejects unsupported
+content before reserving or writing a destination. CLI results contain only
+status, fixed refusal codes and digests, never artifact values or input paths.
+
+The subject separates account, project and deployment. Each uses
+`resource_id_sha256`, the SHA256 of the exact UTF-8 resource ID bytes supplied
+externally, with no trimming, case conversion or other normalization. Raw
+resource names and endpoints are not stored. All artifacts must bind the same
+three identities, served `gpt-5.6-sol` model and model version. These resource
+hashes are external identity claims, not approval or proof that Azure served
+them. They cannot replace any artifact's file digest.
+
+| Role | Required observed evidence for a complete bundle |
+| --- | --- |
+| `identity` | Foundry account/project/deployment identities and served Sol model/version, matching the common subject |
+| `reasoning` | A completed response reporting `max`, with a hashed response identity |
+| `context` | That same completed response, explicitly scoped to one response, with accepted input plus output of at least 1,000,000 tokens |
+| `native_caps` | Positive, native-enforced per-attempt model-call/input/output limits; calls and tokens have separate units |
+| `usage` | Foundry input/cached-input/output meter IDs, native token quantities, known currency/region, and no unresolved partial reasons |
+| `tariff` | Matching meter IDs, currency and region, exact decimal amounts and token denominators, effective/expiry times and a named Foundry tariff source |
+
+Top-level `requested` values remain Azure/Codex/Sol/Max/1M. Each artifact keeps
+`documented` and `observed` values separate. Documentation-only records cannot
+populate observations; a capability boolean cannot replace measured counts or
+a reported effort. The Max and context observations must share a response
+identity. A sum of thread totals does not qualify as a single-response context
+observation. Authenticity of these external claims is still outside this tool.
+
+Each artifact has a source kind, observation time, export issuance time and
+validity end. UTC times are explicit and exact. The caller supplies `--as-of`;
+the compiler never substitutes wall-clock time or file mtime. Observation must
+be no later than issuance, and neither may be in the future. Reverification refuses
+expired evidence. The tariff must cover both the usage observation and the
+evaluation time. No automatic freshness period or currency conversion is added.
+
+Usage follows the existing `cost-receipt-v1` convention: cached input is part of
+total input, not an additional count. The existing `usage_absent`,
+`usage_partial`, `price_missing` and `call_reachability_unknown` reasons are
+preserved. Unknown quantities or rates remain null; this module never computes
+a bill or substitutes zero. A missing required claim prevents this evidence
+marker, not a change to the repository's record-only cost policy. Unsupported
+units, currencies or regions are refused instead of inferred or converted.
+
+### Publication and verification
+
+The descriptor binds the separately supplied full 40-hex reviewed source SHA,
+active plan canonical SHA256, historical plan base and exact pilot run ID. The
+historical base, dataset and grader revisions cannot stand in for the reviewed
+source. Intake verifies its own checkout's active registration and all pinned
+source bytes. The supplied SHA does not prove review took place or establish
+the checkout's Git lineage; a future execution gate must verify that separately.
+
+`compile_foundry_evidence` reads and validates all files without writing.
+It preserves null claims and reports exactly which required evidence is missing.
+`publish_foundry_evidence` accepts only a complete snapshot and an absent,
+non-overlapping destination. It holds parent identities, publishes a sibling
+reservation with the existing atomic no-clobber writer, creates exclusive
+directories, then copies the exact verified descriptor and artifact bytes.
+It rechecks source files, installed files, plan/source pins and reservation
+before publishing `foundry-pilot-evidence-ready.json` last.
+
+A failed publication leaves its reservation and partial tree for manual
+disposition. Neither a partial tree nor an existing reservation is reusable;
+there is no overwrite, cleanup or deletion operation. Symlinks, hardlinks,
+path traversal, extra files and destination collisions are refused.
+`verify_foundry_evidence` reconstructs the canonical marker from current bytes
+and requires the exact marker and reservation. A marker alone is insufficient.
+
+These are offline commands for externally supplied evidence; they were not
+run against real evidence in this unit:
+
+```bash
+PYTHONPATH=batch-runner python3 batch-runner/gpt56_foundry_evidence_intake.py \
+  --source /local/privacy-screened-evidence \
+  --reviewed-source-sha <externally-reviewed-full-40-hex-sha> \
+  --as-of <UTC-evaluation-time>
+
+PYTHONPATH=batch-runner python3 batch-runner/gpt56_foundry_evidence_intake.py \
+  --source /local/privacy-screened-evidence --destination /local/absent-bundle \
+  --reviewed-source-sha <externally-reviewed-full-40-hex-sha> \
+  --as-of <UTC-evaluation-time>
+
+PYTHONPATH=batch-runner python3 batch-runner/gpt56_foundry_evidence_intake.py \
+  --verify-bundle /local/published-bundle \
+  --reviewed-source-sha <externally-reviewed-full-40-hex-sha> \
+  --as-of <UTC-reverification-time>
+```
+
+Exit 0 means a complete local check, publication or reverification. Exit 2
+means incomplete or refused evidence. Neither permits a pilot or a 220-task
+run. The marker's boundary is `offline_local_consistency`, not Azure identity,
+served capability, wire equality, inference publication identity or launch
+authorization. Real evidence acquisition and independent review, native result
+hosting, actual deployment, execution/identity/limit gates, input/wire evidence,
+and usage/tariff receipt integration remain outstanding. No paid pilot command
+is introduced.
