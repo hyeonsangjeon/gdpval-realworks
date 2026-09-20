@@ -1963,3 +1963,78 @@ materialize runtime/grader configs, enforce native caps, provide a native result
 host, deploy or execute a pilot, or integrate runtime usage/tariff receipts.
 No provider/runtime/grader default, workflow, `core/qa.py`, HF upload script or
 historical evidence is changed.
+
+## 19. Materialize an inert pilot config bundle (2026-09-20)
+
+This unit starts from immutable main
+`1c038f8f46df3936228cbeb7bc36a0b8aef61337`. The active contract registers
+`gpt56_pilot_config_bundle.py` and pins 38 source files. The new registration
+changes the canonical active-plan digest. Identity and evidence bundles sealed
+to an older digest are stale; the materializer cannot upgrade them in place.
+
+`compile_pilot_config_bundle` calls the real #633 `verify_pilot_identity` with
+the current active plan and a published identity bundle. It derives four fixed,
+run-relative canonical JSON files:
+
+- `pilot-runtime-config.json`: an `ExperimentConfig`-compatible single-condition
+  config for the Foundry/Codex Sol pilot. It has exactly the five registered
+  task IDs in order, Max, the 1M context request, the unchanged developer
+  instructions, no self-QA, zero request/stream/resume/relay retries, and the
+  existing 1800-second timeout and three infrastructure retries after the first
+  attempt. It uses the existing deferred Foundry route, without an endpoint.
+- `pilot-prepared-task-manifest.json`: the ordered task IDs, prompt and
+  per-task reference hashes, dataset revision/parquet hash and instruction
+  digest from the verified identity. This is a requirement for future input
+  preparation, not Step 1 output or a claim that local input bytes were consumed.
+- `pilot-grading-config.json`: a separate derivation of the pinned step8
+  template. Judge, rubric, prompt, grader, TPM and schema blocks remain exact.
+  Only the pilot name/description, run-local future output directory and removal
+  of the historical `rerun_identity` differ. The output filename contract stays
+  unchanged. The emitted bytes are parsed with YAML and checked by the actual
+  step8 validator using an in-memory copy with resolved prompt paths.
+- `pilot-identity-linkage.json`: identity plan/ready/reservation digests,
+  active-contract digest and source pins, exact dispatch/grading recipes,
+  member digests and the optional evidence link. It retains one logical attempt,
+  one repeat, fresh sessions, no escalation, null native-cap declarations,
+  record-only cost findings and null/partial receipt rules.
+
+The same five-task scope, order and input hashes are sealed for dispatch and
+grading. There is an important boundary: step8's `rerun_identity` requires a real
+immutable inference revision. Before inference, that identity cannot be both
+null and a valid pinned rerun. The materialized config therefore omits it;
+inference repo/revision remain null in the sealed grading recipe. No fake SHA,
+historical 220-task identity or ignored grader task-selection field is added.
+The bundle verifier enforces this scope as a file contract. The generated grader
+config alone does not enforce the future execution scope. Binding real inference
+identity and ordered input rows remains required before any grading execution.
+The template-source hash is retained as such; the future materialized grader
+source hash remains null because this directory is not a deployed source tree.
+
+An evidence-linked identity still requires the actual evidence bundle, external
+reviewed source SHA and explicit UTC evaluation time for reverification. Only
+the link already sealed in the identity is copied: ready-bundle digest, reviewed
+SHA and sealed intake time. No raw claim, resource identity, artifact, endpoint
+or credential is copied. A no-evidence identity keeps the link null. Later
+evaluation times check freshness without changing the sealed file bytes.
+
+`materialize_pilot_config_bundle` accepts an absent disposable directory, not
+an existing checkout. It neither creates a Git checkout nor copies source or
+dataset files. Source/identity/evidence overlap, an existing destination or
+reservation, links and traversal are refused. Using held parents and the existing
+atomic no-clobber writer, it publishes a sibling reservation, the four complete
+files, then `pilot-config-bundle-ready.json` last. Before ready, it re-verifies
+the identity, source closure, active contract and optional evidence, re-derives
+the files and checks their current bytes, exact inventory and reservation.
+Failures retain reservations and partial files for manual disposition; there
+is no overwrite, cleanup or reuse path. `verify_pilot_config_bundle` recomputes
+the files from the current verified identity rather than trusting mutually
+consistent edited file/marker hashes. CLI refusal output uses static codes.
+
+The evidence boundary is `offline_pilot_config_bundle`. Ready means that local
+config files match their sealed contract, not that a pilot may run. No launch
+command, provider/client, prepared rows, inference result or grade is produced.
+Both launch flags stay false and this unit clears no additional preflight
+blocker. Live identity/input/wire binding, a native result-bundle host, actual
+source/input deployment, execution and usage/tariff receipt integration remain
+open. The historical exp035 configs, grader/runtime defaults, workflows,
+`core/qa.py`, HF upload scripts and past evidence remain unchanged.
