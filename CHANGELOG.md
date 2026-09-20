@@ -31,6 +31,23 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Bind private local Foundry resource-ID bytes to complete verified evidence for
+  the fixed GPT-5.6 Sol pilot. Real evidence/identity/config/input verifiers
+  recheck the upstream chain before a separate parser-compatible candidate takes
+  its deployment name from the hash-bound resource ID's last path segment.
+  Full IDs and host paths stay private; the original null-deployment inert
+  template remains unchanged. Held-parent and atomic no-clobber publication
+  retain failed partial state and write the ready marker last. Explicit preflight
+  consumption clears only `actual_pilot_deployment_not_prepared`; live
+  identity/wire, native host and actual execution/runtime receipts remain
+  unresolved, and both launch flags stay false. The sole deployment-binding
+  selector reported `162 passed in 156.65s (0:02:36)`, exit 0.
+  `first-reviewer` and `llm-systems-engineer` approved implementation HEAD
+  `31813e353d3e98bd666c16102d95bfc3f876be41` without blocking findings. Local byte
+  binding and parser compatibility do not authenticate Azure facts, prove
+  runtime consumption or authorize execution. No provider, model or grader
+  was invoked, and no workflow or paid execution ran.
+
 - Add an offline exact-input bundle for the fixed Foundry GPT-5.6 Sol pilot.
   Real config/identity and source/reference validators bind the original pinned
   parquet and only the five-task reference closure. Publication rechecks source
