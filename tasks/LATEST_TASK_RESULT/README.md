@@ -1,245 +1,197 @@
 # Latest substantive task result
 
-## PROJECT5-PR634-DEPLOYMENT-NAME-SEPARATION
+## PROJECT5-GPT56-PILOT-INPUT-BUNDLE FULL-845D7218
 
-PR #634's runtime artifact now separates the requested model label from the
-deployment name. It is a closed template with `deployment: null`,
-`execution: null` and `runnable: false`, rejected by the existing runtime parser
-and Step 1 entrypoint before provider/auth setup. The correction selector ran
-once and reported `129 passed in 23.26s`, exit 0. All original 108 cases remain,
-with 21 regressions added.
+The Foundry GPT-5.6 Sol pilot can now publish and verify an offline input bundle
+from its sealed identity/config bundles and caller-supplied local bytes. The
+bundle preserves the original pinned parquet and accepts only the reference
+files required by the registered five-task cohort. Explicit preflight consumption
+clears only the prepared-input requirement, not live inference identity or wire
+consumption.
 
-The original config-bundle scope is unchanged: a verified #633 identity bundle
-becomes four exact canonical files and a ready marker, without deploying or
-executing the fixed Foundry GPT-5.6 Sol Codex pilot. Grading generation and the
-exact ordered five-task scope are unchanged.
+The sole selector reported `1 failed, 134 passed in 71.41s`, exit 1. Its one
+incorrect drift test was corrected after the run and has not been rerun. Static
+immutable review found no blocking defect, but a green execution result for the
+correction still requires automatic CI. No local green result is claimed.
 
-Both `launch_allowed` and `full_220_allowed` remain false, as do the manifest's
-`launch_enabled` and `full_220_enabled`. Ready means local config consistency,
-not launch permission, served capability or actual input consumption.
-
-### Leader BLOCK and correction
-
-The leader blocked PR #634 at
-`b872446d6e61cfaa8fa1558ee94ea4a6b4ff67ea`. `_runtime()` put the requested
-`identity.model` value `gpt-5.6-sol` into `model.deployment`, although the active
-contract's `foundry_identity.deployment` was null. The artifact passed
-`ExperimentConfig` validation and could be handed to the runner. Outer false
-launch flags did not enforce the claimed inert boundary. The original
-`108 passed in 22.34s` result and earlier review did not catch this defect.
-
-The correction removes the executable config shape and runtime-parser acceptance
-from the compiler. A small internal validator permits only the exact template
-keys and their verified contract/identity-plan values. The model label remains
-in the sealed dispatch request; deployment stays null, even with linked evidence.
-Explicit null execution prevents the legacy parser from filling absent fields
-with runnable defaults. Actual `ExperimentConfig.from_dict`,
-`ExperimentConfig.from_yaml` and the Step 1 CLI entrypoint refuse this document
-before data loading, provider settings, route resolution, auth or command setup.
-The inherited offline guards also prohibit client/model/grader construction.
-
-Only a separate future materialization may bind an externally reviewed deployment
-name into an executable runtime config. No model label, placeholder or hash is
-accepted as a deployment name. `actual_pilot_deployment_not_prepared` remains
-blocked. The materializer source pin was refreshed; the active contract still
-pins 38 sources, and bundles with the old canonical plan digest are stale.
+Both `launch_allowed` and `full_220_allowed` remain false, as do the active
+contract's `launch_enabled` and `full_220_enabled`. The existing runtime template
+remains `deployment: null`, `execution: null` and `runnable: false`.
 
 ### Scope and concrete outcome
 
-`gpt56_pilot_config_bundle.py` exposes `compile_pilot_config_bundle`,
-`materialize_pilot_config_bundle` and `verify_pilot_config_bundle`, plus a small
-offline CLI. It calls the real `verify_pilot_identity` against the active plan,
-identity plan/ready/reservation bytes, current source pins and grader source
-closure. An evidence-linked identity also requires the real evidence bundle,
-caller-reviewed source SHA and explicit UTC evaluation time for reverification.
-Only the sealed evidence digest/SHA/time link is carried forward; raw evidence,
-resource identities and credentials are not copied.
+`batch-runner/gpt56_pilot_input_bundle.py` exposes
+`compile_pilot_input_bundle`, `materialize_pilot_input_bundle` and
+`verify_pilot_input_bundle`, plus a small offline CLI. Each uses the real
+`verify_pilot_config_bundle` to recheck #634 config/ready/reservation bytes,
+the prepared-task manifest, #633 identity linkage, active contract and current
+source pins. Optional evidence remains subject to the existing verifier; only
+its sealed digest, reviewed source SHA and evaluation time are carried forward.
+No raw external claims are copied.
 
-The absent destination receives these files:
+The compiler reuses the existing dataset task selector, source projection and
+reference-integrity helpers. It binds the dataset revision, original parquet
+size/SHA256, exact five task IDs and order, prompt/rubric/projection hashes,
+per-task reference roles/sizes/SHA256, run/condition/repeat and upstream bundle
+identities. The active registration now pins 43 sources, up from 38. Its canonical
+plan digest changes, so bundles tied to the previous plan are stale.
 
-- `pilot-runtime-config.json`: a closed `foundry-pilot-runtime-template-v1`
-  document, not an `ExperimentConfig`. It binds the verified dispatch request
-  for Foundry/Codex, Sol-not-Fast, Max and 1M, with exactly five registered tasks
-  in order. It preserves developer instructions, timeout/retry/native-cap
-  declarations, the endpoint-free route, no self-QA/resume/relay/escalation and
-  the record-only receipt contract. Deployment and execution stay null;
-  `runnable` stays false. It does not inherit exp035's 220-task scope.
-- `pilot-prepared-task-manifest.json`: the registered dataset revision/parquet
-  hash, ordered task IDs, prompt hashes, per-task reference hashes and instruction
-  digest. This is a future preparation contract, not fabricated Step 1 output.
-- `pilot-grading-config.json`: a separate config derived from the verified
-  step8 template. Judge, rubric, prompt, grader, TPM and schema blocks are
-  unchanged. The pilot name/description and run-local future output directory
-  replace the historical metadata; the filename contract is preserved.
-- `pilot-identity-linkage.json`: exact dispatch/grading recipes, file digests,
-  identity plan/ready/reservation linkage, active-contract digest, source pins
-  and optional evidence linkage. It preserves one logical attempt/repeat,
-  fresh sessions, no escalation, null native caps, record-only cost findings
-  and null/partial receipts.
+The absent run-local destination receives:
 
-The internal runtime shape check enforces exact contract parity without creating
-a runtime configuration. The actual step8 validator still receives the emitted
-grading config parsed through YAML, with prompt paths resolved only in an
-in-memory validation copy. No host absolute path enters a generated identity.
+- `data/train-00000-of-00001.parquet`, copied byte-for-byte. It is not filtered
+  or re-encoded into a different parquet artifact.
+- The exact registered `reference_files/` closure. The current five-task cohort
+  requires two files. Unselected references, extra files and extra directories
+  are rejected; the shared full reference tree is not copied.
+- `pilot-input-bundle-ready.json`, a canonical document binding those bytes to
+  the verified config, prepared manifest, identity plan and source pins. It
+  contains run-relative roles and digests, not host paths, raw prompts, resource
+  identities or launch permission.
 
-The grading boundary is explicit. The existing step8 `rerun_identity` requires
-a real immutable inference revision. The materializer therefore omits that
-historical block rather than inventing a revision or copying its 220-task
-identity. Future inference repo/revision remain null in the sealed grading
-recipe. No ignored grader task-selection keys are added. The bundle seals the
-same five-task scope, order and hashes for dispatch and grading, but the
-generated grader config alone does not enforce future execution scope. Real
-inference identity, ordered-row binding and the generated config's eventual
-runtime source hash remain unresolved; `materialized_grader_source_hash` is null.
+Publication uses the existing held-parent and atomic no-clobber primitives.
+It first validates every input and destination relationship, then writes a
+sibling reservation ending in `.pilot-input-bundle-reservation.json`, exclusive
+directories and complete files. Before publishing the ready marker, it rechecks source
+bytes, upstream bundles, installed bytes, exact membership and the reservation.
+The verifier independently derives the expected bundle from current installed
+bytes and rechecks the upstream and local files after derivation.
 
-Publication uses the existing held-parent and atomic no-clobber primitives:
-sibling reservation, four complete files, then `pilot-config-bundle-ready.json`
-last. Before ready, the materializer re-verifies the identity, active contract,
-source closure and optional evidence, re-derives all files, and checks their
-current bytes, exact membership and reservation. Verification independently
-recomputes the bundle; forged matching file/marker hashes cannot substitute for
-the pinned derivation. Collisions, partial reuse, links, traversal, overlap and
-drift fail closed. Reservations and partial files remain for manual disposition.
-There is no overwrite, automatic cleanup or reuse path.
+Source/destination overlap, traversal, duplicate or cross-task reference roles,
+symlinks, hardlinks, missing/extra members, stale identities, byte drift and
+existing targets fail closed. Interrupted files and reservations remain for
+manual disposition. They are not deleted, overwritten or adopted on retry.
+This unit creates no execution checkout, executable config, request, provider
+client, inference result or grade, and it does not modify the source inputs.
 
-The destination is a config-only disposable directory. This unit creates no
-Git checkout, copies no source/data/reference tree, emits no execution command,
-and produces no prepared rows, inference result or grade. It changes no
-preflight blocker transition. The new active registration pins 38 sources;
-the resulting plan digest changes, so older identity/evidence bundles are stale.
+### Closed preflight transition
+
+The combined `live_identity_and_input_bytes_unverified` requirement is split
+into `prepared_input_bytes_unverified` and
+`live_inference_identity_and_wire_unverified`. Both remain in the no-bundle path;
+the ten default blockers preserve the prior combined blocking meaning. Existing
+plan-only report structure and serialization remain apart from this required
+split and the changed active-plan digest.
+
+Explicit input consumption requires the config and identity bundles and calls
+the real input verifier. The closed `INPUT_BUNDLE_BLOCKERS` mapping clears only
+`prepared_input_bytes_unverified`. Existing evidence and identity gates retain
+their separate transitions. Live inference identity/wire, native host and actual
+deployment blockers remain. The report records only the compact verified link
+and `local_prepared_input_consistency_not_model_consumption` boundary. The full
+success report is built before blocker mutation, so a late reporting error also
+retains the prepared-input blocker. CLI errors use static, non-echoing refusals.
+
+### Exact validation evidence
+
+Exactly one pytest invocation was run:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider --tb=short batch-runner/tests/test_gpt56_pilot_input_bundle.py
+```
+
+It collected 135 cases under Python `3.10.12` and pytest `9.1.1` and reported
+`1 failed, 134 passed in 71.41s (0:01:11)`, exit 1.
+`test_upstream_current_bytes_are_reverified[source-plan]` appended a YAML newline
+and expected contract drift. The active contract uses canonical JSON semantics,
+so whitespace did not change its identity and acceptance was correct. The
+retained case now changes `pilot.run_id` to `stale-run` and keeps the refusal and
+no-write assertions. All 135 cases remain; none was removed, skipped or marked
+xfail. No production code changed after the invocation. The test-only correction
+is in the reviewed implementation HEAD but has not been executed locally.
+
+The case set covers no-evidence and evidence-linked bundles; exact ordered
+five-task projection and original bytes; no-bundle compatibility and the one
+prepared-input transition; wrong/stale/missing/extra/tampered data, sources and
+markers; forged matching hashes; invalid roles and overlap; links, traversal and
+collisions; each publication write failure; partial reuse; mid-publication drift;
+held-parent replacement; late report failures; privacy-safe CLI errors; source
+immutability, seed isolation and false launch flags.
+
+Fixtures use real config/identity/evidence verifiers and source/reference
+validators. Module-scoped lazy seeds share immutable bytes, with fresh
+single-link copies for each case and a defensive byte-keyed YAML parse cache.
+No validator verdict is mocked or cached. Tiny synthetic parquet/reference data
+and committed five-task prompts avoid scanning the live 220-task snapshot.
+Offline guards prohibit subprocess, network, provider auth, model/client/grader
+construction and grader execution. The #631-#634 selectors and broad/full suites
+were not rerun. No manual workflow ran.
+
+`git diff --check` and `git diff --cached --check` passed before the implementation
+commit. These are synthetic local fixture and static-review results, not a
+successful workflow, model consumption, Foundry capability or paid run.
 
 ### Immutable base and review boundary
 
-The clean development worktree started from immutable main
-`1c038f8f46df3936228cbeb7bc36a0b8aef61337` on
-`b/gpt56-pilot-config-bundle-20260920`. The preserved checkout
+The clean development worktree started from main
+`845d721886e599b06077da8f3524db9cba8520f0` on
+`b/gpt56-pilot-input-bundle-20260920`. The preserved checkout
 `wip/local-main-preserved-20260719` was not used or edited.
 
-The correction uses the same PR worktree and branch, starting from
-`b872446d6e61cfaa8fa1558ee94ea4a6b4ff67ea`. No new development or execution
-checkout was created. The earlier `first-reviewer` approval at
-`4adbdf859cee549fb3f4245f85fa96b051db833c` is historical and was superseded by the
-leader BLOCK.
-
-New immutable implementation HEAD:
-`c61ede3afaf43a67296262d95a23a7e00ec871aa`.
-The correction's four-file module/test/source-pin/spec diff is the review
-boundary. Both `llm-systems-engineer` and `first-reviewer` returned APPROVE on
-this exact HEAD. The systems review found no blocking or high-confidence
-correctness issue. The first review reported no BLOCK, MAJOR or MINOR findings
-and no second-review escalation. Both confirmed that null execution stops the
-current parser before runtime setup and that the refreshed materializer pin
-matches the committed bytes. Reviews were read-only, without tests, production
-imports or external calls. This record and `CHANGELOG.md` follow validation and
-are outside the implementation review boundary. No code or test changed after
-the passing correction selector.
+Implementation review HEAD: `9a87cc143fa6b2ca75eba589bcd15c795bdd55d6`.
+The nine implementation/config/test files below form the immutable review
+boundary. `first-reviewer` returned APPROVE with no BLOCK, MAJOR or MINOR findings
+and no second-review escalation. `llm-systems-engineer` found no high-confidence
+production blocker at the same HEAD. Both confirmed the canonical-contract test
+correction and explicitly withheld any claim of a green selector. Reviews were
+read-only, without tests, production imports, external calls or file changes.
+This record and `CHANGELOG.md` are subsequent documentation changes outside that
+implementation review boundary.
 
 The repository's existing author and committer identity,
 `hyeonsangjeon <wingnut0310@gmail.com>`, was preserved without changing Git
 configuration. No attribution trailer, hook bypass, history rewrite, force push
 or forbidden Git cleanup was used.
 
-### Exact validation evidence
+### Changed files
 
-The same targeted selector was used for the original implementation and this
-correction, once for each task:
-
-```bash
-PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider batch-runner/tests/test_gpt56_pilot_config_bundle.py
-```
-
-The original result was `108 passed in 22.34s`, exit 0. The single correction
-invocation collected 129 cases and reported `129 passed in 23.26s`, exit 0,
-under Python `3.10.12` and pytest `9.1.1`. The existing 108 cases were retained;
-their runtime-shape assertions now match the corrected inert contract. The
-21 added cases cover real parser/entrypoint refusal with and without evidence,
-closed-shape/control drift, guessed deployment values, forged output hashes
-and an attempted deployment change in the active contract. Nothing was removed,
-skipped or marked xfail. The #631–#633 selectors were not rerun. No broad/full
-suite or manual workflow ran.
-
-Coverage includes complete no-evidence and evidence-linked bundles; real runtime
-parser refusal and step8 validation; exact five-task/order/hash parity; unchanged
-grader blocks; null inference identity; stable later-time evidence linkage; deterministic CLI
-and relocation; every file/ready/reservation's bytes and single-link contract;
-self-consistent forgeries; stale plan/source/evidence; missing/extra members;
-symlink/hardlink/traversal/overlap/collision; all six publication write failures;
-partial reuse; mid-publication drift; held-parent replacement; static privacy-safe
-refusals and false launch flags. Runtime/evidence preflight blockers are retained.
-
-Module-scoped seeds perform real publication and share only immutable bytes.
-Each case receives fresh single-link copies; a regression verifies that mutation
-does not reach another case or seed. No validator verdict is cached. The inherited
-byte-keyed YAML parse cache makes defensive copies while real validators and
-source hashing still consume current files. Fixtures prohibit subprocess,
-network, provider auth, model/client/grader construction and grader execution.
-
-`git diff --check` and `git diff --cached --check` passed before the implementation
-commit. This is synthetic offline fixture evidence, not evidence of a successful
-workflow, served Foundry capability, actual deployment or paid execution.
-Automatic CI is a separate delivery check.
-
-### Correction changed files
-
-- `batch-runner/gpt56_pilot_config_bundle.py`
+- `batch-runner/gpt56_pilot_input_bundle.py`
+- `batch-runner/gpt56_sol_codex_pilot_preflight.py`
 - `batch-runner/experiments/execution_envelope/gpt56_sol_foundry_codex_pilot.yaml`
+- `batch-runner/tests/test_gpt56_pilot_input_bundle.py`
+- `batch-runner/tests/test_gpt56_evidence_preflight_gate.py`
+- `batch-runner/tests/test_gpt56_foundry_evidence_intake.py`
 - `batch-runner/tests/test_gpt56_pilot_config_bundle.py`
-- `tasks/0822_saturday/TASK_NATIVE_CODEX_RUN_PATH.md`
+- `batch-runner/tests/test_gpt56_pilot_identity_plan.py`
+- `batch-runner/tests/test_gpt56_sol_codex_pilot_preflight.py`
 - `CHANGELOG.md`
 - `tasks/LATEST_TASK_RESULT/README.md`
 
-The PR also retains its original changes to
-`batch-runner/gpt56_sol_codex_pilot_preflight.py` and the exact source-count
-assertions in `test_gpt56_pilot_identity_plan.py`,
-`test_gpt56_sol_codex_pilot_preflight.py` and `test_gpt56_foundry_evidence_intake.py`.
-This correction did not change those files or rerun their selectors.
+Changes to the older test files are limited to exact source-count and split-blocker
+expectations. Their selectors were not run.
 
 ### Skills and roles
 
-The full supplied/filesystem skill catalog and repository agent catalog were
-inspected once for the original task. `experiment-design` was reapplied before
-the correction. Its distinction between declared settings and established facts
-kept the requested model label separate from a deployment name and left the
-actual-deployment blocker intact. No experiment variable or paid run was added.
+The full skill catalog was checked once, and `experiment-design` was used before
+planning or code. Its distinction between an input contract and observed model
+consumption kept this unit limited to local prepared-input consistency. No model,
+effort, task cohort, attempt, grader or experiment axis changed.
 
-For the original implementation, `llm-systems-engineer` audited the runtime/config
-and publication boundaries. `grading-engineer` checked the existing step8
-contract after the consolidated grading specification and stable baseline were
-read. Both roles worked read-only. They confirmed that null future inference
-identity belongs in the sealed bundle,
-not an invalid or ignored step8 field. Static inspection also caught a test that
-treated a YAML comment as canonical contract drift; it was corrected to mutate
-the registered run ID before the original selector. Those checks missed the
-deployment assumption later identified by the leader. This correction received
-fresh `llm-systems-engineer` and `first-reviewer` approvals at the immutable HEAD
-above. The grader implementation is unchanged.
-
-`im-not-ai-en` was applied to the English specification, changelog, completion
-record and PR wording, preserving exact hashes, commands, counts and evidence
-limits. UI/animation skills are unrelated to this backend file contract and
-were not used. `extreme-reasoner` does not apply: no workflow, `core/qa.py` or HF
-upload file changed.
+`llm-systems-engineer` provided read-only contract/fixture assistance and the
+immutable systems review. `first-reviewer` reviewed the implementation HEAD.
+Grading implementation is unchanged; no new grading-role task was needed.
+`im-not-ai-en` was applied to the English changelog, completion record and PR
+wording while preserving the measured failure, unexecuted correction, hashes,
+commands and evidence limits. `extreme-reasoner` does not apply because workflows,
+`core/qa.py` and HF upload are unchanged. UI/animation skills are unrelated to this
+backend byte-bundle contract and were not used.
 
 ### Evidence boundary and remaining work
 
-This unit closes only inert config-bundle materialization and verification.
-It does not authenticate external Foundry claims, approve inference identity,
-prove served model/capability, or authorize a launch. No real evidence has been
+This implementation binds local prepared-input consistency only. It does not
+prove that a model consumed these bytes, authenticate external Foundry facts,
+issue inference identity, or authorize launch. No real evidence bundle was
 accepted outside synthetic fixtures in this task.
 
-Remaining work includes separate executable-config materialization with an
-externally reviewed deployment name; live inference identity and actual
-input/wire binding; execution-time grading scope and generated-config source identity; native
-sandbox/result-bundle hosting; actual source/input deployment and pilot execution;
-runtime enforcement of native caps; and usage/tariff receipt integration. Real
-Foundry evidence acquisition and independent review remain external obligations.
-The nine default blockers remain unless existing explicit evidence/identity
-gates are supplied, and both launch flags always remain false.
+Remaining work includes actual external evidence acquisition and independent
+review; live inference identity, input consumption and wire binding; separate
+executable-config materialization with a reviewed deployment name; execution-time
+grading scope and generated-config source identity; native sandbox/result-bundle
+hosting; actual deployment and pilot execution; runtime enforcement of native
+caps; and usage/tariff receipt integration. Both launch flags remain false.
 
 No Azure API/CLI or HF calls, credential/OIDC lookup, provider/model/client
 execution, inference, grading, download, workflow dispatch or paid execution
 occurred. Production runtime/grader defaults, exp035 configs, workflows,
-`core/qa.py`, HF upload and historical
-ledger/evidence bytes are unchanged. Project updates and merge decisions remain
-with the leader. This record contains pre-merge facts only, with no carrying-PR
-merge SHA, time or state.
+`core/qa.py`, HF upload and historical ledger/evidence bytes are unchanged.
+Project updates and merge decisions remain with the leader. This record contains
+pre-merge facts only, with no carrying-PR merge SHA, time or state.
