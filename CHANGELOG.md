@@ -604,6 +604,19 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Split Backend Tests into the existing `pytest` core check and an independent,
+  read-only `comparison-contracts` job after the owner reported two fresh
+  45-minute cancellations without test failures. Core excludes only the 11
+  actual `batch-runner/tests/test_gpt54_*.py` files; the comparison job names
+  each once. Both retain the same runner, Python, dependencies, pip cache,
+  dispatch identity checks, integration safety filter and 45-minute timeout.
+  Repo-root script tests remain in core. The single static selector reported
+  `1 passed in 0.17s`, verifying complete, non-overlapping file coverage and
+  environment parity. The prior `64 passed in 28.36s` was not rerun. No tests
+  were removed or newly skipped, and no matrix, dependency or timeout increase
+  was added. Hosted completion within the budget is still unproven; the leader
+  must inspect both job verdicts. Branch protection is unchanged.
+
 - Cache PR #629's complete workflow-preparation fixtures after manually removing
   the ineffective source-only seed. Four module-scoped ABBA seeds use the real
   preparer; each mutation case gets its own linked worktree and single-link
