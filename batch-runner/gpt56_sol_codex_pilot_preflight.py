@@ -97,6 +97,17 @@ INPUT_SOURCES = {
     "batch-runner/core/source_identity.py",
     "batch-runner/core/needs_files.py",
 }
+DEPLOYMENT_BINDING = {
+    "materializer": "batch-runner/gpt56_pilot_deployment_binding.py",
+    "source_base_sha": "9cda8a92040d6679cbfe7f83bca73b0fe657484f",
+    "ready_marker": "pilot-deployment-binding-ready.json",
+    "evidence_boundary": "offline_deployment_resource_binding_not_launch_or_execution",
+}
+DEPLOYMENT_SOURCES = {
+    DEPLOYMENT_BINDING["materializer"],
+    "batch-runner/core/repository_identity.py",
+    "batch-runner/core/agentic_experiments.py",
+}
 REQUIRED_SOURCES = {
     BASELINE,
     GRADER,
@@ -121,7 +132,7 @@ REQUIRED_SOURCES = {
     "batch-runner/core/cost_receipts.py",
     "batch-runner/core/result_projection.py",
     "batch-runner/schemas/grade.schema.json",
-} | EVIDENCE_SOURCES | IDENTITY_SOURCES | INPUT_SOURCES | {CONFIG_BUNDLE["materializer"]}
+} | EVIDENCE_SOURCES | IDENTITY_SOURCES | INPUT_SOURCES | DEPLOYMENT_SOURCES | {CONFIG_BUNDLE["materializer"]}
 # Findings on BASE_SHA, not editable waivers. Runtime changes need new review.
 LAUNCH_BLOCKERS = (
     "foundry_account_project_deployment_identity_unverified",
@@ -150,6 +161,8 @@ IDENTITY_REFUSAL = "pilot_identity_plan_gate_refused"
 IDENTITY_PLAN_BLOCKERS = ("pilot_dispatch_and_grading_identity_not_wired",)
 INPUT_BUNDLE_BLOCKERS = ("prepared_input_bytes_unverified",)
 INPUT_REFUSAL = "pilot_input_bundle_gate_refused"
+DEPLOYMENT_BINDING_BLOCKERS = ("actual_pilot_deployment_not_prepared",)
+DEPLOYMENT_REFUSAL = "pilot_deployment_binding_gate_refused"
 
 
 class _CLIArgumentsRefused(ValueError):
@@ -205,6 +218,7 @@ def _inspect_plan_only(plan: dict[str, Any]) -> dict[str, Any]:
         "dispatch_grading_identity": DISPATCH_GRADING_IDENTITY,
         "config_bundle": CONFIG_BUNDLE,
         "input_bundle": INPUT_BUNDLE,
+        "deployment_binding": DEPLOYMENT_BINDING,
         "identity": {
             "provider": "azure",
             "model": "gpt-5.6-sol",
@@ -515,7 +529,7 @@ def _input_refusal(result: dict[str, Any] | None = None) -> dict[str, Any]:
     return result
 
 
-def inspect_plan(
+def _inspect_plan_with_input(
     plan: dict[str, Any], *, evidence_bundle: Path | None = None,
     reviewed_source_sha: str | None = None, as_of: str | None = None,
     identity_bundle: Path | None = None, config_bundle: Path | None = None, input_bundle: Path | None = None,
@@ -559,11 +573,73 @@ def inspect_plan(
         return _input_refusal(result)
 
 
+def _deployment_refusal(result: dict[str, Any] | None = None) -> dict[str, Any]:
+    if result is None:
+        result = {"configuration_valid": False, "launch_blockers": list(LAUNCH_BLOCKERS)}
+    result.update({
+        "launch_allowed": False, "full_220_allowed": False,
+        "deployment_binding_gate": {
+            "deployment_binding_complete": False, "consumed_bundle_sha256": None,
+            "candidate_config_sha256": None, "evidence_linkage": None,
+            "cleared_blockers": [], "remaining_blockers": list(result["launch_blockers"]),
+            "evidence_boundary": DEPLOYMENT_BINDING["evidence_boundary"], "refusal_code": DEPLOYMENT_REFUSAL,
+        },
+    })
+    return result
+
+
+def inspect_plan(
+    plan: dict[str, Any], *, evidence_bundle: Path | None = None,
+    reviewed_source_sha: str | None = None, as_of: str | None = None,
+    identity_bundle: Path | None = None, config_bundle: Path | None = None, input_bundle: Path | None = None,
+    deployment_binding: Path | None = None, account_resource_id_file: Path | None = None,
+    project_resource_id_file: Path | None = None, deployment_resource_id_file: Path | None = None,
+) -> dict[str, Any]:
+    """Explicit verified deployment binding clears one local requirement only."""
+    options = {"evidence_bundle": evidence_bundle, "reviewed_source_sha": reviewed_source_sha,
+               "as_of": as_of, "identity_bundle": identity_bundle,
+               "config_bundle": config_bundle, "input_bundle": input_bundle}
+    resource_files = {"account_resource_id_file": account_resource_id_file,
+                      "project_resource_id_file": project_resource_id_file,
+                      "deployment_resource_id_file": deployment_resource_id_file}
+    if deployment_binding is None and all(path is None for path in resource_files.values()):
+        return _inspect_plan_with_input(plan, **options)
+    result = None
+    try:
+        result = _inspect_plan_with_input(plan, **options)
+        if (deployment_binding is None or any(value is None for value in (*options.values(), *resource_files.values()))
+                or not result["configuration_valid"]
+                or result.get("evidence_gate", {}).get("evidence_complete") is not True
+                or result.get("identity_plan_gate", {}).get("identity_complete") is not True
+                or result.get("input_bundle_gate", {}).get("input_bundle_complete") is not True):
+            return _deployment_refusal(result)
+        from gpt56_pilot_deployment_binding import CANDIDATE_PATH, verify_pilot_deployment_binding
+
+        verified = verify_pilot_deployment_binding(plan, bundle_root=deployment_binding, **options, **resource_files)
+        document = verified.as_dict()
+        remaining = [name for name in result["launch_blockers"] if name not in DEPLOYMENT_BINDING_BLOCKERS]
+        gate = {
+            "deployment_binding_complete": True, "consumed_bundle_sha256": verified.sha256,
+            "candidate_config_sha256": document["files"][CANDIDATE_PATH]["sha256"],
+            "evidence_linkage": document["evidence_linkage"], "evaluated_at": as_of,
+            "cleared_blockers": list(DEPLOYMENT_BINDING_BLOCKERS), "remaining_blockers": remaining,
+            "remaining_work": document["remaining_work"], "evidence_boundary": DEPLOYMENT_BINDING["evidence_boundary"],
+        }
+        result["launch_blockers"] = remaining
+        for name in ("evidence_gate", "identity_plan_gate", "input_bundle_gate"):
+            result[name]["remaining_blockers"] = remaining
+        result["deployment_binding_gate"] = gate
+        return result
+    except Exception:
+        return _deployment_refusal(result)
+
+
 def main(argv: list[str] | None = None) -> int:
     arguments = sys.argv[1:] if argv is None else argv
     evidence_requested = False
     identity_requested = False
     input_requested = False
+    deployment_requested = False
     # A misspelled option can conceal which mode was intended. All argument
     # errors are non-echoing; valid plan-only invocations keep their report bytes.
     parser = _SafeArgumentParser(description=__doc__)
@@ -574,6 +650,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--identity-bundle", type=Path, help="Published inert pilot dispatch/grading identity")
     parser.add_argument("--config-bundle", type=Path, help="Verified inert pilot configuration bundle")
     parser.add_argument("--input-bundle", type=Path, help="Published five-task local input bundle")
+    parser.add_argument("--deployment-binding", type=Path, help="Published local deployment binding")
+    for role in ("account", "project", "deployment"):
+        parser.add_argument("--" + role + "-resource-id-file", type=Path, help="Private local resource ID bytes")
     try:
         args = parser.parse_args(arguments)
         evidence_requested = any(value is not None for value in (
@@ -581,23 +660,28 @@ def main(argv: list[str] | None = None) -> int:
         ))
         identity_requested = args.identity_bundle is not None
         input_requested = args.input_bundle is not None or args.config_bundle is not None
+        deployment_requested = any(value is not None for value in (
+            args.deployment_binding, args.account_resource_id_file, args.project_resource_id_file, args.deployment_resource_id_file,
+        ))
         result = inspect_plan(
             load_plan(args.plan), evidence_bundle=args.evidence_bundle,
             reviewed_source_sha=args.reviewed_source_sha, as_of=args.as_of, identity_bundle=args.identity_bundle,
             config_bundle=args.config_bundle, input_bundle=args.input_bundle,
+            deployment_binding=args.deployment_binding, account_resource_id_file=args.account_resource_id_file,
+            project_resource_id_file=args.project_resource_id_file, deployment_resource_id_file=args.deployment_resource_id_file,
         )
     except Exception as error:
         if isinstance(error, _CLIArgumentsRefused):
             evidence_requested = True
-        if not (evidence_requested or identity_requested or input_requested) and not isinstance(error, (OSError, ValueError, KeyError, TypeError, yaml.YAMLError)):
+        if not (evidence_requested or identity_requested or input_requested or deployment_requested) and not isinstance(error, (OSError, ValueError, KeyError, TypeError, yaml.YAMLError)):
             raise
-        result = _input_refusal() if input_requested else _identity_refusal() if identity_requested else _evidence_refusal() if evidence_requested else {
+        result = _deployment_refusal() if deployment_requested else _input_refusal() if input_requested else _identity_refusal() if identity_requested else _evidence_refusal() if evidence_requested else {
             "configuration_valid": False,
             "launch_allowed": False,
             "full_220_allowed": False,
             "error": str(error),
         }
-    print(_canonical_json(result) if evidence_requested or identity_requested or input_requested else json.dumps(result, indent=2, ensure_ascii=False))
+    print(_canonical_json(result) if evidence_requested or identity_requested or input_requested or deployment_requested else json.dumps(result, indent=2, ensure_ascii=False))
     return 2  # No paid pilot or 220-task run can be launched by this module.
 
 

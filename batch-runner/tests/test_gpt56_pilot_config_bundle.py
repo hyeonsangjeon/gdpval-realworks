@@ -179,7 +179,7 @@ def test_real_validators_exact_pilot_scope_and_ready_last(plan, tmp_path, identi
     assert marker["identity_plan_sha256"] == verifications[0].sha256
     assert marker["contract_sha256"] == pilot.seal(plan)
     assert marker["source_pins"] == linkage["source_pins"] == plan["source_pins"]
-    assert len(plan["source_pins"]) == 43 and set(plan["source_pins"]) == pilot.REQUIRED_SOURCES
+    assert len(plan["source_pins"]) == 46 and set(plan["source_pins"]) == pilot.REQUIRED_SOURCES
     assert plan["config_bundle"] == pilot.CONFIG_BUNDLE
     assert marker["evidence_linkage"] == linkage["evidence_linkage"] == sealed["evidence_linkage"]
     if linked:
