@@ -133,11 +133,11 @@ def test_the_orphaned_directory_that_prompted_this_is_actually_wired():
 
 
 def test_backend_jobs_partition_the_comparison_contracts():
-    """The two real commands cover every file once, with identical free setup."""
+    """The three real commands cover every file once, with identical free setup."""
     text = WORKFLOW.read_text(encoding="utf-8")
     workflow = yaml.safe_load(text)
     jobs = workflow["jobs"]
-    assert set(jobs) == {"pytest", "comparison-contracts"}
+    assert set(jobs) == {"pytest", "comparison-contracts", "pilot-contracts"}
     assert workflow["permissions"] == {"contents": "read"}
     assert workflow["concurrency"] == {
         "group": "backend-tests-${{ github.ref }}",
@@ -153,6 +153,7 @@ def test_backend_jobs_partition_the_comparison_contracts():
 
     core = jobs["pytest"]["steps"]
     comparison = jobs["comparison-contracts"]["steps"]
+    pilot = jobs["pilot-contracts"]["steps"]
     setup_names = [
         "Verify dispatch contract",
         "Checkout",
@@ -168,7 +169,8 @@ def test_backend_jobs_partition_the_comparison_contracts():
     assert [step["name"] for step in comparison] == setup_names + [
         "Run comparison contracts"
     ]
-    assert core[:6] == comparison[:6]
+    assert [step["name"] for step in pilot] == setup_names + ["Run pilot contracts"]
+    assert core[:6] == comparison[:6] == pilot[:6]
     assert core[1] == {
         "name": "Checkout",
         "uses": "actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09",
@@ -212,7 +214,7 @@ def test_backend_jobs_partition_the_comparison_contracts():
     }
 
     argv = []
-    for step in (core[6], comparison[6]):
+    for step in (core[6], comparison[6], pilot[6]):
         assert set(step) == {"name", "run"}
         lines = step["run"].splitlines()
         assert len(lines) == 2 and lines[0] == "cd batch-runner"
@@ -220,24 +222,30 @@ def test_backend_jobs_partition_the_comparison_contracts():
     prefix = [
         "python", "-m", "pytest", "-m", "not integration", "--tb=short", "-q", "-rs"
     ]
-    assert argv[0][:len(prefix)] == argv[1][:len(prefix)] == prefix
+    assert argv[0][:len(prefix)] == argv[1][:len(prefix)] == argv[2][:len(prefix)] == prefix
     excluded = [arg.removeprefix("--ignore=") for arg in argv[0][len(prefix):]]
     selected = argv[1][len(prefix):]
+    pilot_selected = argv[2][len(prefix):]
 
     runner = REPO_ROOT / "batch-runner"
     tests = runner / "tests"
-    patterns = ("test_gpt54_*.py", "test_gpt56_*.py")
-    actual = sorted(
+    comparison_files = sorted(
         path.relative_to(runner).as_posix()
-        for pattern in patterns
-        for path in tests.glob(pattern)
+        for path in tests.glob("test_gpt54_*.py")
     )
-    assert actual
-    assert all(any(Path(path).match(pattern) for path in actual) for pattern in patterns)
+    pilot_files = sorted(
+        path.relative_to(runner).as_posix()
+        for path in tests.glob("test_gpt56_*.py")
+    )
+    assert comparison_files and pilot_files
+    actual = sorted(comparison_files + pilot_files)
     assert argv[0][len(prefix):] == [f"--ignore={path}" for path in actual]
-    assert excluded == selected == actual
+    assert excluded == actual
+    assert selected == comparison_files
+    assert pilot_selected == pilot_files
     assert len(excluded) == len(set(excluded))
     assert len(selected) == len(set(selected))
+    assert len(pilot_selected) == len(set(pilot_selected))
 
     discovery = ConfigParser()
     discovery.read(runner / "pytest.ini")
@@ -248,8 +256,11 @@ def test_backend_jobs_partition_the_comparison_contracts():
     }
     core_tests = all_tests - set(excluded)
     comparison_tests = set(selected)
+    pilot_tests = set(pilot_selected)
     assert not core_tests & comparison_tests
-    assert core_tests | comparison_tests == all_tests
+    assert not core_tests & pilot_tests
+    assert not comparison_tests & pilot_tests
+    assert core_tests | comparison_tests | pilot_tests == all_tests
 
 
 @pytest.mark.parametrize("root", COVERED_ROOTS)
