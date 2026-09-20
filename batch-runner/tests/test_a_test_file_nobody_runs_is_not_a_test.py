@@ -22,6 +22,7 @@ by the very defect it exists to catch.
 from __future__ import annotations
 
 import shlex
+from configparser import ConfigParser
 from pathlib import Path
 
 import pytest
@@ -131,6 +132,123 @@ def test_the_orphaned_directory_that_prompted_this_is_actually_wired():
     )
 
 
+def test_backend_jobs_partition_the_comparison_contracts():
+    """The two real commands cover every file once, with identical free setup."""
+    text = WORKFLOW.read_text(encoding="utf-8")
+    workflow = yaml.safe_load(text)
+    jobs = workflow["jobs"]
+    assert set(jobs) == {"pytest", "comparison-contracts"}
+    assert workflow["permissions"] == {"contents": "read"}
+    assert workflow["concurrency"] == {
+        "group": "backend-tests-${{ github.ref }}",
+        "cancel-in-progress": True,
+    }
+    assert "secrets." not in text
+    assert "id-token" not in text
+    for job in jobs.values():
+        # No renamed check, matrix, dependencies, credentials or job-level skip.
+        assert set(job) == {"runs-on", "timeout-minutes", "steps"}
+        assert job["runs-on"] == "ubuntu-latest"
+        assert job["timeout-minutes"] == 45
+
+    core = jobs["pytest"]["steps"]
+    comparison = jobs["comparison-contracts"]["steps"]
+    setup_names = [
+        "Verify dispatch contract",
+        "Checkout",
+        "Verify exact checkout",
+        "Setup Python",
+        "Install dependencies",
+        "Verify integration tests stay deselected",
+    ]
+    assert [step["name"] for step in core] == setup_names + [
+        "Run tests",
+        "Run repo-root script tests",
+    ]
+    assert [step["name"] for step in comparison] == setup_names + [
+        "Run comparison contracts"
+    ]
+    assert core[:6] == comparison[:6]
+    assert core[1] == {
+        "name": "Checkout",
+        "uses": "actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09",
+        "with": {"fetch-depth": 0, "persist-credentials": False},
+    }
+    assert core[3] == {
+        "name": "Setup Python",
+        "uses": "actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+        "with": {
+            "python-version": "3.10.12",
+            "cache": "pip",
+            "cache-dependency-path": "batch-runner/requirements.txt",
+        },
+    }
+    assert core[4] == {
+        "name": "Install dependencies",
+        "run": "cd batch-runner\npip install -r requirements.txt\n",
+    }
+    for index in (0, 2):
+        assert set(core[index]) == {"name", "if", "env", "run"}
+        assert core[index]["if"] == "github.event_name == 'workflow_dispatch'"
+        assert "set -euo pipefail" in core[index]["run"]
+    assert core[0]["env"] == {
+        "EXPECTED_SHA": "${{ inputs.expected_sha }}",
+        "WORKFLOW_SHA": "${{ github.workflow_sha }}",
+    }
+    assert core[2]["env"] == {"EXPECTED_SHA": "${{ inputs.expected_sha }}"}
+    for assertion in (
+        '[[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]',
+        '[[ "$GITHUB_SHA" == "$EXPECTED_SHA" ]]',
+        '[[ "$WORKFLOW_SHA" == "$EXPECTED_SHA" ]]',
+    ):
+        assert assertion in core[0]["run"]
+    assert '[[ "$(git rev-parse HEAD)" == "$EXPECTED_SHA" ]]' in core[2]["run"]
+    assert set(core[5]) == {"name", "run"}
+    assert 'grep -qE \'^addopts = .*-m "not integration"\' pytest.ini' in core[5]["run"]
+    assert "exit 1" in core[5]["run"]
+    assert core[-1] == {
+        "name": "Run repo-root script tests",
+        "run": 'python -m pytest scripts/__tests__ -m "not integration" --tb=short -q -rs',
+    }
+
+    argv = []
+    for step in (core[6], comparison[6]):
+        assert set(step) == {"name", "run"}
+        lines = step["run"].splitlines()
+        assert len(lines) == 2 and lines[0] == "cd batch-runner"
+        argv.append(shlex.split(lines[1]))
+    prefix = [
+        "python", "-m", "pytest", "-m", "not integration", "--tb=short", "-q", "-rs"
+    ]
+    assert argv[0][:len(prefix)] == argv[1][:len(prefix)] == prefix
+    excluded = [arg.removeprefix("--ignore=") for arg in argv[0][len(prefix):]]
+    selected = argv[1][len(prefix):]
+
+    runner = REPO_ROOT / "batch-runner"
+    tests = runner / "tests"
+    actual = sorted(
+        path.relative_to(runner).as_posix()
+        for path in tests.glob("test_gpt54_*.py")
+    )
+    assert actual
+    assert argv[0][len(prefix):] == [f"--ignore={path}" for path in actual]
+    assert excluded == selected == actual
+    assert len(excluded) == len(set(excluded))
+    assert len(selected) == len(set(selected))
+
+    discovery = ConfigParser()
+    discovery.read(runner / "pytest.ini")
+    assert discovery["pytest"]["testpaths"] == "tests"
+    assert discovery["pytest"]["python_files"] == "test_*.py"
+    all_tests = {
+        path.relative_to(runner).as_posix() for path in tests.rglob("test_*.py")
+    }
+    core_tests = all_tests - set(excluded)
+    comparison_tests = set(selected)
+    assert not core_tests & comparison_tests
+    assert core_tests | comparison_tests == all_tests
+
+
 @pytest.mark.parametrize("root", COVERED_ROOTS)
 def test_a_change_under_each_covered_root_actually_starts_this_workflow(root: str):
     """A step that exists but never fires is still a step nobody runs.
@@ -178,5 +296,3 @@ def _pattern_covers(pattern: str, root: str) -> bool:
     if pattern.endswith("/**"):
         return (root + "/").startswith(pattern[:-2])
     return pattern == root
-
-
