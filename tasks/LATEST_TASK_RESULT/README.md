@@ -1,127 +1,197 @@
 # Latest substantive task result
 
-## PROJECT5-PR637-CORE-PYTEST-FIX
+## PROJECT5-PR638-THREE-WAY-PARTITION-FIX
 
-The four reported Backend pytest failures in PR #637 now pass in one targeted
-local run: `4 passed in 5.39s`, exit 0. The correction restores the legacy
-manifest guards' original failure paths and adds the existing prepared-request
-capture blocker to an exact test expectation. The registered Foundry pilot still
-requires capture inputs before Step 1 proceeds.
+Backend Tests now has three independent jobs. Core `pytest` keeps its exact
+20-file exclusions, `comparison-contracts` selects the 11 GPT-5.4 files, and
+the new `pilot-contracts` selects the 9 GPT-5.6 files. The prescribed static
+selector passed once. Fresh automatic CI must still establish all three
+results and durations within their individual 45-minute ceilings.
 
-### CI failure and correction scope
+### CI finding and correction scope
 
-The leader reported four failures at
-`155279f6458ea3341f2c894a1177aaa698bc053d` in Backend pytest run `35506466839`,
-job `106067021054`. At that HEAD, `comparison-contracts`, `validate`,
-`advance-check` and `freeze-check` succeeded. This correction does not claim
-that the new HEAD has passed automatic CI.
+The leader supplied two measured CI rounds. No cancelled job was rerun.
 
-`test_real_validators_exact_pilot_scope_and_ready_last[True]` omitted
-`prepared_request_capture_unverified` from its exact remaining-blocker list.
-The production transition was correct. Only that expected list changes; the
-test still compares the complete ordered list, uses the real bundle validators
-and checks both false launch flags.
+| HEAD | Backend run / job | Result |
+| --- | --- | --- |
+| `c88f76f02c43ef9b2672e61d6cdd6d4630235305` | `35514065313` / `106086906143` (`pytest`) | Cancelled at `45:13`, still progressing at `87%`, with no assertion failure. |
+| `8117a667a49133cfd11f3401d17ddfd36d82db55` | `35517208735` / `106095045010` (`pytest`) | Succeeded in about `25:13`. |
+| `8117a667a49133cfd11f3401d17ddfd36d82db55` | `35517208735` / `106095045151` (`comparison-contracts`) | Cancelled at about `45:16`, at `91%`, with no assertion failure. |
 
-Three Step 1 manifest tests used an existing `SimpleNamespace` config without
-`execution`. Directly reading `config.execution.pilot_input_capture` raised
-`AttributeError` before the intended missing, legacy-schema and byte-drift
-manifest checks. `_prepare_tasks` now obtains `execution` and the optional pilot
-control with `getattr(..., None)`. The independent registered run-ID refusal
-remains in place, and an explicit non-null pilot control still requires capture
-sources. No execution field was injected into a test double. The manifest tests,
-their fixtures and their refusal assertions are unchanged.
+In the first round, comparison succeeded with only the 11 GPT-5.4 files while
+all 9 GPT-5.6 files remained in core. The first correction moved all 20 into
+comparison. That made core green but moved the timeout: the combined job
+completed every GPT-5.4 file and reached `test_gpt56_pilot_wire_receipt.py`
+before cancellation. Neither round is a complete passing Backend run.
 
-The two active GPT-5.4/GPT-5.6 source-pin maps also refresh only the Step 1 hash
-to `c487fd25710155e5bbf07461dd0c3c2d806babe1a64e8ca7cd7931c50461c742`.
-This is required metadata for the changed source bytes, not an experiment or
-capture behavior change. Leaving those pins stale would make the real source
-verifiers reject the corrected implementation. Source counts, grader closure
-metadata, historical registrations and evidence bytes are unchanged.
+This correction leaves core's executable job unchanged, restores comparison's
+GPT-5.4-only selection and adds one explicit GPT-5.6 sibling. The existing
+static test node now requires exactly these three jobs, identical setup,
+independently derived nonempty sorted families, exact core union exclusions,
+duplicate rejection, pairwise disjointness and complete coverage of every
+discovered `test_*.py` file.
 
-No other production code, capture helper, Step 2 gate, preflight transition,
-workflow, timeout, model setting, task cohort or grader behavior changed.
+Existing job/check names, runner, setup, pinned actions, dependencies, pip
+cache, dispatch/checkout SHA checks, integration filter, repo-root script tests,
+triggers, permissions and ref-scoped concurrency are preserved. The new job
+copies the same six setup steps and 45-minute ceiling. There is no job
+dependency, matrix, secret, credential, OIDC access, test deletion, new skip or
+xfail. No timeout was increased.
 
-### Exact correction selector
+### Exact three-way partition
 
-Exactly one pytest invocation ran, selecting only the four reported failures:
+Paths below are relative to `batch-runner`. Core excludes their sorted union
+and retains all other discovered tests plus the existing repo-root script step.
+`comparison-contracts` selects only these 11 sorted GPT-5.4 paths:
 
-```bash
-PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider --tb=short 'batch-runner/tests/test_gpt56_pilot_config_bundle.py::test_real_validators_exact_pilot_scope_and_ready_last[True]' batch-runner/tests/test_manifest_pipeline_guard.py::test_step1_missing_manifest_fails_before_prepared_write batch-runner/tests/test_manifest_pipeline_guard.py::test_step1_legacy_manifest_fails_before_prepared_write batch-runner/tests/test_manifest_pipeline_guard.py::test_step1_manifest_byte_drift_fails_before_prepared_write
+```text
+tests/test_gpt54_codex_grading_input.py
+tests/test_gpt54_codex_input_capture.py
+tests/test_gpt54_comparison_preflight.py
+tests/test_gpt54_disposable_checkout.py
+tests/test_gpt54_prepared_input_attestation.py
+tests/test_gpt54_run_config_bundle.py
+tests/test_gpt54_run_input_bundle.py
+tests/test_gpt54_runtime_checkout.py
+tests/test_gpt54_v2_grading_input.py
+tests/test_gpt54_v2_input_capture.py
+tests/test_gpt54_workflow_gate.py
 ```
 
-Result: `4 passed in 5.39s`, exit 0, four cases collected. The positive bundle
-case retains real evidence, identity, config and static step8 validation under
-the existing offline guards. The three manifest cases retain their original
-expected exceptions and no-prepared-file assertions.
+`pilot-contracts` selects only these 9 sorted GPT-5.6 paths:
 
-The full `comparison-contracts` selector and the 124-case capture selector were
-not rerun locally. No broad/full suite or manual workflow ran. `git diff --check`
-and `git diff --cached --check` passed before the correction commit.
+```text
+tests/test_gpt56_evidence_preflight_gate.py
+tests/test_gpt56_foundry_evidence_intake.py
+tests/test_gpt56_pilot_config_bundle.py
+tests/test_gpt56_pilot_deployment_binding.py
+tests/test_gpt56_pilot_identity_plan.py
+tests/test_gpt56_pilot_input_bundle.py
+tests/test_gpt56_pilot_input_capture.py
+tests/test_gpt56_pilot_wire_receipt.py
+tests/test_gpt56_sol_codex_pilot_preflight.py
+```
 
-The initial capture selector remains historical evidence:
-`2 failed, 122 passed in 284.01s (0:04:44)`, exit 1. Its test-only connection-confirmation correction
-was not rerun locally. The leader subsequently reported automatic
-`comparison-contracts` success at `155279f6458ea3341f2c894a1177aaa698bc053d`.
-Neither that earlier CI result nor this four-case selector proves that the full
-new-HEAD Backend suite is green.
+### Exact validation evidence
+
+Exactly one pytest invocation ran for this correction, from the existing PR
+worktree root:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider --tb=short batch-runner/tests/test_a_test_file_nobody_runs_is_not_a_test.py::test_backend_jobs_partition_the_comparison_contracts
+```
+
+Result: `1 passed in 0.18s`, exit 0, one collected. This is evidence for the
+three-way static workflow and filesystem partition, not execution of the
+20 contract files or a measurement of full-suite duration. `git diff --check` and
+`git diff --cached --check` passed. No core pytest suite, comparison-contracts
+suite, pilot-contracts suite, wire receipt selector, earlier pilot selector,
+broad suite or manual workflow was run locally. The previous two-job correction
+also reported `1 passed in 0.18s` at implementation HEAD
+`70334bb35f7916a4db7a1e1d1a18da10847cb9e1`; its subsequent combined-job timeout
+shows why that static result was not a hosted runtime guarantee.
+
+The prior receipt evidence is preserved as historical evidence only. Its single
+local command, run from `batch-runner`, was:
+
+```bash
+/ai-work/venvs/gdpval-realworks-py310/bin/python -m pytest -q tests/test_gpt56_pilot_wire_receipt.py --tb=short
+```
+
+That command reported `88 passed in 642.32s (0:10:42)`, exit 0, at
+`59aa7f00de5505e0ed5c1bff8e8ae7757ff9398a`. Both reviewers subsequently found
+the endpoint-account binding defect. The corrected receipt implementation
+`89e9a33baa3b6c4b3c404f7c2c6f61798003a868` added a wrong-account parameter,
+bringing its selector to 89 cases. That corrected selector has not been rerun
+locally. The 88-pass result does not validate the correction, and the cancelled
+core run is not a completed pass. Fresh automatic CI is still required.
+
+### Mandatory pre-edit decision
+
+`extreme-reasoner` was invoked before editing and returned
+APPROVE-WITH-CONDITIONS against
+`8117a667a49133cfd11f3401d17ddfd36d82db55`. Its structured memo identified
+missing or duplicated coverage, loss of effective GPT-5.6 merge gating and
+increased runner consumption as the main risks. It required exact family
+selections, core's unchanged exclusions, identical read-only setup and all
+existing security controls. The integration filter is not a network sandbox.
+
+The nominal aggregate allowance rises from `2 × 45 = 90` to
+`3 × 45 = 135` runner-minutes, an increase of 45 minutes or 50%, excluding
+shutdown overhead. One more checkout/Python/pip/cache cycle adds unmeasured
+overhead and uses another runner slot. The second round consumed about 70.5
+combined job-minutes (`25:13 + 45:16`) despite incomplete comparison execution;
+it is not a completed-work baseline. File counts and `91%` progress do not
+predict either new contract job's duration. No paid provider operation was
+authorized.
+
+All three job verdicts must succeed at the same relevant HEAD before a later
+readiness decision. Adding `pilot-contracts` does not establish that it is an
+externally required check; repository rulesets were neither queried nor
+changed. The existing result-PR caller checks aggregate Backend success but
+waits only 1,800 seconds, a separate unchanged limitation. Ref-scoped cancellation
+and independent job verdicts remain in place. A separately authorized rollback
+would restore both selectors and the guard with a normal forward patch; it
+would also restore the known combined-job timeout risk. This memo is not CI,
+launch or merge approval.
 
 ### Immutable review boundary
 
-Correction base: `155279f6458ea3341f2c894a1177aaa698bc053d`.
-Reviewed correction HEAD: `a81985b1f9f74f246d265a273913a9c3ec4cb31e`.
-Both `llm-systems-engineer` and `first-reviewer` returned APPROVE with no blocking
-findings. They confirmed the legacy guard paths, independent registered-pilot
-refusal, exact blocker expectation and both source pins through read-only static
-review. Neither reviewer reran tests or executed runtime code.
-The reviews cover the four-file correction against that base. This completion
-record and the changelog are a subsequent documentation-only commit outside
-the implementation review boundary.
+Correction base: `8117a667a49133cfd11f3401d17ddfd36d82db55`.
+Fixed implementation HEAD: `c6bf7269480bfc804e7f2aaf6427613cdab3fda9`.
+Both `llm-systems-engineer` and `first-reviewer` returned APPROVE with no
+blocking findings on this exact HEAD. Both reviews were read-only; neither
+reviewer ran tests, runtime imports, network calls or CI queries. They confirmed
+the partition and preservation conditions without predicting hosted duration.
+These reviews cover only the two-file partition correction. This record and
+the changelog are a later records-only commit outside that implementation
+review boundary. The prior receipt implementation's two APPROVE verdicts at
+`89e9a33baa3b6c4b3c404f7c2c6f61798003a868` remain separate static evidence.
 
-The same development branch, `b/gpt56-pre-execution-capture-20260920`, is used.
-Its original main base is `140cbf4eef59a2b3c6ee731ac3dd4c75d9e005d7`.
-The preserved checkout `wip/local-main-preserved-20260719` was not used or edited.
-The repository's existing author and committer identity,
-`hyeonsangjeon <wingnut0310@gmail.com>`, was preserved without configuration
-changes. No attribution trailer, history rewrite, force push, hook bypass or
-forbidden Git cleanup was used.
+The existing branch and worktree are retained:
+`b/gpt56-live-wire-receipt-20260920`, originally based on main
+`0cd4c5e76805384a77afabf28b3663a3ad6596c0`. No new checkout or branch was created
+for this correction.
 
-### Files changed by this correction
+### Changed files
 
-- `batch-runner/step1_prepare_tasks.py`
-- `batch-runner/tests/test_gpt56_pilot_config_bundle.py`
-- `batch-runner/experiments/execution_envelope/gpt54_sandboxv2_codex_comparison.yaml`
-- `batch-runner/experiments/execution_envelope/gpt56_sol_foundry_codex_pilot.yaml`
+- `.github/workflows/backend-tests.yml`
+- `batch-runner/tests/test_a_test_file_nobody_runs_is_not_a_test.py`
 - `CHANGELOG.md`
 - `tasks/LATEST_TASK_RESULT/README.md`
 
-### Preserved capture outcome and remaining work
+Runtime receipt logic, experiment settings, source pins, launch flags and
+grading behavior are untouched. No other workflow, `core/qa.py` or HF upload
+code changes.
 
-The original implementation still binds real Step 1 prepared rows to the
-runtime candidate and five verified upstream bundles, publishes prepared and
-capture files without clobbering, and verifies current bytes before Step 2
-provider/auth/client setup. Explicit preflight consumption still clears only
-`prepared_request_capture_unverified`. Legacy absent/null behavior and the
-registered pilot's required-capture boundary are preserved.
+### Skills and unchanged live-wire limits
 
-The evidence boundary remains
-`prepared_request_intent_not_wire_or_served_identity`. Local prepared-input
-consistency does not prove actual model consumption, wire bytes, live inference
-identity, served capability or launch permission. `launch_allowed` and
-`full_220_allowed` remain false, as do `launch_enabled` and `full_220_enabled`
-in the active contract. Real external evidence acquisition/review, live
-identity/input consumption/wire binding, native sandbox/result hosting, actual
-deployment/execution, native-cap enforcement and usage/tariff receipts remain
-unresolved. New-HEAD automatic CI remains a separate gate.
+The mandatory workflow decision used `extreme-reasoner` before editing;
+`llm-systems-engineer` and `first-reviewer` cover the immutable implementation.
+`im-not-ai-en` was applied to the English records without changing hashes,
+commands, timings or evidence limits. UI/animation, grading and repo-readiness
+skills do not apply to this CI partition correction. It introduces no new
+experiment axis or runtime evidence contract.
 
-`experiment-design` kept the source-pin refresh separate from experimental
-changes. This is an offline four-case regression check, not a model-performance
-experiment. `llm-systems-engineer` and `first-reviewer` provide the immutable
-reviews. `im-not-ai-en` was applied to the English records while preserving
-results, commands, hashes and evidence limits. `extreme-reasoner` is not required
-because no workflow, `core/qa.py` or HF upload code changes. Grader production and
-UI/animation are outside this correction.
+The receipt still observes the pinned Codex app-server's actual serialized
+stdio requests, correlated replies and native thread usage. It does not
+observe Foundry HTTP payloads or returned served-model identity. Unavailable
+fields remain `not_available`, and
+`live_inference_identity_and_wire_unverified` stays unresolved. The boundary
+remains `codex_app_server_transport_not_foundry_http_or_served_identity`.
+Synthetic fixtures prove verifier behavior only, not that the pilot was served.
+`launch_enabled`, `launch_allowed`, `full_220_enabled` and `full_220_allowed`
+remain false; no launch command was added.
 
-No Azure/HF/OIDC/provider/model/client/grader execution, credential lookup,
-inference, grading, download, paid execution or manual workflow dispatch
-occurred. Project and merge decisions remain with the leader. This record stops
-at pre-merge facts and contains no carrying-PR merge SHA, time or state.
+Fresh results and duration evidence for all three Backend jobs remain required.
+Real Foundry evidence acquisition/approval, actual HTTP/input-consumption/wire
+and served identity, native sandbox/result-bundle hosting, deployment/execution,
+native-cap enforcement and usage/tariff/billing receipts remain separate work.
+
+No Azure/HF/OIDC lookup, provider/model/client/grader execution, inference,
+grading, download, paid execution or manual workflow dispatch occurred. The
+preserved checkout and other worktrees were not edited. Git author/committer
+identity `hyeonsangjeon <wingnut0310@gmail.com>` was preserved without configuration
+changes, attribution trailers, history rewriting, force push or hook bypass.
+Project and merge decisions remain with the leader. This record stops at
+pre-merge facts.

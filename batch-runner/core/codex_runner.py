@@ -63,6 +63,7 @@ from core.execution_errors import classify_execution_error
 from core.execution_environment_readiness import (
     ENVIRONMENT_CODEX_COMMAND_LINE_TOOL_FOUNDRY,
 )
+from core.experiment_config import PilotInputCapture
 from core.reference_integrity import ReferenceIntegrityError, copy_verified_reference
 
 #: Wall-clock limit for one task's turn. Longer than the subprocess mode's
@@ -694,6 +695,7 @@ class CodexAgentRunner(RecordsItsFirstRequest):
         codex_bin: str | None = None,
         verify_runtime: bool = True,
         preflight_auth: bool = True,
+        pilot_wire_receipts: Any | None = None,
     ) -> None:
         """
         Args:
@@ -715,7 +717,19 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                 isolated environment, before starting a runtime, and refuse to
                 start when it produces no token. Off only for the connection
                 diagnostic, which sometimes needs the failing request itself.
+            pilot_wire_receipts: owned observation session for the registered
+                pilot. Absent/null leaves other runs unchanged; this records
+                app-server traffic, not Foundry HTTP or served identity.
         """
+        if run_id == PilotInputCapture.RUN_ID or pilot_wire_receipts is not None:
+            from gpt56_pilot_wire_receipt import (
+                PilotWireReceiptRefused,
+                PilotWireReceiptSession,
+            )
+
+            if (run_id != PilotInputCapture.RUN_ID
+                    or type(pilot_wire_receipts) is not PilotWireReceiptSession):
+                raise PilotWireReceiptRefused() from None
         if not isinstance(provider, CodexProviderLike):
             raise CodexProviderConfigurationError(
                 "the Codex run place needs a provider description; refusing "
@@ -726,6 +740,7 @@ class CodexAgentRunner(RecordsItsFirstRequest):
         self.cost_ledger = cost_ledger
         self.run_id = run_id
         self.condition_name = condition_name
+        self.pilot_wire_receipts = pilot_wire_receipts
         self.codex_bin = codex_bin
         self.preflight_auth = bool(preflight_auth)
         self._auth_probe: AuthCommandProbe | None = None
@@ -882,7 +897,9 @@ class CodexAgentRunner(RecordsItsFirstRequest):
             )
         return probe
 
-    def open_runtime(self, workspace: CodexWorkspace) -> Any:
+    def open_runtime(
+        self, workspace: CodexWorkspace, *, pilot_wire_observer: Any | None = None,
+    ) -> Any:
         """Start the Codex client a run uses, against this provider.
 
         Public, and paired with :meth:`start_thread`, because the connection
@@ -904,6 +921,19 @@ class CodexAgentRunner(RecordsItsFirstRequest):
         mint will reach the deployment and be refused there, and the refusal
         will describe the endpoint rather than the sign-in.
         """
+        pilot_session = getattr(self, "pilot_wire_receipts", None)
+        if (getattr(self, "run_id", None) == PilotInputCapture.RUN_ID
+                or pilot_session is not None or pilot_wire_observer is not None):
+            from gpt56_pilot_wire_receipt import (
+                PilotWireReceiptRefused,
+                PilotWireReceiptSession,
+                install_runtime_observer,
+            )
+
+            if (getattr(self, "run_id", None) != PilotInputCapture.RUN_ID
+                    or type(pilot_session) is not PilotWireReceiptSession
+                    or pilot_wire_observer is None):
+                raise PilotWireReceiptRefused() from None
         self.require_a_usable_auth_command(workspace)
         environment = self._build_environment(workspace)
         overrides = self.provider.config_overrides()
@@ -920,7 +950,19 @@ class CodexAgentRunner(RecordsItsFirstRequest):
             env=environment,
             cwd=str(workspace.workspace),
         )
-        return Codex(config)
+        codex = Codex(config)
+        if pilot_wire_observer is not None:
+            try:
+                # Codex has already initialized. Only subsequent app-server
+                # traffic belongs to this task's observation interval.
+                install_runtime_observer(codex, pilot_wire_observer)
+            except Exception:
+                try:
+                    codex.close()
+                except Exception:
+                    pass
+                raise PilotWireReceiptRefused() from None
+        return codex
 
     def start_thread(
         self,
@@ -1027,8 +1069,39 @@ class CodexAgentRunner(RecordsItsFirstRequest):
         experiment's recorded model and the model actually called drift apart
         without anything noticing.
         """
+        pilot_session = getattr(self, "pilot_wire_receipts", None)
+        runner_run_id = getattr(self, "run_id", None)
+        pilot_observer = None
+        pilot_linkage = None
+        if (runner_run_id == PilotInputCapture.RUN_ID
+                or run_id == PilotInputCapture.RUN_ID or pilot_session is not None):
+            from gpt56_pilot_wire_receipt import (
+                PilotWireReceiptRefused,
+                PilotWireReceiptSession,
+            )
+
+            if (runner_run_id != PilotInputCapture.RUN_ID
+                    or type(pilot_session) is not PilotWireReceiptSession):
+                raise PilotWireReceiptRefused() from None
+            try:
+                pilot_observer = pilot_session.begin_task(
+                    task_id=task_id,
+                    run_id=runner_run_id if run_id is None else run_id,
+                    condition_name=(getattr(self, "condition_name", None)
+                                    if condition_name is None else condition_name),
+                    task_prompt=task_prompt,
+                    occupation=occupation,
+                    experiment_prompt=experiment_prompt,
+                    perception_text=perception_text,
+                    reference_files=reference_files,
+                    provider=self.provider,
+                )
+            except Exception:
+                raise PilotWireReceiptRefused() from None
         requested = (model or self.provider.model).strip()
         if requested != self.provider.model:
+            if pilot_session is not None:
+                raise PilotWireReceiptRefused() from None
             return self._failure(
                 f"this Codex run place is configured for deployment "
                 f"{self.provider.model!r} and was asked for {requested!r}; "
@@ -1041,6 +1114,8 @@ class CodexAgentRunner(RecordsItsFirstRequest):
         try:
             workspace = CodexWorkspace.create(task_id=task_id or "task")
         except OSError as exc:
+            if pilot_session is not None:
+                raise PilotWireReceiptRefused() from None
             return self._failure(
                 f"could not create the task workspace: {exc}",
                 category="workspace_error",
@@ -1050,22 +1125,42 @@ class CodexAgentRunner(RecordsItsFirstRequest):
             try:
                 workspace.stage_references(reference_files)
             except (ReferenceIntegrityError, OSError) as exc:
+                if pilot_session is not None:
+                    raise PilotWireReceiptRefused() from None
                 return self._failure(
                     f"could not stage the task's reference files: {exc}",
                     category="reference_error",
                 )
 
-            outcome = self._run_one_turn(
-                workspace=workspace,
-                task_text=self.build_task_text(
+            try:
+                task_text = self.build_task_text(
                     task_prompt,
                     workspace,
                     occupation=occupation,
                     perception_text=perception_text,
-                ),
-                experiment_prompt=experiment_prompt,
-                task_id=task_id,
-            )
+                )
+                pilot_options = {}
+                if pilot_observer is not None:
+                    pilot_observer.bind_task_text(task_text)
+                    pilot_options["pilot_wire_observer"] = pilot_observer
+                outcome = self._run_one_turn(
+                    workspace=workspace,
+                    task_text=task_text,
+                    experiment_prompt=experiment_prompt,
+                    task_id=task_id,
+                    **pilot_options,
+                )
+                if pilot_session is not None:
+                    pilot_linkage = pilot_session.finish_task(
+                        pilot_observer,
+                        success=outcome.success,
+                        thread_id=outcome.thread_id,
+                        turn_id=outcome.turn_id,
+                    )
+            except Exception:
+                if pilot_session is not None:
+                    raise PilotWireReceiptRefused() from None
+                raise
         finally:
             if workspace is not None:
                 try:
@@ -1119,9 +1214,11 @@ class CodexAgentRunner(RecordsItsFirstRequest):
             },
         }
         if outcome.error:
-            result["error"] = outcome.error
+            result["error"] = "pilot_task_failed" if pilot_session is not None else outcome.error
         if outcome.error_category:
             result["error_category"] = outcome.error_category
+        if pilot_session is not None:
+            result["pilot_wire_receipt"] = pilot_linkage
         return result
 
     def _run_one_turn(
@@ -1131,13 +1228,19 @@ class CodexAgentRunner(RecordsItsFirstRequest):
         task_text: str,
         experiment_prompt: Optional[dict],
         task_id: Optional[str],
+        pilot_wire_observer: Any | None = None,
     ) -> CodexRunOutcome:
         before_pids = _descendant_pids(os.getpid())
         call_id: str | None = None
         codex: Any = None
         try:
             try:
-                codex = self.open_runtime(workspace)
+                if pilot_wire_observer is None:
+                    codex = self.open_runtime(workspace)
+                else:
+                    codex = self.open_runtime(
+                        workspace, pilot_wire_observer=pilot_wire_observer,
+                    )
             except (CodexRuntimeUnavailable, CodexProviderConfigurationError) as exc:
                 return CodexRunOutcome(
                     success=False,
@@ -1159,6 +1262,11 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                 if isinstance(system, str) and system.strip():
                     developer_instructions = system.strip()
 
+            if pilot_wire_observer is not None:
+                pilot_wire_observer.bind_runtime(
+                    workspace=workspace.workspace,
+                    developer_instructions=developer_instructions,
+                )
             try:
                 thread = self.start_thread(
                     codex,

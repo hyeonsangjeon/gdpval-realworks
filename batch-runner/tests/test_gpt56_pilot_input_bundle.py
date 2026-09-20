@@ -255,7 +255,7 @@ def test_exact_local_bundle_uses_real_validators_and_ready_last(input_seeds, tmp
     assert document["dataset"]["parquet"] == {"path": bundle.PARQUET_PATH, **_digest(case.parquet.read_bytes())}
     assert document["files"] == {name: _digest(data) for name, data in result.files}
     assert document["config_bundle"] == {"path": configs.READY_PATH, **_digest(checked[0].canonical_bytes())}
-    assert document["source_pins"] == case.plan["source_pins"] and len(document["source_pins"]) == 51
+    assert document["source_pins"] == case.plan["source_pins"] and len(document["source_pins"]) == 52
     assert case.plan["input_bundle"] == pilot.INPUT_BUNDLE
     assert document["evidence_linkage"] == checked[0].as_dict()["evidence_linkage"]
     assert (document["evidence_linkage"] is not None) is linked

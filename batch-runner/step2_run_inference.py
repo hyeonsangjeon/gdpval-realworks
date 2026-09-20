@@ -2331,9 +2331,18 @@ def _execute_single_task(
         list[tuple[AzureAIWorkload, str, dict]]
     ] = None,
     cost_recorder=None,
+    pilot_wire_receipts=None,
+    pilot_attempt_index: int = 0,
 ) -> dict:
     """Execute a single task and return result dict."""
     task_id = task_info["task_id"]
+    if run_id == PilotInputCapture.RUN_ID or pilot_wire_receipts is not None:
+        from gpt56_pilot_wire_receipt import PilotWireReceiptRefused, PilotWireReceiptSession
+
+        if (type(pilot_wire_receipts) is not PilotWireReceiptSession or error_context is not None
+                or execution_mode != "codex_foundry" or strict_inputs):
+            raise PilotWireReceiptRefused() from None
+        pilot_wire_receipts.arm_task(task_id, pilot_attempt_index)
 
     # Build prompt
     instruction = task_info["instruction"]
@@ -2490,6 +2499,8 @@ def _execute_single_task(
             condition_name=condition_name,
             task_id=task_id,
         )
+        if pilot_wire_receipts is not None:
+            pilot_wire_receipts.accept_task(task_id=task_id, attempt_index=pilot_attempt_index, result=result)
         latency_ms = (time.time() - start) * 1000
 
         if result["success"]:
@@ -2597,6 +2608,8 @@ def _execute_single_task(
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
     except Exception as exc:
+        if pilot_wire_receipts is not None:
+            raise PilotWireReceiptRefused() from None
         return {
             "task_id": task_id,
             "status": "error",
@@ -3159,6 +3172,15 @@ def _run_inference_impl(
     elif comparison_run_id is not None:
         raise ValueError("pilot_comparison_override_refused")
 
+    pilot_wire_receipts = None
+    if pilot_capture_sources is not None:
+        from gpt56_pilot_wire_receipt import PilotWireReceiptSession
+
+        pilot_wire_receipts = PilotWireReceiptSession(
+            sources=pilot_capture_sources, workspace=WORKSPACE_DIR, dataset_root=DEFAULT_LOCAL_PATH,
+            verified_capture=verified_input_capture,
+        )
+
     tasks = prepared["tasks"]
     condition = prepared[condition_key]
     if condition is None:
@@ -3480,6 +3502,8 @@ def _run_inference_impl(
         if not isinstance(run_identity, str) or not run_identity:
             print("❌ hardened execution requires budget.paired_run_id")
             sys.exit(1)
+    elif pilot_wire_receipts is not None:
+        run_identity = PilotInputCapture.RUN_ID
     else:
         run_identity = _resolve_run_identity(experiment_id)
 
@@ -3890,6 +3914,8 @@ def _run_inference_impl(
             print(f"❌ execution.codex is not usable: {exc}")
             sys.exit(1)
         codex_options = {"provider_settings": codex_settings}
+        if pilot_wire_receipts is not None:
+            codex_options["pilot_wire_receipts"] = pilot_wire_receipts
         print(f"   Codex provider:     {codex_settings.provider_id}")
         print(f"   Codex retries:      {codex_settings.request_max_retries} "
               f"request / {codex_settings.stream_max_retries} stream")
@@ -4242,6 +4268,8 @@ def _run_inference_impl(
                             azure_ai_factory=azure_ai_factory,
                             azure_ai_route_plan=azure_ai_route_plan,
                             cost_recorder=cost_recorder,
+                            **({"pilot_wire_receipts": pilot_wire_receipts, "pilot_attempt_index": infra_attempt}
+                               if pilot_wire_receipts is not None else {}),
                         )
                     if metrics_enabled:
                         _record_execution_metrics(attempted)
@@ -4708,6 +4736,8 @@ def _run_inference_impl(
         final_output["azure_ai_routes"] = azure_ai_routes
     if verified_input_capture is not None:
         final_output["pre_execution_input_capture"] = verified_input_capture
+    if pilot_wire_receipts is not None:
+        final_output["pilot_wire_receipts"] = pilot_wire_receipts.finalize(ordered_task_ids)
 
     # The audit trail the receipts above are derived from. Exported as JSONL
     # next to the results so a later step — a resume, a shard merge, a reader

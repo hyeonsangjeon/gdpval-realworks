@@ -13,6 +13,38 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Split PR #638's Backend contracts into two independent family jobs while
+  leaving core's executable job unchanged. Core `pytest` excludes the exact
+  sorted union of 20 files; `comparison-contracts` selects only the 11 GPT-5.4
+  files, and the new `pilot-contracts` selects only the 9 GPT-5.6 files. The
+  existing static node verifies all three jobs, identical setup, exact sorted
+  family selections, core exclusions, uniqueness and complete disjoint coverage.
+  The leader reported two CI rounds: at
+  `c88f76f02c43ef9b2672e61d6cdd6d4630235305`, run `35514065313` core job
+  `106086906143` was cancelled at `45:13`/`87%` with no assertion failure while
+  the 11-file comparison job succeeded. At
+  `8117a667a49133cfd11f3401d17ddfd36d82db55`, run `35517208735` core job
+  `106095045010` succeeded in about `25:13`, but combined comparison job
+  `106095045151` was cancelled at about `45:16`/`91%`, with no assertion failure,
+  after completing GPT-5.4 and reaching `test_gpt56_pilot_wire_receipt.py`.
+  The mandatory pre-edit `extreme-reasoner` decision was
+  APPROVE-WITH-CONDITIONS. Existing checks, security, setup, action pins and
+  ref-scoped concurrency are preserved; all three jobs have a 45-minute limit.
+  One additional runner/setup cycle raises the nominal aggregate allowance
+  from 90 to 135 runner-minutes (+50%); it does not establish CI headroom.
+  The sole three-way correction selector reported `1 passed in 0.18s`, exit 0.
+  `llm-systems-engineer` and `first-reviewer` approved immutable implementation
+  `c6bf7269480bfc804e7f2aaf6427613cdab3fda9`. The prior two-job static result,
+  also `1 passed in 0.18s` at `70334bb35f7916a4db7a1e1d1a18da10847cb9e1`,
+  did not predict the subsequent combined-job timeout. No cancelled run, full
+  suite, contract group or wire receipt selector was rerun locally. The original
+  `88 passed in 642.32s (0:10:42)` remains pre-account-correction receipt
+  evidence; the corrected 89-case selector has not been rerun locally. Runtime
+  logic, experiment settings, source pins, launch flags and live-wire evidence
+  limits are untouched. Fresh same-HEAD success and duration evidence are
+  required for all three jobs. External required-check settings and the
+  result-PR caller's existing 1,800-second wait are unchanged.
+
 - Correct four Backend pytest failures reported for PR #637 at
   `155279f6458ea3341f2c894a1177aaa698bc053d`, run `35506466839`, job
   `106067021054`. Step 1 now safely reads optional legacy execution/capture
@@ -47,6 +79,27 @@ entries land under a fresh dated heading the day they merge to `main`.
   No provider, model, grader or workflow was executed.
 
 ### Added
+
+- Add a session-owned Codex app-server transport receipt for the registered
+  Foundry GPT-5.6 Sol five-task pilot. The hook hashes actual serialized stdin
+  bytes after write/flush, preserves native usage without invented pricing,
+  binds the verified prepared capture and upstream bundles, and requires its
+  in-process witness before task/result acceptance. Publication is no-clobber
+  and ready-last; legacy absent/null behavior remains unchanged. The pinned
+  SDK does not expose Foundry HTTP payloads or served-model identity, so those
+  fields are explicitly unavailable and
+  `live_inference_identity_and_wire_unverified` remains unresolved. All launch
+  and full-220 flags stay false. The sole local selector reported
+  `88 passed in 642.32s (0:10:42)`, exit 0, at initial implementation
+  `59aa7f00de5505e0ed5c1bff8e8ae7757ff9398a`. Both reviewers then found and
+  required a private endpoint-account/resource-evidence binding correction.
+  Reviewed implementation HEAD `89e9a33baa3b6c4b3c404f7c2c6f61798003a868`
+  received `llm-systems-engineer` and `first-reviewer` APPROVE. Its expanded
+  89-case selector was not rerun locally and still needs automatic CI evidence.
+  No live inference, provider/client, grader or manual workflow ran. Actual
+  wire/served identity, native result hosting, execution/caps and billing
+  receipts remain separate work. The exact selector and evidence limits are
+  recorded in `tasks/LATEST_TASK_RESULT/README.md`.
 
 - Bind the registered Foundry GPT-5.6 Sol pilot's real Step 1 prepared rows to
   its runtime candidate and five verified upstream bundles. The optional typed
