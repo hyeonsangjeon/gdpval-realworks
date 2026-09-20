@@ -120,7 +120,9 @@ runs:
 # Seal the reviewed templates and the boundaries on which the refusal rests.
 # These are file bytes, not a claim to have checked live inputs or a deployment.
 source_pins:
-  batch-runner/gpt54_comparison_preflight.py: 255e416f54e35376743af744ac9cd3c34f0970a14e62db26eff00bbec41c3717
+  .github/workflows/agentic-v2-stage-run.yml: f02579edfa09ee9d3e9576cff25510c27f86bb1a9498f311f0bafd9ff4261ae1
+  .github/workflows/batch-run.yml: 47f006f69bc079c50e3fba5ec5a7afcee769478e9857dead9c2e0eee22d90c26
+  batch-runner/gpt54_comparison_preflight.py: 604e24b0c3a7c3e9344a997273bb492bb5d5f8546518e97f2e59af2c7914ee80
   batch-runner/gpt54_v2_grading_input.py: 3fae995caf3d785d64fad02280d77a6853389a2ff12be2e7165e4868b4b0b830
   batch-runner/gpt54_codex_grading_input.py: a61fd74012dd588225fb77359a2e7c0880e7a10918b33f9658d2a0d78f0d58c8
   batch-runner/gpt54_prepared_input_attestation.py: 6e78388a36446317d02f80409079e3a338eced6245afc56867f5438c0183ff9a
@@ -129,6 +131,7 @@ source_pins:
   batch-runner/gpt54_run_config_bundle.py: 71b4bd5247fed0aaba827e6d6e54d1cc33b5d91c494760d996f5eb815d527b9d
   batch-runner/gpt54_run_input_bundle.py: eadbc027b91192a141737926aa723a1c2985e17038c31b7570840ee4691abe07
   batch-runner/gpt54_disposable_checkout.py: 1674a92096f406e6cafdd9fd9da03760e5d6f920e423d0cc95573ca8dc55c808
+  batch-runner/gpt54_workflow_gate.py: 2fafc4249785fff0d7ccbce267deadbe296c0461b7c4c802656c50b38bfdd55c
   batch-runner/prepare_dataset.py: 17ccad9fe7a360daaa02329481c11f89135ca2cf107eb70355836b11fd4b2d5e
   batch-runner/step8_grade.py: ec23fc941aa0edb54e2858750cc1df5a6a6954a1732cd3f3197d9f9b4b3c18f4
   batch-runner/core/config.py: 483d8ad94ddb78b2a11b8712737ceea1e6b4d3696a8f16fabb84f747a786b48c

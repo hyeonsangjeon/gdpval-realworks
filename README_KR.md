@@ -169,6 +169,7 @@ signature 근거가 미측정이라 aggregate gate도 계속 `blocked`입니다.
 | `wall_timeout` | `290` |
 | `sandbox_image_digest` | 빈 값 |
 | `codex_foundry_confirmed` | 체크하지 않음 |
+| `comparison_reviewed_source_sha` | 빈 값 (GPT-5.4 비교 전용) |
 
 예상 동작은 다음과 같습니다.
 

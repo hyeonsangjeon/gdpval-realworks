@@ -405,6 +405,7 @@ preflight는 checkout과 cloud 접근 전에 non-`main` ref 또는 workflow/even
 | `wall_timeout` | `condition_a` Step 2 checkpoint watchdog `0..290`분. `0`은 YAML의 `execution.wall_timeout`에 위임하며 둘 다 `0`일 때만 비활성화 | `290` | relay 디버깅이 아니면 기본값 유지 |
 | `sandbox_image_digest` | relay 전체에 전달되는 immutable sandbox image | *(비움)* | 내부용. 필요 시 workflow가 결정 |
 | `codex_foundry_confirmed` | 이번 batch가 Foundry deployment에 비용을 써도 된다는 선언. `execution.mode: codex_foundry`만 읽으며, 체크하지 않은 `codex_foundry` dispatch는 credential이 없는 job에서 실패 | `false` | Codex batch를 실제로 돌릴 때, 그 dispatch에 한해서만 체크 |
+| `comparison_reviewed_source_sha` | 호출자가 별도로 검토받은 source commit의 소문자 40자리 SHA. GPT-5.4 비교 admission 전용이며 relay `source_sha`와 별개이고 실행 승인이 아님 | *(비움)* | 정확히 등록된 비교 config에서만 지정. 일반 batch에서는 비워 둠 |
 
 ### 3-task smoke 입력
 
@@ -418,6 +419,7 @@ source_sha:            <비움>
 wall_timeout:          290
 sandbox_image_digest:  <비움>
 codex_foundry_confirmed: false
+comparison_reviewed_source_sha: <비움>
 ```
 
 ### 이어달리기(Relay Run) 동작 원리

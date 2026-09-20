@@ -190,6 +190,7 @@ From **Actions > Run GDPVal Batch Experiment**, use:
 | `wall_timeout` | `290` |
 | `sandbox_image_digest` | leave empty |
 | `codex_foundry_confirmed` | leave unticked |
+| `comparison_reviewed_source_sha` | leave empty (GPT-5.4 comparison only) |
 
 Expected behavior:
 

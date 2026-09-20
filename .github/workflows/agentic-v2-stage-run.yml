@@ -187,6 +187,15 @@ on:
         type: string
         default: ''
         required: false
+      comparison_reviewed_source_sha:
+        description: >-
+          GPT-5.4 comparison only: caller-reviewed full lowercase commit SHA.
+          Use an exact registered run_id, paid, same-host, advance_check_5 and
+          the corrected plan, without resume. This binds source review input;
+          it does not authorize launch. Leave empty for ordinary stage runs.
+        type: string
+        default: ''
+        required: false
 
 # A push must never be able to spend. There is no push, pull_request or
 # schedule trigger above, and adding one would be the change that let this
@@ -211,6 +220,14 @@ jobs:
   # seal, the pricing guard. If any of it is wrong it is wrong for free here.
   free:
     name: Dry run
+    # Comparisons must not enter this lane: even its dataset fetch has a secret.
+    if: >-
+      ${{ !(inputs.comparison_reviewed_source_sha != '' ||
+      contains(inputs.run_id, 'gpt54_v2_codex_') ||
+      contains(inputs.plan, 'gpt54_v2_codex_') ||
+      contains(inputs.plan, 'gpt54_sandboxv2_codex_comparison') ||
+      contains(inputs.plan, 'comparison-run') ||
+      contains(inputs.plan, 'comparison-grading')) }}
     runs-on: ubuntu-latest
     # A bound, not a budget. A `fixture` dispatch has never come near twenty
     # minutes and still does not; the extra is for `same-host`, which pulls the
@@ -561,7 +578,15 @@ jobs:
     # entirely by the free job above. It must never reach here: a mode whose
     # whole purpose is to find out whether something is possible would be a
     # strange thing to charge for.
-    if: ${{ inputs.mode == 'paid' && inputs.isolation != 'capability-check' }}
+    if: >-
+      ${{ inputs.mode == 'paid' && inputs.isolation != 'capability-check' &&
+      needs.free.result == 'success' &&
+      !(inputs.comparison_reviewed_source_sha != '' ||
+      contains(inputs.run_id, 'gpt54_v2_codex_') ||
+      contains(inputs.plan, 'gpt54_v2_codex_') ||
+      contains(inputs.plan, 'gpt54_sandboxv2_codex_comparison') ||
+      contains(inputs.plan, 'comparison-run') ||
+      contains(inputs.plan, 'comparison-grading')) }}
     runs-on: ubuntu-latest
     strategy:
       # One job per piece of the cohort. For `advance_check_5` this is a matrix
@@ -1094,7 +1119,14 @@ jobs:
   collect:
     name: Did the stage run?
     needs: paid
-    if: ${{ always() && inputs.mode == 'paid' && inputs.isolation != 'capability-check' }}
+    if: >-
+      ${{ always() && inputs.mode == 'paid' && inputs.isolation != 'capability-check' &&
+      !(inputs.comparison_reviewed_source_sha != '' ||
+      contains(inputs.run_id, 'gpt54_v2_codex_') ||
+      contains(inputs.plan, 'gpt54_v2_codex_') ||
+      contains(inputs.plan, 'gpt54_sandboxv2_codex_comparison') ||
+      contains(inputs.plan, 'comparison-run') ||
+      contains(inputs.plan, 'comparison-grading')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -1174,3 +1206,65 @@ jobs:
             --records ../shard-records \
             --stage "${{ inputs.stage }}" \
             --collect
+
+  comparison-admission:
+    name: GPT-5.4 comparison — local preparation gate only
+    if: >-
+      ${{ inputs.comparison_reviewed_source_sha != '' ||
+      contains(inputs.run_id, 'gpt54_v2_codex_') ||
+      contains(inputs.plan, 'gpt54_v2_codex_') ||
+      contains(inputs.plan, 'gpt54_sandboxv2_codex_comparison') ||
+      contains(inputs.plan, 'comparison-run') ||
+      contains(inputs.plan, 'comparison-grading') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      # This job has neither provider secrets nor an OIDC grant. Registered or
+      # partially specified comparisons never fall through to free/paid/collect.
+      - name: Bind explicit source review to this workflow commit
+        env:
+          REVIEWED_SOURCE_SHA: ${{ inputs.comparison_reviewed_source_sha }}
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_EVENT_NAME" == 'workflow_dispatch' ]]
+          [[ "$GITHUB_REF" == 'refs/heads/main' ]]
+          [[ "$REVIEWED_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$GITHUB_SHA" == "$REVIEWED_SOURCE_SHA" ]]
+          [[ "$WORKFLOW_SHA" == "$REVIEWED_SOURCE_SHA" ]]
+
+      - name: Checkout explicitly reviewed comparison source
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ inputs.comparison_reviewed_source_sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.11'
+
+      - name: Install offline comparison gate dependencies
+        run: |
+          python3 -m pip install 'PyYAML>=6,<7' 'jsonschema>=4.21.0' \
+            pyarrow 'datasets>=2.18.0' 'huggingface-hub==1.24.0' 'pandas>=2.1.0' numpy
+
+      - name: Prepare and verify comparison checkout; refuse blocked launch
+        env:
+          COMPARISON_INPUTS: ${{ toJSON(inputs) }}
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: |
+          set -euo pipefail
+          # Inputs must already be available locally. Missing bytes refuse;
+          # this lane does not download data, build a guest or authenticate.
+          # Compiled argv/cwd bind only to the new prepared checkout. The gate
+          # cannot dispatch them and exits 2 while launch_allowed is false.
+          env -u PYTHONPATH python3 -I batch-runner/gpt54_workflow_gate.py \
+            --workflow agentic-v2-stage-run --inputs-json "$COMPARISON_INPUTS" \
+            --event-name "$GITHUB_EVENT_NAME" --event-ref "$GITHUB_REF" \
+            --event-sha "$GITHUB_SHA" --workflow-sha "$WORKFLOW_SHA" \
+            --repository "$GITHUB_WORKSPACE" \
+            --destination "$RUNNER_TEMP/comparison-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" \
+            --dataset-parquet "$GITHUB_WORKSPACE/data/gdpval-local/data/train-00000-of-00001.parquet" \
+            --reference-root "$GITHUB_WORKSPACE/data/gdpval-local"

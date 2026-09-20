@@ -604,6 +604,62 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Split Backend Tests into the existing `pytest` core check and an independent,
+  read-only `comparison-contracts` job after the owner reported two fresh
+  45-minute cancellations without test failures. Core excludes only the 11
+  actual `batch-runner/tests/test_gpt54_*.py` files; the comparison job names
+  each once. Both retain the same runner, Python, dependencies, pip cache,
+  dispatch identity checks, integration safety filter and 45-minute timeout.
+  Repo-root script tests remain in core. The single static selector reported
+  `1 passed in 0.17s`, verifying complete, non-overlapping file coverage and
+  environment parity. The prior `64 passed in 28.36s` was not rerun. No tests
+  were removed or newly skipped, and no matrix, dependency or timeout increase
+  was added. Hosted completion within the budget is still unproven; the leader
+  must inspect both job verdicts. Branch protection is unchanged.
+
+- Cache PR #629's complete workflow-preparation fixtures after manually removing
+  the ineffective source-only seed. Four module-scoped ABBA seeds use the real
+  preparer; each mutation case gets its own linked worktree and single-link
+  copies of generated config/input/reservation/ready bytes. Real verifiers,
+  assertions, all 64 cases, CLI and preparation/handoff/quarantine coverage
+  remain intact. The original selector took `80.13s`; the removed source-only
+  attempt took `82.28s`. The one final invocation reported
+  `64 passed in 28.36s`, meeting the 30-second local acceptance limit.
+  Backend Tests run `35475698464`, job `105984493581`, had been cancelled at
+  its 45-minute timeout without a reported test failure. The faster local
+  selector does not establish full-suite headroom; fresh automatic CI is still
+  required. Production code, helpers, workflows, timeouts and the existing
+  byte-keyed caches are unchanged. No broad suite or manual workflow rerun
+  was performed.
+
+- Restore PR #629's workflow-input documentation contract after `validate`
+  run `35474119808`, job `105980280399`, failed at
+  `b1f4a5da0bccc6760d2b78b0708770d35df848dd`. The onboarding test reads
+  `batch-run.yml`; its expected input list/default map and the English/Korean
+  owner tables now include `comparison_reviewed_source_sha`. Ordinary smoke
+  examples leave it empty, and the reference tables distinguish source review
+  from relay identity and launch permission. The exact failing selector passed
+  once: `1 passed, 0 failed, 0 skipped`, total `696.085328 ms`. The original
+  workflow-gate evidence remains `64 passed in 80.13s (0:01:20)` and was not
+  rerun for that correction. Workflow logic, other inputs/defaults and both
+  false launch flags are unchanged; fresh automatic CI remains required.
+
+- Route GPT-5.4 comparison requests in both owning workflows to a separate
+  admission job with read-only repository permissions, no provider secrets
+  and no OIDC grant. An explicit full reviewed SHA must match the event and
+  workflow commits before checkout. The offline helper reuses the disposable
+  checkout preparer and runtime lineage gate, binds inert commands to the
+  prepared checkout, and retains quarantine after a failed handoff. Comparison
+  requests cannot fall through to the ordinary credentialed jobs. Existing
+  input defaults and ordinary step bodies remain unchanged, apart from relay
+  forwarding of the new empty input. The source set has 34 pins. The sole
+  targeted selector reported `64 passed in 80.13s (0:01:20)`. Both launch flags
+  remain false, and the CLI refuses execution. This is offline admission and
+  refusal evidence, not a successful workflow run or launch authorization.
+  External inference identity approval, native result-bundle support, actual
+  deployment and local data provisioning, served capability, native caps,
+  wire consumption and usage/tariff evidence remain outstanding.
+
 - Require registered GPT-5.4 Codex Step 2 and Sandbox V2 runs to verify local
   checkout lineage before provider/auth/client or free voice-safety setup.
   The read-only gate reuses existing ready, reservation and bundle contracts;

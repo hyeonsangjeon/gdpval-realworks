@@ -44,6 +44,8 @@ V2_TEMPLATE = ENVELOPE + "agentic_corrected_harness_plan.yaml"
 CODEX_TEMPLATE = "batch-runner/experiments/exp033_codex_foundry_fixed5.yaml"
 GRADER = "batch-runner/grading_configs/default_v2_sol_max.yaml"
 REQUIRED_SOURCES = {
+    ".github/workflows/agentic-v2-stage-run.yml",
+    ".github/workflows/batch-run.yml",
     "batch-runner/gpt54_comparison_preflight.py",
     "batch-runner/gpt54_v2_grading_input.py",
     "batch-runner/gpt54_codex_grading_input.py",
@@ -53,6 +55,7 @@ REQUIRED_SOURCES = {
     "batch-runner/gpt54_run_config_bundle.py",
     "batch-runner/gpt54_run_input_bundle.py",
     "batch-runner/gpt54_disposable_checkout.py",
+    "batch-runner/gpt54_workflow_gate.py",
     "batch-runner/prepare_dataset.py",
     "batch-runner/step8_grade.py",
     "batch-runner/core/config.py",
@@ -687,6 +690,16 @@ def inspect_plan(
             "git_commands": ["rev-parse"],
             "external_source_worktree_required": False,
             "evidence_boundary": "local_reviewed_checkout_and_bundles",
+        } if compiled is not None else None),
+        "workflow_execution_gate": ({
+            "helper": "gpt54_workflow_gate.prepare_workflow_execution",
+            "workflows": ["agentic-v2-stage-run.yml", "batch-run.yml"],
+            "required_runs": [run.run_id for run in compiled.runs],
+            "reviewed_source_sha": "explicit_caller_input_equal_to_event_and_workflow_commit",
+            "permissions": {"contents": "read"},
+            "commands": "compiled_argv_bound_to_prepared_checkout_only_not_dispatched",
+            "before": "provider_secrets_oidc_auth_client_free_safety_model_setup",
+            "evidence_boundary": "offline_workflow_wiring_and_local_preparation_not_deployment",
         } if compiled is not None else None),
         "launch_allowed": False,
         "full_220_allowed": False,

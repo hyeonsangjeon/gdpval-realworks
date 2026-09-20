@@ -68,6 +68,7 @@ def test_general_batch_blocks_agentic_before_any_credential_step():
     # asserted separately so that what this test is *for* survives the wording.
     assert "needs.inspect-mode.outputs.uses_agentic != 'true'" in batch_job["if"]
     assert batch_job["if"] == (
+        "needs.inspect-mode.result == 'success' && "
         "needs.inspect-mode.outputs.uses_agentic != 'true' && "
         "needs.inspect-mode.outputs.codex_blocked != 'true'"
     )
