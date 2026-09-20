@@ -25,7 +25,7 @@ from .test_gpt54_disposable_checkout import (
     _allow_only_temporary_git, _commit_fixture, _fixture_git, _sidecars, _source_state,
 )
 from .test_gpt54_prepared_input_attestation import _bundle_fixture, _json, _tree_snapshot
-from .test_gpt54_run_input_bundle import _copy_files, _input_bundle_seed, _snapshot_files
+from .test_gpt54_run_input_bundle import _input_bundle_seed
 
 
 _OWNERS = {"sandbox_v2": "agentic-v2-stage-run", "codex": "batch-run"}
@@ -57,38 +57,6 @@ _REFUSALS = (
     "preparation_failure", "rerun", "source_cwd", "changed_argv", "source_pin_missing",
     "source_pin_changed", "ready_hardlink", "handoff_failure",
 )
-
-
-@pytest.fixture(scope="module")
-def _workflow_source_seed(tmp_path_factory: Any, _input_bundle_seed: Any) -> Any:
-    """Commit the unchanged source fixture once, never a prepared checkout.
-
-    Each case receives fresh single-link files, including the Git objects and
-    index. Real worktree creation, bundle publication and validators still run
-    per case; no mutable checkout, Git state or validation verdict is shared.
-    """
-    root = tmp_path_factory.mktemp("workflow-source-seed")
-    with pytest.MonkeyPatch.context() as setup:
-        forbidden, git_calls = _allow_only_temporary_git(setup, root)
-        _input_bundle_seed.install(setup)
-        oracle = root / "oracle"
-        oracle.mkdir()
-        inputs, _, _, _, _ = _input_bundle_seed.inputs(oracle, setup, "identical")
-        repository = root / "source"
-        _bundle_fixture(
-            repository, manifest=inputs["manifest"], combined_plan=inputs["combined_plan"],
-            run=_input_bundle_seed.plan.dispatch.runs[0], materialize=False,
-        )
-        (repository / "ordinary-note.txt").write_bytes(b"reviewed bytes\n")
-        _fixture_git(repository, "init", "--quiet", "--initial-branch=fixture-main",
-                     "--object-format=sha1", "--template=")
-        reviewed_sha = _commit_fixture(repository, "Reviewed temporary workflow source")
-        files = _snapshot_files(repository)
-        assert not (repository / ".git/worktrees").exists()
-        assert forbidden == git_calls == []
-    original = _tree_snapshot(root)
-    yield SimpleNamespace(files=files, reviewed_sha=reviewed_sha)
-    assert _tree_snapshot(root) == original
 
 
 def _digest(value: Any) -> str:
@@ -287,7 +255,6 @@ def _workflow_contract(condition: str, monkeypatch: Any) -> None:
 ])
 def test_workflow_execution_gate(
     condition: str, case: str, tmp_path: Path, monkeypatch: Any, capsys: Any, _input_bundle_seed: Any,
-    _workflow_source_seed: Any,
 ) -> None:
     forbidden, git_calls = _allow_only_temporary_git(monkeypatch, tmp_path)
     _input_bundle_seed.install(monkeypatch)
@@ -303,9 +270,13 @@ def test_workflow_execution_gate(
     index = (2 if case == "r2" else 1) if condition == "codex" else (3 if case == "r2" else 0)
     run = plan.dispatch.runs[index]
     repository, checkout = tmp_path / "source", tmp_path / "prepared"
-    _copy_files(repository, _workflow_source_seed.files)
-    reviewed_sha = _workflow_source_seed.reviewed_sha
+    _bundle_fixture(repository, manifest=inputs["manifest"], combined_plan=inputs["combined_plan"],
+                    run=run, materialize=False)
     note = repository / "ordinary-note.txt"
+    note.write_bytes(b"reviewed bytes\n")
+    _fixture_git(repository, "init", "--quiet", "--initial-branch=fixture-main",
+                 "--object-format=sha1", "--template=")
+    reviewed_sha = _commit_fixture(repository, "Reviewed temporary workflow source")
     note.write_bytes(b"uncommitted caller bytes\n")
     source_before, oracle_before = _source_state(repository), _tree_snapshot(oracle_root)
     monkeypatch.setattr(preparer, "TRUSTED_ROOT", repository)
