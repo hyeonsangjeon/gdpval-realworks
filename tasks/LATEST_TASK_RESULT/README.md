@@ -1,177 +1,190 @@
 # Latest substantive task result
 
-## PROJECT5-GPT56-EVIDENCE-PREFLIGHT-GATE
+## PROJECT5-GPT56-PILOT-DISPATCH-GRADING-IDENTITY
 
-The Foundry GPT-5.6 Sol Codex pilot preflight now has an optional read-only
-evidence gate. It calls the existing intake verifier and can satisfy exactly
-five local evidence requirements for a complete, current bundle. Four runtime
-and deployment blockers remain. Both `launch_allowed` and `full_220_allowed`
-stay false, as do `launch_enabled` and `full_220_enabled` in the manifest.
+The active Foundry GPT-5.6 Sol Codex pilot now has a canonical offline dispatch
+and grading identity compiler, publisher and verifier. Explicit preflight
+consumption of a verified bundle can satisfy exactly
+`pilot_dispatch_and_grading_identity_not_wired`. This is a local contract
+check, not dispatch, grading, external identity approval or launch authority.
+The sole targeted selector reported `115 passed in 22.87s`, exit 0.
 
-The sole local selector reported `4 failed, 92 passed in 9.95s`. All four
-failures came from one privacy assertion matching a required blocker name as
-a substring. That assertion was corrected without a rerun. A parser correction
-and one added regression also remain unrun after immutable review.
-Automatic CI must validate these changes; no local green result is claimed.
+Both `launch_allowed` and `full_220_allowed` stay false, as do the manifest's
+`launch_enabled` and `full_220_enabled`. No real evidence was acquired and no
+pilot was deployed or executed.
 
 ### Scope and outcome
 
-The CLI accepts `--evidence-bundle`, `--reviewed-source-sha` and `--as-of`.
-`inspect_plan` exposes the corresponding typed optional arguments. An explicit
-evidence request requires the whole group. With all three absent/null, the
-existing plan-only path keeps all nine blockers, report fields, ordering and
-serialization and does not import the verifier.
+`gpt56_pilot_identity_plan.py` exposes `compile_pilot_identity`,
+`publish_pilot_identity` and `verify_pilot_identity`, plus a small offline CLI.
+The immutable canonical plan binds the exact
+`gpt56_sol_foundry_codex_pilot5_v1` run, `codex_foundry` condition, Azure route,
+Sol-not-Fast, Max and the 1M context request. Dispatch and grading carry the same
+five task IDs in the same order, prompt hashes and per-task reference paths and
+hashes. The document also binds the dataset revision/parquet hash, source-pin
+map, one repeat and one logical attempt. Fresh sessions, no relay or resume,
+no automatic escalation, and existing timeout, retry, cap, result and receipt
+declarations are preserved.
+Native caps remain null; the three infrastructure retries are after the initial
+attempt, not a three-attempt total.
 
-The gate invokes the real `verify_foundry_evidence`, which rechecks the ready
-marker, sibling reservation, current artifacts, active plan, source pins and
-validity windows. The preflight also checks the returned plan/base/run/source
-binding and exact `evidence_complete=true`. Reverification uses the caller's
-full reviewed SHA and current explicit UTC evaluation time, not the original
-intake time, local clock, Git base or dataset revision.
+The grader identity uses the actual step8 config validator, source-hash closure,
+ordered-task digest and prompt-version helper without constructing a grader.
+It records the template path/raw digest, historical grader source SHA, current
+template-source hash, rubric revision, actual tool prompt/version, judge
+model/effort, grade schema/version and receipt contract. The exp035 template's
+historical 220-task `rerun_identity` is not copied or modified. The pilot scope
+has one pass per task, null future inference repository/revision,
+`reuse_baseline_rerun_identity: false` and `runnable_config: false`. No runnable
+experiment/grading config, argv or launch command is emitted.
 
-The closed mapping satisfies only these requirements:
+Optional evidence linkage calls the real `verify_foundry_evidence`. It includes
+only the ready-bundle SHA256, caller-reviewed source SHA and sealed intake
+evaluation time. Each verification still uses the caller's explicit current UTC
+`as_of` for freshness. No-evidence linkage stays null; linked plans cannot
+downgrade to null. Raw claims, resource identities and local host paths are not
+copied into the plan or report.
 
-| Cleared blocker | Evidence roles |
-| --- | --- |
-| `foundry_account_project_deployment_identity_unverified` | `identity` |
-| `foundry_served_model_version_unverified` | `identity` |
-| `max_and_long_1m_capability_unverified` | `reasoning`, `context` |
-| `native_call_and_token_limits_unresolved` | `native_caps` |
-| `foundry_usage_and_tariff_mapping_unverified` | `usage`, `tariff` |
+The publisher verifies inputs before reserving an absent destination outside
+the source/evidence trees. It reuses held-parent and atomic no-clobber primitives
+to publish a sibling reservation, `foundry-pilot-identity-plan.json`, then
+`foundry-pilot-identity-ready.json` last. It rechecks current sources, optional
+evidence, plan bytes and reservation before ready publication. Verification
+recompiles the recipes and requires all three canonical byte sequences to match.
+Links, traversal, drift, extra members, collisions and partial reuse are refused.
+Failures retain their reservation/partial tree; nothing is automatically deleted
+or overwritten.
 
-The four remaining blockers retain their original order:
+Preflight activation is explicit through `identity_bundle` or
+`--identity-bundle`. Absent/null input keeps the existing plan-only and
+evidence-only paths. A verified identity alone clears exactly one blocker and
+leaves eight. With both evidence and identity gates accepted, three remain:
 
 - `live_identity_and_input_bytes_unverified`
-- `pilot_dispatch_and_grading_identity_not_wired`
 - `native_sandbox_and_result_bundle_host_unverified`
 - `actual_pilot_deployment_not_prepared`
 
-Evidence-mode output is canonical JSON. Its `evidence_gate` records the
-consumed canonical ready SHA256, caller-reviewed source SHA, evaluation time,
-complete status, cleared/remaining blocker lists and `offline_local_consistency`
-boundary. It does not expose raw evidence, resource/response identity hashes,
-endpoints or credentials. Refusals retain all nine blockers and return
-`foundry_evidence_gate_refused`, with unverified digest/SHA/time fields null.
-All CLI argument errors use a non-echoing refusal path, including misspelled
-options that cannot identify the intended mode. Plan-loading and verifier
-exceptions in evidence mode do not echo their input values. Every preflight
-report returns CLI exit 2; there is no launch command.
+Identity failure keeps its blocker, including late report-construction errors.
+Independently verified evidence can still satisfy its own five requirements.
+Reports add only the plan digest, approved evidence linkage, closed blocker
+transition and `offline_dispatch_grading_identity` boundary. CLI refusals are
+static and do not echo untrusted values. The preflight still exits 2.
 
-The active source set still has 30 pins. Only the preflight source digest was
-refreshed. That necessarily changes the active plan seal and makes old-plan
-bundles stale; the no-bundle byte-compatibility assertion applies to the same
-sealed plan, not to equality with an obsolete digest. There is no old-seal
-exception. The fixed five tasks, model/Max/1M requests, null verified fields,
-limits, grader, result/cost contracts and historical Copilot record are unchanged.
+The active manifest now pins 37 sources. The newly sealed plan has a new digest;
+previously sealed evidence is stale and has no compatibility exception. The
+no-bundle byte-compatibility check applies to the same active plan, not an
+obsolete digest. The fixed task cohort, model, effort, context request, grader
+template, runtime defaults and historical Copilot contract are unchanged.
 
 ### Immutable base and review boundary
 
-The new clean development worktree started from main
-`0c54611a30b586c6f42ab9e364cde0746374d0ae` on branch
-`b/gpt56-evidence-preflight-gate-20260920`. The preserved checkout
+The clean development worktree started at immutable main
+`ed6c64f0afb90b0b3a6a9e4719e44184384296ec` on branch
+`b/gpt56-pilot-dispatch-grading-identity-20260920`. The preserved checkout
 `wip/local-main-preserved-20260719` was not used for work or edited.
 
-The first immutable review of `f4123b2c6bd228cee91c85876e2415d37bd6d6f5`
-returned REQUEST-CHANGES with one BLOCK. A transposed option,
-`--evidence-bundel`, could select ordinary argparse and echo an untrusted value.
-The correction removes heuristic mode detection and uses the non-echoing
-parser for every argument error. It adds that exact regression, refreshes the
-source pin and documents the refusal behavior.
-
-Corrected implementation HEAD: `7cccfc675adfa856e499ca428dcf755a481716b4`.
+Reviewed implementation HEAD: `0e472bd021bdc868819fc51ac3e0edc5e3a17a4c`.
 `first-reviewer` returned APPROVE with no BLOCK, MAJOR or MINOR findings and no
-second-review escalation. This is a four-file code/config/test/spec review,
-not passing execution evidence. This completion record and `CHANGELOG.md` are
-outside the immutable implementation review boundary.
+second-review escalation. It confirmed the compiler/preflight Git-object hashes
+match the YAML pins. This approval covers the seven-file code/config/test/spec
+diff, not a live run or future CI result. This completion record and
+`CHANGELOG.md` follow validation and are outside that implementation boundary.
+No implementation or test correction followed the passing selector.
 
-The existing author and committer identity,
-`hyeonsangjeon <wingnut0310@gmail.com>`, was preserved without changing Git
-configuration. No attribution trailers or hook bypass were used.
+The existing Git author and committer,
+`hyeonsangjeon <wingnut0310@gmail.com>`, were preserved without changing Git
+configuration. No attribution trailers, hook bypass, history rewrite, forced
+push or forbidden Git cleanup was used.
 
 ### Exact validation evidence
 
-Exactly one targeted selector ran:
+Exactly one targeted pytest invocation ran:
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider batch-runner/tests/test_gpt56_evidence_preflight_gate.py
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider batch-runner/tests/test_gpt56_pilot_identity_plan.py
 ```
 
-It collected 96 cases and reported `4 failed, 92 passed in 9.95s`, exit 1,
-with Python `3.10.12` and pytest `9.1.1`. The four complete-bundle cases had
-already passed their exact report, closed blocker transition, real-verifier
-call and read-only assertions before reaching the flawed substring check.
-`served_model_version` was found inside the required blocker
-`foundry_served_model_version_unverified`; this was not raw evidence exposure.
+It collected 115 cases and reported `115 passed in 22.87s`, exit 0, with Python
+`3.10.12` and pytest `9.1.1`. No test was removed, skipped or marked xfail.
+The #631 and #632 selectors were not rerun. No broad/full suite or manual
+workflow was run.
 
-After the run, the privacy assertion was changed to check JSON field names
-recursively and actual private values separately. Immutable review then found
-the malformed-option echo path. The parser correction, refreshed source pin,
-specification note and one additional transposition regression also followed
-the sole run. No case was removed, skipped or marked xfail. None of these
-corrections, including the later value assertions in the four failed cases,
-was rerun locally. Automatic CI must validate them; immutable review does not
-replace execution evidence. The recorded 96-case count belongs only to the
-actual invocation, not to the corrected selector.
+Coverage includes canonical plan/marker/reservation bytes; exact five-task
+dispatch/grading equality; Sol/Max/1M and fixed controls; the real step8
+validator/source hash; absent/null compatibility; actual evidence verification
+and later-time linkage; closed blocker transitions; contract/task/grader/source
+drift; missing/extra/noncanonical/link/path/collision cases; forged matching
+markers; partial reuse; write failures; held-parent replacement; drift before
+ready publication; static refusals and false launch flags. Transient catalog
+and same-version prompt mutations are refused even when original bytes are
+restored. Late report failures cannot remove the identity blocker.
 
-The selector uses a real published bundle prepared once under offline guards,
-then copies immutable bytes into fresh single-link files for each case. It
-shares no mutable tree or cached validator verdict. The real verifier reads
-current bytes in normal and tamper/refusal cases; a separate injected exception
-checks error redaction. Coverage includes absent/null compatibility, complete
-and later-time verification, partial groups, missing/null/partial artifacts,
-stale plan/run/SHA/time, source-pin drift, links, traversal, extra files and
-static CLI refusals. Subprocess, network, credentials, provider/client and
-grader construction are forbidden by the fixtures.
+Module-scoped seeds share only immutable bytes. Every case receives fresh
+single-link files, and a regression confirms mutations cannot reach another
+case or seed. No validator verdict is cached. The real validators and source
+hash helpers still read current files; only YAML parsing is cached by exact
+bytes with defensive copies. Fixtures prohibit subprocess, network, provider
+auth, model/client/grader construction and the grader entrypoint.
 
-The #631 152-case selector was not rerun. No broad/full suite, manual workflow
-run or benchmark was used. `git diff --check` and `git diff --cached --check`
-passed before both implementation commits.
+`git diff --check` and `git diff --cached --check` passed before the
+implementation commit. This is offline unit evidence, not a workflow, Azure
+capability, actual input consumption or paid-run result. Automatic CI remains
+separate evidence.
 
 ### Changed files
 
+- `batch-runner/gpt56_pilot_identity_plan.py`
 - `batch-runner/gpt56_sol_codex_pilot_preflight.py`
 - `batch-runner/experiments/execution_envelope/gpt56_sol_foundry_codex_pilot.yaml`
-- `batch-runner/tests/test_gpt56_evidence_preflight_gate.py`
+- `batch-runner/tests/test_gpt56_pilot_identity_plan.py`
+- `batch-runner/tests/test_gpt56_sol_codex_pilot_preflight.py`
+- `batch-runner/tests/test_gpt56_foundry_evidence_intake.py`
 - `tasks/0822_saturday/TASK_NATIVE_CODEX_RUN_PATH.md`
 - `CHANGELOG.md`
 - `tasks/LATEST_TASK_RESULT/README.md`
 
+The two older test files only update the exact source count from 30 to 37.
+Their selectors were not run.
+
 ### Skills and roles
 
-The full supplied skill catalog and repository agent catalog were inspected
-once. `experiment-design` was applied before planning or configuration. It
-kept the intervention limited to evidence consumption, preserved every
-experiment variable and separated synthetic gate tests from Azure observations.
-`llm-systems-engineer` provided read-only design and static audits of the
-mapping, recursion, plan/time linkage and redaction. Its malformed-option
-redaction finding was fixed before the sole selector. `first-reviewer` found
-the separate transposed-option issue after the run and approved its correction
-at the immutable boundary described above.
+The full supplied/filesystem skill catalog and repository agent catalog were
+inspected once. `experiment-design` was applied before planning or config edits.
+It kept this intervention limited to offline identity, preserved all experiment
+variables and distinguished synthetic fixtures from observed Foundry behavior.
+
+`llm-systems-engineer` provided read-only design and implementation audits.
+`grading-engineer` checked the existing step8/grader contract after the
+consolidated grading specification and stable baseline were read. Its scope was
+read-only; no production grader behavior changed. The audits identified consumed
+catalog/prompt snapshots that needed direct pin checks and a late report-failure
+ordering issue. Both were fixed before the sole selector, with regressions.
+`first-reviewer` supplied the separate immutable review boundary above.
 
 `im-not-ai-en` was applied to the English specification, changelog, completion
-record and PR wording without changing hashes, counts, commands, uncertainty
-or the failed-test evidence. UI/animation skills do not apply to this backend
-gate. `extreme-reasoner` does not apply because no workflow, `core/qa.py` or
-HF upload file changed. No grading pipeline implementation or role was needed.
+record and PR wording, preserving hashes, commands, counts and evidence limits.
+UI/animation skills do not apply to this backend contract. `extreme-reasoner`
+does not apply because no workflow, `core/qa.py` or HF upload file changed.
 
 ### Evidence boundary and remaining work
 
-Clearing these five blockers means a local evidence requirement was satisfied
-for this invocation. It does not authenticate the external export, approve
-review or inference publication identity, verify checkout lineage, prove Azure
-served capability/wire equality or prove runtime enforcement of the recorded
-native caps. It does not populate the manifest's null fields or authorize a run.
+This unit closes only offline dispatch/grading artifact identity. A verified
+plan does not authenticate external Foundry evidence, prove its historical
+grader Git source, supply inference publication identity or consumed input/wire
+bytes, or authorize a launch. The current template-source hash is not a future
+materialized grader/runtime identity.
 
-Remaining work includes corrected-selector CI evidence; actual Foundry evidence
-acquisition and independent review; external inference identity and live
-input/wire evidence; native sandbox/result-bundle hosting; actual pilot
-deployment and lineage; dispatch/grading; and runtime usage/tariff receipt and
-execution integration. Section 17 of `tasks/0822_saturday/TASK_NATIVE_CODEX_RUN_PATH.md`
-documents the offline preflight invocation, not a paid launch command.
+Remaining work includes actual Foundry evidence acquisition and independent
+review; live inference identity and input/wire binding; runtime/grader config
+materialization; native sandbox/result-bundle hosting; actual pilot deployment
+and execution; runtime enforcement of native caps; and usage/tariff receipt
+integration. No evidence has been accepted outside synthetic fixtures in this
+task. The nine default blockers remain unless callers explicitly supply verified
+bundles, and both launch flags always remain false.
 
 No Azure/API/CLI, credential/OIDC, deployment, provider/model/client, inference,
 grading, download, workflow dispatch or paid execution occurred. Production
 runtime/grader defaults, workflows, `core/qa.py`, HF upload and historical
-evidence/ledger bytes were not changed. Project fields and merge decisions
-remain with the leader. This record contains only pre-merge facts and no
+ledger/evidence bytes were not changed. Project updates and merge decisions
+remain with the leader. This record stops at pre-merge facts and contains no
 carrying-PR merge SHA, time or state.

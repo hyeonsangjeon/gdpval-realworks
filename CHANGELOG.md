@@ -13,6 +13,24 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Add a canonical offline dispatch and grading identity plan for the fixed
+  Foundry GPT-5.6 Sol Codex pilot. It binds identical ordered five-task scopes,
+  input hashes, Sol/Max/1M requests, unchanged controls and the existing step8
+  grader template, prompt, rubric, schema and source closure. The historical
+  220-task grading identity is not reused; future inference identity stays null
+  and no runnable config or command is emitted. Optional evidence linkage uses
+  the real verifier and stores only its ready digest, reviewed SHA and sealed
+  evaluation time. Existing held-parent and atomic no-clobber primitives publish
+  a reservation, plan and ready marker last, retaining failed partial state.
+  Explicit preflight consumption clears only the dispatch/grading identity
+  blocker; live input/identity, native host and actual deployment remain blocked.
+  The sole targeted selector reported `115 passed in 22.87s`. The implementation
+  was approved at `0e472bd021bdc868819fc51ac3e0edc5e3a17a4c`. Both launch flags
+  stay false. Real evidence acquisition/review, input/wire evidence, runtime and
+  grader config materialization, native result hosting, deployment, execution
+  and usage/tariff receipt integration remain outstanding. No model, grader,
+  provider or workflow was executed.
+
 - Add an optional read-only Foundry evidence gate to the GPT-5.6 Sol Codex
   pilot preflight. A complete, current bundle can satisfy exactly five local
   evidence requirements through a closed role mapping; live input/identity,
