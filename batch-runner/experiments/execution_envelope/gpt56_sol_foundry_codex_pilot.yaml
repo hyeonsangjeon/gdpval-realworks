@@ -212,7 +212,7 @@ cost:
   use_openai_or_copilot_tariff_for_foundry: false
   billing_evidence: provider_native_usage_without_invented_currency_conversion
 
-# 52 exact source files; the superseded record is sealed without refreshing it.
+# 55 exact source files; the superseded record is sealed without refreshing it.
 source_pins:
   batch-runner/experiments/exp035_codex_foundry_full220.yaml: eef6c66ca5d851b379b189e53ed27ef0d10d822fcd09a2e5a5c51acbc5d40819
   batch-runner/experiments/execution_envelope/gdpval_task_catalog.json: 5f1eca853979b2b4efe6c6ba656545c3a416da920e3faf067d52f5d8ac4ae0eb
