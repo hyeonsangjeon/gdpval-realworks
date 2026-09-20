@@ -503,6 +503,28 @@ entries land under a fresh dated heading the day they merge to `main`.
   thing this line of work is not allowed to do.
 
 ### Changed
+
+- Move the active GPT-5.6 Sol Codex five-task pilot contract to Azure AI
+  Foundry, following the owner's provider correction. The Copilot contract
+  retains its original identity, controls and pins as a superseded,
+  non-runnable record; it does not activate the separate GHCP VM TODO. The
+  Foundry contract reuses the existing Entra/provider path, requests Max and
+  a 1,000,000-token context window, and preserves the ordered task inputs,
+  limits, grader and null/partial receipt contracts. Its checker enforces one
+  active ID and 23 source pins, with both launch flags false. The sole targeted
+  invocation reported `1 failed, 95 passed in 29.78s`: an overbroad test matched
+  `copilot` in the checkout path embedded in the auth argv. That assertion now
+  checks exact provider/auth fields and configuration keys; it was not rerun
+  under the one-invocation limit. Implementation HEAD
+  `9941a2c611a0d1cc83053dd1000e07e1b972b210` received first-reviewer `APPROVE`
+  with no blocking findings; passing validation of the correction remains a
+  CI gate.
+  No runtime, workflow, grader or historical result bytes changed. External
+  Foundry deployment identity and served capability, native caps, receipt
+  mapping, a native result-bundle host and actual pilot deployment remain
+  blocked. No Azure query, credential lookup, model/grader call, download,
+  dispatch or paid execution was performed.
+
 - **The Codex readiness record narrows its gate blocker rather than dropping
   it.** It said the gate was closed and `batch-run.yml` did not set it; the
   second half is no longer true. What the reason is actually about — that

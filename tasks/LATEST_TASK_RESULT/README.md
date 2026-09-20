@@ -2,202 +2,193 @@
 
 - Updated: 2026-09-20 (UTC)
 
-## Current Task: PR #629 Backend Comparison Shard
+## Current Task: Foundry GPT-5.6 Sol Codex Pilot Contract
 
 ### Scope and Outcome
 
-Backend Tests now partitions its batch-runner test files between two independent
-jobs. The existing required check name `pytest` remains the core job. It excludes
-only the 11 actual `batch-runner/tests/test_gpt54_*.py` files, each named by an
-explicit `--ignore` argument. The read-only `comparison-contracts` job names
-those same files exactly once. Tests under repo-root `scripts/__tests__` remain
-in core only.
+The active next-model pilot now requests **Azure AI Foundry GPT-5.6 Sol through
+Codex**, following the owner's provider correction. It does not request
+GitHub Copilot, Sol Fast, Astra or a personal OpenAI account. The new plan is
+`batch-runner/experiments/execution_envelope/gpt56_sol_foundry_codex_pilot.yaml`,
+with the sole active run ID `gpt56_sol_foundry_codex_pilot5_v1`.
 
-Both jobs use the same `ubuntu-latest` runner, pinned checkout/setup actions,
-Python `3.10.12`, `requirements.txt`, pip cache settings and 45-minute timeout.
-Both enforce the existing dispatch SHA/checkout contract and integration safety
-filter. Workflow permissions, triggers and concurrency are unchanged. There is
-no matrix, job dependency, new package, credential, OIDC grant or paid route.
-No test was removed, newly skipped or marked xfail. Existing test bodies,
-including the 64-case workflow gate and its full-preparation cache, are unchanged.
+The old `gpt56_sol_copilot_codex_pilot.yaml` retains its original identity,
+controls and source pins. It now has `status: superseded`, a `superseded_by`
+link and its existing disabled launch/full-run flags. The checker rejects it
+even when passed explicitly through `--plan`. The separate GHCP Codex GPT-5.6
+Sol VM TODO was not changed.
 
-The correction starts from immutable PR HEAD
-`55904cc068888df4c95226ff558dc9ddaf2f1097` on the existing branch
-`b/gpt54-workflow-execution-gate-20260919`. The immutable PR base remains
-`1671d6d87c27894d6b1a4d75ee5e7be21170feaa`. The preservation checkout and prior
-worktrees were not edited. Existing author and committer identity,
+The new contract reuses the existing `azure` / `codex_foundry` / `direct-v1`
+route, `endpoint_from_route: true`, `gdpval-foundry` provider and
+`core.codex_azure_token` Entra helper. OIDC or a repository-approved Foundry
+credential route is required for eventual execution. No endpoint or credential
+value is committed, and no auth bridge or fallback is added. The explicit
+client requests remain:
+
+```toml
+model_reasoning_effort="max"
+model_context_window=1000000
+```
+
+These values do not prove a served model/version, Max capability or Long 1M
+entitlement. The externally supplied account, project, deployment and reviewed
+identity/capability evidence remain null. The request label is not a deployment
+name. Native call/input/output token limits also remain null, not zero.
+
+The checker retains both `launch_allowed: false` and `full_220_allowed: false`,
+always exits 2 for a parsed valid or invalid registration, and cannot dispatch
+a paid run. Active source-pin checks in the GPT-5.4 tests now read the Foundry
+plan. The new 23-file source set includes the shared parser, this checker,
+catalog/selection and seal helpers, Azure route/token helpers, dependency
+manifest, baseline/grader/result contracts and the retired Copilot record.
+The original Copilot source map is not refreshed.
+
+### Fixed Five-Task Pilot
+
+The unchanged `advance_check_5` order is:
+
+1. `02aa1805-c658-4069-8a6a-02dec146063a`
+2. `0112fc9b-c3b2-4084-8993-5a4abb1f54f1`
+3. `2ea2e5b5-257f-42e6-a7dc-93763f28b19d`
+4. `3baa0009-5a60-4ae8-ae99-4955cb328ff3`
+5. `0818571f-5ff7-4d39-9d2c-ced5ae44299e`
+
+Prompt/reference and parquet/catalog fingerprints, the dataset revision and
+developer instruction are unchanged. One pilot retains fresh sessions, the
+1,800-second attempt limit, three infrastructure retries, one logical turn,
+zero provider request/stream retries, and no relay, resume or Self-QA. It does
+not measure within-condition spread or automatically expand to 220 tasks.
+
+Grading retains its existing template, source revision
+`6ccd4ae346d302e3da0af455a3c5a72ec79a6984`, rubric revision, `v2.2` prompt,
+Sol/Max judge and one pass. The historical full-run inference identity is not
+reused. Deliverables/results retain `project_result_row`, grade schema `1.4`
+and `cost-receipt-v1`. Unknown usage or price remains null/partial with its
+reason under the record-only policy. Neither a requested deployment name nor
+the existing cost adapter proves the served identity or a verified tariff.
+
+A future pass permits leader review of all five tasks' identity, deliverable,
+grading and usage evidence, followed by a separate full-run gate. Failure or
+unverifiable identity stops progression and preserves the failed/partial rows.
+This is a configuration pilot, not a model-only performance comparison.
+
+### Immutable Base and Changed Files
+
+The clean development branch
+`b/gpt56-foundry-codex-pilot-contract-20260920` starts from immutable main
+`5cbbe3d90d491fde71c268629bdeacc8917ad937`. The preservation checkout
+`wip/local-main-preserved-20260719` was not used as a work branch or edited.
+Existing author and committer identity,
 `hyeonsangjeon <wingnut0310@gmail.com>`, was retained without changing Git
-configuration, bypassing hooks or adding trailers.
+configuration, bypassing hooks or adding attribution trailers.
 
-This correction changes four files:
+This task changes 13 files:
 
-- `.github/workflows/backend-tests.yml`
-- `batch-runner/tests/test_a_test_file_nobody_runs_is_not_a_test.py`
-- `CHANGELOG.md`
-- `tasks/LATEST_TASK_RESULT/README.md`
-
-The parent PR's comparison admission helper, both owning execution workflows,
-onboarding correction, source pins, experiment contracts and runtime/grader
-behavior are unchanged by this unit. Both `launch_allowed` and `full_220_allowed`
-remain false. The cumulative PR changes 28 files:
-
-- `.github/workflows/agentic-v2-stage-run.yml`
-- `.github/workflows/backend-tests.yml`
-- `.github/workflows/batch-run.yml`
-- `CHANGELOG.md`
-- `README.md`
-- `README_KR.md`
-- `batch-runner/README.md`
-- `batch-runner/README_KR.md`
-- `batch-runner/experiments/execution_envelope/gpt54_sandboxv2_codex_comparison.yaml`
+- `batch-runner/experiments/execution_envelope/gpt56_sol_foundry_codex_pilot.yaml`
 - `batch-runner/experiments/execution_envelope/gpt56_sol_copilot_codex_pilot.yaml`
-- `batch-runner/gpt54_comparison_preflight.py`
-- `batch-runner/gpt54_workflow_gate.py`
-- `batch-runner/tests/test_a_batch_dispatch_can_open_the_codex_gate.py`
-- `batch-runner/tests/test_a_test_file_nobody_runs_is_not_a_test.py`
-- `batch-runner/tests/test_agentic_workflows.py`
-- `batch-runner/tests/test_gpt54_codex_grading_input.py`
-- `batch-runner/tests/test_gpt54_codex_input_capture.py`
+- `batch-runner/gpt56_sol_codex_pilot_preflight.py`
+- `batch-runner/tests/test_gpt56_sol_codex_pilot_preflight.py`
 - `batch-runner/tests/test_gpt54_comparison_preflight.py`
-- `batch-runner/tests/test_gpt54_disposable_checkout.py`
+- `batch-runner/tests/test_gpt54_codex_input_capture.py`
+- `batch-runner/tests/test_gpt54_codex_grading_input.py`
 - `batch-runner/tests/test_gpt54_prepared_input_attestation.py`
-- `batch-runner/tests/test_gpt54_run_input_bundle.py`
-- `batch-runner/tests/test_gpt54_runtime_checkout.py`
 - `batch-runner/tests/test_gpt54_v2_grading_input.py`
-- `batch-runner/tests/test_gpt54_v2_input_capture.py`
 - `batch-runner/tests/test_gpt54_workflow_gate.py`
-- `scripts/__tests__/onboarding-contract.test.mjs`
-- `tasks/0822_saturday/TASK_GPT_EXECUTION_ENVELOPE_BENCHMARK.md`
+- `tasks/0822_saturday/TASK_NATIVE_CODEX_RUN_PATH.md`
+- `CHANGELOG.md`
 - `tasks/LATEST_TASK_RESULT/README.md`
+
+The six GPT-5.4 test files change only the active Sol plan path. No production
+runtime/grader code, workflow, `core/qa.py`, HF upload script, historical result
+or ledger bytes were changed. The GPT-5.4 four-run ABBA contract is unchanged.
 
 ### Exact Validation Evidence
 
-The owner reported two fresh Backend pytest runs cancelled at the unchanged
-45-minute ceiling without reported test failures. This is supplied CI evidence;
-the failed jobs were not rerun or re-investigated in this turn. The split responds
-to that repeated budget failure without extending the timeout or reducing tests.
-
-Only this new static selector ran, exactly once:
+Only this targeted selector ran, exactly once:
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider batch-runner/tests/test_a_test_file_nobody_runs_is_not_a_test.py::test_backend_jobs_partition_the_comparison_contracts
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider batch-runner/tests/test_gpt56_sol_codex_pilot_preflight.py::test_gpt56_sol_foundry_pilot_is_pinned_and_fails_closed
 ```
 
-Result: `1 passed in 0.17s`, exit 0, on Python `3.10.12`. The selector parses
-the actual YAML commands and compares their explicit paths with the actual
-11-file collection. It verifies uniqueness, complete/non-overlapping coverage,
-the unchanged core check name, setup/dependency/cache/timeout parity, dispatch
-and checkout identity checks, read-only permissions, concurrency, the existing
-integration filter and core-only script tests. It reads filenames and workflow
-configuration; it does not collect or run the comparison suite.
+Result: `1 failed, 95 passed in 29.78s`, exit 1, with 96 cases collected on
+Python `3.10.12`. The single failure was an overbroad assertion looking for
+`copilot` anywhere in generated config values. The actual Foundry auth argv
+includes this development checkout's `/ai-work/copilot/...` path, so the test
+mistook a directory name for a provider/auth choice.
+
+Before the implementation commit, that assertion was corrected to check the
+exact `gdpval-foundry` provider ID and provider-key prefix, retain the exact
+auth module/scope checks, and reject API-key/environment-key controls. The
+selector was not rerun under the owner's one-invocation limit. This record
+does not claim 96 passes or passing local validation of the corrected HEAD.
+Automatic CI must still establish that result.
+
+The cases use the real plan parser, catalog selector, configuration validator,
+Foundry endpoint validator and Codex override serializer. Subprocess, network,
+credential and Azure/provider client construction are forbidden by the fixture;
+live sign-in discovery is replaced with an empty fake surface. The suite covers
+identity/control drift, source-pin removal/digest drift, historical retirement,
+duplicate active registrations and unchanged fixed task/grader/result contracts.
 
 `git diff --check` passed before the implementation commit. No broad suite,
-64-case selector rerun, build, manual workflow run, live checkout preparation,
-Azure/HF access, download, OIDC/token lookup, provider/model/grader call, paid
-execution, Project edit or merge was performed.
+build, second selector invocation, manual workflow run, Azure API/CLI,
+credential/token lookup, deployment creation, dataset download, model/grader/VM
+call, actual pilot/full benchmark, paid execution, Project edit or merge was
+performed.
 
 ### Immutable Review Boundary
 
-Before editing, `extreme-reasoner` reviewed incoming HEAD
-`55904cc068888df4c95226ff558dc9ddaf2f1097` and returned
-`APPROVE-WITH-CONDITIONS`. The conditions require an exact file partition,
-identical setup and free-test/dispatch safeguards, unchanged core check identity
-and timeout, and explicit review of both job verdicts. Branch protection is
-outside this correction; no aggregate success is manufactured.
+`first-reviewer` returned `APPROVE` on implementation HEAD
+`9941a2c611a0d1cc83053dd1000e07e1b972b210` against immutable base
+`5cbbe3d90d491fde71c268629bdeacc8917ad937`, with no BLOCK, MAJOR or MINOR
+findings and no second-review escalation. The 11-file reviewed diff includes
+the assertion correction. The reviewer confirmed that the corrected predicates
+agree with the actual override builder by static inspection, but explicitly
+did not claim a passing selector. No tests, project imports, network calls or
+mutations were performed during review.
 
-Implementation HEAD `3d188805ad6240fcbdbc47091f949289d7e143c3` received fresh
-read-only reviews against that incoming HEAD. `extreme-reasoner` returned
-`APPROVE`, with all pre-edit conditions satisfied and no blocking or
-high-confidence code findings. `first-reviewer` returned `APPROVE`, with no
-BLOCK, MAJOR or MINOR findings and no second-review escalation. Both confirmed
-the exact file partition, preserved tests, setup/safety parity and unchanged
-45-minute limits. Neither ran tests, project imports, network calls or mutations.
-
-Only `CHANGELOG.md` and this record follow the reviewed implementation commit.
-These reviews do not establish hosted completion time, CI-budget recovery or
-merge readiness. Both job verdicts must be checked at the final carrying
-HEAD; prior approvals do not substitute for those results.
-
-### Prior Validation and Review Evidence
-
-The original workflow gate reported `64 passed in 80.13s (0:01:20)`. The removed
-source-only fixture attempt reported `64 passed in 82.28s (0:01:22)`, so it did
-not demonstrate a speedup. It was manually removed in normal commit
-`a9a7f631d2fcb83afebb9d08611f4960a27286f6` before the complete-preparation cache.
-That cache reported `64 passed in 28.36s`, meeting its 30-second local limit.
-These are distinct prior invocations, not measurements made for this shard.
-
-The unchanged prior selector was:
-
-```bash
-PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider batch-runner/tests/test_gpt54_workflow_gate.py::test_workflow_execution_gate
-```
-
-The earlier supplied Backend Tests cancellation was run `35475698464`, job
-`105984493581`, at HEAD `a31dc33470674c5c6b1c0f5f4cb837f796056474`. Its supplied
-interval was `2026-09-19T23:17:32Z` to `2026-09-20T00:02:47Z`; `Run tests` reached
-the 45-minute timeout without a reported test failure. The newer owner report
-confirms that the full-preparation cache did not by itself close the CI budget
-gate. No hosted-timeout recovery is claimed here.
-
-The onboarding correction followed `validate` failure run `35474119808`, job
-`105980280399`, at HEAD `b1f4a5da0bccc6760d2b78b0708770d35df848dd`. Its exact
-selector was:
-
-```bash
-PYTHONDONTWRITEBYTECODE=1 node --test --test-name-pattern='^workflow input tables mirror defaults and watchdog delegation$' scripts/__tests__/onboarding-contract.test.mjs
-```
-
-Its prior result was `1 passed, 0 failed, 0 skipped`, exit 0; subtest
-`514.103645 ms`, total `696.085328 ms`. It was not rerun here. The original gate,
-onboarding and full-cache implementation reviews returned `APPROVE` at
-`d54df8aa4187070c261103271dd8d587639ec735`,
-`545e6a4309eef7286efd0fc0c9b4f639355542c4` and
-`413e94b7fb7b63ffe7cc49211ffb787c44340866`, respectively. Those approvals are
-prior evidence, not approval of the new shard.
+Only the changelog and this record follow the implementation commit. Review
+approval does not establish passing CI, served capability or launch permission.
 
 ### Skills and Roles
 
-The supplied skill catalog and repository agent catalog were inspected.
-`extreme-reasoner` supplies the mandatory new workflow decision and immutable
-review; `first-reviewer` reviews the implementation diff. Roles use the available
-runtime, not the unavailable external models named in their role files.
-`im-not-ai-en` applies to the English changelog, completion record and PR text,
-preserving commands, SHAs, counts, timings and uncertainty.
+The complete supplied skill catalog and repository role catalog were inspected
+once. `experiment-design` was invoked before configuration. It kept the fixed
+cohort, decision/stop rules, record-only cost policy and the distinction between
+requested and served capabilities explicit. It also records the moving axes
+against the historical baseline, lack of repeat evidence, Sol judge/solver
+shared-bias caveat, and the limit on transferring account-specific claims.
 
-This changes CI scheduling, not the experiment design, inputs or grading
-contract, so no new experiment-design or grading-engineer pass applies.
-Experiment-report skills do not apply to software validation. Repository-readiness,
-UI and animation skills are unrelated. The parent comparison workflow's earlier
-experiment-design and systems-engineering boundaries remain unchanged.
+`llm-systems-engineer` performed a read-only contract review of the existing
+Foundry route, auth, deployment naming and receipt boundaries. `first-reviewer`
+provided the immutable code review using the available runtime. `im-not-ai-en`
+applies to the English specification, changelog, completion record and PR text,
+preserving IDs, hashes, commands, counts, timing and the failed-test evidence.
 
-### Evidence Limits and Remaining Work
+`extreme-reasoner` does not apply because no workflow, `core/qa.py` or HF upload
+code changes. No grading-pipeline implementation or grader role is needed.
+UI/animation skills do not apply to this offline experiment contract.
+Experiment-report skills do not apply to software-test evidence; no model
+benchmark result was produced.
 
-The static selector establishes the partition and configuration parity, not
-hosted execution or restored timeout headroom. The additional runner repeats
-checkout, Python setup, dependency installation and collection work. Each job
-keeps its 45-minute ceiling; the configured aggregate exposure is now up to
-90 runner-minutes rather than 45, excluding queueing. Neither actual duration
-nor billed minutes were measured here.
+### Remaining Work and Evidence Limits
 
-A green `pytest` now means core passed. The leader must inspect both `pytest`
-and `comparison-contracts`; this edit does not make the new check required in
-branch protection. The existing bot-result flow reads overall Backend Tests
-workflow success, which includes both jobs. Automatic CI after the normal push
-must still establish both verdicts. No future merge SHA, time or outcome is
-recorded.
+The existing provider path is available in code; it is not live deployment
+evidence. The active Foundry pilot remains blocked on:
 
-No comparison workflow was dispatched. The parent gate still proves only
-offline admission, local preparation and refusal, not external source-review or
-inference-identity approval, served capability, wire equality or launch permission.
-ABBA, model/effort, task cohort, limits and record-only null/partial cost semantics
-remain fixed. Execution work still includes:
+- Externally supplied and reviewed account/project/deployment identity and
+  served Sol model/version, with no Fast, Copilot or personal OpenAI substitute.
+- Verified Max and requested 1M capability for that deployment, and enforced
+  native call/input/output token caps.
+- Actual staged input bytes, pilot dispatch/grading and external inference
+  identity approval, without reusing a historical full-run identity.
+- A verified native sandbox/result-bundle host and actual pilot deployment.
+- Foundry usage and deployment/tier tariff receipt mapping. Unknown or partial
+  usage, cache-write/audio gaps and native-call reachability stay explicit.
+- Passing validation of the corrected implementation and leader review of the
+  exact configuration/source HEAD before any execution work.
 
-- External inference identity issuance and approval.
-- A host supporting native no-clobber result-bundle installation.
-- Actual runner deployment, pinned data provisioning and workflow execution.
-- V2 same-host approval/capture compatibility at the execution boundary.
-- Served deployment/model/effort capability and native call/token caps.
-- Actual wire-request consumption/equality and usage/tariff evidence.
-- The separate Sol pilot's GitHub Copilot provider/auth route, still blocked by
-  the missing official runtime handoff contract.
+Copilot auth handoff is not a blocker for this Foundry contract. The separate
+GHCP VM TODO is not implemented here. No compliant paid launch command exists
+from this contract alone, and both launch flags remain false. No future merge
+SHA, time or outcome is recorded.
