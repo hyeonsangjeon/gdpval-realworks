@@ -21,12 +21,14 @@ by the very defect it exists to catch.
 
 from __future__ import annotations
 
+import ast
 import shlex
 from configparser import ConfigParser
 from pathlib import Path
 
 import pytest
 import yaml
+from _pytest.mark.expression import Expression
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = REPO_ROOT / ".github/workflows/backend-tests.yml"
@@ -133,11 +135,11 @@ def test_the_orphaned_directory_that_prompted_this_is_actually_wired():
 
 
 def test_backend_jobs_partition_the_comparison_contracts():
-    """The three real commands cover every file once, with identical free setup."""
+    """Four jobs cover every node once, sharing only a complementary wire split."""
     text = WORKFLOW.read_text(encoding="utf-8")
     workflow = yaml.safe_load(text)
     jobs = workflow["jobs"]
-    assert set(jobs) == {"pytest", "comparison-contracts", "pilot-contracts"}
+    assert set(jobs) == {"pytest", "comparison-contracts", "pilot-contracts", "native-host-contracts"}
     assert workflow["permissions"] == {"contents": "read"}
     assert workflow["concurrency"] == {
         "group": "backend-tests-${{ github.ref }}",
@@ -154,6 +156,7 @@ def test_backend_jobs_partition_the_comparison_contracts():
     core = jobs["pytest"]["steps"]
     comparison = jobs["comparison-contracts"]["steps"]
     pilot = jobs["pilot-contracts"]["steps"]
+    native_host = jobs["native-host-contracts"]["steps"]
     setup_names = [
         "Verify dispatch contract",
         "Checkout",
@@ -170,7 +173,8 @@ def test_backend_jobs_partition_the_comparison_contracts():
         "Run comparison contracts"
     ]
     assert [step["name"] for step in pilot] == setup_names + ["Run pilot contracts"]
-    assert core[:6] == comparison[:6] == pilot[:6]
+    assert [step["name"] for step in native_host] == setup_names + ["Run native host contracts"]
+    assert core[:6] == comparison[:6] == pilot[:6] == native_host[:6]
     assert core[1] == {
         "name": "Checkout",
         "uses": "actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09",
@@ -214,18 +218,20 @@ def test_backend_jobs_partition_the_comparison_contracts():
     }
 
     argv = []
-    for step in (core[6], comparison[6], pilot[6]):
+    for step, command_count in ((core[6], 1), (comparison[6], 1), (pilot[6], 2), (native_host[6], 1)):
         assert set(step) == {"name", "run"}
         lines = step["run"].splitlines()
-        assert len(lines) == 2 and lines[0] == "cd batch-runner"
-        argv.append(shlex.split(lines[1]))
+        assert len(lines) == command_count + 1 and lines[0] == "cd batch-runner"
+        argv.extend(shlex.split(line) for line in lines[1:])
     prefix = [
         "python", "-m", "pytest", "-m", "not integration", "--tb=short", "-q", "-rs"
     ]
-    assert argv[0][:len(prefix)] == argv[1][:len(prefix)] == argv[2][:len(prefix)] == prefix
+    assert all(command[:len(prefix)] == prefix for command in argv)
     excluded = [arg.removeprefix("--ignore=") for arg in argv[0][len(prefix):]]
     selected = argv[1][len(prefix):]
     pilot_selected = argv[2][len(prefix):]
+    wire_selected = argv[3][len(prefix):]
+    native_selected = argv[4][len(prefix):]
 
     runner = REPO_ROOT / "batch-runner"
     tests = runner / "tests"
@@ -237,15 +243,41 @@ def test_backend_jobs_partition_the_comparison_contracts():
         path.relative_to(runner).as_posix()
         for path in tests.glob("test_gpt56_*.py")
     )
-    assert comparison_files and pilot_files
+    assert len(comparison_files) == 11 and len(pilot_files) == 9
+    wire_file = "tests/test_gpt56_pilot_wire_receipt.py"
+    keyword = "native_result_host"
+    assert wire_file in pilot_files
+    general_pilot_files = [path for path in pilot_files if path != wire_file]
+    assert len(general_pilot_files) == 8
     actual = sorted(comparison_files + pilot_files)
     assert argv[0][len(prefix):] == [f"--ignore={path}" for path in actual]
     assert excluded == actual
     assert selected == comparison_files
-    assert pilot_selected == pilot_files
+    assert pilot_selected == general_pilot_files
+    assert wire_selected == [wire_file, "-k", f"not {keyword}"]
+    assert native_selected == [wire_file, "-k", keyword]
     assert len(excluded) == len(set(excluded))
     assert len(selected) == len(set(selected))
     assert len(pilot_selected) == len(set(pilot_selected))
+
+    pilot_sources = {path: (runner / path).read_text(encoding="utf-8") for path in pilot_files}
+    assert {path for path, source in pilot_sources.items() if keyword in source.casefold()} == {wire_file}
+    # Use pytest's own expression parser, without collecting/importing the
+    # shared file. Both possible keyword-match states must select one job,
+    # including parametrized nodes whose IDs can affect keyword matching.
+    predicates = [Expression.compile(arguments[-1]) for arguments in (wire_selected, native_selected)]
+    for matches in (False, True):
+        assert sum(predicate.evaluate(lambda name: matches if name == keyword else False)
+                   for predicate in predicates) == 1
+    wire_nodes = [node.name for node in ast.walk(ast.parse(pilot_sources[wire_file]))
+                  if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name.startswith("test_")]
+    assert wire_nodes and len(wire_nodes) == len(set(wire_nodes))
+    node_selections = [{node for node in wire_nodes
+                        if predicate.evaluate(lambda name: name.casefold() in node.casefold())}
+                       for predicate in predicates]
+    assert all(node_selections)
+    assert not node_selections[0] & node_selections[1]
+    assert node_selections[0] | node_selections[1] == set(wire_nodes)
 
     discovery = ConfigParser()
     discovery.read(runner / "pytest.ini")
@@ -257,10 +289,16 @@ def test_backend_jobs_partition_the_comparison_contracts():
     core_tests = all_tests - set(excluded)
     comparison_tests = set(selected)
     pilot_tests = set(pilot_selected)
+    shared_wire_tests = {wire_file}
     assert not core_tests & comparison_tests
     assert not core_tests & pilot_tests
     assert not comparison_tests & pilot_tests
-    assert core_tests | comparison_tests | pilot_tests == all_tests
+    assert not core_tests & shared_wire_tests
+    assert not comparison_tests & shared_wire_tests
+    assert not pilot_tests & shared_wire_tests
+    # Every other file is selected once without a keyword filter. Only the
+    # shared file is visited twice, with the exhaustive/disjoint node split above.
+    assert core_tests | comparison_tests | pilot_tests | shared_wire_tests == all_tests
 
 
 @pytest.mark.parametrize("root", COVERED_ROOTS)
