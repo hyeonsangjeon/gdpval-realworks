@@ -13,6 +13,22 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Add an offline evidence intake for the active Foundry GPT-5.6 Sol Codex
+  pilot. It binds six privacy-screened local JSON evidence roles to the
+  caller-reviewed source SHA, active plan, exact run and 30 pinned sources.
+  Requested, documented and observed values stay separate; incomplete/null
+  claims cannot receive an evidence-ready marker. Max and 1M observations
+  share a response identity, native caps keep their per-attempt units, and
+  usage/tariff records must agree on meters, currency, region and applicable
+  times. The existing held-parent and atomic no-clobber primitives publish
+  verified bytes and a ready marker last; retained reservations and partial
+  trees cannot be reused. The sole targeted selector reported
+  `152 passed in 18.33s`. This is local evidence binding, not Azure fact
+  verification or launch approval. Both launch flags and all existing blockers
+  remain unchanged. Real evidence acquisition/review, native result hosting,
+  deployment and execution/receipt integration remain outstanding; no live
+  provider, model, grader or workflow was called.
+
 - Add a local preparer for one disposable GPT-5.4 comparison checkout at an
   explicit, externally reviewed commit. It verifies the shared Git repository,
   full commit SHA, 31 pinned sources, exact run plan and local input bytes,
