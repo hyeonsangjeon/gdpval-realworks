@@ -244,7 +244,7 @@ def test_gpt56_sol_foundry_pilot_is_pinned_and_fails_closed(
     if not path:
         assert main([]) == 2
         assert json.loads(capsys.readouterr().out) == result
-        assert len(REQUIRED_SOURCES) == 43
+        assert len(REQUIRED_SOURCES) == 46
         assert set(plan["source_pins"]) == REQUIRED_SOURCES
         assert PLAN_READER_SOURCE in REQUIRED_SOURCES
         assert PLAN_READER_SOURCE in plan["source_pins"]
