@@ -13,6 +13,23 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Materialize inert runtime, prepared-task, grading and identity-linkage files
+  for the fixed Foundry GPT-5.6 Sol Codex pilot. The materializer re-verifies the
+  sealed identity, active contract, source closure and optional evidence before
+  and after publication, then writes the ready marker last with the existing
+  held-parent and atomic no-clobber primitives. Failed partial directories are
+  retained and cannot be reused. The runtime parser and real step8 validator
+  check the generated configs; unchanged grading blocks are kept separate from
+  the historical 220-task rerun identity. Five-task scope is sealed in the
+  bundle, while real inference identity and execution-time scope binding remain
+  unresolved. The sole selector reported `108 passed in 22.34s`, exit 0. The
+  implementation was approved at
+  `4adbdf859cee549fb3f4245f85fa96b051db833c` with no blocking findings.
+  Both launch flags stay false.
+  Local config files do not prove live input/wire consumption, a native result
+  host, actual deployment, execution or usage/tariff receipt integration. No
+  provider, model, grader or workflow was executed.
+
 - Add a canonical offline dispatch and grading identity plan for the fixed
   Foundry GPT-5.6 Sol Codex pilot. It binds identical ordered five-task scopes,
   input hashes, Sol/Max/1M requests, unchanged controls and the existing step8
