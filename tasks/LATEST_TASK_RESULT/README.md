@@ -2,23 +2,36 @@
 
 - Updated: 2026-09-20 (UTC)
 
-## Current Task: PR #629 Workflow-Gate Pytest Budget Attempt
+## Current Task: PR #629 Complete-Preparation Fixture Cache
 
 ### Scope and Outcome
 
-The workflow-gate selector now builds its unchanged, unmaterialized source Git
-fixture once per module. Each case receives fresh single-link copies of the
-source files, Git objects and index. The seed contains no worktree registrations,
-and its original filesystem snapshot is checked at teardown. The existing #626
-input seed and byte-keyed parse/hash caches are unchanged. Real checkout creation,
-config/input publication, validators, drift invalidation and assertions still
-run for every applicable case.
+The ineffective source-only fixture seed was first removed by manual patch in
+normal commit `a9a7f631d2fcb83afebb9d08611f4960a27286f6`. The test file at that
+commit is byte-equal to `a31dc33470674c5c6b1c0f5f4cb837f796056474`. No reset,
+checkout restore, revert command, amend or rebase was used.
 
-All 64 cases passed in `82.28s (0:01:22)`. The original result was
-`64 passed in 80.13s (0:01:20)`, so the new invocation took `2.15s` longer.
-This attempt did not demonstrate a runtime reduction or recovery of the CI
-budget. The 45-minute Backend Tests timeout remains unresolved. No further
-selector or broad-suite invocation was made under the one-invocation limit.
+The replacement fixture runs real `prepare_workflow_execution` once for each
+of the four ABBA recipes at module scope. Mutation cases get fresh linked
+worktrees and exclusive single-link copies of generated config/input files,
+reservations and ready markers. They do not copy Git registration metadata or
+share mutable trees. Each case still creates its own source Git repository.
+The seed's filesystem snapshot is unchanged at teardown; copied files are
+checked for single-link isolation. Only immutable bytes, frozen typed prepared
+records and actual preparation-order traces cross case boundaries.
+
+The real CLI, preparation failure, handoff/quarantine and rerun-refusal paths
+remain in the cases that test them. YAML/input-shape cases do not construct a
+prepared seed. Real verifiers and all original assertions remain unchanged;
+no validator verdict is cached. The existing #626 input seed and byte-keyed
+parse/hash caches retain their original drift invalidation.
+
+The final invocation reported `64 passed in 28.36s`, meeting the owner's
+30-second local acceptance limit. This is distinct from the original
+`64 passed in 80.13s (0:01:20)` and the removed source-only attempt's
+`64 passed in 82.28s (0:01:22)`. No second invocation was made. Fresh automatic
+Backend Tests must still establish full-suite headroom within the unchanged
+45-minute timeout.
 
 The parent PR's workflow gate is unchanged. Both owning workflows separate
 GPT-5.4 comparison admission from provider secrets and OIDC, bind an explicit
@@ -31,7 +44,7 @@ them. The mandatory launch check refuses execution. Both `launch_allowed` and
 README tables and adjacent smoke examples.
 
 The correction starts from PR HEAD
-`a31dc33470674c5c6b1c0f5f4cb837f796056474` in the existing development branch
+`e7f05a60696bbda1735aaba7da47cf4633a32c4e` in the existing development branch
 `b/gpt54-workflow-execution-gate-20260919`. The immutable PR base remains
 `1671d6d87c27894d6b1a4d75ee5e7be21170feaa`. The preservation checkout and prior
 worktrees were not used for edits. Existing Git author and committer identity,
@@ -81,13 +94,20 @@ The supplied job interval was `2026-09-19T23:17:32Z` to
 `hosted-containment` as successful. These are supplied CI facts, not a fresh
 post-correction result.
 
-After the fixture edit, the same targeted selector was invoked exactly once:
+The removed source-only attempt at implementation HEAD
+`f2c4d18b1696917a4dbe73039fe5b63b3b3f6c7e`, carried by
+`e7f05a60696bbda1735aaba7da47cf4633a32c4e`, reported
+`64 passed in 82.28s (0:01:22)`. That was `2.15s` slower than the original and
+did not demonstrate budget recovery. It is prior evidence, not the final result.
+
+After replacing that fixture with complete preparation seeds, the same targeted
+selector was invoked exactly once:
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider batch-runner/tests/test_gpt54_workflow_gate.py::test_workflow_execution_gate
 ```
 
-Result: `64 passed in 82.28s (0:01:22)`, exit 0. No case was removed, skipped or
+Result: `64 passed in 28.36s`, exit 0. No case was removed, skipped or
 marked xfail. The unchanged matrix contains two workflow YAML cases, four ABBA
 preparations and 58 refusal cases. It retains owner/default/SHA checks,
 provider-before ordering, collisions, unsafe paths and links, source-pin drift,
@@ -97,33 +117,40 @@ refusal. Post-preparation mutations still exercise the real lineage verifier,
 not merely the always-refusing launch check. Both r2 cases exercise the real CLI
 in-process and return exit 2 without dispatch.
 
-Temporary Git repositories still use real checkout and bundle preparation.
-Subprocess guards allow only bounded local Git. Network, auth, provider, model,
-grader and VM guards recorded no calls. No baseline rerun, broad suite, build,
+The four ABBA seeds use real checkout and config/input bundle preparation.
+Copied fixtures use fresh linked worktrees and real verification after case
+mutations. Their ordering assertion uses the actual trace captured during that
+run's real seed preparation; no synthetic callbacks are added. CLI and failure
+cases still observe their own real preparation calls. Subprocess guards allow
+only bounded local Git. Network, auth, provider, model, grader and VM guards
+recorded no calls. No baseline rerun, broad suite, build,
 manual workflow rerun, live execution-checkout preparation, workflow dispatch,
 Azure/HF access, download, OIDC/token lookup, inference, grading, paid execution,
 Project edit or merge was performed.
 
-`git diff --check a31dc33470674c5c6b1c0f5f4cb837f796056474 HEAD` passed on the
+`git diff --check e7f05a60696bbda1735aaba7da47cf4633a32c4e HEAD` passed on the
 implementation commit. The local selector establishes correctness for these
 fixtures; it does not establish restored full-suite headroom. The timing is one
 invocation, not a repeated or controlled performance comparison.
 
 ### Immutable Review Boundary
 
-Implementation HEAD `f2c4d18b1696917a4dbe73039fe5b63b3b3f6c7e` received a fresh
-read-only `first-reviewer` review against
+Implementation HEAD `413e94b7fb7b63ffe7cc49211ffb787c44340866` received a fresh
+read-only `first-reviewer` review against incoming HEAD
+`e7f05a60696bbda1735aaba7da47cf4633a32c4e` and the original fixture at
 `a31dc33470674c5c6b1c0f5f4cb837f796056474`. The verdict was `APPROVE`, with no
 BLOCK, MAJOR or MINOR findings and no second-review escalation. The reviewer
-confirmed independent Git/file copies, seed immutability, all 64 cases and
-unchanged validators/cache invalidation. Review involved no tests, imports,
-project execution, network or mutations.
+confirmed four real preparation seeds, independent linked worktrees and
+exclusive single-link files, seed immutability, all 64 cases and original
+assertions, real verifiers, CLI/refusal/quarantine coverage and actual ordering
+evidence. Review involved no tests, imports, project execution, network or
+mutations.
 
-Approval covers fixture correctness and isolation, not timeout resolution or
-merge readiness. The reviewer explicitly noted the `2.15s` increase and the
-unresolved CI-budget blocker. Only `CHANGELOG.md` and this record follow the
-reviewed implementation HEAD. Leader review and fresh automatic CI remain
-required; no future carrying-PR merge SHA, time or outcome is claimed.
+Approval covers fixture correctness and isolation. The `28.36s` result meets
+the local 30-second limit but does not prove full-CI timeout resolution or merge
+readiness. Only `CHANGELOG.md` and this record follow the reviewed implementation
+HEAD. Leader review and fresh automatic CI remain required; no future
+carrying-PR merge SHA, time or outcome is claimed.
 
 ### Prior Review and Onboarding Evidence
 
@@ -140,7 +167,8 @@ PYTHONDONTWRITEBYTECODE=1 node --test --test-name-pattern='^workflow input table
 ```
 
 Its prior one-time result was `1 passed, 0 failed, 0 skipped`, exit 0; subtest
-`514.103645 ms`, total `696.085328 ms`. It was not rerun for the budget attempt.
+`514.103645 ms`, total `696.085328 ms`. It was not rerun for either fixture
+correction.
 
 ### Skills and Roles
 
@@ -152,20 +180,20 @@ preparer/verifier reuse and false launch flags; that boundary is unchanged.
 
 This correction uses `first-reviewer` for the fresh immutable review and
 `im-not-ai-en` for English changelog, completion and PR wording. Copyediting
-preserves commands, SHAs, counts, timestamps and the unresolved performance
-limit. Roles ran in the available runtime; unavailable externally named models
-are not claimed. Fixture preparation does not change experiment design or
-workflow logic, so no new experiment-design or extreme-reasoner decision was
-needed. Experiment-report skills do not apply to software validation. No grading
-implementation changed; grading-engineer was not needed. Repository-readiness,
-UI and animation skills are unrelated.
+preserves commands, SHAs, counts, timestamps, the failed attempt and the final
+measurement's limits. Roles ran in the available runtime; unavailable externally
+named models are not claimed. Fixture preparation does not change experiment
+design or workflow logic, so no new experiment-design or extreme-reasoner
+decision was needed. Experiment-report skills do not apply to software
+validation. No grading implementation changed; grading-engineer was not needed.
+Repository-readiness, UI and animation skills are unrelated.
 
 ### Evidence Limits and Remaining Work
 
-The CI runtime blocker remains unresolved: this single local invocation did
-not become faster, and no new full-suite success is claimed. Further bounded
-fixture optimization and authorized validation are needed before claiming
-budget recovery. Automatic checks after the normal push remain a separate gate.
+The local 30-second criterion is met, but no new full-suite success is claimed.
+The supplied 45-minute CI cancellation remains historical evidence. Automatic
+checks after the normal push must establish that the Backend Tests budget has
+recovered; they remain a separate gate.
 
 The unchanged workflow gate proves offline request binding and local prepared
 checkout consistency, not external source-review or inference-identity approval,

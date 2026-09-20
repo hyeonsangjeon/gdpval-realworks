@@ -604,17 +604,20 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
-- Build PR #629's unchanged workflow-gate source Git fixture once per module,
-  then copy its bytes into fresh single-link files for each case. The existing
-  input seed and byte-keyed caches remain unchanged, as do all 64 cases,
-  assertions, real validators and per-case checkout/bundle preparation.
-  Backend Tests run `35475698464`, job `105984493581`, was cancelled at its
-  45-minute timeout without a reported test failure. The one new selector run
-  reported `64 passed in 82.28s (0:01:22)`, compared with the original
-  `64 passed in 80.13s (0:01:20)`. This fixture change did not demonstrate a
-  runtime reduction or recovery of the CI budget. Production code, helpers,
-  workflows and timeouts are unchanged. No broad suite or manual workflow
-  rerun was performed; the runtime blocker remains unresolved.
+- Cache PR #629's complete workflow-preparation fixtures after manually removing
+  the ineffective source-only seed. Four module-scoped ABBA seeds use the real
+  preparer; each mutation case gets its own linked worktree and single-link
+  copies of generated config/input/reservation/ready bytes. Real verifiers,
+  assertions, all 64 cases, CLI and preparation/handoff/quarantine coverage
+  remain intact. The original selector took `80.13s`; the removed source-only
+  attempt took `82.28s`. The one final invocation reported
+  `64 passed in 28.36s`, meeting the 30-second local acceptance limit.
+  Backend Tests run `35475698464`, job `105984493581`, had been cancelled at
+  its 45-minute timeout without a reported test failure. The faster local
+  selector does not establish full-suite headroom; fresh automatic CI is still
+  required. Production code, helpers, workflows, timeouts and the existing
+  byte-keyed caches are unchanged. No broad suite or manual workflow rerun
+  was performed.
 
 - Restore PR #629's workflow-input documentation contract after `validate`
   run `35474119808`, job `105980280399`, failed at
