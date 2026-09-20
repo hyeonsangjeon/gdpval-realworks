@@ -604,6 +604,18 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Build PR #629's unchanged workflow-gate source Git fixture once per module,
+  then copy its bytes into fresh single-link files for each case. The existing
+  input seed and byte-keyed caches remain unchanged, as do all 64 cases,
+  assertions, real validators and per-case checkout/bundle preparation.
+  Backend Tests run `35475698464`, job `105984493581`, was cancelled at its
+  45-minute timeout without a reported test failure. The one new selector run
+  reported `64 passed in 82.28s (0:01:22)`, compared with the original
+  `64 passed in 80.13s (0:01:20)`. This fixture change did not demonstrate a
+  runtime reduction or recovery of the CI budget. Production code, helpers,
+  workflows and timeouts are unchanged. No broad suite or manual workflow
+  rerun was performed; the runtime blocker remains unresolved.
+
 - Restore PR #629's workflow-input documentation contract after `validate`
   run `35474119808`, job `105980280399`, failed at
   `b1f4a5da0bccc6760d2b78b0708770d35df848dd`. The onboarding test reads
@@ -613,8 +625,8 @@ entries land under a fresh dated heading the day they merge to `main`.
   from relay identity and launch permission. The exact failing selector passed
   once: `1 passed, 0 failed, 0 skipped`, total `696.085328 ms`. The original
   workflow-gate evidence remains `64 passed in 80.13s (0:01:20)` and was not
-  rerun. Workflow logic, other inputs/defaults and both false launch flags are
-  unchanged; fresh automatic CI remains required.
+  rerun for that correction. Workflow logic, other inputs/defaults and both
+  false launch flags are unchanged; fresh automatic CI remains required.
 
 - Route GPT-5.4 comparison requests in both owning workflows to a separate
   admission job with read-only repository permissions, no provider secrets
