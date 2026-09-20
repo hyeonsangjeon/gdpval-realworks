@@ -13,6 +13,23 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Correct four Backend pytest failures reported for PR #637 at
+  `155279f6458ea3341f2c894a1177aaa698bc053d`, run `35506466839`, job
+  `106067021054`. Step 1 now safely reads optional legacy execution/capture
+  fields, allowing the unchanged manifest guards to reach their intended
+  refusal paths. The registered pilot's required-capture refusal remains.
+  Add `prepared_request_capture_unverified` to the config-bundle test's exact
+  expected blocker list and refresh only the changed Step 1 source pin in the
+  two active contracts. The single four-node correction selector reported
+  `4 passed in 5.39s`, exit 0. Reviewed correction HEAD:
+  `a81985b1f9f74f246d265a273913a9c3ec4cb31e`. `llm-systems-engineer` and
+  `first-reviewer` approved that correction without blocking findings.
+  Neither the full comparison selector nor the 124-case capture selector was
+  rerun locally. No capture helper, other production behavior, workflow,
+  timeout or launch flag changed. Local prepared request intent still does not
+  prove live wire/identity, native result hosting, actual execution/caps or
+  usage receipts. New-HEAD automatic CI remains a separate gate.
+
 - Correct the leader's BLOCK on PR #634 at
   `b872446d6e61cfaa8fa1558ee94ea4a6b4ff67ea`: the runtime artifact treated the
   requested model label as a deployment name and passed runtime validation even
@@ -30,6 +47,25 @@ entries land under a fresh dated heading the day they merge to `main`.
   No provider, model, grader or workflow was executed.
 
 ### Added
+
+- Bind the registered Foundry GPT-5.6 Sol pilot's real Step 1 prepared rows to
+  its runtime candidate and five verified upstream bundles. The optional typed
+  control is mandatory only for that run. Step 1 uses atomic no-clobber capture
+  publication, and Step 2 rechecks current prepared/config/input/evidence bytes
+  before provider setup. Legacy absent/null behavior stays unchanged. Explicit
+  preflight consumption clears only `prepared_request_capture_unverified`;
+  live identity/wire, native host, actual execution/caps and runtime receipts
+  remain unresolved, and both launch flags stay false. The sole selector
+  reported `2 failed, 122 passed in 284.01s (0:04:44)`, exit 1. Both failures
+  stopped at the existing connection-confirmation boundary because the fixture
+  lacked its GPT-5.4-style stand-in. That fixture was corrected without a rerun;
+  no green local result is claimed, and automatic CI is still required.
+  Read-only `llm-systems-engineer` and `first-reviewer` reviews approved
+  implementation HEAD `667fb775fdb2df4424ea85152c8a8ef86d5d9314` without blocking
+  findings. That approval does not validate the unrerun test correction.
+  The capture records prepared request intent, not actual wire bytes, served
+  capability or launch permission. No provider, model, grader, manual workflow
+  or paid execution ran.
 
 - Bind private local Foundry resource-ID bytes to complete verified evidence for
   the fixed GPT-5.6 Sol pilot. Real evidence/identity/config/input verifiers

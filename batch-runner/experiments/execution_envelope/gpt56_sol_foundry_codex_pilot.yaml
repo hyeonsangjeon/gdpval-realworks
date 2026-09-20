@@ -25,7 +25,7 @@ dispatch_grading_identity:
   source_base_sha: ed6c64f0afb90b0b3a6a9e4719e44184384296ec
   plan_file: foundry-pilot-identity-plan.json
   ready_marker: foundry-pilot-identity-ready.json
-  grader_template_source_hash: db7e9c173dbf7ac60460609a62c7757fc99ee4e42b997f0bd7eac5a964913036
+  grader_template_source_hash: 49f882c8b4e19d60c91130431fa06393d9da7d96b15aff25b16755136298f8bc
   evidence_boundary: offline_dispatch_grading_identity
 
 # Inert runtime template with no deployment/execution, plus grading config and
@@ -51,6 +51,15 @@ deployment_binding:
   source_base_sha: 9cda8a92040d6679cbfe7f83bca73b0fe657484f
   ready_marker: pilot-deployment-binding-ready.json
   evidence_boundary: offline_deployment_resource_binding_not_launch_or_execution
+
+# Local prepared request intent only. It does not prove model consumption,
+# actual wire bytes or served identity, and cannot authorize a launch.
+pre_execution_capture:
+  compiler: batch-runner/gpt56_pilot_input_capture.py
+  source_base_sha: 140cbf4eef59a2b3c6ee731ac3dd4c75d9e005d7
+  capture_file: pilot-pre-execution-input.json
+  binding_version: gpt56-pre-execution-input-v1
+  evidence_boundary: prepared_request_intent_not_wire_or_served_identity
 
 identity:
   provider: azure
@@ -181,26 +190,26 @@ cost:
   use_openai_or_copilot_tariff_for_foundry: false
   billing_evidence: provider_native_usage_without_invented_currency_conversion
 
-# 46 exact source files; the superseded record is sealed without refreshing it.
+# 51 exact source files; the superseded record is sealed without refreshing it.
 source_pins:
   batch-runner/experiments/exp035_codex_foundry_full220.yaml: eef6c66ca5d851b379b189e53ed27ef0d10d822fcd09a2e5a5c51acbc5d40819
   batch-runner/experiments/execution_envelope/gdpval_task_catalog.json: 5f1eca853979b2b4efe6c6ba656545c3a416da920e3faf067d52f5d8ac4ae0eb
   batch-runner/experiments/execution_envelope/advance_check_plan.yaml: 9ecf85f1e9eb40ddb0232baa854c10052c3e4457fe2cf174f9b34d4cbecdc26e
   batch-runner/grading_configs/exp035_codex_foundry_full220_v2_sol_max.yaml: 89820de9d9c4e2e3edc1420d3c05fd12c7bb4c3475fd47ad92ed56566a897025
   batch-runner/gpt54_comparison_preflight.py: 604e24b0c3a7c3e9344a997273bb492bb5d5f8546518e97f2e59af2c7914ee80
-  batch-runner/core/experiment_config.py: 62f13891c405a6599ff883ce7cd0c06bf1ea59a422f25cecec299f4819011705
+  batch-runner/core/experiment_config.py: d05fb9d84bc9c7ec203f2db769ed0570fab005044dfdce32842cc9e23bddec91
   batch-runner/core/config.py: 483d8ad94ddb78b2a11b8712737ceea1e6b4d3696a8f16fabb84f747a786b48c
   batch-runner/core/codex_runtime_config.py: 3ef7a6bcbfe3523516068dee99f5488163cf33516d03de1c9fe42d8e2aca19b3
   batch-runner/core/codex_runner.py: a5e95775f8b5065307c625fb532677517e57217c9efc016f0135a06abd82377e
   batch-runner/core/codex_cost.py: 1a10f4ae516fec5a7d93692e56d0727452a5fdc314c0b915647c5d3545ac0029
   batch-runner/core/executor.py: 0eb0060521191ceceaf08ad8201ece226ae4cd31c46c21ae64d72ae390b94d7b
-  batch-runner/step1_prepare_tasks.py: 051d528c8bf5fdf122120ba88d07ae663c11fb86800fa22fbe6084f76583eee8
-  batch-runner/step2_run_inference.py: aa3952d1a0c698c1f3b7b2a79a681dc8d0ad3c4ccc7f47e99871d3036412e45a
+  batch-runner/step1_prepare_tasks.py: c487fd25710155e5bbf07461dd0c3c2d806babe1a64e8ca7cd7931c50461c742
+  batch-runner/step2_run_inference.py: eb3262a0915b88ae4500ef5654967ed29d3cb71d13947f810090108724ff8af3
   batch-runner/core/cost_receipts.py: 4b936516da622ceaf8cf8d5e10d2dd1b69ded831b4143557b6431a197bab9cbe
   batch-runner/core/result_projection.py: 1b47c4ee0f6d050e5edd4ac5a301203ba834c8d159b1557b04d83046ca965ec6
   batch-runner/schemas/grade.schema.json: 9c611874c2d7aa57018eecdc86b7c0d579aaa9c29dd0df649058eec9ad5175b9
   batch-runner/experiments/execution_envelope/gpt56_sol_copilot_codex_pilot.yaml: 47799d3f61374679722df32c67de14f9d0d56bd6586cf7b28c10076fd41d1901
-  batch-runner/gpt56_sol_codex_pilot_preflight.py: 173a90dc44471391cc406492a6cfdcb3294341be690c42d641c24cc768186bf7
+  batch-runner/gpt56_sol_codex_pilot_preflight.py: 120279acc4c636246508c8c28671290e71117403235b36025ead72946020efc6
   batch-runner/core/agentic_v2_preregistration.py: 02ac15ef8483ac367796feb1fcbadf90a27062c2bf5b3147b75b7e17a0c089e0
   batch-runner/core/execution_envelope_tasks.py: dd934314ce447b78efa45ad9d349f198d1e429531eccdf430106b87335dc2ea0
   batch-runner/core/azure_ai_clients.py: f7211d1070c0b4dd7aae0204c520bc789bb84a300d061b0bdc4fc9a21738915f
@@ -226,6 +235,11 @@ source_pins:
   batch-runner/gpt54_run_input_bundle.py: eadbc027b91192a141737926aa723a1c2985e17038c31b7570840ee4691abe07
   batch-runner/core/source_identity.py: 1a619857e9a7ba8d6d572fa712796da380f648b6c541af727d2c45b6f9848d3b
   batch-runner/core/needs_files.py: 05c1c0baf36c5bae01bcb6c8b5871249e2633c7165b8e96f94726ece7f5ddd84
-  batch-runner/gpt56_pilot_deployment_binding.py: 8a0e47ec5641e9b408c839ebd367afb54363b466116f2d92a2389997ccee42e2
+  batch-runner/gpt56_pilot_deployment_binding.py: 0b968c2985591b807c0ee6fcd3f16668553e42f68495b1c56f83ce5274a3c4fd
   batch-runner/core/repository_identity.py: 66352934060fab45cf4a4808618648440f0efa8e130ceb14f529550012bddfc9
   batch-runner/core/agentic_experiments.py: 5461e782f1b1e9a7da5c75a0e52d5302088d65c7133b8a933c644ac8a186f26a
+  batch-runner/gpt56_pilot_input_capture.py: 7492beaf51c5dc4d2b1b53d4681de0a2fbb816fe0999c2721eea9c408d40e1e9
+  batch-runner/core/prepared_fingerprint.py: dc215010f3d3a99245303af2802f73c5f75d6c8c18a7b1e94a604600dc40b6fc
+  batch-runner/core/publication_generation.py: 033eca1c3e012682db54d343dee2fa2bc80360ae7c6d0f09f7e8e5c1dad983c7
+  batch-runner/core/data_loader.py: 55a228511981e82553f9910d8177e5b66a74cc65ad633cedc3f835a8af41e1d7
+  batch-runner/prepare_dataset.py: 17ccad9fe7a360daaa02329481c11f89135ca2cf107eb70355836b11fd4b2d5e

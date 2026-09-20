@@ -127,6 +127,33 @@ class CodexComparisonCapture:
         return {"binding_version": self.binding_version, "run_id": self.run_id}
 
 
+@dataclass(frozen=True)
+class PilotInputCapture:
+    """Public capture intent only; private bundle paths are runtime arguments."""
+
+    run_id: str
+    binding_version: str = "gpt56-pre-execution-input-v1"
+
+    RUN_ID = "gpt56_sol_foundry_codex_pilot5_v1"
+
+    def __post_init__(self):
+        if type(self.run_id) is not str or self.run_id != self.RUN_ID:
+            raise ValueError("pilot capture requires the registered run")
+        if type(self.binding_version) is not str or self.binding_version != "gpt56-pre-execution-input-v1":
+            raise ValueError("unsupported pilot capture contract")
+
+    @classmethod
+    def from_dict(cls, value):
+        if value is None:
+            return None
+        if type(value) is not dict or set(value) != {"run_id", "binding_version"}:
+            raise ValueError("pilot capture requires the exact typed control")
+        return cls(**value)
+
+    def as_dict(self):
+        return {"binding_version": self.binding_version, "run_id": self.run_id}
+
+
 @dataclass
 class ExecutionConfig:
     """Execution mode configuration (Phase 5-3)"""
@@ -156,6 +183,7 @@ class ExecutionConfig:
     # equalise.
     shared_first_request: bool = False
     comparison_input_capture: Optional[CodexComparisonCapture] = None
+    pilot_input_capture: Optional[PilotInputCapture] = None
 
 
 def _validate_preprocessors(
@@ -364,6 +392,9 @@ class ExperimentConfig:
             comparison_input_capture=CodexComparisonCapture.from_dict(
                 execution_data.get("comparison_input_capture")
             ),
+            pilot_input_capture=PilotInputCapture.from_dict(
+                execution_data.get("pilot_input_capture")
+            ),
         )
 
         return cls(
@@ -483,6 +514,8 @@ class ExperimentConfig:
                 **({"metrics": self.execution.metrics} if self.execution.metrics is not None else {}),
                 **({"comparison_input_capture": self.execution.comparison_input_capture.as_dict()}
                    if self.execution.comparison_input_capture is not None else {}),
+                **({"pilot_input_capture": self.execution.pilot_input_capture.as_dict()}
+                   if self.execution.pilot_input_capture is not None else {}),
             },
         }
 
@@ -535,6 +568,19 @@ class ExperimentConfig:
             or self.condition_b is not None
         ):
             errors.append("comparison capture requires its exact single-condition Codex experiment")
+
+        pilot_capture = self.execution.pilot_input_capture
+        if self.experiment_id == PilotInputCapture.RUN_ID and pilot_capture is None:
+            errors.append("registered Foundry pilot requires an input capture")
+        if pilot_capture is not None and (
+            type(pilot_capture) is not PilotInputCapture
+            or pilot_capture.run_id != self.experiment_id
+            or self.execution.mode != "codex_foundry"
+            or self.condition_a.name != "codex_foundry"
+            or self.condition_b is not None
+            or capture is not None
+        ):
+            errors.append("pilot capture requires its exact single-condition Foundry experiment")
 
         # Check required fields
         if not self.experiment_id:

@@ -32,9 +32,10 @@ ALL_BLOCKERS = [
     "foundry_usage_and_tariff_mapping_unverified",
     "native_sandbox_and_result_bundle_host_unverified",
     "actual_pilot_deployment_not_prepared",
+    "prepared_request_capture_unverified",
 ]
 CLEARED = [ALL_BLOCKERS[index] for index in (0, 1, 2, 3, 7)]
-REMAINING = [ALL_BLOCKERS[index] for index in (4, 5, 6, 8, 9)]
+REMAINING = [ALL_BLOCKERS[index] for index in (4, 5, 6, 8, 9, 10)]
 SENTINEL = "private-evidence-value-DO-NOT-ECHO"
 
 

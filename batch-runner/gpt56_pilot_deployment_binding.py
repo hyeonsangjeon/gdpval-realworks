@@ -25,7 +25,7 @@ import gpt56_pilot_config_bundle as configs
 import gpt56_pilot_identity_plan as identity
 import gpt56_pilot_input_bundle as inputs
 import gpt56_sol_codex_pilot_preflight as pilot
-from core.experiment_config import ExperimentConfig
+from core.experiment_config import ExperimentConfig, PilotInputCapture
 from gpt54_codex_input_capture import _write_no_clobber
 from gpt54_comparison_preflight import _canonical_json
 from gpt54_run_config_bundle import _held_parents, _path, _root
@@ -141,6 +141,7 @@ def _runtime(template: dict[str, Any], deployment: str) -> dict[str, Any]:
         },
         "execution": {
             "mode": route["execution_mode"], "timeout": limits["timeout_seconds_per_attempt"],
+            "pilot_input_capture": PilotInputCapture(dispatch["run_id"]).as_dict(),
             "max_retries": limits["infrastructure_retries_per_task"],
             "resume_max_rounds": limits["resume_max_rounds"],
             "tokens": limits["inactive_generic_token_settings"],

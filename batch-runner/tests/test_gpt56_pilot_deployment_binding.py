@@ -188,7 +188,7 @@ def test_exact_hash_bound_candidate_uses_all_real_verifiers_and_parser(deploymen
     assert _reservation(case).read_bytes() == binding._reservation(result)
     assert document["run_id"] == pilot.RUN_ID and document["condition"] == "codex_foundry" and document["repeat"] == 1
     assert document["task_ids"] == TASK_IDS and document["expected_task_count"] == 5
-    assert document["source_pins"] == case.plan["source_pins"] and len(document["source_pins"]) == 46
+    assert document["source_pins"] == case.plan["source_pins"] and len(document["source_pins"]) == 51
     assert case.plan["deployment_binding"] == pilot.DEPLOYMENT_BINDING
     assert document["evidence_boundary"] == binding.BOUNDARY
     assert document["launch_allowed"] is document["full_220_allowed"] is False
@@ -241,7 +241,7 @@ def test_exact_hash_bound_candidate_uses_all_real_verifiers_and_parser(deploymen
     assert captured.out == captured.err == ""
 
 
-def test_plan_only_and_null_binding_keep_the_ten_default_blockers(sealed, monkeypatch):
+def test_plan_only_and_null_binding_keep_the_eleven_default_blockers(sealed, monkeypatch):
     def forbidden(*args, **kwargs):
         raise AssertionError("legacy path consulted deployment binding")
 
@@ -251,7 +251,7 @@ def test_plan_only_and_null_binding_keep_the_ten_default_blockers(sealed, monkey
     assert _json(pilot.inspect_plan(sealed.plan, deployment_binding=None, account_resource_id_file=None,
                                    project_resource_id_file=None, deployment_resource_id_file=None)) == _json(legacy)
     assert legacy["configuration_valid"] and legacy["launch_blockers"] == list(pilot.LAUNCH_BLOCKERS)
-    assert len(legacy["launch_blockers"]) == 10 and BLOCKER in legacy["launch_blockers"]
+    assert len(legacy["launch_blockers"]) == 11 and BLOCKER in legacy["launch_blockers"]
     assert legacy["launch_allowed"] is legacy["full_220_allowed"] is False
 
 
@@ -259,8 +259,9 @@ def test_verified_explicit_consumption_clears_only_deployment_and_hides_ids(seal
     before = pilot.inspect_plan(sealed.plan, **_upstream_options(sealed))
     after = pilot.inspect_plan(sealed.plan, deployment_binding=sealed.root, **sealed.options)
     assert before["launch_blockers"] == ["live_inference_identity_and_wire_unverified",
-                                       "native_sandbox_and_result_bundle_host_unverified", BLOCKER]
-    assert after["launch_blockers"] == before["launch_blockers"][:-1]
+                                       "native_sandbox_and_result_bundle_host_unverified", BLOCKER,
+                                       "prepared_request_capture_unverified"]
+    assert after["launch_blockers"] == [name for name in before["launch_blockers"] if name != BLOCKER]
     gate = after["deployment_binding_gate"]
     verified = _verify(sealed)
     assert gate["deployment_binding_complete"] is True

@@ -255,7 +255,7 @@ def test_exact_local_bundle_uses_real_validators_and_ready_last(input_seeds, tmp
     assert document["dataset"]["parquet"] == {"path": bundle.PARQUET_PATH, **_digest(case.parquet.read_bytes())}
     assert document["files"] == {name: _digest(data) for name, data in result.files}
     assert document["config_bundle"] == {"path": configs.READY_PATH, **_digest(checked[0].canonical_bytes())}
-    assert document["source_pins"] == case.plan["source_pins"] and len(document["source_pins"]) == 46
+    assert document["source_pins"] == case.plan["source_pins"] and len(document["source_pins"]) == 51
     assert case.plan["input_bundle"] == pilot.INPUT_BUNDLE
     assert document["evidence_linkage"] == checked[0].as_dict()["evidence_linkage"]
     assert (document["evidence_linkage"] is not None) is linked
@@ -287,7 +287,7 @@ def test_no_bundle_retains_both_parts_without_calling_new_verifier(unpublished, 
     assert _json(report) == _json(_expected_legacy(unpublished.plan))
     assert PREPARED_BLOCKER in report["launch_blockers"] and LIVE_BLOCKER in report["launch_blockers"]
     assert "live_identity_and_input_bytes_unverified" not in report["launch_blockers"]
-    assert len(report["launch_blockers"]) == 10
+    assert len(report["launch_blockers"]) == 11
     assert report["launch_allowed"] is report["full_220_allowed"] is False
     assert "input_bundle_gate" not in report
 
@@ -303,7 +303,8 @@ def test_explicit_verified_bundle_closes_only_prepared_input_requirement(input_s
     assert report["launch_blockers"] == expected and len(expected) == len(before["launch_blockers"]) - 1
     assert {LIVE_BLOCKER, "native_sandbox_and_result_bundle_host_unverified", "actual_pilot_deployment_not_prepared"} <= set(expected)
     if linked:
-        assert expected == [LIVE_BLOCKER, "native_sandbox_and_result_bundle_host_unverified", "actual_pilot_deployment_not_prepared"]
+        assert expected == [LIVE_BLOCKER, "native_sandbox_and_result_bundle_host_unverified", "actual_pilot_deployment_not_prepared",
+                            "prepared_request_capture_unverified"]
     gate = report["input_bundle_gate"]
     assert gate["input_bundle_complete"] is True and gate["cleared_blockers"] == [PREPARED_BLOCKER]
     assert gate["consumed_bundle_sha256"] == _digest((case.root / bundle.READY_PATH).read_bytes())["sha256"]

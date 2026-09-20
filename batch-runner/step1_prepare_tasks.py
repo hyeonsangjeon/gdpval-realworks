@@ -20,7 +20,7 @@ from pathlib import Path
 
 from core.config import DEFAULT_LOCAL_PATH, WORKSPACE_DIR
 from core.data_loader import GDPValDataLoader
-from core.experiment_config import ExperimentConfig
+from core.experiment_config import ExperimentConfig, PilotInputCapture
 from core.needs_files import NeedsFilesManifest
 from core.prepared_fingerprint import prepared_fingerprint
 from core.publication_generation import resolve_publication_generation
@@ -80,13 +80,25 @@ def _public_codex_config(value):
     return output or None
 
 
-def prepare_tasks(config_path: str) -> dict:
+def _prepare_tasks(config_path: str, *, pilot_capture_sources=None) -> dict:
     """Load data, apply filters, enrich with needs_files, save to workspace."""
 
     WORKSPACE_DIR.mkdir(parents=True, exist_ok=True)
 
     # 1. Load experiment config
-    config = ExperimentConfig.from_yaml(config_path)
+    pilot_tasks = None
+    if pilot_capture_sources is not None:
+        from gpt56_pilot_input_capture import prepare_pilot_inputs
+
+        config, pilot_tasks = prepare_pilot_inputs(
+            pilot_capture_sources, dataset_root=DEFAULT_LOCAL_PATH, config_path=Path(config_path),
+        )
+    else:
+        config = ExperimentConfig.from_yaml(config_path)
+        execution = getattr(config, "execution", None)
+        pilot_control = getattr(execution, "pilot_input_capture", None)
+        if config.experiment_id == PilotInputCapture.RUN_ID or pilot_control is not None:
+            raise ValueError("pilot_capture_sources_required")
     validation_errors = config.validate()
     if validation_errors:
         raise ValueError("Invalid experiment config: " + "; ".join(validation_errors))
@@ -94,8 +106,11 @@ def prepare_tasks(config_path: str) -> dict:
     print(f"   Description: {config.description}")
 
     # 2. Load dataset (auto_download=False: Step 0에서 이미 다운로드 완료)
-    loader = GDPValDataLoader(auto_download=False)
-    tasks = loader.load()
+    if pilot_tasks is None:
+        loader = GDPValDataLoader(auto_download=False)
+        tasks = loader.load()
+    else:
+        tasks = pilot_tasks
     print(f"📦 Loaded {len(tasks)} tasks from local snapshot")
 
     # 3. Apply filters
@@ -209,7 +224,8 @@ def prepare_tasks(config_path: str) -> dict:
         ),
         "experiment_name": config.name,
         "description": config.description,
-        "config_path": "comparison-run.json" if config.execution.comparison_input_capture is not None else str(config_path),
+        "config_path": ("pilot-runtime-candidate.json" if pilot_capture_sources is not None else
+                        "comparison-run.json" if config.execution.comparison_input_capture is not None else str(config_path)),
         "source": config.data_filter.source,
         "task_scope": {
             "mode": (
@@ -247,6 +263,8 @@ def prepare_tasks(config_path: str) -> dict:
             **({"metrics": config.execution.metrics} if config.execution.metrics is not None else {}),
             **({"comparison_input_capture": config.execution.comparison_input_capture.as_dict()}
                if config.execution.comparison_input_capture is not None else {}),
+            **({"pilot_input_capture": config.execution.pilot_input_capture.as_dict()}
+               if config.execution.pilot_input_capture is not None else {}),
         },
         "total_tasks": len(task_list),
         "needs_files_count": sum(1 for t in task_list if t["needs_files"]),
@@ -259,7 +277,15 @@ def prepare_tasks(config_path: str) -> dict:
 
     # 7. Save
     output_path = WORKSPACE_DIR / "step1_tasks_prepared.json"
-    if config.execution.comparison_input_capture is not None:
+    if pilot_capture_sources is not None:
+        from gpt56_pilot_input_capture import write_pilot_prepared_and_capture
+
+        write_pilot_prepared_and_capture(
+            pilot_capture_sources, workspace=WORKSPACE_DIR, dataset_root=DEFAULT_LOCAL_PATH,
+            config_path=Path(config_path),
+            prepared_data=json.dumps(output, indent=2, ensure_ascii=False).encode("utf-8"),
+        )
+    elif config.execution.comparison_input_capture is not None:
         # Lazy: legacy runs do not import the comparison compiler, and the
         # attester reuses this module's public config projection.
         from gpt54_codex_input_capture import write_codex_prepared_and_capture
@@ -273,9 +299,22 @@ def prepare_tasks(config_path: str) -> dict:
         with open(output_path, "w", encoding="utf-8") as f:
             json.dump(output, f, indent=2, ensure_ascii=False)
 
-    print(f"\n✅ Step 1 complete: {len(task_list)} tasks → {output_path}")
+    public_output = output_path.name if pilot_capture_sources is not None else output_path
+    print(f"\n✅ Step 1 complete: {len(task_list)} tasks → {public_output}")
     print(f"   needs_files: {output['needs_files_count']} | text_only: {output['text_only_count']}")
     return output
+
+
+def prepare_tasks(config_path: str, *, pilot_capture_sources=None) -> dict:
+    """Legacy serializer, with a private, explicit library-only pilot context."""
+    if pilot_capture_sources is None:
+        return _prepare_tasks(config_path)
+    from gpt56_pilot_input_capture import PilotInputCaptureRefused
+
+    try:
+        return _prepare_tasks(config_path, pilot_capture_sources=pilot_capture_sources)
+    except Exception:
+        raise PilotInputCaptureRefused("pilot_step1_refused") from None
 
 
 def main():
