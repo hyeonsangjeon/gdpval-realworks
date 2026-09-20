@@ -1,143 +1,133 @@
 # Latest substantive task result
 
-## PROJECT5-GPT56-FOUNDRY-DEPLOYMENT-BINDING FULL-9CDA8A92
+## PROJECT5-GPT56-PRE-EXECUTION-CAPTURE FULL-140CBF4E
 
-The Foundry GPT-5.6 Sol pilot can now bind private local resource-ID bytes to
-complete evidence and publish a separate runtime candidate. The compiler uses
-the real evidence, identity, config and input bundle verifiers. Explicit
-preflight consumption clears only `actual_pilot_deployment_not_prepared`.
+The registered Foundry GPT-5.6 Sol pilot now binds the real Step 1 prepared
+five-task rows to its runtime candidate and five verified upstream bundles.
+Step 2 checks that capture before host, route, auth or client setup. Explicit
+preflight consumption clears only `prepared_request_capture_unverified`.
+`live_inference_identity_and_wire_unverified` remains blocked. Both
+`launch_allowed` and `full_220_allowed` remain false, as do the active contract's
+`launch_enabled` and `full_220_enabled`.
 
-The sole selector reported `162 passed in 156.65s (0:02:36)`, exit 0. No selector
-was rerun. Both `launch_allowed` and `full_220_allowed` remain false, as do the
-active contract's `launch_enabled` and `full_220_enabled`.
+The sole selector reported `2 failed, 122 passed in 284.01s (0:04:44)`, exit 1.
+Both failures were in the fixture's successful Step 2 and legacy paths: the
+unchanged Codex connection-confirmation gate stopped them before the expected
+host/auth test boundary. The fixture now supplies the same test-only confirmation
+stand-in as the GPT-5.4 capture selector. It was not rerun. This record does not
+claim a green local selector; automatic `comparison-contracts` validation is
+still needed for the corrected fixture.
 
 ### Scope and concrete outcome
 
-`batch-runner/gpt56_pilot_deployment_binding.py` adds a small offline CLI and
-`compile_pilot_deployment_binding`, `materialize_pilot_deployment_binding` and
-`verify_pilot_deployment_binding`. All require complete evidence, identity,
-config and input bundles, a caller-reviewed full source SHA, explicit UTC
-evaluation time and separate account/project/deployment resource-ID files.
+`PilotInputCapture` is a strict optional control for
+`gpt56_sol_foundry_codex_pilot5_v1` only. The deployment candidate carries it;
+registered runs cannot select a legacy bypass by removing it. Invalid control
+keys, a different run, another execution mode, a second condition or simultaneous
+GPT-5.4 and GPT-5.6 controls fail closed. Legacy absent/null controls add no
+serialized field or pilot file reads.
 
-The compiler calls all four real upstream verifiers, checks their exact shared
-evidence/plan/run linkage and binds each private file's original bytes to the
-corresponding evidence subject's `resource_id_sha256`. It rechecks the upstream
-chain and resource files after candidate derivation. Verification recomputes
-the expected canonical bytes; matching forged output hashes cannot replace the
-trusted derivation. The active registration pins 46 sources, up from 43. Bundles
-tied to the earlier active-plan digest are stale and must not be reused.
+The new `gpt56_pilot_input_capture.py` exposes small library functions for
+preparation, publication and verification. `PilotCaptureSources` carries private
+bundle/resource paths, the caller-reviewed source SHA and external evaluation
+time as runtime-only arguments. No execution command or launch CLI was added.
+The existing Step 1 and Step 2 CLIs cannot run the registered pilot without that
+explicit library context.
 
-Resource files must be distinct, regular single-link UTF-8 files. The supported
-closed ARM path shape is an account with its project and deployment children.
-Project-scoped deployment layouts are not inferred. A single terminal slash is
-allowed and remains part of the exact byte digest. The compiler derives only
-the deployment's last nonempty path segment, without case folding, trimming or
-URL decoding. URI forms, query/fragment text, whitespace/control characters,
-credential-like content, traversal, unsafe links and mismatched roles or parent
-accounts fail closed. Errors and CLI reports never echo private paths or IDs.
+Step 1 calls the real deployment binding verifier, which in turn calls the
+evidence, identity, config and input bundle verifiers. It reads the actual
+candidate and input-bundle roles, uses the existing source projection and
+reference snapshot helpers, and preserves the real Step 1 serializer and
+prepared fingerprint. The writer exclusively publishes
+`step1_tasks_prepared.json`, revalidates the upstream chain, then atomically
+publishes `pilot-pre-execution-input.json` last. The held-parent and no-clobber
+writer primitives are reused. Existing or partial pairs are never overwritten,
+adopted or automatically deleted.
 
-The separate candidate uses the existing `codex_foundry` route and real
-`ExperimentConfig.from_dict` and `validate` methods. Its deployment name comes
-from the hash-bound resource ID, not the requested `gpt-5.6-sol` model label.
-The verified dispatch and prepared-task manifests preserve the exact five task
-IDs/order/input hashes, Sol-not-Fast, Max, 1M request, one attempt/repeat, fresh
-sessions, no relay/resume/escalation, unchanged retry/timeout/native-cap
-declarations and record-only receipt contract. No credential, token, endpoint,
-launch command, inference result or grade is generated.
+The canonical capture contains the ordered task IDs, raw and canonical prepared
+JSON digests, each prepared row's canonical digest, prompt/reference/parquet
+identities, dataset revision, requested Foundry/Sol/deployment/Max/1M settings,
+candidate and active-plan digests, upstream ready/reservation digests and reviewed
+source SHA. It contains no raw prompts, evidence claims, resource IDs, host paths,
+endpoint, credentials, auth headers or free-form responses. The deployment leaf
+still comes from the separately verified resource binding, not the model label.
 
-The original config bundle's closed inert template remains `deployment: null`,
-`execution: null` and `runnable: false`. The separate candidate is intentionally
-parser-compatible. Its outer false flags are not runtime enforcement, and Step 2
-does not automatically consume this binding. A passing parser establishes
-configuration compatibility, not permission to execute it.
+Step 2 verifies the current prepared file, byte-equal and digest-equal capture,
+candidate and all upstream bundles before its existing host and provider setup.
+It rechecks upstreams after building the consumer projection, including changes
+during that work. Raw retry/resume/mode/condition/relay overrides are checked
+before coercion. Restored checkpoints cannot enter the fresh pilot path. The
+existing final-output linkage slot can carry the verified capture digest and
+upstream linkage without changing legacy result bytes.
 
-After validating inputs and checking for destination overlap, publication writes
-a sibling reservation ending in `.pilot-deployment-binding-reservation.json`, creates the
-exclusive destination and publishes:
+Preflight accepts an explicit `--capture-workspace` alongside the existing
+private bundle inputs. Without it, the new prepared-request and existing live
+wire blockers both remain. Successful explicit verification removes only the
+prepared-request blocker through a closed mapping. Reports expose safe digests,
+reviewed source SHA, evaluation time and the evidence boundary, not private
+inputs. A capture does not authorize launch or establish actual consumption.
 
-- `pilot-runtime-candidate.json` with only the derived deployment leaf.
-- `pilot-deployment-binding.json` with source file roles/sizes/SHA256 values,
-  exact task/dispatch identities, upstream links and remaining work.
-- `pilot-deployment-binding-ready.json` last, after rechecking source and
-  installed bytes, exact membership, held parents and the reservation.
+The active Foundry contract now pins 51 sources, up from 46. The GPT-5.4 active
+contract retains 34 sources and refreshes only its three shared runtime pins
+and grader-template closure digest. Changing `core/experiment_config.py` changes
+the existing all-core grader source closure, so both active template digests
+were refreshed without changing grader code, configuration, prompts or behavior.
+Historical registrations and ledger/evidence bytes are unchanged. Bundles sealed
+against the earlier active-plan digest are stale and must not be reused.
 
-The existing held-parent and atomic no-clobber primitives reject collisions,
-partial reuse, path escape, symlinks, hardlinks and drift. Interrupted files and
-reservations remain for manual disposition. Nothing is overwritten, adopted on
-retry or automatically deleted. Full resource IDs and host paths are not copied
-into the bundle. Source files, upstream bundles and historical records are not
-modified.
+### Validation evidence and limits
 
-### Closed preflight transition
-
-Absent/null deployment options delegate to the existing preflight path. Its ten
-default blockers are unchanged; the registered source count and active-plan
-digest change with this implementation. Explicit consumption requires all four
-upstream bundles and the three private resource files, and calls the real
-deployment verifier. The closed `DEPLOYMENT_BINDING_BLOCKERS` mapping contains
-only `actual_pilot_deployment_not_prepared`.
-
-After the existing evidence, identity and prepared-input gates and this new gate
-succeed, the named launch blockers are
-`live_inference_identity_and_wire_unverified` and
-`native_sandbox_and_result_bundle_host_unverified`.
-`actual_pilot_execution_and_runtime_receipts_unverified` remains in the explicit
-remaining-work lists of both the binding and report; it is not silently added to
-or removed from the default blocker mapping. Missing links, invalid evidence and
-late reporting errors retain the deployment blocker. CLI refusals are static.
-
-The report carries only the consumed bundle/candidate digests, compact evidence
-link, evaluation time, cleared/remaining blockers and evidence boundary. It does
-not expose the deployment leaf, raw resource IDs, evidence claims or private
-file paths. Both launch flags remain false and no launch command is produced.
-
-### Exact validation evidence
-
-Exactly one pytest invocation was run:
+Exactly one targeted invocation ran:
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider --tb=short batch-runner/tests/test_gpt56_pilot_deployment_binding.py
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider --tb=short batch-runner/tests/test_gpt56_pilot_input_capture.py
 ```
 
-Result: `162 passed in 156.65s (0:02:36)`, exit 0.
+Result: `2 failed, 122 passed in 284.01s (0:04:44)`, exit 1, 124 cases collected.
+The two failing names were
+`test_step2_and_final_output_bind_verified_capture_before_provider` and
+`test_legacy_absent_null_keep_serializer_bytes_and_runtime_order`.
+Their `SystemExit: 1` came from the existing
+`_require_runnable_execution_mode` connection-confirmation check. The correction
+adds only a test fixture stand-in for `_codex_connection_confirmed`; production
+safety gates and real capture/upstream validators are unchanged. The correction
+did not change assertions or case count and added no skips or xfails. No selector
+was rerun after the correction.
 
-The selector covers valid raw-ID variants; real verifier/parser participation;
-exact five-task parity; unchanged inert templates; exact byte hashing; malformed
-or secret-like content; stale plans, SHA/time and source pins; missing, altered
-or linked upstream markers; forged output hashes; unsafe source/destination
-paths; collisions; every publication write failure; retained partial state;
-mid-derivation and publication drift; held-parent replacement; source
-immutability; fresh-case isolation; no-binding compatibility; the exact
-one-blocker transition; false launch flags; and non-echoing CLI errors.
+The passing cases exercise real Step 1 publication and all five upstream
+verifiers; exact five-task bytes and hashes; no-clobber and retained partials;
+capture/prepared/config/source/reference/parquet drift; missing files and unsafe
+links; raw overrides; stale evidence; mid-projection changes; privacy-safe
+refusals; and explicit one-blocker preflight consumption. The corrected positive
+provider-order and complete legacy regression paths still need automatic CI.
 
-Module-scoped lazy seeds prepare the real upstream bundles once per synthetic
-resource-byte variant. Each case receives fresh single-link copies. The inherited
-byte-keyed YAML parse cache does not cache validator verdicts. Tiny synthetic
-parquet/reference fixtures avoid scanning the live 220-task snapshot. Offline
-guards prohibit subprocess, network, credential/auth lookup, endpoint resolution,
-provider/model/client/grader construction and execution. The real static runtime
-parser and validator remain active. The #631-#635 selectors and broad/full suites
-were not rerun. No manual workflow ran.
+Module-scoped lazy seeds prepare real upstream bundles and captures once. Each
+case receives fresh single-link copies. The inherited byte-keyed YAML parse
+cache does not cache validator verdicts. Tiny synthetic parquet/reference files
+avoid scanning the live 220-task snapshot. Guards prohibit subprocess, network,
+credential lookup, endpoint resolution and provider/model/client/grader
+construction or execution. Host and connection test stand-ins are not deployment
+or served-capability evidence.
 
-`git diff --check` and `git diff --cached --check` passed before the implementation
-commit. These are local fixture results, not evidence of a successful workflow,
-live model consumption, served capability or paid execution.
+The #631-#636 selectors and broad/full suites were not rerun. No manual workflow
+ran. `git diff --check` and `git diff --cached --check` passed before the
+implementation commit. The existing static grader source-hash helper was used
+only to derive closure metadata, not to grade anything.
 
 ### Immutable base and review boundary
 
 The clean development worktree started from main
-`9cda8a92040d6679cbfe7f83bca73b0fe657484f` on
-`b/gpt56-foundry-deployment-binding-20260920`. The preserved checkout
+`140cbf4eef59a2b3c6ee731ac3dd4c75d9e005d7` on
+`b/gpt56-pre-execution-capture-20260920`. The preserved checkout
 `wip/local-main-preserved-20260719` was not used or edited.
 
-Implementation review HEAD: `31813e353d3e98bd666c16102d95bfc3f876be41`.
-The nine implementation/config/test files below form that immutable boundary.
-`first-reviewer` returned APPROVE with no BLOCK, MAJOR or MINOR findings and no
-second-review escalation. `llm-systems-engineer` approved the same fixed HEAD
-without blocking or high-confidence findings. Both reviews were read-only,
-without tests, production imports, runtime/network calls or file changes. This
-completion record and `CHANGELOG.md` are subsequent documentation changes outside
-the implementation review boundary.
+Implementation review HEAD: `667fb775fdb2df4424ea85152c8a8ef86d5d9314`.
+Both `llm-systems-engineer` and `first-reviewer` returned APPROVE with no blocking
+findings in read-only reviews against the base above. They reviewed the corrected
+fixture stand-in but did not execute it. Their approval covers the static
+implementation, not a green selector, served capability, launch or merge.
+This completion record and `CHANGELOG.md` are subsequent documentation changes
+outside the implementation review boundary.
 
 The repository's existing author and committer identity,
 `hyeonsangjeon <wingnut0310@gmail.com>`, was preserved without changing Git
@@ -146,50 +136,55 @@ or forbidden Git cleanup was used.
 
 ### Changed files
 
+- `batch-runner/core/experiment_config.py`
+- `batch-runner/gpt56_pilot_input_capture.py`
 - `batch-runner/gpt56_pilot_deployment_binding.py`
 - `batch-runner/gpt56_sol_codex_pilot_preflight.py`
+- `batch-runner/step1_prepare_tasks.py`
+- `batch-runner/step2_run_inference.py`
 - `batch-runner/experiments/execution_envelope/gpt56_sol_foundry_codex_pilot.yaml`
-- `batch-runner/tests/test_gpt56_pilot_deployment_binding.py`
+- `batch-runner/experiments/execution_envelope/gpt54_sandboxv2_codex_comparison.yaml`
+- `batch-runner/tests/test_gpt56_pilot_input_capture.py`
+- `batch-runner/tests/test_gpt56_evidence_preflight_gate.py`
 - `batch-runner/tests/test_gpt56_foundry_evidence_intake.py`
-- `batch-runner/tests/test_gpt56_pilot_config_bundle.py`
 - `batch-runner/tests/test_gpt56_pilot_identity_plan.py`
+- `batch-runner/tests/test_gpt56_pilot_config_bundle.py`
 - `batch-runner/tests/test_gpt56_pilot_input_bundle.py`
+- `batch-runner/tests/test_gpt56_pilot_deployment_binding.py`
 - `batch-runner/tests/test_gpt56_sol_codex_pilot_preflight.py`
 - `CHANGELOG.md`
 - `tasks/LATEST_TASK_RESULT/README.md`
 
-The older test-file changes update only the exact source count from 43 to 46.
-Their selectors were not run.
+Older selector files only update exact source-count and closed-blocker
+expectations. Their selectors were not run.
 
 ### Skills, evidence boundary and remaining work
 
-The full skill catalog was checked once, and `experiment-design` was applied
-before planning or code. Its contract-versus-observation distinction kept this
-unit limited to local byte binding. `llm-systems-engineer` provided contract and
-fixture assistance plus immutable review; `first-reviewer` reviewed the fixed
-implementation HEAD. `im-not-ai-en` was applied to the English changelog,
-completion record and PR wording without changing numbers, hashes, commands or
-evidence limits. No experimental axis or grading contract changed.
+The full skill catalog was checked once. `experiment-design` was applied before
+planning or code and kept prepared intent separate from observed model behavior.
+`llm-systems-engineer` provided contract assistance and immutable review;
+`first-reviewer` reviewed the fixed implementation HEAD. `im-not-ai-en` was
+applied to the English changelog, completion record and PR wording while
+preserving exact results, commands, hashes and evidence limits.
 
 `extreme-reasoner` does not apply because workflows, `core/qa.py` and HF upload
-are unchanged. No grading-role task was needed, since grading production code
-is unchanged. UI/animation skills are unrelated to this backend contract and
-were not used.
+are unchanged. Grader production is unchanged, so no grading-role task was
+needed. UI/animation skills are unrelated to this backend contract and were not
+used. No experimental axis, model setting, cohort or grading behavior changed.
 
-`offline_deployment_resource_binding_not_launch_or_execution` is the evidence
-boundary. The bundle binds local files to externally supplied evidence; it does
-not authenticate Azure facts, attest live input consumption, issue inference
-identity or authorize launch. Only synthetic evidence and IDs were used here.
-
-Remaining work includes real external evidence acquisition and independent
-review; live inference identity, input consumption and wire binding; native
-sandbox/result-bundle hosting; actual candidate deployment and pilot execution;
-execution-time gating and native-cap enforcement; grading run/source identity;
-and runtime usage/tariff receipt integration. Both launch flags remain false.
+`prepared_request_intent_not_wire_or_served_identity` is the evidence boundary.
+The capture proves local prepared-input consistency at verification, not actual
+wire bytes, live inference identity, served capability or launch permission.
+Remaining work includes genuine external evidence acquisition and independent
+review; live identity/input consumption/wire binding; native sandbox/result
+bundle hosting; actual deployment and pilot execution; execution-time native-cap
+enforcement; and actual usage/tariff receipts. Both launch flags remain false.
+Automatic CI must also validate the corrected fixture.
 
 No Azure API/CLI or HF calls, credential/OIDC lookup, provider/model/client
 execution, inference, grading, download, workflow dispatch or paid execution
-occurred. Production runtime/grader defaults, exp035 configs, workflows,
-`core/qa.py`, HF upload and historical ledger/evidence bytes are unchanged.
-Project updates and merge decisions remain with the leader. This record contains
-pre-merge facts only, with no carrying-PR merge SHA, time or state.
+occurred. No live execution checkout was prepared. Production legacy defaults,
+exp035 configs, workflows, `core/qa.py`, HF upload and historical evidence bytes
+are unchanged. Project updates and merge decisions remain with the leader.
+This record contains pre-merge facts only, with no carrying-PR merge SHA, time
+or state.

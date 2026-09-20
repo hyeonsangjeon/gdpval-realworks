@@ -31,6 +31,25 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Bind the registered Foundry GPT-5.6 Sol pilot's real Step 1 prepared rows to
+  its runtime candidate and five verified upstream bundles. The optional typed
+  control is mandatory only for that run. Step 1 uses atomic no-clobber capture
+  publication, and Step 2 rechecks current prepared/config/input/evidence bytes
+  before provider setup. Legacy absent/null behavior stays unchanged. Explicit
+  preflight consumption clears only `prepared_request_capture_unverified`;
+  live identity/wire, native host, actual execution/caps and runtime receipts
+  remain unresolved, and both launch flags stay false. The sole selector
+  reported `2 failed, 122 passed in 284.01s (0:04:44)`, exit 1. Both failures
+  stopped at the existing connection-confirmation boundary because the fixture
+  lacked its GPT-5.4-style stand-in. That fixture was corrected without a rerun;
+  no green local result is claimed, and automatic CI is still required.
+  Read-only `llm-systems-engineer` and `first-reviewer` reviews approved
+  implementation HEAD `667fb775fdb2df4424ea85152c8a8ef86d5d9314` without blocking
+  findings. That approval does not validate the unrerun test correction.
+  The capture records prepared request intent, not actual wire bytes, served
+  capability or launch permission. No provider, model, grader, manual workflow
+  or paid execution ran.
+
 - Bind private local Foundry resource-ID bytes to complete verified evidence for
   the fixed GPT-5.6 Sol pilot. Real evidence/identity/config/input verifiers
   recheck the upstream chain before a separate parser-compatible candidate takes
