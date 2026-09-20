@@ -1,40 +1,48 @@
 # Latest substantive task result
 
-## PROJECT5-PR638-BACKEND-PARTITION-FIX
+## PROJECT5-PR638-THREE-WAY-PARTITION-FIX
 
-The existing Backend partition now moves the exact sorted union of 11 GPT-5.4
-and 9 GPT-5.6 contract files out of core `pytest` and into `comparison-contracts`.
-The prescribed static selector passed once. This corrects file selection; it
-does not establish that either fresh CI job finishes within its unchanged
-45-minute ceiling.
+Backend Tests now has three independent jobs. Core `pytest` keeps its exact
+20-file exclusions, `comparison-contracts` selects the 11 GPT-5.4 files, and
+the new `pilot-contracts` selects the 9 GPT-5.6 files. The prescribed static
+selector passed once. Fresh automatic CI must still establish all three
+results and durations within their individual 45-minute ceilings.
 
 ### CI finding and correction scope
 
-The leader reported that Backend run `35514065313`, job `106086906143`, at
-`c88f76f02c43ef9b2672e61d6cdd6d4630235305` was cancelled after `45:13` while
-still progressing at `87%`, with no assertion failure. `comparison-contracts`
-succeeded. That successful job selected only the 11 GPT-5.4 files; all 9 GPT-5.6
-files, including the 89-case wire receipt selector, still ran in core discovery.
-Neither job result establishes a complete passing Backend run for that HEAD.
+The leader supplied two measured CI rounds. No cancelled job was rerun.
 
-Only the two literal workflow selections, their family comment and the existing
-static partition test change. Core now ignores every member of the 20-file
-union, and comparison selects the identical ordered list exactly once. The
-test derives both filename families from disk, requires each family to be
-represented, and retains exact-list equality, duplicate rejection, disjointness
-and complete coverage of every discovered `test_*.py` file.
+| HEAD | Backend run / job | Result |
+| --- | --- | --- |
+| `c88f76f02c43ef9b2672e61d6cdd6d4630235305` | `35514065313` / `106086906143` (`pytest`) | Cancelled at `45:13`, still progressing at `87%`, with no assertion failure. |
+| `8117a667a49133cfd11f3401d17ddfd36d82db55` | `35517208735` / `106095045010` (`pytest`) | Succeeded in about `25:13`. |
+| `8117a667a49133cfd11f3401d17ddfd36d82db55` | `35517208735` / `106095045151` (`comparison-contracts`) | Cancelled at about `45:16`, at `91%`, with no assertion failure. |
 
-Both job/check names, the two-job topology, runner, setup, pinned actions,
-dependencies, pip cache, dispatch/checkout SHA checks, integration filter,
-repo-root script tests, triggers, permissions, concurrency and 45-minute limits
-are unchanged. No job dependency, matrix, secret, credential or OIDC access was
-added. No test deletion, skip or xfail was introduced. The cancelled run was
-not rerun and no timeout was increased.
+In the first round, comparison succeeded with only the 11 GPT-5.4 files while
+all 9 GPT-5.6 files remained in core. The first correction moved all 20 into
+comparison. That made core green but moved the timeout: the combined job
+completed every GPT-5.4 file and reached `test_gpt56_pilot_wire_receipt.py`
+before cancellation. Neither round is a complete passing Backend run.
 
-### Exact comparison partition
+This correction leaves core's executable job unchanged, restores comparison's
+GPT-5.4-only selection and adds one explicit GPT-5.6 sibling. The existing
+static test node now requires exactly these three jobs, identical setup,
+independently derived nonempty sorted families, exact core union exclusions,
+duplicate rejection, pairwise disjointness and complete coverage of every
+discovered `test_*.py` file.
 
-These are the sorted paths relative to `batch-runner`, excluded only from core
-and selected by the comparison job:
+Existing job/check names, runner, setup, pinned actions, dependencies, pip
+cache, dispatch/checkout SHA checks, integration filter, repo-root script tests,
+triggers, permissions and ref-scoped concurrency are preserved. The new job
+copies the same six setup steps and 45-minute ceiling. There is no job
+dependency, matrix, secret, credential, OIDC access, test deletion, new skip or
+xfail. No timeout was increased.
+
+### Exact three-way partition
+
+Paths below are relative to `batch-runner`. Core excludes their sorted union
+and retains all other discovered tests plus the existing repo-root script step.
+`comparison-contracts` selects only these 11 sorted GPT-5.4 paths:
 
 ```text
 tests/test_gpt54_codex_grading_input.py
@@ -48,6 +56,11 @@ tests/test_gpt54_runtime_checkout.py
 tests/test_gpt54_v2_grading_input.py
 tests/test_gpt54_v2_input_capture.py
 tests/test_gpt54_workflow_gate.py
+```
+
+`pilot-contracts` selects only these 9 sorted GPT-5.6 paths:
+
+```text
 tests/test_gpt56_evidence_preflight_gate.py
 tests/test_gpt56_foundry_evidence_intake.py
 tests/test_gpt56_pilot_config_bundle.py
@@ -68,12 +81,15 @@ worktree root:
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider --tb=short batch-runner/tests/test_a_test_file_nobody_runs_is_not_a_test.py::test_backend_jobs_partition_the_comparison_contracts
 ```
 
-Result: `1 passed in 0.18s`, exit 0, one collected. This is static workflow and
-filesystem partition evidence, not execution of the 20 contract files or a
-measurement of full-suite duration. `git diff --check` and
+Result: `1 passed in 0.18s`, exit 0, one collected. This is evidence for the
+three-way static workflow and filesystem partition, not execution of the
+20 contract files or a measurement of full-suite duration. `git diff --check` and
 `git diff --cached --check` passed. No core pytest suite, comparison-contracts
-suite, wire receipt selector, earlier pilot selector, broad suite or manual
-workflow was run locally.
+suite, pilot-contracts suite, wire receipt selector, earlier pilot selector,
+broad suite or manual workflow was run locally. The previous two-job correction
+also reported `1 passed in 0.18s` at implementation HEAD
+`70334bb35f7916a4db7a1e1d1a18da10847cb9e1`; its subsequent combined-job timeout
+shows why that static result was not a hosted runtime guarantee.
 
 The prior receipt evidence is preserved as historical evidence only. Its single
 local command, run from `batch-runner`, was:
@@ -94,29 +110,39 @@ core run is not a completed pass. Fresh automatic CI is still required.
 
 `extreme-reasoner` was invoked before editing and returned
 APPROVE-WITH-CONDITIONS against
-`c88f76f02c43ef9b2672e61d6cdd6d4630235305`. Its structured memo identified
-omission/duplication, moving the timeout problem to the comparison job, and
-weakening untrusted-PR controls as the main risks. It required the exact
-filesystem-derived union with both families present and preservation of all
-existing setup, security, timeout and topology controls.
+`8117a667a49133cfd11f3401d17ddfd36d82db55`. Its structured memo identified
+missing or duplicated coverage, loss of effective GPT-5.6 merge gating and
+increased runner consumption as the main risks. It required exact family
+selections, core's unchanged exclusions, identical read-only setup and all
+existing security controls. The integration filter is not a network sandbox.
 
-The memo kept the nominal aggregate allowance at two 45-minute jobs,
-approximately 90 runner-minutes excluding shutdown overhead. Actual duration,
-collection effects and CI headroom remain unmeasured. No extra job or paid API
-operation was authorized. Ref-scoped cancellation and independent job verdicts
-remain unchanged. If separately authorized, a normal forward patch can restore
-both command lists and their guard together; that would restore the known core
-imbalance, not fix its timeout. This was a design decision, not CI or launch
-approval.
+The nominal aggregate allowance rises from `2 × 45 = 90` to
+`3 × 45 = 135` runner-minutes, an increase of 45 minutes or 50%, excluding
+shutdown overhead. One more checkout/Python/pip/cache cycle adds unmeasured
+overhead and uses another runner slot. The second round consumed about 70.5
+combined job-minutes (`25:13 + 45:16`) despite incomplete comparison execution;
+it is not a completed-work baseline. File counts and `91%` progress do not
+predict either new contract job's duration. No paid provider operation was
+authorized.
+
+All three job verdicts must succeed at the same relevant HEAD before a later
+readiness decision. Adding `pilot-contracts` does not establish that it is an
+externally required check; repository rulesets were neither queried nor
+changed. The existing result-PR caller checks aggregate Backend success but
+waits only 1,800 seconds, a separate unchanged limitation. Ref-scoped cancellation
+and independent job verdicts remain in place. A separately authorized rollback
+would restore both selectors and the guard with a normal forward patch; it
+would also restore the known combined-job timeout risk. This memo is not CI,
+launch or merge approval.
 
 ### Immutable review boundary
 
-Correction base: `c88f76f02c43ef9b2672e61d6cdd6d4630235305`.
-Fixed implementation HEAD: `70334bb35f7916a4db7a1e1d1a18da10847cb9e1`.
+Correction base: `8117a667a49133cfd11f3401d17ddfd36d82db55`.
+Fixed implementation HEAD: `c6bf7269480bfc804e7f2aaf6427613cdab3fda9`.
 Both `llm-systems-engineer` and `first-reviewer` returned APPROVE with no
 blocking findings on this exact HEAD. Both reviews were read-only; neither
-reviewer ran tests, network calls or runtime code. The reviews confirmed the
-mandatory decision memo's partition and preservation conditions.
+reviewer ran tests, runtime imports, network calls or CI queries. They confirmed
+the partition and preservation conditions without predicting hosted duration.
 These reviews cover only the two-file partition correction. This record and
 the changelog are a later records-only commit outside that implementation
 review boundary. The prior receipt implementation's two APPROVE verdicts at
@@ -138,7 +164,14 @@ Runtime receipt logic, experiment settings, source pins, launch flags and
 grading behavior are untouched. No other workflow, `core/qa.py` or HF upload
 code changes.
 
-### Unchanged live-wire limits and remaining work
+### Skills and unchanged live-wire limits
+
+The mandatory workflow decision used `extreme-reasoner` before editing;
+`llm-systems-engineer` and `first-reviewer` cover the immutable implementation.
+`im-not-ai-en` was applied to the English records without changing hashes,
+commands, timings or evidence limits. UI/animation, grading and repo-readiness
+skills do not apply to this CI partition correction. It introduces no new
+experiment axis or runtime evidence contract.
 
 The receipt still observes the pinned Codex app-server's actual serialized
 stdio requests, correlated replies and native thread usage. It does not
@@ -150,7 +183,7 @@ Synthetic fixtures prove verifier behavior only, not that the pilot was served.
 `launch_enabled`, `launch_allowed`, `full_220_enabled` and `full_220_allowed`
 remain false; no launch command was added.
 
-Fresh results and duration evidence for both Backend jobs remain required.
+Fresh results and duration evidence for all three Backend jobs remain required.
 Real Foundry evidence acquisition/approval, actual HTTP/input-consumption/wire
 and served identity, native sandbox/result-bundle hosting, deployment/execution,
 native-cap enforcement and usage/tariff/billing receipts remain separate work.
@@ -158,8 +191,7 @@ native-cap enforcement and usage/tariff/billing receipts remain separate work.
 No Azure/HF/OIDC lookup, provider/model/client/grader execution, inference,
 grading, download, paid execution or manual workflow dispatch occurred. The
 preserved checkout and other worktrees were not edited. Git author/committer
-identity
-`hyeonsangjeon <wingnut0310@gmail.com>` was preserved without configuration
+identity `hyeonsangjeon <wingnut0310@gmail.com>` was preserved without configuration
 changes, attribution trailers, history rewriting, force push or hook bypass.
 Project and merge decisions remain with the leader. This record stops at
 pre-merge facts.
