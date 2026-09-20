@@ -1885,3 +1885,81 @@ live input/wire evidence, native sandbox/result-bundle hosting, actual pilot
 deployment and lineage, dispatch/grading and runtime usage/receipt integration
 remain outstanding. This unit changes no provider/runtime/grader default,
 workflow, `core/qa.py`, HF upload script, fixed five-task input or launch flag.
+
+## 18. Seal the pilot dispatch and grading identity offline (2026-09-20)
+
+This unit starts from immutable main
+`ed6c64f0afb90b0b3a6a9e4719e44184384296ec`. The active Foundry pilot now
+registers `gpt56_pilot_identity_plan.py` and its fixed grader template source
+hash. The registration pins 37 source files. Refreshing those pins changes the
+active plan digest; evidence sealed to an earlier digest remains stale.
+
+`compile_pilot_identity` returns an immutable canonical JSON document for the
+single `gpt56_sol_foundry_codex_pilot5_v1` run. Its dispatch and grading scopes
+carry identical ordered task IDs, prompt hashes and per-task reference hashes
+derived from a digest-verified catalog snapshot and the real advance-check
+selector. The document also binds the dataset revision and parquet hash,
+source-pin map, Azure/Codex route, Sol-not-Fast, Max, the 1M context request,
+developer-instruction digest, one repeat and one logical attempt per task.
+The existing fresh-session, no-relay, no-resume and no-escalation controls stay
+fixed. Timeout, retry and cap declarations are unchanged, including three
+infrastructure retries after the initial attempt and null native caps.
+These are declared input identities, not a check of consumed parquet/reference
+bytes or a record of actual model requests.
+
+The grading section binds the existing step8 entrypoint, template path and raw
+SHA256, historical grader source SHA, current template-source hash, rubric
+revision, actual tool prompt and version, judge model/effort, grade schema and
+receipt contract. It uses the real step8 config validator and source-hash
+closure without constructing a grader, rubric loader or provider. Every source
+in that closure must be a regular single-link file, including requirements
+includes and core files not individually listed in the manifest. Pinned prompt
+and schema snapshots must match their digests before they contribute fields.
+
+The exp035 grader template remains unchanged. Its historical 220-task
+`rerun_identity` is not a pilot identity and is not copied into either recipe.
+The separate grading scope contains exactly five tasks, one pass per task,
+`inference_repo_id: null`, `inference_revision: null`,
+`reuse_baseline_rerun_identity: false` and `runnable_config: false`. A template
+source hash does not attest the historical Git commit or a future materialized
+pilot config. No new prompt, rubric, metric, argv, launch command or runnable
+experiment/grading config is emitted.
+
+Optional evidence requires the actual published bundle, caller-reviewed full
+source SHA and explicit UTC `as_of`. The compiler calls
+`verify_foundry_evidence` and records only its ready-bundle SHA256, reviewed
+source SHA and sealed intake evaluation time. Later verification checks
+freshness against the caller's new `as_of` without changing the sealed plan.
+No evidence produces `evidence_linkage: null`; a linked plan cannot silently
+downgrade to null or accept a different bundle. Raw claims and local paths are
+not copied into the identity document.
+
+`publish_pilot_identity` accepts an absent destination outside the source and
+evidence trees. It uses the existing held-parent and atomic no-clobber writer
+to publish a sibling reservation, `foundry-pilot-identity-plan.json`, then
+`foundry-pilot-identity-ready.json` last. It rechecks sources, optional evidence,
+plan bytes and reservation before ready publication. `verify_pilot_identity`
+recompiles the recipes and requires exact canonical plan, ready and reservation
+bytes. Missing or extra members, links, traversal, collisions, stale identities
+and partial reuse are refused. Failed reservations and partial trees remain for
+manual disposition; there is no cleanup or overwrite fallback.
+
+The preflight consumes this bundle only through explicit `identity_bundle` or
+`--identity-bundle`. A verified plan clears only
+`pilot_dispatch_and_grading_identity_not_wired` through a closed mapping.
+Without evidence, eight blockers remain. With both gates accepted, the remaining
+blockers are `live_identity_and_input_bytes_unverified`,
+`native_sandbox_and_result_bundle_host_unverified` and
+`actual_pilot_deployment_not_prepared`. Identity refusal keeps its blocker;
+independently accepted evidence may still satisfy its own five requirements.
+Absent/null identity input preserves the existing plan-only and evidence-only
+report paths. Explicit consumption adds a redacted `identity_plan_gate` with
+the plan digest, evidence linkage, cleared/remaining blockers and static refusal
+code. The preflight still exits 2 and both launch flags remain false.
+
+The boundary is `offline_dispatch_grading_identity`. It does not authenticate
+external Foundry claims, supply live inference identity/input/wire evidence,
+materialize runtime/grader configs, enforce native caps, provide a native result
+host, deploy or execute a pilot, or integrate runtime usage/tariff receipts.
+No provider/runtime/grader default, workflow, `core/qa.py`, HF upload script or
+historical evidence is changed.
