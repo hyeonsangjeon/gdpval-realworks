@@ -194,7 +194,7 @@ jobs:
       # even if the addopts guard above is ever relaxed. Integration tests reach
       # paid APIs; CI must never pay.
       #
-      # Only the explicit GPT-5.4 contract files move to comparison-contracts;
+      # Only the explicit GPT-5.4/GPT-5.6 contract files move to comparison-contracts;
       # no additional tests are deselected across the two jobs. The static
       # partition test compares both commands with the actual file set, so a
       # new or removed comparison file requires updating both lists together.
@@ -215,7 +215,7 @@ jobs:
       - name: Run tests
         run: |
           cd batch-runner
-          python -m pytest -m "not integration" --tb=short -q -rs --ignore=tests/test_gpt54_codex_grading_input.py --ignore=tests/test_gpt54_codex_input_capture.py --ignore=tests/test_gpt54_comparison_preflight.py --ignore=tests/test_gpt54_disposable_checkout.py --ignore=tests/test_gpt54_prepared_input_attestation.py --ignore=tests/test_gpt54_run_config_bundle.py --ignore=tests/test_gpt54_run_input_bundle.py --ignore=tests/test_gpt54_runtime_checkout.py --ignore=tests/test_gpt54_v2_grading_input.py --ignore=tests/test_gpt54_v2_input_capture.py --ignore=tests/test_gpt54_workflow_gate.py
+          python -m pytest -m "not integration" --tb=short -q -rs --ignore=tests/test_gpt54_codex_grading_input.py --ignore=tests/test_gpt54_codex_input_capture.py --ignore=tests/test_gpt54_comparison_preflight.py --ignore=tests/test_gpt54_disposable_checkout.py --ignore=tests/test_gpt54_prepared_input_attestation.py --ignore=tests/test_gpt54_run_config_bundle.py --ignore=tests/test_gpt54_run_input_bundle.py --ignore=tests/test_gpt54_runtime_checkout.py --ignore=tests/test_gpt54_v2_grading_input.py --ignore=tests/test_gpt54_v2_input_capture.py --ignore=tests/test_gpt54_workflow_gate.py --ignore=tests/test_gpt56_evidence_preflight_gate.py --ignore=tests/test_gpt56_foundry_evidence_intake.py --ignore=tests/test_gpt56_pilot_config_bundle.py --ignore=tests/test_gpt56_pilot_deployment_binding.py --ignore=tests/test_gpt56_pilot_identity_plan.py --ignore=tests/test_gpt56_pilot_input_bundle.py --ignore=tests/test_gpt56_pilot_input_capture.py --ignore=tests/test_gpt56_pilot_wire_receipt.py --ignore=tests/test_gpt56_sol_codex_pilot_preflight.py
 
       # `scripts/__tests__/` holds Python tests for the repo-root `scripts/`
       # tooling, and until now nothing ran them: the step above changes into
@@ -300,4 +300,4 @@ jobs:
       - name: Run comparison contracts
         run: |
           cd batch-runner
-          python -m pytest -m "not integration" --tb=short -q -rs tests/test_gpt54_codex_grading_input.py tests/test_gpt54_codex_input_capture.py tests/test_gpt54_comparison_preflight.py tests/test_gpt54_disposable_checkout.py tests/test_gpt54_prepared_input_attestation.py tests/test_gpt54_run_config_bundle.py tests/test_gpt54_run_input_bundle.py tests/test_gpt54_runtime_checkout.py tests/test_gpt54_v2_grading_input.py tests/test_gpt54_v2_input_capture.py tests/test_gpt54_workflow_gate.py
+          python -m pytest -m "not integration" --tb=short -q -rs tests/test_gpt54_codex_grading_input.py tests/test_gpt54_codex_input_capture.py tests/test_gpt54_comparison_preflight.py tests/test_gpt54_disposable_checkout.py tests/test_gpt54_prepared_input_attestation.py tests/test_gpt54_run_config_bundle.py tests/test_gpt54_run_input_bundle.py tests/test_gpt54_runtime_checkout.py tests/test_gpt54_v2_grading_input.py tests/test_gpt54_v2_input_capture.py tests/test_gpt54_workflow_gate.py tests/test_gpt56_evidence_preflight_gate.py tests/test_gpt56_foundry_evidence_intake.py tests/test_gpt56_pilot_config_bundle.py tests/test_gpt56_pilot_deployment_binding.py tests/test_gpt56_pilot_identity_plan.py tests/test_gpt56_pilot_input_bundle.py tests/test_gpt56_pilot_input_capture.py tests/test_gpt56_pilot_wire_receipt.py tests/test_gpt56_sol_codex_pilot_preflight.py

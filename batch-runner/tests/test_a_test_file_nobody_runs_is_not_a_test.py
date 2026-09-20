@@ -226,11 +226,14 @@ def test_backend_jobs_partition_the_comparison_contracts():
 
     runner = REPO_ROOT / "batch-runner"
     tests = runner / "tests"
+    patterns = ("test_gpt54_*.py", "test_gpt56_*.py")
     actual = sorted(
         path.relative_to(runner).as_posix()
-        for path in tests.glob("test_gpt54_*.py")
+        for pattern in patterns
+        for path in tests.glob(pattern)
     )
     assert actual
+    assert all(any(Path(path).match(pattern) for path in actual) for pattern in patterns)
     assert argv[0][len(prefix):] == [f"--ignore={path}" for path in actual]
     assert excluded == selected == actual
     assert len(excluded) == len(set(excluded))
