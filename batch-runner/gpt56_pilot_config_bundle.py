@@ -1,9 +1,11 @@
 """Materialize inert pilot configs from an exact, verified identity bundle.
 
 These files are not a checkout, prepared input bytes, an inference identity or
-launch permission. The existing step8 validator accepts the derived template;
-its future five-task execution scope is sealed separately, not smuggled into
-an ignored grader setting or a fabricated rerun revision.
+launch permission. The runtime template is deliberately not an ExperimentConfig:
+a requested model label is not a reviewed deployment name. The existing step8
+validator accepts the derived grading template; its future five-task execution
+scope is sealed separately, not smuggled into an ignored grader setting or a
+fabricated rerun revision.
 """
 
 from __future__ import annotations
@@ -21,7 +23,6 @@ import yaml
 
 import gpt56_pilot_identity_plan as identity
 import gpt56_sol_codex_pilot_preflight as pilot
-from core.experiment_config import ExperimentConfig
 from gpt54_codex_input_capture import _write_no_clobber
 from gpt54_comparison_preflight import _canonical_json
 from gpt54_run_config_bundle import _held_parents, _path, _root
@@ -34,6 +35,8 @@ LINKAGE_PATH = "pilot-identity-linkage.json"
 READY_PATH = "pilot-config-bundle-ready.json"
 RESERVATION_SUFFIX = ".pilot-config-bundle-reservation.json"
 BOUNDARY = "offline_pilot_config_bundle"
+RUNTIME_TEMPLATE_VERSION = "foundry-pilot-runtime-template-v1"
+DEPLOYMENT_BLOCKER = "actual_pilot_deployment_not_prepared"
 
 
 class PilotConfigBundleRefused(ValueError):
@@ -76,48 +79,40 @@ def _digest(data: bytes) -> dict[str, Any]:
     return {"size": len(data), "sha256": hashlib.sha256(data).hexdigest()}
 
 
+def _validate_runtime_template(
+    template: dict[str, Any], plan: dict[str, Any], dispatch: dict[str, Any],
+) -> None:
+    """Check a closed local template, not an executable runner configuration."""
+    _require(type(template) is dict and set(template) == {
+        "template_version", "runnable", "deployment", "execution", "dispatch", "dataset",
+        "developer_instructions", "deployment_blocker", "launch_allowed", "full_220_allowed",
+    }, "runtime_template_shape_invalid")
+    _require(template["template_version"] == RUNTIME_TEMPLATE_VERSION
+             and template["runnable"] is False
+             and template["deployment"] is plan["foundry_identity"]["deployment"] is None
+             and template["execution"] is None
+             and template["deployment_blocker"] == DEPLOYMENT_BLOCKER
+             and template["launch_allowed"] is template["full_220_allowed"] is False
+             and _bytes(template["dispatch"]) == _bytes(dispatch)
+             and _bytes(template["dataset"]) == _bytes(plan["dataset"])
+             and template["developer_instructions"] == plan["developer_instructions"],
+             "runtime_template_contract_mismatch")
+
+
 def _runtime(plan: dict[str, Any], dispatch: dict[str, Any]) -> dict[str, Any]:
-    """Construct only pilot fields; never copy the exp035 corpus or relay scope."""
-    limits = dispatch["limits"]
-    config = {
-        "experiment": {"id": dispatch["run_id"], "name": "Foundry Sol five-task pilot",
-                       "description": "Inert pilot configuration; no launch authorization."},
-        "data": {"source": plan["dataset"]["repo_id"], "filter": {"task_ids": dispatch["task_ids"]}},
-        "condition_a": {
-            "name": dispatch["condition"],
-            "model": {"provider": dispatch["identity"]["provider"],
-                      "deployment": dispatch["identity"]["model"],
-                      "reasoning_effort": dispatch["codex_request"]["reasoning_effort"],
-                      "temperature": 0.0, "seed": 42},
-            "prompt": {"system": plan["developer_instructions"]},
-            "qa": {"enabled": limits["self_qa_enabled"], "max_retries": 0},
-        },
-        "execution": {
-            "mode": dispatch["foundry_route"]["execution_mode"],
-            "timeout": limits["timeout_seconds_per_attempt"],
-            "max_retries": limits["infrastructure_retries_per_task"],
-            "resume_max_rounds": limits["resume_max_rounds"],
-            "relay_max_runs": dispatch["pilot_controls"]["relay_max_runs"],
-            "tokens": limits["inactive_generic_token_settings"],
-            "codex": {
-                "endpoint_from_route": dispatch["foundry_route"]["endpoint_from_route"],
-                "provider_id": dispatch["foundry_route"]["provider_id"],
-                "model": dispatch["identity"]["model"],
-                **dispatch["codex_request"],
-                "request_max_retries": limits["request_max_retries"],
-                "stream_max_retries": limits["stream_max_retries"],
-            },
-        },
-        "output": {"publish_to_hf": dispatch["results"]["publish_to_hf"],
-                   "submit_to_evals": dispatch["results"]["submit_to_evals"]},
+    """Keep requested model identity separate from a future reviewed deployment."""
+    # The legacy parser supplies runnable defaults for absent blocks. Explicit
+    # null execution makes it reject this template before provider/auth setup,
+    # independently of the bundle's outer launch flags.
+    template = {
+        "template_version": RUNTIME_TEMPLATE_VERSION, "runnable": False,
+        "deployment": None, "execution": None, "dispatch": dispatch, "dataset": plan["dataset"],
+        "developer_instructions": plan["developer_instructions"],
+        "deployment_blocker": DEPLOYMENT_BLOCKER,
+        "launch_allowed": False, "full_220_allowed": False,
     }
-    parsed = ExperimentConfig.from_dict(config)
-    _require(not parsed.validate(), "runtime_config_invalid")
-    _require(parsed.data_filter.task_ids == dispatch["task_ids"] and not parsed.is_ab_test,
-             "runtime_scope_mismatch")
-    # Do not serialize parsed.to_dict(): the existing parser deliberately drops
-    # workflow-owned relay_max_runs. Keep the exact, explicitly built mapping.
-    return config
+    _validate_runtime_template(template, plan, dispatch)
+    return template
 
 
 def _grading(document: dict[str, Any]) -> dict[str, Any]:

@@ -1976,12 +1976,17 @@ to an older digest are stale; the materializer cannot upgrade them in place.
 the current active plan and a published identity bundle. It derives four fixed,
 run-relative canonical JSON files:
 
-- `pilot-runtime-config.json`: an `ExperimentConfig`-compatible single-condition
-  config for the Foundry/Codex Sol pilot. It has exactly the five registered
-  task IDs in order, Max, the 1M context request, the unchanged developer
-  instructions, no self-QA, zero request/stream/resume/relay retries, and the
-  existing 1800-second timeout and three infrastructure retries after the first
-  attempt. It uses the existing deferred Foundry route, without an endpoint.
+- `pilot-runtime-config.json`: a closed `foundry-pilot-runtime-template-v1`
+  document with `deployment: null`, `execution: null` and `runnable: false`.
+  Its sealed dispatch recipe keeps `identity.model: gpt-5.6-sol` as a request
+  label, not a deployment name. It preserves exactly five task IDs in order,
+  Max, the 1M context request, developer instructions, no self-QA, zero
+  request/stream/resume/relay retries, and the existing 1800-second timeout and
+  three infrastructure retries after the first attempt. The Foundry route is a
+  declaration without an endpoint. The existing `ExperimentConfig` parser
+  rejects the explicit null execution block before provider/auth setup. A small
+  internal shape check verifies parity with the active contract and identity
+  plan; it does not try to validate this template as an executable config.
 - `pilot-prepared-task-manifest.json`: the ordered task IDs, prompt and
   per-task reference hashes, dataset revision/parquet hash and instruction
   digest from the verified identity. This is a requirement for future input
@@ -2009,6 +2014,15 @@ config alone does not enforce the future execution scope. Binding real inference
 identity and ordered input rows remains required before any grading execution.
 The template-source hash is retained as such; the future materialized grader
 source hash remains null because this directory is not a deployed source tree.
+
+Leader review blocked PR #634 at
+`b872446d6e61cfaa8fa1558ee94ea4a6b4ff67ea`: the original runtime artifact put the
+requested model label in `model.deployment` and passed the real runtime parser,
+although the active contract had no deployment name. Outer false launch flags
+did not make that artifact inert. The corrected template keeps deployment null,
+including when an evidence digest is linked. A separate future materialization
+must bind an externally reviewed deployment name into an executable config.
+`actual_pilot_deployment_not_prepared` remains a blocker.
 
 An evidence-linked identity still requires the actual evidence bundle, external
 reviewed source SHA and explicit UTC evaluation time for reverification. Only

@@ -28,7 +28,8 @@ dispatch_grading_identity:
   grader_template_source_hash: db7e9c173dbf7ac60460609a62c7757fc99ee4e42b997f0bd7eac5a964913036
   evidence_boundary: offline_dispatch_grading_identity
 
-# Config files only, not prepared input bytes or permission to execute them.
+# Inert runtime template with no deployment/execution, plus grading config and
+# identity files. No prepared input bytes or permission to execute them.
 config_bundle:
   materializer: batch-runner/gpt56_pilot_config_bundle.py
   source_base_sha: 1c038f8f46df3936228cbeb7bc36a0b8aef61337
@@ -203,4 +204,4 @@ source_pins:
   batch-runner/core/grade_payload.py: 4992c803dd60fd239bb76f6fa87d080e1239288a4485a1075337d343c91f0dae
   batch-runner/prompts/grader_judge.md: 9bf9ec73be0fe0886e17171aabcd9470869e8aeccafa22b53217d229029c2e11
   batch-runner/prompts/grader_judge_v2.md: 9bbded2220760521846637486971b9a7d89eab0d4832295778a16cb672c22af9
-  batch-runner/gpt56_pilot_config_bundle.py: 3dbcb33f8dedd8c7971f7160ef045c1ed306990567039c827af504a79b7f2118
+  batch-runner/gpt56_pilot_config_bundle.py: c24b68b1b324b5106ad06e83f7f46624aa43daf8b0bb894b49cdb640892ef1d8

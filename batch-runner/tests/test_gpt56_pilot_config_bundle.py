@@ -3,6 +3,7 @@
 import hashlib
 import json
 import os
+import sys
 from functools import lru_cache
 
 import pytest
@@ -10,6 +11,7 @@ import yaml
 
 # Preserve the real class/static prompt-version reader before inherited guards.
 import step8_grade as step8
+import step1_prepare_tasks as step1
 import gpt56_foundry_evidence_intake as evidence
 import gpt56_pilot_config_bundle as bundle
 import gpt56_pilot_identity_plan as identity
@@ -111,29 +113,34 @@ def test_real_validators_exact_pilot_scope_and_ready_last(plan, tmp_path, identi
     grader = yaml.safe_load((root / bundle.GRADING_PATH).read_bytes())
     linkage = json.loads((root / bundle.LINKAGE_PATH).read_bytes())
     marker = result.as_dict()
-    parsed = ExperimentConfig.from_yaml(str(root / bundle.RUNTIME_PATH))
-    assert parsed.validate() == []
-    assert parsed.experiment_id == pilot.RUN_ID and not parsed.is_ab_test
-    assert parsed.data_filter.task_ids == TASK_IDS
-    assert runtime["data"] == {"source": "openai/gdpval", "filter": {"task_ids": TASK_IDS}}
-    assert parsed.condition_a.model.provider == "azure"
-    assert parsed.condition_a.model.deployment == "gpt-5.6-sol"
-    assert parsed.condition_a.model.reasoning_effort == "max"
-    assert parsed.condition_a.prompt.system == plan["developer_instructions"]
-    assert parsed.condition_a.qa.enabled is False and parsed.condition_a.qa.max_retries == 0
-    assert parsed.execution.codex == {
-        "endpoint_from_route": True, "provider_id": "gdpval-foundry", "model": "gpt-5.6-sol",
-        "reasoning_effort": "max", "model_context_window": 1000000,
-        "request_max_retries": 0, "stream_max_retries": 0,
-    }
-    assert parsed.execution.timeout == 1800 and parsed.execution.max_retries == 3
-    assert parsed.execution.resume_max_rounds == runtime["execution"]["relay_max_runs"] == 0
-    assert parsed.execution.tokens == plan["limits"]["inactive_generic_token_settings"]
-    assert parsed.output.publish_to_hf is parsed.output.submit_to_evals is False
-    assert parsed.execution.comparison_input_capture is None
-
     sealed = verifications[0].as_dict()
-    for section in (prepared, linkage["dispatch"], linkage["grading"], marker):
+    assert runtime == {
+        "template_version": "foundry-pilot-runtime-template-v1", "runnable": False,
+        "deployment": None, "execution": None, "dispatch": sealed["dispatch"], "dataset": plan["dataset"],
+        "developer_instructions": plan["developer_instructions"],
+        "deployment_blocker": "actual_pilot_deployment_not_prepared",
+        "launch_allowed": False, "full_220_allowed": False,
+    }
+    bundle._validate_runtime_template(runtime, plan, sealed["dispatch"])
+    request = runtime["dispatch"]
+    assert runtime["deployment"] is plan["foundry_identity"]["deployment"] is None
+    assert request["identity"]["provider"] == "azure"
+    assert request["identity"]["model"] == "gpt-5.6-sol" and request["identity"]["fast_mode"] is False
+    assert request["identity"]["reasoning_effort"] == "max"
+    assert request["foundry_route"] == plan["foundry_route"]
+    assert request["foundry_route"]["endpoint_from_route"] is True
+    assert request["foundry_route"]["provider_id"] == "gdpval-foundry"
+    assert request["codex_request"] == {"reasoning_effort": "max", "model_context_window": 1000000}
+    assert request["limits"]["timeout_seconds_per_attempt"] == 1800
+    assert request["limits"]["infrastructure_retries_per_task"] == 3
+    assert request["limits"]["self_qa_enabled"] is False
+    assert request["limits"]["request_max_retries"] == request["limits"]["stream_max_retries"] == 0
+    assert request["limits"]["resume_max_rounds"] == request["pilot_controls"]["relay_max_runs"] == 0
+    assert request["limits"]["inactive_generic_token_settings"] == plan["limits"]["inactive_generic_token_settings"]
+    assert request["results"]["publish_to_hf"] is request["results"]["submit_to_evals"] is False
+    assert not {"experiment", "condition_a", "condition_b", "comparison_input_capture"} & set(runtime)
+
+    for section in (request, prepared, linkage["dispatch"], linkage["grading"], marker):
         assert section["run_id"] == pilot.RUN_ID and section["condition"] == "codex_foundry"
         assert section["repeat"] == 1 and section["expected_task_count"] == 5
         assert section["task_ids"] == TASK_IDS
@@ -200,6 +207,74 @@ def test_real_validators_exact_pilot_scope_and_ready_last(plan, tmp_path, identi
     assert report["launch_allowed"] is report["full_220_allowed"] is False
 
 
+@pytest.mark.parametrize("linked", [False, True])
+def test_inert_template_is_refused_by_real_runtime_parser_and_entrypoint(
+    plan, tmp_path, config_seeds, linked, monkeypatch, offline_only,
+):
+    from core import codex_runtime_config
+
+    root, source, options = _fresh(config_seeds(linked), tmp_path, linked)
+    result = bundle.verify_pilot_config_bundle(plan, identity_bundle=source, bundle_root=root, **options)
+    path = root / bundle.RUNTIME_PATH
+    runtime = json.loads(path.read_bytes())
+    assert runtime["dispatch"]["identity"]["model"] == plan["identity"]["model"] == "gpt-5.6-sol"
+    assert runtime["deployment"] is plan["foundry_identity"]["deployment"] is None
+    assert runtime["runnable"] is False and runtime["execution"] is None
+    assert runtime["deployment_blocker"] == "actual_pilot_deployment_not_prepared"
+    before = _tree(root)
+
+    def forbidden(*args, **kwargs):
+        offline_only.append("runtime setup before inert-template refusal")
+        raise AssertionError("inert runtime template reached execution setup")
+
+    monkeypatch.setattr(step1, "GDPValDataLoader", forbidden)
+    monkeypatch.setattr(step1, "resolve_publication_generation", forbidden)
+    for name in ("CodexProviderSettings", "resolve_endpoint_setting", "provider_config_overrides"):
+        monkeypatch.setattr(codex_runtime_config, name, forbidden)
+    workspace = tmp_path / "workspace"
+    monkeypatch.setattr(step1, "WORKSPACE_DIR", workspace)
+    monkeypatch.setattr(sys, "argv", ["step1_prepare_tasks.py", "--config", str(path)])
+
+    # Missing blocks would acquire runnable defaults. Explicit null execution
+    # is rejected by the unchanged parser, before validation or any setup.
+    for read in (lambda: ExperimentConfig.from_dict(runtime),
+                 lambda: ExperimentConfig.from_yaml(str(path)), step1.main):
+        with pytest.raises(AttributeError, match="'NoneType' object has no attribute 'get'"):
+            read()
+    assert not (workspace / "step1_tasks_prepared.json").exists()
+    assert _tree(root) == before and offline_only == []
+    assert not {"argv", "command", "endpoint", "credential"} & _field_names(
+        [result.as_dict(), *(json.loads(data) for _, data in result.files)])
+
+
+@pytest.mark.parametrize("keys,value", [
+    (("deployment",), "gpt-5.6-sol"), (("deployment",), "pending-deployment"),
+    (("deployment",), "a" * 64), (("runnable",), True), (("runnable",), 0),
+    (("execution",), {}), (("execution",), {"mode": "codex_foundry"}),
+    (("condition_a",), {"model": {"deployment": "gpt-5.6-sol"}}),
+    (("dispatch", "identity", "model"), "gpt-5.6-sol-fast"),
+    (("dataset", "revision"), "a" * 40), (("developer_instructions",), "changed"),
+    (("deployment_blocker",), None),
+])
+def test_closed_runtime_template_rejects_deployment_or_request_drift(plan, installed, keys, value):
+    root, _, _ = installed
+    runtime = json.loads((root / bundle.RUNTIME_PATH).read_bytes())
+    dispatch = json.loads((root / bundle.LINKAGE_PATH).read_bytes())["dispatch"]
+    _set(runtime, keys, value)
+    with pytest.raises(bundle.PilotConfigBundleRefused, match="runtime_template_"):
+        bundle._validate_runtime_template(runtime, plan, dispatch)
+
+
+@pytest.mark.parametrize("field", ["deployment", "execution", "runnable"])
+def test_closed_runtime_template_cannot_omit_inert_controls(plan, installed, field):
+    root, _, _ = installed
+    runtime = json.loads((root / bundle.RUNTIME_PATH).read_bytes())
+    dispatch = runtime["dispatch"]
+    del runtime[field]
+    with pytest.raises(bundle.PilotConfigBundleRefused, match="runtime_template_shape_invalid"):
+        bundle._validate_runtime_template(runtime, plan, dispatch)
+
+
 @pytest.mark.parametrize("mode", ["compile", "publish", "verify"])
 def test_cli_determinism_and_read_only_verification(plan, installed, tmp_path, mode, capsys):
     root, source, options = installed
@@ -248,10 +323,13 @@ def test_each_member_and_reservation_is_exact_single_link_and_read_only(plan, in
 
 
 @pytest.mark.parametrize("role,keys,value", [
-    (bundle.RUNTIME_PATH, ("data", "filter", "task_ids"), TASK_IDS[::-1]),
-    (bundle.RUNTIME_PATH, ("execution", "codex", "model"), "gpt-5.6-sol-fast"),
-    (bundle.RUNTIME_PATH, ("execution", "codex", "model_context_window"), 272000),
-    (bundle.RUNTIME_PATH, ("execution", "max_retries"), 4),
+    (bundle.RUNTIME_PATH, ("dispatch", "task_ids"), TASK_IDS[::-1]),
+    (bundle.RUNTIME_PATH, ("dispatch", "identity", "model"), "gpt-5.6-sol-fast"),
+    (bundle.RUNTIME_PATH, ("dispatch", "codex_request", "model_context_window"), 272000),
+    (bundle.RUNTIME_PATH, ("dispatch", "limits", "infrastructure_retries_per_task"), 4),
+    (bundle.RUNTIME_PATH, ("deployment",), "gpt-5.6-sol"),
+    (bundle.RUNTIME_PATH, ("runnable",), True),
+    (bundle.RUNTIME_PATH, ("execution",), {}),
     (bundle.GRADING_PATH, ("judge", "reasoning", "effort"), "low"),
     (bundle.GRADING_PATH, ("rubric", "revision"), "a" * 40),
     (bundle.PREPARED_PATH, ("tasks",), []),
@@ -325,6 +403,7 @@ def test_identity_bundle_is_reverified_before_any_write(plan, installed, tmp_pat
     (("pilot", "run_id"), "wrong-run"), (("dataset", "tasks"), []),
     (("grading", "passes_per_task"), 2), (("launch_enabled",), True),
     (("pilot", "full_220_enabled"), True), (("source_pins",), {}),
+    (("foundry_identity", "deployment"), "gpt-5.6-sol"),
 ])
 def test_wrong_or_stale_active_contract_cannot_be_materialized(plan, installed, tmp_path, keys, value):
     _, source, _ = installed
