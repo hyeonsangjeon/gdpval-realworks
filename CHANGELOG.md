@@ -13,6 +13,25 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Correct PR #638's Backend file partition after the leader reported
+  `pytest` run `35514065313`, job `106086906143`, cancelled at `45:13` and
+  `87%` with no assertion failure at `c88f76f02c43ef9b2672e61d6cdd6d4630235305`.
+  The successful comparison job covered only 11 GPT-5.4 files. Core now ignores
+  the exact sorted union of 11 GPT-5.4 and 9 GPT-5.6 files, and the existing
+  comparison job selects those same 20 files once. Extend the existing static
+  guard to both families without weakening coverage, uniqueness or setup
+  assertions. The mandatory pre-edit `extreme-reasoner` decision was
+  APPROVE-WITH-CONDITIONS; both jobs, 45-minute limits and existing security,
+  setup and concurrency controls remain unchanged. The sole correction
+  selector reported `1 passed in 0.18s`, exit 0. `llm-systems-engineer` and
+  `first-reviewer` approved immutable correction HEAD
+  `70334bb35f7916a4db7a1e1d1a18da10847cb9e1`. No cancelled run, full suite,
+  comparison suite or wire receipt selector was rerun locally. The original
+  `88 passed in 642.32s (0:10:42)` remains pre-correction receipt evidence;
+  its corrected 89-case selector has not been rerun locally. Runtime logic,
+  experiment settings, source pins, launch flags and the unresolved live-wire
+  boundary are untouched. Fresh CI must establish both job results and timing.
+
 - Correct four Backend pytest failures reported for PR #637 at
   `155279f6458ea3341f2c894a1177aaa698bc053d`, run `35506466839`, job
   `106067021054`. Step 1 now safely reads optional legacy execution/capture
