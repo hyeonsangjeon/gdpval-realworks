@@ -180,7 +180,7 @@ def test_gpt54_comparison_is_fixed_and_fails_closed(change, tmp_path, capsys):
         parser_source = "batch-runner/gpt54_comparison_preflight.py"
         sol = load_plan(ROOT / (
             "batch-runner/experiments/execution_envelope/"
-            "gpt56_sol_copilot_codex_pilot.yaml"
+            "gpt56_sol_foundry_codex_pilot.yaml"
         ))
         assert sol["source_pins"][parser_source] == hashlib.sha256(
             (ROOT / parser_source).read_bytes()
@@ -410,7 +410,7 @@ def test_gpt54_offline_dispatch_plan_is_bound_and_non_executing(
     dispatch_path.write_bytes(compiled.canonical_bytes())
     assert main(["--plan", str(manifest_path), "--dispatch-plan", str(dispatch_path)]) == 2
     assert json.loads(capsys.readouterr().out) == result
-    sol = load_plan(ROOT / "batch-runner/experiments/execution_envelope/gpt56_sol_copilot_codex_pilot.yaml")
+    sol = load_plan(ROOT / "batch-runner/experiments/execution_envelope/gpt56_sol_foundry_codex_pilot.yaml")
     assert sol["source_pins"][compiler_source] == hashlib.sha256((ROOT / compiler_source).read_bytes()).hexdigest()
 
 
@@ -722,7 +722,7 @@ def test_gpt54_pinned_grading_plan_is_bound_and_non_executing(
     grading_path.write_bytes(compiled.canonical_bytes())
     assert main(["--plan", str(manifest_path), "--dispatch-plan", str(dispatch_path), "--grading-plan", str(grading_path)]) == 2
     assert json.loads(capsys.readouterr().out) == result
-    sol = load_plan(ROOT / "batch-runner/experiments/execution_envelope/gpt56_sol_copilot_codex_pilot.yaml")
+    sol = load_plan(ROOT / "batch-runner/experiments/execution_envelope/gpt56_sol_foundry_codex_pilot.yaml")
     compiler_source = "batch-runner/gpt54_comparison_preflight.py"
     assert sol["source_pins"][compiler_source] == hashlib.sha256((ROOT / compiler_source).read_bytes()).hexdigest()
     assert forbidden_calls == []

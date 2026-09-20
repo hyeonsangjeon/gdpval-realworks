@@ -497,7 +497,7 @@ def test_codex_grading_input_preserves_source_and_v2_boundary(case, tmp_path, mo
     assert [(row.condition, row.repeat) for row in plan.runs] == [("sandbox_v2", 1), ("codex", 1), ("codex", 2), ("sandbox_v2", 2)]
     assert run.input_materialization == "gpt54_codex_grading_input.materialize_codex_grading_input"
     assert len(REQUIRED_SOURCES) == 34
-    sol = load_plan(ROOT / "batch-runner/experiments/execution_envelope/gpt56_sol_copilot_codex_pilot.yaml")
+    sol = load_plan(ROOT / "batch-runner/experiments/execution_envelope/gpt56_sol_foundry_codex_pilot.yaml")
     parser = "batch-runner/gpt54_comparison_preflight.py"
     assert sol["source_pins"][parser] == hashlib.sha256((ROOT / parser).read_bytes()).hexdigest()
     assert not forbidden_calls and not list(tmp_path.glob(".*.tmp-*"))

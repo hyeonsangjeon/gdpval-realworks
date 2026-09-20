@@ -322,7 +322,7 @@ def _workflow_contract(condition: str, monkeypatch: Any) -> None:
                 altered["source_pins"][name] = "0" * 64
             with pytest.raises(preflight.DispatchPlanRefused):
                 preflight.compile_dispatch_plan(altered)
-    sol = yaml.safe_load((preflight.ROOT / preflight.ENVELOPE / "gpt56_sol_copilot_codex_pilot.yaml").read_bytes())
+    sol = yaml.safe_load((preflight.ROOT / preflight.ENVELOPE / "gpt56_sol_foundry_codex_pilot.yaml").read_bytes())
     for name, digest in sol["source_pins"].items():
         assert hashlib.sha256((preflight.ROOT / name).read_bytes()).hexdigest() == digest
 

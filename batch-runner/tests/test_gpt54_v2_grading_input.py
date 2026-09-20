@@ -540,7 +540,7 @@ def test_v2_grading_input_is_bound_atomic_and_offline(case, tmp_path, monkeypatc
     ]
     assert run.input_materialization == "gpt54_v2_grading_input.materialize_v2_grading_input"
     assert len(REQUIRED_SOURCES) == 34
-    sol = load_plan(ROOT / "batch-runner/experiments/execution_envelope/gpt56_sol_copilot_codex_pilot.yaml")
+    sol = load_plan(ROOT / "batch-runner/experiments/execution_envelope/gpt56_sol_foundry_codex_pilot.yaml")
     parser = "batch-runner/gpt54_comparison_preflight.py"
     assert sol["source_pins"][parser] == hashlib.sha256((ROOT / parser).read_bytes()).hexdigest()
     assert not forbidden_calls
