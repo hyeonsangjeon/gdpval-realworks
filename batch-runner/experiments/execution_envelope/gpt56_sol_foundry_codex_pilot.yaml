@@ -215,7 +215,7 @@ source_pins:
   batch-runner/core/executor.py: 1dc9d329d5fbde4cc1834e19abfddb2575970bd56445a7b7e8b7dd97acd94be8
   batch-runner/step1_prepare_tasks.py: c487fd25710155e5bbf07461dd0c3c2d806babe1a64e8ca7cd7931c50461c742
   batch-runner/step2_run_inference.py: ce90a0d3afd0568500f7fe7fb2b337abd41a4cd9390402c2f7df1c330596197c
-  batch-runner/gpt56_pilot_wire_receipt.py: 67d926513e6e234fb45f596dcaaf82598cdd0a0bdd6bc5127eb0224834d532a4
+  batch-runner/gpt56_pilot_wire_receipt.py: de5ddbef2acddbd816e4a9348df2b6b95457b6c3d8867ade308981f46c23510d
   batch-runner/core/cost_receipts.py: 4b936516da622ceaf8cf8d5e10d2dd1b69ded831b4143557b6431a197bab9cbe
   batch-runner/core/result_projection.py: 1b47c4ee0f6d050e5edd4ac5a301203ba834c8d159b1557b04d83046ca965ec6
   batch-runner/schemas/grade.schema.json: 9c611874c2d7aa57018eecdc86b7c0d579aaa9c29dd0df649058eec9ad5175b9

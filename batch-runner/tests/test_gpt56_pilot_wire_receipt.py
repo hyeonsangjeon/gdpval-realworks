@@ -248,7 +248,7 @@ def _begin(session, task_id, *, attempt=0, override=None):
     provider = SimpleNamespace(model=REQUESTED["deployment"], provider_id="gdpval-foundry", reasoning_effort="max",
         model_context_window=1_000_000, request_max_retries=0, stream_max_retries=0,
         auth_module=pilot.DEFAULT_AUTH_MODULE, auth_scope=pilot.DIRECT_TOKEN_SCOPE, query_params={},
-        endpoint="https://synthetic-resource.services.ai.azure.com/openai/v1/")
+        endpoint="https://fixture-foundry.services.ai.azure.com/openai/v1/")
     options = dict(task_id=task_id, run_id=pilot.RUN_ID, condition_name="condition_a", task_prompt=row["instruction"],
         occupation=row["occupation"], experiment_prompt={"system": prompt.get("system", "You are a helpful assistant."),
             **{key: prompt.get(key) for key in ("prefix", "body", "suffix")}}, perception_text=None,
@@ -513,7 +513,7 @@ def test_step2_real_task_acceptance_precedes_file_acceptance(case, monkeypatch, 
     provider = SimpleNamespace(model=REQUESTED["deployment"], provider_id="gdpval-foundry", reasoning_effort="max",
         model_context_window=1_000_000, request_max_retries=0, stream_max_retries=0,
         auth_module=pilot.DEFAULT_AUTH_MODULE, auth_scope=pilot.DIRECT_TOKEN_SCOPE, query_params={},
-        endpoint="https://synthetic-resource.services.ai.azure.com/openai/v1/")
+        endpoint="https://fixture-foundry.services.ai.azure.com/openai/v1/")
 
     def execute(**kwargs):
         events.append("synthetic-transport")
@@ -549,14 +549,15 @@ def test_step2_real_task_acceptance_precedes_file_acceptance(case, monkeypatch, 
         assert events == ["synthetic-transport", "verified-receipt", "save"]
 
 
-def test_runner_passes_owned_observer_and_finishes_before_cleanup(case, monkeypatch):
+@pytest.mark.parametrize("wrong_account", [False, True])
+def test_runner_passes_owned_observer_and_finishes_before_cleanup(case, monkeypatch, wrong_account, capsys):
     session = _session(case)
     task = session.prepared["tasks"][0]
     session.arm_task(task["task_id"], 0)
     provider = SimpleNamespace(model=REQUESTED["deployment"], provider_id="gdpval-foundry", reasoning_effort="max",
         model_context_window=1_000_000, request_max_retries=0, stream_max_retries=0,
         auth_module=pilot.DEFAULT_AUTH_MODULE, auth_scope=pilot.DIRECT_TOKEN_SCOPE, query_params={},
-        endpoint="https://synthetic-resource.services.ai.azure.com/openai/v1/")
+        endpoint="https://fixture-foundry.services.ai.azure.com/openai/v1/")
     runner = object.__new__(codex_runner.CodexAgentRunner)
     runner.run_id, runner.condition_name = pilot.RUN_ID, "condition_a"
     runner.provider, runner.pilot_wire_receipts = provider, session
@@ -578,10 +579,33 @@ def test_runner_passes_owned_observer_and_finishes_before_cleanup(case, monkeypa
 
     monkeypatch.setattr(runner, "_run_one_turn", turn)
     prompt = session.prepared["condition_a"]["prompt"]
-    result = runner.run(task["instruction"], model=REQUESTED["deployment"],
-        reference_files=[session.dataset_root / record["path"] for record in task["reference_file_records"]],
-        occupation=task["occupation"], experiment_prompt={"system": prompt.get("system", "You are a helpful assistant."),
-            **{key: prompt.get(key) for key in ("prefix", "body", "suffix")}},
-        run_id=pilot.RUN_ID, condition_name="condition_a", task_id=task["task_id"])
+
+    def run():
+        return runner.run(task["instruction"], model=REQUESTED["deployment"],
+            reference_files=[session.dataset_root / record["path"] for record in task["reference_file_records"]],
+            occupation=task["occupation"], experiment_prompt={"system": prompt.get("system", "You are a helpful assistant."),
+                **{key: prompt.get(key) for key in ("prefix", "body", "suffix")}},
+            run_id=pilot.RUN_ID, condition_name="condition_a", task_id=task["task_id"])
+
+    if wrong_account:
+        provider.endpoint = "https://wrong-account.services.ai.azure.com/openai/v1/"
+
+        def forbidden(**kwargs):
+            events.append("runtime-boundary")
+            raise AssertionError("wrong account reached workspace/auth/client")
+
+        monkeypatch.setattr(codex_runner.CodexWorkspace, "create", forbidden)
+        monkeypatch.setattr(runner, "open_runtime", forbidden)
+        with pytest.raises(wire.PilotWireReceiptRefused) as refused:
+            run()
+        assert str(refused.value) == wire.REFUSAL
+        output = capsys.readouterr()
+        assert provider.endpoint not in output.out + output.err
+        assert all(value.decode() not in output.out + output.err for value in RAW_IDS)
+        assert events == [] and session.files == {} and session.active == {}
+        assert not (session.root / wire.READY_PATH).exists()
+        return
+
+    result = run()
     session.accept_task(task_id=task["task_id"], attempt_index=0, result=result)
     assert result["success"] and events == ["cleanup-after-receipt"]

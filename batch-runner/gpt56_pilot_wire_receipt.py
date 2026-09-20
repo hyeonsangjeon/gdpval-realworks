@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 import gpt56_pilot_input_capture as capture
+import gpt56_pilot_deployment_binding as deployment
 import gpt56_sol_codex_pilot_preflight as pilot
 from core.cost_receipts import make_call_id
 from core.azure_ai_clients import EndpointKind, classify_endpoint
@@ -344,13 +345,24 @@ class PilotWireReceiptSession:
                      and experiment_prompt == {"system": prompt.get("system", "You are a helpful assistant."),
                                                 **{key: prompt.get(key) for key in ("prefix", "body", "suffix")}})
             requested = self.document["requested"]
+            # Keep the resource bytes private. The endpoint account must be
+            # the account sealed by the capture, not a same-named deployment
+            # on a different resource selected through environment settings.
+            ready = json.loads(_read_bytes(
+                _path(_root(self.sources.deployment_binding), deployment.READY_PATH),
+                **self.document["upstream_bundles"]["deployment"]["ready"],
+            ))
+            account = deployment._resource_bytes(deployment._resource_path(self.sources.account_resource_id_file))
+            _require(_digest(account) == {key: ready["resource_files"]["account"][key] for key in ("size", "sha256")})
+            account_leaf = deployment._resource_parts(account, "account")[-1]
+            endpoint = classify_endpoint(provider.endpoint)
             _require(provider.model == requested["deployment"] and provider.provider_id == requested["provider_id"]
                      and provider.reasoning_effort == requested["reasoning_effort"]
                      and provider.model_context_window == requested["context_tokens"]
                      and provider.request_max_retries == provider.stream_max_retries == 0
                      and provider.auth_module == pilot.DEFAULT_AUTH_MODULE and not provider.query_params
                      and provider.auth_scope == pilot.DIRECT_TOKEN_SCOPE
-                     and classify_endpoint(provider.endpoint).kind is EndpointKind.DIRECT_V1
+                     and endpoint.kind is EndpointKind.DIRECT_V1 and endpoint.account == account_leaf
                      and os.environ.get("AZURE_AI_ROUTE_PROFILE") == "direct-v1")
             references = reference_files or []
             _require(len(references) == len(row["reference_file_records"]))
