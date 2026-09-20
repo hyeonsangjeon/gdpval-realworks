@@ -1,190 +1,127 @@
 # Latest substantive task result
 
-## PROJECT5-GPT56-PRE-EXECUTION-CAPTURE FULL-140CBF4E
+## PROJECT5-PR637-CORE-PYTEST-FIX
 
-The registered Foundry GPT-5.6 Sol pilot now binds the real Step 1 prepared
-five-task rows to its runtime candidate and five verified upstream bundles.
-Step 2 checks that capture before host, route, auth or client setup. Explicit
-preflight consumption clears only `prepared_request_capture_unverified`.
-`live_inference_identity_and_wire_unverified` remains blocked. Both
-`launch_allowed` and `full_220_allowed` remain false, as do the active contract's
-`launch_enabled` and `full_220_enabled`.
+The four reported Backend pytest failures in PR #637 now pass in one targeted
+local run: `4 passed in 5.39s`, exit 0. The correction restores the legacy
+manifest guards' original failure paths and adds the existing prepared-request
+capture blocker to an exact test expectation. The registered Foundry pilot still
+requires capture inputs before Step 1 proceeds.
 
-The sole selector reported `2 failed, 122 passed in 284.01s (0:04:44)`, exit 1.
-Both failures were in the fixture's successful Step 2 and legacy paths: the
-unchanged Codex connection-confirmation gate stopped them before the expected
-host/auth test boundary. The fixture now supplies the same test-only confirmation
-stand-in as the GPT-5.4 capture selector. It was not rerun. This record does not
-claim a green local selector; automatic `comparison-contracts` validation is
-still needed for the corrected fixture.
+### CI failure and correction scope
 
-### Scope and concrete outcome
+The leader reported four failures at
+`155279f6458ea3341f2c894a1177aaa698bc053d` in Backend pytest run `35506466839`,
+job `106067021054`. At that HEAD, `comparison-contracts`, `validate`,
+`advance-check` and `freeze-check` succeeded. This correction does not claim
+that the new HEAD has passed automatic CI.
 
-`PilotInputCapture` is a strict optional control for
-`gpt56_sol_foundry_codex_pilot5_v1` only. The deployment candidate carries it;
-registered runs cannot select a legacy bypass by removing it. Invalid control
-keys, a different run, another execution mode, a second condition or simultaneous
-GPT-5.4 and GPT-5.6 controls fail closed. Legacy absent/null controls add no
-serialized field or pilot file reads.
+`test_real_validators_exact_pilot_scope_and_ready_last[True]` omitted
+`prepared_request_capture_unverified` from its exact remaining-blocker list.
+The production transition was correct. Only that expected list changes; the
+test still compares the complete ordered list, uses the real bundle validators
+and checks both false launch flags.
 
-The new `gpt56_pilot_input_capture.py` exposes small library functions for
-preparation, publication and verification. `PilotCaptureSources` carries private
-bundle/resource paths, the caller-reviewed source SHA and external evaluation
-time as runtime-only arguments. No execution command or launch CLI was added.
-The existing Step 1 and Step 2 CLIs cannot run the registered pilot without that
-explicit library context.
+Three Step 1 manifest tests used an existing `SimpleNamespace` config without
+`execution`. Directly reading `config.execution.pilot_input_capture` raised
+`AttributeError` before the intended missing, legacy-schema and byte-drift
+manifest checks. `_prepare_tasks` now obtains `execution` and the optional pilot
+control with `getattr(..., None)`. The independent registered run-ID refusal
+remains in place, and an explicit non-null pilot control still requires capture
+sources. No execution field was injected into a test double. The manifest tests,
+their fixtures and their refusal assertions are unchanged.
 
-Step 1 calls the real deployment binding verifier, which in turn calls the
-evidence, identity, config and input bundle verifiers. It reads the actual
-candidate and input-bundle roles, uses the existing source projection and
-reference snapshot helpers, and preserves the real Step 1 serializer and
-prepared fingerprint. The writer exclusively publishes
-`step1_tasks_prepared.json`, revalidates the upstream chain, then atomically
-publishes `pilot-pre-execution-input.json` last. The held-parent and no-clobber
-writer primitives are reused. Existing or partial pairs are never overwritten,
-adopted or automatically deleted.
+The two active GPT-5.4/GPT-5.6 source-pin maps also refresh only the Step 1 hash
+to `c487fd25710155e5bbf07461dd0c3c2d806babe1a64e8ca7cd7931c50461c742`.
+This is required metadata for the changed source bytes, not an experiment or
+capture behavior change. Leaving those pins stale would make the real source
+verifiers reject the corrected implementation. Source counts, grader closure
+metadata, historical registrations and evidence bytes are unchanged.
 
-The canonical capture contains the ordered task IDs, raw and canonical prepared
-JSON digests, each prepared row's canonical digest, prompt/reference/parquet
-identities, dataset revision, requested Foundry/Sol/deployment/Max/1M settings,
-candidate and active-plan digests, upstream ready/reservation digests and reviewed
-source SHA. It contains no raw prompts, evidence claims, resource IDs, host paths,
-endpoint, credentials, auth headers or free-form responses. The deployment leaf
-still comes from the separately verified resource binding, not the model label.
+No other production code, capture helper, Step 2 gate, preflight transition,
+workflow, timeout, model setting, task cohort or grader behavior changed.
 
-Step 2 verifies the current prepared file, byte-equal and digest-equal capture,
-candidate and all upstream bundles before its existing host and provider setup.
-It rechecks upstreams after building the consumer projection, including changes
-during that work. Raw retry/resume/mode/condition/relay overrides are checked
-before coercion. Restored checkpoints cannot enter the fresh pilot path. The
-existing final-output linkage slot can carry the verified capture digest and
-upstream linkage without changing legacy result bytes.
+### Exact correction selector
 
-Preflight accepts an explicit `--capture-workspace` alongside the existing
-private bundle inputs. Without it, the new prepared-request and existing live
-wire blockers both remain. Successful explicit verification removes only the
-prepared-request blocker through a closed mapping. Reports expose safe digests,
-reviewed source SHA, evaluation time and the evidence boundary, not private
-inputs. A capture does not authorize launch or establish actual consumption.
-
-The active Foundry contract now pins 51 sources, up from 46. The GPT-5.4 active
-contract retains 34 sources and refreshes only its three shared runtime pins
-and grader-template closure digest. Changing `core/experiment_config.py` changes
-the existing all-core grader source closure, so both active template digests
-were refreshed without changing grader code, configuration, prompts or behavior.
-Historical registrations and ledger/evidence bytes are unchanged. Bundles sealed
-against the earlier active-plan digest are stale and must not be reused.
-
-### Validation evidence and limits
-
-Exactly one targeted invocation ran:
+Exactly one pytest invocation ran, selecting only the four reported failures:
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider --tb=short batch-runner/tests/test_gpt56_pilot_input_capture.py
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider --tb=short 'batch-runner/tests/test_gpt56_pilot_config_bundle.py::test_real_validators_exact_pilot_scope_and_ready_last[True]' batch-runner/tests/test_manifest_pipeline_guard.py::test_step1_missing_manifest_fails_before_prepared_write batch-runner/tests/test_manifest_pipeline_guard.py::test_step1_legacy_manifest_fails_before_prepared_write batch-runner/tests/test_manifest_pipeline_guard.py::test_step1_manifest_byte_drift_fails_before_prepared_write
 ```
 
-Result: `2 failed, 122 passed in 284.01s (0:04:44)`, exit 1, 124 cases collected.
-The two failing names were
-`test_step2_and_final_output_bind_verified_capture_before_provider` and
-`test_legacy_absent_null_keep_serializer_bytes_and_runtime_order`.
-Their `SystemExit: 1` came from the existing
-`_require_runnable_execution_mode` connection-confirmation check. The correction
-adds only a test fixture stand-in for `_codex_connection_confirmed`; production
-safety gates and real capture/upstream validators are unchanged. The correction
-did not change assertions or case count and added no skips or xfails. No selector
-was rerun after the correction.
+Result: `4 passed in 5.39s`, exit 0, four cases collected. The positive bundle
+case retains real evidence, identity, config and static step8 validation under
+the existing offline guards. The three manifest cases retain their original
+expected exceptions and no-prepared-file assertions.
 
-The passing cases exercise real Step 1 publication and all five upstream
-verifiers; exact five-task bytes and hashes; no-clobber and retained partials;
-capture/prepared/config/source/reference/parquet drift; missing files and unsafe
-links; raw overrides; stale evidence; mid-projection changes; privacy-safe
-refusals; and explicit one-blocker preflight consumption. The corrected positive
-provider-order and complete legacy regression paths still need automatic CI.
+The full `comparison-contracts` selector and the 124-case capture selector were
+not rerun locally. No broad/full suite or manual workflow ran. `git diff --check`
+and `git diff --cached --check` passed before the correction commit.
 
-Module-scoped lazy seeds prepare real upstream bundles and captures once. Each
-case receives fresh single-link copies. The inherited byte-keyed YAML parse
-cache does not cache validator verdicts. Tiny synthetic parquet/reference files
-avoid scanning the live 220-task snapshot. Guards prohibit subprocess, network,
-credential lookup, endpoint resolution and provider/model/client/grader
-construction or execution. Host and connection test stand-ins are not deployment
-or served-capability evidence.
+The initial capture selector remains historical evidence:
+`2 failed, 122 passed in 284.01s (0:04:44)`, exit 1. Its test-only connection-confirmation correction
+was not rerun locally. The leader subsequently reported automatic
+`comparison-contracts` success at `155279f6458ea3341f2c894a1177aaa698bc053d`.
+Neither that earlier CI result nor this four-case selector proves that the full
+new-HEAD Backend suite is green.
 
-The #631-#636 selectors and broad/full suites were not rerun. No manual workflow
-ran. `git diff --check` and `git diff --cached --check` passed before the
-implementation commit. The existing static grader source-hash helper was used
-only to derive closure metadata, not to grade anything.
+### Immutable review boundary
 
-### Immutable base and review boundary
-
-The clean development worktree started from main
-`140cbf4eef59a2b3c6ee731ac3dd4c75d9e005d7` on
-`b/gpt56-pre-execution-capture-20260920`. The preserved checkout
-`wip/local-main-preserved-20260719` was not used or edited.
-
-Implementation review HEAD: `667fb775fdb2df4424ea85152c8a8ef86d5d9314`.
+Correction base: `155279f6458ea3341f2c894a1177aaa698bc053d`.
+Reviewed correction HEAD: `a81985b1f9f74f246d265a273913a9c3ec4cb31e`.
 Both `llm-systems-engineer` and `first-reviewer` returned APPROVE with no blocking
-findings in read-only reviews against the base above. They reviewed the corrected
-fixture stand-in but did not execute it. Their approval covers the static
-implementation, not a green selector, served capability, launch or merge.
-This completion record and `CHANGELOG.md` are subsequent documentation changes
-outside the implementation review boundary.
+findings. They confirmed the legacy guard paths, independent registered-pilot
+refusal, exact blocker expectation and both source pins through read-only static
+review. Neither reviewer reran tests or executed runtime code.
+The reviews cover the four-file correction against that base. This completion
+record and the changelog are a subsequent documentation-only commit outside
+the implementation review boundary.
 
+The same development branch, `b/gpt56-pre-execution-capture-20260920`, is used.
+Its original main base is `140cbf4eef59a2b3c6ee731ac3dd4c75d9e005d7`.
+The preserved checkout `wip/local-main-preserved-20260719` was not used or edited.
 The repository's existing author and committer identity,
-`hyeonsangjeon <wingnut0310@gmail.com>`, was preserved without changing Git
-configuration. No attribution trailer, hook bypass, history rewrite, force push
-or forbidden Git cleanup was used.
+`hyeonsangjeon <wingnut0310@gmail.com>`, was preserved without configuration
+changes. No attribution trailer, history rewrite, force push, hook bypass or
+forbidden Git cleanup was used.
 
-### Changed files
+### Files changed by this correction
 
-- `batch-runner/core/experiment_config.py`
-- `batch-runner/gpt56_pilot_input_capture.py`
-- `batch-runner/gpt56_pilot_deployment_binding.py`
-- `batch-runner/gpt56_sol_codex_pilot_preflight.py`
 - `batch-runner/step1_prepare_tasks.py`
-- `batch-runner/step2_run_inference.py`
-- `batch-runner/experiments/execution_envelope/gpt56_sol_foundry_codex_pilot.yaml`
-- `batch-runner/experiments/execution_envelope/gpt54_sandboxv2_codex_comparison.yaml`
-- `batch-runner/tests/test_gpt56_pilot_input_capture.py`
-- `batch-runner/tests/test_gpt56_evidence_preflight_gate.py`
-- `batch-runner/tests/test_gpt56_foundry_evidence_intake.py`
-- `batch-runner/tests/test_gpt56_pilot_identity_plan.py`
 - `batch-runner/tests/test_gpt56_pilot_config_bundle.py`
-- `batch-runner/tests/test_gpt56_pilot_input_bundle.py`
-- `batch-runner/tests/test_gpt56_pilot_deployment_binding.py`
-- `batch-runner/tests/test_gpt56_sol_codex_pilot_preflight.py`
+- `batch-runner/experiments/execution_envelope/gpt54_sandboxv2_codex_comparison.yaml`
+- `batch-runner/experiments/execution_envelope/gpt56_sol_foundry_codex_pilot.yaml`
 - `CHANGELOG.md`
 - `tasks/LATEST_TASK_RESULT/README.md`
 
-Older selector files only update exact source-count and closed-blocker
-expectations. Their selectors were not run.
+### Preserved capture outcome and remaining work
 
-### Skills, evidence boundary and remaining work
+The original implementation still binds real Step 1 prepared rows to the
+runtime candidate and five verified upstream bundles, publishes prepared and
+capture files without clobbering, and verifies current bytes before Step 2
+provider/auth/client setup. Explicit preflight consumption still clears only
+`prepared_request_capture_unverified`. Legacy absent/null behavior and the
+registered pilot's required-capture boundary are preserved.
 
-The full skill catalog was checked once. `experiment-design` was applied before
-planning or code and kept prepared intent separate from observed model behavior.
-`llm-systems-engineer` provided contract assistance and immutable review;
-`first-reviewer` reviewed the fixed implementation HEAD. `im-not-ai-en` was
-applied to the English changelog, completion record and PR wording while
-preserving exact results, commands, hashes and evidence limits.
+The evidence boundary remains
+`prepared_request_intent_not_wire_or_served_identity`. Local prepared-input
+consistency does not prove actual model consumption, wire bytes, live inference
+identity, served capability or launch permission. `launch_allowed` and
+`full_220_allowed` remain false, as do `launch_enabled` and `full_220_enabled`
+in the active contract. Real external evidence acquisition/review, live
+identity/input consumption/wire binding, native sandbox/result hosting, actual
+deployment/execution, native-cap enforcement and usage/tariff receipts remain
+unresolved. New-HEAD automatic CI remains a separate gate.
 
-`extreme-reasoner` does not apply because workflows, `core/qa.py` and HF upload
-are unchanged. Grader production is unchanged, so no grading-role task was
-needed. UI/animation skills are unrelated to this backend contract and were not
-used. No experimental axis, model setting, cohort or grading behavior changed.
+`experiment-design` kept the source-pin refresh separate from experimental
+changes. This is an offline four-case regression check, not a model-performance
+experiment. `llm-systems-engineer` and `first-reviewer` provide the immutable
+reviews. `im-not-ai-en` was applied to the English records while preserving
+results, commands, hashes and evidence limits. `extreme-reasoner` is not required
+because no workflow, `core/qa.py` or HF upload code changes. Grader production and
+UI/animation are outside this correction.
 
-`prepared_request_intent_not_wire_or_served_identity` is the evidence boundary.
-The capture proves local prepared-input consistency at verification, not actual
-wire bytes, live inference identity, served capability or launch permission.
-Remaining work includes genuine external evidence acquisition and independent
-review; live identity/input consumption/wire binding; native sandbox/result
-bundle hosting; actual deployment and pilot execution; execution-time native-cap
-enforcement; and actual usage/tariff receipts. Both launch flags remain false.
-Automatic CI must also validate the corrected fixture.
-
-No Azure API/CLI or HF calls, credential/OIDC lookup, provider/model/client
-execution, inference, grading, download, workflow dispatch or paid execution
-occurred. No live execution checkout was prepared. Production legacy defaults,
-exp035 configs, workflows, `core/qa.py`, HF upload and historical evidence bytes
-are unchanged. Project updates and merge decisions remain with the leader.
-This record contains pre-merge facts only, with no carrying-PR merge SHA, time
-or state.
+No Azure/HF/OIDC/provider/model/client/grader execution, credential lookup,
+inference, grading, download, paid execution or manual workflow dispatch
+occurred. Project and merge decisions remain with the leader. This record stops
+at pre-merge facts and contains no carrying-PR merge SHA, time or state.

@@ -13,6 +13,23 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Correct four Backend pytest failures reported for PR #637 at
+  `155279f6458ea3341f2c894a1177aaa698bc053d`, run `35506466839`, job
+  `106067021054`. Step 1 now safely reads optional legacy execution/capture
+  fields, allowing the unchanged manifest guards to reach their intended
+  refusal paths. The registered pilot's required-capture refusal remains.
+  Add `prepared_request_capture_unverified` to the config-bundle test's exact
+  expected blocker list and refresh only the changed Step 1 source pin in the
+  two active contracts. The single four-node correction selector reported
+  `4 passed in 5.39s`, exit 0. Reviewed correction HEAD:
+  `a81985b1f9f74f246d265a273913a9c3ec4cb31e`. `llm-systems-engineer` and
+  `first-reviewer` approved that correction without blocking findings.
+  Neither the full comparison selector nor the 124-case capture selector was
+  rerun locally. No capture helper, other production behavior, workflow,
+  timeout or launch flag changed. Local prepared request intent still does not
+  prove live wire/identity, native result hosting, actual execution/caps or
+  usage receipts. New-HEAD automatic CI remains a separate gate.
+
 - Correct the leader's BLOCK on PR #634 at
   `b872446d6e61cfaa8fa1558ee94ea4a6b4ff67ea`: the runtime artifact treated the
   requested model label as a deployment name and passed runtime validation even
