@@ -61,6 +61,23 @@ EVIDENCE_SOURCES = {
     "batch-runner/core/inference_manifest.py",
     "batch-runner/core/reference_integrity.py",
 }
+DISPATCH_GRADING_IDENTITY = {
+    "compiler": "batch-runner/gpt56_pilot_identity_plan.py",
+    "source_base_sha": "ed6c64f0afb90b0b3a6a9e4719e44184384296ec",
+    "plan_file": "foundry-pilot-identity-plan.json",
+    "ready_marker": "foundry-pilot-identity-ready.json",
+    "grader_template_source_hash": "db7e9c173dbf7ac60460609a62c7757fc99ee4e42b997f0bd7eac5a964913036",
+    "evidence_boundary": "offline_dispatch_grading_identity",
+}
+IDENTITY_SOURCES = {
+    DISPATCH_GRADING_IDENTITY["compiler"],
+    "batch-runner/step8_grade.py",
+    "batch-runner/core/grader.py",
+    "batch-runner/core/rubric_loader.py",
+    "batch-runner/core/grade_payload.py",
+    "batch-runner/prompts/grader_judge.md",
+    "batch-runner/prompts/grader_judge_v2.md",
+}
 REQUIRED_SOURCES = {
     BASELINE,
     GRADER,
@@ -85,7 +102,7 @@ REQUIRED_SOURCES = {
     "batch-runner/core/cost_receipts.py",
     "batch-runner/core/result_projection.py",
     "batch-runner/schemas/grade.schema.json",
-} | EVIDENCE_SOURCES
+} | EVIDENCE_SOURCES | IDENTITY_SOURCES
 # Findings on BASE_SHA, not editable waivers. Runtime changes need new review.
 LAUNCH_BLOCKERS = (
     "foundry_account_project_deployment_identity_unverified",
@@ -108,6 +125,9 @@ EVIDENCE_BLOCKER_ROLES = {
     "foundry_usage_and_tariff_mapping_unverified": ("usage", "tariff"),
 }
 EVIDENCE_REFUSAL = "foundry_evidence_gate_refused"
+IDENTITY_REFUSAL = "pilot_identity_plan_gate_refused"
+# A verified inert plan closes one local contract requirement, not dispatch.
+IDENTITY_PLAN_BLOCKERS = ("pilot_dispatch_and_grading_identity_not_wired",)
 
 
 class _CLIArgumentsRefused(ValueError):
@@ -160,6 +180,7 @@ def _inspect_plan_only(plan: dict[str, Any]) -> dict[str, Any]:
         "owner_approved_eventual_execution": True,
         "launch_enabled": False,
         "evidence_intake": EVIDENCE_INTAKE,
+        "dispatch_grading_identity": DISPATCH_GRADING_IDENTITY,
         "identity": {
             "provider": "azure",
             "model": "gpt-5.6-sol",
@@ -324,7 +345,7 @@ def _evidence_refusal(result: dict[str, Any] | None = None) -> dict[str, Any]:
     return result
 
 
-def inspect_plan(
+def _inspect_plan_with_evidence(
     plan: dict[str, Any], *, evidence_bundle: Path | None = None,
     reviewed_source_sha: str | None = None, as_of: str | None = None,
 ) -> dict[str, Any]:
@@ -395,9 +416,70 @@ def inspect_plan(
         return _evidence_refusal(result)
 
 
+def _identity_refusal(result: dict[str, Any] | None = None) -> dict[str, Any]:
+    if result is None:
+        result = {"configuration_valid": False, "launch_blockers": list(LAUNCH_BLOCKERS)}
+    result.update({
+        "launch_allowed": False,
+        "full_220_allowed": False,
+        "identity_plan_gate": {
+            "identity_complete": False, "consumed_plan_sha256": None,
+            "evidence_linkage": None, "cleared_blockers": [],
+            "remaining_blockers": list(result["launch_blockers"]),
+            "evidence_boundary": DISPATCH_GRADING_IDENTITY["evidence_boundary"],
+            "refusal_code": IDENTITY_REFUSAL,
+        },
+    })
+    return result
+
+
+def inspect_plan(
+    plan: dict[str, Any], *, evidence_bundle: Path | None = None,
+    reviewed_source_sha: str | None = None, as_of: str | None = None,
+    identity_bundle: Path | None = None,
+) -> dict[str, Any]:
+    """Optionally consume an exact sealed identity; absent/null is unchanged."""
+    if identity_bundle is None:
+        return _inspect_plan_with_evidence(
+            plan, evidence_bundle=evidence_bundle, reviewed_source_sha=reviewed_source_sha, as_of=as_of,
+        )
+    result = None
+    try:
+        result = _inspect_plan_with_evidence(
+            plan, evidence_bundle=evidence_bundle, reviewed_source_sha=reviewed_source_sha, as_of=as_of,
+        )
+        if not result["configuration_valid"] or (
+            "evidence_gate" in result and result["evidence_gate"]["evidence_complete"] is not True
+        ):
+            return _identity_refusal(result)
+        # Intake/compiler plan checks re-enter the no-bundle path, never this
+        # explicit consumption branch. Do not import or verify on legacy calls.
+        from gpt56_pilot_identity_plan import verify_pilot_identity
+
+        verified = verify_pilot_identity(
+            plan, bundle_root=identity_bundle, evidence_bundle=evidence_bundle,
+            reviewed_source_sha=reviewed_source_sha, as_of=as_of,
+        )
+        remaining = [name for name in result["launch_blockers"] if name not in IDENTITY_PLAN_BLOCKERS]
+        gate = {
+            "identity_complete": True, "consumed_plan_sha256": verified.sha256,
+            "evidence_linkage": verified.as_dict()["evidence_linkage"],
+            "cleared_blockers": list(IDENTITY_PLAN_BLOCKERS), "remaining_blockers": remaining,
+            "evidence_boundary": DISPATCH_GRADING_IDENTITY["evidence_boundary"],
+        }
+        result["launch_blockers"] = remaining
+        if "evidence_gate" in result:
+            result["evidence_gate"]["remaining_blockers"] = remaining
+        result["identity_plan_gate"] = gate
+        return result
+    except Exception:
+        return _identity_refusal(result)
+
+
 def main(argv: list[str] | None = None) -> int:
     arguments = sys.argv[1:] if argv is None else argv
     evidence_requested = False
+    identity_requested = False
     # A misspelled option can conceal which mode was intended. All argument
     # errors are non-echoing; valid plan-only invocations keep their report bytes.
     parser = _SafeArgumentParser(description=__doc__)
@@ -405,27 +487,29 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--evidence-bundle", type=Path, help="Published local Foundry evidence bundle")
     parser.add_argument("--reviewed-source-sha", help="Externally reviewed full 40-hex source SHA")
     parser.add_argument("--as-of", help="Externally supplied UTC time, YYYY-MM-DDTHH:MM:SSZ")
+    parser.add_argument("--identity-bundle", type=Path, help="Published inert pilot dispatch/grading identity")
     try:
         args = parser.parse_args(arguments)
         evidence_requested = any(value is not None for value in (
             args.evidence_bundle, args.reviewed_source_sha, args.as_of,
         ))
+        identity_requested = args.identity_bundle is not None
         result = inspect_plan(
             load_plan(args.plan), evidence_bundle=args.evidence_bundle,
-            reviewed_source_sha=args.reviewed_source_sha, as_of=args.as_of,
+            reviewed_source_sha=args.reviewed_source_sha, as_of=args.as_of, identity_bundle=args.identity_bundle,
         )
     except Exception as error:
         if isinstance(error, _CLIArgumentsRefused):
             evidence_requested = True
-        if not evidence_requested and not isinstance(error, (OSError, ValueError, KeyError, TypeError, yaml.YAMLError)):
+        if not (evidence_requested or identity_requested) and not isinstance(error, (OSError, ValueError, KeyError, TypeError, yaml.YAMLError)):
             raise
-        result = _evidence_refusal() if evidence_requested else {
+        result = _identity_refusal() if identity_requested else _evidence_refusal() if evidence_requested else {
             "configuration_valid": False,
             "launch_allowed": False,
             "full_220_allowed": False,
             "error": str(error),
         }
-    print(_canonical_json(result) if evidence_requested else json.dumps(result, indent=2, ensure_ascii=False))
+    print(_canonical_json(result) if evidence_requested or identity_requested else json.dumps(result, indent=2, ensure_ascii=False))
     return 2  # No paid pilot or 220-task run can be launched by this module.
 
 
