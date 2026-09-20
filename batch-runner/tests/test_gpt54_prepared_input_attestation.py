@@ -556,7 +556,7 @@ def test_prepared_input_attestation_binds_actual_bytes_without_execution(case, t
                 assert "comparison_materialization_and_workflow_gates_not_wired" in inspection["launch_blockers"]
                 assert len(preflight.REQUIRED_SOURCES) == 34
                 assert set(inputs["manifest"]["source_pins"]) == preflight.REQUIRED_SOURCES
-                sol = preflight.load_plan(preflight.ROOT / preflight.ENVELOPE / "gpt56_sol_copilot_codex_pilot.yaml")
+                sol = preflight.load_plan(preflight.ROOT / preflight.ENVELOPE / "gpt56_sol_foundry_codex_pilot.yaml")
                 parser = "batch-runner/gpt54_comparison_preflight.py"
                 assert sol["source_pins"][parser] == _identity((preflight.ROOT / parser).read_bytes())["sha256"]
         else:

@@ -1,9 +1,11 @@
 # Codex's own agent: what is officially supported, and what is still unknown
 
-The current work adds **requested Codex reasoning and context controls** in
-section 14. The GitHub Copilot GPT-5.6 Sol pilot in section 13 remains blocked
-from execution. Sections 1–12 preserve their dated findings about the Foundry path;
-they are not evidence that the requested Copilot route exists.
+The active next-model pilot is **Azure AI Foundry GPT-5.6 Sol through Codex**
+in section 15, following the owner's provider correction. It remains blocked
+from execution. Section 13 preserves the superseded, non-runnable Copilot
+contract; the separate GHCP Codex Sol VM TODO is not activated here. Section 14
+documents the requested client controls. Sections 1–12 retain dated findings,
+not evidence about the future Sol deployment.
 
 - Written: 2026-08-25
 - Updated: 2026-08-26 — the documentation was searched again and half of the
@@ -1342,6 +1344,14 @@ paid run must be preceded by a fresh smoke at the new fingerprint.
 
 ## 13. GitHub Copilot GPT-5.6 Sol five-task pilot (2026-09-19)
 
+**Historical contract, superseded on 2026-09-20.** The owner corrected the active
+provider to Azure AI Foundry in section 15. The old YAML retains its original
+identity, controls, and source pins with `status: superseded`, an explicit
+`superseded_by` link, and disabled launch/full-run flags. The checker now selects
+the Foundry contract and rejects the old contract even when named by `--plan`.
+The following findings and Copilot-specific restrictions describe the old
+preregistration, not a second active pilot or a claim that Copilot is wired.
+
 ### Decision and scope
 
 The owner selected GitHub Copilot GPT-5.6 Sol through the Codex harness, with
@@ -1559,3 +1569,112 @@ replaces its forwarding gap with a served-capability boundary. Task order, input
 repeats, grader revisions, result schemas, record-only cost policy, and
 null/partial receipts are unchanged. A new immutable-HEAD review is required;
 no launch command becomes compliant through this change alone.
+
+## 15. Active Foundry GPT-5.6 Sol pilot contract (2026-09-20)
+
+The owner selected Azure AI Foundry, not GitHub Copilot, for the next-model
+pilot. This contract starts from immutable main
+`5cbbe3d90d491fde71c268629bdeacc8917ad937`. The sole active plan is
+`batch-runner/experiments/execution_envelope/gpt56_sol_foundry_codex_pilot.yaml`,
+with run ID `gpt56_sol_foundry_codex_pilot5_v1`. Its `supersedes` link preserves
+the Copilot record in section 13. That historical ID is not runnable, and the
+separate GHCP Codex GPT-5.6 Sol VM TODO remains outside this contract.
+
+### Existing route, requested settings, and missing evidence
+
+The requested model is GPT-5.6 Sol, not Fast or Astra, through the pinned Codex
+SDK/CLI `0.147.0`. The contract reuses `provider: azure`,
+`execution.mode: codex_foundry`, `endpoint_from_route: true`, the `direct-v1`
+route, and provider ID `gdpval-foundry`. The existing
+`CodexProviderSettings`/`resolve_endpoint_setting` path supplies provider
+configuration; `core.codex_azure_token` uses the repository-approved Entra
+credential route and `https://ai.azure.com/.default` scope. OIDC or an already
+approved Foundry credential route is required at execution time. No new token
+bridge, static credential, personal OpenAI account, Copilot handoff, provider
+fallback, or endpoint value is introduced.
+
+The future run place must supply `AZURE_AI_ROUTE_PROFILE=direct-v1`, its
+`AZURE_OPENAI_V1_ENDPOINT` and `AZURE_AI_EXPECTED_DIRECT_ACCOUNT`, with
+`AZURE_AI_REQUIRE_EXPECTED_IDENTITIES=1`. These are existing runtime controls,
+not new environment variables. The external account, project, deployment,
+served model/version and reviewed identity/capability evidence remain null in
+the registration. A deployment may have a name different from `gpt-5.6-sol`;
+both future runtime deployment fields must name the same externally reviewed
+deployment. Neither the requested model label nor the receipt's requested
+deployment name proves what model/version was served.
+
+The unchanged client requests are:
+
+```toml
+model_reasoning_effort="max"
+model_context_window=1000000
+```
+
+They do not establish that Foundry serves Max or the requested Long 1M context,
+or that the native call/input/output token limits are enforced. Those facts
+must be verified for the exact deployment before spending. Setting a null
+identity/evidence field to a self-asserted value does not pass this contract;
+binding external evidence requires a separately reviewed configuration change.
+
+### Fixed pilot and decision
+
+The five ordered task IDs, prompt hashes, dataset/parquet/catalog revision and
+hashes, both reference hashes, and developer instruction are unchanged from
+section 13. The plan uses one `advance_check_5` pilot, no repeat expansion,
+fresh sessions per attempt, and no relay, resume or automatic full-run
+escalation. The 1,800-second attempt limit, three infrastructure retries, one
+logical turn, zero provider retries, inactive generic token settings and null
+native limits are unchanged. Infrastructure retries do not measure spread.
+
+The grader template, source SHA
+`6ccd4ae346d302e3da0af455a3c5a72ec79a6984`, dataset rubric revision, `v2.2`
+prompt, Sol/Max judge, one grading pass and five-task scope are preserved.
+The historical full-220 inference identity is never reused. Deliverables use
+the existing result projection, grade schema `1.4`, and `cost-receipt-v1`;
+there is no alternate result or receipt schema.
+
+A future pilot pass requires all five tasks to retain verifiable identity,
+deliverables, grading provenance and usage/cost records under the fixed
+controls. It permits leader review and a separate full-run gate, not 220-task
+execution. Failure, unverifiable identity or input/limit drift stops
+progression and preserves the failed/partial evidence. The record-only cost
+policy is unchanged: unknown usage or price is null/partial with its reason,
+never zero. `core.codex_cost` still records `call_reachability_unknown` for
+native calls within a turn. Foundry usage and deployment/tier tariff mapping
+need reviewed evidence; OpenAI or Copilot tariffs cannot substitute for it.
+This does not make missing prices alone a cost-policy hard stop.
+
+The historical full-220 result is not a simultaneous control. The moving axes
+are the inference model, explicit Max request, requested context window, cohort
+size/order, scheduling, source revision, future host/time, deployment identity,
+and usage/tariff mapping. The provider family and Codex harness now match the
+Foundry baseline, but the account, deployment, served capability, native tools,
+compaction, cache behavior and wire input equivalence are not verified. One
+five-task pilot cannot measure within-condition spread, establish a model-only
+effect or predict another account's performance. The Sol judge shares a model
+family with the solver; pinning it does not resolve that grading bias.
+
+### Offline gate and remaining work
+
+`gpt56_sol_codex_pilot_preflight.py` checks the sole active registration,
+historical retirement, exact controls and 23 source-file pins. The seven pins
+added to the earlier 16 bind this checker, the historical contract, the
+catalog selector and seal helpers, the Azure route/token helpers, and the
+dependency manifest. Active cross-contract tests now read the Foundry plan;
+the historical source map is frozen. The checker always exits 2 and reports
+`launch_allowed: false` and `full_220_allowed: false`, including for a valid
+contract. It is not a runtime approval service or a paid dispatcher.
+
+Remaining work includes external account/project/deployment and served-version
+identity, Max/1M capability, native call/token caps, actual input bytes, a
+pilot-specific dispatch/grading and external inference identity, a verified
+native sandbox/result-bundle host, actual deployment, and Foundry usage/tariff
+receipts. Copilot auth handoff is not an active Foundry blocker. No compliant
+paid pilot command exists from this contract alone. After separate review of
+those boundaries, the existing batch workflow is the reuse target; this unit
+changes no workflow, runtime, grader or historical result bytes.
+
+The single targeted offline selector and immutable review are recorded in
+`tasks/LATEST_TASK_RESULT/README.md`. No Azure API/CLI, deployment creation,
+credential lookup, model/grader call, download, workflow dispatch or paid
+execution is part of this unit.

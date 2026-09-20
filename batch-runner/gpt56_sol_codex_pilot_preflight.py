@@ -1,8 +1,8 @@
-"""Validate the Copilot Sol pilot registration offline; never launch a run.
+"""Validate the Foundry Sol pilot registration offline; never launch a run.
 
-Exit 2 is intentional even for a valid registration. The pinned runtime is
-Foundry-only and cannot verify the requested Copilot route, Max, or Long 1M.
-This check is not wired into existing paid workflows.
+Exit 2 is intentional even for a valid registration. A supported provider path
+does not verify a deployment's identity, Max, Long 1M, limits, or tariff.
+This check neither reads credentials nor opens an existing paid workflow.
 """
 
 from __future__ import annotations
@@ -16,7 +16,10 @@ from typing import Any
 import yaml
 
 from core.agentic_v2_preregistration import seal
+from core.azure_ai_clients import DIRECT_TOKEN_SCOPE
 from core.codex_runtime_config import (
+    DEFAULT_AUTH_MODULE,
+    DEFAULT_PROVIDER_ID,
     PINNED_CODEX_CLI_VERSION,
     PINNED_CODEX_SDK_VERSION,
     requested_model_config_overrides,
@@ -31,10 +34,13 @@ from core.experiment_config import ExperimentConfig
 from gpt54_comparison_preflight import load_plan
 
 ROOT = Path(__file__).resolve().parents[1]
-BASE_SHA = "a5ed62bd55471c0fd8bdd637c9312315a17ebf4b"
+BASE_SHA = "5cbbe3d90d491fde71c268629bdeacc8917ad937"
 GRADER_SOURCE_SHA = "6ccd4ae346d302e3da0af455a3c5a72ec79a6984"
 ENVELOPE = "batch-runner/experiments/execution_envelope/"
-PLAN = ROOT / ENVELOPE / "gpt56_sol_copilot_codex_pilot.yaml"
+ACTIVE_PLAN = ENVELOPE + "gpt56_sol_foundry_codex_pilot.yaml"
+HISTORICAL_PLAN = ENVELOPE + "gpt56_sol_copilot_codex_pilot.yaml"
+PLAN = ROOT / ACTIVE_PLAN
+RUN_ID = "gpt56_sol_foundry_codex_pilot5_v1"
 BASELINE = "batch-runner/experiments/exp035_codex_foundry_full220.yaml"
 GRADER = "batch-runner/grading_configs/exp035_codex_foundry_full220_v2_sol_max.yaml"
 REQUIRED_SOURCES = {
@@ -42,7 +48,14 @@ REQUIRED_SOURCES = {
     GRADER,
     ENVELOPE + "gdpval_task_catalog.json",
     ENVELOPE + "advance_check_plan.yaml",
+    HISTORICAL_PLAN,
     "batch-runner/gpt54_comparison_preflight.py",
+    "batch-runner/gpt56_sol_codex_pilot_preflight.py",
+    "batch-runner/core/agentic_v2_preregistration.py",
+    "batch-runner/core/execution_envelope_tasks.py",
+    "batch-runner/core/azure_ai_clients.py",
+    "batch-runner/core/codex_azure_token.py",
+    "batch-runner/requirements.txt",
     "batch-runner/core/experiment_config.py",
     "batch-runner/core/config.py",
     "batch-runner/core/codex_runtime_config.py",
@@ -57,13 +70,39 @@ REQUIRED_SOURCES = {
 }
 # Findings on BASE_SHA, not editable waivers. Runtime changes need new review.
 LAUNCH_BLOCKERS = (
-    "github_copilot_route_not_implemented",
+    "foundry_account_project_deployment_identity_unverified",
+    "foundry_served_model_version_unverified",
     "max_and_long_1m_capability_unverified",
     "native_call_and_token_limits_unresolved",
     "live_identity_and_input_bytes_unverified",
     "pilot_dispatch_and_grading_identity_not_wired",
-    "copilot_usage_and_tariff_mapping_unverified",
+    "foundry_usage_and_tariff_mapping_unverified",
+    "native_sandbox_and_result_bundle_host_unverified",
+    "actual_pilot_deployment_not_prepared",
 )
+
+
+def _registration_problems() -> list[str]:
+    """Keep one active pilot; the old provider contract is retained, not routed."""
+    paths = sorted((ROOT / ENVELOPE).glob("gpt56_sol_*_codex_pilot.yaml"))
+    if {path.relative_to(ROOT).as_posix() for path in paths} != {
+        ACTIVE_PLAN, HISTORICAL_PLAN,
+    }:
+        return ["pilot_registration_set"]
+    registrations = {path.relative_to(ROOT).as_posix(): load_plan(path) for path in paths}
+    active = [name for name, plan in registrations.items() if plan.get("status") == "active"]
+    problems = []
+    if active != [ACTIVE_PLAN] or registrations[ACTIVE_PLAN].get("pilot", {}).get("run_id") != RUN_ID:
+        problems.append("active_pilot_identity")
+    historical = registrations[HISTORICAL_PLAN]
+    if (
+        historical.get("status") != "superseded"
+        or historical.get("superseded_by") != ACTIVE_PLAN
+        or historical.get("launch_enabled") is not False
+        or historical.get("pilot", {}).get("full_220_enabled") is not False
+    ):
+        problems.append("historical_pilot_not_retired")
+    return problems
 
 
 def inspect_plan(plan: dict[str, Any]) -> dict[str, Any]:
@@ -75,13 +114,15 @@ def inspect_plan(plan: dict[str, Any]) -> dict[str, Any]:
     selection = select_advance_check_tasks(catalog)
     tasks = {task.task_id: task for task in catalog.tasks}
     expected = {
-        "plan_version": "gpt56-sol-copilot-codex-pilot-v1",
+        "plan_version": "gpt56-sol-foundry-codex-pilot-v1",
+        "status": "active",
+        "supersedes": HISTORICAL_PLAN,
         "base_sha": BASE_SHA,
         "baseline": BASELINE,
         "owner_approved_eventual_execution": True,
         "launch_enabled": False,
         "identity": {
-            "provider": "github_copilot",
+            "provider": "azure",
             "model": "gpt-5.6-sol",
             "model_label": "GPT-5.6 Sol",
             "fast_mode": False,
@@ -98,12 +139,33 @@ def inspect_plan(plan: dict[str, Any]) -> dict[str, Any]:
             "automatic_fallback_allowed": False,
             "fallbacks": [],
         },
+        "foundry_route": {
+            "execution_mode": "codex_foundry",
+            "route_profile": "direct-v1",
+            "endpoint_from_route": True,
+            "provider_id": DEFAULT_PROVIDER_ID,
+            "auth_module": DEFAULT_AUTH_MODULE,
+            "auth_scope": DIRECT_TOKEN_SCOPE,
+            "credential_policy": "repository_approved_entra_only",
+            "require_expected_identities": True,
+        },
+        # A model label is not a deployment name or externally reviewed evidence.
+        # No endpoint/account/credential values are committed or resolved here.
+        "foundry_identity": {
+            "account": None,
+            "project": None,
+            "deployment": None,
+            "served_model": None,
+            "served_model_version": None,
+            "identity_evidence_sha256": None,
+            "capability_evidence_sha256": None,
+        },
         "codex_request": {
             "reasoning_effort": "max",
             "model_context_window": 1_000_000,
         },
         "pilot": {
-            "run_id": "gpt56_sol_copilot_codex_pilot5_v1",
+            "run_id": RUN_ID,
             "cohort": "advance_check_5",
             "task_count": 5,
             "repeats": 1,
@@ -163,7 +225,9 @@ def inspect_plan(plan: dict[str, Any]) -> dict[str, Any]:
         "cost": {
             "policy": envelope["cost"]["policy"],
             "approved_maximum_usd": None,
-            "use_foundry_or_openai_tariff_for_copilot": False,
+            "usage_adapter": "core.codex_cost",
+            "foundry_tariff_evidence_sha256": None,
+            "use_openai_or_copilot_tariff_for_foundry": False,
             "billing_evidence": "provider_native_usage_without_invented_currency_conversion",
         },
     }
@@ -175,6 +239,7 @@ def inspect_plan(plan: dict[str, Any]) -> dict[str, Any]:
     ]
     if set(plan) != set(expected) | {"source_pins"}:
         problems.append("plan_key_set")
+    problems.extend(_registration_problems())
     pins = plan.get("source_pins")
     if not isinstance(pins, dict) or set(pins) != REQUIRED_SOURCES:
         problems.append("source_pin_set")
@@ -187,7 +252,7 @@ def inspect_plan(plan: dict[str, Any]) -> dict[str, Any]:
         "configuration_valid": not problems,
         "configuration_problems": problems,
         "plan_sha256": seal(plan),
-        # These are client requests, not proof of a served Copilot capability.
+        # These are client requests, not proof of a served Foundry capability.
         "requested_codex_config_overrides": (
             list(requested_model_config_overrides(**plan["codex_request"]))
             if not problems else None
