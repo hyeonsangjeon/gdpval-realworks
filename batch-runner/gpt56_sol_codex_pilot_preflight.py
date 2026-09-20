@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -31,7 +32,7 @@ from core.execution_envelope_tasks import (
     select_advance_check_tasks,
 )
 from core.experiment_config import ExperimentConfig
-from gpt54_comparison_preflight import load_plan
+from gpt54_comparison_preflight import _canonical_json, load_plan
 
 ROOT = Path(__file__).resolve().parents[1]
 BASE_SHA = "5cbbe3d90d491fde71c268629bdeacc8917ad937"
@@ -97,6 +98,26 @@ LAUNCH_BLOCKERS = (
     "native_sandbox_and_result_bundle_host_unverified",
     "actual_pilot_deployment_not_prepared",
 )
+# Only these local evidence requirements may be satisfied by the intake
+# verifier. The mapping is closed, not inferred from blocker-name substrings.
+EVIDENCE_BLOCKER_ROLES = {
+    "foundry_account_project_deployment_identity_unverified": ("identity",),
+    "foundry_served_model_version_unverified": ("identity",),
+    "max_and_long_1m_capability_unverified": ("reasoning", "context"),
+    "native_call_and_token_limits_unresolved": ("native_caps",),
+    "foundry_usage_and_tariff_mapping_unverified": ("usage", "tariff"),
+}
+EVIDENCE_REFUSAL = "foundry_evidence_gate_refused"
+
+
+class _CLIArgumentsRefused(ValueError):
+    """An argument error cannot safely identify the caller's intended mode."""
+
+
+class _SafeArgumentParser(argparse.ArgumentParser):
+    def error(self, message: str) -> None:
+        # Never repeat arguments that might contain evidence or credentials.
+        raise _CLIArgumentsRefused(EVIDENCE_REFUSAL)
 
 
 def _registration_problems() -> list[str]:
@@ -122,7 +143,7 @@ def _registration_problems() -> list[str]:
     return problems
 
 
-def inspect_plan(plan: dict[str, Any]) -> dict[str, Any]:
+def _inspect_plan_only(plan: dict[str, Any]) -> dict[str, Any]:
     """Check declared controls against existing sources, not live capabilities."""
     baseline = ExperimentConfig.from_yaml(str(ROOT / BASELINE))
     envelope = load_plan(ROOT / ENVELOPE / "advance_check_plan.yaml")
@@ -281,20 +302,130 @@ def inspect_plan(plan: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--plan", type=Path, default=PLAN)
-    args = parser.parse_args(argv)
+def _evidence_refusal(result: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Keep every blocker and expose no unverified input or exception value."""
+    if result is None:
+        result = {"configuration_valid": False}
+    result.update({
+        "launch_allowed": False,
+        "full_220_allowed": False,
+        "launch_blockers": list(LAUNCH_BLOCKERS),
+        "evidence_gate": {
+            "evidence_complete": False,
+            "consumed_bundle_sha256": None,
+            "reviewed_source_sha": None,
+            "evaluated_at": None,
+            "cleared_blockers": [],
+            "remaining_blockers": list(LAUNCH_BLOCKERS),
+            "evidence_boundary": EVIDENCE_INTAKE["evidence_boundary"],
+            "refusal_code": EVIDENCE_REFUSAL,
+        },
+    })
+    return result
+
+
+def inspect_plan(
+    plan: dict[str, Any], *, evidence_bundle: Path | None = None,
+    reviewed_source_sha: str | None = None, as_of: str | None = None,
+) -> dict[str, Any]:
+    """Inspect a plan, optionally consuming a published local evidence bundle.
+
+    All three evidence arguments must be explicit. With all absent/null, the
+    legacy report and verifier-free path are unchanged. Verification is read
+    only and satisfies local evidence requirements, never launch authorization.
+    Refused evidence retains every blocker and returns a static refusal code.
+    """
+    if evidence_bundle is None and reviewed_source_sha is None and as_of is None:
+        return _inspect_plan_only(plan)
+    result = None
     try:
-        result = inspect_plan(load_plan(args.plan))
-    except (OSError, ValueError, KeyError, TypeError, yaml.YAMLError) as error:
-        result = {
+        result = _inspect_plan_only(plan)
+        if (not result["configuration_valid"] or evidence_bundle is None
+                or type(reviewed_source_sha) is not str or type(as_of) is not str):
+            return _evidence_refusal(result)
+        # Intake calls inspect_plan(plan) to validate its own active plan. A
+        # lazy import and the no-evidence branch above avoid recursive intake.
+        from gpt56_foundry_evidence_intake import verify_foundry_evidence
+
+        bundle = verify_foundry_evidence(
+            bundle_root=evidence_bundle, reviewed_source_sha=reviewed_source_sha, as_of=as_of,
+        )
+        document = bundle.as_dict()
+        expected_binding = {
+            "bundle_version": "foundry-pilot-evidence-ready-v1",
+            "evidence_boundary": EVIDENCE_INTAKE["evidence_boundary"],
+            "reviewed_source_sha": reviewed_source_sha,
+            "plan_base_sha": plan["base_sha"],
+            "plan_sha256": result["plan_sha256"],
+            "run_id": RUN_ID,
+            "source_pins": plan["source_pins"],
+            "evidence_complete": True,
+            "missing_evidence": [],
+            "launch_enabled": False,
+            "full_220_enabled": False,
+            "remaining_launch_blockers": list(LAUNCH_BLOCKERS),
+        }
+        if bundle.missing or any(
+            seal({"value": document.get(key)}) != seal({"value": value})
+            for key, value in expected_binding.items()
+        ):
+            return _evidence_refusal(result)
+        # The real verifier checked each role's schema, observations and bytes.
+        # Select only the explicitly mapped requirements from that complete set.
+        roles = {role for required in EVIDENCE_BLOCKER_ROLES.values() for role in required}
+        if set(document["claims"]) != roles:
+            return _evidence_refusal(result)
+        cleared = [name for name in LAUNCH_BLOCKERS if name in EVIDENCE_BLOCKER_ROLES]
+        remaining = [name for name in LAUNCH_BLOCKERS if name not in EVIDENCE_BLOCKER_ROLES]
+        result["launch_blockers"] = remaining
+        result["evidence_gate"] = {
+            "evidence_complete": True,
+            "consumed_bundle_sha256": bundle.sha256,
+            "reviewed_source_sha": reviewed_source_sha,
+            # Reverification uses the supplied time, not the original intake time.
+            "evaluated_at": as_of,
+            "cleared_blockers": cleared,
+            "remaining_blockers": remaining,
+            "evidence_boundary": EVIDENCE_INTAKE["evidence_boundary"],
+        }
+        return result
+    except Exception:
+        # This trust boundary must not render parser/verifier exception text.
+        # Unexpected errors are refusals too, never an evidence waiver.
+        return _evidence_refusal(result)
+
+
+def main(argv: list[str] | None = None) -> int:
+    arguments = sys.argv[1:] if argv is None else argv
+    evidence_requested = False
+    # A misspelled option can conceal which mode was intended. All argument
+    # errors are non-echoing; valid plan-only invocations keep their report bytes.
+    parser = _SafeArgumentParser(description=__doc__)
+    parser.add_argument("--plan", type=Path, default=PLAN)
+    parser.add_argument("--evidence-bundle", type=Path, help="Published local Foundry evidence bundle")
+    parser.add_argument("--reviewed-source-sha", help="Externally reviewed full 40-hex source SHA")
+    parser.add_argument("--as-of", help="Externally supplied UTC time, YYYY-MM-DDTHH:MM:SSZ")
+    try:
+        args = parser.parse_args(arguments)
+        evidence_requested = any(value is not None for value in (
+            args.evidence_bundle, args.reviewed_source_sha, args.as_of,
+        ))
+        result = inspect_plan(
+            load_plan(args.plan), evidence_bundle=args.evidence_bundle,
+            reviewed_source_sha=args.reviewed_source_sha, as_of=args.as_of,
+        )
+    except Exception as error:
+        if isinstance(error, _CLIArgumentsRefused):
+            evidence_requested = True
+        if not evidence_requested and not isinstance(error, (OSError, ValueError, KeyError, TypeError, yaml.YAMLError)):
+            raise
+        result = _evidence_refusal() if evidence_requested else {
             "configuration_valid": False,
             "launch_allowed": False,
             "full_220_allowed": False,
             "error": str(error),
         }
-    print(json.dumps(result, indent=2, ensure_ascii=False))
+    print(_canonical_json(result) if evidence_requested else json.dumps(result, indent=2, ensure_ascii=False))
     return 2  # No paid pilot or 220-task run can be launched by this module.
 
 

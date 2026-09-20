@@ -1807,3 +1807,81 @@ authorization. Real evidence acquisition and independent review, native result
 hosting, actual deployment, execution/identity/limit gates, input/wire evidence,
 and usage/tariff receipt integration remain outstanding. No paid pilot command
 is introduced.
+
+## 17. Consume Foundry evidence in the pilot preflight (2026-09-20)
+
+This unit starts from immutable main
+`0c54611a30b586c6f42ab9e364cde0746374d0ae`. The existing pilot preflight can
+now consume a published local evidence bundle through `inspect_plan` or its
+CLI. This is a read-only check of external evidence, not evidence acquisition,
+Azure authentication, live capability verification or launch authorization.
+
+The explicit input group is `evidence_bundle`, `reviewed_source_sha` and
+`as_of`, exposed as `--evidence-bundle`, `--reviewed-source-sha` and `--as-of`.
+All three are required when evidence is requested. An incomplete group is
+refused. With all three absent/null, the preflight keeps the existing nine
+blockers, report fields, ordering and CLI serialization without importing the
+verifier. Refreshing the already-pinned preflight source changes the active
+plan's canonical digest; it does not change the no-bundle report format or any
+experiment control. Bundles sealed to the previous plan are stale and must be
+reissued through intake. No old-plan exception is allowed.
+
+The evidence branch calls the real `verify_foundry_evidence` with the caller's
+full reviewed source SHA and UTC evaluation time. It verifies the reservation,
+canonical ready marker, current artifacts, active plan and pinned source bytes.
+The preflight then checks the returned plan/base/run/source binding and exact
+`evidence_complete=true`. The supplied evaluation time may be later than the
+intake time, but cannot precede it or exceed the evidence/tariff validity. It
+never substitutes the marker's original time or the local clock.
+
+Only a complete matching bundle can satisfy this closed mapping. Blocker names
+are literal keys, not substring matches or operator-supplied waivers.
+
+| Cleared preflight requirement | Verified evidence roles |
+| --- | --- |
+| `foundry_account_project_deployment_identity_unverified` | `identity` |
+| `foundry_served_model_version_unverified` | `identity` |
+| `max_and_long_1m_capability_unverified` | `reasoning`, `context` |
+| `native_call_and_token_limits_unresolved` | `native_caps` |
+| `foundry_usage_and_tariff_mapping_unverified` | `usage`, `tariff` |
+
+The four remaining blockers keep their existing order:
+
+- `live_identity_and_input_bytes_unverified`
+- `pilot_dispatch_and_grading_identity_not_wired`
+- `native_sandbox_and_result_bundle_host_unverified`
+- `actual_pilot_deployment_not_prepared`
+
+The complete report adds `evidence_gate` with `consumed_bundle_sha256`,
+`reviewed_source_sha`, `evaluated_at`, `evidence_complete`, `cleared_blockers`,
+`remaining_blockers` and `evidence_boundary`. The bundle digest is the SHA256
+of the verified canonical ready bytes. Evidence-mode CLI output is canonical
+JSON. No raw evidence, resource/response hashes, endpoints or credentials are
+included. Every evidence refusal retains all nine blockers and uses
+`foundry_evidence_gate_refused`; unverified digest/SHA/time fields remain null.
+Argument and plan-loading failures in evidence mode also use that static code.
+All CLI argument errors use the non-echoing refusal path, since a misspelled
+option cannot reliably identify the intended mode. Valid plan-only invocations
+retain their existing report bytes.
+
+An example offline invocation, not a launch command:
+
+```bash
+PYTHONPATH=batch-runner python3 batch-runner/gpt56_sol_codex_pilot_preflight.py \
+  --evidence-bundle /local/published-bundle \
+  --reviewed-source-sha <externally-reviewed-full-40-hex-sha> \
+  --as-of <UTC-reverification-time>
+```
+
+The CLI still exits 2, including for complete evidence. Both `launch_allowed`
+and `full_220_allowed` remain false, as do the manifest's launch flags. No null
+verified identity or native-cap field in the plan is populated. Satisfying a
+local evidence requirement does not prove the external export is authentic or
+that a pilot runtime enforces its recorded caps. The boundary remains
+`offline_local_consistency`.
+
+Real evidence acquisition and independent review, external inference identity,
+live input/wire evidence, native sandbox/result-bundle hosting, actual pilot
+deployment and lineage, dispatch/grading and runtime usage/receipt integration
+remain outstanding. This unit changes no provider/runtime/grader default,
+workflow, `core/qa.py`, HF upload script, fixed five-task input or launch flag.

@@ -13,6 +13,24 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Add an optional read-only Foundry evidence gate to the GPT-5.6 Sol Codex
+  pilot preflight. A complete, current bundle can satisfy exactly five local
+  evidence requirements through a closed role mapping; live input/identity,
+  dispatch/grading, native host and actual deployment blockers remain. The
+  no-bundle path keeps its report shape and serialization, while the source-pin
+  refresh necessarily changes the plan digest. Evidence reports contain only
+  approved summary fields and use static refusal codes. Both launch flags stay
+  false. The sole selector reported `4 failed, 92 passed in 9.95s`: four privacy
+  assertions matched a required blocker name as a substring. The assertion was
+  corrected to inspect JSON keys and actual values without a rerun. Immutable
+  review also found that a misspelled option could echo an untrusted value.
+  The parser now refuses all argument errors without echoing values, with one
+  added regression and a refreshed source pin. The corrected implementation
+  was approved at `7cccfc675adfa856e499ca428dcf755a481716b4`. Automatic CI must
+  validate all post-run corrections; no local green result is claimed. No live
+  evidence acquisition, provider/model/grader call, workflow dispatch or paid
+  execution occurred.
+
 - Add an offline evidence intake for the active Foundry GPT-5.6 Sol Codex
   pilot. It binds six privacy-screened local JSON evidence roles to the
   caller-reviewed source SHA, active plan, exact run and 30 pinned sources.
