@@ -188,7 +188,7 @@ def test_exact_hash_bound_candidate_uses_all_real_verifiers_and_parser(deploymen
     assert _reservation(case).read_bytes() == binding._reservation(result)
     assert document["run_id"] == pilot.RUN_ID and document["condition"] == "codex_foundry" and document["repeat"] == 1
     assert document["task_ids"] == TASK_IDS and document["expected_task_count"] == 5
-    assert document["source_pins"] == case.plan["source_pins"] and len(document["source_pins"]) == 52
+    assert document["source_pins"] == case.plan["source_pins"] and len(document["source_pins"]) == 55
     assert case.plan["deployment_binding"] == pilot.DEPLOYMENT_BINDING
     assert document["evidence_boundary"] == binding.BOUNDARY
     assert document["launch_allowed"] is document["full_220_allowed"] is False
