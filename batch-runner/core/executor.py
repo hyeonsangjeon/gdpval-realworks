@@ -724,6 +724,8 @@ class TaskExecutor:
                 cost_ledger=codex_cost_ledger,
                 run_id=run_id,
                 condition_name=condition_name,
+                **({"pilot_wire_receipts": opts["pilot_wire_receipts"]}
+                   if opts.get("pilot_wire_receipts") is not None else {}),
             )
 
         elif mode == "json_renderer":

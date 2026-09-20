@@ -66,7 +66,7 @@ DISPATCH_GRADING_IDENTITY = {
     "source_base_sha": "ed6c64f0afb90b0b3a6a9e4719e44184384296ec",
     "plan_file": "foundry-pilot-identity-plan.json",
     "ready_marker": "foundry-pilot-identity-ready.json",
-    "grader_template_source_hash": "49f882c8b4e19d60c91130431fa06393d9da7d96b15aff25b16755136298f8bc",
+    "grader_template_source_hash": "e24fa5bf8dd2f095e863d719d77430a6ae09e3d690fabdfcf89a4912795b5ce3",
     "evidence_boundary": "offline_dispatch_grading_identity",
 }
 IDENTITY_SOURCES = {
@@ -122,6 +122,14 @@ CAPTURE_SOURCES = {
     "batch-runner/core/data_loader.py",
     "batch-runner/prepare_dataset.py",
 }
+WIRE_RECEIPT = {
+    "recorder": "batch-runner/gpt56_pilot_wire_receipt.py",
+    "source_base_sha": "0cd4c5e76805384a77afabf28b3663a3ad6596c0",
+    "ready_marker": "pilot-wire-receipts-ready.json",
+    "evidence_boundary": "codex_app_server_transport_not_foundry_http_or_served_identity",
+    "requires_live_session_witness": True,
+    "clears_live_identity_and_wire_blocker": False,
+}
 REQUIRED_SOURCES = {
     BASELINE,
     GRADER,
@@ -146,7 +154,9 @@ REQUIRED_SOURCES = {
     "batch-runner/core/cost_receipts.py",
     "batch-runner/core/result_projection.py",
     "batch-runner/schemas/grade.schema.json",
-} | EVIDENCE_SOURCES | IDENTITY_SOURCES | INPUT_SOURCES | DEPLOYMENT_SOURCES | CAPTURE_SOURCES | {CONFIG_BUNDLE["materializer"]}
+} | EVIDENCE_SOURCES | IDENTITY_SOURCES | INPUT_SOURCES | DEPLOYMENT_SOURCES | CAPTURE_SOURCES | {
+    CONFIG_BUNDLE["materializer"], WIRE_RECEIPT["recorder"],
+}
 # Findings on BASE_SHA, not editable waivers. Runtime changes need new review.
 LAUNCH_BLOCKERS = (
     "foundry_account_project_deployment_identity_unverified",
@@ -237,6 +247,7 @@ def _inspect_plan_only(plan: dict[str, Any]) -> dict[str, Any]:
         "input_bundle": INPUT_BUNDLE,
         "deployment_binding": DEPLOYMENT_BINDING,
         "pre_execution_capture": PRE_EXECUTION_CAPTURE,
+        "wire_receipt": WIRE_RECEIPT,
         "identity": {
             "provider": "azure",
             "model": "gpt-5.6-sol",
