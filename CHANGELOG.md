@@ -80,6 +80,41 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Add session-owned native-workspace and accepted-result receipts for the
+  registered Foundry GPT-5.6 Sol five-task pilot. The exact live capture/wire
+  session owns workspace observations before cleanup, strict deliverable
+  collection, Step 2 acceptance and saved-byte checks, and no-clobber publication
+  with the host ready marker last. A pre-host payload fingerprint avoids circular
+  result linkage. There is no disk-only witness adoption or offline preflight
+  consumption option. Both `native_sandbox_and_result_bundle_host_unverified`
+  and `live_inference_identity_and_wire_unverified` remain unresolved for the
+  current pilot. All launch/full-220 flags remain false. Legacy absent/null
+  behavior and output shapes are preserved; workflows, QA, grader production,
+  HF upload and the three-way Backend partition are unchanged. The source
+  closure grows from 52 to 55 files, with directly affected pins/counts refreshed.
+  The sole local command was
+  `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider --tb=short batch-runner/tests/test_gpt56_pilot_wire_receipt.py -k native_result_host`.
+  It reported `1 failed, 70 passed, 84 deselected in 2790.26s (0:46:30)`, exit 1.
+  The test called nonexistent `pilot.inspect` after its receipt checks; it now
+  uses `pilot.inspect_plan`. The existing fixture parse cache also now reads
+  current text-stream contents, keys by content and returns fresh copies while
+  retaining real validators and drift checks. Neither correction was rerun;
+  speedup and fresh hosted CI headroom are unmeasured. `llm-systems-engineer`
+  and `first-reviewer` approved immutable implementation
+  `d2850e6dd4d12ab5180bdaaeef17c840a2a90fa3` with no remaining findings.
+  The original PR #638 `88 passed in 642.32s (0:10:42)` remains
+  pre-account-correction evidence; its corrected 89-case full selector was not
+  rerun locally. Historical hosted HEAD
+  `9e6e42b85e56478f8082cd7bc9ae1fb6feb31812` subsequently passed all three
+  Backend jobs in run `35520193108`: comparison `106102829162` in `17:54`,
+  pilot `106102829266` in `18:27`, and core `106102829319` in `25:25`.
+  Those results do not validate this implementation. Synthetic host fixtures
+  do not prove a live pilot, remote isolation or served identity. Actual
+  wire/identity, live native-host evidence, execution/caps and usage/tariff
+  receipts remain separate work. No provider/model/client, grader, inference,
+  paid execution or manual workflow ran. Exact validation, review boundaries,
+  skills and remaining work are recorded in `tasks/LATEST_TASK_RESULT/README.md`.
+
 - Add a session-owned Codex app-server transport receipt for the registered
   Foundry GPT-5.6 Sol five-task pilot. The hook hashes actual serialized stdin
   bytes after write/flush, preserves native usage without invented pricing,
