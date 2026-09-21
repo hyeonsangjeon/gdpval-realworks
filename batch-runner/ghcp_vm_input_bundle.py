@@ -176,7 +176,9 @@ def _held_parents(root: Path, roles: tuple[str, ...]) -> Iterator[Callable[[], N
 
 
 @contextmanager
-def _publication_parents(root: Path) -> Iterator[tuple[Callable[[], None], Callable[[Path], None]]]:
+def _publication_parents(root: Path) -> Iterator[
+    tuple[Callable[[], None], Callable[[Path], None], Callable[[Path], int]]
+]:
     """Hold each exclusively created output directory through ready publication."""
     with ExitStack() as stack:
         descriptors: dict[Path, int] = {}
@@ -202,44 +204,50 @@ def _publication_parents(root: Path) -> Iterator[tuple[Callable[[], None], Calla
             hold(path, parent)
             check()
 
+        def directory_fd(path: Path) -> int:
+            check()
+            _require(path in descriptors)
+            return descriptors[path]
+
         hold(root)
         check()
-        yield check, mkdir
+        yield check, mkdir, directory_fd
 
 
-def _write_no_clobber(path: Path, data: bytes) -> None:
-    """Atomically link complete bytes into a held parent, without replacement.
+def _write_no_clobber(path: Path, data: bytes, *, parent_fd: int) -> None:
+    """Atomically publish through the caller-held parent, never reopen its path.
 
     Only the helper's private temporary link is removed. A published target,
     reservation or partial bundle is never removed, repaired or adopted.
+    The descriptor remains owned by the caller on success and refusal.
     """
-    _reject_symlink_components(path.parent)
-    descriptor = os.open(path.parent, _directory_flags())
+    _require(type(parent_fd) is int and parent_fd >= 0)
+    opened = os.fstat(parent_fd)
+    _require(stat.S_ISDIR(opened.st_mode))
+
+    def check_parent() -> None:
+        _reject_symlink_components(path.parent)
+        current, held = path.parent.lstat(), os.fstat(parent_fd)
+        _require(stat.S_ISDIR(current.st_mode) and stat.S_ISDIR(held.st_mode)
+                 and (current.st_dev, current.st_ino) == (opened.st_dev, opened.st_ino)
+                 and (held.st_dev, held.st_ino) == (opened.st_dev, opened.st_ino))
+
     temporary: str | None = None
     try:
-        opened = os.fstat(descriptor)
-
-        def check_parent() -> None:
-            _reject_symlink_components(path.parent)
-            current = path.parent.lstat()
-            _require(stat.S_ISDIR(current.st_mode)
-                     and (current.st_dev, current.st_ino) == (opened.st_dev, opened.st_ino))
-
         check_parent()
-        handle, name = tempfile.mkstemp(prefix=".ghcp-input-", dir=f"/proc/self/fd/{descriptor}")
+        handle, name = tempfile.mkstemp(prefix=".ghcp-input-", dir=f"/proc/self/fd/{parent_fd}")
         temporary = Path(name).name
         with os.fdopen(handle, "wb") as stream:
             stream.write(data)
             stream.flush()
             os.fsync(stream.fileno())
         check_parent()
-        os.link(temporary, path.name, src_dir_fd=descriptor, dst_dir_fd=descriptor, follow_symlinks=False)
+        os.link(temporary, path.name, src_dir_fd=parent_fd, dst_dir_fd=parent_fd, follow_symlinks=False)
+        check_parent()
     finally:
-        try:
-            if temporary is not None:
-                os.unlink(temporary, dir_fd=descriptor)
-        finally:
-            os.close(descriptor)
+        if temporary is not None:
+            os.unlink(temporary, dir_fd=parent_fd)
+    check_parent()
 
 
 def _stamp(metadata: os.stat_result) -> tuple[int, ...]:
@@ -460,18 +468,21 @@ def materialize_ghcp_input_bundle(
             bundle, reads = _snapshot(reviewed, parquet, references)
             for check in (check_code, check_parquet, check_references, check_parent):
                 check()
-            _write_no_clobber(reserved, _reservation(bundle))
+            _write_no_clobber(reserved, _reservation(bundle), parent_fd=parent_fd)
             check_parent()
             os.mkdir(root.name, mode=0o700, dir_fd=parent_fd)
             check_parent()
-            with _publication_parents(root) as (check_root, mkdir):
+            with _publication_parents(root) as (check_root, mkdir, directory_fd):
                 for role in _directories(bundle.files):
                     check_parent()
                     mkdir(_path(root, role))
                 for role, data in bundle.files:
                     check_parent()
                     check_root()
-                    _write_no_clobber(_path(root, role), data)
+                    path = _path(root, role)
+                    _write_no_clobber(path, data, parent_fd=directory_fd(path.parent))
+                    check_root()
+                    check_parent()
                 _members(root, bundle, published=False)
                 _check_reads(reads)
                 _require(_validated_plan(plan, reviewed_plan_sha256) == reviewed)
@@ -479,8 +490,11 @@ def materialize_ghcp_input_bundle(
                 _require(_read_file(reserved, MAX_DOCUMENT_BYTES).data == _reservation(bundle))
                 for check in (check_code, check_parquet, check_references, check_root, check_parent):
                     check()
-                # No fallible verification follows publication of this marker.
-                _write_no_clobber(root / READY_PATH, bundle.canonical_bytes())
+                # Ready is the last file written; a replaced directory still
+                # refuses success, retaining any already published bytes.
+                _write_no_clobber(root / READY_PATH, bundle.canonical_bytes(), parent_fd=directory_fd(root))
+                check_root()
+                check_parent()
                 return bundle
     except Exception:
         raise GHCPInputBundleRefused() from None

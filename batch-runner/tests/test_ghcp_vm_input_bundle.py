@@ -204,12 +204,12 @@ def test_ghcp_vm_input_bundle_real_publication_exact_order_bytes_closure_and_rea
         opened.append(path)
         return original_open(path, *args, **kwargs)
 
-    def track_write(path, data):
+    def track_write(path, data, **kwargs):
         if path == case.destination / case.bundle.READY_PATH:
             assert (case.destination / case.bundle.MANIFEST_PATH).is_file()
             assert (case.destination / case.bundle.PARQUET_PATH).read_bytes() == case.parquet_bytes
             assert reservation(case).is_file()
-        original_write(path, data)
+        original_write(path, data, **kwargs)
         written.append(path)
 
     monkeypatch.setattr(os, "open", track_open)
@@ -396,10 +396,10 @@ def test_ghcp_vm_input_bundle_failed_partial_is_retained_and_never_reused(inputs
     case = inputs()
     original = case.bundle._write_no_clobber
 
-    def fail(path, data):
+    def fail(path, data, **kwargs):
         if path == case.destination / case.bundle.PARQUET_PATH:
             raise OSError(PRIVATE + str(case.parent))
-        original(path, data)
+        original(path, data, **kwargs)
 
     with monkeypatch.context() as patch:
         patch.setattr(case.bundle, "_write_no_clobber", fail)
@@ -419,8 +419,8 @@ def test_ghcp_vm_input_bundle_mid_publication_drift_never_writes_ready(inputs, m
     original = case.bundle._write_no_clobber
     fired = []
 
-    def drift(path, data):
-        original(path, data)
+    def drift(path, data, **kwargs):
+        original(path, data, **kwargs)
         if path == case.destination / case.bundle.MANIFEST_PATH:
             targets = {
                 "parquet": case.parquet,
@@ -439,6 +439,58 @@ def test_ghcp_vm_input_bundle_mid_publication_drift_never_writes_ready(inputs, m
     assert fired == [fault]
     assert reservation(case).exists() and case.destination.exists()
     assert not (case.destination / case.bundle.READY_PATH).exists()
+    assert_preflight_refused(case)
+
+
+@pytest.mark.parametrize("fault", [
+    "reservation-parent", "parquet-parent", "reference-parent", "manifest-parent",
+    "ready-parent", "ready-after-write",
+])
+def test_ghcp_vm_input_bundle_publication_never_adopts_replaced_held_parents(inputs, monkeypatch, fault):
+    case = inputs()
+    if fault == "reservation-parent":
+        parent = case.parent / "output-parent"
+        parent.mkdir()
+        case.destination = parent / "local-bundle"
+    target = {
+        "reservation-parent": reservation(case),
+        "parquet-parent": case.destination / case.bundle.PARQUET_PATH,
+        "reference-parent": case.destination / sorted(case.reference_bytes)[0],
+        "manifest-parent": case.destination / case.bundle.MANIFEST_PATH,
+        "ready-parent": case.destination / case.bundle.READY_PATH,
+        "ready-after-write": case.destination / case.bundle.READY_PATH,
+    }[fault]
+    displaced = target.parent.with_name(target.parent.name + "-quarantined")
+    original, fired = case.bundle._write_no_clobber, []
+
+    def replace_parent(path, data, **kwargs):
+        if path != target:
+            return original(path, data, **kwargs)
+        if fault == "ready-after-write":
+            original(path, data, **kwargs)
+        # Real directory replacement at the write boundary, after caller checks.
+        target.parent.rename(displaced)
+        target.parent.mkdir()
+        fired.append(fault)
+        if fault != "ready-after-write":
+            return original(path, data, **kwargs)
+
+    monkeypatch.setattr(case.bundle, "_write_no_clobber", replace_parent)
+    assert_static_refusal(case, lambda: materialize(case))
+    assert fired == [fault]
+    assert displaced.is_dir() and target.parent.is_dir()
+    assert not target.exists()
+    assert not (case.destination / case.bundle.READY_PATH).exists()
+    if fault == "ready-after-write":
+        assert (displaced / case.bundle.READY_PATH).is_file()
+    elif fault == "ready-parent":
+        assert not (displaced / case.bundle.READY_PATH).exists()
+        assert (displaced / case.bundle.PARQUET_PATH).read_bytes() == case.parquet_bytes
+    if fault != "reservation-parent":
+        assert reservation(case).is_file()
+    assert case.parquet.read_bytes() == case.parquet_bytes
+    assert_static_refusal(case, lambda: verify(case))
+    assert_static_refusal(case, lambda: verify(case, bundle_root=displaced))
     assert_preflight_refused(case)
 
 
