@@ -176,6 +176,36 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Add an independent, blocked GHCP Codex GPT-5.6 Sol VM five-task contract
+  and a lightweight offline preflight. The historical Copilot pilot remains
+  superseded and byte-identical; the Foundry contract/source closure, runtime
+  and workflows are unchanged. The new condition pins `github_copilot`,
+  `gpt-5.6-sol` / `GPT-5.6 Sol`, Fast false, `codex`, `max` and Long 1M as
+  requests, never served-capability evidence. Existing helpers and sixteen
+  source pins preserve the exact five-task order, prompt/reference hashes,
+  deliverables, grader policy and null/partial result contract without
+  inheriting historical execution approval, limits or full-220 identity.
+  The closed reader refuses missing/extra/drifted fields, unsafe YAML,
+  aliases, duplicate keys, unsafe files and self-asserted observations with
+  static non-echoing errors. Even valid input exits 2, retaining fifteen
+  blockers, nine null observations and six false launch/paid/full-220 flags.
+  Auth supply/disposal, VM image/OS/packages and versions, reset/capture,
+  enforced limits, repeats/variance, time/cost ceilings, GHCP-native usage
+  policy, original input materialization and grader validation remain
+  unresolved. No Foundry/OpenAI tariff or inferred zero substitutes for
+  unavailable usage. The sole selector was
+  `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider --tb=short batch-runner/tests/test_ghcp_vm_gate_contract.py -k ghcp_vm_gate_contract`.
+  It reported `93 passed in 9.51s`, exit 0; `git diff --check` passed.
+  The new test file stays in core pytest, without expanding the GPT-5.6
+  contract jobs. `llm-systems-engineer` and `first-reviewer` approved immutable
+  implementation `26e6ce0d659655547dcdc5ac01730c3611f2c97f`; the selector passed
+  on that unchanged HEAD after static review. The later records-only commit
+  is outside their review boundary. `experiment-design` preceded planning,
+  and `im-not-ai-en` was applied to the English records. Exact blockers,
+  scope decisions and evidence limits are in `tasks/LATEST_TASK_RESULT/README.md`.
+  Fresh final-HEAD automatic CI remains required. No launch command, live
+  login, provider/model/client, VM, grader or paid execution was added or run.
+
 - Add offline intake for caller-pinned, sanitized Foundry receipt claims,
   bound to the original finalized capture/wire/host/caps owners and accepted
   result. The existing evidence schema gains closed, bounded shapes for exact

@@ -1,103 +1,140 @@
 # Latest substantive task result
 
-## PROJECT5-PR641-PILOT-WIRE-CI-PARTITION
+## PROJECT5-GHCP56-VM-GATE-CONTRACT
 
-Moved the existing non-native wire command into an independent `wire-contracts`
-job. `pilot-contracts` now runs only its existing general GPT-5.6 command.
-The correction changes the workflow partition and its static test, plus these
-completion records. Production intake/schema behavior, source pins, experiment
-settings, launch flags and runtime evidence boundaries are unchanged.
+Added an independent, inert GHCP VM prerequisite contract and a read-only
+offline preflight for `gpt56_sol_ghcp_codex_vm_pilot5_v1`. Work started in a
+new clean worktree at exact base `99e62ed5d4f1b1506841dd70a66c2696ac95b4c6`.
+The historical `gpt56_sol_copilot_codex_pilot.yaml` remains unchanged,
+superseded and non-runnable. The active Foundry contract, its source closure,
+runtime code and all workflows are unchanged.
 
-### Supplied hosted evidence and exact partition
+### Scope and preregistration
 
-The leader supplied the evidence for immutable HEAD
-`509c1d963a784814fe27dc1d1ed9f6c8a18a8d92`, Backend run `35559683998`,
-`pilot-contracts` job `106210033391`. The job started at
-`2026-09-21 04:05:02Z` and was cancelled at `2026-09-21 04:50:17Z` (45:15).
-Its first command succeeded with `1253 passed in 2478.08s (0:41:18)`.
-The second command selected 84 non-native wire cases and passed 33 before
-the shared 45-minute job ceiling cancelled it. The same HEAD's `pytest`,
-`validate`, `advance-check`, `comparison-contracts` and `native-host-contracts`
-were green. These supplied facts were not queried again. They establish that
-the commands shared an insufficient job budget, not an implementation defect.
+The new contract is
+`batch-runner/experiments/execution_envelope/gpt56_sol_ghcp_codex_vm_gate.yaml`.
+`batch-runner/ghcp_vm_gate_preflight.py` reuses the existing bounded local-file,
+canonical JSON, hashing and score-free task-selection helpers. Sixteen source
+pins bind the checker and the existing input, deliverable, grader and result
+contracts. The five task IDs and their order derive from the existing catalog
+and are checked against the pinned advance plan and historical pilot. Original
+prompt hashes, reference hashes and developer instructions are preserved.
+Grading policy metadata is reused without adopting the template's full-220
+identity or running a grader.
 
-The five Backend jobs now partition the same tests as follows:
+The requested condition is `github_copilot`, `gpt-5.6-sol` / `GPT-5.6 Sol`,
+Fast false, harness `codex`, reasoning `max`, and Long context with a nominal
+1,000,000-token request. These settings are not observations of served identity,
+capability or entitlement. No route, credential bridge or personal-account
+fallback is implemented. All nine observed fields remain null.
 
-| Job | Selection |
-| --- | --- |
-| `pytest` | Core tests, excluding the sorted union of 11 GPT-5.4 and 9 GPT-5.6 files, plus the unchanged repo-root script tests |
-| `comparison-contracts` | The exact 11 GPT-5.4 files |
-| `pilot-contracts` | The exact eight GPT-5.6 files other than the wire file |
-| `wire-contracts` | `tests/test_gpt56_pilot_wire_receipt.py -k "not native_result_host"` |
-| `native-host-contracts` | `tests/test_gpt56_pilot_wire_receipt.py -k native_result_host` |
+The experiment-design question is whether missing or drifted prerequisites
+are refused before any paid five-task run. Acceptance of a changed task/pin,
+an unresolved prerequisite or a requested setting as verified readiness would
+falsify the gate. Tasks, inputs, deliverables and grader policy stay fixed;
+this unit introduces only a separate GHCP VM condition. It makes no model
+performance comparison or environment-only causal claim and does not pool
+Foundry results or costs. Repeats and within-condition spread remain null.
+The existing grader is pinned, not independently validated for accuracy.
+Time and cost ceilings are unresolved. The stop rule is before spending;
+this unit authorizes no paid execution.
 
-The existing static node pins five job names, identical six-step setup, exact
-step names and commands, sorted file families, core exclusions, complementary
-wire predicates and complete exactly-once file/node coverage. The keyword
-remains confined to the wire source. No test or pytest invocation was added
-or removed. All jobs retain `ubuntu-latest`, 45-minute ceilings, pinned
-checkout/setup-python actions, Python `3.10.12`, full-history checkout without
-persisted credentials, dispatch/exact-checkout SHA guards, dependency/cache
-settings and both integration exclusions. Permissions remain `contents: read`;
-triggers and ref-scoped concurrency are unchanged. No secrets, OIDC,
-credentials, matrix, dependencies between jobs or job skips were added.
+Fresh VM snapshots and workdirs, no prior conversation/cache/output, and
+transcript/tool/command/file/exit capture are requirements, not proof that a
+VM has met them. Image/OS/package digests, version policy, exact GHCP/Codex
+versions, auth supply/disposal, network/permission policy and execution limits
+remain null. Usage must come from GHCP-native receipts. Missing or unpriced
+usage preserves null/partial reasons; no Foundry/OpenAI tariff, inferred zero
+or invented currency conversion is accepted. The missing-usage execution
+policy itself remains unresolved.
 
-The mandatory pre-edit `extreme-reasoner` memo returned
-APPROVE-WITH-CONDITIONS. Its conditions preserve coverage and security,
-require immutable review, and require fresh same-final-HEAD success from all
-five Backend jobs. The new check is not automatically an externally required
-branch-protection check; those settings were not changed. A newer same-ref run
-can still cancel all jobs. One more runner and setup raise the nominal
-aggregate allowance from 4 × 45 = 180 to 5 × 45 = 225 runner-minutes (+25%).
-This is neither a measured billing increase nor a guarantee of future timing
-headroom. Independent jobs retain independent verdicts.
+The closed v1 shape rejects extra or missing fields, drifted pins, caller
+repinning of existing sources, unsafe YAML, aliases, duplicate keys,
+non-regular or multiply linked plan files, and self-asserted observations.
+Refusals use the static code `ghcp_vm_gate_refused`, with no caller value,
+private host path or exception echo. A valid contract still exits 2 and reports
+all blockers, no eligible facts and no cleared blockers. There is no evidence
+intake, materializer, runtime route or launch command in this unit.
 
 ### Exact validation and immutable review
 
-Exactly one pytest invocation ran for this correction:
+Exactly one pytest invocation ran:
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider --tb=short batch-runner/tests/test_a_test_file_nobody_runs_is_not_a_test.py::test_backend_jobs_partition_the_comparison_contracts
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider --tb=short batch-runner/tests/test_ghcp_vm_gate_contract.py -k ghcp_vm_gate_contract
 ```
 
-Result: `1 passed in 0.23s`, exit 0. `git diff --check` passed.
-No receipt selector, contract group, broad/full suite, cancelled workflow or
-manual workflow ran. Workflow/test implementation HEAD:
-`f2140ee9a26fa527d914a94a5eabdac22ba7a536`. The read-only `first-reviewer`
-verdict is APPROVE, with no BLOCK, MAJOR or MINOR findings. The reviewer read
-the two changed files from immutable Git objects and ran no tests or CI
-queries. The later records-only commit is outside that implementation-review
-boundary. Fresh final-HEAD automatic CI remains required; earlier green
-checks and this static selector do not establish hosted timing headroom.
-The final-HEAD checks will be read once after the normal push, with the
-snapshot recorded in the completion response rather than another commit.
+It reported `93 passed in 9.51s`, exit 0. `git diff --check` against the exact
+base passed. The dedicated `test_ghcp_vm_gate_contract.py` remains in core
+pytest and adds no cases to the hosted GPT-5.6 contract groups. Tests cover
+the exact task/input/grader pins, requested identity, historical/Foundry/workflow
+byte preservation, null cost/usage, all blockers and false flags, malformed
+and drifted inputs, static private-input refusals and guarded offline imports,
+processes and network access. No other selector, broad suite, build, standalone
+application CLI, fidelity script or manual workflow ran.
 
-### Evidence limits, skills and ownership
+Immutable implementation HEAD: `26e6ce0d659655547dcdc5ac01730c3611f2c97f`.
+`llm-systems-engineer` and `first-reviewer` returned read-only APPROVE verdicts
+on that exact three-file implementation, with no blocking findings. Both
+reviews were static and preceded the sole selector, which passed on the same
+unchanged HEAD. The later completion-records-only commit is outside their
+review boundary. Fresh final-HEAD automatic CI remains required. Its checks
+will be read once after the normal push and reported in the completion
+response rather than another commit.
 
-The original intake result, `143 passed, 196 deselected in 2606.67s (0:43:26)`,
-remains tied to implementation `010f7ec0f80c29b6acd8a92077c424ef8f59ef4a`.
-It was not rerun and does not validate this scheduling change. Its complete
-record and older task history are preserved below. This correction does not
-authenticate provider provenance or clear any pilot blocker. All launch and
-full-220 flags remain false. Live wire/served identity, native result host,
-native call limits and Foundry usage/tariff evidence remain unresolved for
-the current pilot; separately approved evidence acquisition and execution
-remain future work.
+### Remaining blockers and evidence limits
 
-The full skill catalog was inspected once. `extreme-reasoner` was the first
-relevant agent because this changes a workflow and adds a runner.
-`first-reviewer` reviewed the immutable workflow/test correction.
-`im-not-ai-en` was applied to the English records, preserving commands,
-counts, times, SHAs and qualifications. `experiment-design` and
-`llm-systems-engineer` do not apply to this scheduling-only correction because
-no experiment or runtime evidence contract changes. UI/animation, grading and
-repo-readiness are outside scope: no interface, grader or publication-readiness
-work is involved.
+Every report retains these exact blockers:
 
-The existing author/committer identity `hyeonsangjeon <wingnut0310@gmail.com>`
-was preserved without attribution trailers or prohibited Git operations.
-No Azure/HF/OIDC, provider/model/client, grader, paid execution, Project edit
-or merge action occurred. This record stops at pre-merge facts.
+```text
+ghcp_route_served_identity_unverified
+max_long_1m_capability_unverified
+ghcp_codex_versions_unresolved
+authentication_supply_disposal_unresolved
+vm_image_os_packages_version_policy_unresolved
+fresh_task_vm_reset_unverified
+network_permission_policy_unresolved
+native_execution_limits_unresolved
+repeat_and_variance_plan_unresolved
+five_task_time_cost_caps_unresolved
+native_ghcp_usage_and_missing_usage_policy_unresolved
+original_task_input_materialization_unverified
+transcript_tool_command_file_exit_capture_unverified
+grading_result_runtime_unwired
+grader_validation_unverified
+```
+
+`launch_enabled`, `launch_allowed`, `paid_execution_enabled`,
+`paid_execution_allowed`, `full_220_enabled` and `full_220_allowed` remain
+false. Filling a null or setting a capability boolean cannot clear a blocker.
+A separately reviewed unit must define acquisition and verification of served
+identity/Max/1M, reproducible reset/capture, enforced limits, authentic GHCP
+usage and the remaining operational decisions before a paid run can be
+considered. These local tests prove only source consistency and refusal
+behavior; no VM, actual task input materialization or live result was produced.
+The Foundry evidence boundary remains separate and unchanged. Prior task and
+CI records retained below and in the changelog do not validate this new code.
+
+### Skills and ownership
+
+The complete skill catalog was inspected once. `experiment-design` was the
+first relevant skill and kept the question, falsification, fixed inputs,
+unresolved variance/judge validation and no-spend stop rule explicit.
+`llm-systems-engineer` implemented the contract/preflight and reviewed the
+immutable implementation; `first-reviewer` provided its independent review.
+`im-not-ai-en` was applied to these English records, preserving the commands,
+counts, SHAs, nulls and evidence limits by manual comparison under the
+selector-only validation restriction.
+
+UI/animation and repo-readiness skills do not apply to this offline contract.
+No grader behavior is changed or executed, so grading-engineer is not needed.
+`extreme-reasoner` is not triggered: workflows, core/QA, HF upload, credentials
+and runtime provider routes are untouched. The existing author/committer
+identity `hyeonsangjeon <wingnut0310@gmail.com>` was preserved without
+attribution trailers or prohibited Git operations. No Azure/Foundry/HF/OIDC,
+GHCP login/token, personal OpenAI/Codex account, provider/model/client, VM,
+grader or paid execution was used. No Project or merge action occurred.
+This record stops at pre-merge facts.
 
 ## Historical PROJECT5-GPT56-EXTERNAL-LIVE-RECEIPT-INTAKE
 
