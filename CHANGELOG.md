@@ -13,43 +13,42 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
-- Give PR #642's complete pilot preflight file its own
-  `pilot-preflight-contracts` job. The supplied evidence at
-  `b1f28554d636bf7763acbd50d0df7fca59dcc675` identifies Backend run
-  `35574884052`, `pilot-contracts` job `106254379443`, which started at
-  `2026-09-21 07:50:42Z` and was cancelled at `2026-09-21 08:35:56Z` (45:14).
-  Pytest began its 1253 items at `07:52:35Z`; the first seven files finished
-  by `08:00:12Z` (about 7:37). The last preflight file used about 35:42 and
-  reached 98% before the shared 45-minute job ceiling cancelled it. The
-  same HEAD's validate, pytest, advance-check, comparison-contracts,
-  wire-contracts and native-host-contracts checks were green. The seven
-  files remain in `pilot-contracts`; the preflight file runs whole in the
-  new sibling job with the same pytest flags. Core's 20 exclusions, the
-  11-file GPT-5.4 job and the complementary wire/native-host selectors
-  are unchanged. The static contract now requires six jobs, identical
-  setup, exact commands and complete, disjoint node coverage. The only
-  authorized GHCP test change refreshes `WORKFLOW_SHA256`; its assertion,
-  historical/Foundry pins and behavior remain unchanged. The pre-edit
-  `extreme-reasoner` decision was APPROVE-WITH-CONDITIONS. Security,
-  ref-scoped concurrency and 45-minute limits are unchanged; the nominal
-  aggregate allowance rises from 225 to 270 runner-minutes (+20%), with
-  one extra setup and pytest process but no extra test nodes. This is not
-  a billing or CI-headroom guarantee. The sole selector was
-  `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider --tb=short batch-runner/tests/test_a_test_file_nobody_runs_is_not_a_test.py::test_backend_jobs_partition_the_comparison_contracts`.
-  It reported `1 passed in 0.31s`, exit 0, on the bytes committed as
-  `7e91cde2e26cfe7082e5e2e5584167e329dfbce0`. A later comment correction
-  and coupled digest refresh were not rerun locally. `git diff --check`
-  passed. `first-reviewer` approved final implementation HEAD
-  `1bba3aa4b091d1bed45f95c8db9263170e2c57f5` with no remaining findings;
-  this records-only update is outside that review boundary. The earlier
-  GHCP result, `93 passed in 9.51s` at
-  `26e6ce0d659655547dcdc5ac01730c3611f2c97f`, is separate historical
-  evidence, not validation of this correction. `im-not-ai-en` was applied
-  to the English records; skill scope decisions are in
-  `tasks/LATEST_TASK_RESULT/README.md`. Fresh final-HEAD automatic CI is
-  still required for all six Backend jobs and other applicable checks.
-  No GHCP/Foundry production contract, runtime behavior, execution flag or
-  evidence boundary changed, and no live execution occurred.
+- Split PR #642's overloaded preflight selection into three exhaustive,
+  disjoint selections over the same file, bringing Backend to eight jobs.
+  At `f7e058d32ae0e6f3dc343c530e3b8239aa6d14a0`, the supplied Backend run
+  `35593387331`, `pilot-preflight-contracts` job `106312605362`, started at
+  `2026-09-21T11:18:51Z` and ended CANCELLED at `12:04:10Z` (45:19).
+  It collected 339 cases at `11:20:59Z`, reported 92% at `11:37:31Z`, and
+  logged cancellation at `12:04:07Z`. No assertion failure was reported,
+  but the unfinished tail has no passing verdict. All other checks on that
+  HEAD succeeded. Existing `pilot-preflight-contracts` now selects
+  `not external_live_receipt`; two new siblings divide the external cases
+  using the three exact publication/attempt function names recorded in
+  `tasks/LATEST_TASK_RESULT/README.md`. Every parameter case remains covered.
+  The remaining external group includes owner/refusal and shape cases.
+  The static guard verifies all eight jobs and compares actual pytest
+  collection-only node sets for the baseline and three selections. All
+  other selections, six-step setup, security controls, ref-scoped
+  concurrency and 45-minute limits are unchanged. Only the authorized
+  GHCP `WORKFLOW_SHA256` constant was refreshed; its assertion and
+  historical/Foundry pins remain intact. Pre-edit `extreme-reasoner` verdict:
+  APPROVE-WITH-CONDITIONS. Configured aggregate ceilings rise from 270 to
+  360 runner-minutes (+90, +33.3%), adding two setups/test processes plus
+  four collection subprocesses in the guard. These are allowances and
+  overhead sources, not billed usage or a headroom guarantee. The sole
+  focused command was
+  `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider --tb=short batch-runner/tests/test_a_test_file_nobody_runs_is_not_a_test.py::test_backend_jobs_partition_the_comparison_contracts batch-runner/tests/test_ghcp_vm_gate_contract.py::test_ghcp_vm_gate_contract_preserves_history_foundry_and_backend_partition`.
+  It reported `2 passed in 5.29s`, exit 0; `git diff --check` passed.
+  `first-reviewer` approved immutable implementation HEAD
+  `4578345570d4b38545e1367e73adf817c49091a9` with no findings.
+  Its review boundary excludes the later records-only update.
+  The prior `93 passed in 9.51s`, `1 passed in 0.31s` and local external
+  `143 passed / 196 deselected in 43:26` are separate historical evidence,
+  not validation of this split or proof of hosted timing headroom.
+  `im-not-ai-en` was applied to the English records. Fresh final-HEAD CI
+  remains required for all eight Backend jobs and other applicable checks.
+  No heavy cases, full suites, builds or manual workflows ran locally.
+  GHCP/Foundry behavior, launch flags and live evidence limits are unchanged.
 
 - Give PR #641's unchanged non-native wire command its own `wire-contracts`
   job. The supplied evidence at `509c1d963a784814fe27dc1d1ed9f6c8a18a8d92`

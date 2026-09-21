@@ -1,174 +1,147 @@
 # Latest substantive task result
 
-## PROJECT5-PR642-PILOT-PREFLIGHT-CI-PARTITION
+## PROJECT5-PR642-PREFLIGHT-BALANCED-CI
 
-Moved the complete GPT-5.6 preflight file into a sixth independent Backend
-job, `pilot-preflight-contracts`, on the existing PR #642 branch. The seven
-other general pilot files stay in `pilot-contracts`. No timeout was raised
-and no test node was removed. The GHCP gate implementation was not
-re-investigated or changed.
+Replaced the overloaded whole-file preflight selection with three exhaustive,
+disjoint selections over `tests/test_gpt56_sol_codex_pilot_preflight.py`.
+Two sibling jobs bring Backend to eight jobs. Existing check names and all
+other selections are preserved. No timeout or heavy test case was changed;
+fixture ownership, production behavior and live evidence boundaries are unchanged.
 
-### Supplied hosted evidence and scope
+### Confirmed cancellation and authorized split
 
-At `b1f28554d636bf7763acbd50d0df7fca59dcc675`, Backend run `35574884052`,
-`pilot-contracts` job `106254379443`, started at `2026-09-21 07:50:42Z`
-and was cancelled at `2026-09-21 08:35:56Z` (45:14). Pytest began its
-1253 items at `07:52:35Z`. The first seven GPT-5.6 files finished by
-`08:00:12Z`, about 7:37 later. The final
-`tests/test_gpt56_sol_codex_pilot_preflight.py` used about 35:42 and reached
-98% before the shared 45-minute job ceiling cancelled the job. On that
-same HEAD, validate, pytest, advance-check, comparison-contracts,
-wire-contracts and native-host-contracts were green. These are the leader's
-supplied timing facts; the cancelled job was not queried or rerun.
+The leader supplied the failure at
+`f7e058d32ae0e6f3dc343c530e3b8239aa6d14a0`: Backend run `35593387331`,
+`pilot-preflight-contracts` job `106312605362`, started at
+`2026-09-21T11:18:51Z` and ended CANCELLED at `12:04:10Z` (45:19).
+The isolated file collected 339 cases at `11:20:59Z`, reported 92% at
+`11:37:31Z`, and logged cancellation at `12:04:07Z`. No assertion failure
+was reported; the unfinished tail has no passing verdict. All other checks
+on that exact HEAD succeeded. No old log was queried and no cancelled job
+was rerun.
 
-The workflow now has this exact partition:
-
-| Job | Selection |
-| --- | --- |
-| `pytest` | Unchanged core command excludes the sorted union of 11 GPT-5.4 and 9 GPT-5.6 files; repo-root tests remain included. |
-| `comparison-contracts` | The same 11 `tests/test_gpt54_*.py` files. |
-| `pilot-contracts` | The seven general GPT-5.6 files listed below, each selected once without a keyword filter. |
-| `pilot-preflight-contracts` | Only the full `tests/test_gpt56_sol_codex_pilot_preflight.py`. |
-| `wire-contracts` | `tests/test_gpt56_pilot_wire_receipt.py -k "not native_result_host"`. |
-| `native-host-contracts` | `tests/test_gpt56_pilot_wire_receipt.py -k native_result_host`. |
-
-The sorted seven-file pilot selection is:
+The three jobs retain the same file and
+`-m "not integration" --tb=short -q -rs` flags. Their exact `-k` expressions
+use the following existing function names:
 
 ```text
-tests/test_gpt56_evidence_preflight_gate.py
-tests/test_gpt56_foundry_evidence_intake.py
-tests/test_gpt56_pilot_config_bundle.py
-tests/test_gpt56_pilot_deployment_binding.py
-tests/test_gpt56_pilot_identity_plan.py
-tests/test_gpt56_pilot_input_bundle.py
-tests/test_gpt56_pilot_input_capture.py
+A = test_external_live_receipt_real_owners_ready_last_and_no_disk_adoption_or_reuse
+B = test_external_live_receipt_mid_publication_drift_and_partials_cannot_be_adopted
+C = test_external_live_receipt_every_real_infrastructure_attempt_is_bound_without_inferred_calls
 ```
 
-The new `Run pilot preflight contracts` step runs the whole file with the
-unchanged `-m "not integration" --tb=short -q -rs` flags. Its six setup
-steps match the other five jobs exactly: dispatch SHA verification, pinned
-full-history checkout without persisted credentials, exact-checkout guard,
-pinned Python 3.10.12 with pip cache, dependency installation and the
-integration-deselection guard. All jobs use `ubuntu-latest`, `contents: read`
-and 45-minute ceilings under the existing ref-scoped concurrency. Triggers,
-action pins and existing check names are unchanged. No secrets, OIDC,
-credentials, matrix, job dependencies or job-level skips were added.
+| Job | Keyword expression, with A/B/C expanded literally in the workflow |
+| --- | --- |
+| `pilot-preflight-contracts` | `not external_live_receipt` |
+| `pilot-external-receipt-contracts` | `external_live_receipt and not (A or B or C)` |
+| `pilot-external-publication-contracts` | `A or B or C` |
 
-The existing static partition node requires six jobs, exact step names and
-commands, identical setup, all 11 GPT-5.4 and 9 GPT-5.6 files, the seven-plus-one
-pilot split, and complementary wire predicates. It retains keyword
-confinement, exhaustive/disjoint node selection and repo-root coverage.
+Every parameter case of A, B and C stays in the publication selection.
+Static fixture inspection confirmed that the remaining external selection
+still includes other owner/refusal cases, including caller-pin, no-clobber
+and current-file checks, as well as shape cases. It is not pure-shape-only.
+No cases were shortened and no mutable fixture sharing was introduced.
 
-The user explicitly authorized updating only `WORKFLOW_SHA256` in
-`test_ghcp_vm_gate_contract.py` to match the changed workflow bytes. Its final
-value is `9814528133f1c3a55a9122f857ce79575ce2b8e99215f216bd833c90128a384a`.
-The assertion, historical/Foundry pins, coverage and GHCP behavior are
-unchanged. No other GHCP test line, production file, source pin, runtime
-receipt or evidence mapping changed.
+Core's sorted 20-file exclusion union and repo-root tests are unchanged.
+The 11-file GPT-5.4 job, seven-file general pilot job, and wire/native-host
+jobs with complementary `not native_result_host` / `native_result_host`
+predicates are unchanged. The guard still pins all 11 GPT-5.4 and 9 GPT-5.6
+files and complete file coverage.
 
-### Decision, validation and immutable review
+All eight jobs retain the same six setup steps, `contents: read`,
+`ubuntu-latest`, 45-minute ceilings, pinned actions and Python 3.10.12,
+full-history checkout without persisted credentials, dispatch/workflow/checkout
+SHA guards, cache/dependencies and integration deselection. Ref-scoped
+concurrency and triggers are unchanged. No secrets, OIDC, matrix, job
+dependencies, job-level skips, xfails or verifier bypasses were added.
+Only the authorized `WORKFLOW_SHA256` constant changed in the GHCP test;
+its assertion, historical/Foundry pins and behavior remain intact. The new
+workflow digest is
+`a0cc6b2b76c43a143a73ef40da3cf8088b85a6c01b0f509a5606b91bb7b1fd8c`.
 
-The pre-edit `extreme-reasoner` verdict was APPROVE-WITH-CONDITIONS: preserve
-security/setup parity, complete disjoint coverage, independent jobs and exact
-check names, and require fresh final-HEAD CI. The nominal aggregate ceiling
-rises from 5 x 45 = 225 to 6 x 45 = 270 runner-minutes (+45, +20%). This adds
-one runner/setup cycle and one pytest process, not test nodes. It is not an
-actual billing estimate or a guarantee of headroom; process separation may
-also expose fixture or order dependence. Adding the check does not make it
-externally required by branch protection. No external gate setting changed.
-The memo's workflow-digest authorization blocker was resolved by the user's
-explicit one-constant approval.
+### Decision and exact validation
 
-Exactly one pytest invocation ran for this correction:
+The pre-edit `extreme-reasoner` decision was APPROVE-WITH-CONDITIONS,
+requiring exact coverage, unchanged security/setup and fresh final-HEAD CI.
+The configured aggregate ceiling rises from 6 x 45 = 270 to
+8 x 45 = 360 runner-minutes (+90, +33.3%). Two extra runner setups/test
+processes bring separate fixture/cache initialization. The guard adds four
+collection subprocesses. These describe configured ceilings and overhead,
+not billed usage or measured balance. Hosted headroom remains unproven;
+independent jobs may queue under existing concurrency. New check names do
+not automatically become required by external branch protection, which was
+not changed.
+
+The guard collects the actual non-integration preflight baseline and all
+three selections with pytest. It requires nonempty, duplicate-free,
+pairwise-disjoint node sets whose union equals the full baseline, and exact
+publication membership including all collected parameter cases. It does not
+approximate the new split with AST or regex matching. Each subprocess uses
+an argument list, the fixed interpreter and working directory, explicit
+collection-only mode and a 60-second bound; collection errors fail closed.
+Collection runs imports, hooks and plugins, but not test bodies or fixtures.
+The existing offline fixture is not represented as a collection-time sandbox.
+
+Exactly one focused pytest invocation ran:
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider --tb=short batch-runner/tests/test_a_test_file_nobody_runs_is_not_a_test.py::test_backend_jobs_partition_the_comparison_contracts
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider --tb=short batch-runner/tests/test_a_test_file_nobody_runs_is_not_a_test.py::test_backend_jobs_partition_the_comparison_contracts batch-runner/tests/test_ghcp_vm_gate_contract.py::test_ghcp_vm_gate_contract_preserves_history_foundry_and_backend_partition
 ```
 
-It reported `1 passed in 0.31s`, exit 0, on the bytes committed as
-`7e91cde2e26cfe7082e5e2e5584167e329dfbce0`. `first-reviewer` approved that
-HEAD and noted one stale comment saying five job verdicts. A normal follow-up
-commit changed that word to six and refreshed the coupled workflow digest.
-The selector was not rerun after those two line changes. `git diff --check`
-passed, including after the correction.
+It reported `2 passed in 5.29s`, exit 0. This includes the four collection-only
+subprocesses inside the guard, not execution of heavy preflight cases.
+`git diff --check` passed. No 339-case preflight, 143-case external,
+93-case GHCP, full suite, build, profile, fidelity script or manual workflow
+ran. The implementation was committed without changing the tested bytes as
+`4578345570d4b38545e1367e73adf817c49091a9`, based on
+`f7e058d32ae0e6f3dc343c530e3b8239aa6d14a0`.
 
-Final immutable implementation HEAD:
-`1bba3aa4b091d1bed45f95c8db9263170e2c57f5`, reviewed against
-`b1f28554d636bf7763acbd50d0df7fca59dcc675`. `first-reviewer` returned a fresh
-read-only APPROVE with no remaining findings on the complete three-file
-correction. The review used immutable Git objects and ran no tests or CI
-queries. This later records-only update is outside that review boundary.
-Fresh automatic CI on the final pushed HEAD is still required for all six
-Backend jobs and other applicable checks. Its checks will be read once after
-the normal push and reported in the completion response, not another commit.
-No GHCP selector, pilot group, full suite, build, fidelity script or manual
-workflow ran during this correction.
+### Immutable review and evidence limits
 
-### Historical GHCP evidence and remaining blockers
+`first-reviewer` returned APPROVE with no findings on exact implementation
+HEAD `4578345570d4b38545e1367e73adf817c49091a9`. The read-only review covered
+the three-file correction from immutable Git objects and ran no tests,
+collection or CI queries. This later two-file completion-record update is
+outside that implementation-review boundary. Fresh automatic CI on the final
+pushed HEAD remains required for all eight Backend jobs and other applicable
+checks.
+Checks will be read once after the normal push and reported in the completion
+response without waiting, polling or another records commit.
 
-The separate GHCP implementation at
-`26e6ce0d659655547dcdc5ac01730c3611f2c97f` received read-only
-`llm-systems-engineer` and `first-reviewer` APPROVE verdicts. Its command was
-`PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider --tb=short batch-runner/tests/test_ghcp_vm_gate_contract.py -k ghcp_vm_gate_contract`,
-which reported `93 passed in 9.51s`, exit 0. That selector was not rerun and
-does not validate this CI correction or its refreshed workflow digest.
+The earlier GHCP result, `93 passed in 9.51s` at
+`26e6ce0d659655547dcdc5ac01730c3611f2c97f`, and static result,
+`1 passed in 0.31s` on the bytes committed as
+`7e91cde2e26cfe7082e5e2e5584167e329dfbce0`, are separate historical evidence.
+The latter was not rerun after its comment/digest-only follow-up. Neither
+validates this correction. The earlier local external selector's
+`143 passed / 196 deselected in 43:26` likewise does not establish that the
+current full file fits a hosted 45-minute job.
 
-The historical Copilot pilot remains superseded and non-runnable. GHCP's
-requested Sol/Max/1M identity remains a request, not served evidence; all nine
-observed fields remain null. The exact five-task order, original input hashes,
-deliverable/grader contracts and sixteen GHCP source pins are unchanged.
-Every GHCP report still retains these 15 blockers:
-
-```text
-ghcp_route_served_identity_unverified
-max_long_1m_capability_unverified
-ghcp_codex_versions_unresolved
-authentication_supply_disposal_unresolved
-vm_image_os_packages_version_policy_unresolved
-fresh_task_vm_reset_unverified
-network_permission_policy_unresolved
-native_execution_limits_unresolved
-repeat_and_variance_plan_unresolved
-five_task_time_cost_caps_unresolved
-native_ghcp_usage_and_missing_usage_policy_unresolved
-original_task_input_materialization_unverified
-transcript_tool_command_file_exit_capture_unverified
-grading_result_runtime_unwired
-grader_validation_unverified
-```
-
-`launch_enabled`, `launch_allowed`, `paid_execution_enabled`,
-`paid_execution_allowed`, `full_220_enabled` and `full_220_allowed` remain
-false. Filling a null or setting a capability boolean cannot clear a blocker.
-A separately reviewed unit must define acquisition and verification of served
-identity/Max/1M, reproducible reset/capture, enforced limits, authentic GHCP
-usage and the remaining operational decisions before a paid run can be
-considered. Auth supply/disposal, VM image/version policy, repeat/variance,
-time/cost limits, missing-usage policy, actual input materialization and grader
-validation remain unresolved. This scheduling correction acquires none of
-that evidence. The Foundry contract, source closure, runtime and live
-wire/host/caps/billing boundaries remain separate and unchanged. Older task
-and CI records below do not validate the six-job correction.
+All 15 GHCP blockers remain unresolved, including served Sol/Max/1M identity,
+exact versions, auth supply/disposal, VM image/reset, network/permission policy,
+enforced limits, repeat/variance, time/cost caps, native usage honesty, input
+materialization, capture and grading readiness. The six launch/paid/full-220
+flags remain false, and no live evidence or execution permission was acquired.
+The historical Copilot record stays superseded; Foundry's separate source
+closure and wire/host/caps/billing evidence boundaries are unchanged.
 
 ### Skills and ownership
 
-The complete skill catalog was inspected once for this correction.
-`extreme-reasoner` was the first relevant agent because a workflow and runner
-budget changed. `first-reviewer` reviewed the immutable correction.
-`im-not-ai-en` was applied to these English records, preserving commands,
-times, counts, SHAs and evidence limits by manual comparison under the
-selector-only validation restriction. No fidelity script was run.
+The full skill catalog was inspected once for this correction.
+`extreme-reasoner` was the first relevant agent because the workflow and
+runner budget changed. `first-reviewer` reviewed the immutable correction.
+`im-not-ai-en` was applied to the English records, with manual preservation
+of commands, timestamps, counts, SHAs and qualifications under the focused
+validation restriction. `experiment-design` does not apply to a scheduling-only
+change with no new experiment setting or evidence contract. UI/animation,
+grading, repo-readiness and LLM-systems implementation skills do not apply:
+no interface, grader, publication-readiness audit or runtime pipeline changed.
 
-`experiment-design` and `llm-systems-engineer` belong to the earlier GHCP
-implementation, not this scheduling-only correction: no experiment setting,
-LLM pipeline or runtime contract changed. UI/animation, grading and
-repo-readiness skills do not apply because no interface, grading behavior or
-publication-readiness audit is in scope. The repository's existing
-author/committer identity `hyeonsangjeon <wingnut0310@gmail.com>` was preserved,
-without attribution trailers or prohibited Git operations. No Azure/Foundry/HF/
-OIDC, GHCP login/token, personal OpenAI/Codex account, provider/model/client,
-VM, grader or paid execution was used. No Project or merge action occurred.
-This record stops at pre-merge facts; PR #642 remains draft.
+The repository's existing author/committer identity
+`hyeonsangjeon <wingnut0310@gmail.com>` was preserved without attribution
+trailers or prohibited Git operations. No Azure, credentials/OIDC, provider,
+model/client, VM, grader, HF or paid execution occurred. No Project or merge
+action occurred. This record stops at pre-merge facts.
 
 ## Historical PROJECT5-GPT56-EXTERNAL-LIVE-RECEIPT-INTAKE
 
