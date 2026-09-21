@@ -213,6 +213,31 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Record one real offline GHCP five-task input bundle, published and verified
+  with the unchanged CLI at `c1c4e7a50af80a719bacae0054337a4306c5c051`.
+  The exact registered HF snapshot was already cached locally. Only its pinned
+  parquet and the two reference roles emitted by GHCP preflight were read.
+  Confined snapshot links were normalized to private single-link regular
+  files without downloading, altering the cache or relaxing the verifier.
+  Canonical reviewed plan SHA256:
+  `6cc207ee574e6b062cecfab8dd6035a0ab67cd0f2cba24516b2fdc149babd5dc`.
+  The existing materialize and verify operations each ran once and returned 0;
+  bundle-consuming preflight ran once and intentionally returned 2 with
+  `configuration_valid=true`. Ready/bundle SHA256:
+  `bdab5831512ab01bd68e292cf8f9558583abc1dcd46d405911076f24aeccc33d`.
+  Only `original_task_input_materialization_unverified` was cleared. Fourteen
+  requirements remain, all nine runtime observations remain null, and all six
+  launch/paid/full-220 flags remain false. The private bundle and handoff are
+  retained; only sanitized records enter Git. Exact input sizes/digests,
+  invocation shapes and verdicts are in `tasks/LATEST_TASK_RESULT/README.md`.
+  This is real local materialization, not VM/model consumption, grading or
+  paid readiness. The earlier synthetic `89 passed in 33.08s` is separate
+  implementation evidence; no pytest or live execution ran in this operation.
+  `experiment-design` retained the existing boundary; `experiment-report-en`
+  and `im-not-ai-en` preserve the evidence limits in the English records.
+  Immutable records review and fresh final-HEAD automatic checks remain
+  pending. Production code, plans, pins and workflows are unchanged.
+
 - Add a usable offline GHCP five-task input staging/verification library and
   CLI. It copies the entire pinned parquet byte-for-byte, only the registered
   reference closure, and the original developer instructions. A closed
