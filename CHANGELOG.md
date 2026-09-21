@@ -13,6 +13,43 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Correct PR #642's pytest target helper so it separates option tokens and
+  values from positional targets before any directory inspection. At
+  `99032f49c62ead8a39fd099943084a60dbd68418`, the supplied Backend run
+  `35608152827`, core pytest job `106360271871`, reported
+  `2 failed, 12658 passed, 61 skipped, 46 deselected in 1382.82s (23:02)`.
+  Both root parameter cases of
+  `test_the_workflow_still_runs_each_root_this_file_vouches_for` failed
+  because `_pytest_targets()` passed a long `-k` value to `Path.is_dir()`,
+  raising `OSError` errno 36. A small local parser now handles the workflow's
+  split and attached option values, positional directories and default cwd.
+  Unknown options and missing values fail before path inspection. The initial
+  change added 24 synthetic-workflow regressions in the same guard file;
+  every existing coverage assertion and collected-node partition check is
+  preserved.
+  The sole validation command was
+  `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider --tb=short batch-runner/tests/test_a_test_file_nobody_runs_is_not_a_test.py`.
+  It reported `31 passed in 5.41s`, exit 0, on the bytes committed as
+  `74c1118cd0b46274ce64150a7055cdac5e499d71`. `first-reviewer` then returned
+  REQUEST-CHANGES: a split option could consume the next option as its value.
+  The surgical correction rejects such missing values before path inspection
+  and adds three refusal cases. Corrected implementation HEAD
+  `8ab40556de0e599f21d3ecfb57bce05861adfdf6` received immutable, read-only
+  `first-reviewer` APPROVE with no findings. The correction and three added
+  cases were not rerun locally, so the 31-pass result does not validate them.
+  `git diff --check` passed after the correction. The later records-only
+  update is outside the
+  implementation-review boundary.
+  The earlier balanced split reported `2 passed in 5.29s` at
+  `4578345570d4b38545e1367e73adf817c49091a9`; all seven non-core Backend
+  jobs, validate and advance-check then succeeded at `99032f49c`.
+  Those results are historical evidence, not validation of this helper fix.
+  Workflow bytes, the GHCP workflow-digest pin, eight-job selections,
+  timeouts, production behavior and heavy tests are unchanged.
+  `im-not-ai-en` was applied to the English records. Fresh final-HEAD
+  automatic checks remain required. No old logs were queried; no heavy test
+  bodies, full suites or manual workflows ran. No live evidence was acquired.
+
 - Give PR #641's unchanged non-native wire command its own `wire-contracts`
   job. The supplied evidence at `509c1d963a784814fe27dc1d1ed9f6c8a18a8d92`
   identifies Backend run `35559683998`, `pilot-contracts` job `106210033391`,
@@ -175,6 +212,36 @@ entries land under a fresh dated heading the day they merge to `main`.
   No provider, model, grader or workflow was executed.
 
 ### Added
+
+- Add an independent, blocked GHCP Codex GPT-5.6 Sol VM five-task contract
+  and a lightweight offline preflight. The historical Copilot pilot remains
+  superseded and byte-identical; the Foundry contract/source closure, runtime
+  and workflows are unchanged. The new condition pins `github_copilot`,
+  `gpt-5.6-sol` / `GPT-5.6 Sol`, Fast false, `codex`, `max` and Long 1M as
+  requests, never served-capability evidence. Existing helpers and sixteen
+  source pins preserve the exact five-task order, prompt/reference hashes,
+  deliverables, grader policy and null/partial result contract without
+  inheriting historical execution approval, limits or full-220 identity.
+  The closed reader refuses missing/extra/drifted fields, unsafe YAML,
+  aliases, duplicate keys, unsafe files and self-asserted observations with
+  static non-echoing errors. Even valid input exits 2, retaining fifteen
+  blockers, nine null observations and six false launch/paid/full-220 flags.
+  Auth supply/disposal, VM image/OS/packages and versions, reset/capture,
+  enforced limits, repeats/variance, time/cost ceilings, GHCP-native usage
+  policy, original input materialization and grader validation remain
+  unresolved. No Foundry/OpenAI tariff or inferred zero substitutes for
+  unavailable usage. The sole selector was
+  `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider --tb=short batch-runner/tests/test_ghcp_vm_gate_contract.py -k ghcp_vm_gate_contract`.
+  It reported `93 passed in 9.51s`, exit 0; `git diff --check` passed.
+  The new test file stays in core pytest, without expanding the GPT-5.6
+  contract jobs. `llm-systems-engineer` and `first-reviewer` approved immutable
+  implementation `26e6ce0d659655547dcdc5ac01730c3611f2c97f`; the selector passed
+  on that unchanged HEAD after static review. The later records-only commit
+  is outside their review boundary. `experiment-design` preceded planning,
+  and `im-not-ai-en` was applied to the English records. Exact blockers,
+  scope decisions and evidence limits are in `tasks/LATEST_TASK_RESULT/README.md`.
+  Fresh final-HEAD automatic CI remains required. No launch command, live
+  login, provider/model/client, VM, grader or paid execution was added or run.
 
 - Add offline intake for caller-pinned, sanitized Foundry receipt claims,
   bound to the original finalized capture/wire/host/caps owners and accepted
