@@ -13,6 +13,32 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Correct only the linked input-bundle test's ordered blocker expectation in
+  PR #640. At `be06873cee480a7db6b03557af20f85ebf848bb0`, the leader reported
+  Backend run `35549673553`, `pilot-contracts` job `106181955827`, completing
+  in 25:52 with `1 failed, 1109 passed in 1552.54s`. The failure was
+  `tests/test_gpt56_pilot_input_bundle.py::test_explicit_verified_bundle_closes_only_prepared_input_requirement`
+  at line 306. The list omitted `native_call_and_token_limits_unresolved` and
+  `foundry_usage_and_tariff_mapping_unverified`; production correctly retains
+  these runtime-observation requirements after complete offline declarations.
+  The sole correction command was
+  `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider --tb=short batch-runner/tests/test_gpt56_pilot_input_bundle.py::test_explicit_verified_bundle_closes_only_prepared_input_requirement`.
+  It reported `2 passed in 7.73s`, exit 0, covering both parameter cases.
+  `git diff --check` passed. Test-only correction HEAD:
+  `ffd841ee2d58b1bdc538227baa712c486429aa60`; fresh read-only
+  `llm-systems-engineer` and `first-reviewer` verdicts are both APPROVE, with
+  no findings. The records-only commit follows those approvals and is outside
+  their test-only review boundary.
+  The prior `86 passed, 110 deselected in 939.90s (0:15:39)` result remains
+  tied to `97b9e1c07149a7f85e9e33a85cb5d6b15dd99a96`; its subsequent
+  reference-drift fixture and test-name corrections at
+  `e84761f3589cdade5ba0f9d066a490042cceaa86` were not rerun locally.
+  The caps/usage, wire and native-host selectors were not rerun. No production,
+  source pin, workflow, flag, evidence mapping or other test changed. Live caps,
+  usage/tariff, wire and native-host requirements remain unresolved, and all
+  launch/full-220 flags remain false. Fresh automatic CI is required; no live
+  execution, Project or merge action occurred.
+
 - Correct PR #639's stale capture-verification trace and split native-host
   cases into a fourth Backend job. The leader reported that at
   `3d8336933ed26266332c97b3caf1235b95cb98e4`, run `35529571789`, pilot job

@@ -1,6 +1,77 @@
 # Latest substantive task result
 
-## PROJECT5-GPT56-RUNTIME-CAPS-USAGE-RECEIPT
+## PROJECT5-PR640-INPUT-BUNDLE-EXPECTATION-FIX
+
+Corrected only the expected ordered blocker list in the linked input-bundle
+case. The exact correction selector passed both parameter cases:
+`2 passed in 7.73s`, exit 0. Production, source pins, workflows, launch flags,
+evidence mappings and every other test are unchanged.
+
+### Hosted failure and correction
+
+The leader supplied the failure evidence for PR #640 HEAD
+`be06873cee480a7db6b03557af20f85ebf848bb0`: Backend run `35549673553`,
+`pilot-contracts` job `106181955827`, completed in 25:52 and reported
+`1 failed, 1109 passed in 1552.54s`. The exact failure was
+`tests/test_gpt56_pilot_input_bundle.py::test_explicit_verified_bundle_closes_only_prepared_input_requirement`
+at line 306.
+
+The linked case's expected list omitted
+`native_call_and_token_limits_unresolved` and
+`foundry_usage_and_tariff_mapping_unverified`. The unchanged production mapping
+correctly keeps both requirements because complete offline declarations do not
+establish runtime call or billing observations. The correction adds them in
+the existing canonical order, before and after the live-wire requirement.
+All other list entries and assertions are unchanged. The explicit input-bundle
+gate still clears only `prepared_input_bytes_unverified`.
+
+### Exact validation and immutable review
+
+Exactly one local pytest command ran on the existing PR branch/worktree:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider --tb=short batch-runner/tests/test_gpt56_pilot_input_bundle.py::test_explicit_verified_bundle_closes_only_prepared_input_requirement
+```
+
+Result: `2 passed in 7.73s`, exit 0. Both `linked=False` and `linked=True`
+parameter cases passed. `git diff --check` passed. No pilot-contracts,
+runtime_caps_usage, native-host, wire, broad/full suite or manual workflow
+was run locally.
+
+Test-only immutable correction HEAD:
+`ffd841ee2d58b1bdc538227baa712c486429aa60`. Fresh read-only
+`llm-systems-engineer` and `first-reviewer` verdicts are both APPROVE, with no
+findings. Both reviewers checked immutable Git objects without running tests
+or querying CI. Completion records follow both approvals and are outside that
+test-only review boundary. Fresh automatic CI at the final HEAD is still required.
+
+### Preserved evidence and remaining blockers
+
+The original caps/usage selector reported
+`86 passed, 110 deselected in 939.90s (0:15:39)` at
+`97b9e1c07149a7f85e9e33a85cb5d6b15dd99a96`. The reference-drift fixture and
+stale evidence-test-name corrections at
+`e84761f3589cdade5ba0f9d066a490042cceaa86` received both immutable approvals
+but were not rerun locally. This correction's two-case result is separate
+evidence; it does not validate the full caps/usage or native-host selectors.
+The earlier #639 and #638 records below remain historical.
+
+This linked input-only path retains native call/token limits, live identity/wire,
+Foundry usage/tariff mapping, native host, actual deployment and prepared-request
+capture requirements. Even after all separately verified local preparation,
+the four caps, billing, live-wire and native-host blockers recorded below remain
+unresolved for the current pilot. All launch/full-220 flags stay false. No live
+receipt or new capability evidence was produced.
+
+`im-not-ai-en` was applied to the English records to preserve exact commands,
+SHAs, counts, timings and the distinction between hosted failure, local
+correction evidence and prior unrerun fixes. Existing Git identity
+`hyeonsangjeon <wingnut0310@gmail.com>` is unchanged, with no attribution
+trailers or prohibited Git operations. No Azure/HF/OIDC, provider/model/client,
+grader or paid execution, Project edit or merge action occurred. This record
+stops at pre-merge facts.
+
+## Historical PROJECT5-GPT56-RUNTIME-CAPS-USAGE-RECEIPT
 
 Implemented a caps/usage receipt owner attached to the registered Foundry
 GPT-5.6 Sol pilot's existing capture, wire and accepted-result session. The sole
