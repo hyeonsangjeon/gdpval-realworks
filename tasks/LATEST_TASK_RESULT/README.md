@@ -142,13 +142,22 @@ the existing exact-byte acceptance boundary: missing/drifted bytes or uncertain
 provenance would stop the operation. No settings were invented.
 `experiment-report-en` separates the real local observation from unobserved
 runtime claims; `im-not-ai-en` preserves the exact values and limits while
-copyediting the English records. `first-reviewer` will review the immutable
+copyediting the English records. `first-reviewer` reviewed the immutable
 records-only commit. No implementation work required `llm-systems-engineer`.
 UI/animation, grading, repo-readiness and extreme-reasoner do not apply because
 no interface, grading behavior, publication-readiness audit or workflow changed.
 
-Immutable records review is pending. Fresh final-HEAD automatic checks remain
-required and will be read once after the normal push without waiting or polling.
+Read-only `first-reviewer` returned APPROVE with no findings on records HEAD
+`8ea66191829148c3f84bc8564c00951f15ea225e` against base
+`c1c4e7a50af80a719bacae0054337a4306c5c051`. The reviewer compared immutable Git
+records with the saved sanitized evidence. The review did not independently
+rehash raw inputs or repeat the operation; execution counts and cache handling
+were reviewed from the supplied operational handoff. No tests, imports,
+application CLI, network/CI queries or edits were performed by the reviewer.
+This later acknowledgment is outside that initial review boundary.
+
+`git diff --check` passed. Fresh final-HEAD automatic checks remain required
+and will be read once after the normal push without waiting or polling.
 The existing author/committer identity is
 `hyeonsangjeon <wingnut0310@gmail.com>`; no attribution trailers are added.
 No Project card edit or merge action was performed. This record stops at

@@ -235,8 +235,12 @@ entries land under a fresh dated heading the day they merge to `main`.
   implementation evidence; no pytest or live execution ran in this operation.
   `experiment-design` retained the existing boundary; `experiment-report-en`
   and `im-not-ai-en` preserve the evidence limits in the English records.
-  Immutable records review and fresh final-HEAD automatic checks remain
-  pending. Production code, plans, pins and workflows are unchanged.
+  Read-only `first-reviewer` returned APPROVE with no findings on records HEAD
+  `8ea66191829148c3f84bc8564c00951f15ea225e`, comparing the records with saved
+  sanitized evidence without rereading raw inputs or rerunning the operation.
+  This later review acknowledgment is outside that initial review boundary.
+  `git diff --check` passed; fresh final-HEAD automatic checks remain required.
+  Production code, plans, pins and workflows are unchanged.
 
 - Add a usable offline GHCP five-task input staging/verification library and
   CLI. It copies the entire pinned parquet byte-for-byte, only the registered
