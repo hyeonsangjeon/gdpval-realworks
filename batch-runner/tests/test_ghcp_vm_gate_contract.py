@@ -22,7 +22,7 @@ HISTORICAL_SHA256 = "47799d3f61374679722df32c67de14f9d0d56bd6586cf7b28c10076fd41
 FOUNDRY = ENVELOPE + "gpt56_sol_foundry_codex_pilot.yaml"
 FOUNDRY_SHA256 = "8afe05923c7da813c29cae924e29380463e640478e8231c3437c3649e4a74d6f"
 WORKFLOW = ".github/workflows/backend-tests.yml"
-WORKFLOW_SHA256 = "9814528133f1c3a55a9122f857ce79575ce2b8e99215f216bd833c90128a384a"
+WORKFLOW_SHA256 = "a0cc6b2b76c43a143a73ef40da3cf8088b85a6c01b0f509a5606b91bb7b1fd8c"
 FALSE_FLAGS = (
     "launch_enabled", "launch_allowed", "paid_execution_enabled",
     "paid_execution_allowed", "full_220_enabled", "full_220_allowed",

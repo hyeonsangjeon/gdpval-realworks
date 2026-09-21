@@ -22,7 +22,10 @@ by the very defect it exists to catch.
 from __future__ import annotations
 
 import ast
+import os
 import shlex
+import subprocess
+import sys
 from configparser import ConfigParser
 from pathlib import Path
 
@@ -135,12 +138,13 @@ def test_the_orphaned_directory_that_prompted_this_is_actually_wired():
 
 
 def test_backend_jobs_partition_the_comparison_contracts():
-    """Six jobs cover every node once, sharing only a complementary wire split."""
+    """Eight jobs cover every node once, including wire and preflight splits."""
     text = WORKFLOW.read_text(encoding="utf-8")
     workflow = yaml.safe_load(text)
     jobs = workflow["jobs"]
     assert set(jobs) == {
         "pytest", "comparison-contracts", "pilot-contracts", "pilot-preflight-contracts",
+        "pilot-external-receipt-contracts", "pilot-external-publication-contracts",
         "wire-contracts", "native-host-contracts"
     }
     assert workflow["permissions"] == {"contents": "read"}
@@ -160,6 +164,8 @@ def test_backend_jobs_partition_the_comparison_contracts():
     comparison = jobs["comparison-contracts"]["steps"]
     pilot = jobs["pilot-contracts"]["steps"]
     pilot_preflight = jobs["pilot-preflight-contracts"]["steps"]
+    pilot_external = jobs["pilot-external-receipt-contracts"]["steps"]
+    pilot_publication = jobs["pilot-external-publication-contracts"]["steps"]
     wire = jobs["wire-contracts"]["steps"]
     native_host = jobs["native-host-contracts"]["steps"]
     setup_names = [
@@ -179,9 +185,14 @@ def test_backend_jobs_partition_the_comparison_contracts():
     ]
     assert [step["name"] for step in pilot] == setup_names + ["Run pilot contracts"]
     assert [step["name"] for step in pilot_preflight] == setup_names + ["Run pilot preflight contracts"]
+    assert [step["name"] for step in pilot_external] == setup_names + ["Run pilot external receipt contracts"]
+    assert [step["name"] for step in pilot_publication] == setup_names + ["Run pilot external publication contracts"]
     assert [step["name"] for step in wire] == setup_names + ["Run wire contracts"]
     assert [step["name"] for step in native_host] == setup_names + ["Run native host contracts"]
-    assert core[:6] == comparison[:6] == pilot[:6] == pilot_preflight[:6] == wire[:6] == native_host[:6]
+    assert all(steps[:6] == core[:6] for steps in (
+        comparison, pilot, pilot_preflight, pilot_external, pilot_publication,
+        wire, native_host,
+    ))
     assert core[1] == {
         "name": "Checkout",
         "uses": "actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09",
@@ -227,7 +238,8 @@ def test_backend_jobs_partition_the_comparison_contracts():
     argv = []
     for step, command_count in (
         (core[6], 1), (comparison[6], 1), (pilot[6], 1),
-        (pilot_preflight[6], 1), (wire[6], 1), (native_host[6], 1)
+        (pilot_preflight[6], 1), (pilot_external[6], 1), (pilot_publication[6], 1),
+        (wire[6], 1), (native_host[6], 1)
     ):
         assert set(step) == {"name", "run"}
         lines = step["run"].splitlines()
@@ -241,8 +253,10 @@ def test_backend_jobs_partition_the_comparison_contracts():
     selected = argv[1][len(prefix):]
     pilot_selected = argv[2][len(prefix):]
     pilot_preflight_selected = argv[3][len(prefix):]
-    wire_selected = argv[4][len(prefix):]
-    native_selected = argv[5][len(prefix):]
+    pilot_external_selected = argv[4][len(prefix):]
+    pilot_publication_selected = argv[5][len(prefix):]
+    wire_selected = argv[6][len(prefix):]
+    native_selected = argv[7][len(prefix):]
 
     runner = REPO_ROOT / "batch-runner"
     tests = runner / "tests"
@@ -257,6 +271,12 @@ def test_backend_jobs_partition_the_comparison_contracts():
     assert len(comparison_files) == 11 and len(pilot_files) == 9
     wire_file = "tests/test_gpt56_pilot_wire_receipt.py"
     pilot_preflight_file = "tests/test_gpt56_sol_codex_pilot_preflight.py"
+    publication_functions = (
+        "test_external_live_receipt_real_owners_ready_last_and_no_disk_adoption_or_reuse",
+        "test_external_live_receipt_mid_publication_drift_and_partials_cannot_be_adopted",
+        "test_external_live_receipt_every_real_infrastructure_attempt_is_bound_without_inferred_calls",
+    )
+    publication_expression = " or ".join(publication_functions)
     keyword = "native_result_host"
     assert wire_file in pilot_files
     assert pilot_preflight_file in pilot_files
@@ -267,7 +287,11 @@ def test_backend_jobs_partition_the_comparison_contracts():
     assert excluded == actual
     assert selected == comparison_files
     assert pilot_selected == general_pilot_files
-    assert pilot_preflight_selected == [pilot_preflight_file]
+    assert pilot_preflight_selected == [pilot_preflight_file, "-k", "not external_live_receipt"]
+    assert pilot_external_selected == [
+        pilot_preflight_file, "-k", f"external_live_receipt and not ({publication_expression})"
+    ]
+    assert pilot_publication_selected == [pilot_preflight_file, "-k", publication_expression]
     assert wire_selected == [wire_file, "-k", f"not {keyword}"]
     assert native_selected == [wire_file, "-k", keyword]
     assert len(excluded) == len(set(excluded))
@@ -294,6 +318,44 @@ def test_backend_jobs_partition_the_comparison_contracts():
     assert not node_selections[0] & node_selections[1]
     assert node_selections[0] | node_selections[1] == set(wire_nodes)
 
+    def collect_preflight_nodes(arguments: list[str]) -> set[str]:
+        # Collection runs imports/hooks but not fixtures or test bodies. Keep
+        # it scoped to this one file, with the workflow's non-integration filter.
+        assert arguments[0] == pilot_preflight_file
+        result = subprocess.run(
+            [sys.executable, *prefix[1:], "--collect-only", "-p", "no:cacheprovider",
+             "-o", "addopts=", "--color=no", *arguments],
+            cwd=runner,
+            env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1", "PYTEST_ADDOPTS": ""},
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        nodes = [line for line in result.stdout.splitlines()
+                 if line.startswith(pilot_preflight_file + "::")]
+        assert nodes, result.stdout
+        assert len(nodes) == len(set(nodes)), "duplicate collected preflight node IDs"
+        return set(nodes)
+
+    # Ask pytest itself about full parameterized node IDs and -k semantics.
+    # No AST/regex approximation can establish this three-way partition.
+    all_preflight_nodes = collect_preflight_nodes([pilot_preflight_file])
+    preflight_node_sets = [collect_preflight_nodes(arguments) for arguments in (
+        pilot_preflight_selected, pilot_external_selected, pilot_publication_selected,
+    )]
+    assert all(preflight_node_sets)
+    for index, nodes in enumerate(preflight_node_sets):
+        assert all(not nodes & other for other in preflight_node_sets[index + 1:])
+    assert set().union(*preflight_node_sets) == all_preflight_nodes
+    publication_nodes = {
+        node for node in all_preflight_nodes
+        if node.split("::")[-1].split("[", 1)[0] in publication_functions
+    }
+    assert {node.split("::")[-1].split("[", 1)[0] for node in publication_nodes} == set(publication_functions)
+    assert preflight_node_sets[2] == publication_nodes
+
     discovery = ConfigParser()
     discovery.read(runner / "pytest.ini")
     assert discovery["pytest"]["testpaths"] == "tests"
@@ -304,7 +366,7 @@ def test_backend_jobs_partition_the_comparison_contracts():
     core_tests = all_tests - set(excluded)
     comparison_tests = set(selected)
     pilot_tests = set(pilot_selected)
-    pilot_preflight_tests = set(pilot_preflight_selected)
+    pilot_preflight_tests = {pilot_preflight_file}
     shared_wire_tests = {wire_file}
     assert not core_tests & comparison_tests
     assert not core_tests & pilot_tests
@@ -316,8 +378,8 @@ def test_backend_jobs_partition_the_comparison_contracts():
     assert not comparison_tests & shared_wire_tests
     assert not pilot_tests & shared_wire_tests
     assert not pilot_preflight_tests & shared_wire_tests
-    # Every other file is selected once without a keyword filter. Only the
-    # shared file is visited twice, with the exhaustive/disjoint node split above.
+    # Every other file is selected once without a keyword filter. The shared
+    # wire and preflight files have exhaustive/disjoint node splits above.
     assert core_tests | comparison_tests | pilot_tests | pilot_preflight_tests | shared_wire_tests == all_tests
 
 
