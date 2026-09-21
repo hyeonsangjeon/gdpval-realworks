@@ -149,6 +149,15 @@ RUNTIME_CAPS_USAGE = {
     "offline_preflight_consumption": False,
     "clears_native_call_or_billing_blockers": False,
 }
+EXTERNAL_LIVE_RECEIPT = {
+    "recorder": "batch-runner/gpt56_pilot_external_live_receipt.py",
+    "source_base_sha": "20c2fea35fbd0bc9cd197f5fd07c5b4f4113377a",
+    "ready_marker": "pilot-external-live-receipt-ready.json",
+    "evidence_boundary": "offline_external_receipt_consistency_not_provider_authenticity_or_launch_approval",
+    "requires_live_caps_usage_witness": True,
+    "offline_preflight_consumption": False,
+    "clears_current_blockers": False,
+}
 REQUIRED_SOURCES = {
     BASELINE,
     GRADER,
@@ -175,6 +184,7 @@ REQUIRED_SOURCES = {
     "batch-runner/schemas/grade.schema.json",
 } | EVIDENCE_SOURCES | IDENTITY_SOURCES | INPUT_SOURCES | DEPLOYMENT_SOURCES | CAPTURE_SOURCES | {
     CONFIG_BUNDLE["materializer"], WIRE_RECEIPT["recorder"], NATIVE_RESULT_HOST["recorder"], RUNTIME_CAPS_USAGE["recorder"],
+    EXTERNAL_LIVE_RECEIPT["recorder"],
     "batch-runner/core/result_fingerprint.py", "batch-runner/core/public_error.py",
 }
 # Findings on BASE_SHA, not editable waivers. Runtime changes need new review.
@@ -268,6 +278,7 @@ def _inspect_plan_only(plan: dict[str, Any]) -> dict[str, Any]:
         "wire_receipt": WIRE_RECEIPT,
         "native_result_host": NATIVE_RESULT_HOST,
         "runtime_caps_usage": RUNTIME_CAPS_USAGE,
+        "external_live_receipt": EXTERNAL_LIVE_RECEIPT,
         "identity": {
             "provider": "azure",
             "model": "gpt-5.6-sol",
