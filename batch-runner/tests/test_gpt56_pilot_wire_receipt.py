@@ -301,7 +301,8 @@ def test_five_task_bundle_real_upstream_verification_ready_last_and_no_live_clea
         assert receipt["attempt_index"] == 0 and receipt["retry_kind"] == "initial"
         assert receipt["launch_allowed"] is receipt["full_220_allowed"] is False
     report = pilot.inspect_plan(case.plan, **vars(case.context), capture_workspace=case.workspace)
-    assert report["launch_blockers"] == ["live_inference_identity_and_wire_unverified", "native_sandbox_and_result_bundle_host_unverified"]
+    assert report["launch_blockers"] == ["native_call_and_token_limits_unresolved", "live_inference_identity_and_wire_unverified",
+                                       "foundry_usage_and_tariff_mapping_unverified", "native_sandbox_and_result_bundle_host_unverified"]
     assert report["launch_allowed"] is report["full_220_allowed"] is False
     public = session.ready + b"".join(session.files.values()) + wire._bytes(report)
     assert PRIVATE_TEXT.encode() not in public and str(case.parent).encode() not in public
@@ -921,6 +922,10 @@ def test_native_result_host_fresh_containment_and_pre_auth_gate(case, monkeypatc
 @pytest.mark.parametrize("damage", ["bytes", "extra", "reference", "root"])
 def test_native_result_host_post_collection_drift_is_refused_before_cleanup(case, damage):
     host = native.PilotNativeResultHostSession(_session(case))
+    if damage == "reference":
+        for task_id in TASK_IDS[:2]:
+            previous = _native_start(case, host, task_id)
+            _native_accept(case, previous, _native_finish(previous))
     state = _native_start(case, host, TASK_IDS[2] if damage == "reference" else TASK_IDS[0])
     target = state.workspace.workspace / "answer.txt"
     target.write_bytes(b"initial")

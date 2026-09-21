@@ -538,7 +538,7 @@ def test_active_registration_seals_the_intake_boundary(source, tmp_path, monkeyp
         result = pilot.inspect_plan(plan)
         assert result["configuration_valid"] is True
         assert set(plan["source_pins"]) == pilot.REQUIRED_SOURCES
-        assert len(pilot.REQUIRED_SOURCES) == 55
+        assert len(pilot.REQUIRED_SOURCES) == 56
         assert set(pilot.EVIDENCE_SOURCES) <= set(plan["source_pins"])
         assert plan["evidence_intake"] == pilot.EVIDENCE_INTAKE
         assert result["launch_allowed"] is result["full_220_allowed"] is False

@@ -244,7 +244,9 @@ def test_preflight_only_explicit_verified_capture_clears_one_blocker(sealed):
     assert BLOCKER in before["launch_blockers"] and LIVE in before["launch_blockers"]
     after = _preflight(sealed, capture_workspace=sealed.workspace)
     assert after["launch_blockers"] == [name for name in before["launch_blockers"] if name != BLOCKER]
-    assert after["launch_blockers"] == [LIVE, "native_sandbox_and_result_bundle_host_unverified"]
+    assert after["launch_blockers"] == ["native_call_and_token_limits_unresolved", LIVE,
+                                       "foundry_usage_and_tariff_mapping_unverified",
+                                       "native_sandbox_and_result_bundle_host_unverified"]
     gate = after["pre_execution_capture_gate"]
     assert gate["capture_complete"] and gate["cleared_blockers"] == [BLOCKER]
     assert gate["capture_sha256"] == _verify(sealed)["sha256"]

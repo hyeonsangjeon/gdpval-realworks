@@ -188,7 +188,7 @@ def test_exact_hash_bound_candidate_uses_all_real_verifiers_and_parser(deploymen
     assert _reservation(case).read_bytes() == binding._reservation(result)
     assert document["run_id"] == pilot.RUN_ID and document["condition"] == "codex_foundry" and document["repeat"] == 1
     assert document["task_ids"] == TASK_IDS and document["expected_task_count"] == 5
-    assert document["source_pins"] == case.plan["source_pins"] and len(document["source_pins"]) == 55
+    assert document["source_pins"] == case.plan["source_pins"] and len(document["source_pins"]) == 56
     assert case.plan["deployment_binding"] == pilot.DEPLOYMENT_BINDING
     assert document["evidence_boundary"] == binding.BOUNDARY
     assert document["launch_allowed"] is document["full_220_allowed"] is False
@@ -258,7 +258,8 @@ def test_plan_only_and_null_binding_keep_the_eleven_default_blockers(sealed, mon
 def test_verified_explicit_consumption_clears_only_deployment_and_hides_ids(sealed):
     before = pilot.inspect_plan(sealed.plan, **_upstream_options(sealed))
     after = pilot.inspect_plan(sealed.plan, deployment_binding=sealed.root, **sealed.options)
-    assert before["launch_blockers"] == ["live_inference_identity_and_wire_unverified",
+    assert before["launch_blockers"] == ["native_call_and_token_limits_unresolved", "live_inference_identity_and_wire_unverified",
+                                       "foundry_usage_and_tariff_mapping_unverified",
                                        "native_sandbox_and_result_bundle_host_unverified", BLOCKER,
                                        "prepared_request_capture_unverified"]
     assert after["launch_blockers"] == [name for name in before["launch_blockers"] if name != BLOCKER]

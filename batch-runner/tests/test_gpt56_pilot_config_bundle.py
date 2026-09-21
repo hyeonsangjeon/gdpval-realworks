@@ -179,7 +179,7 @@ def test_real_validators_exact_pilot_scope_and_ready_last(plan, tmp_path, identi
     assert marker["identity_plan_sha256"] == verifications[0].sha256
     assert marker["contract_sha256"] == pilot.seal(plan)
     assert marker["source_pins"] == linkage["source_pins"] == plan["source_pins"]
-    assert len(plan["source_pins"]) == 55 and set(plan["source_pins"]) == pilot.REQUIRED_SOURCES
+    assert len(plan["source_pins"]) == 56 and set(plan["source_pins"]) == pilot.REQUIRED_SOURCES
     assert plan["config_bundle"] == pilot.CONFIG_BUNDLE
     assert marker["evidence_linkage"] == linkage["evidence_linkage"] == sealed["evidence_linkage"]
     if linked:
@@ -200,7 +200,8 @@ def test_real_validators_exact_pilot_scope_and_ready_last(plan, tmp_path, identi
         assert private not in all_bytes
     assert not (root / "workspace/step1_tasks_prepared.json").exists()
     report = pilot.inspect_plan(plan, identity_bundle=source, **options)
-    expected = ["prepared_input_bytes_unverified", "live_inference_identity_and_wire_unverified", "native_sandbox_and_result_bundle_host_unverified",
+    expected = ["native_call_and_token_limits_unresolved", "prepared_input_bytes_unverified", "live_inference_identity_and_wire_unverified",
+                "foundry_usage_and_tariff_mapping_unverified", "native_sandbox_and_result_bundle_host_unverified",
                 "actual_pilot_deployment_not_prepared", "prepared_request_capture_unverified"] if linked else [
                     item for item in pilot.LAUNCH_BLOCKERS if item != identity.BLOCKER]
     assert report["launch_blockers"] == expected

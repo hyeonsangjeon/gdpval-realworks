@@ -167,6 +167,9 @@ class PilotNativeResultHostSession:
                     check()
                 self.root_identity = _identity(self.root)
                 wire_session.native_host = self
+                from gpt56_pilot_runtime_caps_usage import PilotRuntimeCapsUsageSession
+
+                self.runtime_caps_usage = PilotRuntimeCapsUsageSession(self)
 
     @staticmethod
     def _mkdir(parent: Path, name: str) -> None:
@@ -328,6 +331,7 @@ class PilotNativeResultHostSession:
         with self._guard():
             witness = self._attempt(task_id, attempt_index)
             _require(not witness.accepted and _runner_digest(result) == witness.result_digest)
+            self.runtime_caps_usage.check_attempt(witness)
             self._current()
             self.wire.accept_task(task_id=task_id, attempt_index=attempt_index, result=result)
             witness.accepted = True
@@ -452,6 +456,7 @@ class PilotNativeResultHostSession:
                 self._current()
                 check()
             witness.row = json.loads(_bytes(row))
+            self.runtime_caps_usage.record_step2_result(witness)
             return row
 
     def _final_rows(self, payload: dict) -> None:
@@ -548,6 +553,9 @@ class PilotNativeResultHostSession:
                 self.ready = data
                 self._current()
                 check()
+            # The caps receipt points to this accepted result, never back from
+            # the sealed result to the later receipt (which would be circular).
+            self.runtime_caps_usage.finalize()
             return linked
 
 
@@ -560,6 +568,9 @@ def native_result_host_for(session: wire.PilotWireReceiptSession) -> PilotNative
         with host._guard():
             _require(host.ready is None)
             host._current()
+            from gpt56_pilot_runtime_caps_usage import runtime_caps_usage_for
+
+            runtime_caps_usage_for(session)
             return host
 
 

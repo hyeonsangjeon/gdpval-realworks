@@ -140,6 +140,15 @@ NATIVE_RESULT_HOST = {
     "offline_preflight_consumption": False,
     "clears_live_identity_and_wire_blocker": False,
 }
+RUNTIME_CAPS_USAGE = {
+    "recorder": "batch-runner/gpt56_pilot_runtime_caps_usage.py",
+    "source_base_sha": "0ae151d105258c6f716e22aea54c7df8cd0a8112",
+    "ready_marker": "pilot-runtime-caps-usage-ready.json",
+    "evidence_boundary": "observed_app_server_token_thresholds_not_native_call_enforcement_or_billing",
+    "requires_live_host_session_witness": True,
+    "offline_preflight_consumption": False,
+    "clears_native_call_or_billing_blockers": False,
+}
 REQUIRED_SOURCES = {
     BASELINE,
     GRADER,
@@ -165,7 +174,7 @@ REQUIRED_SOURCES = {
     "batch-runner/core/result_projection.py",
     "batch-runner/schemas/grade.schema.json",
 } | EVIDENCE_SOURCES | IDENTITY_SOURCES | INPUT_SOURCES | DEPLOYMENT_SOURCES | CAPTURE_SOURCES | {
-    CONFIG_BUNDLE["materializer"], WIRE_RECEIPT["recorder"], NATIVE_RESULT_HOST["recorder"],
+    CONFIG_BUNDLE["materializer"], WIRE_RECEIPT["recorder"], NATIVE_RESULT_HOST["recorder"], RUNTIME_CAPS_USAGE["recorder"],
     "batch-runner/core/result_fingerprint.py", "batch-runner/core/public_error.py",
 }
 # Findings on BASE_SHA, not editable waivers. Runtime changes need new review.
@@ -188,8 +197,6 @@ EVIDENCE_BLOCKER_ROLES = {
     "foundry_account_project_deployment_identity_unverified": ("identity",),
     "foundry_served_model_version_unverified": ("identity",),
     "max_and_long_1m_capability_unverified": ("reasoning", "context"),
-    "native_call_and_token_limits_unresolved": ("native_caps",),
-    "foundry_usage_and_tariff_mapping_unverified": ("usage", "tariff"),
 }
 EVIDENCE_REFUSAL = "foundry_evidence_gate_refused"
 IDENTITY_REFUSAL = "pilot_identity_plan_gate_refused"
@@ -260,6 +267,7 @@ def _inspect_plan_only(plan: dict[str, Any]) -> dict[str, Any]:
         "pre_execution_capture": PRE_EXECUTION_CAPTURE,
         "wire_receipt": WIRE_RECEIPT,
         "native_result_host": NATIVE_RESULT_HOST,
+        "runtime_caps_usage": RUNTIME_CAPS_USAGE,
         "identity": {
             "provider": "azure",
             "model": "gpt-5.6-sol",
@@ -472,7 +480,9 @@ def _inspect_plan_with_evidence(
             return _evidence_refusal(result)
         # The real verifier checked each role's schema, observations and bytes.
         # Select only the explicitly mapped requirements from that complete set.
-        roles = {role for required in EVIDENCE_BLOCKER_ROLES.values() for role in required}
+        # Complete external exports bind declarations; they do not enumerate
+        # live model calls or prove that billing applied those tariff meters.
+        roles = set(EVIDENCE_INTAKE["required_roles"])
         if set(document["claims"]) != roles:
             return _evidence_refusal(result)
         cleared = [name for name in LAUNCH_BLOCKERS if name in EVIDENCE_BLOCKER_ROLES]
