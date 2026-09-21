@@ -1,6 +1,148 @@
 # Latest substantive task result
 
-## PROJECT5-PR639-PILOT-CI-FIX
+## PROJECT5-GPT56-RUNTIME-CAPS-USAGE-RECEIPT
+
+Implemented a caps/usage receipt owner attached to the registered Foundry
+GPT-5.6 Sol pilot's existing capture, wire and accepted-result session. The sole
+authorized selector passed: `86 passed, 110 deselected in 939.90s (0:15:39)`,
+exit 0. This is offline verifier evidence, not a live pilot receipt, proof of
+native spending enforcement, a billing measurement or hosted CI headroom.
+All launch/full-220 flags remain false.
+
+### Scope and evidence boundary
+
+The owner records the actual task/attempt order, infrastructure retry indices,
+and one observed app-server thread and turn per attempt. Those counts are not
+model-call counts. The transport observer retains exact native input, cached,
+cache-write, output, reasoning and total token snapshots, including optional
+null/absent fields and the reported context window. It checks cumulative
+monotonicity, subcounts, reported totals, reviewed input/output thresholds and
+any reported context-window mismatch. Missing required totals refuse result
+acceptance. A notification can report an overrun after it occurred; these
+checks do not establish provider-native preemptive enforcement.
+
+The receipt binds the verified evidence bundle's `native_caps`, `usage` and
+`tariff` artifact hashes, approved limits and meter identities. Reviewed
+quantities and tariff rates do not become runtime observations. Model-call
+count, native spending enforcement, Foundry HTTP/request identity, served
+identity, billing quantity and currency conversion remain `not_available` on
+the pinned route. Cost stays null/partial; no price is calculated or invented.
+
+The wire owner installs the observer only when its registered pilot host owner
+is present. Step 2's existing host acceptance and publication hooks require the
+caps owner, so no runner or Step 2 source change was needed. Attempt receipts
+bind the verified capture, wire record, accepted host record and accepted-row
+fingerprint. Final publication binds the exact saved-result bytes and the host
+ready marker without inserting a circular link back into those sealed results.
+The owner rechecks parent bytes after publication and writes its ready marker
+last. Failures poison the linked owners and retain partials for quarantine.
+There is no disk-only adoption API, new CLI, offline receipt-consumption option
+or runnable launch command. Legacy absent/null output behavior is unchanged.
+
+Preflight still requires all six external evidence roles. Its closed clearing
+map now removes only the three identity/capability requirements; a complete
+offline export cannot remove the native-call or billing requirements. Even
+after explicit verification of all local preparation bundles, these remain:
+
+- `native_call_and_token_limits_unresolved`
+- `live_inference_identity_and_wire_unverified`
+- `foundry_usage_and_tariff_mapping_unverified`
+- `native_sandbox_and_result_bundle_host_unverified`
+
+The new receipt reports observed token-threshold checks but clears none of
+those four blockers. Synthetic owners never establish real pilot service,
+remote isolation, actual model calls or a billed meter quantity. Public receipt
+files contain no prompt/output text, private host paths, raw resource IDs,
+endpoint, credential, auth material or exception strings.
+
+### Exact validation and implementation boundary
+
+The new clean worktree and branch started from exactly
+`0ae151d105258c6f716e22aea54c7df8cd0a8112`:
+`b/gpt56-runtime-caps-usage-20260921`. Prior worktrees and the preserved local
+main branch were not edited.
+
+Exactly one targeted pytest invocation ran from the worktree root:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider --tb=short batch-runner/tests/test_gpt56_sol_codex_pilot_preflight.py -k runtime_caps_usage
+```
+
+Result: `86 passed, 110 deselected in 939.90s (0:15:39)`, exit 0, on initial
+implementation `97b9e1c07149a7f85e9e33a85cb5d6b15dd99a96`. The selector
+covers observed and unavailable fields, threshold boundaries, monotonicity,
+context/correlation, retry/order, current evidence and parent links, forged
+quantities/meters, privacy, no-clobber/partial publication, session reuse,
+legacy no-op behavior and false flags. Scalar cases exercise the real transport
+observer with a bounded owner stand-in; full-session cases use the real capture,
+upstream, wire, host and saved-result verifiers. Module-scoped seeds share only
+immutable bytes, each case copies fresh single-link files, and YAML parsing is
+cached by current bytes rather than by verifier verdict.
+
+No earlier selector, full wire file, core suite, contract job, broad suite or
+manual workflow ran. The old count/blocker assertions were updated statically
+and were not rerun locally. `git diff --check` and `git diff --cached --check`
+passed. The unchanged four-way Backend partition remains responsible for
+fresh automatic coverage of the full affected groups and their time budgets.
+
+Both requested reviewers returned REQUEST-CHANGES on the initial implementation
+because the existing reference-drift fixture started at the third task on a
+fresh owner. The new order check correctly refused that start before the test
+could mutate the reference or reach its refusal assertion. The test-only
+correction completes the first two tasks through the real start, finish and
+accept/record helpers before testing third-task drift. Production ordering and
+all drift assertions remain intact. The stale evidence test name now says
+three cleared requirements rather than five.
+
+Fixed immutable implementation HEAD:
+`e84761f3589cdade5ba0f9d066a490042cceaa86`. `llm-systems-engineer` and
+`first-reviewer` both returned read-only APPROVE on that exact HEAD, with no
+remaining blocking findings. The correction changed only two test files; no
+production code or source pin changed after the passing selector. Neither the
+selector nor the corrected reference-drift case was rerun locally. These static
+approvals do not establish a new test result or hosted CI headroom. The
+records-only commit follows both approvals and is outside the implementation
+review boundary.
+Fresh same-HEAD automatic CI remains required; no result is claimed here.
+
+### Files, skills and remaining work
+
+Production changes are limited to `gpt56_pilot_runtime_caps_usage.py`, its
+wire/native-host hooks, the pilot preflight and the active Foundry contract.
+The exact source closure grows from 55 to 56 files. Only directly affected
+source pins and existing count/blocker expectations were refreshed. The new
+cases are in `test_gpt56_sol_codex_pilot_preflight.py`; no test file was added.
+Workflows, jobs, matrices, dependencies, timeouts, core/QA, grader and HF upload
+code are unchanged. Model, five-task scope, reasoning/context request and
+experiment limits are unchanged.
+
+The full skill catalog was inspected once. `experiment-design` established
+the single evidence-contract change and the falsifier: a missing, inconsistent
+or stale observation must refuse acceptance, not become a complete receipt.
+`llm-systems-engineer` supplied the helper and approved the fixed implementation;
+`first-reviewer` independently approved the same immutable HEAD. `im-not-ai-en`
+keeps the English records' commands, hashes, numbers and evidence limits exact.
+UI/animation, grading and repo-readiness do not apply to this scope.
+`extreme-reasoner` is not triggered because workflows, core/QA and HF upload
+code are untouched.
+
+Remaining work includes actual reviewed Foundry evidence acquisition, a
+separately approved deployment/execution, live wire/served identity, a live
+native-host result, observable native model-call enforcement and Foundry
+usage/tariff/billing receipts. The pinned route still cannot expose every
+required fact. No Azure/HF/OIDC, provider/model/client, grader, inference,
+download, paid execution, Project or merge action occurred. Existing Git
+identity `hyeonsangjeon <wingnut0310@gmail.com>` is unchanged, with no
+attribution trailers, history rewrite, force push or hook bypass. This record
+stops at pre-merge facts.
+
+The #639 records below remain historical. They preserve the original
+`1 failed, 70 passed, 84 deselected in 2790.26s (0:46:30)` result, the two
+unrerun corrections, hosted 1179-item failure/cancellation evidence and the
+subsequent `2 passed in 21.28s` correction selector. Neither those results nor
+the earlier #638 hosted checks validate the caps/usage implementation above.
+
+## Historical PROJECT5-PR639-PILOT-CI-FIX
 
 Corrected the stale input-capture test expectation and split the native-host
 cases into a fourth Backend job on the existing PR #639 branch. Production

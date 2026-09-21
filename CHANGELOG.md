@@ -117,6 +117,45 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Add a session-owned caps/usage receipt to the registered Foundry GPT-5.6 Sol
+  pilot's verified capture/wire/host chain. It records actual task/attempt order,
+  infrastructure retries, app-server thread/turn counts and raw native token
+  snapshots. It rejects missing required totals, decreasing or inconsistent
+  counters, reviewed input/output threshold overruns, context mismatch, stale
+  links, forged mappings, result drift, partial publication and owner reuse.
+  Reviewed `native_caps`, `usage` and `tariff` hashes and meter identities are
+  bound without copying historical quantities or prices into observations.
+  Model calls, native spending enforcement, Foundry HTTP/request and served
+  identity, billing quantity and currency conversion remain `not_available`;
+  cost stays null/partial. Observation-time refusal is not proof of native
+  preemptive enforcement. The existing host hooks require the owner before
+  acceptance and final publication. No-clobber writes retain failed partials,
+  recheck parent/saved bytes and publish ready last without circular linkage.
+  No disk-only adoption, offline consumption option or runnable CLI was added.
+  Complete offline evidence still requires all six roles but can no longer
+  clear native-call or usage/tariff blockers; live wire and native-host blockers
+  also remain. All launch/full-220 flags stay false and legacy absent/null
+  output behavior is unchanged. Only directly affected pins/counts changed as
+  the source closure grew from 55 to 56 files. The sole local command was
+  `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider --tb=short batch-runner/tests/test_gpt56_sol_codex_pilot_preflight.py -k runtime_caps_usage`.
+  Result: `86 passed, 110 deselected in 939.90s (0:15:39)`, exit 0, at initial
+  implementation `97b9e1c07149a7f85e9e33a85cb5d6b15dd99a96`. Both reviewers
+  blocked an existing reference-drift fixture that started at the third task.
+  The new order gate refused that start before the test reached its intended
+  assertion. A test-only correction completes the first two tasks through the
+  real helpers and renames the evidence test to match its three cleared requirements. Production
+  checks and all assertions remain intact. The correction was not rerun locally.
+  `llm-systems-engineer` and `first-reviewer` both returned read-only APPROVE on
+  `e84761f3589cdade5ba0f9d066a490042cceaa86`; the records-only commit is outside
+  that review boundary. Fresh automatic CI remains required. No earlier
+  selector, full suite or workflow ran. Workflows, the four-way Backend partition,
+  core/QA, grader, HF upload, experiment settings and limits are unchanged.
+  The historical #639 failure and two unrerun corrections remain recorded separately. Synthetic
+  success does not prove a live pilot, billing or hosted CI headroom. Actual
+  evidence acquisition, approved deployment/execution, live identity/host and
+  native-call/usage/billing facts remain outstanding. Exact validation, skills,
+  review boundaries and prior evidence are in `tasks/LATEST_TASK_RESULT/README.md`.
+
 - Add session-owned native-workspace and accepted-result receipts for the
   registered Foundry GPT-5.6 Sol five-task pilot. The exact live capture/wire
   session owns workspace observations before cleanup, strict deliverable
