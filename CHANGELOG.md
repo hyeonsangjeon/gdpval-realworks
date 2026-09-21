@@ -143,6 +143,39 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Add offline intake for caller-pinned, sanitized Foundry receipt claims,
+  bound to the original finalized capture/wire/host/caps owners and accepted
+  result. The existing evidence schema gains closed, bounded shapes for exact
+  five-task/attempt order, request digest/size, hashed correlation, time/source
+  pins and optional served/usage/billing facts. Existing receipt and held-parent
+  helpers enforce current-byte checks, no-clobber and ready-last publication;
+  a pre-validation finding added an optional descriptor/read-loop bound without
+  changing legacy reader behavior. Failed partials are retained, not adopted.
+  The intake checks consistency, not provider authenticity: issuer labels and
+  hashes cannot identify synthetic data disguised as a real export. Provenance
+  remains unverified, eligible facts and cleared blockers remain empty, cost is
+  null/partial, and all launch/full-220 flags stay false. Billing quantities are
+  independent assertions, never reconstructed from app-server tokens. No
+  disk-only adoption, runnable CLI or offline preflight consumption was added.
+  Only directly affected pins/counts changed as the source closure grew from
+  56 to 57 files. The sole local command was
+  `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider --tb=short batch-runner/tests/test_gpt56_sol_codex_pilot_preflight.py -k external_live_receipt`.
+  Result: `143 passed, 196 deselected in 2606.67s (0:43:26)`, exit 0.
+  `git diff --check` passed. The local selector alone approaches the existing
+  hosted pilot job's 45-minute ceiling; CI headroom remains unresolved.
+  `llm-systems-engineer` and `first-reviewer` both returned read-only APPROVE
+  on implementation `010f7ec0f80c29b6acd8a92077c424ef8f59ef4a`, with no
+  remaining findings. The records-only commit is outside that review boundary;
+  fresh final-HEAD automatic CI remains required.
+  The historical #640 86-pass result, subsequent unrerun fixture/name fixes
+  and hosted input-bundle expectation failure/correction remain separate
+  evidence and do not validate this intake. Actual provider authentication,
+  live wire/served identity, native host, model-call and billing facts remain
+  unresolved. No provider/model/client, grader, paid execution or manual
+  workflow ran. Workflows, core/QA, grader, HF upload and execution settings
+  are unchanged. Exact evidence limits, skills, reviews and remaining work
+  are recorded in `tasks/LATEST_TASK_RESULT/README.md`.
+
 - Add a session-owned caps/usage receipt to the registered Foundry GPT-5.6 Sol
   pilot's verified capture/wire/host chain. It records actual task/attempt order,
   infrastructure retries, app-server thread/turn counts and raw native token
