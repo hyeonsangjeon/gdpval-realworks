@@ -240,12 +240,46 @@ entries land under a fresh dated heading the day they merge to `main`.
   preserved plan identity and the ordered requirements are recorded in
   `tasks/LATEST_TASK_RESULT/README.md`.
   `experiment-report-en` and `im-not-ai-en` preserve the observation boundaries.
-  Immutable `first-reviewer` review is limited to the two result records and
-  saved sanitized facts. Validation is whitespace and record-to-observation
-  comparison only; no tests, model, VM, grader, HF/Azure or paid operation ran.
+  Read-only `first-reviewer` returned APPROVE with no findings on records HEAD
+  `e90e51db35601bfa38df3f15795bee27df666711` against base
+  `6d6663e7e536a88a58079ddc41ed8e38b0507824`. It compared only the two immutable
+  records with saved sanitized facts, without repeating capability probes or
+  inspecting private inputs. This acknowledgment commit follows that review
+  and is outside its initial review boundary. Validation is whitespace and
+  record-to-observation comparison only; no tests, model, VM, grader, HF/Azure
+  or paid operation ran.
   The GitHub source fetch was network activity. Production, plans, source pins
   and workflows are unchanged; capability monitoring stops pending an
   owner/admin environment change.
+
+- Record one real offline GHCP five-task input bundle, published and verified
+  with the unchanged CLI at `c1c4e7a50af80a719bacae0054337a4306c5c051`.
+  The exact registered HF snapshot was already cached locally. Only its pinned
+  parquet and the two reference roles emitted by GHCP preflight were read.
+  Confined snapshot links were normalized to private single-link regular
+  files without downloading, altering the cache or relaxing the verifier.
+  Canonical reviewed plan SHA256:
+  `6cc207ee574e6b062cecfab8dd6035a0ab67cd0f2cba24516b2fdc149babd5dc`.
+  The existing materialize and verify operations each ran once and returned 0;
+  bundle-consuming preflight ran once and intentionally returned 2 with
+  `configuration_valid=true`. Ready/bundle SHA256:
+  `bdab5831512ab01bd68e292cf8f9558583abc1dcd46d405911076f24aeccc33d`.
+  Only `original_task_input_materialization_unverified` was cleared. Fourteen
+  requirements remain, all nine runtime observations remain null, and all six
+  launch/paid/full-220 flags remain false. The private bundle and handoff are
+  retained; only sanitized records enter Git. Exact input sizes/digests,
+  invocation shapes and verdicts are in `tasks/LATEST_TASK_RESULT/README.md`.
+  This is real local materialization, not VM/model consumption, grading or
+  paid readiness. The earlier synthetic `89 passed in 33.08s` is separate
+  implementation evidence; no pytest or live execution ran in this operation.
+  `experiment-design` retained the existing boundary; `experiment-report-en`
+  and `im-not-ai-en` preserve the evidence limits in the English records.
+  Read-only `first-reviewer` returned APPROVE with no findings on records HEAD
+  `8ea66191829148c3f84bc8564c00951f15ea225e`, comparing the records with saved
+  sanitized evidence without rereading raw inputs or rerunning the operation.
+  This later review acknowledgment is outside that initial review boundary.
+  `git diff --check` passed; fresh final-HEAD automatic checks remain required.
+  Production code, plans, pins and workflows are unchanged.
 
 - Add a usable offline GHCP five-task input staging/verification library and
   CLI. It copies the entire pinned parquet byte-for-byte, only the registered

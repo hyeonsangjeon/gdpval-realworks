@@ -104,10 +104,12 @@ Capability monitoring stops until the owner/admin supplies a changed environment
 ### Validation, review scope and skills
 
 Validation is limited to whitespace and comparison of these records with saved
-sanitized observations. The immutable `first-reviewer` scope is the commit
-containing only these two records and those saved facts. Its exact reviewed SHA
-and verdict are supplied in the draft PR and final handoff; the review does not
-repeat capability probes or inspect private inputs.
+sanitized observations. Read-only `first-reviewer` returned APPROVE with no
+findings on records HEAD `e90e51db35601bfa38df3f15795bee27df666711` against base
+`6d6663e7e536a88a58079ddc41ed8e38b0507824`. It compared only the two immutable
+records with saved sanitized facts; it did not repeat capability probes or
+inspect private inputs. This acknowledgment commit follows that review and is
+outside its initial review boundary.
 
 The full skill catalog was inspected once. `experiment-report-en` separates
 accepted prior observations, current host metadata and unobserved guest/runtime
