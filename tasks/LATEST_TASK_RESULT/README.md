@@ -1,109 +1,67 @@
 # Latest substantive task result
 
-## PROJECT5-GHCP56-REAL-LOCAL-INPUT-STAGING
+## PROJECT5-GHCP-VM-BLOCKER-HANDOFF-0439
 
-Published and verified one real local input bundle for the registered GHCP
-Codex GPT-5.6 Sol five-task condition. The existing CLI accepted the original
-pinned bytes. Explicit bundle consumption satisfied only
-`original_task_input_materialization_unverified`; fourteen requirements remain.
-This proves local input materialization, not VM or model consumption, grading
-accuracy or paid readiness.
+Source synchronization is resolved. A non-paid VM reset/input-copy test still
+needs an approved isolated Linux target and a pinned guest image. The accepted
+`/dev/kvm` failure establishes missing device exposure in this execution
+container only; it says nothing about virtualization hardware in the physical
+NAS. No fresh guest or GHCP noninteractive execution route was observed.
+This bounded metadata check clears none of the fourteen remaining requirements.
 
-The operation used unchanged code at
-`c1c4e7a50af80a719bacae0054337a4306c5c051` in a new clean worktree.
-Only `CHANGELOG.md` and this record are changed. No production module, schema,
-GHCP/Foundry plan, source pin, workflow, test or evidence policy was changed.
-Completed branches, earlier worktrees and the preserved checkout remain intact.
+Only `CHANGELOG.md` and this result record change. Production, configuration,
+workflows, plans and source pins are unchanged. The verified real input bundle,
+private handoff, completed worktrees and preserved checkout remain untouched.
 
-### Source and input identities
+### Source and verification methods
 
-The unmodified no-bundle preflight ran once and returned 2 with a valid
-configuration, fifteen blockers, nine null observations and six false flags.
-Its canonical plan digest and emitted task/reference identities were used
-directly. No task selection or pin list was redefined.
+The configured origin was checked internally as
+`hyeonsangjeon/gdpval-realworks` without printing its URL. One authorized
+`git fetch --no-tags origin refs/heads/main:refs/remotes/origin/main` returned 0.
+Both `FETCH_HEAD` and `origin/main` matched
+`6d6663e7e536a88a58079ddc41ed8e38b0507824`; a new clean worktree was created
+from that exact source. The GitHub source fetch was network activity, not
+provider or experiment traffic. Source checkout is not an owner/admin blocker.
 
-| Identity | Observed value |
-| --- | --- |
-| Condition | `gpt56_sol_ghcp_codex_vm_pilot5_v1` |
-| Dataset | `openai/gdpval` |
-| Dataset revision | `11e7900cdcac61bc4daf59e65feb238acda98fbf` |
-| Canonical reviewed plan SHA256 | `6cc207ee574e6b062cecfab8dd6035a0ab67cd0f2cba24516b2fdc149babd5dc` |
-| Input CLI source SHA256 | `f6b57eacdcb93715bb286dc7bc979599d5c5a14a948f5b14a1c8561631780d39` |
-| GHCP preflight source SHA256 | `20bf6f374c576c96fd9fdc222a767bdcac62bd253d23de39bfaefc95cde796b2` |
-| Ordered five-task source projection SHA256 | `1635898065af9948c5e611ff0bb44d23620f20ad11fa69c9f1202de931dbb090` |
+| Subject | Evidence and method | Limit or missing prerequisite |
+| --- | --- | --- |
+| Container architecture | Earlier user-accepted Linux / `x86_64` observation; not reprobed | No fresh target VM was inspected |
+| KVM exposure | Earlier user-accepted `/dev/kvm` `ENOENT`; not reprobed | No device-open/API/usability verdict; no conclusion about physical NAS hardware |
+| Host Copilot CLI | One offline `copilot --version`, exit 0: `GitHub Copilot CLI 1.0.83` | Host version only; not a GHCP execution-route or guest-version verdict |
+| Host Codex CLI | One offline `codex --version`, exit 0: `codex-cli 0.144.5` | Generic host binary; not evidence that Codex belongs to the GHCP route; SDK version unestablished |
+| Registered VM substrate | Exact-main Agentic V2 documentation requires Firecracker, jailer, KVM, a kernel and rootfs | Readiness metadata is not boot/reset/cleanup proof; no launcher was invoked |
+| GHCP guest image | The inspected GHCP plan has null image/OS/package digests and version policy, with no local guest-image path | Local availability is unknown, not proven absent; no storage search or image verification occurred |
 
-The authorized snapshot already contained the complete pinned input set.
-Discovery stopped there; no broader filesystem search was needed. Each exact
-snapshot role was a symlink to a regular, single-link blob inside that same
-dataset cache. The operation checked confinement and the pinned digest, then
-copied the bytes into fresh private single-link regular source files with the
-existing relative layout. This was local cache normalization, not a download.
-The cache was not changed and the materializer's no-symlink rule was preserved.
+The inspected policy includes
+`batch-runner/experiments/execution_envelope/gpt56_sol_ghcp_codex_vm_gate.yaml`,
+`batch-runner/sandbox/v2/README.md`,
+`batch-runner/sandbox/agentic_v2_capabilities.json` and directly referenced
+launcher/image/host metadata. Historical host observations do not approve a
+replacement target or establish current readiness.
 
-| Published relative role | Bytes | SHA256 |
-| --- | ---: | --- |
-| `data/train-00000-of-00001.parquet` | 1913489 | `f8422fab9b21d90c0ee5f0659842ab666d418cb8940842918f9f4b0df7ae0202` |
-| `reference_files/bb09ca2a9999b404d7fced9202b42949/Work Time Study - Source.xlsx` | 329418 | `bb09ca2a9999b404d7fced9202b42949cd9f142f39554e254bac77b3686dae9e` |
-| `reference_files/901e943a97328a661f9e704ae43eeea1/Acquisition Criteria (2).pdf` | 47850 | `901e943a97328a661f9e704ae43eeea167e7805385a99322f1c24f8e159125c4` |
-| `developer-instructions.txt` | 178 | `f8300fb85d3bd1231d9dd548817a941aa938fb42d6c8c7a1cd8dea7abece97a4` |
-| `ghcp-vm-input-manifest.json` | 11132 | `960be2a26ccd97da5f3c7530deca3c66dd77f3f3fe6124811309cda54435da18` |
-| `ghcp-vm-input-bundle-ready.json` | 1519 | `bdab5831512ab01bd68e292cf8f9558583abc1dcd46d405911076f24aeccc33d` |
+`batch-runner/sandbox/v2/parent.lock.json` pins a separate `linux/amd64`
+container parent at
+`sha256:ee6ef798631d3c3aeaed28658c640e6f5d021677449852bf2e1f18be5bd24edb`.
+That pin is not an approved GHCP guest kernel/rootfs or proof of local image
+availability. Agentic V2 network/resource settings were not adopted as GHCP
+settings. The GHCP CLI/SDK pins remain null despite the host version readings.
 
-The sibling reservation contains 349 bytes with SHA256
-`88e67f6c5f20e7d21c7a40cc988149a5217dba584d3ad3134eb00911abd2bfa9`.
-The whole parquet was copied without filtering or re-encoding. Only the two
-reference roles in the exact five-task closure were staged. The verifier
-checked the ordered task IDs, prompt hashes, reference hashes, developer
-instructions, deliverable/grading metadata and all nineteen source pins.
-These pins establish source consistency, not grader accuracy or a full-220
-execution identity.
+### Preserved input evidence and remaining requirements
 
-### Executed operations
+The accepted condition remains `gpt56_sol_ghcp_codex_vm_pilot5_v1`.
+Its ready/bundle SHA256 is
+`bdab5831512ab01bd68e292cf8f9558583abc1dcd46d405911076f24aeccc33d`,
+and its reviewed plan SHA256 is
+`6cc207ee574e6b062cecfab8dd6035a0ab67cd0f2cba24516b2fdc149babd5dc`.
+These are preserved prior identities, not new hash measurements. Neither the
+bundle nor the private handoff was opened. Nothing was restaged or reverified,
+and preflight was not rerun.
 
-The following are the actual invocation shapes with private path arguments
-represented by variables. Each operation ran once, without retries. The plan
-variable held the canonical digest above; no raw input or host path is included
-in this record.
-
-```bash
-/usr/bin/python3 batch-runner/ghcp_vm_input_bundle.py \
-  --reviewed-plan-sha256 "$GHCP_REVIEWED_PLAN_SHA256" \
-  --dataset-parquet "$GHCP_LOCAL_PARQUET" \
-  --reference-root "$GHCP_LOCAL_REFERENCE_ROOT" \
-  --destination "$GHCP_INPUT_DESTINATION"
-
-/usr/bin/python3 batch-runner/ghcp_vm_input_bundle.py \
-  --reviewed-plan-sha256 "$GHCP_REVIEWED_PLAN_SHA256" \
-  --verify-bundle "$GHCP_INPUT_DESTINATION"
-
-/usr/bin/python3 batch-runner/ghcp_vm_gate_preflight.py \
-  --local-input-bundle "$GHCP_INPUT_DESTINATION" \
-  --reviewed-plan-sha256 "$GHCP_REVIEWED_PLAN_SHA256"
-```
-
-| Operation | Exit | Observed verdict |
-| --- | ---: | --- |
-| Materialize | 0 | `input_bundle_complete=true`; ready published last |
-| Verify bundle | 0 | `input_bundle_complete=true`; published bytes and current pins rechecked |
-| Preflight with verified bundle | 2 | `configuration_valid=true`; launch remains blocked |
-
-All three results identify the same ready/bundle SHA256 shown above.
-`cleared_blockers` is exactly
-`["original_task_input_materialization_unverified"]`. The evidence boundary is
-`local_input_materialization_not_vm_or_model_consumption`.
-All nine runtime observations, including `verified_task_inputs`, remain null.
-`launch_enabled`, `launch_allowed`, `paid_execution_enabled`,
-`paid_execution_allowed`, `full_220_enabled` and `full_220_allowed` are false.
-
-The fresh persistent destination is private and outside the checkout and
-cache. The real bundle, reservation and normalized sources are retained for
-the next stage. A private handoff records the destination and the plan, code
-and bundle identities. No raw parquet, references, prompts, host paths, credentials
-or endpoints are included in Git or public records.
-
-### Remaining requirements and evidence limits
-
-The consuming preflight returned these fourteen blockers, in order:
+Prior real materialization, verification and consuming preflight returned
+0 / 0 / 2 and satisfied only
+`original_task_input_materialization_unverified`. That accepted result remains
+local materialization evidence, not VM/model consumption or grader validation.
+Its fourteen remaining requirements are carried forward unchanged:
 
 ```text
 ghcp_route_served_identity_unverified
@@ -122,43 +80,49 @@ grading_result_runtime_unwired
 grader_validation_unverified
 ```
 
-The same original five tasks and GHCP Sol/Codex/Max/1M request remain fixed.
-GHCP and Foundry stay separate; no performance comparison is made. Auth, VM
-reset/capture, versions, limits, repeats/variance, time/cost caps and usage
-decisions are unchanged. No served identity, capability, usage or grader
-validation was observed. This operation grants no execution permission.
+All nine runtime observations remain unobserved/null. `launch_enabled`,
+`launch_allowed`, `paid_execution_enabled`, `paid_execution_allowed`,
+`full_220_enabled` and `full_220_allowed` remain false. This is the inherited
+preflight boundary, not a fresh evaluation. The same five original tasks and
+GHCP Sol/Codex/Max/1M request remain fixed and separate from Foundry. No auth,
+repeat, variance, time, cost, usage or runtime-limit decision was invented.
 
-The earlier synthetic result, `89 passed in 33.08s` on implementation
-`d92e72b2fc76510929b961c8103a8d2d6ed4e02c`, is separate historical test evidence.
-It did not stage these real inputs and is not the evidence for this operation.
-No pytest, new fixture, build, benchmark, manual workflow, Azure/Foundry call,
-HF download/upload, login/token access, provider/model/client, VM, grader or
-paid execution occurred here.
+### Owner/admin handoff
 
-### Records review and skills
+Provide one explicitly approved isolated Linux target with usable KVM
+exposure, either this container after an authorized host change or an approved
+alternative, together with the pinned guest image/kernel/rootfs and OS/package
+policy required for a separately approved non-paid reset/input-copy test.
+No alternative image or target is implicitly approved by this record.
 
-The complete skill catalog was inspected once. `experiment-design` retained
-the existing exact-byte acceptance boundary: missing/drifted bytes or uncertain
-provenance would stop the operation. No settings were invented.
-`experiment-report-en` separates the real local observation from unobserved
-runtime claims; `im-not-ai-en` preserves the exact values and limits while
-copyediting the English records. `first-reviewer` reviewed the immutable
-records-only commit. No implementation work required `llm-systems-engineer`.
-UI/animation, grading, repo-readiness and extreme-reasoner do not apply because
-no interface, grading behavior, publication-readiness audit or workflow changed.
+A GHCP noninteractive execution route, including approved versions and auth
+supply/disposal, remains unproven and is a separate prerequisite for later
+GHCP execution. Host CLI versions do not supply that route. No auth bridge or
+replacement runtime was implemented, and no launch permission is granted.
+Capability monitoring stops until the owner/admin supplies a changed environment.
 
-Read-only `first-reviewer` returned APPROVE with no findings on records HEAD
-`8ea66191829148c3f84bc8564c00951f15ea225e` against base
-`c1c4e7a50af80a719bacae0054337a4306c5c051`. The reviewer compared immutable Git
-records with the saved sanitized evidence. The review did not independently
-rehash raw inputs or repeat the operation; execution counts and cache handling
-were reviewed from the supplied operational handoff. No tests, imports,
-application CLI, network/CI queries or edits were performed by the reviewer.
-This later acknowledgment is outside that initial review boundary.
+### Validation, review scope and skills
 
-`git diff --check` passed. Fresh final-HEAD automatic checks remain required
-and will be read once after the normal push without waiting or polling.
-The existing author/committer identity is
-`hyeonsangjeon <wingnut0310@gmail.com>`; no attribution trailers are added.
-No Project card edit or merge action was performed. This record stops at
-pre-merge facts.
+Validation is limited to whitespace and comparison of these records with saved
+sanitized observations. Read-only `first-reviewer` returned APPROVE with no
+findings on records HEAD `e90e51db35601bfa38df3f15795bee27df666711` against base
+`6d6663e7e536a88a58079ddc41ed8e38b0507824`. It compared only the two immutable
+records with saved sanitized facts; it did not repeat capability probes or
+inspect private inputs. This acknowledgment commit follows that review and is
+outside its initial review boundary.
+
+The full skill catalog was inspected once. `experiment-report-en` separates
+accepted prior observations, current host metadata and unobserved guest/runtime
+facts. `im-not-ai-en` preserves their values and limits in the English records.
+`experiment-design` does not apply because no experiment condition or setting
+changed. No implementation requires `llm-systems-engineer`; no workflow or
+security architecture change requires `extreme-reasoner`. UI/animation,
+grading and repo-readiness skills do not apply to this records-only handoff.
+
+No tests, suite, build, manual workflow, VM boot/creation, image download,
+package installation, provider/model/client, grader, paid, Azure or HF operation
+was invoked. No credentials were read, and no login, environment dump, sudo,
+permission/device change, broad storage scan, sleep or polling occurred.
+The existing author/committer identity is preserved as
+`hyeonsangjeon <wingnut0310@gmail.com>`, without attribution/session trailers.
+No Project card or merge action is authorized. These are pre-merge facts only.

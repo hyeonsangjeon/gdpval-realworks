@@ -213,6 +213,45 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Record the bounded GHCP VM infrastructure handoff at source
+  `6d6663e7e536a88a58079ddc41ed8e38b0507824`. One authorized GitHub source
+  fetch returned 0; fetched main matched that exact SHA and a new clean
+  worktree was created. Source checkout is no longer an owner/admin blocker.
+  Earlier accepted Linux/`x86_64` and `/dev/kvm` `ENOENT` observations were
+  not repeated. The missing device is specific to this container, not a claim
+  about physical NAS virtualization hardware. Offline host version commands
+  each returned 0: `GitHub Copilot CLI 1.0.83` and `codex-cli 0.144.5`.
+  Neither identifies a fresh guest or proves the GHCP execution route.
+  Repository policy requires Firecracker/jailer, usable KVM, a kernel and
+  rootfs; the GHCP image/OS/package pins and version policy remain null.
+  No GHCP local image path is registered in the inspected plan, so image
+  availability remains unknown. The separate Agentic V2 container-parent
+  pin is not an approved GHCP guest image.
+  The owner/admin must provide an approved isolated Linux target with usable
+  KVM exposure and pinned guest artifacts for a separately approved non-paid
+  reset/input-copy test. The GHCP noninteractive execution route remains a
+  separate unproven prerequisite; no replacement runtime or auth bridge is
+  proposed. The accepted real input bundle
+  `bdab5831512ab01bd68e292cf8f9558583abc1dcd46d405911076f24aeccc33d`
+  and private handoff were not opened, rehashed, restaged or reverified.
+  Prior staging alone satisfied `original_task_input_materialization_unverified`.
+  This check clears nothing: fourteen requirements, nine null runtime
+  observations and six false launch/paid/full-220 flags remain. Source methods,
+  preserved plan identity and the ordered requirements are recorded in
+  `tasks/LATEST_TASK_RESULT/README.md`.
+  `experiment-report-en` and `im-not-ai-en` preserve the observation boundaries.
+  Read-only `first-reviewer` returned APPROVE with no findings on records HEAD
+  `e90e51db35601bfa38df3f15795bee27df666711` against base
+  `6d6663e7e536a88a58079ddc41ed8e38b0507824`. It compared only the two immutable
+  records with saved sanitized facts, without repeating capability probes or
+  inspecting private inputs. This acknowledgment commit follows that review
+  and is outside its initial review boundary. Validation is whitespace and
+  record-to-observation comparison only; no tests, model, VM, grader, HF/Azure
+  or paid operation ran.
+  The GitHub source fetch was network activity. Production, plans, source pins
+  and workflows are unchanged; capability monitoring stops pending an
+  owner/admin environment change.
+
 - Record one real offline GHCP five-task input bundle, published and verified
   with the unchanged CLI at `c1c4e7a50af80a719bacae0054337a4306c5c051`.
   The exact registered HF snapshot was already cached locally. Only its pinned
