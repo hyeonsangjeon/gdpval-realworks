@@ -1,6 +1,105 @@
 # Latest substantive task result
 
-## PROJECT5-GPT56-EXTERNAL-LIVE-RECEIPT-INTAKE
+## PROJECT5-PR641-PILOT-WIRE-CI-PARTITION
+
+Moved the existing non-native wire command into an independent `wire-contracts`
+job. `pilot-contracts` now runs only its existing general GPT-5.6 command.
+The correction changes the workflow partition and its static test, plus these
+completion records. Production intake/schema behavior, source pins, experiment
+settings, launch flags and runtime evidence boundaries are unchanged.
+
+### Supplied hosted evidence and exact partition
+
+The leader supplied the evidence for immutable HEAD
+`509c1d963a784814fe27dc1d1ed9f6c8a18a8d92`, Backend run `35559683998`,
+`pilot-contracts` job `106210033391`. The job started at
+`2026-09-21 04:05:02Z` and was cancelled at `2026-09-21 04:50:17Z` (45:15).
+Its first command succeeded with `1253 passed in 2478.08s (0:41:18)`.
+The second command selected 84 non-native wire cases and passed 33 before
+the shared 45-minute job ceiling cancelled it. The same HEAD's `pytest`,
+`validate`, `advance-check`, `comparison-contracts` and `native-host-contracts`
+were green. These supplied facts were not queried again. They establish that
+the commands shared an insufficient job budget, not an implementation defect.
+
+The five Backend jobs now partition the same tests as follows:
+
+| Job | Selection |
+| --- | --- |
+| `pytest` | Core tests, excluding the sorted union of 11 GPT-5.4 and 9 GPT-5.6 files, plus the unchanged repo-root script tests |
+| `comparison-contracts` | The exact 11 GPT-5.4 files |
+| `pilot-contracts` | The exact eight GPT-5.6 files other than the wire file |
+| `wire-contracts` | `tests/test_gpt56_pilot_wire_receipt.py -k "not native_result_host"` |
+| `native-host-contracts` | `tests/test_gpt56_pilot_wire_receipt.py -k native_result_host` |
+
+The existing static node pins five job names, identical six-step setup, exact
+step names and commands, sorted file families, core exclusions, complementary
+wire predicates and complete exactly-once file/node coverage. The keyword
+remains confined to the wire source. No test or pytest invocation was added
+or removed. All jobs retain `ubuntu-latest`, 45-minute ceilings, pinned
+checkout/setup-python actions, Python `3.10.12`, full-history checkout without
+persisted credentials, dispatch/exact-checkout SHA guards, dependency/cache
+settings and both integration exclusions. Permissions remain `contents: read`;
+triggers and ref-scoped concurrency are unchanged. No secrets, OIDC,
+credentials, matrix, dependencies between jobs or job skips were added.
+
+The mandatory pre-edit `extreme-reasoner` memo returned
+APPROVE-WITH-CONDITIONS. Its conditions preserve coverage and security,
+require immutable review, and require fresh same-final-HEAD success from all
+five Backend jobs. The new check is not automatically an externally required
+branch-protection check; those settings were not changed. A newer same-ref run
+can still cancel all jobs. One more runner and setup raise the nominal
+aggregate allowance from 4 × 45 = 180 to 5 × 45 = 225 runner-minutes (+25%).
+This is neither a measured billing increase nor a guarantee of future timing
+headroom. Independent jobs retain independent verdicts.
+
+### Exact validation and immutable review
+
+Exactly one pytest invocation ran for this correction:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider --tb=short batch-runner/tests/test_a_test_file_nobody_runs_is_not_a_test.py::test_backend_jobs_partition_the_comparison_contracts
+```
+
+Result: `1 passed in 0.23s`, exit 0. `git diff --check` passed.
+No receipt selector, contract group, broad/full suite, cancelled workflow or
+manual workflow ran. Workflow/test implementation HEAD:
+`f2140ee9a26fa527d914a94a5eabdac22ba7a536`. The read-only `first-reviewer`
+verdict is APPROVE, with no BLOCK, MAJOR or MINOR findings. The reviewer read
+the two changed files from immutable Git objects and ran no tests or CI
+queries. The later records-only commit is outside that implementation-review
+boundary. Fresh final-HEAD automatic CI remains required; earlier green
+checks and this static selector do not establish hosted timing headroom.
+The final-HEAD checks will be read once after the normal push, with the
+snapshot recorded in the completion response rather than another commit.
+
+### Evidence limits, skills and ownership
+
+The original intake result, `143 passed, 196 deselected in 2606.67s (0:43:26)`,
+remains tied to implementation `010f7ec0f80c29b6acd8a92077c424ef8f59ef4a`.
+It was not rerun and does not validate this scheduling change. Its complete
+record and older task history are preserved below. This correction does not
+authenticate provider provenance or clear any pilot blocker. All launch and
+full-220 flags remain false. Live wire/served identity, native result host,
+native call limits and Foundry usage/tariff evidence remain unresolved for
+the current pilot; separately approved evidence acquisition and execution
+remain future work.
+
+The full skill catalog was inspected once. `extreme-reasoner` was the first
+relevant agent because this changes a workflow and adds a runner.
+`first-reviewer` reviewed the immutable workflow/test correction.
+`im-not-ai-en` was applied to the English records, preserving commands,
+counts, times, SHAs and qualifications. `experiment-design` and
+`llm-systems-engineer` do not apply to this scheduling-only correction because
+no experiment or runtime evidence contract changes. UI/animation, grading and
+repo-readiness are outside scope: no interface, grader or publication-readiness
+work is involved.
+
+The existing author/committer identity `hyeonsangjeon <wingnut0310@gmail.com>`
+was preserved without attribution trailers or prohibited Git operations.
+No Azure/HF/OIDC, provider/model/client, grader, paid execution, Project edit
+or merge action occurred. This record stops at pre-merge facts.
+
+## Historical PROJECT5-GPT56-EXTERNAL-LIVE-RECEIPT-INTAKE
 
 Added offline intake for sanitized external Foundry receipt claims. The intake
 binds caller-pinned bytes to the original finalized capture, wire, accepted-result

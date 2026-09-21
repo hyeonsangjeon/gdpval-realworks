@@ -13,6 +13,39 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Give PR #641's unchanged non-native wire command its own `wire-contracts`
+  job. The supplied evidence at `509c1d963a784814fe27dc1d1ed9f6c8a18a8d92`
+  identifies Backend run `35559683998`, `pilot-contracts` job `106210033391`,
+  which started at `2026-09-21 04:05:02Z` and was cancelled at
+  `2026-09-21 04:50:17Z`. Its general GPT-5.6 command reported
+  `1253 passed in 2478.08s (0:41:18)`. The following wire command passed 33
+  of 84 selected cases before the shared 45-minute ceiling cancelled the job.
+  This establishes a shared-budget defect, not an implementation failure.
+  `pilot-contracts` now retains only the eight-file general command;
+  `wire-contracts` takes the exact `-k "not native_result_host"` command.
+  Core's 20 exclusions, the 11-file GPT-5.4 selection and native-host's
+  complementary `-k native_result_host` selection are unchanged. The static
+  contract pins five jobs, identical six-step setup, exact steps/commands,
+  all 11 GPT-5.4 and 9 GPT-5.6 files, and complete disjoint node coverage.
+  Pre-edit `extreme-reasoner` decision: APPROVE-WITH-CONDITIONS. All jobs
+  retain read-only permissions, pinned actions, SHA guards and 45-minute
+  limits under the existing ref-scoped concurrency. The nominal aggregate
+  allowance rises from 180 to 225 runner-minutes (+25%), adding one setup
+  without adding tests or pytest commands; future CI headroom is unproven.
+  The sole selector was
+  `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider --tb=short batch-runner/tests/test_a_test_file_nobody_runs_is_not_a_test.py::test_backend_jobs_partition_the_comparison_contracts`.
+  It reported `1 passed in 0.23s`, exit 0; `git diff --check` passed.
+  Workflow/test implementation HEAD:
+  `f2140ee9a26fa527d914a94a5eabdac22ba7a536`. Its read-only `first-reviewer`
+  verdict is APPROVE with no findings; the later records-only commit is
+  outside that implementation-review boundary. `im-not-ai-en` was applied to
+  the English records; skill scope decisions are recorded in
+  `tasks/LATEST_TASK_RESULT/README.md`.
+  Fresh final-HEAD automatic CI remains required for all five Backend jobs
+  and the other required checks. Receipt logic, source pins, experiment
+  settings, launch flags and evidence boundaries are unchanged. No long
+  selector or cancelled workflow was rerun, and no live execution occurred.
+
 - Correct only the linked input-bundle test's ordered blocker expectation in
   PR #640. At `be06873cee480a7db6b03557af20f85ebf848bb0`, the leader reported
   Backend run `35549673553`, `pilot-contracts` job `106181955827`, completing
