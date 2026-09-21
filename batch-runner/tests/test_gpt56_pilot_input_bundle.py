@@ -303,8 +303,14 @@ def test_explicit_verified_bundle_closes_only_prepared_input_requirement(input_s
     assert report["launch_blockers"] == expected and len(expected) == len(before["launch_blockers"]) - 1
     assert {LIVE_BLOCKER, "native_sandbox_and_result_bundle_host_unverified", "actual_pilot_deployment_not_prepared"} <= set(expected)
     if linked:
-        assert expected == [LIVE_BLOCKER, "native_sandbox_and_result_bundle_host_unverified", "actual_pilot_deployment_not_prepared",
-                            "prepared_request_capture_unverified"]
+        assert expected == [
+            "native_call_and_token_limits_unresolved",
+            LIVE_BLOCKER,
+            "foundry_usage_and_tariff_mapping_unverified",
+            "native_sandbox_and_result_bundle_host_unverified",
+            "actual_pilot_deployment_not_prepared",
+            "prepared_request_capture_unverified",
+        ]
     gate = report["input_bundle_gate"]
     assert gate["input_bundle_complete"] is True and gate["cleared_blockers"] == [PREPARED_BLOCKER]
     assert gate["consumed_bundle_sha256"] == _digest((case.root / bundle.READY_PATH).read_bytes())["sha256"]
