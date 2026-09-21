@@ -135,11 +135,13 @@ def test_the_orphaned_directory_that_prompted_this_is_actually_wired():
 
 
 def test_backend_jobs_partition_the_comparison_contracts():
-    """Four jobs cover every node once, sharing only a complementary wire split."""
+    """Five jobs cover every node once, sharing only a complementary wire split."""
     text = WORKFLOW.read_text(encoding="utf-8")
     workflow = yaml.safe_load(text)
     jobs = workflow["jobs"]
-    assert set(jobs) == {"pytest", "comparison-contracts", "pilot-contracts", "native-host-contracts"}
+    assert set(jobs) == {
+        "pytest", "comparison-contracts", "pilot-contracts", "wire-contracts", "native-host-contracts"
+    }
     assert workflow["permissions"] == {"contents": "read"}
     assert workflow["concurrency"] == {
         "group": "backend-tests-${{ github.ref }}",
@@ -156,6 +158,7 @@ def test_backend_jobs_partition_the_comparison_contracts():
     core = jobs["pytest"]["steps"]
     comparison = jobs["comparison-contracts"]["steps"]
     pilot = jobs["pilot-contracts"]["steps"]
+    wire = jobs["wire-contracts"]["steps"]
     native_host = jobs["native-host-contracts"]["steps"]
     setup_names = [
         "Verify dispatch contract",
@@ -173,8 +176,9 @@ def test_backend_jobs_partition_the_comparison_contracts():
         "Run comparison contracts"
     ]
     assert [step["name"] for step in pilot] == setup_names + ["Run pilot contracts"]
+    assert [step["name"] for step in wire] == setup_names + ["Run wire contracts"]
     assert [step["name"] for step in native_host] == setup_names + ["Run native host contracts"]
-    assert core[:6] == comparison[:6] == pilot[:6] == native_host[:6]
+    assert core[:6] == comparison[:6] == pilot[:6] == wire[:6] == native_host[:6]
     assert core[1] == {
         "name": "Checkout",
         "uses": "actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09",
@@ -218,7 +222,9 @@ def test_backend_jobs_partition_the_comparison_contracts():
     }
 
     argv = []
-    for step, command_count in ((core[6], 1), (comparison[6], 1), (pilot[6], 2), (native_host[6], 1)):
+    for step, command_count in (
+        (core[6], 1), (comparison[6], 1), (pilot[6], 1), (wire[6], 1), (native_host[6], 1)
+    ):
         assert set(step) == {"name", "run"}
         lines = step["run"].splitlines()
         assert len(lines) == command_count + 1 and lines[0] == "cd batch-runner"

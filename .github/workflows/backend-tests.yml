@@ -195,7 +195,7 @@ jobs:
       # paid APIs; CI must never pay.
       #
       # Only the explicit GPT-5.4/GPT-5.6 contract files move to their family jobs;
-      # no additional tests are deselected across the four jobs. The static
+      # no additional tests are deselected across the five jobs. The static
       # partition test compares all commands with the actual file set, so a
       # new or removed contract file requires updating its selection and ignore.
       # The sandbox launcher test used to be deselected because it probed exec
@@ -243,7 +243,7 @@ jobs:
         run: python -m pytest scripts/__tests__ -m "not integration" --tb=short -q -rs
 
   # Separate read-only runners give each contract family its own 45-minute
-  # ceiling. `pytest` remains the core check; all four job verdicts must be
+  # ceiling. `pytest` remains the core check; all five job verdicts must be
   # reviewed. Keep setup and dispatch pinning identical to the core job.
   comparison-contracts:
     runs-on: ubuntu-latest
@@ -358,6 +358,64 @@ jobs:
         run: |
           cd batch-runner
           python -m pytest -m "not integration" --tb=short -q -rs tests/test_gpt56_evidence_preflight_gate.py tests/test_gpt56_foundry_evidence_intake.py tests/test_gpt56_pilot_config_bundle.py tests/test_gpt56_pilot_deployment_binding.py tests/test_gpt56_pilot_identity_plan.py tests/test_gpt56_pilot_input_bundle.py tests/test_gpt56_pilot_input_capture.py tests/test_gpt56_sol_codex_pilot_preflight.py
+
+  # Wire contracts need their own budget after the general pilot suite used
+  # 41:18 of the shared 45-minute ceiling in run 35559683998.
+  wire-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Verify dispatch contract
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$GITHUB_SHA" == "$EXPECTED_SHA" ]]
+          [[ "$WORKFLOW_SHA" == "$EXPECTED_SHA" ]]
+          echo "dispatch pinned to $EXPECTED_SHA"
+
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify exact checkout
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$(git rev-parse HEAD)" == "$EXPECTED_SHA" ]]
+
+      - name: Setup Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.10.12"
+          cache: pip
+          cache-dependency-path: batch-runner/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          cd batch-runner
+          pip install -r requirements.txt
+
+      - name: Verify integration tests stay deselected
+        run: |
+          set -euo pipefail
+          cd batch-runner
+          if ! grep -qE '^addopts = .*-m "not integration"' pytest.ini; then
+            echo "::error::pytest.ini no longer deselects integration tests"
+            exit 1
+          fi
+          echo "pytest.ini deselects integration tests"
+
+      - name: Run wire contracts
+        run: |
+          cd batch-runner
           python -m pytest -m "not integration" --tb=short -q -rs tests/test_gpt56_pilot_wire_receipt.py -k "not native_result_host"
 
   # Only the shared wire file is split by complementary keyword predicates.
