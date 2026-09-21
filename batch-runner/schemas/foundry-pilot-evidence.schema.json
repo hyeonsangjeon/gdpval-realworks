@@ -122,6 +122,122 @@
         }
       }
     },
+    "external_live_runtime_time": {
+      "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,6})?Z(?![\\s\\S])"
+    },
+    "external_live_bytes": {
+      "type": "object", "additionalProperties": false, "required": ["size", "sha256"],
+      "properties": {
+        "size": {"type": "integer", "minimum": 1, "maximum": 9223372036854775807},
+        "sha256": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "external_live_task_id": {
+      "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?![\\s\\S])"
+    },
+    "external_live_result": {
+      "type": "object", "additionalProperties": false, "required": ["size", "sha256", "result_fingerprint"],
+      "properties": {
+        "size": {"type": "integer", "minimum": 1, "maximum": 9223372036854775807},
+        "sha256": {"$ref": "#/$defs/digest"}, "result_fingerprint": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "external_live_request": {
+      "description": "Exact local app-server serialization and RPC correlation, never provider HTTP identity.",
+      "type": "object", "additionalProperties": false, "required": ["request_id_sha256", "serialized_utf8"],
+      "properties": {
+        "request_id_sha256": {"$ref": "#/$defs/digest"}, "serialized_utf8": {"$ref": "#/$defs/external_live_bytes"}
+      }
+    },
+    "external_live_binding": {
+      "type": "object", "additionalProperties": false,
+      "required": ["run_id", "reviewed_source_sha", "task_ids", "run_started_at", "run_completed_at", "capture", "capture_linkage_sha256", "prepared", "upstream_bundles_sha256", "caps_ready", "caps_reservation", "wire_ready", "wire_reservation", "host_ready", "host_reservation", "evidence_ready", "evidence_roles", "accepted_results"],
+      "properties": {
+        "run_id": {"const": "gpt56_sol_foundry_codex_pilot5_v1"}, "reviewed_source_sha": {"$ref": "#/$defs/commit"},
+        "task_ids": {"type": "array", "minItems": 5, "maxItems": 5, "uniqueItems": true, "items": {"$ref": "#/$defs/external_live_task_id"}},
+        "run_started_at": {"$ref": "#/$defs/external_live_runtime_time"}, "run_completed_at": {"$ref": "#/$defs/external_live_runtime_time"},
+        "capture": {"$ref": "#/$defs/external_live_bytes"}, "capture_linkage_sha256": {"$ref": "#/$defs/digest"},
+        "prepared": {"$ref": "#/$defs/external_live_bytes"}, "upstream_bundles_sha256": {"$ref": "#/$defs/digest"},
+        "caps_ready": {"$ref": "#/$defs/external_live_bytes"}, "caps_reservation": {"$ref": "#/$defs/external_live_bytes"},
+        "wire_ready": {"$ref": "#/$defs/external_live_bytes"}, "wire_reservation": {"$ref": "#/$defs/external_live_bytes"},
+        "host_ready": {"$ref": "#/$defs/external_live_bytes"}, "host_reservation": {"$ref": "#/$defs/external_live_bytes"},
+        "evidence_ready": {"$ref": "#/$defs/external_live_bytes"},
+        "evidence_roles": {
+          "type": "object", "additionalProperties": false, "required": ["identity", "reasoning", "context", "native_caps", "usage", "tariff"],
+          "properties": {
+            "identity": {"$ref": "#/$defs/external_live_bytes"}, "reasoning": {"$ref": "#/$defs/external_live_bytes"},
+            "context": {"$ref": "#/$defs/external_live_bytes"}, "native_caps": {"$ref": "#/$defs/external_live_bytes"},
+            "usage": {"$ref": "#/$defs/external_live_bytes"}, "tariff": {"$ref": "#/$defs/external_live_bytes"}
+          }
+        },
+        "accepted_results": {
+          "type": "object", "additionalProperties": false,
+          "required": ["step2_inference_results_condition_a.json", "step2_inference_results.json"],
+          "properties": {
+            "step2_inference_results_condition_a.json": {"$ref": "#/$defs/external_live_result"},
+            "step2_inference_results.json": {"$ref": "#/$defs/external_live_result"}
+          }
+        }
+      }
+    },
+    "external_live_attempt_binding": {
+      "description": "Run and accepted-row bounds do not measure individual provider transport timing.",
+      "type": "object", "additionalProperties": false,
+      "required": ["task_id", "attempt_index", "retry_kind", "logical_turn", "not_before", "accepted_at", "caps_receipt", "wire_receipt", "host_receipt", "accepted_row_sha256", "thread_start", "turn_start", "thread_id_sha256", "turn_id_sha256"],
+      "properties": {
+        "task_id": {"$ref": "#/$defs/external_live_task_id"}, "attempt_index": {"type": "integer", "minimum": 0, "maximum": 3},
+        "retry_kind": {"enum": ["initial", "infrastructure"]}, "logical_turn": {"const": 1},
+        "not_before": {"$ref": "#/$defs/external_live_runtime_time"}, "accepted_at": {"$ref": "#/$defs/external_live_runtime_time"},
+        "caps_receipt": {"$ref": "#/$defs/external_live_bytes"}, "wire_receipt": {"$ref": "#/$defs/external_live_bytes"},
+        "host_receipt": {"$ref": "#/$defs/external_live_bytes"}, "accepted_row_sha256": {"$ref": "#/$defs/digest"},
+        "thread_start": {"$ref": "#/$defs/external_live_request"}, "turn_start": {"$ref": "#/$defs/external_live_request"},
+        "thread_id_sha256": {"$ref": "#/$defs/digest"}, "turn_id_sha256": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "external_live_count": {
+      "allOf": [{"$ref": "#/$defs/count"}, {"maximum": 9223372036854775807}]
+    },
+    "external_live_usage": {
+      "description": "The existing Foundry usage vocabulary, with bounded quantities; billing is an independent external assertion.",
+      "allOf": [
+        {"$ref": "#/$defs/usage"},
+        {"properties": {"meters": {"properties": {
+          "input_tokens": {"properties": {"quantity": {"$ref": "#/$defs/external_live_count"}}},
+          "cached_input_tokens": {"properties": {"quantity": {"$ref": "#/$defs/external_live_count"}}},
+          "output_tokens": {"properties": {"quantity": {"$ref": "#/$defs/external_live_count"}}}
+        }}}}
+      ]
+    },
+    "external_live_attempt": {
+      "type": "object", "additionalProperties": false,
+      "required": ["binding", "source_kind", "issuer", "window_started_at", "window_ended_at", "observed_at", "issued_at", "valid_until", "provider_request_id_sha256", "provider_response_id_sha256", "served", "usage", "billing", "tariff"],
+      "properties": {
+        "binding": {"$ref": "#/$defs/external_live_attempt_binding"},
+        "source_kind": {"const": "foundry_response_export"}, "issuer": {"const": "microsoft_foundry"},
+        "window_started_at": {"$ref": "#/$defs/time"}, "window_ended_at": {"$ref": "#/$defs/time"},
+        "observed_at": {"$ref": "#/$defs/time"}, "issued_at": {"$ref": "#/$defs/time"}, "valid_until": {"$ref": "#/$defs/time"},
+        "provider_request_id_sha256": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/digest"}]},
+        "provider_response_id_sha256": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/digest"}]},
+        "served": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/subject"}]},
+        "usage": {
+          "description": "External corroboration of available raw app-server cumulative counters, not provider billing; missing native counters cannot be guessed.",
+          "oneOf": [{"type": "null"}, {"$ref": "#/$defs/external_live_usage"}]
+        },
+        "billing": {
+          "description": "Independent unverified provider billing meter quantities; never derived from or equated with app-server token counters.",
+          "oneOf": [{"type": "null"}, {"$ref": "#/$defs/external_live_usage"}]
+        },
+        "tariff": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/tariff"}]}
+      }
+    },
+    "external_live_receipt": {
+      "description": "Caller-pinned sanitized external claims checked against an exact finalized in-process owner. Neither hashes nor the owner authenticate the provider or distinguish disguised synthetic evidence; no fact is eligible to clear launch blockers.",
+      "type": "object", "additionalProperties": false, "required": ["schema_version", "binding", "attempts"],
+      "properties": {
+        "schema_version": {"const": "pilot-external-live-receipt-v1"}, "binding": {"$ref": "#/$defs/external_live_binding"},
+        "attempts": {"type": "array", "minItems": 5, "maxItems": 20, "items": {"$ref": "#/$defs/external_live_attempt"}}
+      }
+    },
     "artifact": {
       "type": "object", "additionalProperties": false,
       "required": ["role", "source_kind", "issued_at", "observed_at", "valid_until", "subject", "documented", "observed"],

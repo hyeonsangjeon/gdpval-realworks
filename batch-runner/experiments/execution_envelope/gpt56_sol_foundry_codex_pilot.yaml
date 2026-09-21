@@ -94,6 +94,17 @@ runtime_caps_usage:
   offline_preflight_consumption: false
   clears_native_call_or_billing_blockers: false
 
+# Offline intake needs the original live owners and separately reviewed bytes.
+# Source labels and hashes do not authenticate a provider or clear a blocker.
+external_live_receipt:
+  recorder: batch-runner/gpt56_pilot_external_live_receipt.py
+  source_base_sha: 20c2fea35fbd0bc9cd197f5fd07c5b4f4113377a
+  ready_marker: pilot-external-live-receipt-ready.json
+  evidence_boundary: offline_external_receipt_consistency_not_provider_authenticity_or_launch_approval
+  requires_live_caps_usage_witness: true
+  offline_preflight_consumption: false
+  clears_current_blockers: false
+
 identity:
   provider: azure
   model: gpt-5.6-sol
@@ -223,7 +234,7 @@ cost:
   use_openai_or_copilot_tariff_for_foundry: false
   billing_evidence: provider_native_usage_without_invented_currency_conversion
 
-# 56 exact source files; the superseded record is sealed without refreshing it.
+# 57 exact source files; the superseded record is sealed without refreshing it.
 source_pins:
   batch-runner/experiments/exp035_codex_foundry_full220.yaml: eef6c66ca5d851b379b189e53ed27ef0d10d822fcd09a2e5a5c51acbc5d40819
   batch-runner/experiments/execution_envelope/gdpval_task_catalog.json: 5f1eca853979b2b4efe6c6ba656545c3a416da920e3faf067d52f5d8ac4ae0eb
@@ -239,22 +250,23 @@ source_pins:
   batch-runner/step1_prepare_tasks.py: c487fd25710155e5bbf07461dd0c3c2d806babe1a64e8ca7cd7931c50461c742
   batch-runner/step2_run_inference.py: 3cc748ed49de4a2642ace6bc825e3c4fdedc1e0adc98f0d88d7b13c9acc7fd38
   batch-runner/gpt56_pilot_wire_receipt.py: d0e3fe7fe04e32ae041bcaaf68c6209c2bc46d0413491172ac4e3e90c4a3fdc2
-  batch-runner/gpt56_pilot_native_result_host.py: 343a0c8ce5a52a4073facec4ede54983eed34cd6433f885e80e24d276df4adb2
+  batch-runner/gpt56_pilot_native_result_host.py: bff197cc94926edbd2a3acf7f1891a699460185354f34fc0f2772d5204a2ecde
   batch-runner/gpt56_pilot_runtime_caps_usage.py: 0c3868fb52cfa72da5252298a56a1e13bde2b0b61d233c3a19a56af289123b44
+  batch-runner/gpt56_pilot_external_live_receipt.py: 270a0f7ca441333ea65e3efc3cc3ec3d02f153d8625766f0514846cee103697e
   batch-runner/core/result_fingerprint.py: 12f33eea20922e9bcc85f136e57af2a7ed5263335de638df2099ef33ed9f3c01
   batch-runner/core/public_error.py: c51c221712e31b85c4fadf1b0afa2cb4c914ec707b36cabc1aea5ab9a31020b5
   batch-runner/core/cost_receipts.py: 4b936516da622ceaf8cf8d5e10d2dd1b69ded831b4143557b6431a197bab9cbe
   batch-runner/core/result_projection.py: 1b47c4ee0f6d050e5edd4ac5a301203ba834c8d159b1557b04d83046ca965ec6
   batch-runner/schemas/grade.schema.json: 9c611874c2d7aa57018eecdc86b7c0d579aaa9c29dd0df649058eec9ad5175b9
   batch-runner/experiments/execution_envelope/gpt56_sol_copilot_codex_pilot.yaml: 47799d3f61374679722df32c67de14f9d0d56bd6586cf7b28c10076fd41d1901
-  batch-runner/gpt56_sol_codex_pilot_preflight.py: 12a18d532681e2ad171a81cf7dca7516ebea531878632daef941bef82fda80e9
+  batch-runner/gpt56_sol_codex_pilot_preflight.py: 1c11f949aec6c9764fde4912771ea8d38fcb48b1284496376d54e59f790360c1
   batch-runner/core/agentic_v2_preregistration.py: 02ac15ef8483ac367796feb1fcbadf90a27062c2bf5b3147b75b7e17a0c089e0
   batch-runner/core/execution_envelope_tasks.py: dd934314ce447b78efa45ad9d349f198d1e429531eccdf430106b87335dc2ea0
   batch-runner/core/azure_ai_clients.py: f7211d1070c0b4dd7aae0204c520bc789bb84a300d061b0bdc4fc9a21738915f
   batch-runner/core/codex_azure_token.py: fa3621b2b77c35fd34e4e703359c26670b8f9fa75b7ed98d8172737cc91cfaf1
   batch-runner/requirements.txt: 34e6e3d73fce7ee2e08b7573a78ff8d3946a2b385ba07d880e56bb2c13069eba
   batch-runner/gpt56_foundry_evidence_intake.py: 5cc0477ab6e63203bfd9836be40a06164c5138a5442427082d8c20d7dfce5d4f
-  batch-runner/schemas/foundry-pilot-evidence.schema.json: 4ef619c47a62104225c5225e0bbf20c1da744e30e27a5aafeae1e34b24389ca7
+  batch-runner/schemas/foundry-pilot-evidence.schema.json: 1e69be36260f2a8500404cde7b50be5280a91e581c3c957ac90b5604b66dcad0
   batch-runner/gpt54_codex_input_capture.py: f2a31e4ffc4ed26e28e3e8bc0cb88ce6b33887cc94bb8a9d7ee1e6b6170642ec
   batch-runner/gpt54_run_config_bundle.py: 71b4bd5247fed0aaba827e6d6e54d1cc33b5d91c494760d996f5eb815d527b9d
   batch-runner/gpt54_v2_grading_input.py: 3fae995caf3d785d64fad02280d77a6853389a2ff12be2e7165e4868b4b0b830

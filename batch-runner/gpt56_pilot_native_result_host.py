@@ -57,12 +57,14 @@ def _identity(path: Path) -> tuple[int, int]:
     return metadata.st_dev, metadata.st_ino
 
 
-def _workspace_bytes(root: Path, relative: Path, identity: tuple[int, int], expected: dict) -> bytes:
+def _workspace_bytes(root: Path, relative: Path, identity: tuple[int, int], expected: dict,
+                     *, max_bytes: int | None = None) -> bytes:
     """Read a potentially hostile runtime leaf without following raced links.
 
     The ordinary bundle reader is used for trusted published bundles. Runtime
     output additionally needs dirfd traversal and a nonblocking leaf open so a
-    FIFO swapped in after lstat cannot block collection.
+    FIFO swapped in after lstat cannot block collection. An optional intake
+    bound applies to the opened file and every read, not only an earlier stat.
     """
     with _held_parents(root, (relative.as_posix(),)) as check, ExitStack() as stack:
         descriptor = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
@@ -76,9 +78,16 @@ def _workspace_bytes(root: Path, relative: Path, identity: tuple[int, int], expe
         stack.callback(os.close, leaf)
         before = os.fstat(leaf)
         _require(stat.S_ISREG(before.st_mode) and before.st_nlink == 1)
+        if max_bytes is not None:
+            _require(type(max_bytes) is int and max_bytes > 0 and before.st_size <= max_bytes
+                     and (not expected or before.st_size == expected["size"]))
         chunks = []
-        while chunk := os.read(leaf, 1024 * 1024):
+        consumed = 0
+        while chunk := os.read(leaf, 1024 * 1024 if max_bytes is None else
+                               min(1024 * 1024, max_bytes + 1 - consumed)):
             chunks.append(chunk)
+            consumed += len(chunk)
+            _require(max_bytes is None or consumed <= max_bytes)
         data = b"".join(chunks)
         fields = ("st_dev", "st_ino", "st_mode", "st_nlink", "st_size", "st_mtime_ns", "st_ctime_ns")
         before_identity = tuple(getattr(before, key) for key in fields)
