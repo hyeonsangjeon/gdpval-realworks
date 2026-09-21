@@ -34,8 +34,8 @@ ALL_BLOCKERS = [
     "actual_pilot_deployment_not_prepared",
     "prepared_request_capture_unverified",
 ]
-CLEARED = [ALL_BLOCKERS[index] for index in (0, 1, 2, 3, 7)]
-REMAINING = [ALL_BLOCKERS[index] for index in (4, 5, 6, 8, 9, 10)]
+CLEARED = [ALL_BLOCKERS[index] for index in (0, 1, 2)]
+REMAINING = [ALL_BLOCKERS[index] for index in (3, 4, 5, 6, 7, 8, 9, 10)]
 SENTINEL = "private-evidence-value-DO-NOT-ECHO"
 
 
@@ -186,8 +186,7 @@ def test_complete_bundle_clears_exactly_five_local_evidence_requirements(
     }
     assert pilot.EVIDENCE_BLOCKER_ROLES == {
         ALL_BLOCKERS[0]: ("identity",), ALL_BLOCKERS[1]: ("identity",),
-        ALL_BLOCKERS[2]: ("reasoning", "context"), ALL_BLOCKERS[3]: ("native_caps",),
-        ALL_BLOCKERS[7]: ("usage", "tariff"),
+        ALL_BLOCKERS[2]: ("reasoning", "context"),
     }
     assert set(CLEARED).isdisjoint(REMAINING)
     assert plan == original_plan

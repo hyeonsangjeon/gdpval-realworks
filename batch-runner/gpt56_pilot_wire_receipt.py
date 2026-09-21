@@ -80,6 +80,7 @@ class _TransportObservation:
         self.settings = None
         self.usage: list[dict] = []
         self.completion = None
+        self.caps_usage_observer = None
 
     @contextmanager
     def guard(self):
@@ -165,8 +166,11 @@ class _TransportObservation:
                 if "modelContextWindow" in usage:
                     value = usage["modelContextWindow"]
                     _require(value is None or type(value) is int and value > 0)
-                self.usage.append({"thread_id_sha256": thread, "turn_id_sha256": _correlation(params["turnId"]),
-                                   "native": json.loads(_bytes(usage))})
+                snapshot = {"thread_id_sha256": thread, "turn_id_sha256": _correlation(params["turnId"]),
+                            "native": json.loads(_bytes(usage))}
+                if self.caps_usage_observer is not None:
+                    self.caps_usage_observer.observe(snapshot)
+                self.usage.append(snapshot)
 
     def finish(self, *, success: bool, thread_id: str, turn_id: str) -> dict:
         with self.guard():
@@ -177,6 +181,8 @@ class _TransportObservation:
             _require(all(row["thread_id_sha256"] == self.thread and row["turn_id_sha256"] == self.turn
                          for row in [self.completion, *self.usage]))
             _require(success == (self.completion["status"] == "completed"))
+            if self.caps_usage_observer is not None:
+                self.caps_usage_observer.finish(self)
             result = {"scope": "codex_app_server_stdio_utf8_after_initialize",
                       "requests": self.requests, "correlation": self.completion,
                       "app_server_settings": self.settings,
@@ -332,6 +338,10 @@ class PilotWireReceiptSession:
             previous = self.attempts[task_id]
             _require(not previous or previous[-1]["accepted"] and not previous[-1]["success"])
             self._current()
+            if getattr(self, "native_host", None) is not None:
+                from gpt56_pilot_runtime_caps_usage import runtime_caps_usage_for
+
+                runtime_caps_usage_for(self).arm_task(task_id, attempt_index)
             self.armed[task_id] = attempt_index
 
     def begin_task(self, *, task_id, run_id, condition_name, task_prompt, occupation,
@@ -373,6 +383,10 @@ class PilotWireReceiptSession:
                 _read_bytes(path, size=record["size"], sha256=record["sha256"])
             observer = _TransportObservation(json.loads(_bytes(requested)))
             self.active[task_id] = observer
+            if getattr(self, "native_host", None) is not None:
+                from gpt56_pilot_runtime_caps_usage import runtime_caps_usage_for
+
+                runtime_caps_usage_for(self).bind_observer(task_id, self.armed[task_id], observer)
             return observer
 
     def finish_task(self, observer, *, success, thread_id, turn_id) -> dict:

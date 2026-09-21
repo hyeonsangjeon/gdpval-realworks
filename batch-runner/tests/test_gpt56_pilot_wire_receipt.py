@@ -301,7 +301,8 @@ def test_five_task_bundle_real_upstream_verification_ready_last_and_no_live_clea
         assert receipt["attempt_index"] == 0 and receipt["retry_kind"] == "initial"
         assert receipt["launch_allowed"] is receipt["full_220_allowed"] is False
     report = pilot.inspect_plan(case.plan, **vars(case.context), capture_workspace=case.workspace)
-    assert report["launch_blockers"] == ["live_inference_identity_and_wire_unverified", "native_sandbox_and_result_bundle_host_unverified"]
+    assert report["launch_blockers"] == ["native_call_and_token_limits_unresolved", "live_inference_identity_and_wire_unverified",
+                                       "foundry_usage_and_tariff_mapping_unverified", "native_sandbox_and_result_bundle_host_unverified"]
     assert report["launch_allowed"] is report["full_220_allowed"] is False
     public = session.ready + b"".join(session.files.values()) + wire._bytes(report)
     assert PRIVATE_TEXT.encode() not in public and str(case.parent).encode() not in public
