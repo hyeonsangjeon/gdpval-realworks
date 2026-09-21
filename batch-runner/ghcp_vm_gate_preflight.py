@@ -1,8 +1,9 @@
 """Inspect one inert GHCP VM contract using local pinned bytes only.
 
 Configuration validity is not served-model evidence, judge validation or launch
-approval. This v1 has no evidence intake, materializer or execution path. Every
-invocation keeps all blockers and exits 2, including a valid preregistration.
+approval. Only an explicitly verified local input bundle can satisfy the input
+materialization blocker. This is not VM or model consumption; every invocation
+still exits 2 and keeps every execution flag false.
 """
 
 from __future__ import annotations
@@ -24,6 +25,7 @@ ENVELOPE = "batch-runner/experiments/execution_envelope/"
 PLAN_PATH = ENVELOPE + "gpt56_sol_ghcp_codex_vm_gate.yaml"
 PLAN = ROOT / PLAN_PATH
 SELF = "batch-runner/ghcp_vm_gate_preflight.py"
+INPUT_BUNDLE = "batch-runner/ghcp_vm_input_bundle.py"
 HISTORICAL_PLAN = ENVELOPE + "gpt56_sol_copilot_codex_pilot.yaml"
 CATALOG = ENVELOPE + "gdpval_task_catalog.json"
 ADVANCE_PLAN = ENVELOPE + "advance_check_plan.yaml"
@@ -34,10 +36,12 @@ MAX_PLAN_BYTES = 65536
 MAX_SOURCE_BYTES = 8 * 1024 * 1024
 
 # The existing bytes are immutable inputs, not assertions supplied by a caller.
-# The new reader's own digest is sealed in the YAML at its reviewed Git HEAD.
+# The local readers' digests are sealed in the YAML at their reviewed Git HEAD.
 PINNED_SOURCES = {
     "batch-runner/core/agentic_v2_oci.py": "3828aebc41bc27ed571991b27f7847a7a77f0b2240a2616fe554fd5e0c513337",
     "batch-runner/core/execution_envelope_tasks.py": "dd934314ce447b78efa45ad9d349f198d1e429531eccdf430106b87335dc2ea0",
+    "batch-runner/core/reference_integrity.py": "13198897c189a9276494b78ea3359fc2e623211ab2f32554b81ab9b12d9cf19e",
+    "batch-runner/core/source_identity.py": "1a619857e9a7ba8d6d572fa712796da380f648b6c541af727d2c45b6f9848d3b",
     CATALOG: "5f1eca853979b2b4efe6c6ba656545c3a416da920e3faf067d52f5d8ac4ae0eb",
     ADVANCE_PLAN: "9ecf85f1e9eb40ddb0232baa854c10052c3e4457fe2cf174f9b34d4cbecdc26e",
     HISTORICAL_PLAN: "47799d3f61374679722df32c67de14f9d0d56bd6586cf7b28c10076fd41d1901",
@@ -52,7 +56,8 @@ PINNED_SOURCES = {
     "batch-runner/core/result_projection.py": "1b47c4ee0f6d050e5edd4ac5a301203ba834c8d159b1557b04d83046ca965ec6",
     "batch-runner/core/cost_receipts.py": "4b936516da622ceaf8cf8d5e10d2dd1b69ded831b4143557b6431a197bab9cbe",
 }
-REQUIRED_SOURCES = frozenset(PINNED_SOURCES) | {SELF}
+LOCAL_MODULES = frozenset({SELF, INPUT_BUNDLE})
+REQUIRED_SOURCES = frozenset(PINNED_SOURCES) | LOCAL_MODULES
 FALSE_FLAGS = (
     "launch_enabled", "launch_allowed", "paid_execution_enabled",
     "paid_execution_allowed", "full_220_enabled", "full_220_allowed",
@@ -135,11 +140,11 @@ def _sources(plan: dict[str, Any]) -> dict[str, bytes]:
     for name in sorted(REQUIRED_SOURCES):
         digest = pins[name]
         _require(type(digest) is str and re.fullmatch(r"[0-9a-f]{64}", digest) is not None)
-        _require(name == SELF or digest == PINNED_SOURCES[name])
+        _require(name in LOCAL_MODULES or digest == PINNED_SOURCES[name])
         data = _read_regular_path(ROOT / name, MAX_SOURCE_BYTES)
         _require(sha256_bytes(data) == digest)
-        if name == SELF:
-            _require(data == _read_regular_path(Path(__file__), MAX_SOURCE_BYTES))
+        if name in LOCAL_MODULES:
+            _require(data == _read_regular_path(Path(__file__).with_name(Path(name).name), MAX_SOURCE_BYTES))
         sources[name] = data
     return sources
 
@@ -238,27 +243,56 @@ def _report() -> dict[str, Any]:
     }
 
 
-def inspect_plan(plan: object) -> dict[str, Any]:
-    """Check the closed v1 contract; no value or boolean can clear a blocker."""
+def inspect_plan(
+    plan: object, *, local_input_bundle: Path | None = None,
+    reviewed_plan_sha256: str | None = None,
+) -> dict[str, Any]:
+    """Keep the legacy report unless explicit current-byte input verification succeeds."""
     try:
         _require(type(plan) is dict)
         sources = _sources(plan)
         expected, derived = _expected(sources)
         _require(set(plan) == set(expected) | {"source_pins"})
         _require(canonical_json({key: value for key, value in plan.items() if key != "source_pins"}) == canonical_json(expected))
-        return {**_report(), **derived, "configuration_valid": True, "configuration_problems": [],
-                "plan_sha256": sha256_bytes(canonical_json(plan))}
+        report = {**_report(), **derived, "configuration_valid": True, "configuration_problems": [],
+                  "plan_sha256": sha256_bytes(canonical_json(plan))}
+        if local_input_bundle is None:
+            _require(reviewed_plan_sha256 is None)
+            return report
+        # No import or extra observation on the legacy absent/null path.
+        from ghcp_vm_input_bundle import BOUNDARY, verify_ghcp_input_bundle
+
+        bundle = verify_ghcp_input_bundle(
+            plan, reviewed_plan_sha256=reviewed_plan_sha256, bundle_root=local_input_bundle,
+        )
+        satisfied = "original_task_input_materialization_unverified"
+        return {
+            **report,
+            "local_input_bundle": {"sha256": bundle.sha256, "evidence_boundary": BOUNDARY},
+            "eligible_facts": ["local_original_task_input_materialization"],
+            "cleared_blockers": [satisfied],
+            "launch_blockers": [blocker for blocker in LAUNCH_BLOCKERS if blocker != satisfied],
+        }
     except Exception:
         return _report()
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Accept only no arguments or --plan PATH; always emit JSON and exit 2."""
+    """Inspect local prerequisites; even verified local input bytes never enable launch."""
     try:
         arguments = sys.argv[1:] if argv is None else argv
         _require(type(arguments) is list and all(type(value) is str for value in arguments))
-        _require(not arguments or (len(arguments) == 2 and arguments[0] == "--plan"))
-        report = inspect_plan(load_plan(Path(arguments[1]) if arguments else None))
+        _require(len(arguments) % 2 == 0)
+        options = {}
+        for name, value in zip(arguments[::2], arguments[1::2]):
+            _require(name in {"--plan", "--local-input-bundle", "--reviewed-plan-sha256"} and name not in options)
+            options[name] = value
+        _require(("--local-input-bundle" in options) == ("--reviewed-plan-sha256" in options))
+        report = inspect_plan(
+            load_plan(Path(options["--plan"]) if "--plan" in options else None),
+            local_input_bundle=Path(options["--local-input-bundle"]) if "--local-input-bundle" in options else None,
+            reviewed_plan_sha256=options.get("--reviewed-plan-sha256"),
+        )
     except Exception:
         report = _report()
     sys.stdout.write(canonical_json(report).decode("utf-8") + "\n")
