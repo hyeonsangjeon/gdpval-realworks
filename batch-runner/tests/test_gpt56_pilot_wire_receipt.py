@@ -922,6 +922,10 @@ def test_native_result_host_fresh_containment_and_pre_auth_gate(case, monkeypatc
 @pytest.mark.parametrize("damage", ["bytes", "extra", "reference", "root"])
 def test_native_result_host_post_collection_drift_is_refused_before_cleanup(case, damage):
     host = native.PilotNativeResultHostSession(_session(case))
+    if damage == "reference":
+        for task_id in TASK_IDS[:2]:
+            previous = _native_start(case, host, task_id)
+            _native_accept(case, previous, _native_finish(previous))
     state = _native_start(case, host, TASK_IDS[2] if damage == "reference" else TASK_IDS[0])
     target = state.workspace.workspace / "answer.txt"
     target.write_bytes(b"initial")

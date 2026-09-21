@@ -143,7 +143,7 @@ def test_no_bundle_preserves_legacy_bytes_and_never_imports_verifier(plan, mode,
 
 @pytest.mark.parametrize("entry", ["library", "cli"])
 @pytest.mark.parametrize("evaluated", [AS_OF, "2026-09-25T00:00:00Z"])
-def test_complete_bundle_clears_exactly_five_local_evidence_requirements(
+def test_complete_bundle_clears_exactly_three_local_evidence_requirements(
     plan, bundle, entry, evaluated, monkeypatch, capsys,
 ):
     before = _tree(bundle.parent)
