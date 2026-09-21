@@ -213,6 +213,39 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Record one real offline GPT-5.4 preparation at leader-reviewed source
+  `778a627bbb5404f33e5e62019382fa107aa47840`. The saved normalized-original
+  source handoff supplied the unchanged parquet and exactly two pinned
+  references. Only those references were copied into a fresh private
+  reference-only root, using exclusive single-link regular-file creation and
+  the existing `reference_files/...` layout. Original sources, cache, handoff
+  and the separate GHCP output bundle were unchanged; that output bundle was
+  not opened or rehashed.
+  The canonical manifest SHA256 is
+  `457b38f870a37b2ab64cdfcaacdd17f14a04ab6aa48d445838a08ecb34ef02c8`;
+  the combined-plan SHA256 is
+  `f33abf80e316117c1c3abdd3de56d055bd79c97394dc6e47b6a124ed45cb3206`.
+  Exactly one `prepare_disposable_checkout()` call prepared the first
+  registered run, `gpt54_v2_codex_v1_v2_r1`, condition `sandbox_v2`, repeat 1.
+  It returned its built-in verified marker; the operation exited 0. Checkout
+  ready SHA256:
+  `02d38bc3d8fc369d6c384c1c7abd3d4d79265161131b5c39b02f6aec046d8498`.
+  The private checkout, source copies, configuration/input bundles, reservation,
+  readiness markers and handoff are retained without quarantine. No separate
+  verifier pass or compiled command ran. `commands_executed=false`, provider
+  observation is null, and all launch/full-220 flags and six blockers are
+  unchanged. This is local preparation, not a paired result, model consumption,
+  grading, or completion of the historical five-environment comparison.
+  Only this changelog and `tasks/LATEST_TASK_RESULT/README.md` change; previous
+  GHCP staging and infrastructure entries are preserved. `experiment-design`
+  kept the existing boundary; `experiment-report-en` and `im-not-ai-en` preserved
+  the evidence limits in the English records. Record-to-evidence comparison
+  and `git diff --check` passed. The source review authorized this one local
+  operation, not launch or approval of these new records. The records are
+  submitted without waiting for CI or independent review; no such verdict is
+  claimed. No tests, build, workflow dispatch, VM, provider/model, grader,
+  Azure/HF, credential or paid operation ran.
+
 - Record the bounded GHCP VM infrastructure handoff at source
   `6d6663e7e536a88a58079ddc41ed8e38b0507824`. One authorized GitHub source
   fetch returned 0; fetched main matched that exact SHA and a new clean
