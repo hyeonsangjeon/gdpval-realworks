@@ -1,6 +1,7 @@
 """One offline selector for the externally supplied Foundry evidence boundary."""
 
 import hashlib
+import io
 import json
 import os
 import shutil
@@ -122,6 +123,10 @@ def _parse_cache():
         return real(data)
 
     def cached(data):
+        # from_yaml passes text streams. Read their current contents each time
+        # so drift changes the key; every caller still receives a fresh copy.
+        if isinstance(data, io.TextIOBase):
+            data = data.read()
         return deepcopy(parse(data)) if type(data) in (str, bytes) else real(data)
 
     return cached
@@ -533,7 +538,7 @@ def test_active_registration_seals_the_intake_boundary(source, tmp_path, monkeyp
         result = pilot.inspect_plan(plan)
         assert result["configuration_valid"] is True
         assert set(plan["source_pins"]) == pilot.REQUIRED_SOURCES
-        assert len(pilot.REQUIRED_SOURCES) == 52
+        assert len(pilot.REQUIRED_SOURCES) == 55
         assert set(pilot.EVIDENCE_SOURCES) <= set(plan["source_pins"])
         assert plan["evidence_intake"] == pilot.EVIDENCE_INTAKE
         assert result["launch_allowed"] is result["full_220_allowed"] is False

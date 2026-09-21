@@ -2336,13 +2336,23 @@ def _execute_single_task(
 ) -> dict:
     """Execute a single task and return result dict."""
     task_id = task_info["task_id"]
+    pilot_host = None
     if run_id == PilotInputCapture.RUN_ID or pilot_wire_receipts is not None:
         from gpt56_pilot_wire_receipt import PilotWireReceiptRefused, PilotWireReceiptSession
+        from gpt56_pilot_native_result_host import native_result_host_for
 
         if (type(pilot_wire_receipts) is not PilotWireReceiptSession or error_context is not None
                 or execution_mode != "codex_foundry" or strict_inputs):
             raise PilotWireReceiptRefused() from None
+        pilot_host = native_result_host_for(pilot_wire_receipts)
         pilot_wire_receipts.arm_task(task_id, pilot_attempt_index)
+
+    def accepted_row(row: dict) -> dict:
+        if pilot_host is not None:
+            return pilot_host.record_step2_result(
+                task_id=task_id, attempt_index=pilot_attempt_index, row=row, upload_root=upload_root,
+            )
+        return row
 
     # Build prompt
     instruction = task_info["instruction"]
@@ -2500,15 +2510,17 @@ def _execute_single_task(
             task_id=task_id,
         )
         if pilot_wire_receipts is not None:
-            pilot_wire_receipts.accept_task(task_id=task_id, attempt_index=pilot_attempt_index, result=result)
+            pilot_host.accept_task(task_id=task_id, attempt_index=pilot_attempt_index, result=result)
         latency_ms = (time.time() - start) * 1000
 
         if result["success"]:
             deliverable_text = (
                 result.get("deliverable_text", "") or result.get("text", "")
             )
-            deliverable_files = _save_files(
-                result.get("files", []), task_id, upload_root=upload_root
+            deliverable_files = (
+                pilot_host.save_task(task_id=task_id, attempt_index=pilot_attempt_index, result=result, upload_root=upload_root)
+                if pilot_host is not None else
+                _save_files(result.get("files", []), task_id, upload_root=upload_root)
             )
 
             # needs_files gate
@@ -2517,7 +2529,7 @@ def _execute_single_task(
                 needs_files = manifest.needs_files(task_id)
 
             if needs_files and not deliverable_files:
-                return {
+                return accepted_row({
                     "task_id": task_id,
                     "status": "error",
                     "error": "needs_files=True but no deliverable files produced",
@@ -2531,9 +2543,9 @@ def _execute_single_task(
                     ),
                     "latency_ms": round(latency_ms, 2),
                     "timestamp": datetime.now(timezone.utc).isoformat(),
-                }
+                })
 
-            return {
+            return accepted_row({
                 "task_id": task_id,
                 "status": "success",
                 "content": result["text"],
@@ -2546,7 +2558,7 @@ def _execute_single_task(
                 ),
                 "latency_ms": round(latency_ms, 2),
                 "timestamp": datetime.now(timezone.utc).isoformat(),
-            }
+            })
         else:
             failure_evidence = None
             if strict_inputs and result.get("files"):
@@ -2574,7 +2586,7 @@ def _execute_single_task(
                         "latency_ms": round(latency_ms, 2),
                         "timestamp": datetime.now(timezone.utc).isoformat(),
                     }
-            return {
+            return accepted_row({
                 "task_id": task_id,
                 "status": "error",
                 "error": result.get("error", "Unknown error"),
@@ -2589,7 +2601,7 @@ def _execute_single_task(
                 ),
                 "latency_ms": round(latency_ms, 2),
                 "timestamp": datetime.now(timezone.utc).isoformat(),
-            }
+            })
 
     except ReferenceIntegrityError as exc:
         return {
@@ -3173,13 +3185,16 @@ def _run_inference_impl(
         raise ValueError("pilot_comparison_override_refused")
 
     pilot_wire_receipts = None
+    pilot_native_result_host = None
     if pilot_capture_sources is not None:
         from gpt56_pilot_wire_receipt import PilotWireReceiptSession
+        from gpt56_pilot_native_result_host import PilotNativeResultHostSession
 
         pilot_wire_receipts = PilotWireReceiptSession(
             sources=pilot_capture_sources, workspace=WORKSPACE_DIR, dataset_root=DEFAULT_LOCAL_PATH,
             verified_capture=verified_input_capture,
         )
+        pilot_native_result_host = PilotNativeResultHostSession(pilot_wire_receipts)
 
     tasks = prepared["tasks"]
     condition = prepared[condition_key]
@@ -4114,7 +4129,10 @@ def _run_inference_impl(
                 backup_dir = None
 
         def _clear_task_files():
-            reset_task_deliverable_dir(condition_upload_root, task_id)
+            if pilot_native_result_host is not None:
+                pilot_native_result_host.require_absent_task_output(task_id, condition_upload_root)
+            else:
+                reset_task_deliverable_dir(condition_upload_root, task_id)
 
         def _record_execution_metrics(task_result: dict) -> None:
             nonlocal execution_attempt_count, sandbox_attempt_count
@@ -4756,18 +4774,24 @@ def _run_inference_impl(
 
     final_output["result_fingerprint"] = inference_result_fingerprint(final_output)
 
-    with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(
-            final_output,
-            f,
-            indent=2,
-            ensure_ascii=False,
-            default=str,
-            allow_nan=False,
+    if pilot_native_result_host is not None:
+        final_output = pilot_native_result_host.publish_result(
+            final_output, output_path=output_path, upload_root=condition_upload_root,
+            legacy_output_path=WORKSPACE_DIR / "step2_inference_results.json" if condition_key == "condition_a" else None,
         )
-    if condition_key == "condition_a":
-        legacy_output_path = WORKSPACE_DIR / "step2_inference_results.json"
-        legacy_output_path.write_bytes(output_path.read_bytes())
+    else:
+        with open(output_path, "w", encoding="utf-8") as f:
+            json.dump(
+                final_output,
+                f,
+                indent=2,
+                ensure_ascii=False,
+                default=str,
+                allow_nan=False,
+            )
+        if condition_key == "condition_a":
+            legacy_output_path = WORKSPACE_DIR / "step2_inference_results.json"
+            legacy_output_path.write_bytes(output_path.read_bytes())
 
     print(f"\n{'='*60}")
     print(f"✅ Step 2 complete: {output_path}")

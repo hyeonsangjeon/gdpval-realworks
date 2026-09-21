@@ -361,6 +361,44 @@ class CodexWorkspace:
             names.append(Path(str(copied)).name)
         self.staged_reference_names = tuple(names)
 
+    def is_deliverable(self, relative: Path) -> bool:
+        """Return whether a relative name is output rather than input or litter.
+
+        Args:
+            relative: A path relative to the task workspace.
+
+        Returns:
+            Whether the collection policy includes this name.
+        """
+        return (
+            not any(part in _NOT_A_DELIVERABLE for part in relative.parts)
+            and not any(part.startswith(".") for part in relative.parts)
+            and relative.as_posix() not in self.staged_reference_names
+            and relative.name not in self.staged_reference_names
+            and relative.suffix != ".pyc"
+        )
+
+    @staticmethod
+    def is_canonical_deliverable_name(relative: Path) -> bool:
+        """Return whether a relative output name needs no collection rewrite.
+
+        Args:
+            relative: A path relative to the task workspace.
+
+        Returns:
+            Whether the name is canonical and can be saved unchanged.
+        """
+        name = relative.as_posix()
+        return (
+            not relative.is_absolute()
+            and bool(relative.parts)
+            and ".." not in relative.parts
+            and not any(ord(char) < 32 or ord(char) == 127 for char in name)
+            and len(relative.parts) <= 16
+            and len(name.encode("utf-8")) <= 240
+            and _unused_deliverable_name(_NTFS_FORBIDDEN.sub("_", name), set()) == name
+        )
+
     def collect_deliverables(self) -> list[dict[str, Any]]:
         """Everything in the workspace that is not an input or runtime litter.
 
@@ -374,7 +412,6 @@ class CodexWorkspace:
         name discards the whole task -- and on run 34485072751 one did, to a
         task the model had already answered.
         """
-        skip = set(self.staged_reference_names)
         collected: list[dict[str, Any]] = []
         taken: set[str] = set()
         for path in sorted(self.workspace.rglob("*")):
@@ -384,17 +421,7 @@ class CodexWorkspace:
                 relative = path.relative_to(self.workspace)
             except ValueError:  # pragma: no cover - rglob stays inside
                 continue
-            if any(part in _NOT_A_DELIVERABLE for part in relative.parts):
-                continue
-            if any(part.startswith(".") for part in relative.parts):
-                # Not a deliverable, and not saveable either: `_save_files`
-                # refuses any hidden component. An agent building something in
-                # a directory writes `.gitignore` and friends without being
-                # asked, and before this they took the answer down with them.
-                continue
-            if relative.as_posix() in skip or relative.name in skip:
-                continue
-            if path.suffix == ".pyc":
+            if not self.is_deliverable(relative):
                 continue
             if path.is_symlink():
                 # A link can point outside the task. The bytes it names were
@@ -730,6 +757,9 @@ class CodexAgentRunner(RecordsItsFirstRequest):
             if (run_id != PilotInputCapture.RUN_ID
                     or type(pilot_wire_receipts) is not PilotWireReceiptSession):
                 raise PilotWireReceiptRefused() from None
+            from gpt56_pilot_native_result_host import native_result_host_for
+
+            native_result_host_for(pilot_wire_receipts)
         if not isinstance(provider, CodexProviderLike):
             raise CodexProviderConfigurationError(
                 "the Codex run place needs a provider description; refusing "
@@ -934,6 +964,9 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                     or type(pilot_session) is not PilotWireReceiptSession
                     or pilot_wire_observer is None):
                 raise PilotWireReceiptRefused() from None
+            from gpt56_pilot_native_result_host import native_result_host_for
+
+            native_result_host_for(pilot_session)
         self.require_a_usable_auth_command(workspace)
         environment = self._build_environment(workspace)
         overrides = self.provider.config_overrides()
@@ -1073,6 +1106,8 @@ class CodexAgentRunner(RecordsItsFirstRequest):
         runner_run_id = getattr(self, "run_id", None)
         pilot_observer = None
         pilot_linkage = None
+        pilot_host = None
+        pilot_host_witness = None
         if (runner_run_id == PilotInputCapture.RUN_ID
                 or run_id == PilotInputCapture.RUN_ID or pilot_session is not None):
             from gpt56_pilot_wire_receipt import (
@@ -1083,6 +1118,12 @@ class CodexAgentRunner(RecordsItsFirstRequest):
             if (runner_run_id != PilotInputCapture.RUN_ID
                     or type(pilot_session) is not PilotWireReceiptSession):
                 raise PilotWireReceiptRefused() from None
+            from gpt56_pilot_native_result_host import (
+                PilotNativeResultHostRefused,
+                native_result_host_for,
+            )
+
+            pilot_host = native_result_host_for(pilot_session)
             try:
                 pilot_observer = pilot_session.begin_task(
                     task_id=task_id,
@@ -1133,6 +1174,8 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                 )
 
             try:
+                if pilot_host is not None:
+                    pilot_host_witness = pilot_host.begin_task(pilot_observer, workspace)
                 task_text = self.build_task_text(
                     task_prompt,
                     workspace,
@@ -1143,6 +1186,7 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                 if pilot_observer is not None:
                     pilot_observer.bind_task_text(task_text)
                     pilot_options["pilot_wire_observer"] = pilot_observer
+                    pilot_options["pilot_host_witness"] = pilot_host_witness
                 outcome = self._run_one_turn(
                     workspace=workspace,
                     task_text=task_text,
@@ -1157,8 +1201,38 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                         thread_id=outcome.thread_id,
                         turn_id=outcome.turn_id,
                     )
-            except Exception:
+                result: dict[str, Any] = {
+                    "success": outcome.success,
+                    "text": outcome.text,
+                    "files": outcome.files,
+                    # The same two numbers, on the way out rather than on the runner.
+                    # `last_run_diagnostics` is an attribute no caller reads, so until
+                    # now how far a turn got and what refused it were measured and then
+                    # left behind here. What the turn spent is deliberately not
+                    # repeated: the cost ledger already carries it under this task id,
+                    # and a second copy is a second thing to disagree with the first.
+                    #
+                    # `rate_limit_kind` is here for the opposite reason: the sentence
+                    # it is read from is deliberately not carried anywhere, so one word
+                    # from a closed set is the only form in which the distinction can
+                    # reach an artifact at all.
+                    "codex_diagnostics": {
+                        "items_seen": outcome.items_seen,
+                        "http_status_code": outcome.http_status_code,
+                        "rate_limit_kind": outcome.rate_limit_kind,
+                    },
+                }
+                if outcome.error:
+                    result["error"] = "pilot_task_failed" if pilot_session is not None else outcome.error
+                if outcome.error_category:
+                    result["error_category"] = outcome.error_category
                 if pilot_session is not None:
+                    result["pilot_wire_receipt"] = pilot_linkage
+                    pilot_host.finish_task(pilot_host_witness, result=result)
+            except Exception as exc:
+                if pilot_session is not None:
+                    if isinstance(exc, PilotNativeResultHostRefused):
+                        raise PilotNativeResultHostRefused() from None
                     raise PilotWireReceiptRefused() from None
                 raise
         finally:
@@ -1192,33 +1266,6 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                 ),
             },
         }
-        result: dict[str, Any] = {
-            "success": outcome.success,
-            "text": outcome.text,
-            "files": outcome.files,
-            # The same two numbers, on the way out rather than on the runner.
-            # `last_run_diagnostics` is an attribute no caller reads, so until
-            # now how far a turn got and what refused it were measured and then
-            # left behind here. What the turn spent is deliberately not
-            # repeated: the cost ledger already carries it under this task id,
-            # and a second copy is a second thing to disagree with the first.
-            #
-            # `rate_limit_kind` is here for the opposite reason: the sentence
-            # it is read from is deliberately not carried anywhere, so one word
-            # from a closed set is the only form in which the distinction can
-            # reach an artifact at all.
-            "codex_diagnostics": {
-                "items_seen": outcome.items_seen,
-                "http_status_code": outcome.http_status_code,
-                "rate_limit_kind": outcome.rate_limit_kind,
-            },
-        }
-        if outcome.error:
-            result["error"] = "pilot_task_failed" if pilot_session is not None else outcome.error
-        if outcome.error_category:
-            result["error_category"] = outcome.error_category
-        if pilot_session is not None:
-            result["pilot_wire_receipt"] = pilot_linkage
         return result
 
     def _run_one_turn(
@@ -1229,7 +1276,19 @@ class CodexAgentRunner(RecordsItsFirstRequest):
         experiment_prompt: Optional[dict],
         task_id: Optional[str],
         pilot_wire_observer: Any | None = None,
+        pilot_host_witness: Any | None = None,
     ) -> CodexRunOutcome:
+        pilot_session = getattr(self, "pilot_wire_receipts", None)
+        pilot_host = None
+        if pilot_session is not None or pilot_host_witness is not None:
+            from gpt56_pilot_native_result_host import (
+                PilotNativeResultHostRefused,
+                native_result_host_for,
+            )
+
+            pilot_host = native_result_host_for(pilot_session)
+            if pilot_wire_observer is None or pilot_host_witness is None:
+                raise PilotNativeResultHostRefused() from None
         before_pids = _descendant_pids(os.getpid())
         call_id: str | None = None
         codex: Any = None
@@ -1335,7 +1394,11 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                 # to report before the interrupt is settled; what it did not
                 # stays an open reservation.
                 measured = _settle_what_was_measured()
-                files = workspace.collect_deliverables()
+                files = (
+                    workspace.collect_deliverables()
+                    if pilot_host is None
+                    else pilot_host.collect_deliverables(pilot_host_witness, workspace)
+                )
                 return CodexRunOutcome(
                     success=False,
                     text="",
@@ -1354,7 +1417,11 @@ class CodexAgentRunner(RecordsItsFirstRequest):
             if failure is not None:
                 status_code = observed.http_status_code
                 measured = _settle_what_was_measured()
-                files = workspace.collect_deliverables()
+                files = (
+                    workspace.collect_deliverables()
+                    if pilot_host is None
+                    else pilot_host.collect_deliverables(pilot_host_witness, workspace)
+                )
                 return CodexRunOutcome(
                     success=False,
                     text="",
@@ -1378,7 +1445,11 @@ class CodexAgentRunner(RecordsItsFirstRequest):
             self._settle_call(call_id, delta)
             call_id = None
 
-            files = workspace.collect_deliverables()
+            files = (
+                workspace.collect_deliverables()
+                if pilot_host is None
+                else pilot_host.collect_deliverables(pilot_host_witness, workspace)
+            )
             text = getattr(result, "final_response", None) or ""
             return CodexRunOutcome(
                 success=True,

@@ -66,7 +66,7 @@ DISPATCH_GRADING_IDENTITY = {
     "source_base_sha": "ed6c64f0afb90b0b3a6a9e4719e44184384296ec",
     "plan_file": "foundry-pilot-identity-plan.json",
     "ready_marker": "foundry-pilot-identity-ready.json",
-    "grader_template_source_hash": "e24fa5bf8dd2f095e863d719d77430a6ae09e3d690fabdfcf89a4912795b5ce3",
+    "grader_template_source_hash": "56fdb74e2f9fd1afbe9d064fc2cb1e1410d5cebec55edcca8324effd1a1dc9e1",
     "evidence_boundary": "offline_dispatch_grading_identity",
 }
 IDENTITY_SOURCES = {
@@ -130,6 +130,16 @@ WIRE_RECEIPT = {
     "requires_live_session_witness": True,
     "clears_live_identity_and_wire_blocker": False,
 }
+NATIVE_RESULT_HOST = {
+    "recorder": "batch-runner/gpt56_pilot_native_result_host.py",
+    "source_base_sha": "f6d76e2084bcda75de5dad15b98503f598734bc0",
+    "ready_marker": "pilot-native-result-host-ready.json",
+    "evidence_boundary": "local_codex_workspace_and_step2_saved_result_not_remote_isolation_or_served_identity",
+    "requires_live_wire_session_witness": True,
+    "eligible_blocker": "native_sandbox_and_result_bundle_host_unverified",
+    "offline_preflight_consumption": False,
+    "clears_live_identity_and_wire_blocker": False,
+}
 REQUIRED_SOURCES = {
     BASELINE,
     GRADER,
@@ -155,7 +165,8 @@ REQUIRED_SOURCES = {
     "batch-runner/core/result_projection.py",
     "batch-runner/schemas/grade.schema.json",
 } | EVIDENCE_SOURCES | IDENTITY_SOURCES | INPUT_SOURCES | DEPLOYMENT_SOURCES | CAPTURE_SOURCES | {
-    CONFIG_BUNDLE["materializer"], WIRE_RECEIPT["recorder"],
+    CONFIG_BUNDLE["materializer"], WIRE_RECEIPT["recorder"], NATIVE_RESULT_HOST["recorder"],
+    "batch-runner/core/result_fingerprint.py", "batch-runner/core/public_error.py",
 }
 # Findings on BASE_SHA, not editable waivers. Runtime changes need new review.
 LAUNCH_BLOCKERS = (
@@ -248,6 +259,7 @@ def _inspect_plan_only(plan: dict[str, Any]) -> dict[str, Any]:
         "deployment_binding": DEPLOYMENT_BINDING,
         "pre_execution_capture": PRE_EXECUTION_CAPTURE,
         "wire_receipt": WIRE_RECEIPT,
+        "native_result_host": NATIVE_RESULT_HOST,
         "identity": {
             "provider": "azure",
             "model": "gpt-5.6-sol",

@@ -12,6 +12,7 @@ import pytest
 
 import gpt56_pilot_input_capture as capture
 import gpt56_pilot_wire_receipt as wire
+import gpt56_pilot_native_result_host as native
 import gpt56_sol_codex_pilot_preflight as pilot
 import step2_run_inference as step2
 from core import codex_runner
@@ -45,11 +46,11 @@ class Pipe:
         self.flushed += 1
 
 
-def _transport(observer=None, *, thread_id="thread-private", turn_id="turn-private"):
+def _transport(observer=None, *, thread_id="thread-private", turn_id="turn-private", workspace=Path("/private/task-workspace")):
     observer = observer or wire._TransportObservation(deepcopy(REQUESTED))
     if observer.task_text is None:
         observer.bind_task_text(PRIVATE_TEXT)
-    observer.bind_runtime(workspace=Path("/private/task-workspace"), developer_instructions="private developer text")
+    observer.bind_runtime(workspace=workspace, developer_instructions="private developer text")
     pipe = Pipe()
     client = SimpleNamespace(_proc=SimpleNamespace(stdin=pipe),
                              _router=SimpleNamespace(route_response=lambda value: "original-response"),
@@ -79,7 +80,9 @@ def _thread_response():
 
 
 def _start(fake):
-    fake.client._write_message(_thread_request())
+    request = _thread_request()
+    request["params"]["cwd"] = fake.observer.runtime["cwd"]
+    fake.client._write_message(request)
     response = _thread_response()
     response["result"]["thread"]["id"] = fake.thread_id
     assert fake.client._router.route_response(response) == "original-response"
@@ -487,26 +490,33 @@ def test_registered_missing_session_refuses_before_auth_or_task_creation(boundar
     assert touched == []
 
 
-def test_step2_order_and_final_acceptance_are_not_optional_for_registered_path():
+def test_native_result_host_step2_order_and_final_acceptance_are_not_optional_for_registered_path():
     tree = ast.parse(Path(step2.__file__).read_text())
     functions = {node.name: node for node in tree.body if isinstance(node, ast.FunctionDef)}
     text = ast.unparse(functions["_run_inference_impl"])
     assert text.index("verified_input_capture = _pilot_input_gate") < text.index("pilot_wire_receipts = PilotWireReceiptSession")
     assert text.index("pilot_wire_receipts = PilotWireReceiptSession") < text.index("_require_host_may_carry_a_benchmark_run")
     assert text.index("pilot_wire_receipts = PilotWireReceiptSession") < text.index("AzureAIRouteSettings.from_env")
+    assert text.index("pilot_native_result_host = PilotNativeResultHostSession") < text.index("AzureAIRouteSettings.from_env")
+    assert text.index("pilot_wire_receipts.finalize") < text.index("pilot_native_result_host.publish_result")
     assert text.index("pilot_wire_receipts.finalize") < text.index("final_output['result_fingerprint']")
     assert "run_identity = PilotInputCapture.RUN_ID" in text
     assert "'pilot_attempt_index': infra_attempt" in text
     text = ast.unparse(functions["_execute_single_task"])
     assert text.index("pilot_wire_receipts.arm_task") < text.index("executor.execute")
-    assert text.index("executor.execute") < text.index("pilot_wire_receipts.accept_task") < text.index("_save_files")
+    assert text.index("native_result_host_for") < text.index("executor.execute")
+    assert text.index("executor.execute") < text.index("pilot_host.accept_task") < text.index("pilot_host.save_task") < text.index("_save_files")
+    acceptance = ast.unparse(ast.parse(Path(native.__file__).read_text()))
+    assert acceptance.index("_runner_digest(result) == witness.result_digest") < acceptance.index("self.wire.accept_task")
+    assert "pilot_native_result_host.require_absent_task_output" in ast.unparse(functions["_run_inference_impl"])
     assert pilot.WIRE_RECEIPT["clears_live_identity_and_wire_blocker"] is False
     assert "live_inference_identity_and_wire_unverified" in pilot.LAUNCH_BLOCKERS
 
 
 @pytest.mark.parametrize("missing", [False, True])
-def test_step2_real_task_acceptance_precedes_file_acceptance(case, monkeypatch, missing):
+def test_native_result_host_step2_real_task_acceptance_precedes_file_acceptance(case, monkeypatch, missing):
     session = _session(case)
+    host = native.PilotNativeResultHostSession(session)
     task = session.prepared["tasks"][0]
     events = []
     condition = session.prepared["condition_a"]
@@ -520,13 +530,17 @@ def test_step2_real_task_acceptance_precedes_file_acceptance(case, monkeypatch, 
         observer = session.begin_task(**{key: kwargs[key] for key in (
             "task_id", "run_id", "condition_name", "task_prompt", "occupation", "experiment_prompt",
             "perception_text", "reference_files")}, provider=provider)
-        fake = _transport(observer)
+        workspace = _native_workspace(case, session, task["task_id"], 0)
+        witness = host.begin_task(observer, workspace)
+        fake = _transport(observer, workspace=workspace.workspace)
         _start(fake)
         _turn(fake)
+        files = host.collect_deliverables(witness, workspace)
         linkage = session.finish_task(observer, success=True, thread_id=fake.thread_id, turn_id=fake.turn_id)
-        result = {"success": True, "files": [], "text": "synthetic result"}
-        if not missing:
-            result["pilot_wire_receipt"] = linkage
+        result = {"success": True, "files": files, "text": "synthetic result", "pilot_wire_receipt": linkage}
+        host.finish_task(witness, result=result)
+        if missing:
+            del result["pilot_wire_receipt"]
         return result
 
     accept = session.accept_task
@@ -536,8 +550,17 @@ def test_step2_real_task_acceptance_precedes_file_acceptance(case, monkeypatch, 
         events.append("verified-receipt")
 
     monkeypatch.setattr(session, "accept_task", accepted)
-    monkeypatch.setattr(step2, "_save_files", lambda *args, **kwargs: events.append("save") or [])
-    options = dict(run_id=pilot.RUN_ID, condition_name="condition_a", pilot_wire_receipts=session)
+    save = host.save_task
+
+    def saved(**kwargs):
+        result = save(**kwargs)
+        events.append("save")
+        return result
+
+    monkeypatch.setattr(host, "save_task", saved)
+    monkeypatch.setattr(step2, "_save_files", lambda *args, **kwargs: pytest.fail("pilot used overwriting legacy saver"))
+    options = dict(run_id=pilot.RUN_ID, condition_name="condition_a", pilot_wire_receipts=session,
+                   upload_root=case.workspace / "upload")
     if missing:
         with pytest.raises(wire.PilotWireReceiptRefused):
             step2._execute_single_task(task, condition, SimpleNamespace(execute=execute), "codex_foundry", None,
@@ -550,8 +573,9 @@ def test_step2_real_task_acceptance_precedes_file_acceptance(case, monkeypatch, 
 
 
 @pytest.mark.parametrize("wrong_account", [False, True])
-def test_runner_passes_owned_observer_and_finishes_before_cleanup(case, monkeypatch, wrong_account, capsys):
+def test_native_result_host_runner_passes_owned_observer_and_finishes_before_cleanup(case, monkeypatch, wrong_account, capsys):
     session = _session(case)
+    host = native.PilotNativeResultHostSession(session)
     task = session.prepared["tasks"][0]
     session.arm_task(task["task_id"], 0)
     provider = SimpleNamespace(model=REQUESTED["deployment"], provider_id="gdpval-foundry", reasoning_effort="max",
@@ -565,17 +589,21 @@ def test_runner_passes_owned_observer_and_finishes_before_cleanup(case, monkeypa
 
     def cleanup():
         assert len(session.files) == 1
+        assert host.witnesses[(task["task_id"], 0)].result_digest is not None
         events.append("cleanup-after-receipt")
 
-    workspace = SimpleNamespace(staged_reference_names=(), stage_references=lambda _: None, cleanup=cleanup)
+    workspace = _native_workspace(case, session, task["task_id"], 0, stage=False)
+    monkeypatch.setattr(workspace, "cleanup", cleanup)
     monkeypatch.setattr(codex_runner.CodexWorkspace, "create", lambda **kwargs: workspace)
 
     def turn(**kwargs):
         assert kwargs["task_text"] == kwargs["pilot_wire_observer"].task_text
-        fake = _transport(kwargs["pilot_wire_observer"])
+        fake = _transport(kwargs["pilot_wire_observer"], workspace=workspace.workspace)
         _start(fake)
         _turn(fake)
-        return codex_runner.CodexRunOutcome(success=True, text="synthetic", thread_id=fake.thread_id, turn_id=fake.turn_id)
+        files = host.collect_deliverables(kwargs["pilot_host_witness"], workspace)
+        return codex_runner.CodexRunOutcome(success=True, text="synthetic", files=files,
+                                           thread_id=fake.thread_id, turn_id=fake.turn_id)
 
     monkeypatch.setattr(runner, "_run_one_turn", turn)
     prompt = session.prepared["condition_a"]["prompt"]
@@ -607,5 +635,467 @@ def test_runner_passes_owned_observer_and_finishes_before_cleanup(case, monkeypa
         return
 
     result = run()
-    session.accept_task(task_id=task["task_id"], attempt_index=0, result=result)
+    host.accept_task(task_id=task["task_id"], attempt_index=0, result=result)
     assert result["success"] and events == ["cleanup-after-receipt"]
+
+
+def _native_workspace(case, session, task_id, attempt, *, stage=True):
+    root = case.parent / f"native-{task_id}-{attempt}"
+    root.mkdir(mode=0o700)
+    for name in ("workspace", "codex_home", "home"):
+        (root / name).mkdir(mode=0o700)
+    workspace = codex_runner.CodexWorkspace(root, root / "workspace", root / "codex_home", root / "home")
+    if stage:
+        task = next(row for row in session.prepared["tasks"] if row["task_id"] == task_id)
+        workspace.stage_references([session.dataset_root / row["path"] for row in task["reference_file_records"]])
+    return workspace
+
+
+def _native_start(case, host, task_id=TASK_IDS[0], *, attempt=0):
+    observer = _begin(host.wire, task_id, attempt=attempt)
+    workspace = _native_workspace(case, host.wire, task_id, attempt)
+    witness = host.begin_task(observer, workspace)
+    fake = _transport(observer, workspace=workspace.workspace, thread_id=f"thread-{task_id}-{attempt}", turn_id=f"turn-{task_id}-{attempt}")
+    _start(fake)
+    return SimpleNamespace(host=host, observer=observer, witness=witness, workspace=workspace, fake=fake,
+                           task_id=task_id, attempt=attempt)
+
+
+def _native_finish(state, *, success=True, output=True, text=PRIVATE_TEXT):
+    if output:
+        (state.workspace.workspace / "answer").mkdir()
+        (state.workspace.workspace / "answer" / "result.txt").write_bytes(PRIVATE_TEXT.encode())
+    _turn(state.fake, success=success)
+    files = state.host.collect_deliverables(state.witness, state.workspace)
+    linkage = state.host.wire.finish_task(state.observer, success=success,
+                                         thread_id=state.fake.thread_id, turn_id=state.fake.turn_id)
+    result = {"success": success, "files": files, "text": text if success else "", "pilot_wire_receipt": linkage}
+    if not success:
+        result.update(error="pilot_task_failed", error_category="timeout")
+    state.host.finish_task(state.witness, result=result)
+    return result
+
+
+def _native_accept(case, state, result):
+    host = state.host
+    options = {"task_id": state.task_id, "attempt_index": state.attempt}
+    host.accept_task(**options, result=result)
+    saved = host.save_task(**options, result=result, upload_root=case.workspace / "upload") if result["success"] else []
+    task = next(row for row in host.wire.prepared["tasks"] if row["task_id"] == state.task_id)
+    no_output = result["success"] and task["needs_files"] and not saved
+    row = {"task_id": state.task_id, "status": "success" if result["success"] and not no_output else "error",
+           "content": result["text"], "deliverable_text": result["text"] if result["success"] else None,
+           "deliverable_files": saved, "model": REQUESTED["deployment"], "usage": None,
+           "observability": step2._build_execution_observability(result, []),
+           "latency_ms": 1, "timestamp": "2026-09-20T00:00:00Z"}
+    if no_output:
+        row["error"] = "needs_files=True but no deliverable files produced"
+    elif not result["success"]:
+        row.update(error=result["error"], failure_evidence=None)
+    return host.record_step2_result(**options, row=row, upload_root=case.workspace / "upload")
+
+
+def _native_payload(case, host):
+    rows = []
+    for task_id in TASK_IDS:
+        state = _native_start(case, host, task_id)
+        rows.append(_native_accept(case, state, _native_finish(state)))
+    rows = step2._public_persisted_results(step2.bind_deliverable_file_records(rows, case.workspace / "upload"))
+    return {**{key: host.wire.prepared[key] for key in ("experiment_id", "publication_generation", "experiment_name", "source", "prepared_fingerprint")},
+            "condition": host.wire.prepared["condition_a"]["name"], "model": REQUESTED["deployment"],
+            "started_at": "2026-09-20T00:00:00Z", "completed_at": "2026-09-20T00:01:00Z",
+            "run_id": pilot.RUN_ID, "condition_identity": "condition_a", "execution_mode": "codex_foundry",
+            "ordered_task_ids": TASK_IDS, "resume_rounds_used": 0, "pre_execution_input_capture": host.wire.linkage,
+            "pilot_wire_receipts": host.wire.finalize(TASK_IDS), "results": rows,
+            "summary": {"total": 5, "success": 5, "error": 0, "qa_failed": 0}}
+
+
+def _native_publish(case, host, payload):
+    return host.publish_result(payload, output_path=case.workspace / "step2_inference_results_condition_a.json",
+                               legacy_output_path=case.workspace / "step2_inference_results.json",
+                               upload_root=case.workspace / "upload")
+
+
+def test_native_result_host_five_task_real_verifiers_ready_last_and_private_result_digest(case, monkeypatch, capsys, offline_only):
+    host = native.PilotNativeResultHostSession(_session(case))
+    writes, original = [], native._write_no_clobber
+
+    def write(path, data):
+        assert not (host.root / native.READY_PATH).exists()
+        writes.append(path)
+        original(path, data)
+
+    monkeypatch.setattr(native, "_write_no_clobber", write)
+    payload = _native_payload(case, host)
+    # Exercise the same closed final-result validator without repeating five
+    # expensive real upstream preparations for each scalar/order mutation.
+    for field in ("run", "order", "missing-task", "summary", "accepted-row", "file-record",
+                  "observability-category", "observability-codex", "observability-preprocessors"):
+        changed = deepcopy(payload)
+        if field == "run":
+            changed["run_id"] = "other"
+        elif field == "order":
+            changed["results"].reverse()
+        elif field == "missing-task":
+            changed["results"].pop()
+        elif field == "summary":
+            changed["summary"]["success"] = 4
+        elif field == "accepted-row":
+            changed["results"][0]["content"] += " forged"
+        elif field == "file-record":
+            changed["results"][0]["deliverable_file_records"][0]["sha256"] = "0" * 64
+        elif field == "observability-category":
+            changed["results"][0]["observability"]["error_category"] = "timeout"
+        elif field == "observability-codex":
+            changed["results"][0]["observability"]["codex"] = {"fresh_session": False}
+        else:
+            changed["results"][0]["observability"]["preprocessors"] = [{"status": "forged"}]
+        with pytest.raises(native.PilotNativeResultHostRefused):
+            host._final_rows(changed)
+    before = native.inference_result_fingerprint(payload)
+    linked = _native_publish(case, host, payload)
+    document = native.verify_pilot_native_result_host(host)
+    assert writes[-1] == host.root / native.READY_PATH and writes[-2].name == "step2_inference_results.json"
+    assert len(document["receipts"]) == 5 and document["task_ids"] == TASK_IDS
+    assert document["result_payload_before_host_sha256"] == before
+    assert native.inference_result_fingerprint(linked) == linked["result_fingerprint"] != before
+    assert linked[native.LINK]["sha256"] == wire._digest(host.ready)["sha256"]
+    assert all(path.read_bytes() == wire._bytes(linked) for path in host.results)
+    assert all(path.stat().st_nlink == 1 for path in writes)
+    receipts = [json.loads(value) for value in host.files.values()]
+    for receipt in receipts:
+        assert receipt["selected_policy"] == {"sandbox": "workspace-write", "approval": "never", "source": "observed_app_server_thread_start"}
+        assert receipt["remote_or_kernel_isolation"] == "not_attested"
+        assert receipt["collected"] == [{"path": "answer/result.txt", **wire._digest(PRIVATE_TEXT.encode())}]
+        assert receipt["saved_deliverables"] == [{"path": f"deliverable_files/{receipt['task_id']}/answer/result.txt", **wire._digest(PRIVATE_TEXT.encode())}]
+        assert receipt["attempt_index"] == 0 and receipt["retry_kind"] == "initial"
+        assert receipt["step2_status"] == "success" and receipt["output_state"] == "saved"
+        assert receipt["launch_allowed"] is receipt["full_220_allowed"] is False
+    public = b"".join([host.reservation, *host.files.values(), host.ready]).decode() + capsys.readouterr().out
+    assert all(secret not in public for secret in (PRIVATE_TEXT, str(case.parent), "Authorization", "thread-", "rpc-thread",
+                                                  "https://fixture-foundry", *(value.decode() for value in RAW_IDS)))
+    assert document["eligible_blocker"] == native.BLOCKER and document["live_inference_identity_and_wire_unverified"] is True
+    assert document["launch_allowed"] is document["full_220_allowed"] is False
+    report = pilot.inspect_plan(case.plan)
+    assert native.BLOCKER in report["launch_blockers"] and "live_inference_identity_and_wire_unverified" in report["launch_blockers"]
+    assert report["launch_allowed"] is report["full_220_allowed"] is False
+    assert case.plan["native_result_host"] == pilot.NATIVE_RESULT_HOST
+    assert pilot.NATIVE_RESULT_HOST["offline_preflight_consumption"] is False
+    assert offline_only == []
+    with pytest.raises(native.PilotNativeResultHostRefused):
+        _native_publish(case, host, payload)
+    assert all(path.read_bytes() == wire._bytes(linked) for path in host.results)
+
+
+@pytest.mark.parametrize("damage", ["capture", "wire", "wire-reservation", "host-reservation", "input", "source"])
+def test_native_result_host_current_upstream_and_wire_bytes_required(case, damage):
+    host = native.PilotNativeResultHostSession(_session(case))
+    state = _native_start(case, host)
+    result = _native_finish(state)
+    targets = {"capture": case.workspace / capture.CAPTURE_PATH,
+               "wire": case.workspace / result["pilot_wire_receipt"]["path"],
+               "wire-reservation": host.wire.reserved, "host-reservation": host.reserved,
+               "input": case.parent / "inputs/pilot-input-bundle-ready.json",
+               "source": pilot.ROOT / "batch-runner/core/codex_runner.py"}
+    path = targets[damage]
+    path.write_bytes(path.read_bytes() + b" ")
+    with pytest.raises(native.PilotNativeResultHostRefused, match="^pilot_native_result_host_refused$"):
+        host.accept_task(task_id=state.task_id, attempt_index=0, result=result)
+    assert host.failed and host.wire.failed and not (host.root / native.READY_PATH).exists()
+
+
+@pytest.mark.parametrize("damage", ["text", "file", "name", "wire", "missing-wire", "attempt", "task", "extra"])
+def test_native_result_host_rejects_forged_or_mismatched_runner_handoff(case, damage):
+    host = native.PilotNativeResultHostSession(_session(case))
+    state = _native_start(case, host)
+    result = _native_finish(state)
+    task, attempt = state.task_id, 0
+    if damage == "text":
+        result["text"] += " changed"
+    elif damage == "file":
+        result["files"][0]["content"] += b" changed"
+    elif damage == "name":
+        result["files"][0]["filename"] = "/private/escaped"
+    elif damage == "wire":
+        result["pilot_wire_receipt"]["sha256"] = "0" * 64
+    elif damage == "missing-wire":
+        del result["pilot_wire_receipt"]
+    elif damage == "attempt":
+        attempt = 1
+    elif damage == "task":
+        task = TASK_IDS[1]
+    else:
+        result["command"] = PRIVATE_TEXT
+    with pytest.raises(native.PilotNativeResultHostRefused):
+        host.accept_task(task_id=task, attempt_index=attempt, result=result)
+
+
+@pytest.mark.parametrize("damage", ["symlink", "hardlink", "fifo", "hidden", "runtime", "pyc", "collision", "unsafe-name", "directory-link", "containment"])
+def test_native_result_host_strict_collection_refuses_unsafe_inputs_before_read(case, damage, monkeypatch, capsys):
+    host = native.PilotNativeResultHostSession(_session(case))
+    state = _native_start(case, host)
+    root = state.workspace.workspace
+    if damage == "symlink":
+        (root / "answer.txt").symlink_to(case.candidate)
+    elif damage == "hardlink":
+        os.link(case.candidate, root / "answer.txt")
+    elif damage == "fifo":
+        os.mkfifo(root / "answer.txt")
+    elif damage in {"hidden", "runtime", "pyc", "unsafe-name"}:
+        name = {"hidden": ".secret", "runtime": "__pycache__", "pyc": "answer.pyc", "unsafe-name": "bad:name.txt"}[damage]
+        (root / name).write_bytes(PRIVATE_TEXT.encode())
+    elif damage == "collision":
+        (root / "Answer.txt").write_bytes(b"one")
+        (root / "answer.txt").write_bytes(b"two")
+    elif damage == "directory-link":
+        (root / "escaped").symlink_to(case.parent, target_is_directory=True)
+    else:
+        root.rename(root.with_name("displaced-workspace"))
+        root.mkdir()
+    with pytest.raises(native.PilotNativeResultHostRefused) as refusal:
+        host.collect_deliverables(state.witness, state.workspace)
+    assert str(refusal.value) == native.REFUSAL
+    output = capsys.readouterr()
+    assert PRIVATE_TEXT not in output.out + output.err and str(case.parent) not in str(refusal.value)
+    assert not (host.root / native.READY_PATH).exists()
+
+
+@pytest.mark.parametrize("replacement", ["fifo", "ancestor-link"])
+def test_native_result_host_raced_runtime_leaf_cannot_block_or_escape(case, monkeypatch, replacement):
+    host = native.PilotNativeResultHostSession(_session(case))
+    state = _native_start(case, host)
+    directory = state.workspace.workspace / "answer"
+    directory.mkdir()
+    path = directory / "result.txt"
+    path.write_bytes(b"initial")
+    original = os.open
+    raced = []
+
+    def opened(name, flags, *args, **kwargs):
+        if not raced and kwargs.get("dir_fd") is not None:
+            if replacement == "fifo" and name == "result.txt" and flags & os.O_NONBLOCK:
+                path.rename(directory / "held-original")
+                os.mkfifo(path)
+                raced.append(name)
+            elif replacement == "ancestor-link" and name == "answer":
+                directory.rename(state.workspace.workspace / "held-original")
+                directory.symlink_to(case.parent, target_is_directory=True)
+                raced.append(name)
+        return original(name, flags, *args, **kwargs)
+
+    monkeypatch.setattr(os, "open", opened)
+    with pytest.raises(native.PilotNativeResultHostRefused):
+        host.collect_deliverables(state.witness, state.workspace)
+    assert raced
+
+
+@pytest.mark.parametrize("damage", ["seeded-answer", "relative-overlap", "upload-link", "upload-escape", "pre-auth-drift"])
+def test_native_result_host_fresh_containment_and_pre_auth_gate(case, monkeypatch, damage):
+    host = native.PilotNativeResultHostSession(_session(case))
+    if damage in {"upload-link", "upload-escape"}:
+        if damage == "upload-link":
+            (case.workspace / "upload").symlink_to(case.parent, target_is_directory=True)
+        with pytest.raises(native.PilotNativeResultHostRefused):
+            host.require_absent_task_output(TASK_IDS[0], case.parent if damage == "upload-escape" else case.workspace / "upload")
+        return
+    if damage == "pre-auth-drift":
+        (case.workspace / capture.CAPTURE_PATH).write_bytes(b"changed before auth")
+        with pytest.raises(native.PilotNativeResultHostRefused):
+            native.native_result_host_for(host.wire)
+        return
+    observer = _begin(host.wire, TASK_IDS[0])
+    if damage == "relative-overlap":
+        monkeypatch.chdir(case.parent)
+        root = Path("workspace/runtime-root")
+        root.mkdir()
+        for name in ("workspace", "codex_home", "home"):
+            (root / name).mkdir()
+        workspace = codex_runner.CodexWorkspace(root, root / "workspace", root / "codex_home", root / "home")
+    else:
+        workspace = _native_workspace(case, host.wire, TASK_IDS[0], 0)
+        (workspace.workspace / "answer.txt").write_bytes(b"pre-populated answer")
+    with pytest.raises(native.PilotNativeResultHostRefused):
+        host.begin_task(observer, workspace)
+
+
+@pytest.mark.parametrize("damage", ["bytes", "extra", "reference", "root"])
+def test_native_result_host_post_collection_drift_is_refused_before_cleanup(case, damage):
+    host = native.PilotNativeResultHostSession(_session(case))
+    state = _native_start(case, host, TASK_IDS[2] if damage == "reference" else TASK_IDS[0])
+    target = state.workspace.workspace / "answer.txt"
+    target.write_bytes(b"initial")
+    _turn(state.fake)
+    files = host.collect_deliverables(state.witness, state.workspace)
+    link = host.wire.finish_task(state.observer, success=True, thread_id=state.fake.thread_id, turn_id=state.fake.turn_id)
+    if damage == "bytes":
+        target.write_bytes(b"changed")
+    elif damage == "extra":
+        (target.parent / "extra.txt").write_bytes(b"extra")
+    elif damage == "reference":
+        reference = state.workspace.workspace / state.workspace.staged_reference_names[0]
+        reference.chmod(0o600)
+        reference.write_bytes(b"changed reference")
+    else:
+        state.workspace.codex_home.rename(state.workspace.root / "displaced-runtime")
+        state.workspace.codex_home.mkdir()
+    with pytest.raises(native.PilotNativeResultHostRefused):
+        host.finish_task(state.witness, result={"success": True, "text": "", "files": files, "pilot_wire_receipt": link})
+
+
+@pytest.mark.parametrize("damage", ["missing-witness", "duplicate-collect", "duplicate-finish", "duplicate-accept", "different-session"])
+def test_native_result_host_witness_is_owned_and_single_use(case, damage):
+    host = native.PilotNativeResultHostSession(_session(case))
+    with pytest.raises(native.PilotNativeResultHostRefused):
+        native.verify_pilot_native_result_host(host)
+    state = _native_start(case, host)
+    if damage == "missing-witness":
+        with pytest.raises(native.PilotNativeResultHostRefused):
+            host.collect_deliverables(None, state.workspace)
+    elif damage == "duplicate-collect":
+        host.collect_deliverables(state.witness, state.workspace)
+        with pytest.raises(native.PilotNativeResultHostRefused):
+            host.collect_deliverables(state.witness, state.workspace)
+    elif damage == "different-session":
+        host.wire.native_host = SimpleNamespace()
+        with pytest.raises(native.PilotNativeResultHostRefused):
+            native.native_result_host_for(host.wire)
+    else:
+        result = _native_finish(state)
+        if damage == "duplicate-finish":
+            with pytest.raises(native.PilotNativeResultHostRefused):
+                host.finish_task(state.witness, result=result)
+        else:
+            host.accept_task(task_id=state.task_id, attempt_index=0, result=result)
+            with pytest.raises(native.PilotNativeResultHostRefused):
+                host.accept_task(task_id=state.task_id, attempt_index=0, result=result)
+
+
+@pytest.mark.parametrize("kind", ["root", "reservation", "symlink", "hardlink", "second-owner"])
+def test_native_result_host_no_adoption_or_clobber(case, kind):
+    session = _session(case)
+    if kind == "root":
+        (case.workspace / native.DIRECTORY).mkdir()
+    elif kind == "reservation":
+        (case.workspace / native.RESERVATION).write_bytes(b"partial")
+    elif kind == "symlink":
+        (case.workspace / native.DIRECTORY).symlink_to(case.parent, target_is_directory=True)
+    elif kind == "hardlink":
+        os.link(case.candidate, case.workspace / native.RESERVATION)
+    else:
+        native.PilotNativeResultHostSession(session)
+    before = (case.candidate.read_bytes(), (case.workspace / capture.CAPTURE_PATH).read_bytes())
+    with pytest.raises(native.PilotNativeResultHostRefused):
+        native.PilotNativeResultHostSession(session)
+    assert (case.candidate.read_bytes(), (case.workspace / capture.CAPTURE_PATH).read_bytes()) == before
+    assert not (case.workspace / native.DIRECTORY / native.READY_PATH).exists()
+
+
+@pytest.mark.parametrize("damage", ["saved-bytes", "saved-hardlink", "accepted-text", "accepted-status", "collision",
+                                    "observability-category", "observability-codex"])
+def test_native_result_host_binds_actual_step2_records_and_saved_bytes(case, damage):
+    host = native.PilotNativeResultHostSession(_session(case))
+    state = _native_start(case, host)
+    result = _native_finish(state)
+    host.accept_task(task_id=state.task_id, attempt_index=0, result=result)
+    upload = case.workspace / "upload"
+    if damage == "collision":
+        path = upload / "deliverable_files" / state.task_id
+        path.mkdir(parents=True)
+        (path / "keep.txt").write_bytes(b"do not delete")
+        with pytest.raises(native.PilotNativeResultHostRefused):
+            host.save_task(task_id=state.task_id, attempt_index=0, result=result, upload_root=upload)
+        assert (path / "keep.txt").read_bytes() == b"do not delete"
+        return
+    saved = host.save_task(task_id=state.task_id, attempt_index=0, result=result, upload_root=upload)
+    row = {"task_id": state.task_id, "status": "success", "deliverable_files": saved, "content": result["text"],
+           "deliverable_text": result["text"], "model": REQUESTED["deployment"], "usage": None,
+           "observability": step2._build_execution_observability(result, [])}
+    if damage == "saved-bytes":
+        (upload / saved[0]).write_bytes(b"altered")
+    elif damage == "saved-hardlink":
+        os.link(upload / saved[0], case.parent / "extra-link")
+    elif damage == "accepted-text":
+        row["content"] += " forged"
+    elif damage == "observability-category":
+        row["observability"]["error_category"] = "timeout"
+    elif damage == "observability-codex":
+        row["observability"]["codex"] = {"fresh_session": False}
+    else:
+        row["status"] = "error"
+    with pytest.raises(native.PilotNativeResultHostRefused):
+        host.record_step2_result(task_id=state.task_id, attempt_index=0, row=row, upload_root=upload)
+
+
+@pytest.mark.parametrize("state_name", ["error", "no_output", "text_only"])
+def test_native_result_host_records_error_and_no_output_without_inventing_success(case, state_name):
+    host = native.PilotNativeResultHostSession(_session(case))
+    state = _native_start(case, host)
+    result = _native_finish(state, success=state_name != "error", output=False,
+                            text=PRIVATE_TEXT if state_name == "text_only" else "")
+    row = _native_accept(case, state, result)
+    receipt = json.loads(next(iter(host.files.values())))
+    assert receipt["output_state"] == state_name and receipt["saved_deliverables"] == []
+    assert receipt["step2_status"] == row["status"]
+    if state_name == "error":
+        retry = _native_start(case, host, attempt=1)
+        _native_accept(case, retry, _native_finish(retry))
+        receipt = json.loads(list(host.files.values())[-1])
+        assert receipt["retry_kind"] == "infrastructure" and receipt["attempt_index"] == 1
+    assert not (host.root / native.READY_PATH).exists()
+
+
+@pytest.mark.parametrize("damage", ["payload", "saved", "ready", "partial-publication"])
+def test_native_result_host_final_payload_drift_and_partial_quarantine(case, monkeypatch, damage):
+    host = native.PilotNativeResultHostSession(_session(case))
+    payload = _native_payload(case, host)
+    if damage == "partial-publication":
+        original = native._write_no_clobber
+
+        def write(path, data):
+            original(path, data)
+            if path.name == "step2_inference_results.json":
+                (case.workspace / capture.CAPTURE_PATH).write_bytes(b"changed during publication")
+
+        monkeypatch.setattr(native, "_write_no_clobber", write)
+        with pytest.raises(native.PilotNativeResultHostRefused):
+            _native_publish(case, host, payload)
+        assert (case.workspace / "step2_inference_results_condition_a.json").is_file()
+        assert host.reserved.is_file() and not (host.root / native.READY_PATH).exists()
+        with pytest.raises(native.PilotNativeResultHostRefused):
+            _native_publish(case, host, payload)
+        return
+    _native_publish(case, host, payload)
+    if damage == "payload":
+        path = next(iter(host.results))
+        changed = json.loads(path.read_bytes())
+        changed["results"][0]["content"] = "forged"
+        changed["result_fingerprint"] = native.inference_result_fingerprint(changed)
+        path.write_bytes(wire._bytes(changed))
+    elif damage == "saved":
+        (case.workspace / "upload" / payload["results"][0]["deliverable_files"][0]).write_bytes(b"drift")
+    else:
+        (host.root / native.READY_PATH).write_bytes(host.ready + b" ")
+    with pytest.raises(native.PilotNativeResultHostRefused):
+        native.verify_pilot_native_result_host(host)
+
+
+@pytest.mark.parametrize("value", [None, {}, {"bundle_version": "pilot-native-result-host-ready-v1"}, "pilot-native-result-host-ready.json"])
+def test_native_result_host_saved_json_cannot_replace_live_witness(value):
+    with pytest.raises(native.PilotNativeResultHostRefused, match="^pilot_native_result_host_refused$"):
+        native.verify_pilot_native_result_host(value)
+
+
+@pytest.mark.parametrize("kwargs", [{}, {"pilot_wire_receipts": None}])
+def test_native_result_host_legacy_absent_null_collector_and_result_shapes_unchanged(tmp_path, monkeypatch, kwargs):
+    workspace = codex_runner.CodexWorkspace(tmp_path, tmp_path, tmp_path / "runtime", tmp_path / "home")
+    (tmp_path / "ordinary.txt").write_bytes(b"ordinary")
+    (tmp_path / ".hidden").write_bytes(b"legacy skipped")
+    (tmp_path / "link").symlink_to(tmp_path / "ordinary.txt")
+    assert workspace.collect_deliverables() == [{"filename": "ordinary.txt", "content": b"ordinary"}]
+    monkeypatch.setattr(native, "native_result_host_for", lambda _: pytest.fail("legacy reached pilot host"))
+    monkeypatch.setattr(step2, "_save_files", lambda *args, **options: [])
+    task = {"task_id": "legacy-task", "instruction": "legacy input", "reference_files": [], "needs_files": False}
+    result = step2._execute_single_task(task, {"prompt": {}}, SimpleNamespace(execute=lambda **_: {
+        "success": True, "text": "legacy result", "files": []}), "codex_foundry", None, "legacy-model", **kwargs)
+    assert result["status"] == "success" and result["content"] == "legacy result"
+    assert not any("pilot" in key for key in result)

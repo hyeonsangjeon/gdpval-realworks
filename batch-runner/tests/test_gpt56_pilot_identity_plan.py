@@ -124,7 +124,7 @@ def test_canonical_recipes_bind_the_real_grader_and_exact_five_tasks(plan, monke
     assert document["evidence_linkage"] is None
     assert document["contract_sha256"] == pilot.seal(plan)
     assert document["source_pins"] == plan["source_pins"]
-    assert set(plan["source_pins"]) == pilot.REQUIRED_SOURCES and len(pilot.REQUIRED_SOURCES) == 52
+    assert set(plan["source_pins"]) == pilot.REQUIRED_SOURCES and len(pilot.REQUIRED_SOURCES) == 55
     assert document["dataset"] == plan["dataset"]
     assert document["launch_allowed"] is document["full_220_allowed"] is False
     assert document["evidence_boundary"] == "offline_dispatch_grading_identity"

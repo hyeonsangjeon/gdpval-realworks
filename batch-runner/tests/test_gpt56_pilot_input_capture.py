@@ -158,7 +158,8 @@ def _before_provider(case, monkeypatch, *, kwargs=None, success=False):
     with pytest.raises(ProviderBoundary if success else capture.PilotInputCaptureRefused) as failure:
         step2.run_inference(**options)
     if success:
-        assert events == ["verify", "verified", "host_boundary", "auth_boundary"]
+        # The live host owner revalidates the capture before either boundary.
+        assert events == ["verify", "verified", "verify", "verified", "host_boundary", "auth_boundary"]
     else:
         code = str(failure.value)
         assert code in ("pilot_prepared_read_refused", "pilot_capture_verification_refused")

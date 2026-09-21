@@ -13,6 +13,43 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Correct PR #639's stale capture-verification trace and split native-host
+  cases into a fourth Backend job. The leader reported that at
+  `3d8336933ed26266332c97b3caf1235b95cb98e4`, run `35529571789`, pilot job
+  `106127662743` collected 1179 items, failed the second input-capture node,
+  reached the wire-receipt file at about 80%, and was cancelled after about
+  45:15. Core, GPT-5.4 comparison and the other reported gates succeeded.
+  The host-session constructor deliberately revalidates the capture before
+  host/auth; only the test's exact event expectation changed. Production
+  gates and final-output AST assertions are unchanged. Core retains all 20
+  exclusions and `comparison-contracts` retains the 11 GPT-5.4 files.
+  `pilot-contracts` selects the eight non-wire GPT-5.6 files, then the wire
+  file with `-k "not native_result_host"`; new `native-host-contracts` selects
+  only that file with `-k native_result_host`. The static contract requires
+  identical six-step setup, exact sorted lists, complementary node predicates,
+  complete exactly-once selection and the keyword only in the wire source.
+  The pilot step remains fail-fast, so a failed first command prevents the
+  second from running. Mandatory pre-edit `extreme-reasoner` decision:
+  APPROVE-WITH-CONDITIONS. All four jobs retain their 45-minute limits, pinned
+  actions, read-only setup and ref-scoped concurrency. The configured allowance
+  grows from 135 to 180 runner-minutes (+45, +33.3%), with another runner/setup
+  cycle; no speedup or CI headroom is established. The sole correction selector
+  selected `test_step2_and_final_output_bind_verified_capture_before_provider`
+  and `test_backend_jobs_partition_the_comparison_contracts`, and reported
+  `2 passed in 21.28s`, exit 0. The exact command is in
+  `tasks/LATEST_TASK_RESULT/README.md`. Immutable implementation HEAD:
+  `360af26eb9c8fd051c301e2463ba297c747ca198`. `llm-systems-engineer` and
+  `first-reviewer` returned read-only APPROVE verdicts with no findings.
+  The completion records are outside their implementation-review boundary.
+  The original `1 failed, 70 passed, 84 deselected in 2790.26s (0:46:30)`
+  remains distinct from this correction result. Its test-API and YAML-cache
+  corrections were not followed by a native-host rerun. No cancelled job,
+  native-host selector, contract group, full suite or manual workflow was
+  rerun. Source pins, experiment settings, launch flags and live host/wire
+  evidence boundaries are unchanged. Fresh same-final-HEAD success and
+  duration evidence are required for all four jobs; external required-check
+  settings and the existing 1,800-second caller wait are unchanged.
+
 - Split PR #638's Backend contracts into two independent family jobs while
   leaving core's executable job unchanged. Core `pytest` excludes the exact
   sorted union of 20 files; `comparison-contracts` selects only the 11 GPT-5.4
@@ -79,6 +116,41 @@ entries land under a fresh dated heading the day they merge to `main`.
   No provider, model, grader or workflow was executed.
 
 ### Added
+
+- Add session-owned native-workspace and accepted-result receipts for the
+  registered Foundry GPT-5.6 Sol five-task pilot. The exact live capture/wire
+  session owns workspace observations before cleanup, strict deliverable
+  collection, Step 2 acceptance and saved-byte checks, and no-clobber publication
+  with the host ready marker last. A pre-host payload fingerprint avoids circular
+  result linkage. There is no disk-only witness adoption or offline preflight
+  consumption option. Both `native_sandbox_and_result_bundle_host_unverified`
+  and `live_inference_identity_and_wire_unverified` remain unresolved for the
+  current pilot. All launch/full-220 flags remain false. Legacy absent/null
+  behavior and output shapes are preserved; workflows, QA, grader production,
+  HF upload and the three-way Backend partition are unchanged. The source
+  closure grows from 52 to 55 files, with directly affected pins/counts refreshed.
+  The sole local command was
+  `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider --tb=short batch-runner/tests/test_gpt56_pilot_wire_receipt.py -k native_result_host`.
+  It reported `1 failed, 70 passed, 84 deselected in 2790.26s (0:46:30)`, exit 1.
+  The test called nonexistent `pilot.inspect` after its receipt checks; it now
+  uses `pilot.inspect_plan`. The existing fixture parse cache also now reads
+  current text-stream contents, keys by content and returns fresh copies while
+  retaining real validators and drift checks. Neither correction was rerun;
+  speedup and fresh hosted CI headroom are unmeasured. `llm-systems-engineer`
+  and `first-reviewer` approved immutable implementation
+  `d2850e6dd4d12ab5180bdaaeef17c840a2a90fa3` with no remaining findings.
+  The original PR #638 `88 passed in 642.32s (0:10:42)` remains
+  pre-account-correction evidence; its corrected 89-case full selector was not
+  rerun locally. Historical hosted HEAD
+  `9e6e42b85e56478f8082cd7bc9ae1fb6feb31812` subsequently passed all three
+  Backend jobs in run `35520193108`: comparison `106102829162` in `17:54`,
+  pilot `106102829266` in `18:27`, and core `106102829319` in `25:25`.
+  Those results do not validate this implementation. Synthetic host fixtures
+  do not prove a live pilot, remote isolation or served identity. Actual
+  wire/identity, live native-host evidence, execution/caps and usage/tariff
+  receipts remain separate work. No provider/model/client, grader, inference,
+  paid execution or manual workflow ran. Exact validation, review boundaries,
+  skills and remaining work are recorded in `tasks/LATEST_TASK_RESULT/README.md`.
 
 - Add a session-owned Codex app-server transport receipt for the registered
   Foundry GPT-5.6 Sol five-task pilot. The hook hashes actual serialized stdin

@@ -1,197 +1,299 @@
 # Latest substantive task result
 
-## PROJECT5-PR638-THREE-WAY-PARTITION-FIX
+## PROJECT5-PR639-PILOT-CI-FIX
 
-Backend Tests now has three independent jobs. Core `pytest` keeps its exact
-20-file exclusions, `comparison-contracts` selects the 11 GPT-5.4 files, and
-the new `pilot-contracts` selects the 9 GPT-5.6 files. The prescribed static
-selector passed once. Fresh automatic CI must still establish all three
-results and durations within their individual 45-minute ceilings.
+Corrected the stale input-capture test expectation and split the native-host
+cases into a fourth Backend job on the existing PR #639 branch. Production
+code, experiment settings, source pins, launch flags and runtime evidence
+boundaries are unchanged. The single authorized two-node selector passed;
+fresh automatic CI is still required for all four jobs at the final HEAD.
 
-### CI finding and correction scope
+### Hosted failure and static diagnosis
 
-The leader supplied two measured CI rounds. No cancelled job was rerun.
+The leader supplied the following evidence for
+`3d8336933ed26266332c97b3caf1235b95cb98e4`: Backend run `35529571789`,
+`pilot-contracts` job `106127662743`, collected 1179 items. The log showed a
+failure at the second input-capture test, reached the wire-receipt file at
+about 80%, and remained there until cancellation after about 45:15. Core
+`pytest`, `comparison-contracts`, validate, advance, freeze and containment
+succeeded. The cancelled job was not rerun and no timeout was increased.
 
-| HEAD | Backend run / job | Result |
-| --- | --- | --- |
-| `c88f76f02c43ef9b2672e61d6cdd6d4630235305` | `35514065313` / `106086906143` (`pytest`) | Cancelled at `45:13`, still progressing at `87%`, with no assertion failure. |
-| `8117a667a49133cfd11f3401d17ddfd36d82db55` | `35517208735` / `106095045010` (`pytest`) | Succeeded in about `25:13`. |
-| `8117a667a49133cfd11f3401d17ddfd36d82db55` | `35517208735` / `106095045151` (`comparison-contracts`) | Cancelled at about `45:16`, at `91%`, with no assertion failure. |
+Collection order identifies the early failure as
+`test_step2_and_final_output_bind_verified_capture_before_provider`.
+Static tracing shows that Step 2 first verifies the capture, then the live
+host-session constructor calls `wire_session._current()`, which verifies it
+again before the host/auth boundaries. The test now expects the exact trace
+`["verify", "verified", "verify", "verified", "host_boundary", "auth_boundary"]`.
+The real verifiers, refusal assertions, final-output AST extraction and
+fingerprint checks remain intact. No production fix was needed.
 
-In the first round, comparison succeeded with only the 11 GPT-5.4 files while
-all 9 GPT-5.6 files remained in core. The first correction moved all 20 into
-comparison. That made core green but moved the timeout: the combined job
-completed every GPT-5.4 file and reached `test_gpt56_pilot_wire_receipt.py`
-before cancellation. Neither round is a complete passing Backend run.
+### Four-way partition and decision
 
-This correction leaves core's executable job unchanged, restores comparison's
-GPT-5.4-only selection and adds one explicit GPT-5.6 sibling. The existing
-static test node now requires exactly these three jobs, identical setup,
-independently derived nonempty sorted families, exact core union exclusions,
-duplicate rejection, pairwise disjointness and complete coverage of every
-discovered `test_*.py` file.
+| Check | Exact selection |
+| --- | --- |
+| `pytest` | Existing core command excludes the sorted union of all 11 GPT-5.4 and 9 GPT-5.6 files. The repo-root script-test step is unchanged. |
+| `comparison-contracts` | The same sorted 11 `tests/test_gpt54_*.py` files. |
+| `pilot-contracts` | The sorted eight `tests/test_gpt56_*.py` files other than `test_gpt56_pilot_wire_receipt.py`, then that wire file with `-k "not native_result_host"`. |
+| `native-host-contracts` | Only `tests/test_gpt56_pilot_wire_receipt.py -k native_result_host`. |
 
-Existing job/check names, runner, setup, pinned actions, dependencies, pip
-cache, dispatch/checkout SHA checks, integration filter, repo-root script tests,
-triggers, permissions and ref-scoped concurrency are preserved. The new job
-copies the same six setup steps and 45-minute ceiling. There is no job
-dependency, matrix, secret, credential, OIDC access, test deletion, new skip or
-xfail. No timeout was increased.
+The existing static node checks the four job names, identical six-step setup,
+exact file lists, 20 core exclusions, complementary literal keyword predicates,
+and complete, disjoint node selection. It uses pytest's expression parser and
+the wire source AST without importing or collecting that file. The keyword
+occurs only in the wire source among GPT-5.6 test files. All other files have
+one selection without a keyword filter. The two pilot commands retain normal fail-fast
+behavior: if the eight-file command fails, its following wire command does not
+run. Exactly-once selection does not mean a failed job executed every node.
 
-### Exact three-way partition
+Before edits, `extreme-reasoner` returned APPROVE-WITH-CONDITIONS against the
+correction base. The patch preserves `contents: read`, pinned actions,
+`ubuntu-latest`, full-history checkout without persisted credentials, dispatch
+and exact-checkout guards, Python 3.10.12, pip cache/dependencies, the integration
+guard and explicit `-m "not integration"`. All four jobs retain 45-minute limits
+and run independently under the existing ref-scoped concurrency/cancellation.
+There is no matrix, dependency, new secret, OIDC permission or credential route.
 
-Paths below are relative to `batch-runner`. Core excludes their sorted union
-and retains all other discovered tests plus the existing repo-root script step.
-`comparison-contracts` selects only these 11 sorted GPT-5.4 paths:
+The configured allowance rises from 3 × 45 = 135 to 4 × 45 = 180 runner-minutes,
+an increase of 45 minutes or 33.3%. The new job adds a runner slot and setup
+cycle; the extra pytest process adds collection/fixture work. This is not a
+billing measurement or evidence of speedup or CI headroom. All four check
+verdicts must succeed at the same final HEAD. External required-check settings
+and the result-PR caller's existing 1,800-second wait are unchanged.
 
-```text
-tests/test_gpt54_codex_grading_input.py
-tests/test_gpt54_codex_input_capture.py
-tests/test_gpt54_comparison_preflight.py
-tests/test_gpt54_disposable_checkout.py
-tests/test_gpt54_prepared_input_attestation.py
-tests/test_gpt54_run_config_bundle.py
-tests/test_gpt54_run_input_bundle.py
-tests/test_gpt54_runtime_checkout.py
-tests/test_gpt54_v2_grading_input.py
-tests/test_gpt54_v2_input_capture.py
-tests/test_gpt54_workflow_gate.py
-```
+### Exact correction validation and review boundary
 
-`pilot-contracts` selects only these 9 sorted GPT-5.6 paths:
-
-```text
-tests/test_gpt56_evidence_preflight_gate.py
-tests/test_gpt56_foundry_evidence_intake.py
-tests/test_gpt56_pilot_config_bundle.py
-tests/test_gpt56_pilot_deployment_binding.py
-tests/test_gpt56_pilot_identity_plan.py
-tests/test_gpt56_pilot_input_bundle.py
-tests/test_gpt56_pilot_input_capture.py
-tests/test_gpt56_pilot_wire_receipt.py
-tests/test_gpt56_sol_codex_pilot_preflight.py
-```
-
-### Exact validation evidence
-
-Exactly one pytest invocation ran for this correction, from the existing PR
-worktree root:
+Exactly one targeted pytest invocation ran from the worktree root:
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider --tb=short batch-runner/tests/test_a_test_file_nobody_runs_is_not_a_test.py::test_backend_jobs_partition_the_comparison_contracts
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider --tb=short batch-runner/tests/test_gpt56_pilot_input_capture.py::test_step2_and_final_output_bind_verified_capture_before_provider batch-runner/tests/test_a_test_file_nobody_runs_is_not_a_test.py::test_backend_jobs_partition_the_comparison_contracts
 ```
 
-Result: `1 passed in 0.18s`, exit 0, one collected. This is evidence for the
-three-way static workflow and filesystem partition, not execution of the
-20 contract files or a measurement of full-suite duration. `git diff --check` and
-`git diff --cached --check` passed. No core pytest suite, comparison-contracts
-suite, pilot-contracts suite, wire receipt selector, earlier pilot selector,
-broad suite or manual workflow was run locally. The previous two-job correction
-also reported `1 passed in 0.18s` at implementation HEAD
-`70334bb35f7916a4db7a1e1d1a18da10847cb9e1`; its subsequent combined-job timeout
-shows why that static result was not a hosted runtime guarantee.
+Result: `2 passed in 21.28s`, exit 0. `git diff --check` and
+`git diff --cached --check` passed. No native-host selector, full wire file,
+pilot group, prior selector, full suite or manual workflow ran in this
+correction. The two-node result does not validate the full native-host contract
+or predict the new job durations.
 
-The prior receipt evidence is preserved as historical evidence only. Its single
-local command, run from `batch-runner`, was:
+The correction base is `3d8336933ed26266332c97b3caf1235b95cb98e4`; the immutable
+implementation HEAD is `360af26eb9c8fd051c301e2463ba297c747ca198`.
+Both `llm-systems-engineer` and `first-reviewer` returned APPROVE with no
+findings on that exact HEAD. Their reviews inspected immutable Git objects
+without running tests, imports, collection, network calls or CI queries.
+These are static implementation approvals, not hosted runtime-budget evidence.
+This record and CHANGELOG belong to a subsequent records-only commit outside
+the implementation-review boundary.
+
+### Preserved evidence, scope and remaining work
+
+The original native-host selector remains `1 failed, 70 passed, 84 deselected in
+2790.26s (0:46:30)`, exit 1. Its later `pilot.inspect` to `pilot.inspect_plan`
+correction and content-keyed text-stream YAML fixture-cache correction were not
+followed by a local native-host rerun. Neither a passing native-host selector
+nor a cache speedup is claimed. The full original record and PR #638 evidence
+remain below; they do not validate this correction.
+
+This correction changes only `.github/workflows/backend-tests.yml`,
+`batch-runner/tests/test_a_test_file_nobody_runs_is_not_a_test.py`,
+`batch-runner/tests/test_gpt56_pilot_input_capture.py`, `CHANGELOG.md` and this
+record. The mandatory `extreme-reasoner` decision covers the added CI runner;
+`llm-systems-engineer` and `first-reviewer` cover the immutable implementation.
+`im-not-ai-en` preserves the English records' commands, hashes, timings and
+evidence limits. No experiment/runtime contract changed, so experiment-design
+was not repeated. UI/animation, grading and repo-readiness do not apply.
+
+For the real pilot, `native_sandbox_and_result_bundle_host_unverified` and
+`live_inference_identity_and_wire_unverified` remain unresolved. Actual Foundry
+evidence acquisition/approval, separately approved deployment/execution,
+native-cap enforcement and usage/tariff/billing receipts remain separate work.
+All launch/full-220 flags stay false. No Azure/HF/OIDC, provider/model/client,
+grader, paid execution, Project or merge action occurred. Existing Git identity
+`hyeonsangjeon <wingnut0310@gmail.com>` is unchanged; there are no attribution
+trailers, history rewrites, force pushes or hook bypasses. This record stops at
+pre-merge facts. Fresh same-HEAD automatic CI and duration evidence remain
+required.
+
+## Historical PROJECT5-GPT56-NATIVE-RESULT-HOST
+
+The following record describes the original implementation before the CI
+correction above. Its unchanged-workflow and three-job statements apply to that
+earlier scope, not the current four-job partition.
+
+Implemented a session-owned native workspace and accepted-result receipt for
+the registered Foundry GPT-5.6 Sol five-task pilot. The current pilot still has
+no live host evidence. Both `native_sandbox_and_result_bundle_host_unverified`
+and `live_inference_identity_and_wire_unverified` remain unresolved, and all
+launch/full-220 flags remain false.
+
+The sole local selector reported `1 failed, 70 passed, 84 deselected in
+2790.26s (0:46:30)`, exit 1. The test-only API error was corrected without a
+rerun. A fixture-cache correction was also made after the run; its speedup is
+unmeasured. Fresh automatic CI is required for the corrected implementation
+and its runtime budget.
+
+### Scope and evidence boundary
+
+The new helper attaches to the exact live pre-execution capture/wire-receipt
+session. The runner requires that owner before runtime/auth, holds the actual
+local workspace directory identities, and rechecks collected bytes and the
+runner handoff before cleanup. It records the sandbox/approval policy observed
+in the app-server request. It does not infer remote or kernel isolation.
+
+Step 2 verifies the runner handoff before accepting or saving deliverables.
+The host binds task order and attempt indices, wire-receipt linkage, relative
+deliverable paths/sizes/SHA256 values, saved-file records, accepted task rows,
+and error/no-output state. Final publication binds a non-circular fingerprint
+of the payload before host linkage. It rereads the actual saved result files
+and publishes the host ready marker last.
+
+Unsafe paths, links, special files, hidden/runtime files, duplicate or colliding
+names, stale links, altered handoffs, changed output bytes, partial publication
+and witness/session reuse fail closed. No-clobber writes retain failed partials
+for quarantine; another session cannot adopt them. Public host receipts contain
+no prompt/output text, private host paths, resource IDs, credentials or exception
+strings. The existing Step 2 result retains its ordinary content; the receipt
+contains only its digest and the allowed identities.
+
+There is no saved-JSON adoption API, new CLI, offline preflight consumption
+option or runnable launch command. A future runtime-owned verified host bundle
+may satisfy only the native-host blocker. It cannot satisfy live wire/served
+identity, native-cap enforcement, usage/tariff/billing or launch requirements.
+Synthetic fixtures establish verifier behavior only.
+
+Legacy absent/null paths keep their collector, saver and output shapes. The
+active source closure grows from 52 to 55 files, adding the host helper and two
+existing fingerprint/public-error helpers. Only directly affected source pins,
+grader source-closure hashes and count expectations were refreshed. The grader
+implementation, five-task scope, model, Max effort, 1M request and experiment
+settings are unchanged. The three-way Backend partition is unchanged.
+
+### Exact validation and post-run corrections
+
+Exactly one pytest command ran, from the new worktree root:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider --tb=short batch-runner/tests/test_gpt56_pilot_wire_receipt.py -k native_result_host
+```
+
+Pytest collected 155 cases, selected 71 and deselected 84. The selected set has
+66 new native-host cases and five adapted existing runner/Step 2 boundary cases.
+The result was `1 failed, 70 passed, 84 deselected in 2790.26s (0:46:30)`, exit 1.
+The failing node was
+`test_native_result_host_five_task_real_verifiers_ready_last_and_private_result_digest`.
+It reached its preflight assertion after the receipt checks, then raised
+`AttributeError` because the test called nonexistent `pilot.inspect`.
+The call now uses the existing `pilot.inspect_plan` API.
+
+Static cost inspection found that `ExperimentConfig.from_yaml()` passes an open
+text stream to `yaml.safe_load`, bypassing the existing string/bytes parse cache.
+The shared fixture now reads the current `io.TextIOBase` contents into the same
+content-keyed cache and returns a fresh `deepcopy`. Changed contents change the
+key. Real validators, source hashes, path/link checks, current-byte checks and
+session/witness checks still run; no validator verdict or mutable tree is shared.
+
+Neither post-run correction was rerun locally. The 46:30 measurement belongs to
+the pre-cache run, not the corrected HEAD. No passing selector, speedup or hosted
+CI headroom is claimed. `git diff --check` and `git diff --cached --check` passed.
+No full wire selector, prior pilot selector, core suite, contract job, broad
+suite or manual workflow ran locally.
+
+### Immutable review boundary
+
+The new clean worktree and branch
+`b/gpt56-native-result-host-20260921` start at requested main
+`f6d76e2084bcda75de5dad15b98503f598734bc0`.
+The implementation review HEAD is
+`d2850e6dd4d12ab5180bdaaeef17c840a2a90fa3`.
+The initial implementation commit was
+`c2fbd6f3696058403b571b35b767a318423ad253`; its only follow-up change corrects a
+source-count comment from 52 to 55. Both `llm-systems-engineer` and
+`first-reviewer` returned APPROVE on the final implementation HEAD, with no
+remaining findings. Their reviews were read-only and ran no tests, imports,
+runtime, network calls or CI queries. They checked the 55 source pins and the
+actual caller/handoff/result boundary. These are static review verdicts, not
+passing test, live-runtime or CI-readiness evidence. This record and the
+changelog are a subsequent records-only commit, outside that boundary.
+
+### Historical PR #638 evidence, not validation of this code
+
+The original wire-receipt selector ran from `batch-runner`:
 
 ```bash
 /ai-work/venvs/gdpval-realworks-py310/bin/python -m pytest -q tests/test_gpt56_pilot_wire_receipt.py --tb=short
 ```
 
-That command reported `88 passed in 642.32s (0:10:42)`, exit 0, at
-`59aa7f00de5505e0ed5c1bff8e8ae7757ff9398a`. Both reviewers subsequently found
-the endpoint-account binding defect. The corrected receipt implementation
-`89e9a33baa3b6c4b3c404f7c2c6f61798003a868` added a wrong-account parameter,
-bringing its selector to 89 cases. That corrected selector has not been rerun
-locally. The 88-pass result does not validate the correction, and the cancelled
-core run is not a completed pass. Fresh automatic CI is still required.
+It reported `88 passed in 642.32s (0:10:42)`, exit 0, at implementation
+`59aa7f00de5505e0ed5c1bff8e8ae7757ff9398a`, before the endpoint-account correction.
+The corrected implementation
+`89e9a33baa3b6c4b3c404f7c2c6f61798003a868` had 89 cases; that full selector was
+not rerun locally. The 88-pass result does not validate the account correction
+or this native-host implementation.
 
-### Mandatory pre-edit decision
+The subsequent partition history remains distinct:
 
-`extreme-reasoner` was invoked before editing and returned
-APPROVE-WITH-CONDITIONS against
-`8117a667a49133cfd11f3401d17ddfd36d82db55`. Its structured memo identified
-missing or duplicated coverage, loss of effective GPT-5.6 merge gating and
-increased runner consumption as the main risks. It required exact family
-selections, core's unchanged exclusions, identical read-only setup and all
-existing security controls. The integration filter is not a network sandbox.
+| HEAD | Backend run / job | Result |
+| --- | --- | --- |
+| `c88f76f02c43ef9b2672e61d6cdd6d4630235305` | `35514065313` / `106086906143` (`pytest`) | Cancelled at `45:13` / `87%`, with no assertion failure. |
+| `8117a667a49133cfd11f3401d17ddfd36d82db55` | `35517208735` / `106095045010` (`pytest`) | Succeeded in about `25:13`. |
+| `8117a667a49133cfd11f3401d17ddfd36d82db55` | `35517208735` / `106095045151` (`comparison-contracts`) | Cancelled at about `45:16` / `91%`, with no assertion failure. |
 
-The nominal aggregate allowance rises from `2 × 45 = 90` to
-`3 × 45 = 135` runner-minutes, an increase of 45 minutes or 50%, excluding
-shutdown overhead. One more checkout/Python/pip/cache cycle adds unmeasured
-overhead and uses another runner slot. The second round consumed about 70.5
-combined job-minutes (`25:13 + 45:16`) despite incomplete comparison execution;
-it is not a completed-work baseline. File counts and `91%` progress do not
-predict either new contract job's duration. No paid provider operation was
-authorized.
+The three-way partition's static selector reported `1 passed in 0.18s` at
+reviewed implementation `c6bf7269480bfc804e7f2aaf6427613cdab3fda9`.
+The final historical HEAD was
+`9e6e42b85e56478f8082cd7bc9ae1fb6feb31812`. A single read of its hosted checks
+confirmed all three Backend jobs succeeded in run `35520193108`. They all
+started at `2026-09-20T15:38:03Z`:
 
-All three job verdicts must succeed at the same relevant HEAD before a later
-readiness decision. Adding `pilot-contracts` does not establish that it is an
-externally required check; repository rulesets were neither queried nor
-changed. The existing result-PR caller checks aggregate Backend success but
-waits only 1,800 seconds, a separate unchanged limitation. Ref-scoped cancellation
-and independent job verdicts remain in place. A separately authorized rollback
-would restore both selectors and the guard with a normal forward patch; it
-would also restore the known combined-job timeout risk. This memo is not CI,
-launch or merge approval.
+| Check | Job | Completed UTC | Duration | Result |
+| --- | --- | --- | --- | --- |
+| `comparison-contracts` | `106102829162` | `2026-09-20T15:55:57Z` | `17:54` | success |
+| `pilot-contracts` | `106102829266` | `2026-09-20T15:56:30Z` | `18:27` | success |
+| `pytest` | `106102829319` | `2026-09-20T16:03:28Z` | `25:25` | success |
 
-### Immutable review boundary
-
-Correction base: `8117a667a49133cfd11f3401d17ddfd36d82db55`.
-Fixed implementation HEAD: `c6bf7269480bfc804e7f2aaf6427613cdab3fda9`.
-Both `llm-systems-engineer` and `first-reviewer` returned APPROVE with no
-blocking findings on this exact HEAD. Both reviews were read-only; neither
-reviewer ran tests, runtime imports, network calls or CI queries. They confirmed
-the partition and preservation conditions without predicting hosted duration.
-These reviews cover only the two-file partition correction. This record and
-the changelog are a later records-only commit outside that implementation
-review boundary. The prior receipt implementation's two APPROVE verdicts at
-`89e9a33baa3b6c4b3c404f7c2c6f61798003a868` remain separate static evidence.
-
-The existing branch and worktree are retained:
-`b/gpt56-live-wire-receipt-20260920`, originally based on main
-`0cd4c5e76805384a77afabf28b3663a3ad6596c0`. No new checkout or branch was created
-for this correction.
+Those hosted results validate the historical HEAD only. They do not establish
+success or CI headroom for the new native-host code. No cancelled job was rerun.
 
 ### Changed files
 
-- `.github/workflows/backend-tests.yml`
-- `batch-runner/tests/test_a_test_file_nobody_runs_is_not_a_test.py`
+- `batch-runner/gpt56_pilot_native_result_host.py`
+- `batch-runner/core/codex_runner.py`
+- `batch-runner/step2_run_inference.py`
+- `batch-runner/gpt56_sol_codex_pilot_preflight.py`
+- `batch-runner/experiments/execution_envelope/gpt56_sol_foundry_codex_pilot.yaml`
+- `batch-runner/experiments/execution_envelope/gpt54_sandboxv2_codex_comparison.yaml`
+- `batch-runner/tests/test_gpt56_pilot_wire_receipt.py`
+- `batch-runner/tests/test_gpt56_foundry_evidence_intake.py`
+- `batch-runner/tests/test_gpt56_sol_codex_pilot_preflight.py`
+- `batch-runner/tests/test_gpt56_pilot_identity_plan.py`
+- `batch-runner/tests/test_gpt56_pilot_config_bundle.py`
+- `batch-runner/tests/test_gpt56_pilot_input_bundle.py`
+- `batch-runner/tests/test_gpt56_pilot_deployment_binding.py`
 - `CHANGELOG.md`
 - `tasks/LATEST_TASK_RESULT/README.md`
 
-Runtime receipt logic, experiment settings, source pins, launch flags and
-grading behavior are untouched. No other workflow, `core/qa.py` or HF upload
-code changes.
+### Skills and remaining work
 
-### Skills and unchanged live-wire limits
+The complete skill catalog was inspected once. `experiment-design` was applied
+before planning to keep the change confined to local evidence, with no new
+experiment axis or launch authority. `llm-systems-engineer` covered implementation
+and review; `first-reviewer` covered the immutable implementation. `im-not-ai-en`
+was applied to the English records while preserving commands, hashes, counts,
+timings and evidence limits.
 
-The mandatory workflow decision used `extreme-reasoner` before editing;
-`llm-systems-engineer` and `first-reviewer` cover the immutable implementation.
-`im-not-ai-en` was applied to the English records without changing hashes,
-commands, timings or evidence limits. UI/animation, grading and repo-readiness
-skills do not apply to this CI partition correction. It introduces no new
-experiment axis or runtime evidence contract.
+UI/animation and repo-readiness do not apply to this backend evidence unit.
+Grading behavior is unchanged, so no grading skill or execution is needed.
+No workflow, `core/qa.py` or HF upload code changed, so the extreme-reasoner
+decision boundary was not triggered.
 
-The receipt still observes the pinned Codex app-server's actual serialized
-stdio requests, correlated replies and native thread usage. It does not
-observe Foundry HTTP payloads or returned served-model identity. Unavailable
-fields remain `not_available`, and
-`live_inference_identity_and_wire_unverified` stays unresolved. The boundary
-remains `codex_app_server_transport_not_foundry_http_or_served_identity`.
-Synthetic fixtures prove verifier behavior only, not that the pilot was served.
-`launch_enabled`, `launch_allowed`, `full_220_enabled` and `full_220_allowed`
-remain false; no launch command was added.
+Fresh automatic checks and duration evidence remain required. Actual Foundry
+evidence acquisition/approval, a separately approved pilot deployment and
+execution, live input consumption/HTTP wire/served identity, a real runtime-owned
+native-host receipt, native-cap enforcement and usage/tariff/billing receipts
+remain separate work. `launch_enabled`, `launch_allowed`, `full_220_enabled` and
+`full_220_allowed` remain false.
 
-Fresh results and duration evidence for all three Backend jobs remain required.
-Real Foundry evidence acquisition/approval, actual HTTP/input-consumption/wire
-and served identity, native sandbox/result-bundle hosting, deployment/execution,
-native-cap enforcement and usage/tariff/billing receipts remain separate work.
-
-No Azure/HF/OIDC lookup, provider/model/client/grader execution, inference,
-grading, download, paid execution or manual workflow dispatch occurred. The
-preserved checkout and other worktrees were not edited. Git author/committer
-identity `hyeonsangjeon <wingnut0310@gmail.com>` was preserved without configuration
-changes, attribution trailers, history rewriting, force push or hook bypass.
-Project and merge decisions remain with the leader. This record stops at
-pre-merge facts.
+No Azure/HF/OIDC/credential lookup, provider/model/client/grader execution,
+inference, grading, download, paid execution or manual workflow dispatch occurred.
+The preserved checkout and prior worktrees were not edited. Existing Git identity
+`hyeonsangjeon <wingnut0310@gmail.com>` was retained without configuration changes,
+attribution trailers, history rewriting, force push or hook bypass. Project and
+merge actions were not taken. This record stops at pre-merge facts.
