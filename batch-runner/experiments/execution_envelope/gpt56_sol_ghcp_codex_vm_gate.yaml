@@ -1,0 +1,172 @@
+# An independent, inert GHCP VM prerequisite contract, not a benchmark result.
+# The historical Copilot pilot remains superseded. No Foundry approval, version,
+# repeat count, limit or result is inherited by this condition.
+plan_version: ghcp-vm-gate-v1
+base_sha: 99e62ed5d4f1b1506841dd70a66c2696ac95b4c6
+condition_id: gpt56_sol_ghcp_codex_vm_pilot5_v1
+status: blocked_preregistration
+question: missing_or_drifted_prerequisites_refuse_before_paid_five_task_execution
+launch_enabled: false
+launch_allowed: false
+paid_execution_enabled: false
+paid_execution_allowed: false
+full_220_enabled: false
+full_220_allowed: false
+
+identity:
+  provider: github_copilot
+  model: gpt-5.6-sol
+  model_label: GPT-5.6 Sol
+  fast_mode: false
+  harness: codex
+  reasoning_effort: max
+  context_tier: long
+  context_label: Long (1M)
+  nominal_context_tokens: 1000000
+  capability_semantics: request_not_served_evidence
+  ghcp_cli_version: null
+  codex_cli_version: null
+  codex_sdk_version: null
+  automatic_fallback_allowed: false
+  fallbacks: []
+
+# The existing score-free selector derives the five IDs and their order. The
+# catalog and inherited dataset block pin prompts, references and deliverables;
+# checking these local records is not verification of actual staged input files.
+dataset:
+  cohort: advance_check_5
+  task_count: 5
+  selector: core.execution_envelope_tasks.select_advance_check_tasks
+  catalog: batch-runner/experiments/execution_envelope/gdpval_task_catalog.json
+  input_plan: batch-runner/experiments/execution_envelope/advance_check_plan.yaml
+  inherited_contract: batch-runner/experiments/execution_envelope/gpt56_sol_copilot_codex_pilot.yaml
+  repo_id: openai/gdpval
+  revision: 11e7900cdcac61bc4daf59e65feb238acda98fbf
+  parquet_sha256: f8422fab9b21d90c0ee5f0659842ab666d418cb8940842918f9f4b0df7ae0202
+  catalog_sha256: 5f1eca853979b2b4efe6c6ba656545c3a416da920e3faf067d52f5d8ac4ae0eb
+  task_content_policy: original_unchanged
+  reference_policy: original_unchanged
+  deliverable_policy: original_unchanged
+
+instructions:
+  source: batch-runner/experiments/execution_envelope/gpt56_sol_copilot_codex_pilot.yaml
+  field: developer_instructions
+  policy: copy_exactly
+
+# Reuse the existing policy metadata, never the template's full-220 identity.
+# These pins do not establish independent validation of judge accuracy.
+grading:
+  template: batch-runner/grading_configs/exp035_codex_foundry_full220_v2_sol_max.yaml
+  source_sha: 6ccd4ae346d302e3da0af455a3c5a72ec79a6984
+  rubric_revision: 11e7900cdcac61bc4daf59e65feb238acda98fbf
+  prompt_version: v2.2
+  judge_model: gpt-5.6-sol
+  judge_effort: max
+  passes_per_task: 1
+  pilot_expected_task_count: 5
+  inference_revision: null
+  reuse_baseline_rerun_identity: false
+  policy_scope: policy_blocks_not_full220_rerun_identity
+  pin_semantics: source_consistency_not_judge_accuracy
+
+vm:
+  fresh_snapshot_per_task: true
+  fresh_workdir_per_task: true
+  prior_conversations_allowed: false
+  prior_caches_allowed: false
+  prior_outputs_allowed: false
+  image_sha256: null
+  os_sha256: null
+  package_manifest_sha256: null
+  version_policy: null
+
+authentication:
+  supply_method: null
+  disposal_method: null
+  identity_scope: null
+
+execution:
+  network_policy: null
+  permission_policy: null
+  timeout_seconds_per_task: null
+  tool_calls_per_task: null
+  turns_per_task: null
+  retry_limit: null
+  native_input_tokens_per_task: null
+  native_output_tokens_per_task: null
+
+capture:
+  required:
+    - transcript
+    - tool_calls
+    - commands
+    - input_file_hashes
+    - output_file_hashes
+    - exit_status
+  credential_capture_allowed: false
+  private_host_path_capture_allowed: false
+  storage_policy: null
+
+study:
+  performance_comparison: false
+  pool_with_foundry: false
+  environment_only_causality: false
+  repeats: null
+  within_condition_spread: null
+  pass_decision: fresh_immutable_review_only_not_launch_approval
+  failure_decision: stop_before_spend
+
+cost:
+  policy: record_cost_findings_only
+  five_task_wallclock_seconds: null
+  approved_maximum_usd: null
+
+usage:
+  source: github_copilot_native_only
+  missing_usage_execution_policy: null
+  missing_or_unpriced: preserve_null_and_partial_reasons
+  infer_missing_as_zero: false
+  use_foundry_or_openai_tariff: false
+  invent_currency_conversion: false
+
+results:
+  projector: core.result_projection.project_result_row
+  receipt_schema: cost-receipt-v1
+  grade_schema: batch-runner/schemas/grade.schema.json
+  grade_schema_version: '1.4'
+  missing_or_unpriced_usage: preserve_null_and_partial_reasons
+  publish_to_hf: false
+  submit_to_evals: false
+
+# No asserted observation is accepted by v1, including an asserted pass. A new
+# reviewed unit must define how these facts are obtained and independently bound.
+observed:
+  verified_served: null
+  verified_capability: null
+  verified_auth: null
+  verified_reset: null
+  verified_capture: null
+  verified_enforced_limits: null
+  verified_usage: null
+  verified_task_inputs: null
+  grader_validation: null
+
+# Sixteen directly consumed files. The checker reads grader/runtime sources only
+# as bytes; it never imports them or visits the Foundry verifier chain.
+source_pins:
+  batch-runner/ghcp_vm_gate_preflight.py: da623cb3ec93b2a5ee0c0b35698f56ecd85f7bf77f43e0c0546ca7396535601a
+  batch-runner/core/agentic_v2_oci.py: 3828aebc41bc27ed571991b27f7847a7a77f0b2240a2616fe554fd5e0c513337
+  batch-runner/core/execution_envelope_tasks.py: dd934314ce447b78efa45ad9d349f198d1e429531eccdf430106b87335dc2ea0
+  batch-runner/experiments/execution_envelope/gdpval_task_catalog.json: 5f1eca853979b2b4efe6c6ba656545c3a416da920e3faf067d52f5d8ac4ae0eb
+  batch-runner/experiments/execution_envelope/advance_check_plan.yaml: 9ecf85f1e9eb40ddb0232baa854c10052c3e4457fe2cf174f9b34d4cbecdc26e
+  batch-runner/experiments/execution_envelope/gpt56_sol_copilot_codex_pilot.yaml: 47799d3f61374679722df32c67de14f9d0d56bd6586cf7b28c10076fd41d1901
+  batch-runner/grading_configs/exp035_codex_foundry_full220_v2_sol_max.yaml: 89820de9d9c4e2e3edc1420d3c05fd12c7bb4c3475fd47ad92ed56566a897025
+  batch-runner/step8_grade.py: ec23fc941aa0edb54e2858750cc1df5a6a6954a1732cd3f3197d9f9b4b3c18f4
+  batch-runner/core/grader.py: d7904ea02659bb9d703712e16f89ed8bc5af5a6c6d104a34d11668f8a396180f
+  batch-runner/core/rubric_loader.py: 804e1a90d9e96d686d022d9243cfe47b5f5041651c25d450855b30e8d3f2b059
+  batch-runner/core/grade_payload.py: 4992c803dd60fd239bb76f6fa87d080e1239288a4485a1075337d343c91f0dae
+  batch-runner/prompts/grader_judge.md: 9bf9ec73be0fe0886e17171aabcd9470869e8aeccafa22b53217d229029c2e11
+  batch-runner/prompts/grader_judge_v2.md: 9bbded2220760521846637486971b9a7d89eab0d4832295778a16cb672c22af9
+  batch-runner/schemas/grade.schema.json: 9c611874c2d7aa57018eecdc86b7c0d579aaa9c29dd0df649058eec9ad5175b9
+  batch-runner/core/result_projection.py: 1b47c4ee0f6d050e5edd4ac5a301203ba834c8d159b1557b04d83046ca965ec6
+  batch-runner/core/cost_receipts.py: 4b936516da622ceaf8cf8d5e10d2dd1b69ded831b4143557b6431a197bab9cbe
