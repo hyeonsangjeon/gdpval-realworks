@@ -62,7 +62,7 @@ def _pytest_target_arguments(args: list[str]) -> list[str]:
             break
         if token in {"-k", "-m", "-r", "--tb", "--ignore"}:
             value = next(tokens, None)
-            assert value is not None, "missing pytest option value"
+            assert value is not None and not value.startswith("-"), "missing pytest option value"
         elif token in {"-q", "-v"}:
             continue
         elif token.startswith(("-k", "-m", "-r", "--tb=", "--ignore=")):
@@ -200,6 +200,9 @@ def test_pytest_targets_next_step_resets_to_repo_root(synthetic_workflow, tmp_pa
 @pytest.mark.parametrize("args,refusal", [
     (["-k"], "missing pytest option value"),
     (["--ignore"], "missing pytest option value"),
+    (["-k", "-q", "tests"], "missing pytest option value"),
+    (["--ignore", "--future-option", "tests"], "missing pytest option value"),
+    (["-m", "--", "tests"], "missing pytest option value"),
     (["--future-option", "tests"], "unsupported pytest option in workflow"),
 ])
 def test_pytest_targets_unknown_or_incomplete_options_refuse_before_paths(
