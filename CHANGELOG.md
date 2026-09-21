@@ -213,6 +213,41 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Add a usable offline GHCP five-task input staging/verification library and
+  CLI. It copies the entire pinned parquet byte-for-byte, only the registered
+  reference closure, and the original developer instructions. A closed
+  manifest binds ordered task/prompt/reference identities, file sizes and
+  hashes, deliverable/grading metadata and the reviewed GHCP plan/source pins.
+  Held parents, single-link regular files, a sibling reservation, exclusive
+  publication and ready-last checks refuse unsafe paths, changed bytes,
+  collisions and partial adoption. Verification rereads published bytes and
+  current pins; CLI output contains digests and static refusal codes, not
+  source paths, prompts or exception text. Optional verified consumption
+  satisfies only `original_task_input_materialization_unverified`, explicitly
+  not VM/model consumption. The no-bundle path retains fifteen blockers;
+  observations stay null and all six launch/paid/full-220 flags stay false.
+  Real pinned inputs were not supplied or staged. The initial focused command
+  selected the new lightweight input-bundle file and eight directly affected
+  fast GHCP nodes: `83 passed in 31.47s`, exit 0, at
+  `bb87f9a618001f9b6cc84e5c1f2c248f7cf2e55d`. Immutable review then found a
+  BLOCK: reopening a parent could adopt a replacement destination and publish
+  ready alone. Writes now use caller-held descriptors and check directory
+  identity during publication and before returning. Six actual directory-swap
+  regressions were added. The necessary rerun of the same focused selection
+  reported `89 passed in 33.08s`, exit 0. The exact command and correction boundary
+  are in `tasks/LATEST_TASK_RESULT/README.md`; `git diff --check` and the staged
+  whitespace check passed. Corrected immutable implementation HEAD
+  `d92e72b2fc76510929b961c8103a8d2d6ed4e02c` received read-only
+  `first-reviewer` APPROVE with no findings; the earlier BLOCK is resolved.
+  The later records-only commit is outside that boundary. `experiment-design`
+  set the local-input claim and falsifier;
+  `llm-systems-engineer` implemented the module, and `im-not-ai-en` was applied
+  to these records. Foundry/GPT-5.4 behavior and pins, the superseded Copilot
+  contract, workflows and the GHCP workflow digest are unchanged. Synthetic fixtures
+  prove local verifier behavior only; real staging, all runtime prerequisites
+  and fresh final-HEAD CI remain outstanding. No input download,
+  provider/model/VM/grader or paid execution occurred.
+
 - Add an independent, blocked GHCP Codex GPT-5.6 Sol VM five-task contract
   and a lightweight offline preflight. The historical Copilot pilot remains
   superseded and byte-identical; the Foundry contract/source closure, runtime
