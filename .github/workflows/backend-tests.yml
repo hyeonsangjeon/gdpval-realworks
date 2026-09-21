@@ -243,7 +243,7 @@ jobs:
         run: python -m pytest scripts/__tests__ -m "not integration" --tb=short -q -rs
 
   # Separate read-only runners give each contract family its own 45-minute
-  # ceiling. `pytest` remains the core check; all five job verdicts must be
+  # ceiling. `pytest` remains the core check; all six job verdicts must be
   # reviewed. Keep setup and dispatch pinning identical to the core job.
   comparison-contracts:
     runs-on: ubuntu-latest
