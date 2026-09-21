@@ -52,6 +52,28 @@ def _test_files() -> list[Path]:
     )
 
 
+def _pytest_target_arguments(args: list[str]) -> list[str]:
+    """Separate positional targets using only the workflow's option syntax."""
+    targets = []
+    tokens = iter(args)
+    for token in tokens:
+        if token == "--":
+            targets.extend(tokens)
+            break
+        if token in {"-k", "-m", "-r", "--tb", "--ignore"}:
+            value = next(tokens, None)
+            assert value is not None, "missing pytest option value"
+        elif token in {"-q", "-v"}:
+            continue
+        elif token.startswith(("-k", "-m", "-r", "--tb=", "--ignore=")):
+            # Short attached values (-rs/-kexpr) and long --option=value forms.
+            continue
+        else:
+            assert not token.startswith("-"), "unsupported pytest option in workflow"
+            targets.append(token)
+    return targets
+
+
 def _pytest_targets() -> set[Path]:
     """The directories the workflow's pytest invocations actually reach.
 
@@ -60,9 +82,9 @@ def _pytest_targets() -> set[Path]:
     invocations: a `run:` block may `cd` somewhere first, and an invocation
     with no path argument collects everything beneath wherever it is standing.
 
-    Path arguments are told apart from flag values by asking the filesystem
-    rather than by parsing option syntax, so `-m "not integration"` needs no
-    special case: `not integration` is not a directory.
+    Classify options and their values before inspecting the filesystem.
+    A keyword/marker expression or another option value is never evidence
+    of directory coverage, even when it names an existing directory.
     """
     targets: set[Path] = set()
     base = REPO_ROOT
@@ -77,10 +99,123 @@ def _pytest_targets() -> set[Path]:
             base = REPO_ROOT / line[3:].strip()
         elif "python -m pytest" in line:
             args = shlex.split(line.split("python -m pytest", 1)[1])
-            paths = [base / arg for arg in args if (base / arg).is_dir()]
+            positional = _pytest_target_arguments(args)
+            paths = [base / arg for arg in positional if (base / arg).is_dir()]
             targets.update(path.resolve() for path in (paths or [base]))
 
     return targets
+
+
+@pytest.fixture
+def synthetic_workflow(tmp_path, monkeypatch):
+    workflow = tmp_path / "backend-tests.yml"
+    monkeypatch.setattr(sys.modules[__name__], "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(sys.modules[__name__], "WORKFLOW", workflow)
+    return workflow
+
+
+@pytest.mark.parametrize("option", ["-k", "-m"])
+@pytest.mark.parametrize("attached", [False, True])
+def test_pytest_targets_long_quoted_option_values_are_not_paths(
+    synthetic_workflow, tmp_path, option, attached,
+):
+    target = tmp_path / "tests"
+    target.mkdir()
+    expression = "condition_" * 40 + " or another_condition"
+    assert len(expression.encode()) > 255
+    options = [option + expression] if attached else [option, expression]
+    synthetic_workflow.write_text(
+        "run: python -m pytest -q --tb=short -rs "
+        + shlex.join([*options, "tests"]) + "\n",
+        encoding="utf-8",
+    )
+    assert _pytest_targets() == {target}
+
+
+@pytest.mark.parametrize("option,value", [
+    ("-k", "other_tests"), ("-m", "other_tests"), ("-r", "s"),
+    ("--tb", "short"), ("--ignore", "other_tests"),
+])
+@pytest.mark.parametrize("attached", [False, True])
+def test_pytest_targets_only_positionals_reach_filesystem_inspection(
+    synthetic_workflow, tmp_path, monkeypatch, option, value, attached,
+):
+    target = tmp_path / "selected_tests"
+    target.mkdir()
+    (tmp_path / value).mkdir()
+    if attached:
+        options = [option + ("=" if option.startswith("--") else "") + value]
+    else:
+        options = [option, value]
+    synthetic_workflow.write_text(
+        "run: python -m pytest " + shlex.join([*options, "-q", "selected_tests"]) + "\n",
+        encoding="utf-8",
+    )
+    inspected, original = [], Path.is_dir
+
+    def tracked(path):
+        inspected.append(path)
+        return original(path)
+
+    monkeypatch.setattr(Path, "is_dir", tracked)
+    assert _pytest_targets() == {target}
+    assert inspected == [target]
+
+
+@pytest.mark.parametrize("directory,args,expected", [
+    (".", [], ["."]),
+    ("batch-runner", [], ["batch-runner"]),
+    ("batch-runner", ["-m", "not integration", "--tb=short", "-q", "-rs", "--ignore=excluded"],
+     ["batch-runner"]),
+    ("batch-runner", ["tests", "-m", "not integration", "-q"], ["batch-runner/tests"]),
+    ("batch-runner", ["-q", "tests", "other tests"], ["batch-runner/tests", "batch-runner/other tests"]),
+    ("batch-runner", ["-q", "--", "-k"], ["batch-runner/-k"]),
+])
+def test_pytest_targets_preserve_positional_directories_and_default_cwd(
+    synthetic_workflow, tmp_path, directory, args, expected,
+):
+    for name in ("tests", "other tests", "excluded", "-k"):
+        (tmp_path / "batch-runner" / name).mkdir(parents=True)
+    synthetic_workflow.write_text(
+        "- name: tests\n  run: |\n    cd " + directory
+        + "\n    python -m pytest " + shlex.join(args) + "\n",
+        encoding="utf-8",
+    )
+    assert _pytest_targets() == {(tmp_path / name).resolve() for name in expected}
+
+
+def test_pytest_targets_next_step_resets_to_repo_root(synthetic_workflow, tmp_path):
+    runner = tmp_path / "batch-runner"
+    scripts = tmp_path / "scripts" / "__tests__"
+    runner.mkdir()
+    scripts.mkdir(parents=True)
+    synthetic_workflow.write_text(
+        "- name: core\n  run: |\n    cd batch-runner\n    python -m pytest -q\n"
+        "- name: scripts\n  run: python -m pytest scripts/__tests__ -m 'not integration' -q\n",
+        encoding="utf-8",
+    )
+    assert _pytest_targets() == {runner, scripts}
+
+
+@pytest.mark.parametrize("args,refusal", [
+    (["-k"], "missing pytest option value"),
+    (["--ignore"], "missing pytest option value"),
+    (["--future-option", "tests"], "unsupported pytest option in workflow"),
+])
+def test_pytest_targets_unknown_or_incomplete_options_refuse_before_paths(
+    synthetic_workflow, monkeypatch, args, refusal,
+):
+    synthetic_workflow.write_text(
+        "run: python -m pytest " + shlex.join(args) + "\n", encoding="utf-8",
+    )
+
+    def forbidden(_):
+        pytest.fail("option parsing must finish before filesystem inspection")
+
+    with monkeypatch.context() as patches:
+        patches.setattr(Path, "is_dir", forbidden)
+        with pytest.raises(AssertionError, match=refusal):
+            _pytest_targets()
 
 
 def test_every_python_test_file_sits_under_a_root_ci_runs():
