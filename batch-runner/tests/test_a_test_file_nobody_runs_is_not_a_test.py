@@ -135,12 +135,13 @@ def test_the_orphaned_directory_that_prompted_this_is_actually_wired():
 
 
 def test_backend_jobs_partition_the_comparison_contracts():
-    """Five jobs cover every node once, sharing only a complementary wire split."""
+    """Six jobs cover every node once, sharing only a complementary wire split."""
     text = WORKFLOW.read_text(encoding="utf-8")
     workflow = yaml.safe_load(text)
     jobs = workflow["jobs"]
     assert set(jobs) == {
-        "pytest", "comparison-contracts", "pilot-contracts", "wire-contracts", "native-host-contracts"
+        "pytest", "comparison-contracts", "pilot-contracts", "pilot-preflight-contracts",
+        "wire-contracts", "native-host-contracts"
     }
     assert workflow["permissions"] == {"contents": "read"}
     assert workflow["concurrency"] == {
@@ -158,6 +159,7 @@ def test_backend_jobs_partition_the_comparison_contracts():
     core = jobs["pytest"]["steps"]
     comparison = jobs["comparison-contracts"]["steps"]
     pilot = jobs["pilot-contracts"]["steps"]
+    pilot_preflight = jobs["pilot-preflight-contracts"]["steps"]
     wire = jobs["wire-contracts"]["steps"]
     native_host = jobs["native-host-contracts"]["steps"]
     setup_names = [
@@ -176,9 +178,10 @@ def test_backend_jobs_partition_the_comparison_contracts():
         "Run comparison contracts"
     ]
     assert [step["name"] for step in pilot] == setup_names + ["Run pilot contracts"]
+    assert [step["name"] for step in pilot_preflight] == setup_names + ["Run pilot preflight contracts"]
     assert [step["name"] for step in wire] == setup_names + ["Run wire contracts"]
     assert [step["name"] for step in native_host] == setup_names + ["Run native host contracts"]
-    assert core[:6] == comparison[:6] == pilot[:6] == wire[:6] == native_host[:6]
+    assert core[:6] == comparison[:6] == pilot[:6] == pilot_preflight[:6] == wire[:6] == native_host[:6]
     assert core[1] == {
         "name": "Checkout",
         "uses": "actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09",
@@ -223,7 +226,8 @@ def test_backend_jobs_partition_the_comparison_contracts():
 
     argv = []
     for step, command_count in (
-        (core[6], 1), (comparison[6], 1), (pilot[6], 1), (wire[6], 1), (native_host[6], 1)
+        (core[6], 1), (comparison[6], 1), (pilot[6], 1),
+        (pilot_preflight[6], 1), (wire[6], 1), (native_host[6], 1)
     ):
         assert set(step) == {"name", "run"}
         lines = step["run"].splitlines()
@@ -236,8 +240,9 @@ def test_backend_jobs_partition_the_comparison_contracts():
     excluded = [arg.removeprefix("--ignore=") for arg in argv[0][len(prefix):]]
     selected = argv[1][len(prefix):]
     pilot_selected = argv[2][len(prefix):]
-    wire_selected = argv[3][len(prefix):]
-    native_selected = argv[4][len(prefix):]
+    pilot_preflight_selected = argv[3][len(prefix):]
+    wire_selected = argv[4][len(prefix):]
+    native_selected = argv[5][len(prefix):]
 
     runner = REPO_ROOT / "batch-runner"
     tests = runner / "tests"
@@ -251,20 +256,24 @@ def test_backend_jobs_partition_the_comparison_contracts():
     )
     assert len(comparison_files) == 11 and len(pilot_files) == 9
     wire_file = "tests/test_gpt56_pilot_wire_receipt.py"
+    pilot_preflight_file = "tests/test_gpt56_sol_codex_pilot_preflight.py"
     keyword = "native_result_host"
     assert wire_file in pilot_files
-    general_pilot_files = [path for path in pilot_files if path != wire_file]
-    assert len(general_pilot_files) == 8
+    assert pilot_preflight_file in pilot_files
+    general_pilot_files = [path for path in pilot_files if path not in {wire_file, pilot_preflight_file}]
+    assert len(general_pilot_files) == 7
     actual = sorted(comparison_files + pilot_files)
     assert argv[0][len(prefix):] == [f"--ignore={path}" for path in actual]
     assert excluded == actual
     assert selected == comparison_files
     assert pilot_selected == general_pilot_files
+    assert pilot_preflight_selected == [pilot_preflight_file]
     assert wire_selected == [wire_file, "-k", f"not {keyword}"]
     assert native_selected == [wire_file, "-k", keyword]
     assert len(excluded) == len(set(excluded))
     assert len(selected) == len(set(selected))
     assert len(pilot_selected) == len(set(pilot_selected))
+    assert len(pilot_preflight_selected) == len(set(pilot_preflight_selected))
 
     pilot_sources = {path: (runner / path).read_text(encoding="utf-8") for path in pilot_files}
     assert {path for path, source in pilot_sources.items() if keyword in source.casefold()} == {wire_file}
@@ -295,16 +304,21 @@ def test_backend_jobs_partition_the_comparison_contracts():
     core_tests = all_tests - set(excluded)
     comparison_tests = set(selected)
     pilot_tests = set(pilot_selected)
+    pilot_preflight_tests = set(pilot_preflight_selected)
     shared_wire_tests = {wire_file}
     assert not core_tests & comparison_tests
     assert not core_tests & pilot_tests
     assert not comparison_tests & pilot_tests
+    assert not core_tests & pilot_preflight_tests
+    assert not comparison_tests & pilot_preflight_tests
+    assert not pilot_tests & pilot_preflight_tests
     assert not core_tests & shared_wire_tests
     assert not comparison_tests & shared_wire_tests
     assert not pilot_tests & shared_wire_tests
+    assert not pilot_preflight_tests & shared_wire_tests
     # Every other file is selected once without a keyword filter. Only the
     # shared file is visited twice, with the exhaustive/disjoint node split above.
-    assert core_tests | comparison_tests | pilot_tests | shared_wire_tests == all_tests
+    assert core_tests | comparison_tests | pilot_tests | pilot_preflight_tests | shared_wire_tests == all_tests
 
 
 @pytest.mark.parametrize("root", COVERED_ROOTS)
