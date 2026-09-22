@@ -584,7 +584,7 @@ def test_prepared_input_attestation_binds_actual_bytes_without_execution(case, t
                 assert inspection["launch_allowed"] is inspection["full_220_allowed"] is False
                 assert "live_deployment_identity_and_input_bytes_not_verified" in inspection["launch_blockers"]
                 assert "comparison_materialization_and_workflow_gates_not_wired" in inspection["launch_blockers"]
-                assert len(preflight.REQUIRED_SOURCES) == 36
+                assert len(preflight.REQUIRED_SOURCES) == 37
                 assert set(inputs["manifest"]["source_pins"]) == preflight.REQUIRED_SOURCES
                 sol = preflight.load_plan(preflight.ROOT / preflight.ENVELOPE / "gpt56_sol_foundry_codex_pilot.yaml")
                 parser = "batch-runner/gpt54_comparison_preflight.py"

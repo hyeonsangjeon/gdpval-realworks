@@ -54,6 +54,11 @@ from core.config import (
 )
 from core.agentic_authorization import task_request_sha256
 from core.codex_runner import RATE_LIMIT_KINDS
+from core.codex_task_deadline import (
+    ATTEMPTS_EXHAUSTED, EXHAUSTED, STATE_REFUSED,
+    CodexTaskDeadline, CodexTaskDeadlineStore,
+    TaskDeadlineExhausted, TaskDeadlineRefused, validate_deadline_execution,
+)
 from core.executor import TaskExecutor
 from core.experiment_config import CodexComparisonCapture, PilotInputCapture
 from core.agentic_experiments import (
@@ -255,6 +260,7 @@ def run_with_infra_retries(
     max_attempts: int,
     before_retry: Optional[Callable[[], None]] = None,
     sleep: Callable[[float], None] = time.sleep,
+    task_deadline: CodexTaskDeadline | None = None,
 ) -> dict:
     """Run ``attempt`` again while it fails for a reason another try can fix.
 
@@ -263,11 +269,41 @@ def run_with_infra_retries(
     or not it succeeded: this decides how many times to ask, not what to do
     with the answer.
 
-    ``max_attempts`` is a ceiling, not a target, and it is the *only* thing
+    Without the opt-in cumulative deadline, ``max_attempts`` is the ceiling
     that bounds the number of paid attempts. It comes from
     ``execution.max_retries`` plus one, which is what every experiment file
     that sets that key has always claimed it did.
     """
+    if task_deadline is not None:
+        result = None
+        infra_attempt = 0
+        while True:
+            try:
+                if result is not None and infra_retry_category(result) is None:
+                    return result
+                if task_deadline.remaining_seconds() <= 0:
+                    return task_deadline.refused_result(EXHAUSTED, result)
+                if not task_deadline.attempts_remaining():
+                    return task_deadline.refused_result(ATTEMPTS_EXHAUSTED, result)
+                if result is not None:
+                    # No legacy 600-second wait cap here: A has four durable
+                    # admissions, B/C are bounded by this same total deadline.
+                    if before_retry is not None:
+                        before_retry()
+                    task_deadline.wait(infra_retry_pause_seconds(infra_attempt - 1), sleep)
+                result = attempt(infra_attempt)
+                infra_attempt += 1
+                if task_deadline.remaining_seconds() <= 0:
+                    return task_deadline.refused_result(EXHAUSTED, result)
+            except TaskDeadlineExhausted as exc:
+                return task_deadline.refused_result(str(exc), result)
+            except TaskDeadlineRefused:
+                refused = dict(result or {}, task_id=task_deadline.task_id,
+                               status="error", error=STATE_REFUSED)
+                refused["observability"] = dict(
+                    refused.get("observability") or {}, error_category=STATE_REFUSED,
+                )
+                return refused
     result = attempt(0)
     waited = 0.0
     for infra_attempt in range(1, max(1, int(max_attempts))):
@@ -449,6 +485,7 @@ class _Step2RuntimeResources:
         self.provider_clients: list[object] = []
         self.factory: Optional[AzureAIClientFactory] = None
         self.cost_ledger: Optional[object] = None
+        self.task_deadline_store: CodexTaskDeadlineStore | None = None
         self._closed = False
 
     def own_executor(self, executor: TaskExecutor) -> None:
@@ -490,6 +527,7 @@ class _Step2RuntimeResources:
             # so a settle issued during their teardown still has somewhere
             # to go.
             ("cost ledger", self.cost_ledger),
+            ("task deadline store", self.task_deadline_store),
         ]
         for role, resource in resources:
             if resource is None or id(resource) in seen:
@@ -1180,6 +1218,17 @@ def _build_execution_observability(
     codex = _bounded_codex_diagnostics((result or {}).get("codex_diagnostics"))
     if codex:
         observability["codex"] = codex
+    deadline = (result or {}).get("task_deadline")
+    if isinstance(deadline, dict):
+        # This is the host record, never a task-workspace path or prompt.
+        observability["task_deadline"] = {
+            key: deadline[key] for key in (
+                "format", "run_id", "task_id", "condition", "repetition",
+                "total_seconds", "attempt_seconds", "started_unix", "expires_unix",
+                "remaining_seconds", "attempts_admitted", "wait_seconds",
+                "retained_attempts", "model_call_accounting", "invoice_accounting",
+            ) if key in deadline
+        }
     budget_metrics = _bounded_budget_metrics((result or {}).get("budget_metrics"))
     if budget_metrics:
         observability["budget_metrics"] = budget_metrics
@@ -3028,6 +3077,10 @@ def _resume_refusal_category(result: dict) -> Optional[str]:
     category = observability.get("error_category")
     if category in NON_RESUMABLE_ERROR_CATEGORIES:
         return str(category)
+    if category in {EXHAUSTED, ATTEMPTS_EXHAUSTED, STATE_REFUSED}:
+        # Only the opt-in deadline emits these; a terminal cell never gains
+        # another admission from the generic resume loop.
+        return str(category)
     return None
 
 
@@ -3102,6 +3155,8 @@ def run_inference(
     wall_timeout: int = None,
     comparison_run_id: str | None = None,
     *, pilot_capture_sources=None,
+    codex_deadline_state: Path | None = None,
+    initialize_codex_deadlines: bool = False,
 ):
     with _Step2RuntimeResources() as runtime_resources:
         return _run_inference_impl(
@@ -3114,6 +3169,9 @@ def run_inference(
             wall_timeout=wall_timeout,
             **({"comparison_run_id": comparison_run_id} if comparison_run_id is not None else {}),
             **({"pilot_capture_sources": pilot_capture_sources} if pilot_capture_sources is not None else {}),
+            **({"codex_deadline_state": codex_deadline_state,
+                "initialize_codex_deadlines": initialize_codex_deadlines}
+               if codex_deadline_state is not None or initialize_codex_deadlines else {}),
             runtime_resources=runtime_resources,
         )
 
@@ -3129,6 +3187,8 @@ def _run_inference_impl(
     comparison_run_id: str | None = None,
     *,
     pilot_capture_sources=None,
+    codex_deadline_state: Path | None = None,
+    initialize_codex_deadlines: bool = False,
     runtime_resources: _Step2RuntimeResources,
 ):
     """Run inference for all prepared tasks with multi-round resume.
@@ -3323,6 +3383,15 @@ def _run_inference_impl(
     # Codex-mode settings (execution.codex block, carried through step 1 with
     # the endpoint variable's *name* rather than its value).
     codex_config = execution_cfg.get("codex", {}) or {}
+    deadline_control = validate_deadline_execution(
+        dict(execution_cfg, mode=execution_mode, max_retries=max_retries), condition,
+    )
+    if deadline_control is None:
+        if codex_deadline_state is not None or initialize_codex_deadlines:
+            raise TaskDeadlineRefused("deadline CLI arguments require the explicit experiment opt-in")
+    elif (codex_deadline_state is None or prepared.get("condition_b") is not None
+          or not os.getenv("GDPVAL_RELAY_LINEAGE_ID", "").strip()):
+        raise TaskDeadlineRefused("task_deadline requires an explicit host state root, stable run lineage and one condition")
     hardened_requested = (
         execution_mode == "agentic_sandbox"
         or (
@@ -3455,9 +3524,14 @@ def _run_inference_impl(
     print(f"   Model:              {model}")
     print(f"   Mode:               {execution_mode}")
     print(f"   Tasks:              {len(tasks)}")
-    print(f"   Max retries:        {max_retries} (per task, infra — "
-          f"{infra_max_attempts} attempts at most, on "
-          f"{', '.join(sorted(RETRYABLE_INFRA_ERROR_CATEGORIES))})")
+    if deadline_control is None:
+        print(f"   Max retries:        {max_retries} (per task, infra — "
+              f"{infra_max_attempts} attempts at most, on "
+              f"{', '.join(sorted(RETRYABLE_INFRA_ERROR_CATEGORIES))})")
+    else:
+        print("   Task deadline:      180 minutes, including waits/recovery")
+        print(f"   Attempt policy:     {deadline_control.max_attempts or 'until deadline'} "
+              "(existing transient-error categories only)")
     print(f"   Resume max rounds:  {resume_max_rounds} (re-run failed tasks)")
     print(f"   Tokens:             code={tokens_cfg['code_generation']}, "
           f"qa={tokens_cfg['qa_check']}, render={tokens_cfg['json_render']}")
@@ -3568,6 +3642,18 @@ def _run_inference_impl(
                     + ", ".join(str(task_id) for task_id in unsafe_resume)
                 )
                 sys.exit(1)
+
+    codex_deadlines = None
+    if deadline_control is not None:
+        if initialize_codex_deadlines and (progress_path.exists() or legacy_progress_path.exists()):
+            raise TaskDeadlineRefused("existing progress requires deadline restore, not initialization")
+        codex_deadlines = CodexTaskDeadlineStore(
+            codex_deadline_state, run_id=run_identity, experiment_id=experiment_id,
+            condition_key=execution_condition, control=deadline_control,
+            task_ids=ordered_task_ids, prepared_fingerprint=prepared_fingerprint,
+            initialize=initialize_codex_deadlines,
+        )
+        runtime_resources.task_deadline_store = codex_deadlines
 
     # 2. Create LLM client (provider-aware). Agentic mode defers construction
     # until its compute preflight and signed approval gate pass.
@@ -3929,6 +4015,8 @@ def _run_inference_impl(
             print(f"❌ execution.codex is not usable: {exc}")
             sys.exit(1)
         codex_options = {"provider_settings": codex_settings}
+        if codex_deadlines is not None:
+            codex_options["task_deadline_store"] = codex_deadlines
         if pilot_wire_receipts is not None:
             codex_options["pilot_wire_receipts"] = pilot_wire_receipts
         print(f"   Codex provider:     {codex_settings.provider_id}")
@@ -4039,6 +4127,7 @@ def _run_inference_impl(
         import tempfile
 
         task_id = task["task_id"]
+        task_deadline = codex_deadlines.for_task(task_id) if codex_deadlines is not None else None
         job_started = time.perf_counter()
         execution_attempt_count = 0
         sandbox_attempt_count = 0
@@ -4129,7 +4218,11 @@ def _run_inference_impl(
                 backup_dir = None
 
         def _clear_task_files():
-            if pilot_native_result_host is not None:
+            if task_deadline is not None:
+                # Budgeted attempts keep their partials; no deletion on retry
+                # or resume. Their private Codex workspaces are also retained.
+                ensure_task_deliverable_dir(condition_upload_root, task_id)
+            elif pilot_native_result_host is not None:
                 pilot_native_result_host.require_absent_task_output(task_id, condition_upload_root)
             else:
                 reset_task_deliverable_dir(condition_upload_root, task_id)
@@ -4297,7 +4390,12 @@ def _run_inference_impl(
                     _attempt,
                     max_attempts=infra_max_attempts,
                     before_retry=_clear_task_files,
+                    **({"task_deadline": task_deadline} if task_deadline is not None else {}),
                 )
+                if task_deadline is not None:
+                    result.setdefault("model", model)
+                    result.setdefault("deliverable_files", [])
+                    result.setdefault("timestamp", datetime.now(timezone.utc).isoformat())
 
                 # If execution failed, return best if available
                 if result["status"] != "success":
@@ -4887,9 +4985,19 @@ def main():
         "--comparison-run-id", choices=CodexComparisonCapture.RUN_IDS, default=None,
         help="Require the pinned Codex comparison input capture before provider construction",
     )
+    parser.add_argument(
+        "--codex-deadline-state", type=Path, default=None,
+        help="Private host-owned cumulative deadline directory; restore is the default",
+    )
+    parser.add_argument(
+        "--initialize-codex-deadlines", action="store_true",
+        help="Declare new deadline cells in an absent directory; never use for a restart",
+    )
     args = parser.parse_args()
 
     if args.validate_checkpoint_only:
+        if args.codex_deadline_state is not None or args.initialize_codex_deadlines:
+            parser.error("deadline restore is validated by its opted-in Step 2 consumer")
         validate_restored_checkpoint(
             args.condition,
             **({"comparison_run_id": args.comparison_run_id} if args.comparison_run_id is not None else {}),
@@ -4905,6 +5013,9 @@ def main():
         verbose=args.verbose,
         wall_timeout=args.wall_timeout,
         **({"comparison_run_id": args.comparison_run_id} if args.comparison_run_id is not None else {}),
+        **({"codex_deadline_state": args.codex_deadline_state,
+            "initialize_codex_deadlines": args.initialize_codex_deadlines}
+           if args.codex_deadline_state is not None or args.initialize_codex_deadlines else {}),
     )
 
 

@@ -174,6 +174,55 @@ re-runs `error`/`qa_failed` tasks automatically. Existing progress identity is
 validated before provider-client or executor construction, so a stale or
 malformed local resume cannot spend model budget.
 
+#### Opt-in cumulative Codex task deadline
+
+The external-budget pilot can add this block to its existing
+`execution.codex` settings without changing the provider/model settings:
+
+```yaml
+task_deadline:
+  condition: B
+  repetition: 1
+```
+
+Only `codex_foundry`, one prepared condition, `execution.timeout: 1800`,
+`execution.max_retries: 3`, and no Self-QA/preprocessors are accepted. Conditions
+are A/B/C; repetitions are 1/2. Each declared run/task/condition/repetition has
+180 minutes of wall time from its first admission, including backoff and
+restart downtime. A retains four durable attempt admissions. B/C replace that
+cap with the same cumulative deadline; both retain the same partial artifacts.
+Existing retryable error categories are unchanged. This does not add an
+adaptive retry policy or opt any existing experiment into the pilot.
+
+Step 2 requires a stable `GDPVAL_RELAY_LINEAGE_ID` and an explicit
+`--codex-deadline-state` host directory. Only a genuinely new declaration uses
+`--initialize-codex-deadlines`, with an absent directory and no existing Step 2
+progress. A restart must retain that directory, use the same identity and omit
+the initialization flag. Missing/incompatible state is a refusal, never a new
+start time. The directory must be outside the problem workspace, Codex run
+root and temporary writable roots, including `/tmp`. Keep its private state
+and lock with the run's recovery artifacts; do not move it into agent inputs.
+
+The host record binds the ordered task IDs and prepared fingerprint. It uses
+the existing atomic private-JSON writer, restrictive modes, link checks and an
+exclusive process lock. A checksum detects damaged state, not a hostile host
+operator replacing both payload and checksum. The native wait is bounded by
+the lesser of 30 minutes and remaining cumulative time; backoff cannot extend
+the expiry. Exhaustion records `task_deadline_exhausted` without a further turn.
+Budgeted attempt workspaces remain available after interruption. Path-free
+`observability.task_deadline` records admission counts, expiry and observed
+completed waits. Existing cost receipts retain observed token usage and their
+missing-call/cost qualifications; neither complete API-call accounting nor an
+invoice total is claimed. There is no automatic monetary cutoff in this slice.
+
+This implements deadline persistence, not agent-session rehydration, adaptive
+planning or the 30-cell ABC/CBA dispatcher. The intended pilot still uses the
+unchanged `advance_check_5` cohort, two repetitions and one active inference
+execution on the same deployment. No target model/effort/context is selected
+by this setting. Running the pilot requires separate leader direction after
+review and technical readiness. With the block absent, exp035 and other modes
+retain their existing retry, timeout and cleanup behavior.
+
 ### Step 3: Format Results (`step3_format_results.py`)
 
 Converts inference output into structured JSON + Markdown report under `results/<exp_id>/`.

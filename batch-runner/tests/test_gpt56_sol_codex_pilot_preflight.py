@@ -246,7 +246,7 @@ def test_gpt56_sol_foundry_pilot_is_pinned_and_fails_closed(
     if not path:
         assert main([]) == 2
         assert json.loads(capsys.readouterr().out) == result
-        assert len(REQUIRED_SOURCES) == 57
+        assert len(REQUIRED_SOURCES) == 58
         assert set(plan["source_pins"]) == REQUIRED_SOURCES
         assert PLAN_READER_SOURCE in REQUIRED_SOURCES
         assert PLAN_READER_SOURCE in plan["source_pins"]
@@ -380,7 +380,7 @@ def test_runtime_caps_usage_active_contract_and_offline_gates_keep_unobserved_re
     ]
     assert case.plan["runtime_caps_usage"] == preflight.RUNTIME_CAPS_USAGE
     assert preflight.RUNTIME_CAPS_USAGE["recorder"] in REQUIRED_SOURCES
-    assert len(REQUIRED_SOURCES) == 57
+    assert len(REQUIRED_SOURCES) == 58
     assert preflight.RUNTIME_CAPS_USAGE["requires_live_host_session_witness"] is True
     assert preflight.RUNTIME_CAPS_USAGE["offline_preflight_consumption"] is False
     assert preflight.RUNTIME_CAPS_USAGE["clears_native_call_or_billing_blockers"] is False
@@ -1041,7 +1041,7 @@ def test_external_live_receipt_active_plan_keeps_all_offline_blockers_and_false_
     assert set(preflight.EVIDENCE_BLOCKER_ROLES) == set(LAUNCH_BLOCKERS[:3])
     assert case.plan["external_live_receipt"] == preflight.EXTERNAL_LIVE_RECEIPT
     assert preflight.EXTERNAL_LIVE_RECEIPT["recorder"] in REQUIRED_SOURCES
-    assert set(case.plan["source_pins"]) == REQUIRED_SOURCES and len(REQUIRED_SOURCES) == 57
+    assert set(case.plan["source_pins"]) == REQUIRED_SOURCES and len(REQUIRED_SOURCES) == 58
     assert preflight.EXTERNAL_LIVE_RECEIPT["requires_live_caps_usage_witness"] is True
     assert preflight.EXTERNAL_LIVE_RECEIPT["offline_preflight_consumption"] is False
     assert preflight.EXTERNAL_LIVE_RECEIPT["clears_current_blockers"] is False

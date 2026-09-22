@@ -54,6 +54,11 @@ from core.codex_runtime_config import (
     resolve_run_root_base,
 )
 from core.cost_metering import CostRecorder
+from core.codex_task_deadline import (
+    ATTEMPT_SECONDS, ATTEMPTS_EXHAUSTED, EXHAUSTED, STATE_REFUSED,
+    CodexTaskDeadline, CodexTaskDeadlineStore,
+    TaskDeadlineExhausted, TaskDeadlineRefused,
+)
 from core.cost_receipts import STAGE_GENERATION, RETRY_NONE, make_call_id
 from core.execution_envelope_observed import (
     API_FAMILY_RESPONSES,
@@ -723,6 +728,7 @@ class CodexAgentRunner(RecordsItsFirstRequest):
         verify_runtime: bool = True,
         preflight_auth: bool = True,
         pilot_wire_receipts: Any | None = None,
+        task_deadline_store: CodexTaskDeadlineStore | None = None,
     ) -> None:
         """
         Args:
@@ -747,6 +753,8 @@ class CodexAgentRunner(RecordsItsFirstRequest):
             pilot_wire_receipts: owned observation session for the registered
                 pilot. Absent/null leaves other runs unchanged; this records
                 app-server traffic, not Foundry HTTP or served identity.
+            task_deadline_store: opt-in, host-owned cumulative cell clocks.
+                Omitted leaves the legacy per-turn timeout and cleanup intact.
         """
         if run_id == PilotInputCapture.RUN_ID or pilot_wire_receipts is not None:
             from gpt56_pilot_wire_receipt import (
@@ -767,6 +775,15 @@ class CodexAgentRunner(RecordsItsFirstRequest):
             )
         self.provider = provider
         self.timeout = int(timeout) if timeout else CODEX_TURN_TIMEOUT
+        if task_deadline_store is not None and (
+            type(task_deadline_store) is not CodexTaskDeadlineStore
+            or type(timeout) is not int or timeout != ATTEMPT_SECONDS
+            or pilot_wire_receipts is not None
+            or run_id != task_deadline_store.identity["run_id"]
+            or condition_name != task_deadline_store.identity["condition_key"]
+        ):
+            raise TaskDeadlineRefused("Codex runner differs from its deadline identity/controls")
+        self.task_deadline_store = task_deadline_store
         self.cost_ledger = cost_ledger
         self.run_id = run_id
         self.condition_name = condition_name
@@ -1151,6 +1168,24 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                 category="model_mismatch",
             )
 
+        deadline = None
+        store = getattr(self, "task_deadline_store", None)
+        if store is not None:
+            try:
+                if ((run_id is not None and run_id != self.run_id)
+                        or (condition_name is not None and condition_name != self.condition_name)):
+                    raise TaskDeadlineRefused("Codex call differs from its declared cell")
+                deadline = store.for_task(task_id)
+                deadline.bound_timeout(self.timeout)
+                if not deadline.attempts_remaining():
+                    raise TaskDeadlineExhausted(ATTEMPTS_EXHAUSTED)
+            except TaskDeadlineExhausted as exc:
+                result = self._failure(str(exc), category=str(exc))
+                result["task_deadline"] = deadline.as_record()
+                return result
+            except TaskDeadlineRefused:
+                return self._failure(STATE_REFUSED, category=STATE_REFUSED)
+
         workspace: CodexWorkspace | None = None
         try:
             workspace = CodexWorkspace.create(task_id=task_id or "task")
@@ -1163,6 +1198,16 @@ class CodexAgentRunner(RecordsItsFirstRequest):
             )
 
         try:
+            attempt_index = None
+            if deadline is not None:
+                try:
+                    attempt_index = deadline.admit_attempt(workspace.root)
+                except TaskDeadlineExhausted as exc:
+                    result = self._failure(str(exc), category=str(exc))
+                    result["task_deadline"] = deadline.as_record()
+                    return result
+                except TaskDeadlineRefused:
+                    return self._failure(STATE_REFUSED, category=STATE_REFUSED)
             try:
                 workspace.stage_references(reference_files)
             except (ReferenceIntegrityError, OSError) as exc:
@@ -1187,6 +1232,9 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                     pilot_observer.bind_task_text(task_text)
                     pilot_options["pilot_wire_observer"] = pilot_observer
                     pilot_options["pilot_host_witness"] = pilot_host_witness
+                if deadline is not None:
+                    pilot_options["task_deadline"] = deadline
+                    pilot_options["attempt_index"] = attempt_index
                 outcome = self._run_one_turn(
                     workspace=workspace,
                     task_text=task_text,
@@ -1226,6 +1274,11 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                     result["error"] = "pilot_task_failed" if pilot_session is not None else outcome.error
                 if outcome.error_category:
                     result["error_category"] = outcome.error_category
+                if deadline is not None:
+                    try:
+                        result["task_deadline"] = deadline.as_record()
+                    except TaskDeadlineRefused:
+                        result.update(success=False, error=STATE_REFUSED, error_category=STATE_REFUSED)
                 if pilot_session is not None:
                     result["pilot_wire_receipt"] = pilot_linkage
                     pilot_host.finish_task(pilot_host_witness, result=result)
@@ -1236,7 +1289,7 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                     raise PilotWireReceiptRefused() from None
                 raise
         finally:
-            if workspace is not None:
+            if workspace is not None and deadline is None:
                 try:
                     workspace.cleanup()
                 except OSError:
@@ -1277,6 +1330,8 @@ class CodexAgentRunner(RecordsItsFirstRequest):
         task_id: Optional[str],
         pilot_wire_observer: Any | None = None,
         pilot_host_witness: Any | None = None,
+        task_deadline: CodexTaskDeadline | None = None,
+        attempt_index: int | None = None,
     ) -> CodexRunOutcome:
         pilot_session = getattr(self, "pilot_wire_receipts", None)
         pilot_host = None
@@ -1293,6 +1348,8 @@ class CodexAgentRunner(RecordsItsFirstRequest):
         call_id: str | None = None
         codex: Any = None
         try:
+            if task_deadline is not None:
+                task_deadline.bound_timeout(self.timeout)
             try:
                 if pilot_wire_observer is None:
                     codex = self.open_runtime(workspace)
@@ -1316,6 +1373,8 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                 )
 
             developer_instructions = None
+            if task_deadline is not None:
+                task_deadline.bound_timeout(self.timeout)
             if isinstance(experiment_prompt, dict):
                 system = experiment_prompt.get("system")
                 if isinstance(system, str) and system.strip():
@@ -1341,8 +1400,18 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                 )
 
             before_totals = CodexTokenTotals.zero()
-            call_id = self._reserve_call(task_id)
+            if task_deadline is not None:
+                task_deadline.bound_timeout(self.timeout)
+            call_id = (self._reserve_call(task_id) if task_deadline is None else
+                       self._reserve_call(task_id, attempt_index=attempt_index))
 
+            if task_deadline is not None:
+                try:
+                    task_deadline.bound_timeout(self.timeout)
+                except (TaskDeadlineExhausted, TaskDeadlineRefused):
+                    self._abandon_call(call_id, "deadline refused before the turn started")
+                    call_id = None
+                    raise
             try:
                 turn_handle = thread.turn(task_text)
             except Exception as exc:  # noqa: BLE001
@@ -1358,7 +1427,11 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                     thread_id=getattr(thread, "id", None),
                 )
 
-            observed = self._await_turn(turn_handle)
+            observed = (
+                self._await_turn(turn_handle)
+                if task_deadline is None else
+                self._await_turn(turn_handle, task_deadline=task_deadline)
+            )
             result, timed_out, failure = (
                 observed.result, observed.timed_out, observed.failure
             )
@@ -1388,7 +1461,8 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                 call_id = None
                 return measured
 
-            if timed_out:
+            deadline_expired = task_deadline is not None and task_deadline.remaining_seconds() <= 0
+            if timed_out or deadline_expired:
                 # The turn was sent and the model may well have answered, so
                 # the reservation is never abandoned. What the stream managed
                 # to report before the interrupt is settled; what it did not
@@ -1403,11 +1477,11 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                     success=False,
                     text="",
                     files=files,
-                    error=(
+                    error=EXHAUSTED if deadline_expired else (
                         f"the Codex turn exceeded {self.timeout} seconds and "
                         "was interrupted"
                     ),
-                    error_category="timeout",
+                    error_category=EXHAUSTED if deadline_expired else "timeout",
                     usage_delta=measured,
                     items_seen=observed.items_seen,
                     thread_id=getattr(thread, "id", None),
@@ -1460,6 +1534,16 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                 thread_id=getattr(thread, "id", None),
                 turn_id=getattr(result, "id", None),
             )
+        except TaskDeadlineExhausted:
+            return CodexRunOutcome(
+                success=False, text="", files=workspace.collect_deliverables(),
+                error=EXHAUSTED, error_category=EXHAUSTED,
+            )
+        except TaskDeadlineRefused:
+            return CodexRunOutcome(
+                success=False, text="", files=workspace.collect_deliverables(),
+                error=STATE_REFUSED, error_category=STATE_REFUSED,
+            )
         finally:
             if codex is not None:
                 try:
@@ -1470,7 +1554,9 @@ class CodexAgentRunner(RecordsItsFirstRequest):
             if swept:
                 self.last_swept_pids = swept
 
-    def _await_turn(self, turn_handle: Any) -> TurnObservation:
+    def _await_turn(
+        self, turn_handle: Any, *, task_deadline: CodexTaskDeadline | None = None,
+    ) -> TurnObservation:
         """Consume a turn under a wall clock; interrupt it if it overruns.
 
         The SDK exposes no timeout of its own -- ``Thread.run`` blocks until the
@@ -1487,6 +1573,14 @@ class CodexAgentRunner(RecordsItsFirstRequest):
         single assignment or a count only that thread increments.
         """
         observed = TurnObservation()
+        try:
+            timeout = self.timeout if task_deadline is None else task_deadline.bound_timeout(self.timeout)
+        except TaskDeadlineExhausted:
+            try:
+                turn_handle.interrupt()
+            except Exception:  # noqa: BLE001
+                pass
+            return TurnObservation(timed_out=True)
         collector = _load_turn_collector()
 
         def _consume() -> None:
@@ -1509,14 +1603,17 @@ class CodexAgentRunner(RecordsItsFirstRequest):
             target=_consume, name="codex-turn", daemon=True
         )
         worker.start()
-        worker.join(self.timeout)
+        worker.join(timeout)
 
         if worker.is_alive():
             try:
                 turn_handle.interrupt()
             except Exception:  # noqa: BLE001
                 pass
-            worker.join(CODEX_INTERRUPT_GRACE_SECONDS)
+            grace = CODEX_INTERRUPT_GRACE_SECONDS
+            if task_deadline is not None:
+                grace = min(grace, task_deadline.remaining_seconds())
+            worker.join(grace)
             observed.result = None
             observed.failure = None
             observed.timed_out = True
@@ -1524,7 +1621,7 @@ class CodexAgentRunner(RecordsItsFirstRequest):
 
     # -- cost ---------------------------------------------------------------
 
-    def _reserve_call(self, task_id: str | None) -> str | None:
+    def _reserve_call(self, task_id: str | None, *, attempt_index: int | None = None) -> str | None:
         """Open a receipt for the turn we are about to send.
 
         One receipt per turn, not per model request. Codex opens however many
@@ -1551,14 +1648,18 @@ class CodexAgentRunner(RecordsItsFirstRequest):
         if self.cost_ledger is None:
             return None
         task = task_id or "unknown-task"
-        attempt = self._turns_per_task.get(task, 0)
+        attempt = self._turns_per_task.get(task, 0) if attempt_index is None else attempt_index
         self._turns_per_task[task] = attempt + 1
         attribution = CostRecorder.current()
         retry_kind = (
             attribution.retry_kind if attribution is not None else RETRY_NONE
         )
+        receipt_run_id = self.run_id or getattr(self.cost_ledger, "run_id", "codex")
+        store = getattr(self, "task_deadline_store", None)
+        if store is not None:
+            receipt_run_id += f":{store.control.condition}:r{store.control.repetition}"
         call_id = make_call_id(
-            run_id=self.run_id or getattr(self.cost_ledger, "run_id", "codex"),
+            run_id=receipt_run_id,
             task_id=task,
             stage=STAGE_GENERATION,
             retry_kind=retry_kind,

@@ -558,6 +558,17 @@ class ExperimentConfig:
         """
         errors = []
 
+        from core.codex_task_deadline import validate_deadline_execution
+
+        try:
+            deadline = validate_deadline_execution(
+                self.to_dict()["execution"], self._condition_to_dict(self.condition_a),
+            )
+            if deadline is not None and self.condition_b is not None:
+                errors.append("task_deadline requires one declared condition per prepared run")
+        except ValueError as exc:
+            errors.append(str(exc))
+
         capture = self.execution.comparison_input_capture
         if self.experiment_id in CodexComparisonCapture.RUN_IDS and capture is None:
             errors.append("registered Codex comparisons require an input capture")
