@@ -190,7 +190,8 @@ Only `codex_foundry`, one prepared condition, `execution.timeout: 1800`,
 are A/B/C; repetitions are 1/2. Each declared run/task/condition/repetition has
 180 minutes of wall time from its first admission, including backoff and
 restart downtime. A retains four durable attempt admissions. B/C replace that
-cap with the same cumulative deadline; both retain the same partial artifacts.
+cap with the same cumulative deadline. B/C now share retained-workspace and
+native-thread continuation; A still creates a fresh session for each attempt.
 Existing retryable error categories are unchanged. This does not add an
 adaptive retry policy or opt any existing experiment into the pilot.
 
@@ -211,12 +212,34 @@ the lesser of 30 minutes and remaining cumulative time; backoff cannot extend
 the expiry. Exhaustion records `task_deadline_exhausted` without a further turn.
 Budgeted attempt workspaces remain available after interruption. Path-free
 `observability.task_deadline` records admission counts, expiry and observed
-completed waits. Existing cost receipts retain observed token usage and their
+completed waits, plus session policy and native-resume count. Existing cost receipts retain observed token usage and their
 missing-call/cost qualifications; neither complete API-call accounting nor an
 invoice total is claimed. There is no automatic monetary cutoff in this slice.
 
-This implements deadline persistence, not agent-session rehydration, adaptive
-planning or the 30-cell ABC/CBA dispatcher. The intended pilot still uses the
+The private host record binds B/C's actual native thread ID to the original
+workspace, `CODEX_HOME` and task home directory identities, prepared/request
+digests, provider/settings, pinned runtime and receipt ledger. The pinned
+Python SDK's `Codex.thread_resume(thread_id, ...)` opens that same native thread;
+the adapter validates the returned ID and submits the unchanged task request
+as its next turn. It does not reconstruct a conversation from prior answers.
+References are staged once. Restore never recreates directories or copies over
+partials. A proven failure before `thread/start` can reuse the staged workspace;
+an interrupted/uncertain start without a bound ID refuses. Missing, linked,
+replaced or incompatible bindings also refuse. Older deadline files without
+continuation metadata cannot be adopted as resumable state; do not replace them
+with a new clock. Content-filter stops remain terminal across restarts.
+
+Usage observations are written before settlement, using the existing ledger's
+idempotent equality check and durable attempt/receipt IDs. Resumed thread totals
+are differenced against the previous observation. A lost response or unobserved
+turn leaves an unknown boundary; its cumulative tokens are not charged again as
+the next turn's usage. Missing observations and per-request/invoice gaps remain
+explicit, not zero-cost claims. Keep the private binding, retained directories
+and ledger together; a native session file missing inside an otherwise retained
+home is a native resume refusal, never a fresh-thread fallback.
+
+This slice does not add adaptive planning or the 30-cell ABC/CBA dispatcher.
+The intended pilot still uses the
 unchanged `advance_check_5` cohort, two repetitions and one active inference
 execution on the same deployment. No target model/effort/context is selected
 by this setting. Running the pilot requires separate leader direction after

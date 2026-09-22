@@ -1227,6 +1227,7 @@ def _build_execution_observability(
                 "total_seconds", "attempt_seconds", "started_unix", "expires_unix",
                 "remaining_seconds", "attempts_admitted", "wait_seconds",
                 "retained_attempts", "model_call_accounting", "invoice_accounting",
+                "session_policy", "native_resumes",
             ) if key in deadline
         }
     budget_metrics = _bounded_budget_metrics((result or {}).get("budget_metrics"))

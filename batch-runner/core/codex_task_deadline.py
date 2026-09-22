@@ -2,7 +2,8 @@
 
 The deadline is wall time, not model time or a monetary allowance. Its state
 must accompany a restart; a missing or incompatible restore never starts a
-new clock. This does not restore an agent session or authorize a paid run.
+new clock. B/C can bind a retained native session to this same host record;
+A keeps fresh sessions. Neither control authorizes a paid run.
 """
 
 from __future__ import annotations
@@ -18,6 +19,11 @@ from pathlib import Path
 from typing import Any, Callable
 
 FORMAT = "codex-task-deadline-v1"
+CONTINUATION_FORMAT = "codex-native-continuation-v1"
+_USAGE_FIELDS = frozenset({
+    "input_tokens", "cached_input_tokens", "cache_write_input_tokens",
+    "output_tokens", "reasoning_output_tokens",
+})
 TOTAL_SECONDS = 180 * 60
 ATTEMPT_SECONDS = 30 * 60
 EXHAUSTED = "task_deadline_exhausted"
@@ -99,6 +105,64 @@ def _regular_private(path: Path) -> None:
         raise TaskDeadlineRefused("deadline state must be a private single-link regular file")
 
 
+def _valid_totals(value: Any) -> bool:
+    return (type(value) is dict and set(value) == _USAGE_FIELDS
+            and all(item is None or (type(item) is int and item >= 0)
+                    for item in value.values()))
+
+
+def _validate_continuation(value: Any, attempts: list[dict]) -> None:
+    """Validate host metadata, never open an agent transcript or auth store."""
+    if value is None:
+        return
+    if (type(value) is not dict or set(value) != {
+        "format", "identity_sha256", "request_sha256", "workspace", "phase", "thread_id",
+        "usage_boundary", "turns", "native_resumes", "terminal_reason",
+    } or value["format"] != CONTINUATION_FORMAT
+            or type(value["identity_sha256"]) is not str
+            or len(value["identity_sha256"]) != 64
+            or any(char not in "0123456789abcdef" for char in value["identity_sha256"])
+            or type(value["request_sha256"]) is not str or len(value["request_sha256"]) != 64
+            or any(char not in "0123456789abcdef" for char in value["request_sha256"])
+            or type(value["workspace"]) is not dict
+            or value["phase"] not in {"pre_thread", "starting", "bound"}
+            or not _valid_totals(value["usage_boundary"])
+            or type(value["turns"]) is not list
+            or type(value["native_resumes"]) is not int or value["native_resumes"] < 0
+            or value["terminal_reason"] not in {None, "completed", "content_filter"}):
+        raise TaskDeadlineRefused("native continuation binding is invalid")
+    if not attempts or any(attempt["workspace_root"] != value["workspace"].get("root")
+                           for attempt in attempts):
+        raise TaskDeadlineRefused("native continuation workspace differs from its admissions")
+    if value["phase"] == "bound":
+        if type(value["thread_id"]) is not str or not value["thread_id"].strip():
+            raise TaskDeadlineRefused("bound native thread identifier is missing")
+    elif (value["thread_id"] is not None or value["turns"]
+          or value["native_resumes"] or value["terminal_reason"] is not None):
+        raise TaskDeadlineRefused("pre-thread continuation has bound activity")
+    prior = -1
+    for turn in value["turns"]:
+        if (type(turn) is not dict or set(turn) != {
+            "attempt_index", "call_id", "before", "after", "phase",
+        } or type(turn["attempt_index"]) is not int
+                or not prior < turn["attempt_index"] < len(attempts)
+                or (turn["call_id"] is not None
+                    and (type(turn["call_id"]) is not str or not turn["call_id"]))
+                or not _valid_totals(turn["before"])
+                or turn["phase"] not in {"in_flight", "observed", "settled", "unmetered"}
+                or (turn["after"] is None) != (turn["phase"] == "in_flight")
+                or (turn["after"] is not None and not _valid_totals(turn["after"]))
+                or (turn["phase"] == "settled" and turn["call_id"] is None)
+                or (turn["phase"] == "unmetered" and turn["call_id"] is not None)):
+            raise TaskDeadlineRefused("native continuation usage boundary is invalid")
+        prior = turn["attempt_index"]
+    if value["turns"]:
+        last = value["turns"][-1]
+        boundary = last["after"] or dict.fromkeys(_USAGE_FIELDS)
+        if value["usage_boundary"] != boundary:
+            raise TaskDeadlineRefused("native continuation usage boundary differs from its turn")
+
+
 class CodexTaskDeadlineStore:
     """One locked host record for an explicitly declared run/condition/repeat.
 
@@ -172,6 +236,7 @@ class CodexTaskDeadlineStore:
                     "cells": {task: {
                         "started_unix": None, "expires_unix": None,
                         "attempts": [], "wait_seconds": 0.0,
+                        "continuation": None,
                     } for task in task_ids},
                 })
             self._read()
@@ -206,7 +271,7 @@ class CodexTaskDeadlineStore:
             if type(last) not in {int, float} or not math.isfinite(last) or self._now() < last:
                 raise TaskDeadlineRefused("deadline clock moved backwards")
             for cell in data["cells"].values():
-                if set(cell) != {"started_unix", "expires_unix", "attempts", "wait_seconds"}:
+                if set(cell) != {"started_unix", "expires_unix", "attempts", "wait_seconds", "continuation"}:
                     raise TaskDeadlineRefused("deadline cell shape mismatch")
                 start, expiry = cell["started_unix"], cell["expires_unix"]
                 if start is None:
@@ -230,6 +295,9 @@ class CodexTaskDeadlineStore:
                             or not start <= attempt["admitted_unix"] < expiry
                             or type(attempt["workspace_root"]) is not str):
                         raise TaskDeadlineRefused("deadline attempt record is invalid")
+                _validate_continuation(cell["continuation"], cell["attempts"])
+                if self.control.condition == "A" and cell["continuation"] is not None:
+                    raise TaskDeadlineRefused("A requires fresh native sessions")
             return data
         except (OSError, ValueError, TypeError, KeyError) as exc:
             if isinstance(exc, TaskDeadlineRefused):
@@ -260,6 +328,11 @@ class CodexTaskDeadlineStore:
 class CodexTaskDeadline:
     store: CodexTaskDeadlineStore
     task_id: str
+
+    @property
+    def retains_thread(self) -> bool:
+        """B/C share one continuation mechanism; A never adopts a thread."""
+        return self.store.control.condition in {"B", "C"}
 
     def _state(self, *, start: bool = False) -> tuple[dict, dict, float]:
         data = self.store._read()
@@ -309,6 +382,128 @@ class CodexTaskDeadline:
         self.store._write(data)
         return index
 
+    def continuation(self, identity_sha256: str | None = None) -> dict | None:
+        """Get the binding, refusing missing post-admission or uncertain state."""
+        _, cell, _ = self._state()
+        binding = cell["continuation"]
+        if not self.retains_thread:
+            return None
+        if binding is None:
+            if cell["attempts"]:
+                raise TaskDeadlineRefused("admitted cell is missing its native continuation binding")
+            return None
+        if identity_sha256 is not None and binding["identity_sha256"] != identity_sha256:
+            raise TaskDeadlineRefused("native continuation request/runtime identity mismatch")
+        if binding["phase"] == "starting":
+            raise TaskDeadlineRefused("native thread creation was interrupted before its identifier was bound")
+        if binding["terminal_reason"] is not None:
+            raise TaskDeadlineRefused("native continuation is terminal: " + binding["terminal_reason"])
+        return binding
+
+    def bind_workspace(self, identity_sha256: str, request_sha256: str, workspace: dict) -> None:
+        """Seal the initial staged layout before any runtime can be opened."""
+        data, cell, _ = self._state()
+        if (not self.retains_thread or cell["continuation"] is not None
+                or len(cell["attempts"]) != 1):
+            raise TaskDeadlineRefused("native continuation cannot replace an admitted workspace")
+        cell["continuation"] = {
+            "format": CONTINUATION_FORMAT, "identity_sha256": identity_sha256,
+            "request_sha256": request_sha256,
+            "workspace": workspace, "phase": "pre_thread", "thread_id": None,
+            "usage_boundary": dict.fromkeys(_USAGE_FIELDS, 0), "turns": [],
+            "native_resumes": 0, "terminal_reason": None,
+        }
+        _validate_continuation(cell["continuation"], cell["attempts"])
+        self.store._write(data)
+
+    def thread_starting(self) -> None:
+        """Write ahead of thread/start; an ambiguous response never means fresh."""
+        data, cell, _ = self._state()
+        binding = cell["continuation"]
+        if binding is None or binding["phase"] != "pre_thread":
+            raise TaskDeadlineRefused("native thread start lacks a proven pre-thread binding")
+        binding["phase"] = "starting"
+        self.store._write(data)
+
+    def bind_thread(self, thread_id: str, *, resumed: bool) -> None:
+        """Bind the actual response ID before a turn or receipt can be opened."""
+        data, cell, _ = self._state()
+        binding = cell["continuation"]
+        if binding is None or type(thread_id) is not str or not thread_id.strip():
+            raise TaskDeadlineRefused("native runtime returned no thread identifier")
+        if resumed:
+            if binding["phase"] != "bound" or binding["thread_id"] != thread_id:
+                raise TaskDeadlineRefused("native resume returned a different thread identifier")
+            binding["native_resumes"] += 1
+        else:
+            if binding["phase"] != "starting":
+                raise TaskDeadlineRefused("native thread response has no pending start")
+            binding.update(phase="bound", thread_id=thread_id)
+        self.store._write(data)
+
+    def begin_turn(self, attempt_index: int, call_id: str | None) -> dict:
+        """Keep a durable receipt ID and invalidate an unobserved usage gap."""
+        data, cell, _ = self._state()
+        binding = cell["continuation"]
+        if (binding is None or binding["phase"] != "bound"
+                or binding["terminal_reason"] is not None
+                or attempt_index != len(cell["attempts"]) - 1
+                or any(turn["attempt_index"] == attempt_index for turn in binding["turns"])):
+            raise TaskDeadlineRefused("native turn is not a new admitted attempt")
+        before = dict(binding["usage_boundary"])
+        binding["turns"].append({
+            "attempt_index": attempt_index, "call_id": call_id,
+            "before": before, "after": None, "phase": "in_flight",
+        })
+        # A killed process may miss further activity. Never subtract a stale
+        # observation from the next turn and attribute the unseen gap to it.
+        binding["usage_boundary"] = dict.fromkeys(_USAGE_FIELDS)
+        self.store._write(data)
+        return before
+
+    def observe_turn(self, attempt_index: int, after: dict, *, terminal_reason: str | None = None) -> None:
+        """Write observed totals before idempotent ledger settlement."""
+        from core.codex_cost import CodexTokenTotals, turn_usage_delta
+
+        data, cell, _ = self._state()
+        binding = cell["continuation"]
+        if binding is None or not binding["turns"] or not _valid_totals(after):
+            raise TaskDeadlineRefused("native turn observation is invalid")
+        turn = binding["turns"][-1]
+        if turn["attempt_index"] != attempt_index or turn["phase"] != "in_flight":
+            raise TaskDeadlineRefused("native turn observation belongs to another attempt")
+        try:
+            turn_usage_delta(CodexTokenTotals(**turn["before"]), CodexTokenTotals(**after))
+        except ValueError:
+            raise TaskDeadlineRefused("native cumulative usage moved backwards") from None
+        turn.update(after=after, phase="observed")
+        binding["usage_boundary"] = after
+        binding["terminal_reason"] = terminal_reason
+        _validate_continuation(binding, cell["attempts"])
+        self.store._write(data)
+
+    def acknowledge_usage(self, attempt_index: int) -> None:
+        """Mark a persisted observation only after its existing ledger settles."""
+        data, cell, _ = self._state()
+        binding = cell["continuation"]
+        if binding is None:
+            raise TaskDeadlineRefused("native usage has no continuation binding")
+        for turn in binding["turns"]:
+            if turn["attempt_index"] == attempt_index and turn["phase"] == "observed":
+                turn["phase"] = "settled" if turn["call_id"] is not None else "unmetered"
+                self.store._write(data)
+                return
+        raise TaskDeadlineRefused("native usage observation is missing")
+
+    def stop_continuation(self, reason: str) -> None:
+        """Retain a content-filter refusal even if no usage event arrived."""
+        data, cell, _ = self._state()
+        binding = cell["continuation"]
+        if binding is None or reason != "content_filter":
+            raise TaskDeadlineRefused("native terminal reason is invalid")
+        binding["terminal_reason"] = reason
+        self.store._write(data)
+
     def wait(self, seconds: float, sleep: Callable[[float], None]) -> None:
         """Charge a backoff to the original expiry, including an oversleep."""
         before = self.remaining_seconds()
@@ -333,6 +528,8 @@ class CodexTaskDeadline:
             "attempts_admitted": len(cell["attempts"]),
             "wait_seconds": cell["wait_seconds"],
             "retained_attempts": len(cell["attempts"]),
+            "session_policy": "retained_native_thread" if self.retains_thread else "fresh_session",
+            "native_resumes": (cell["continuation"] or {}).get("native_resumes", 0),
             "model_call_accounting": "not_complete", "invoice_accounting": "unavailable",
         }
 
