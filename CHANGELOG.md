@@ -428,12 +428,49 @@ entries land under a fresh dated heading the day they merge to `main`.
   cases. The earlier 45/8 selections were not rerun and did not cover the
   terminal replay gap. The existing isolated SDK environment was reused
   without installation. This is synthetic SDK-transport/fake-clock and SQLite
-  evidence, not live recovery or invoice completeness. The review requests a
-  correction; it does not approve this new implementation delta.
+  evidence, not live recovery or invoice completeness. The leader subsequently
+  reviewed the terminal-accounting delta and 42-case evidence at
+  `0b37bc5991834b12788434c10ebb56e39d3d9db9` and reported all fourteen
+  applicable CI checks passing there. Review `5278280269`'s gate-order defect
+  is addressed for the covered no-reference inputs; that result did not
+  establish reference-bearing continuation.
+  Separate REQUEST-CHANGES review `5280465712` on that HEAD identified that
+  Step 2's per-invocation temporary reference paths were included in the native
+  continuation digest. Identical verified inputs staged on retry or restore
+  therefore refused before native resume or host accounting. The existing
+  `VerifiedReferencePath` now carries the validated declared path, SHA256 and
+  size through verification/copying. Continuation and accounting bind those
+  ordered identities while the string still names the current read location.
+  Current-byte checks, declared roles/order, link and basename-collision
+  protections remain. Retained workspace copies are neither approved sources
+  nor restaged over partials. A stays fresh; B/C share the same continuation
+  path and unchanged 180/30-minute policy. No old binding is silently adopted.
+  One focused invocation at `76178074c1ad1e7a11f7b7a40d0773c26295ef20`
+  reported `43 passed in 165.28s (0:02:45)`, exit 0: 35 new reference-bearing
+  cases, five reference-integrity cases, one existing terminal replay parameter
+  and two current/stale binding cases. With `RESUME_PYTHON` denoting the existing
+  private isolated interpreter, the exact environment and pytest argv were:
+  `HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 DO_NOT_TRACK=1 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner "$RESUME_PYTHON" -m pytest -q -o addopts= batch-runner/tests/test_codex_native_resume.py::test_native_resume_stable_reference_retry_and_process_restore batch-runner/tests/test_codex_native_resume.py::test_native_resume_stable_reference_a_stays_fresh batch-runner/tests/test_codex_native_resume.py::test_native_resume_stable_reference_terminal_accounting batch-runner/tests/test_codex_native_resume.py::test_native_resume_stable_reference_drift_refuses_before_request_or_settlement batch-runner/tests/test_codex_native_resume.py::test_native_resume_stable_reference_unknown_usage_remains_partial batch-runner/tests/test_reference_integrity.py 'batch-runner/tests/test_codex_native_resume.py::test_native_resume_crash_reconciliation_terminal_and_expired[completed-before_ack-outer_retry-B]' batch-runner/tests/test_codex_native_resume.py::test_native_resume_active_grader_template_source_bindings`.
+  The real default `_execute_single_task()` resolution/staging path produced
+  distinct temporary directories from synthetic regular files and validated
+  records. Tests verify B/C native-ID/workspace reuse after failure and process
+  restore, fresh A, retained partials, unchanged deadlines/admissions, and
+  terminal/expired accounting-only reconciliation without another runtime or
+  native request. Invalid reference identity/bytes/size/order, missing or
+  linked files and collisions refuse before a new request or invalid
+  settlement. Unknown usage remains partial. The earlier 45/8/42 selections
+  retain their original commits/scopes and were not rerun in full. `165.28s`
+  is pytest wall time, not task latency or cost. No test retry, installation,
+  real-data operation or live recovery was performed; the private log is
+  retained. Review `5280465712` requests this correction, not approval of it;
+  immutable review and carrying-HEAD CI remain required. No new CI success is
+  claimed and no CI query was made.
   The exact commands and dependency/contract limits are in the latest result.
   Active full-template hashes and directly coupled pins were recomputed with
   the unchanged helper/original template roles; source counts remain 37/58,
   `WORKFLOW_SHA256` and all false launch flags/blockers remain unchanged.
+  The active GHCP gate's directly coupled reference-source constant and YAML
+  pins were also refreshed; its 19-file source set and strict guard remain.
   The exact source baseline is `237fdc429420d417909fd109232710d933c5ce63`.
   #650's reviews `5276488086` and `5276986025`, the latter at
   `846b7dddc7d4cf674f4da68ca5d6e1d330e3b6b5`, cover only the prior deadline
