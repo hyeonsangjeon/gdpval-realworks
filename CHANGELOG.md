@@ -213,38 +213,53 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
-- Record one real offline GPT-5.4 preparation at leader-reviewed source
-  `778a627bbb5404f33e5e62019382fa107aa47840`. The saved normalized-original
-  source handoff supplied the unchanged parquet and exactly two pinned
-  references. Only those references were copied into a fresh private
-  reference-only root, using exclusive single-link regular-file creation and
-  the existing `reference_files/...` layout. Original sources, cache, handoff
-  and the separate GHCP output bundle were unchanged; that output bundle was
-  not opened or rehashed.
+- Extend the real offline GPT-5.4 preparation evidence at leader-reviewed
+  source `778a627bbb5404f33e5e62019382fa107aa47840` with the first registered
+  Codex run. The unchanged compiler selected `gpt54_v2_codex_v1_codex_r1`,
+  condition `codex`, repeat 1, ABBA index 1. Exactly one new
+  `prepare_disposable_checkout()` call returned its built-in verified marker,
+  exit 0, with no separate verification pass. Codex checkout-ready SHA256:
+  `ea5d6ede676bce62d4302833ecb3dad0c7f75b95609eb35f7b668ab30d66e5f1`.
+  Configuration-ready SHA256:
+  `9af32b257de1c84e8372c88dc6d117741d5c89051806c63af5d9c17e081f7a75`;
+  input-ready SHA256:
+  `cd6da95d37da9c2325e0d9a8af29cf8aa50643451c4fe78d5752ba2d59b69faf`.
+  The saved private handoff supplied the existing reference-only source root
+  and separate original parquet. No replacement source tree or standalone
+  input hash check was needed; the preparer performed its normal pinned-byte
+  checks and publication.
+  The earlier V2 operation prepared `gpt54_v2_codex_v1_v2_r1`, condition
+  `sandbox_v2`, repeat 1, ABBA index 0, with one call and exit 0. Its preserved
+  checkout-ready SHA256 is
+  `02d38bc3d8fc369d6c384c1c7abd3d4d79265161131b5c39b02f6aec046d8498`.
+  That operation created the reference-only root from exactly two pinned
+  references using exclusive single-link regular-file copies and the existing
+  `reference_files/...` layout. V2 was not prepared or verified again. Both
+  checkouts, bundles, reservations, readiness markers and private handoffs are
+  retained without quarantine. Original sources, cache and prior handoffs
+  remain unchanged; the distinct GHCP output bundle was not opened or rehashed.
   The canonical manifest SHA256 is
   `457b38f870a37b2ab64cdfcaacdd17f14a04ab6aa48d445838a08ecb34ef02c8`;
   the combined-plan SHA256 is
   `f33abf80e316117c1c3abdd3de56d055bd79c97394dc6e47b6a124ed45cb3206`.
-  Exactly one `prepare_disposable_checkout()` call prepared the first
-  registered run, `gpt54_v2_codex_v1_v2_r1`, condition `sandbox_v2`, repeat 1.
-  It returned its built-in verified marker; the operation exited 0. Checkout
-  ready SHA256:
-  `02d38bc3d8fc369d6c384c1c7abd3d4d79265161131b5c39b02f6aec046d8498`.
-  The private checkout, source copies, configuration/input bundles, reservation,
-  readiness markers and handoff are retained without quarantine. No separate
-  verifier pass or compiled command ran. `commands_executed=false`, provider
-  observation is null, and all launch/full-220 flags and six blockers are
-  unchanged. This is local preparation, not a paired result, model consumption,
-  grading, or completion of the historical five-environment comparison.
+  `commands_executed=false`, provider observation is null, and all launch flags
+  remain false with the six blockers unchanged. Two prepared conditions are
+  not a paired runtime result, model consumption, grading or completion of the
+  historical five-environment comparison. No repeat, variance, limit or cost
+  decision was changed.
+  The leader's read-only review of records HEAD
+  `1344aa77a6316192b72b785baabd4b65fa16655f` against the source SHA above found
+  no correctness or evidence-scope issues in the complete two-file V2 record.
+  It covers only that earlier one-run record, not this Codex operation, these
+  new records or launch permission.
   Only this changelog and `tasks/LATEST_TASK_RESULT/README.md` change; previous
   GHCP staging and infrastructure entries are preserved. `experiment-design`
   kept the existing boundary; `experiment-report-en` and `im-not-ai-en` preserved
   the evidence limits in the English records. Record-to-evidence comparison
-  and `git diff --check` passed. The source review authorized this one local
-  operation, not launch or approval of these new records. The records are
-  submitted without waiting for CI or independent review; no such verdict is
-  claimed. No tests, build, workflow dispatch, VM, provider/model, grader,
-  Azure/HF, credential or paid operation ran.
+  and `git diff --check` passed. The new substantive records are submitted
+  without waiting for CI or review; no new verdict is claimed. No tests,
+  build, workflow dispatch, VM, provider/model, grader, Azure/HF, credential or
+  paid operation ran.
 
 - Record the bounded GHCP VM infrastructure handoff at source
   `6d6663e7e536a88a58079ddc41ed8e38b0507824`. One authorized GitHub source
