@@ -413,6 +413,23 @@ entries land under a fresh dated heading the day they merge to `main`.
   `ee11f956d53225760b96040c2642e7ef0682b554` reported
   `8 passed in 18.21s`, exit 0: six filter cases and two refreshed current/stale
   binding cases. The earlier 45-case result retains its original commit/scope.
+  REQUEST-CHANGES review `5278280269` at
+  `0f3cbdca6326c4916f282d5f5796fd7bd02be15e` then identified that terminal
+  and expiry gates could strand a persisted usage observation before ledger
+  settlement/acknowledgment. Host-only reconciliation now validates the cell,
+  request, provider, retained directories and ledger before those gates, using
+  the unchanged receipt equality guard. Completed, filtered and expired cells
+  settle/acknowledge known usage without another native request, attempt,
+  expiry extension or terminal-state reset; unknown usage remains partial.
+  No completed task result is reconstructed. One focused invocation at
+  `d486dc456e3caf8c2cacc4cfd480a9828796d0e5` reported
+  `42 passed in 158.33s (0:02:38)`, exit 0: 39 new crash/refusal/unknown-usage
+  cases, one existing nonterminal replay case and two current/stale binding
+  cases. The earlier 45/8 selections were not rerun and did not cover the
+  terminal replay gap. The existing isolated SDK environment was reused
+  without installation. This is synthetic SDK-transport/fake-clock and SQLite
+  evidence, not live recovery or invoice completeness. The review requests a
+  correction; it does not approve this new implementation delta.
   The exact commands and dependency/contract limits are in the latest result.
   Active full-template hashes and directly coupled pins were recomputed with
   the unchanged helper/original template roles; source counts remain 37/58,
