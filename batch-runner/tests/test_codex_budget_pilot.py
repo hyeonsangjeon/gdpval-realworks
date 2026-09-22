@@ -10,8 +10,11 @@ from __future__ import annotations
 import fcntl
 import json
 import os
+import select
+import signal
 import socket
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from types import SimpleNamespace
@@ -31,6 +34,8 @@ from core.result_fingerprint import inference_result_fingerprint
 from core.source_identity import source_task_projection_sha256
 from gpt54_prepared_input_attestation import _dataset_tasks, _prepared_condition, _reference_snapshot
 from step1_prepare_tasks import _public_codex_config
+
+REAL_POPEN = subprocess.Popen
 
 
 class Clock:
@@ -456,3 +461,262 @@ def test_pilot_dispatcher_failed_filtered_and_missing_receipts_stay_in_denominat
     before = list(scenario.transport.calls)
     assert invoke(scenario, "--execute", "--resume") == 1
     assert scenario.transport.calls == before
+
+
+OWNED_TREE_FIXTURE = """
+import json, os, signal, sys
+from pathlib import Path
+ready_read, ready_write = os.pipe()
+descendant = os.fork()
+if descendant == 0:
+    os.close(ready_read)
+    os.setsid()  # A different process group/session must not escape cleanup.
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)
+    Path(sys.argv[1]).write_bytes(b'owned fixture partial')
+    os.write(ready_write, b'1')
+    os.close(ready_write)
+    while True:
+        signal.pause()
+os.close(ready_write)
+assert os.read(ready_read, 1) == b'1'
+os.close(ready_read)
+with open(sys.argv[2], 'w') as stream:
+    stream.write(json.dumps({'payload': os.getpid(), 'descendant': descendant}) + '\\n')
+if sys.argv[3] != 'exit':
+    while True:
+        signal.pause()
+"""
+
+
+@pytest.fixture
+def owned_lifecycle(monkeypatch, scenario):
+    """Only the approved harmless fixture may cross the real process boundary."""
+    pipe_path = scenario.host / "owned-fixture-ready"
+    os.mkfifo(pipe_path, 0o600)
+    ready = os.open(pipe_path, os.O_RDWR | os.O_NONBLOCK)
+    original_process = scenario.transport.process
+    original_response = pilot._owned_response
+    original_stop = pilot._request_owned_stop
+    evidence = SimpleNamespace(mode="timeout", processes=[], pids={}, used=False, injected=False,
+                               partial=None, before=None, deadline=None, handles=[])
+
+    def local_only(command, **options):
+        assert command[:3] == [sys.executable, str(Path(pilot.__file__).absolute()), pilot.OWNED_CHILD_ARG]
+        assert command[5:8] == [sys.executable, "-c", OWNED_TREE_FIXTURE]
+        assert options["start_new_session"] is True
+        process = REAL_POPEN(command, **options)
+        evidence.processes.append(process)
+        return process
+
+    def fixture_process(command, **options):
+        if command[1] != "step2_run_inference.py" or evidence.used:
+            if evidence.used:
+                assert all(not Path(f"/proc/{pid}").exists() for pid in evidence.pids.values())
+                assert pilot._load(scenario.root / "owned-child.json")["phase"] == "reaped"
+            return original_process(command, **options)
+        evidence.used = True
+        cell = read_plan(scenario)["cells"][0]
+        key = cell["cell_id"]
+        state = read_state(scenario, key)
+        store = pilot._deadline(scenario.root, cell, state, scenario.transport)
+        try:
+            native = scenario.root / cell["roles"]["native_workspaces"] / "attempt-0"
+            native.mkdir(parents=True)
+            assert store.for_task(cell["task_id"]).admit_attempt(native) == 0
+            evidence.deadline = scenario.root / cell["roles"]["deadline"] / "deadlines.json"
+            evidence.before = pilot._load(evidence.deadline)["cells"][cell["task_id"]]
+        finally:
+            store.close()
+        evidence.partial = native / "partial.txt"
+        scenario.transport.calls.append(("infer", key, tuple(command)))
+        return pilot.LocalTransport.process(
+            scenario.transport,
+            [sys.executable, "-c", OWNED_TREE_FIXTURE, str(evidence.partial), str(pipe_path), evidence.mode],
+            **options,
+        )
+
+    def response(control, timeout):
+        if evidence.processes and not evidence.injected:
+            # The first read is the actual supervisor handshake. Only interrupt
+            # its next wait, after two real fixture processes report readiness.
+            owner = pilot._load(scenario.root / "owned-child.json")
+            if owner["phase"] == "running" and getattr(evidence, "handshake", False):
+                assert select.select([ready], [], [], 10.0)[0], "owned fixture did not start"
+                evidence.pids = json.loads(os.read(ready, 4096))
+                evidence.handles = [os.pidfd_open(pid) for pid in evidence.pids.values()]
+                assert os.getsid(evidence.pids["descendant"]) == evidence.pids["descendant"]
+                assert evidence.partial.read_bytes() == b"owned fixture partial"
+                held = os.open(scenario.root / "lock", os.O_RDWR)
+                try:
+                    with pytest.raises(BlockingIOError):
+                        fcntl.flock(held, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                finally:
+                    os.close(held)
+                evidence.injected = True
+                if evidence.mode in {"timeout", "refusal"}:
+                    raise subprocess.TimeoutExpired("owned harmless fixture", timeout)
+                if evidence.mode == "interrupt":
+                    assert callable(signal.getsignal(signal.SIGTERM))
+                    os.kill(os.getpid(), signal.SIGTERM)
+        value = original_response(control, timeout)
+        if value.get("phase") == "ready":
+            evidence.handshake = True
+        return value
+
+    def stop(process):
+        if evidence.mode == "refusal":
+            assert process is evidence.processes[0]
+            raise PermissionError("synthetic owned-stop refusal")
+        original_stop(process)
+
+    monkeypatch.setattr(subprocess, "Popen", local_only)
+    monkeypatch.setattr(scenario.transport, "process", fixture_process)
+    monkeypatch.setattr(pilot, "_owned_response", response)
+    monkeypatch.setattr(pilot, "_request_owned_stop", stop)
+    try:
+        yield evidence
+    finally:
+        for process in evidence.processes:
+            handle = os.pidfd_open(process.pid) if process.returncode is None else None
+            try:
+                if handle is not None:
+                    original_stop(process)
+                    assert select.select([handle], [], [], pilot.CLEANUP_WAIT_SECONDS + 2)[0]
+                    process.wait()
+            finally:
+                if handle is not None:
+                    os.close(handle)
+        for handle in evidence.handles:
+            os.close(handle)
+        os.close(ready)
+
+
+@pytest.mark.parametrize("outcome", ["timeout", "interrupt", "exit"])
+def test_pilot_owned_child_tree_reaped_before_next_cell_or_restore(scenario, owned_lifecycle, outcome):
+    owned_lifecycle.mode = outcome
+    # A separate harmless process is deliberately outside the cell's ownership.
+    unrelated = REAL_POPEN([sys.executable, "-c", "import signal; signal.pause()"],
+                           stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL, start_new_session=True)
+    unrelated_handle = os.pidfd_open(unrelated.pid)
+    try:
+        assert invoke(scenario, "--execute") == (130 if outcome == "interrupt" else 1)
+        assert unrelated.poll() is None
+        assert owned_lifecycle.injected and len(owned_lifecycle.pids) == 2
+        assert all(not Path(f"/proc/{pid}").exists() for pid in owned_lifecycle.pids.values())
+        owner = pilot._load(scenario.root / "owned-child.json")
+        assert owner["phase"] == "reaped" and owner["tree_reaped"] and owner["owner_reaped"]
+        key = read_plan(scenario)["order"][0]
+        state = read_state(scenario, key)
+        assert state["accounting"] == "missing" and state["receipt"] is None
+        assert state["status"] == ("running" if outcome == "interrupt" else "stopped" if outcome == "timeout" else "failed")
+        if outcome == "timeout":
+            assert state["reason"] == "child_timeout_partial_accounting" and state["exit_code"] is None
+        if outcome == "exit":
+            assert state["reason"] == "missing_result" and state["exit_code"] == 0
+        assert owned_lifecycle.partial.read_bytes() == b"owned fixture partial"
+        before_calls = list(scenario.transport.calls)
+        scenario.transport.clock.now += 25
+        assert invoke(scenario, "--execute", "--resume") == (0 if outcome == "interrupt" else 1)
+        after = pilot._load(owned_lifecycle.deadline)["cells"][scenario.ids[0]]
+        assert after["started_unix"] == owned_lifecycle.before["started_unix"]
+        assert after["expires_unix"] == owned_lifecycle.before["expires_unix"]
+        assert len(after["attempts"]) == (2 if outcome == "interrupt" else 1)
+        if outcome != "interrupt":
+            assert scenario.transport.calls == before_calls
+        calls = list(scenario.transport.calls)
+        assert invoke(scenario, "--execute", "--resume") == (0 if outcome == "interrupt" else 1)
+        assert scenario.transport.calls == calls
+        assert owned_lifecycle.partial.read_bytes() == b"owned fixture partial"
+    finally:
+        unrelated.terminate()
+        assert select.select([unrelated_handle], [], [], 2.0)[0]
+        unrelated.wait()
+        os.close(unrelated_handle)
+
+
+def test_pilot_owned_child_cleanup_refusal_keeps_lock_and_durable_unresolved_cell(scenario, owned_lifecycle):
+    owned_lifecycle.mode = "refusal"
+    assert invoke(scenario, "--execute") == 2
+    plan = read_plan(scenario)
+    first = plan["cells"][0]
+    owner = pilot._load(scenario.root / "owned-child.json")
+    assert owner["phase"] == "cleanup_unresolved" and not owner["tree_reaped"] and not owner["owner_reaped"]
+    assert owner["cell_id"] == first["cell_id"]
+    state = read_state(scenario, first["cell_id"])
+    assert state["status"] == "running" and state["reason"] == "owned_child_cleanup_unconfirmed"
+    assert state["accounting"] == "missing" and state["receipt"] is None
+    assert all(Path(f"/proc/{pid}").exists() for pid in owned_lifecycle.pids.values())
+    assert all(read_state(scenario, cell["cell_id"])["status"] == "pending" for cell in plan["cells"][1:])
+    calls = list(scenario.transport.calls)
+    # The surviving supervisor/payload still holds the inherited physical lock.
+    held = os.open(scenario.root / "lock", os.O_RDWR)
+    try:
+        with pytest.raises(BlockingIOError):
+            fcntl.flock(held, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    finally:
+        os.close(held)
+    assert invoke(scenario, "--execute", "--resume") == 2
+    assert scenario.transport.calls == calls
+    # The test alone stops its known harmless supervisor. Even once the physical
+    # lock is free, a lost cleanup acknowledgment is not inferred on restore.
+    process = owned_lifecycle.processes[0]
+    handle = os.pidfd_open(process.pid)
+    try:
+        process.send_signal(signal.SIGTERM)
+        assert select.select([handle], [], [], pilot.CLEANUP_WAIT_SECONDS + 2)[0]
+        assert process.wait() == 0
+    finally:
+        os.close(handle)
+    for _ in range(2):
+        assert invoke(scenario, "--execute", "--resume") == 2
+        assert scenario.transport.calls == calls
+        assert pilot._load(scenario.root / "owned-child.json") == owner
+    assert owned_lifecycle.partial.read_bytes() == b"owned fixture partial"
+    assert pilot._load(owned_lifecycle.deadline)["cells"][scenario.ids[0]] == owned_lifecycle.before
+
+
+@pytest.mark.parametrize("change", ["missing", "cross_plan"])
+def test_pilot_owned_child_restore_refuses_missing_or_incompatible_owner(scenario, change):
+    assert invoke(scenario) == 0
+    path = scenario.root / "owned-child.json"
+    if change == "missing":
+        path.unlink()
+    else:
+        state = pilot._load(path)
+        state["plan_sha256"] = "f" * 64
+        pilot._save(path, state)
+    assert invoke(scenario, "--execute", "--resume") == 2
+    assert scenario.transport.calls == []
+
+
+@pytest.mark.parametrize("guard", ["inputs", "runtime", "host"])
+def test_pilot_integrated_capability_present_without_launch_readiness(monkeypatch, scenario, guard):
+    import step2_run_inference as step2
+
+    # Actual integrated code/closure, not a patched constant or copied #652 file.
+    assert pilot.LocalTransport().feedback_available() is True
+    plan, parent, _ = pilot.compile_pilot("synthetic_pilot", "1" * 40)
+    assert plan["source_capability"] == {"c_host_feedback_present": True, "unmet": []}
+    assert plan["launch_authorized_by_plan"] is False and plan["grading_launched"] is False
+    if guard == "inputs":
+        assert pilot.main(scenario.argv[:6] + ["--execute"], _test_transport=scenario.transport) == 2
+    else:
+        # Only Git/source metadata is synthetic. Keep real installed-runtime,
+        # connection and host validators, with all provider constructors blocked.
+        monkeypatch.setattr(pilot, "_repository", lambda root: (root, "synthetic-git"))
+        monkeypatch.setattr(pilot, "_safe_checkout_configuration", lambda root: None)
+        monkeypatch.setattr(pilot, "_git", lambda root, *args: subprocess.CompletedProcess(
+            args, 0, (("1" * 40) + "\n").encode() if args[0] == "rev-parse" else b""))
+        monkeypatch.setattr(pilot, "_reviewed_commit", lambda *args: {"tree_sha": "b" * 40})
+        if guard == "runtime":
+            monkeypatch.delenv("CODEX_FOUNDRY_CONNECTION_CONFIRMED", raising=False)
+            assert pilot.main([*scenario.argv, "--execute"]) == 2
+        else:
+            marker = scenario.host / "synthetic-dev-marker"
+            marker.write_text("role=development\nbenchmark_execution_environment=no\n")
+            monkeypatch.setenv("CODEX_FOUNDRY_CONNECTION_CONFIRMED", "1")
+            monkeypatch.setenv("GDPVAL_DEV_HOST_MARKER", str(marker))
+            with pytest.raises(step2.dev_host_boundary.DevHostBoundaryError, match="refusing to start"):
+                pilot.main([*scenario.argv, "--execute"])
+    assert scenario.transport.calls == [] and not scenario.root.exists()

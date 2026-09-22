@@ -9,17 +9,22 @@ An explicit reviewed SHA is a caller assertion, not approval issued here.
 from __future__ import annotations
 
 import argparse
+import ctypes
 import fcntl
 import hashlib
 import json
 import logging
 import os
 import re
+import select
+import signal
 import stat
 import subprocess
 import sys
 import time
 from dataclasses import dataclass, replace
+from multiprocessing import Pipe
+from multiprocessing.connection import Connection
 from pathlib import Path
 from typing import Any, Callable
 
@@ -55,10 +60,157 @@ PREPARED = "batch-runner/workspace/step1_tasks_prepared.json"
 RESULT = "batch-runner/workspace/step2_inference_results_condition_a.json"
 LEDGER = "batch-runner/workspace/cost_ledger_condition_a.jsonl"
 LOG = logging.getLogger(__name__)
+OWNED_CHILD_ARG = "--_pilot-owned-child"
+TERM_GRACE_SECONDS = 0.5
+KILL_GRACE_SECONDS = 3.0
+CLEANUP_WAIT_SECONDS = TERM_GRACE_SECONDS + KILL_GRACE_SECONDS + 2.0
 
 
 class PilotDispatchRefused(ValueError):
     """No child may be admitted; retain any reserved or partial output."""
+
+
+class OwnedChildCleanupRefused(PilotDispatchRefused):
+    """The serial slot remains durably occupied; do not adopt or skip it."""
+
+
+def _owned_child_worker(control_fd: int, lock_fd: int, command: list[str]) -> int:
+    """Supervise only this cell's descendants, including detached grandchildren.
+
+    Like the repository's owned worker, this has a private session and uses
+    TERM then KILL. A Linux child subreaper keeps orphaned tool processes under
+    this supervisor, not Step 2 or the dispatcher. ECHILD is the cleanup proof;
+    a direct-child exit or an empty process-group snapshot is not sufficient.
+    """
+    from core.codex_runner import _descendant_pids
+
+    control = Connection(control_fd)
+    wake_read, wake_write = os.pipe2(os.O_NONBLOCK | os.O_CLOEXEC)
+    stopped = False
+
+    def stop(signum: int, frame: Any) -> None:
+        nonlocal stopped
+        stopped = True
+
+    def wait_event(seconds: float) -> None:
+        if select.select([wake_read], [], [], max(0.0, seconds))[0]:
+            try:
+                os.read(wake_read, 65536)
+            except BlockingIOError:
+                pass
+
+    # No shared/personal process is made a subreaper. This private supervisor
+    # has no other children, and the payload cannot start before the handshake.
+    libc = ctypes.CDLL(None, use_errno=True)
+    enabled = ctypes.c_int()
+    if (os.getsid(0) != os.getpid() or os.getpgrp() != os.getpid()
+            or not hasattr(os, "pidfd_open") or not hasattr(signal, "pidfd_send_signal")
+            or not Path("/proc/self/task").is_dir()
+            or libc.prctl(36, 1, 0, 0, 0) != 0  # PR_SET_CHILD_SUBREAPER
+            or libc.prctl(37, ctypes.byref(enabled), 0, 0, 0) != 0
+            or enabled.value != 1):
+        return 2
+    signal.set_wakeup_fd(wake_write)
+    signal.signal(signal.SIGCHLD, lambda signum, frame: None)
+    signal.signal(signal.SIGTERM, stop)
+    signal.signal(signal.SIGINT, stop)
+    control.send_bytes(json.dumps({"phase": "ready", "pid": os.getpid()}).encode())
+    launch = json.loads(control.recv_bytes(4096))
+    if set(launch) != {"timeout"} or type(launch["timeout"]) not in (int, float) or launch["timeout"] <= 0:
+        return 2
+    expires = time.monotonic() + launch["timeout"]
+    process = subprocess.Popen(command, stdin=subprocess.DEVNULL, pass_fds=(lock_fd,))
+
+    def reaped_all() -> bool:
+        while True:
+            try:
+                pid, status = os.waitpid(-1, os.WNOHANG)
+            except ChildProcessError:
+                return True
+            if pid == 0:
+                return False
+            if pid == process.pid:
+                process.returncode = os.waitstatus_to_exitcode(status)
+
+    while process.poll() is None and not stopped and time.monotonic() < expires:
+        wait_event(expires - time.monotonic())
+    reason = "interrupted" if stopped else "timeout" if process.returncode is None else "exited"
+    confirmed = reaped_all()
+    for sig, grace in ((signal.SIGTERM, TERM_GRACE_SECONDS), (signal.SIGKILL, KILL_GRACE_SECONDS)):
+        until = time.monotonic() + grace
+        while not confirmed and time.monotonic() < until:
+            # Snapshot this private supervisor's tree, not processes by name,
+            # UID, or the dispatcher's other children. Pin each signal target.
+            for pid in _descendant_pids(os.getpid()):
+                try:
+                    reference = os.open(f"/proc/{pid}", os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
+                    try:
+                        handle = os.pidfd_open(pid)
+                        try:
+                            # Reopen through the pre-pidfd /proc reference. If
+                            # that process exited/recycled, this cannot read the
+                            # new occupant, matching the repository's pidfd rule.
+                            status = os.open("stat", os.O_RDONLY | os.O_CLOEXEC, dir_fd=reference)
+                            try:
+                                os.read(status, 4096)
+                            finally:
+                                os.close(status)
+                            if pid in _descendant_pids(os.getpid()):
+                                signal.pidfd_send_signal(handle, sig)
+                        finally:
+                            os.close(handle)
+                    finally:
+                        os.close(reference)
+                except (ProcessLookupError, FileNotFoundError, PermissionError):
+                    pass
+            confirmed = reaped_all()
+            if not confirmed:
+                wait_event(until - time.monotonic())
+                confirmed = reaped_all()
+        if confirmed:
+            break
+    try:
+        control.send_bytes(json.dumps({"phase": "finished", "pid": os.getpid(),
+                                       "tree_reaped": confirmed, "exit_code": process.returncode,
+                                       "reason": reason}).encode())
+    except (BrokenPipeError, EOFError):
+        pass  # Parent interruption does not cancel this owned-tree cleanup.
+    finally:
+        signal.set_wakeup_fd(-1)
+        os.close(wake_read)
+        os.close(wake_write)
+        control.close()
+    return 0 if confirmed else 2
+
+
+def _owned_response(control: Connection, timeout: float) -> dict:
+    if not control.poll(max(0.0, timeout)):
+        raise subprocess.TimeoutExpired("owned pilot child", timeout)
+    return json.loads(control.recv_bytes(4096))
+
+
+def _request_owned_stop(process: subprocess.Popen) -> None:
+    process.send_signal(signal.SIGTERM)
+
+
+def _owner_state(plan_sha256: str) -> dict:
+    return {"plan_sha256": plan_sha256, "phase": "idle", "cell_id": None, "stage": None,
+            "pid": None, "tree_reaped": True, "owner_reaped": True, "reason": None, "exit_code": None}
+
+
+def _require_quiet_owner(root: Path, plan: dict) -> None:
+    state = _load(root / "owned-child.json")
+    expected = _owner_state(_digest(plan))
+    if set(state) != set(expected) or state["plan_sha256"] != expected["plan_sha256"]:
+        raise PilotDispatchRefused("owned_child_identity_mismatch")
+    if state["phase"] == "idle":
+        _same("idle child owner", state, expected)
+    elif (state["phase"] != "reaped" or state["tree_reaped"] is not True
+          or state["owner_reaped"] is not True):
+        raise OwnedChildCleanupRefused("owned_child_cleanup_unconfirmed")
+    elif (state["cell_id"] not in plan["order"] or state["stage"] not in {"prepare", "infer"}
+          or type(state["pid"]) is not int or state["pid"] <= 0):
+        raise PilotDispatchRefused("owned_child_identity_mismatch")
 
 
 def _digest(value: Any) -> str:
@@ -230,9 +382,86 @@ class LocalTransport:
                 or _git(destination, "symbolic-ref", "--quiet", "HEAD", ok=(0, 1)).returncode != 1):
             raise PilotDispatchRefused("cell_source_drift")
 
-    def process(self, command: list[str], **options: Any) -> subprocess.CompletedProcess:
-        """Only process boundary; the offline transport replaces this method."""
-        return subprocess.run(command, **options)
+    def process(self, command: list[str], *, ownership: tuple[Path, dict], **options: Any) -> subprocess.CompletedProcess:
+        """Own, stop and reap the entire cell tree before releasing its slot."""
+        if not hasattr(os, "pidfd_open"):
+            raise PilotDispatchRefused("owned_child_pidfd_required")
+        path, binding = ownership
+        state = {**_owner_state(binding["plan_sha256"]), **binding, "phase": "launching",
+                 "tree_reaped": False, "owner_reaped": False}
+        _save(path, state)  # A crash even before PID publication is not silently adoptable.
+        control, inherited = Pipe()
+        timeout = options.pop("timeout")
+        options.pop("check")
+        lock, = options.pop("pass_fds")
+        process, handle, response, failure = None, None, None, None
+        previous = {sig: signal.getsignal(sig) for sig in (signal.SIGINT, signal.SIGTERM)}
+
+        def interrupted(signum: int, frame: Any) -> None:
+            raise KeyboardInterrupt
+
+        signal.signal(signal.SIGTERM, interrupted)
+        until = time.monotonic() + timeout
+        try:
+            process = subprocess.Popen(
+                [sys.executable, str(Path(__file__).absolute()), OWNED_CHILD_ARG,
+                 str(inherited.fileno()), str(lock), *command],
+                start_new_session=True, pass_fds=(lock, inherited.fileno()), **options,
+            )
+            inherited.close()
+            handle = os.pidfd_open(process.pid)
+            state.update(phase="running", pid=process.pid)
+            _save(path, state)
+            ready = _owned_response(control, min(10.0, until - time.monotonic()))
+            _same("owned child handshake", ready, {"phase": "ready", "pid": process.pid})
+            if os.getpgid(process.pid) != process.pid or os.getsid(process.pid) != process.pid:
+                raise PilotDispatchRefused("owned_child_session_mismatch")
+            remaining = until - time.monotonic()
+            if remaining <= 0:
+                raise subprocess.TimeoutExpired(command, timeout)
+            control.send_bytes(json.dumps({"timeout": remaining}).encode())
+            response = _owned_response(control, until - time.monotonic())
+        except BaseException as error:
+            failure = error
+            # A second host interrupt must not bypass bounded cleanup.
+            for sig in previous:
+                signal.signal(sig, signal.SIG_IGN)
+            if process is not None:
+                try:
+                    _request_owned_stop(process)
+                    response = _owned_response(control, CLEANUP_WAIT_SECONDS)
+                except (OSError, ValueError, EOFError, subprocess.SubprocessError):
+                    response = None
+        finally:
+            confirmed = False
+            try:
+                if (process is not None and handle is not None and isinstance(response, dict)
+                        and set(response) == {"phase", "pid", "tree_reaped", "exit_code", "reason"}
+                        and response["phase"] == "finished" and response["pid"] == process.pid
+                        and response["tree_reaped"] is True
+                        and select.select([handle], [], [], 1.0)[0]):
+                    # pidfd readiness means this wait cannot turn into an unbounded
+                    # cleanup wait. The supervisor already reaped every descendant.
+                    confirmed = process.wait() == 0
+                state.update(phase="reaped" if confirmed else "cleanup_unresolved",
+                             tree_reaped=confirmed, owner_reaped=confirmed,
+                             reason=(response["reason"] if confirmed else "owned_child_cleanup_unconfirmed"),
+                             exit_code=response["exit_code"] if confirmed else None)
+                _save(path, state)
+            finally:
+                control.close()
+                inherited.close()
+                if handle is not None:
+                    os.close(handle)
+                for sig, handler in previous.items():
+                    signal.signal(sig, handler)
+        if not confirmed:
+            raise OwnedChildCleanupRefused("owned_child_cleanup_unconfirmed") from failure
+        if failure is not None:
+            raise failure
+        if response["reason"] == "timeout":
+            raise subprocess.TimeoutExpired(command, timeout)
+        return subprocess.CompletedProcess(command, response["exit_code"])
 
     def child(self, *, stage: str, cell: dict, root: Path, lock: int, timeout: float) -> int:
         checkout = root / cell["roles"]["checkout"]
@@ -256,7 +485,11 @@ class LocalTransport:
             os.chmod(log_path, 0o600)
             result = self.process(command, cwd=checkout / "batch-runner", env=environment,
                                   stdin=subprocess.DEVNULL, stdout=stream, stderr=subprocess.STDOUT,
-                                  pass_fds=(lock,), timeout=timeout, check=False)
+                                  pass_fds=(lock,), timeout=timeout, check=False,
+                                  ownership=(root / "owned-child.json", {
+                                      "plan_sha256": _load(root / "ready.json")["plan_sha256"],
+                                      "cell_id": cell["cell_id"], "stage": stage,
+                                  }))
         return result.returncode
 
 
@@ -410,7 +643,12 @@ def dispatch(plan: dict, parent: Any, specs: dict[str, ComparisonRunSpec], *, ro
                 _write_file(root / cell["roles"]["config"], specs[cell["cell_id"]].config_json.encode())
                 os.chmod(root / cell["roles"]["config"], 0o600)
                 _save(root / cell["roles"]["checkpoint"], _cell_state(plan, cell))
+            _save(root / "owned-child.json", _owner_state(_digest(plan)))
             _save(root / "ready.json", {"plan_sha256": _digest(plan)})  # Last; partial materialization refuses.
+        # Check the global serial slot before even skipping a finished cell.
+        # A lost supervisor/cleanup acknowledgment requires explicit resolution,
+        # not another child, even after an inherited OS lock is released.
+        _require_quiet_owner(root, plan)
         if execute:
             binding = {"plan_sha256": _digest(plan), "execution": execution, "files": inputs.identities(),
                        "source_projection": inputs.snapshot.shared_binding}
@@ -451,7 +689,17 @@ def dispatch(plan: dict, parent: Any, specs: dict[str, ComparisonRunSpec], *, ro
                     target.parent.mkdir(parents=True, exist_ok=True)
                     _write_file(target, data)
                 _check_inputs(checkout, inputs)
-                code = transport.child(stage="prepare", cell=cell, root=root, lock=descriptor, timeout=300)
+                try:
+                    code = transport.child(stage="prepare", cell=cell, root=root, lock=descriptor, timeout=300)
+                except OwnedChildCleanupRefused:
+                    state["reason"] = "owned_child_cleanup_unconfirmed"
+                    _save(state_path, state)
+                    raise
+                except subprocess.TimeoutExpired:
+                    state.update(status="stopped", phase="finished", reason="preparation_timeout_partial_output", exit_code=None)
+                    _save(state_path, state)
+                    states.append(state)
+                    continue
                 if code:
                     state.update(status="failed", phase="finished", exit_code=code, reason="step1_refused")
                     _save(state_path, state)
@@ -492,6 +740,10 @@ def dispatch(plan: dict, parent: Any, specs: dict[str, ComparisonRunSpec], *, ro
                     # Even an expired restore reaches Step 2 host-only accounting;
                     # its original deadline forbids a native request. Allow cleanup.
                     code = transport.child(stage="infer", cell=cell, root=root, lock=descriptor, timeout=remaining + 60)
+                except OwnedChildCleanupRefused:
+                    state["reason"] = "owned_child_cleanup_unconfirmed"
+                    _save(state_path, state)
+                    raise
                 except subprocess.TimeoutExpired:
                     state.update(status="stopped", phase="finished", reason="child_timeout_partial_accounting", exit_code=None)
                 else:
@@ -544,5 +796,7 @@ def main(argv: list[str] | None = None, *, _test_transport: LocalTransport | Non
 
 
 if __name__ == "__main__":
+    if len(sys.argv) > 4 and sys.argv[1] == OWNED_CHILD_ARG:
+        raise SystemExit(_owned_child_worker(int(sys.argv[2]), int(sys.argv[3]), sys.argv[4:]))
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     raise SystemExit(main())

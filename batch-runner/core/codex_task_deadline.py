@@ -19,7 +19,10 @@ from pathlib import Path
 from typing import Any, Callable
 
 FORMAT = "codex-task-deadline-v1"
-CONTINUATION_FORMAT = "codex-native-continuation-v1"
+CONTINUATION_FORMAT = "codex-native-continuation-v2"
+RECOVERY_CONTEXT_FORMAT = "codex-host-recovery-context-v1"
+# The existing Step 2 infra-retry policy, not a broader retry permission.
+RECOVERY_FAILURE_CATEGORIES = frozenset({"rate_limited", "turn_start_failed"})
 _USAGE_FIELDS = frozenset({
     "input_tokens", "cached_input_tokens", "cache_write_input_tokens",
     "output_tokens", "reasoning_output_tokens",
@@ -111,7 +114,57 @@ def _valid_totals(value: Any) -> bool:
                     for item in value.values()))
 
 
-def _validate_continuation(value: Any, attempts: list[dict]) -> None:
+def _valid_sha256(value: Any) -> bool:
+    return (type(value) is str and len(value) == 64
+            and all(char in "0123456789abcdef" for char in value))
+
+
+def _recovery_context(
+    binding: dict, attempts: list[dict], expires_unix: float, condition: str,
+    attempt_index: int, previous_turn: dict | None,
+) -> dict | None:
+    """Derive C's only permitted addition from the immediately preceding turn.
+
+    IDs are opaque and bound to the immutable cell/input/runtime identity.
+    Time is explicitly the admission snapshot, not a new budget or a claim
+    that runtime startup consumed no time. Unknown failures supply no context.
+    """
+    if (condition != "C" or previous_turn is None
+            or previous_turn["attempt_index"] != attempt_index - 1
+            or previous_turn["failure_observation"] is None):
+        return None
+    return {
+        "format": RECOVERY_CONTEXT_FORMAT,
+        "failed_attempt_id": _digest({"identity": binding["identity_sha256"],
+                                      "attempt_index": previous_turn["attempt_index"]}),
+        "attempt_id": _digest({"identity": binding["identity_sha256"],
+                               "attempt_index": attempt_index}),
+        "failure": dict(previous_turn["failure_observation"]),
+        "remaining_seconds_at_admission": expires_unix - attempts[attempt_index]["admitted_unix"],
+    }
+
+
+def _validate_failure_observation(value: Any, phase: str) -> None:
+    if value is None:
+        return
+    if (type(value) is not dict or set(value) != {
+        "category", "http_status_code", "retry_guidance",
+    } or type(value["category"]) is not str or value["category"] not in RECOVERY_FAILURE_CATEGORIES
+            # SDK 0.147.0 has no typed Retry-After/retry guidance on TurnError.
+            # Its free-form message/additional_details are never instructions.
+            or value["retry_guidance"] is not None
+            or (value["http_status_code"] is not None
+                and (type(value["http_status_code"]) is not int
+                     or not 100 <= value["http_status_code"] <= 599))
+            or (value["category"] == "turn_start_failed"
+                and (phase != "in_flight" or value["http_status_code"] is not None))
+            or (value["category"] == "rate_limited" and phase == "in_flight")):
+        raise TaskDeadlineRefused("native recovery observation is invalid")
+
+
+def _validate_continuation(
+    value: Any, attempts: list[dict], *, condition: str, expires_unix: float | None,
+) -> None:
     """Validate host metadata, never open an agent transcript or auth store."""
     if value is None:
         return
@@ -141,9 +194,11 @@ def _validate_continuation(value: Any, attempts: list[dict]) -> None:
           or value["native_resumes"] or value["terminal_reason"] is not None):
         raise TaskDeadlineRefused("pre-thread continuation has bound activity")
     prior = -1
+    previous_turn = None
     for turn in value["turns"]:
         if (type(turn) is not dict or set(turn) != {
             "attempt_index", "call_id", "before", "after", "phase",
+            "input_sha256", "recovery_context", "failure_observation",
         } or type(turn["attempt_index"]) is not int
                 or not prior < turn["attempt_index"] < len(attempts)
                 or (turn["call_id"] is not None
@@ -152,12 +207,22 @@ def _validate_continuation(value: Any, attempts: list[dict]) -> None:
                 or turn["phase"] not in {"in_flight", "observed", "settled", "unmetered"}
                 or (turn["after"] is None) != (turn["phase"] == "in_flight")
                 or (turn["after"] is not None and not _valid_totals(turn["after"]))
+                or not _valid_sha256(turn["input_sha256"])
                 or (turn["phase"] == "settled" and turn["call_id"] is None)
                 or (turn["phase"] == "unmetered" and turn["call_id"] is not None)):
             raise TaskDeadlineRefused("native continuation usage boundary is invalid")
+        _validate_failure_observation(turn["failure_observation"], turn["phase"])
+        expected_context = _recovery_context(
+            value, attempts, expires_unix, condition, turn["attempt_index"], previous_turn,
+        )
+        if _digest({"context": turn["recovery_context"]}) != _digest({"context": expected_context}):
+            raise TaskDeadlineRefused("native recovery context differs from its host observation/admission")
         prior = turn["attempt_index"]
+        previous_turn = turn
     if value["turns"]:
         last = value["turns"][-1]
+        if value["terminal_reason"] is not None and last["failure_observation"] is not None:
+            raise TaskDeadlineRefused("terminal native turn cannot supply recovery feedback")
         boundary = last["after"] or dict.fromkeys(_USAGE_FIELDS)
         if value["usage_boundary"] != boundary:
             raise TaskDeadlineRefused("native continuation usage boundary differs from its turn")
@@ -297,7 +362,8 @@ class CodexTaskDeadlineStore:
                             or not start <= attempt["admitted_unix"] < expiry
                             or type(attempt["workspace_root"]) is not str):
                         raise TaskDeadlineRefused("deadline attempt record is invalid")
-                _validate_continuation(cell["continuation"], cell["attempts"])
+                _validate_continuation(cell["continuation"], cell["attempts"],
+                                       condition=self.control.condition, expires_unix=expiry)
                 if self.control.condition == "A" and cell["continuation"] is not None:
                     raise TaskDeadlineRefused("A requires fresh native sessions")
             return data
@@ -433,7 +499,8 @@ class CodexTaskDeadline:
             "usage_boundary": dict.fromkeys(_USAGE_FIELDS, 0), "turns": [],
             "native_resumes": 0, "terminal_reason": None,
         }
-        _validate_continuation(cell["continuation"], cell["attempts"])
+        _validate_continuation(cell["continuation"], cell["attempts"],
+                               condition=self.store.control.condition, expires_unix=cell["expires_unix"])
         self.store._write(data)
 
     def thread_starting(self) -> None:
@@ -461,8 +528,24 @@ class CodexTaskDeadline:
             binding.update(phase="bound", thread_id=thread_id)
         self.store._write(data)
 
-    def begin_turn(self, attempt_index: int, call_id: str | None) -> dict:
-        """Keep a durable receipt ID and invalidate an unobserved usage gap."""
+    def recovery_context(self, attempt_index: int) -> dict | None:
+        """Read the host-derived C context; callers cannot supply arbitrary feedback."""
+        _, cell, _ = self._state()
+        binding = cell["continuation"]
+        if (binding is None or binding["phase"] != "bound"
+                or binding["terminal_reason"] is not None
+                or attempt_index != len(cell["attempts"]) - 1):
+            raise TaskDeadlineRefused("native recovery context has no runnable admission")
+        return _recovery_context(
+            binding, cell["attempts"], cell["expires_unix"], self.store.control.condition,
+            attempt_index, binding["turns"][-1] if binding["turns"] else None,
+        )
+
+    def begin_turn(
+        self, attempt_index: int, call_id: str | None, *, input_sha256: str,
+        recovery_context: dict | None,
+    ) -> dict:
+        """Bind the submitted input/receipt before a native request; preserve unknown gaps."""
         data, cell, _ = self._state()
         binding = cell["continuation"]
         if (binding is None or binding["phase"] != "bound"
@@ -474,15 +557,36 @@ class CodexTaskDeadline:
         binding["turns"].append({
             "attempt_index": attempt_index, "call_id": call_id,
             "before": before, "after": None, "phase": "in_flight",
+            "input_sha256": input_sha256, "recovery_context": recovery_context,
+            "failure_observation": None,
         })
         # A killed process may miss further activity. Never subtract a stale
         # observation from the next turn and attribute the unseen gap to it.
         binding["usage_boundary"] = dict.fromkeys(_USAGE_FIELDS)
+        _validate_continuation(binding, cell["attempts"], condition=self.store.control.condition,
+                               expires_unix=cell["expires_unix"])
         self.store._write(data)
         return before
 
-    def observe_turn(self, attempt_index: int, after: dict, *, terminal_reason: str | None = None) -> None:
-        """Write observed totals before idempotent ledger settlement."""
+    def observe_turn_start_failure(self, attempt_index: int) -> None:
+        """Record the known failed boundary without inventing usage for a lost response."""
+        data, cell, _ = self._state()
+        binding = cell["continuation"]
+        if (binding is None or not binding["turns"] or binding["terminal_reason"] is not None
+                or binding["turns"][-1]["attempt_index"] != attempt_index
+                or binding["turns"][-1]["phase"] != "in_flight"
+                or binding["turns"][-1]["failure_observation"] is not None):
+            raise TaskDeadlineRefused("native turn-start observation belongs to another boundary")
+        binding["turns"][-1]["failure_observation"] = {
+            "category": "turn_start_failed", "http_status_code": None, "retry_guidance": None,
+        }
+        self.store._write(data)
+
+    def observe_turn(
+        self, attempt_index: int, after: dict, *, terminal_reason: str | None = None,
+        failure_observation: dict | None = None,
+    ) -> None:
+        """Write observed totals and whitelisted failure metadata before ledger settlement."""
         from core.codex_cost import CodexTokenTotals, turn_usage_delta
 
         data, cell, _ = self._state()
@@ -496,10 +600,11 @@ class CodexTaskDeadline:
             turn_usage_delta(CodexTokenTotals(**turn["before"]), CodexTokenTotals(**after))
         except ValueError:
             raise TaskDeadlineRefused("native cumulative usage moved backwards") from None
-        turn.update(after=after, phase="observed")
+        turn.update(after=after, phase="observed", failure_observation=failure_observation)
         binding["usage_boundary"] = after
         binding["terminal_reason"] = terminal_reason
-        _validate_continuation(binding, cell["attempts"])
+        _validate_continuation(binding, cell["attempts"], condition=self.store.control.condition,
+                               expires_unix=cell["expires_unix"])
         self.store._write(data)
 
     def acknowledge_usage(self, attempt_index: int) -> None:
