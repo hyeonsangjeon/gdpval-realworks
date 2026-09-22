@@ -278,6 +278,35 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Add opt-in cumulative task deadlines to the existing `codex_foundry`
+  retry/turn path. `execution.codex.task_deadline` declares A/B/C and repetition
+  1/2; each run/task/condition/repetition retains one 180-minute expiry through
+  retry and process resume. Native waits are bounded by the lesser of the
+  existing 30-minute attempt timeout and remaining time. Backoff consumes that
+  same deadline. A retains four durable attempt admissions; B/C use the
+  cumulative deadline with identical partial-artifact retention. Missing,
+  incompatible, linked or checksum-tampered host state refuses rather than
+  starting a new clock. Exhaustion records `task_deadline_exhausted` without
+  another turn. Existing atomic persistence and cost receipts are reused;
+  observed partial usage does not imply complete API-call or invoice accounting.
+  No existing experiment is opted in, no automatic monetary cutoff is added,
+  and legacy exp035/other-mode retry, timeout and cleanup defaults are unchanged.
+  On implementation `fe4d772df69c1653709bdfaf5bede8d005a6bf01`, based on
+  `eba56139f95443a715e8309e75c57fe5688c1f2b`, one focused invocation reported
+  `30 passed in 40.83s`, exit 0: 29 fake-clock/stub-runtime and active-binding
+  cases plus one coupled Foundry/GHCP digest guard. The exact command is in
+  `tasks/LATEST_TASK_RESULT/README.md`. Tests exercised the real retry,
+  task-executor and native-turn boundary with synthetic inputs, not a provider.
+  Current/stale checks use the unchanged full-template hash helper and original
+  template roles. Only active future source identities/pins and coupled count/
+  digest guards were refreshed; historical templates/results, experimental
+  controls, live blockers and false launch flags are unchanged.
+  This separate implementation has not received leader review. It does not
+  implement agent-session rehydration, adaptive planning or the 30-cell ABC/CBA
+  dispatcher, and no paid pilot ran. Final-HEAD CI/review, recovery/policy work
+  and separately directed leader launch remain outstanding. Earlier real
+  preprocessing and failed/prepared-artifact evidence below is unchanged.
+
 - Record one successful real GPT-5.4 Codex local preparation and Step 1 at
   authorized source `6f7c77a9de52678e188f025b86de537ce8825dee`. One source fetch
   returned that exact commit. One unauthenticated public HTTPS GET returned

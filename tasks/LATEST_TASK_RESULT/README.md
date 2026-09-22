@@ -1,163 +1,107 @@
-# Latest substantive task result
+# Latest task result
 
-## PROJECT5-REAL-CODEX-STEP1-PUBLIC-SOURCE-1423
+## Opt-in cumulative Codex task deadlines
 
-One real Codex local preparation and its existing Step 1 command succeeded.
-The command exited 0 and emitted five tasks in the exact canonical order,
-the prepared-task file and the pre-execution-input capture. One local
-preprocessing command executed; zero inference/model commands executed.
-This is local input-consumption evidence, not model consumption, scoring,
-variance, cost, a paired runtime comparison or Project-card completion.
+Implemented the first external-budget control slice on independent baseline
+`eba56139f95443a715e8309e75c57fe5688c1f2b`. The tested implementation is
+`fe4d772df69c1653709bdfaf5bede8d005a6bf01`. This is implementation and synthetic
+offline evidence, not a pilot result, model observation or execution approval.
+It is separate from the frozen selector correction in #649; no approval of
+that work covers this implementation.
 
-### Authorized source and review boundary
+### Behavior and default boundary
 
-One ordinary GitHub fetch returned the exact authorized source
-`6f7c77a9de52678e188f025b86de537ce8825dee`, exit 0. A new clean feature
-worktree was created from it. The old implementation branch and preserved
-checkout were not changed.
+The opt-in `execution.codex.task_deadline` block declares `condition: A`, `B`
+or `C` and `repetition: 1` or `2`. Existing configs are not opted in. The
+consumer requires `codex_foundry`, one prepared condition, a stable run lineage,
+`timeout: 1800`, `max_retries: 3`, no Self-QA/preprocessors and an explicit
+host-owned `--codex-deadline-state` directory. New cells require explicit
+initialization into an absent directory; restart/resume must restore that same
+state, not initialize another directory.
 
-The leader's `FINAL-APPROVE` review `5273753355` at
-`0913891fcbcfe2119c2899535a5e2b017cd99eee` covers the Step 0 input fix and
-narrow parent-snapshot correction. Review `5273863452` at
-`6fef8c76a41072cdb335c236c0ac4c1fc2ae4276` covers the final prior records.
-The leader supplied the earlier ten-check success; no CI query was made here.
-Those reviews do not review this later operation or its new records and do
-not authorize model or paid execution.
+One 180-minute expiry is persisted per run/task/condition/repetition and bound
+to the ordered task IDs and prepared fingerprint. It includes backoff and
+restart downtime. Missing, incompatible, linked, checksum-tampered or
+backward-clock restore state refuses. Atomic private-JSON persistence and a
+nonblocking process lock protect the host record outside agent-writable roots.
+The checksum detects damaged/edited state, not a hostile host replacing both
+payload and checksum.
 
-### Public canonical metadata
+The existing retry loop and `TaskExecutor` pass this deadline to the real Codex
+turn runner. Every attempt is admitted against remaining time. Native waiting
+is bounded by `min(1800, remaining_seconds)`; backoff cannot extend the expiry.
+A retains four durable attempt admissions. B/C replace that cap with the
+cumulative deadline and retain identical partial-artifact capabilities. The
+existing transient-error retry categories are unchanged; this is not an
+adaptive retry policy. `task_deadline_exhausted` records exhaustion without an
+additional turn. Missing/invalid state records `task_deadline_state_refused`.
 
-Exactly one unauthenticated HTTPS GET used the
-[immutable public manifest](https://huggingface.co/datasets/HyeonSang/exp033_codex_foundry_fixed5/resolve/6c7e07ee7365f145dfcf898263365b5c8c97b224/step0_needs_files_manifest.json).
-`curl -q` ignored user configuration, allowed HTTPS-only redirects, used zero
-retries, a 5-second connect timeout, a 25-second total timeout and a
-2,000,000-byte maximum with a matching process file-size limit. The body and
-raw response metadata were written only to fresh private files. No token,
-cookie, login, credential file, `HfApi` call or dataset bootstrap was used.
+Interrupted attempt workspaces remain available. Path-free result records
+carry expiry, remaining time, admissions and observed completed waits. The
+existing receipt ledger records observed token usage with missing-call/cost
+qualifications, not complete API-call or invoice accounting. There is no
+automatic monetary cutoff. Without the opt-in, legacy exp035 and other modes
+retain their existing retry, timeout and cleanup behavior.
 
-| Observation | Result |
-|---|---|
-| HTTP status / curl exit | `200` / `0` |
-| Immutable revision and observed `x-repo-commit` | `6c7e07ee7365f145dfcf898263365b5c8c97b224` |
-| Complete byte size | `218405` |
-| SHA256 | `463fc119841dbe67e427c372da93ff55972139377aa03194764b57d87004c512` |
-| Production canonical contract | Accepted, schema `4`, active policy `deliverable_only`, exit `0` |
+### Focused evidence
 
-The original bytes were not normalized or regenerated. No fixture pins,
-monkeypatching or fallback were used. This endpoint supplied only canonical
-Step 0 metadata, not historical model results for this comparison. Neither
-rejected local candidate was reread or reinterpreted.
+One fresh pytest process ran this exact command on the tested implementation:
 
-### One real preparation
-
-The current `load_plan()` and `compile_grading_plan()` APIs selected the first
-registered Codex run: `gpt54_v2_codex_v1_codex_r1`, condition `codex`, repeat 1,
-ABBA index 1. The unchanged comparison keeps its prescribed tasks, settings,
-repeats, limits and grading controls; no new condition was introduced.
-
-| Identity | Value |
-|---|---|
-| Reviewed source tree | `ffc7c49033243e03c2119e2110867f4b74b15cda` |
-| Current comparison-manifest seal | `b8e25f6548e5829daa77e9330c0157ab295f28318afec17f8615382a33f7a42f` |
-| Current combined-plan SHA256 | `4495cfe94f9d1e4f6319143540ddc434273fb38d2222b27ab3c616b1b3a84c2b` |
-| Run-configuration SHA256 | `288acbfab4da283c777626a05e696d792829f9bb6d08fe9599ec0331804d3463` |
-| Source-pins SHA256 | `1b9efbe1ad47aa3a2bfa2088d166562cad604cd46e6284155621717d3cd20bfe` |
-
-Exactly one `prepare_disposable_checkout()` call used the full reviewed source
-SHA, the saved normalized original parquet, the successful reference-only
-source root and the explicit downloaded `step0_manifest`. It created one
-absent destination outside the source checkout and caches. The preparer's
-normal pinned-byte checks ran; no standalone original-input audit or new
-normalized source tree was made. Its built-in final verification returned the
-verified marker, exit 0.
-No second verifier, alternate destination, cleanup or retry was used.
-
-The readiness identities below come from that verified return. Its input
-bundle includes the exact canonical Step 0 bytes above.
-
-| Logical role | Bytes | SHA256 |
-|---|---:|---|
-| `comparison-bundle-ready.json` | 10956 | `2e764dd3b3503ba9b79794eb23814720e1d259b645f246e43de750b463c246db` |
-| `comparison-inputs-ready.json` | 4863 | `ff6e156fbcc09508cdbdcdc1423ba49c00ebacb655a7a8a4e19a5e1cd26ce61c` |
-| `comparison-checkout-ready.json` | 5717 | `167dfca701803a5fe0a1caa20628cd9e6b649b5311335e17e8769b9985fdb8d2` |
-
-### One local Step 1 command
-
-After an existence-only check found both intended output roles absent, the
-first canonical argv ran once from the new checkout's `batch-runner` directory:
-
-```text
-python3 step1_prepare_tasks.py --config comparison-run.json
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 DO_NOT_TRACK=1 /usr/bin/python3 -m pytest -q -p no:cacheprovider --tb=short batch-runner/tests/test_codex_task_deadline.py batch-runner/tests/test_ghcp_vm_gate_contract.py::test_ghcp_vm_gate_contract_preserves_history_foundry_and_backend_partition
 ```
 
-It used the existing installed environment with `HF_HUB_OFFLINE=1`,
-`HF_DATASETS_OFFLINE=1`, `HF_HUB_DISABLE_TELEMETRY=1`, `DO_NOT_TRACK=1` and
-`PYTHONDONTWRITEBYTECODE=1`. No argv, config, pin, source code or task order was
-changed. The command exited 0. Only the newly emitted output bytes needed for
-this record were read afterward; no verification pass was repeated.
+Result: `30 passed in 40.83s`, exit 0. The 29 deadline/binding cases cover retry
+and process resume without resetting expiry; bounded native waits; backoff;
+no turn after exhaustion, including expiry during receipt reservation; new
+cell identities; retained partials and observed usage; invalid restore refusal;
+config/CLI propagation; legacy behavior; and genuine current/stale grader
+bindings. The additional case preserves the coupled Foundry/GHCP digest and
+workflow/history assertions. Clocks and the native runtime were stubbed;
+provider/auth/network/subprocess construction and real sleeps were blocked.
+No full lane, selector family, prior binding family or real-data preparation
+was rerun. `git diff --check` passed.
 
-`total_tasks=5`, with this exact canonical order:
+The unchanged `step8_grade.compute_grader_source_hash()` recomputed both full
+closures from each original template path and its actual configuration bytes:
 
-```text
-02aa1805-c658-4069-8a6a-02dec146063a
-0112fc9b-c3b2-4084-8993-5a4abb1f54f1
-2ea2e5b5-257f-42e6-a7dc-93763f28b19d
-3baa0009-5a60-4ae8-ae99-4955cb328ff3
-0818571f-5ff7-4d39-9d2c-ced5ae44299e
-```
+| Active template role | Previous SHA256 | New SHA256 |
+|---|---|---|
+| `default_v2_sol_max.yaml` | `40ada97c41117e3966e5a192c19dafcf4db34d4dd2ddd4230c4b729f421d6e08` | `fdfb7b9160635859d2c46ee9a79d5d908bc4ad546f9d240893da98159752258d` |
+| `exp035_codex_foundry_full220_v2_sol_max.yaml` | `56fdb74e2f9fd1afbe9d064fc2cb1e1410d5cebec55edcca8324effd1a1dc9e1` | `c85f5b7ac5a723266172fedae39d38a69bd93cebae25888c63469f038c97ef01` |
 
-Observed `prepared_fingerprint`:
-`12eba3b1bfb6d48fb600f455a1c3391b0630a5378db26365926eb319275712d0`.
+Only active GPT-5.4/Foundry source bindings and their coupled guards change.
+The new deadline module is pinned explicitly; exact source counts become
+37 and 58 respectively. The Foundry YAML digest guard is
+`824533c9e08b1b24217c66497ee9c269e2c156411e3a5d95238a1bcc578e80f0`.
+Historical source/base identities, grader templates/results, task/control
+settings, live blockers and false launch flags remain unchanged. No workflow,
+model/effort/context, pricing, `core/qa.py` or HF-upload code changes.
 
-| New logical role | Bytes | SHA256 |
-|---|---:|---|
-| `batch-runner/workspace/step1_tasks_prepared.json` | 15980 | `41951cb8b4edee9e378fe1197943b42d38950fbb37b51a4a907d2a92c9654d92` |
-| `batch-runner/workspace/pre-execution-input.json` | 14830 | `f12dda6c51c0e532b988daf5e80b389b75ea89ee8acf61f12a035aa8621ed5f1` |
+### Remaining work and review boundary
 
-### Retained evidence and remaining boundary
+The intended pilot remains `advance_check_5` × A/B/C × two repetitions, 30
+executions, ABC then CBA per task, with one active inference execution on the
+same deployment. This slice does not implement that dispatcher, agent-session
+rehydration or adaptive planning. End-to-end state recovery and equal B/C
+continuation behavior still need later implementation/review. The supervisor's
+Astra Max/1M settings are not a target-model selection. Leader-directed paid
+launch remains separate from this implementation-only authorization.
 
-The new private source, verified checkout, bundles, readiness markers,
-reservation, Step 1 outputs, raw logs and private handoff are retained. No
-private host path or task text is published. Both historical prepared
-checkouts, their markers, original inputs, caches, prior handoffs and the GHCP
-bundle remain untouched. Their preparation-only `commands_executed=false`
-fields are unedited historical boundaries; they do not describe the current
-successful Step 1 command.
+This implementation and these records are unreviewed. Final-HEAD automatic
+checks and leader review remain outstanding. One normal GitHub source fetch
+occurred at intake; the prepublication main read still returned the exact input
+baseline above, so no integration merge was needed. No CI query, manual rerun,
+review wait, Project edit or PR merge occurred. No Azure/HF/provider/model, VM,
+grader or paid operation ran. Original inputs, prepared/failed real artifacts,
+published grades and the earlier operational changelog entries were untouched.
+This does not complete the pilot or Project card.
 
-The earlier two preparations and the Step 1 exit-1 missing-manifest failure
-at source `778a627bbb5404f33e5e62019382fa107aa47840` remain historical evidence
-in the unchanged operational changelog entry. The earlier synthetic results,
-`45 passed, 319 deselected in 18.36s` at
-`8728c350266578c299dd64b974f9368288de09d7` and `7 passed in 7.30s` at
-`0c5074665cd01be89e9d380614903471ab819f0f`, remain separate test evidence.
-No tests were rerun. The new success above comes from real pinned inputs and
-the production preparation/Step 1 paths, not substituted fixtures.
-
-All launch flags remain false, including `launch_allowed=false` and
-`full_220_allowed=false`; provider observations remain null. The six existing
-live blockers are unchanged:
-
-- `v2_reasoning_effort_capability_unverified`
-- `codex_reasoning_effort_capability_unverified`
-- `codex_native_model_call_and_token_limits_unenforced`
-- `live_deployment_identity_and_input_bytes_not_verified`
-- `comparison_materialization_and_workflow_gates_not_wired`
-- `comparison_usage_and_tariff_evidence_unverified`
-
-No Step 2, V2 stage, later compiled command, workflow dispatch,
-`require_workflow_launch()`, provider/model, VM, grader, Azure or paid operation
-ran. Preparation and local preprocessing do not establish served identity,
-enforced native limits, usage/tariff evidence or independent grader accuracy.
-Any later execution needs separate authorization and the existing live
-evidence gates. This record does not complete the comparison card.
-
-Only the two completion records change in Git. Their validation is bounded
-record-to-evidence, editorial and whitespace checking, not another runtime
-validation. The new records still need leader review and final-HEAD automatic
-checks; no CI query or review waiting occurred.
-
-The full skill catalog was inspected once. `experiment-design` fixed the
-one-run input/preprocessing acceptance boundary without inventing controls
-or runtime claims. `experiment-report-en` separates real local evidence,
-historical synthetic tests and unmeasured live outcomes; `im-not-ai-en`
-preserves their identifiers and qualifications. No implementation, workflow,
-UI/animation, new framework or repository-readiness work was needed.
+The full skill catalog was checked once for this phase. `experiment-design`
+kept the approved controls fixed before active pin edits. Repository backend
+and LLM-systems guidance governed the existing retry/runtime integration;
+grading guidance governed genuine source-identity coupling, not grading.
+`experiment-report-en` separated synthetic evidence from unmeasured outcomes;
+`im-not-ai-en` preserved exact commands, values and qualifications. UI/animation,
+framework, workflow, QA/upload, pricing and repository-publication skills did
+not match this bounded implementation.
