@@ -13,6 +13,116 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Refresh the two active grader-template source bindings after the reviewed
+  selector change. The unchanged `step8_grade.compute_grader_source_hash()`
+  includes `core/deliverable_selector.py` in its full closure. GPT-5.4's
+  `shared.grading.template_source_sha256` changes from
+  `40ada97c41117e3966e5a192c19dafcf4db34d4dd2ddd4230c4b729f421d6e08` to
+  `c92bf13696fa506c84dbee649d5ba3c03fb33244810f30e2be4a05630ca204e1`;
+  Foundry's `dispatch_grading_identity.grader_template_source_hash` changes from
+  `56fdb74e2f9fd1afbe9d064fc2cb1e1410d5cebec55edcca8324effd1a1dc9e1` to
+  `785352daa052b105f0dfce08d8de7b3f41633a8e6b312111bec5bdbc8806144b`.
+  Both were recomputed from each original template path and actual config
+  bytes. The Foundry preflight's matching constant, its active source pin
+  (`df62b761638a9afce831a839bf6a5eba3134919cf728d6b56c9ee5e3222f82a9`)
+  and the GHCP contract's active Foundry YAML digest
+  (`7f7331440f0c13a254353acd4a715f7eb7d3d4c0ba3d9ed32615640cc24ceeef`)
+  are refreshed without weakening equality checks or changing `WORKFLOW_SHA256`.
+  The leader supplied Backend run `35695570658` at
+  `a2685e91b704218c657da41bd1505f40b6d1da66`: job `106641640717`,
+  `comparison-contracts`, reported `559 failed, 71 passed, 312 errors in 99.37s`
+  at `2026-09-22T06:40:15Z`; job `106641640514`, `pilot-preflight-contracts`,
+  reported `161 passed, 143 deselected, 35 errors in 41.54s` at
+  `2026-09-22T06:39:04Z`. These are two representative jobs from seven failing
+  non-core lanes. Their `shared_controls, conditions` and
+  `grader_template_source_drift` refusals reflect one binding problem, not
+  independent selector failures.
+  No logs were fetched and the unchanged failure was not rerun. One focused
+  invocation used:
+  `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 DO_NOT_TRACK=1 /usr/bin/python3 -m pytest -q -p no:cacheprovider --tb=short batch-runner/tests/test_gpt54_comparison_preflight.py::test_active_grader_template_source_comparison batch-runner/tests/test_gpt56_sol_codex_pilot_preflight.py::test_active_grader_template_source_foundry_preflight batch-runner/tests/test_gpt56_pilot_identity_plan.py::test_active_grader_template_source_foundry_identity batch-runner/tests/test_ghcp_vm_gate_contract.py::test_ghcp_vm_gate_contract_preserves_history_foundry_and_backend_partition`.
+  It reported `9 passed in 4.44s`, exit 0; the tested bytes were committed
+  unchanged as `acabb11b383c2b6cfea9291da0d58c9848ba201f`, on integrated
+  baseline `eba56139f95443a715e8309e75c57fe5688c1f2b`. Real hash/validation
+  functions accept the current bindings and refuse old hashes or actual
+  selector-byte mutations in temporary source trees. Existing live blockers
+  and false launch flags remain unchanged. `git diff --check` passed. The
+  selector and its 42/45-case evidence below retain their original scope;
+  no selector suite, broad CI job, dataset/preparation, model or grader ran.
+  Historical templates, source/base identities, scores, results and private
+  artifacts remain unchanged. These active future bindings do not upgrade
+  historical runs or establish score comparability. `FINAL-APPROVE` review
+  `5274748991` at `200a35070bc0ffbf5938fea2a1fc85a470c98544` covers the earlier
+  selector/test bytes and records, not this correction. `REQUEST-CHANGES`
+  review `5274961797` at `a2685e91b704218c657da41bd1505f40b6d1da66` identifies
+  the stale bindings.
+  The leader later supplied run `35698722071`, `pilot-preflight-contracts`
+  job `106651380186`, at `9efee401178d2926d7fccf9508af33d3940eaa00`:
+  `2 failed, 196 passed, 143 deselected in 658.21s (10:58)`; ten of eleven
+  applicable checks succeeded. Only the two Foundry preflight binding cases
+  failed. Their function-local `step8_grade` import followed the offline
+  fixture's replacement of `AzureAIClientFactory` with a forbidden function,
+  causing `TypeError` in the `owned_factory: AzureAIClientFactory | None`
+  annotation. The earlier nine-case selection pre-imported the module and
+  masked this isolation defect; its result retains that limited scope.
+  Correction `f0215aa3f6e4d09520b37804a1bdf68147e06959` moves the genuine helper
+  import to module scope without changing production bytes, identities or
+  offline guards. One fresh process ran only:
+  `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 DO_NOT_TRACK=1 /usr/bin/python3 -m pytest -q -p no:cacheprovider --tb=short batch-runner/tests/test_gpt56_sol_codex_pilot_preflight.py::test_active_grader_template_source_foundry_preflight`.
+  Result: `2 passed in 1.45s`, exit 0, with real hash/contract assertions and
+  all network, credential, subprocess and provider-construction guards intact.
+  No earlier selection, full lane or unchanged failure was rerun; no logs were
+  fetched. `REQUEST-CHANGES` review `5275599170` at
+  `9efee401178d2926d7fccf9508af33d3940eaa00` identifies the isolation defect,
+  not approval of its correction. Final-HEAD leader review and automatic CI
+  remain outstanding; the branch is frozen after publication. No new approval,
+  full-CI success, live execution or budget-feature implementation is claimed
+  by this correction. Reporting and English copyediting preserve these scopes.
+
+- Recognize an explicit deliverable-format clause containing standalone
+  `Word (.docx)` without widening the shared extension boundary. The public
+  selector chooses `Modlev_Tail_Lamp_Negotiation_Strategy.docx` for exp035 task
+  `15ddd28d-8445-4baa-ac7f-f41372e1344e` from its unchanged recorded two-file
+  set in both tested orders; the Markdown sibling remains support. The test
+  preserves the real Word-or-PDF rubric wording. Filename/reference mentions,
+  unsupported token suffixes and multiple matching Word files do not become
+  arbitrary primaries. The initial focused invocation at
+  `6cd3360e092fbf1505c672fd37f249ecf09a1a39` reported
+  `42 passed, 19 deselected in 0.29s`, exit 0. A subsequent code read found
+  that the new suffix guard would reject a quoted sentence-ending period.
+  Correction `d0de31307d7cc6e7dfa665d95e97b4eb6e651e25`, based on
+  `6f7c77a9de52678e188f025b86de537ce8825dee`, adds three punctuation cases and
+  preserves those ordinary Word requirements. Both focused invocations used:
+  `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider --tb=short batch-runner/tests/test_deliverable_selector.py batch-runner/tests/test_selector_reads_a_filename_as_a_filename.py -k 'parenthesized_docx or an_extension_written_against_a_name or an_extension_standing_on_its_own or a_trigger_word_cannot_reach_a_filename or the_expert_answer_is_no_longer_refused_for_its_format or the_supplied_file_is_still_kept_out_of_what_gets_graded or a_task_that_really_asks_for_one_format'`.
+  The necessary rerun reported `45 passed, 19 deselected in 0.28s`, exit 0,
+  on the unchanged selector/test bytes committed in the correction above.
+  `git diff --check` passed. Real requirement/file-list evidence and synthetic
+  guard cases establish candidate choice only, not grading quality, score lift
+  or eight restored tasks. Historical grades, results, artifacts, costs and
+  baseline records are unchanged; future grading uses the existing source
+  fingerprint mechanism with the changed selector bytes. No grader, model,
+  rendering or paid operation ran. At initial publication, one GitHub source
+  fetch found main unchanged and no integration was needed. A later single
+  GitHub source fetch returned authorized main
+  `eba56139f95443a715e8309e75c57fe5688c1f2b`, exit 0, which was integrated
+  through an ordinary merge. The only conflict was in the latest-result
+  document; the complete earlier real canonical-source/preparation/Step 1
+  changelog entry and all unrelated entries were preserved. Selector/test
+  bytes match approved HEAD `200a35070bc0ffbf5938fea2a1fc85a470c98544`
+  exactly; whitespace and conflict-marker checks passed. No tests were rerun
+  during that integration, so the results above retain their original
+  tested-commit scope rather than
+  becoming final-HEAD validation. The leader's `FINAL-APPROVE` review
+  `5274748991` covers that approved HEAD's selector/test bytes and records,
+  with no high-confidence correctness findings. It does not cover this later
+  integration/records delta or establish CI success, a grade or execution
+  permission. Later CI exposed the active grading-binding defect corrected
+  above; that correction is outside the selector review. No CI status was
+  queried during integration. The preceding #648 `FINAL-APPROVE`
+  records review `5274558309` at
+  `ae784cac096bb4cd3338390bddf47309de3e3667` remains limited
+  to that earlier operation's records. See
+  `tasks/LATEST_TASK_RESULT/README.md` for the scoped evidence and remaining work.
+
 - Require an explicit local canonical Step 0 manifest for GPT-5.4 Codex input
   preparation. The full file is copied to
   `batch-runner/workspace/step0_needs_files_manifest.json`, bound by size/SHA256

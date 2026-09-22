@@ -1,163 +1,195 @@
 # Latest substantive task result
 
-## PROJECT5-REAL-CODEX-STEP1-PUBLIC-SOURCE-1423
+## PROJECT5-PR649-ISOLATION-THEN-BUDGET-1710 (Phase 1 only)
 
-One real Codex local preparation and its existing Step 1 command succeeded.
-The command exited 0 and emitted five tasks in the exact canonical order,
-the prepared-task file and the pre-execution-input capture. One local
-preprocessing command executed; zero inference/model commands executed.
-This is local input-consumption evidence, not model consumption, scoring,
-variance, cost, a paired runtime comparison or Project-card completion.
+The Foundry preflight's two active-grader-binding cases now pass in a fresh
+pytest process that selects no other module. The correction moves the genuine
+`step8_grade.compute_grader_source_hash` import to module scope, before the
+offline fixture replaces provider constructors. Production bytes, the current
+source identities, selector tests and every offline guard are unchanged.
+This is test isolation evidence, not a grade or live execution result.
 
-### Authorized source and review boundary
+### Isolation defect and new focused result
 
-One ordinary GitHub fetch returned the exact authorized source
-`6f7c77a9de52678e188f025b86de537ce8825dee`, exit 0. A new clean feature
-worktree was created from it. The old implementation branch and preserved
-checkout were not changed.
+The leader supplied Backend run `35698722071`, job `106651380186`,
+`pilot-preflight-contracts`, at exact HEAD
+`9efee401178d2926d7fccf9508af33d3940eaa00`:
+`2 failed, 196 passed, 143 deselected in 658.21s (10:58)`.
+Ten of eleven applicable checks succeeded; the only
+failures were `test_active_grader_template_source_foundry_preflight[current]`
+and `[stale_expected_hash]`. No broad source-drift failures remained.
 
-The leader's `FINAL-APPROVE` review `5273753355` at
-`0913891fcbcfe2119c2899535a5e2b017cd99eee` covers the Step 0 input fix and
-narrow parent-snapshot correction. Review `5273863452` at
-`6fef8c76a41072cdb335c236c0ac4c1fc2ae4276` covers the final prior records.
-The leader supplied the earlier ten-check success; no CI query was made here.
-Those reviews do not review this later operation or its new records and do
-not authorize model or paid execution.
+The function-local import ran after `offline_only` replaced
+`azure_ai_clients.AzureAIClientFactory` with a forbidden function. Importing
+`step8_grade` then traversed `core.grader` and `core.llm_client`, where the
+`owned_factory: AzureAIClientFactory | None` annotation raised `TypeError`.
+The earlier combined nine-case invocation had already imported the module and
+did not establish isolated import behavior. The fix changes only import
+ordering; network, credential, subprocess and provider-construction boundaries
+remain blocked, with the existing empty-call assertions intact.
 
-### Public canonical metadata
-
-Exactly one unauthenticated HTTPS GET used the
-[immutable public manifest](https://huggingface.co/datasets/HyeonSang/exp033_codex_foundry_fixed5/resolve/6c7e07ee7365f145dfcf898263365b5c8c97b224/step0_needs_files_manifest.json).
-`curl -q` ignored user configuration, allowed HTTPS-only redirects, used zero
-retries, a 5-second connect timeout, a 25-second total timeout and a
-2,000,000-byte maximum with a matching process file-size limit. The body and
-raw response metadata were written only to fresh private files. No token,
-cookie, login, credential file, `HfApi` call or dataset bootstrap was used.
-
-| Observation | Result |
-|---|---|
-| HTTP status / curl exit | `200` / `0` |
-| Immutable revision and observed `x-repo-commit` | `6c7e07ee7365f145dfcf898263365b5c8c97b224` |
-| Complete byte size | `218405` |
-| SHA256 | `463fc119841dbe67e427c372da93ff55972139377aa03194764b57d87004c512` |
-| Production canonical contract | Accepted, schema `4`, active policy `deliverable_only`, exit `0` |
-
-The original bytes were not normalized or regenerated. No fixture pins,
-monkeypatching or fallback were used. This endpoint supplied only canonical
-Step 0 metadata, not historical model results for this comparison. Neither
-rejected local candidate was reread or reinterpreted.
-
-### One real preparation
-
-The current `load_plan()` and `compile_grading_plan()` APIs selected the first
-registered Codex run: `gpt54_v2_codex_v1_codex_r1`, condition `codex`, repeat 1,
-ABBA index 1. The unchanged comparison keeps its prescribed tasks, settings,
-repeats, limits and grading controls; no new condition was introduced.
-
-| Identity | Value |
-|---|---|
-| Reviewed source tree | `ffc7c49033243e03c2119e2110867f4b74b15cda` |
-| Current comparison-manifest seal | `b8e25f6548e5829daa77e9330c0157ab295f28318afec17f8615382a33f7a42f` |
-| Current combined-plan SHA256 | `4495cfe94f9d1e4f6319143540ddc434273fb38d2222b27ab3c616b1b3a84c2b` |
-| Run-configuration SHA256 | `288acbfab4da283c777626a05e696d792829f9bb6d08fe9599ec0331804d3463` |
-| Source-pins SHA256 | `1b9efbe1ad47aa3a2bfa2088d166562cad604cd46e6284155621717d3cd20bfe` |
-
-Exactly one `prepare_disposable_checkout()` call used the full reviewed source
-SHA, the saved normalized original parquet, the successful reference-only
-source root and the explicit downloaded `step0_manifest`. It created one
-absent destination outside the source checkout and caches. The preparer's
-normal pinned-byte checks ran; no standalone original-input audit or new
-normalized source tree was made. Its built-in final verification returned the
-verified marker, exit 0.
-No second verifier, alternate destination, cleanup or retry was used.
-
-The readiness identities below come from that verified return. Its input
-bundle includes the exact canonical Step 0 bytes above.
-
-| Logical role | Bytes | SHA256 |
-|---|---:|---|
-| `comparison-bundle-ready.json` | 10956 | `2e764dd3b3503ba9b79794eb23814720e1d259b645f246e43de750b463c246db` |
-| `comparison-inputs-ready.json` | 4863 | `ff6e156fbcc09508cdbdcdc1423ba49c00ebacb655a7a8a4e19a5e1cd26ce61c` |
-| `comparison-checkout-ready.json` | 5717 | `167dfca701803a5fe0a1caa20628cd9e6b649b5311335e17e8769b9985fdb8d2` |
-
-### One local Step 1 command
-
-After an existence-only check found both intended output roles absent, the
-first canonical argv ran once from the new checkout's `batch-runner` directory:
+Exactly one fresh pytest process ran for this correction:
 
 ```text
-python3 step1_prepare_tasks.py --config comparison-run.json
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 DO_NOT_TRACK=1 /usr/bin/python3 -m pytest -q -p no:cacheprovider --tb=short batch-runner/tests/test_gpt56_sol_codex_pilot_preflight.py::test_active_grader_template_source_foundry_preflight
 ```
 
-It used the existing installed environment with `HF_HUB_OFFLINE=1`,
-`HF_DATASETS_OFFLINE=1`, `HF_HUB_DISABLE_TELEMETRY=1`, `DO_NOT_TRACK=1` and
-`PYTHONDONTWRITEBYTECODE=1`. No argv, config, pin, source code or task order was
-changed. The command exited 0. Only the newly emitted output bytes needed for
-this record were read afterward; no verification pass was repeated.
+Result: `2 passed in 1.45s`, exit 0. The tested import-order bytes were committed
+unchanged as `f0215aa3f6e4d09520b37804a1bdf68147e06959`; this records update
+follows that commit. Both parameters execute the real hash/contract assertions
+under the offline guards. `git diff --check` passed. No other test module,
+earlier nine-case selection, selector family or full hosted lane was rerun.
+No failure logs were fetched and the unchanged failure was not reproduced.
 
-`total_tasks=5`, with this exact canonical order:
+### Preserved binding defect and supplied CI evidence
+
+The earlier binding correction started from
+`a2685e91b704218c657da41bd1505f40b6d1da66` on the existing feature branch.
+Integrated main remains `eba56139f95443a715e8309e75c57fe5688c1f2b`.
+No further fetch was needed. The approved selector and its tests remain unchanged.
+
+The unchanged `step8_grade.compute_grader_source_hash()` includes all core
+Python files, including `deliverable_selector.py`, plus requirements, schema,
+prompts and the original grading config bytes and path. The selector change
+therefore changed both full-template identities. The active plans still named
+the old hashes: GPT-5.4 refused through `_configuration_problems()` when
+checking shared controls and conditions; Foundry refused through
+`gpt56_pilot_identity_plan._grader_identity()`.
+
+The leader supplied Backend run `35695570658` at exact HEAD
+`a2685e91b704218c657da41bd1505f40b6d1da66`:
+
+| Job | Supplied result | Completed (UTC) |
+|---|---|---|
+| `comparison-contracts`, `106641640717` | `559 failed, 71 passed, 312 errors in 99.37s` | `2026-09-22T06:40:15Z` |
+| `pilot-preflight-contracts`, `106641640514` | `161 passed, 143 deselected, 35 errors in 41.54s` | `2026-09-22T06:39:04Z` |
+
+These are two representative jobs from seven failing non-core lanes. Their
+`shared_controls, conditions` and `grader_template_source_drift` refusals
+identify the shared binding cause, not hundreds of independent selector
+failures. No full logs were fetched or unchanged failure reproduced.
+
+### Active identities and preserved controls
+
+Each identity was recomputed with the unchanged repository helper using the
+original template path and actual configuration bytes in this worktree.
+No fixture pin, renamed template, hash stub or waived comparison was used.
+
+| Original template | Previous full-source SHA256 | Current full-source SHA256 |
+|---|---|---|
+| `batch-runner/grading_configs/default_v2_sol_max.yaml` | `40ada97c41117e3966e5a192c19dafcf4db34d4dd2ddd4230c4b729f421d6e08` | `c92bf13696fa506c84dbee649d5ba3c03fb33244810f30e2be4a05630ca204e1` |
+| `batch-runner/grading_configs/exp035_codex_foundry_full220_v2_sol_max.yaml` | `56fdb74e2f9fd1afbe9d064fc2cb1e1410d5cebec55edcca8324effd1a1dc9e1` | `785352daa052b105f0dfce08d8de7b3f41633a8e6b312111bec5bdbc8806144b` |
+
+The first value is registered in GPT-5.4's
+`shared.grading.template_source_sha256`, inherited by both conditions. The
+second is registered in Foundry's
+`dispatch_grading_identity.grader_template_source_hash` and its matching
+preflight constant. That constant change requires the active Foundry source
+pin for `gpt56_sol_codex_pilot_preflight.py` to become
+`df62b761638a9afce831a839bf6a5eba3134919cf728d6b56c9ee5e3222f82a9`.
+The GHCP contract's `FOUNDRY_SHA256` now binds the resulting active YAML bytes,
+`7f7331440f0c13a254353acd4a715f7eb7d3d4c0ba3d9ed32615640cc24ceeef`.
+Its equality assertion and `WORKFLOW_SHA256` are unchanged.
+
+Only these five binding values changed outside the new tests and records.
+Tasks, models, effort, limits, repeats, grader config bytes, historical
+source/base identities, live blockers and launch flags are preserved.
+Historical plans, completed-run configs, grades, results, costs and private
+artifacts were not updated. A refreshed active future binding does not upgrade
+old runs or establish comparable scores.
+
+### Earlier nine-case binding validation
+
+Exactly one pytest invocation ran for the earlier binding correction:
 
 ```text
-02aa1805-c658-4069-8a6a-02dec146063a
-0112fc9b-c3b2-4084-8993-5a4abb1f54f1
-2ea2e5b5-257f-42e6-a7dc-93763f28b19d
-3baa0009-5a60-4ae8-ae99-4955cb328ff3
-0818571f-5ff7-4d39-9d2c-ced5ae44299e
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 DO_NOT_TRACK=1 /usr/bin/python3 -m pytest -q -p no:cacheprovider --tb=short batch-runner/tests/test_gpt54_comparison_preflight.py::test_active_grader_template_source_comparison batch-runner/tests/test_gpt56_sol_codex_pilot_preflight.py::test_active_grader_template_source_foundry_preflight batch-runner/tests/test_gpt56_pilot_identity_plan.py::test_active_grader_template_source_foundry_identity batch-runner/tests/test_ghcp_vm_gate_contract.py::test_ghcp_vm_gate_contract_preserves_history_foundry_and_backend_partition
 ```
 
-Observed `prepared_fingerprint`:
-`12eba3b1bfb6d48fb600f455a1c3391b0630a5378db26365926eb319275712d0`.
+Result: `9 passed in 4.44s`, exit 0. The tested contract/guard/test bytes were
+committed unchanged as `acabb11b383c2b6cfea9291da0d58c9848ba201f` after this
+invocation; later completion-record changes are outside that implementation
+commit. `git diff --check` passed.
 
-| New logical role | Bytes | SHA256 |
-|---|---:|---|
-| `batch-runner/workspace/step1_tasks_prepared.json` | 15980 | `41951cb8b4edee9e378fe1197943b42d38950fbb37b51a4a907d2a92c9654d92` |
-| `batch-runner/workspace/pre-execution-input.json` | 14830 | `f12dda6c51c0e532b988daf5e80b389b75ea89ee8acf61f12a035aa8621ed5f1` |
+The selection comprises three GPT-5.4 cases, two Foundry preflight cases,
+three Foundry identity cases and the existing Foundry/GHCP byte-digest guard.
+Actual hash and validation functions are exercised. Negative source-drift
+cases change real selector bytes only in temporary source trees, with original
+relative template roles and unchanged expected pins. They do not replace the
+hash function with an expected value. The checks retain all existing live
+blockers and false launch flags; no provider evidence is supplied or inferred.
 
-### Retained evidence and remaining boundary
+This is focused offline contract evidence, not a passing full comparison job.
+No selector tests or whole CI lanes were rerun. No dataset staging,
+preparation, grading, model/provider execution, VM launch, Azure/HF request or
+paid operation took place in this correction.
 
-The new private source, verified checkout, bundles, readiness markers,
-reservation, Step 1 outputs, raw logs and private handoff are retained. No
-private host path or task text is published. Both historical prepared
-checkouts, their markers, original inputs, caches, prior handoffs and the GHCP
-bundle remain untouched. Their preparation-only `commands_executed=false`
-fields are unedited historical boundaries; they do not describe the current
-successful Step 1 command.
+### Preserved selector and preprocessing evidence
 
-The earlier two preparations and the Step 1 exit-1 missing-manifest failure
-at source `778a627bbb5404f33e5e62019382fa107aa47840` remain historical evidence
-in the unchanged operational changelog entry. The earlier synthetic results,
-`45 passed, 319 deselected in 18.36s` at
-`8728c350266578c299dd64b974f9368288de09d7` and `7 passed in 7.30s` at
-`0c5074665cd01be89e9d380614903471ab819f0f`, remain separate test evidence.
-No tests were rerun. The new success above comes from real pinned inputs and
-the production preparation/Step 1 paths, not substituted fixtures.
+The first invocation at `6cd3360e092fbf1505c672fd37f249ecf09a1a39` reported
+`42 passed, 19 deselected in 0.29s`, exit 0. A subsequent code read found that
+the new suffix guard would reject a sentence-ending period followed by a
+closing quote, including an ordinary standalone `.docx` requirement. That
+patch regression was corrected, with three added punctuation cases.
 
-All launch flags remain false, including `launch_allowed=false` and
-`full_220_allowed=false`; provider observations remain null. The six existing
-live blockers are unchanged:
+There were exactly two earlier selector invocations, both using this command.
+The necessary rerun selected 27 `parenthesized_docx` cases and 18 directly
+related existing format, filename and reference guards:
 
-- `v2_reasoning_effort_capability_unverified`
-- `codex_reasoning_effort_capability_unverified`
-- `codex_native_model_call_and_token_limits_unenforced`
-- `live_deployment_identity_and_input_bytes_not_verified`
-- `comparison_materialization_and_workflow_gates_not_wired`
-- `comparison_usage_and_tariff_evidence_unverified`
+```text
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider --tb=short batch-runner/tests/test_deliverable_selector.py batch-runner/tests/test_selector_reads_a_filename_as_a_filename.py -k 'parenthesized_docx or an_extension_written_against_a_name or an_extension_standing_on_its_own or a_trigger_word_cannot_reach_a_filename or the_expert_answer_is_no_longer_refused_for_its_format or the_supplied_file_is_still_kept_out_of_what_gets_graded or a_task_that_really_asks_for_one_format'
+```
 
-No Step 2, V2 stage, later compiled command, workflow dispatch,
-`require_workflow_launch()`, provider/model, VM, grader, Azure or paid operation
-ran. Preparation and local preprocessing do not establish served identity,
-enforced native limits, usage/tariff evidence or independent grader accuracy.
-Any later execution needs separate authorization and the existing live
-evidence gates. This record does not complete the comparison card.
+Corrected selector result: `45 passed, 19 deselected in 0.28s`, exit 0, on the
+unchanged selector/test bytes committed as
+`d0de31307d7cc6e7dfa665d95e97b4eb6e651e25`.
+The recorded-task case uses real requirement/file-list evidence; the guard
+cases are synthetic counterexamples. All assertions exercise deterministic
+selection, not a model judge, render pipeline or benchmark run.
 
-Only the two completion records change in Git. Their validation is bounded
-record-to-evidence, editorial and whitespace checking, not another runtime
-validation. The new records still need leader review and final-HEAD automatic
-checks; no CI query or review waiting occurred.
+For exp035 task `15ddd28d-8445-4baa-ac7f-f41372e1344e`, the public selector
+chose `Modlev_Tail_Lamp_Negotiation_Strategy.docx` from the recorded two-file
+set in both tested orders; `modlev_tail_lamp_negotiation_strategy.md` remained
+support. That replay establishes candidate choice only, not document quality,
+grading correctness, score lift, eight restored tasks or a repaired historical
+comparison. The selector and both existing test files still match reviewed
+HEAD `200a35070bc0ffbf5938fea2a1fc85a470c98544` byte-for-byte. They were not rerun.
 
-The full skill catalog was inspected once. `experiment-design` fixed the
-one-run input/preprocessing acceptance boundary without inventing controls
-or runtime claims. `experiment-report-en` separates real local evidence,
-historical synthetic tests and unmeasured live outcomes; `im-not-ai-en`
-preserves their identifiers and qualifications. No implementation, workflow,
-UI/animation, new framework or repository-readiness work was needed.
+The complete #648 real canonical-source/preparation/Step 1 changelog entry and
+all unrelated entries are preserved. Its
+[historical preprocessing evidence](https://github.com/hyeonsangjeon/gdpval-realworks/blob/eba56139f95443a715e8309e75c57fe5688c1f2b/tasks/LATEST_TASK_RESULT/README.md)
+is separate from these contract tests and was not revalidated. Original inputs,
+all successful and failed prepared artifacts, handoffs and the GHCP bundle
+remain untouched.
+
+### Review boundary and remaining work
+
+The leader supplied `FINAL-APPROVE` review `5274748991` at exact HEAD
+`200a35070bc0ffbf5938fea2a1fc85a470c98544`, with no high-confidence
+correctness findings. It covers the selector/test bytes tested as
+`d0de31307d7cc6e7dfa665d95e97b4eb6e651e25` and the records at the reviewed
+HEAD. It did not approve the stale active grading bindings. The leader then
+supplied `REQUEST-CHANGES` review `5274961797` at
+`a2685e91b704218c657da41bd1505f40b6d1da66` for the coupling defect above.
+Neither review approves this new contract delta or its later records.
+The leader subsequently supplied `REQUEST-CHANGES` review `5275599170` at
+`9efee401178d2926d7fccf9508af33d3940eaa00` for the isolated import failure.
+That diagnosis is not approval of this correction. Final-HEAD automatic checks
+and leader review remain outstanding; neither the earlier nine-case result
+nor the new isolated two-case result establishes full-CI success. The branch
+is frozen after publication. No CI query, manual rerun or review waiting occurred.
+
+The preceding `FINAL-APPROVE` review `5274558309` at records HEAD
+`ae784cac096bb4cd3338390bddf47309de3e3667` for #648 remains limited to the
+earlier real local preparation and Step 1 records, not this selector change.
+Any future grading requires separate authorization; this change grants no
+execution permission or card completion.
+
+The complete skill catalog was inspected once for this phase.
+`experiment-report-en` and `im-not-ai-en` were applied to the bounded changed
+records, protecting exact source hashes, test counts, supplied CI evidence and
+review limits. This import-order correction changes no experiment or control,
+so `experiment-design` is not applicable here; it was applied to the earlier
+active-contract correction. UI/animation, workflow, QA, upload, pricing,
+model/provider and new-framework work is outside this phase. The independent
+budget implementation is not part of this branch or record.
