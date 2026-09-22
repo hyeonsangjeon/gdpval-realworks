@@ -198,6 +198,7 @@ VERDICTS: tuple[str, ...] = (
     VERDICT_SANDBOX_FAILED,
     VERDICT_TURN_TIMED_OUT,
     VERDICT_RUNTIME_UNAVAILABLE,
+    VERDICT_AUTH_COMMAND_FAILED,
     VERDICT_SESSION_NOT_STARTED,
     VERDICT_SETTINGS_INCOMPLETE,
     VERDICT_NOT_SENT,
@@ -823,6 +824,7 @@ def probe(
         # 34347516170 are what that costs.
         auth_probe = runner.preflight_auth_command(workspace)
         observed["auth_command"] = auth_probe.as_record()
+        observed["auth_command"]["reason"] = redact(observed["auth_command"].get("reason"))
         if auth_probe.ran and not auth_probe.ok:
             return _record(
                 verdict=VERDICT_AUTH_COMMAND_FAILED,

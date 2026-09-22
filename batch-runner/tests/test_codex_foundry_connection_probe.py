@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import socket
 import subprocess
 import sys
 from enum import Enum
@@ -32,6 +33,7 @@ from scripts.diagnose_codex_foundry_connection import (
     NOT_ESTABLISHED_BY_A_TEXT_TURN,
     PROMPT,
     SCHEMA,
+    VERDICT_AUTH_COMMAND_FAILED,
     VERDICT_AUTHENTICATION_REJECTED,
     VERDICT_CONNECTED,
     VERDICT_CONTENT_FILTERED,
@@ -43,6 +45,7 @@ from scripts.diagnose_codex_foundry_connection import (
     VERDICT_QUOTA_EXHAUSTED,
     VERDICT_RATE_LIMITED,
     VERDICT_REQUEST_SHAPE_REJECTED,
+    VERDICT_RUNTIME_UNAVAILABLE,
     VERDICT_SANDBOX_FAILED,
     VERDICT_SETTINGS_INCOMPLETE,
     VERDICT_UNCLASSIFIED_FAILURE,
@@ -282,6 +285,8 @@ def test_only_verdicts_that_mean_the_provider_spoke_are_marked_as_such():
     """
     assert VERDICT_CONNECTED in VERDICTS_THE_PROVIDER_ANSWERED
     assert VERDICT_AUTHENTICATION_REJECTED in VERDICTS_THE_PROVIDER_ANSWERED
+    assert VERDICT_AUTH_COMMAND_FAILED in VERDICTS
+    assert VERDICT_AUTH_COMMAND_FAILED not in VERDICTS_THE_PROVIDER_ANSWERED
     assert VERDICT_SETTINGS_INCOMPLETE not in VERDICTS_THE_PROVIDER_ANSWERED
     assert VERDICT_NOT_SENT not in VERDICTS_THE_PROVIDER_ANSWERED
     assert VERDICT_PROVIDER_UNREACHABLE not in VERDICTS_THE_PROVIDER_ANSWERED
@@ -765,13 +770,149 @@ class _FakeRunner:
         self._probe = probe
         self.workspaces = []
 
-    def __call__(self, settings, verify_runtime=True):
+    def __call__(self, settings, verify_runtime=True, timeout=None):
         self.verify_runtime = verify_runtime
+        self.timeout = timeout
         return self
 
     def preflight_auth_command(self, workspace):
         self.workspaces.append(workspace)
         return self._probe
+
+
+@pytest.fixture
+def auth_command_failure_output_boundary(monkeypatch, tmp_path):
+    """Keep real workspace cleanup and reporting, but forbid every live boundary."""
+    import core.codex_runner as runner_module
+    import core.codex_runtime_config as runtime_config
+
+    calls = {name: 0 for name in (
+        "runtime", "thread", "subprocess", "network", "credential_discovery",
+    )}
+
+    def forbidden(name):
+        def refuse(*args, **kwargs):
+            calls[name] += 1
+            raise AssertionError(f"offline auth-report test reached {name}")
+
+        return refuse
+
+    monkeypatch.setattr(subprocess, "run", forbidden("subprocess"))
+    monkeypatch.setattr(subprocess, "Popen", forbidden("subprocess"))
+    monkeypatch.setattr(socket, "socket", forbidden("network"))
+    monkeypatch.setattr(socket, "create_connection", forbidden("network"))
+    monkeypatch.setattr(
+        runtime_config, "discover_azure_cli_config_dir", forbidden("credential_discovery")
+    )
+    monkeypatch.setattr(runner_module, "resolve_run_root_base", lambda: tmp_path / "workspaces")
+
+    def install(auth_probe):
+        fake = _FakeRunner(auth_probe)
+        fake.open_runtime = forbidden("runtime")
+        fake.start_thread = forbidden("thread")
+        monkeypatch.setattr(runner_module, "CodexAgentRunner", fake)
+        return fake
+
+    yield install, calls
+    assert not any(calls.values()), calls
+
+
+@pytest.mark.parametrize(
+    "exit_code,produced_a_token",
+    [
+        pytest.param(1, False, id="failed_command"),
+        pytest.param(0, False, id="empty_stdout"),
+        pytest.param(None, False, id="preflight_timeout"),
+        pytest.param(2, True, id="nonzero_with_stdout"),
+    ],
+)
+def test_auth_command_failure_output_preserves_probe_and_redacts_reason(
+    monkeypatch, capsys, tmp_path, auth_command_failure_output_boundary,
+    exit_code, produced_a_token,
+):
+    """Exercise main -> probe -> _record -> _emit without constructing a runtime."""
+    install, calls = auth_command_failure_output_boundary
+    token = "eyJhbGciOiJSUzI1NiJ9.eyJhdWQiOiJodHRwcyJ9.c2lnbmF0dXJl"
+    raw_reason = (
+        f"failed for {PROJECT_ENDPOINT} resource {ACCOUNT.upper()} project {PROJECT}; "
+        f"token {token}; Authorization: Bearer synthetic-access-token"
+    )
+    auth_probe = _probe(
+        exit_code=exit_code, produced_a_token=produced_a_token, reason=raw_reason,
+    )
+    fake = install(auth_probe)
+    out = tmp_path / "diagnostic.json"
+    assert not out.exists()
+
+    code, record = _run(
+        ["--deployment", DEPLOYMENT, "--send-request", "--timeout", "120", "--out", str(out)],
+        ROUTED, monkeypatch, capsys,
+    )
+
+    written = out.read_text(encoding="utf-8")
+    assert json.loads(written) == record
+    assert code == 1
+    assert record["schema"] == SCHEMA
+    assert record["verdict"] == VERDICT_AUTH_COMMAND_FAILED
+    assert record["provider_answered"] is False
+    observed = record["observed"]
+    assert observed["thread_started"] is False
+    assert observed["turn_sent"] is False
+    assert observed["usage"] is None
+    assert observed["auth_command"] == {
+        **auth_probe.as_record(), "reason": build_redactor(ROUTED)(raw_reason),
+    }
+    assert observed["auth_command"]["ran"] is True
+    assert observed["auth_command"]["ok"] is False
+    assert observed["auth_command"]["exit_code"] == exit_code
+    assert observed["auth_command"]["produced_a_token"] is produced_a_token
+    for value in (ENDPOINT, PROJECT_ENDPOINT, ACCOUNT, PROJECT, token, "synthetic-access-token"):
+        assert value.lower() not in written.lower()
+    for marker in ("<url redacted>", "<name redacted>", "<token redacted>", "bearer <token redacted>"):
+        assert marker in observed["auth_command"]["reason"]
+    assert auth_probe.reason == raw_reason
+    assert fake.timeout == 120
+    assert len(fake.workspaces) == 1
+    assert not fake.workspaces[0].root.exists()
+    assert not any(calls.values()), calls
+
+
+def test_auth_command_failure_output_does_not_invent_an_unrun_auth_failure(
+    monkeypatch, capsys, tmp_path, auth_command_failure_output_boundary,
+):
+    """ran=False retains its meaning; a synthetic runtime stop remains separate."""
+    install, calls = auth_command_failure_output_boundary
+    auth_probe = _probe(
+        ran=False, exit_code=None, produced_a_token=False, reason=None,
+        azure_config_dir=None,
+    )
+    fake = install(auth_probe)
+    runtime_boundary = []
+
+    def unavailable(workspace):
+        runtime_boundary.append(workspace)
+        raise RuntimeError("synthetic runtime unavailable; no process started")
+
+    fake.open_runtime = unavailable
+    out = tmp_path / "diagnostic.json"
+    code, record = _run(
+        ["--deployment", DEPLOYMENT, "--send-request", "--out", str(out)],
+        ROUTED, monkeypatch, capsys,
+    )
+
+    assert code == 1
+    assert json.loads(out.read_text(encoding="utf-8")) == record
+    assert record["verdict"] == VERDICT_RUNTIME_UNAVAILABLE
+    assert record["provider_answered"] is False
+    assert record["observed"]["auth_command"] == auth_probe.as_record()
+    assert record["observed"]["error"]["stage"] == "runtime"
+    assert record["observed"]["thread_started"] is False
+    assert record["observed"]["turn_sent"] is False
+    assert record["observed"]["usage"] is None
+    assert len(fake.workspaces) == 1
+    assert runtime_boundary == fake.workspaces
+    assert not fake.workspaces[0].root.exists()
+    assert not any(calls.values()), calls
 
 
 def test_the_free_plan_says_whether_the_sign_in_can_mint(monkeypatch, capsys):

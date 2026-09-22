@@ -1,182 +1,85 @@
 # Latest task result
 
-## Owned-child cleanup for the Codex pilot dispatcher
+## Codex diagnostic local-auth failure reporting
 
-The four affected lifecycle cases passed at implementation commit
-`d9bed6851a611787fa14f3e67c156d6369b11875`:
-`4 passed in 127.23s (0:02:07)`, exit 0. The initial selection's six passing
-capability/owner-state cases retain their separate source scope below. There
-was no fresh ten-pass run or full dispatcher-suite rerun. This is offline
-process-lifecycle evidence, not a paid-pilot or model-recovery result.
+The diagnostic now emits its existing `auth_command_produced_no_token`
+verdict instead of raising while building the failure record. The focused
+offline selection passed at `1dfa5d0879e04c1b32b39d0fb0c5ba5785992e63`:
+`13 passed, 116 deselected in 0.34s`, exit 0. This is reporting evidence, not
+a successful authentication or connectivity observation.
 
-REQUEST-CHANGES review `5282428403` at
-`47e725bc3ff1945f12cc6756c0d610646dc7feb3` identified the gap. The former
-`subprocess.run(timeout=remaining+60)` could kill and reap Step 2 while leaving
-Codex/app-server/tool descendants alive. The dispatcher then marked the cell
-stopped and advanced. An inherited lock protects a surviving direct child
-after dispatcher death; it did not establish descendant cleanup after that
-child was killed. Step 2's own `finally` cleanup cannot be relied on after
-SIGKILL.
+### Accepted failed observation
 
-### Correction and preserved controls
+Campaign `budget_pilot_20260923_01` used clean source
+`0d6ed6d806fc0360434952792d5ab82327290570`. Its one authorized diagnostic
+exited 1 after 2.859043 seconds, including confirmed owned cleanup.
+Authentication preflight failed before native startup. The existing
+`auth_command_produced_no_token` verdict was missing from `VERDICTS`, so
+`_record()` raised before stdout/file diagnostic JSON could be emitted.
+The underlying auth reason, auth-command exit code and token-production
+boolean were not emitted. No model turn was sent; usage, charges and HTTP
+counts remain unknown.
 
-Each real Step 1/Step 2 child now has a private supervisor session. The
-supervisor enables Linux child-subreaper behavior for itself only, so orphaned
-descendants remain its children even if they create another session. It
-reuses the repository's descendant discovery and TERM-then-KILL convention.
-Before sending a signal, `waitpid` must establish that the target is its own
-unreaped direct child. That child cannot be recycled before signaling because
-the supervisor does not reap it in between. Deeper descendants are adopted
-as their parents exit and handled in subsequent cleanup passes. No process
-name, shared process or unrelated dispatcher child is a kill target.
+The diagnostic authorization is consumed. No authentication or diagnostic
+was rerun, credentials were not repaired, and no replacement receipt was
+created for that attempt. No diagnostic rerun or replacement receipt is
+authorized here. Private evidence and the separate reporting commit
+`3fbb1c6cca856b62adc7fe7902f9ebc9f83792a6` remain unchanged.
 
-Cleanup waits are bounded. Completion requires the supervisor to observe no
-remaining children after reaping, report that fact through its private
-control channel, and itself be reaped by the dispatcher. The same cleanup
-applies when the payload exits while leaving descendants behind. This does
-not depend on Step 2 or a tool running cleanup after SIGKILL. Linux
-subreaper/process visibility remains a host requirement; it is not waived.
+### Correction and offline evidence
 
-The host-owned `owned-child.json` checkpoint reserves the serial slot before
-launch. The supervisor and payload inherit the serial lock. Missing or
-incompatible ownership state refuses. Unconfirmed cleanup keeps a durable
-unresolved record and leaves the cell running with an explicit reason and
-missing accounting. Every restore checks that global record before skipping
-finished cells or starting any child. Even if the OS lock is later released,
-restore does not infer cleanup from a missing process or silently adopt the
-cell. Resolving an unacknowledged cleanup requires separate investigation;
-there is no automatic clearance flag in this change.
+The production change adds the existing verdict to `VERDICTS` while keeping
+it out of `VERDICTS_THE_PROVIDER_ANSWERED`, and applies the existing redactor
+to `observed.auth_command.reason`, as the plan path already does. The
+ran/ok/exit_code/produced_a_token observations, failure exit 1, cleanup,
+unknown-verdict rejection and unrun-auth meaning are preserved. Auth paths,
+credentials, targets and plan-only defaults are unchanged.
 
-Confirmed timeout retains a stopped cell with an unknown cell exit and partial
-accounting. Confirmed host interruption retains the running cell for explicit
-restore. Partial files are not overwritten or deleted by cleanup. The original
-deadline and durable attempt count remain authoritative; restore does not
-initialize a new clock. A successful child exit without a result remains a
-failure, and failed/filtered/expired cells stay in the denominator.
-
-The dispatcher still defaults to plan-only. The existing `advance_check_5`
-cohort has exactly 30 cells, A1/B1/C1/C2/B2/A2 per task, with one active cell
-tree. The GPT-5.4 Foundry/xhigh profile, original task/reference bytes, base
-requests, provider, context, tools and fixed grader remain unchanged. A keeps
-four fresh attempts; B/C share retained-state capability and fixed backoff.
-C's only intervention remains the reviewed host error feedback. The
-180-minute cumulative and 30-minute attempt limits are unchanged. There is
-no new wait optimizer, monetary cutoff, model setting or grading dispatch.
-Self-QA and legacy resume rounds stay disabled; there is no low-score retry.
-The registered grader remains `default_v2_sol_max.yaml`, GPT-5.6-sol/max,
-prompt v2.2 and one grade per task, with launch separately directed.
-A versus B still changes both retention and attempt policy; it is not a
-retention-only causal comparison. B versus C isolates the feedback intervention.
-
-### Integrated source and remaining execution guards
-
-The single authorized fetch returned exact main
-`9b572a39af8ecd48850e427d1bccf8cb65b7c65a`. An ordinary non-destructive merge
-preserved the dispatcher and #652 histories; conflicts were confined to the
-two completion records. Imported core, feedback tests and active binding
-bytes match that main exactly. The local correction changes only
-`batch-runner/codex_budget_pilot.py`, its existing test module and the two
-records. The dispatcher is outside the full grader closure, so no additional
-active digest refresh or source-count change was needed. The genuine compiler
-and exact 37/58 source sets remain in force; historical identities and results
-were not rewritten.
-
-The real integrated source reports
-`c_host_feedback_present=true` and no missing-C capability requirement. The
-negative capability gate remains tested. The focused cases also retain the
-explicit-input refusal, real pinned-runtime/connection check and real
-development-host refusal. The runtime/host cases use genuine validators after
-synthetic Git metadata; the missing-input case uses the existing fake execution
-boundary. No production pin or guard is changed.
-The registered route and other source/input guards remain wired; this
-selection is not a live validation of them. C availability is not paid-launch
-readiness, and compilation still sets launch authorization and grading flags
-false.
-
-### Exact focused evidence
-
-`PILOT_PYTHON` denotes the existing private isolated interpreter with the
-declared `openai-codex==0.147.0` and companion environment; its host locator is
-omitted. No dependency was installed or upgraded. From the repository root,
-the initial invocation at `789995071ed1b7630f2da1e239704301845a36cc` was:
+One invocation ran from the repository root with `AUTH_VERDICT_PYTHON`
+bound to the existing isolated interpreter prepared with
+`openai-codex==0.147.0` and `openai-codex-cli-bin==0.147.0`:
 
 ```bash
-HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 DO_NOT_TRACK=1 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner "$PILOT_PYTHON" -m pytest -q -o addopts= batch-runner/tests/test_codex_budget_pilot.py -k 'owned_child or integrated_capability or real_capability_gate_before_source_or_process'
+HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 DO_NOT_TRACK=1 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner "$AUTH_VERDICT_PYTHON" -m pytest -q -o addopts= -p no:cacheprovider --tb=short batch-runner/tests/test_codex_foundry_connection_probe.py -k 'auth_command_failure_output or vocabulary or provider_spoke or token_shaped or names_are_recovered or what_the_sign_in_said or without_send_request or preflight_that_could_not_run_at_all'
 ```
 
-Result: `4 failed, 6 passed, 24 deselected, 1 error in 22.00s`, exit 1.
-The host returns `ENOSYS` for `pidfd_open`. That newly introduced dependency
-caused four lifecycle cases to fail; one also raised a teardown error. The
-six capability/owner-state cases passed under their original source scope.
-Three harmless fixtures left by the failed setup were identity-checked and
-terminated by their exact PIDs; a subsequent exact-PID check found none.
-No shared or unrelated process was targeted.
+The five new cases traverse real `main --send-request --out`, `probe()`,
+`_record()` and `_emit()` with synthetic `AuthCommandProbe` observations.
+Four failed-auth cases check equivalent parseable stdout/file JSON,
+`provider_answered=false`, `thread_started=false`, `turn_sent=false`,
+`usage=null`, the original auth fields, redacted token/resource-shaped
+reasons, real workspace cleanup and no runtime/thread/network/auth
+subprocess calls beyond the auth stub. The unrun-auth case preserves that
+meaning and reaches only a synthetic runtime-unavailable boundary, not a
+native process. Eight related existing cases check vocabulary, unknown
+verdict refusal, redaction and plan semantics. No live authentication,
+native app-server, provider or model operation occurred. Both reported
+durations are wall times for their respective operations, not task latency.
 
-The correction removes the pidfd dependency and uses unreaped direct-child
-ownership with bounded SIGCHLD-driven waits. Only the four affected cases
-were rerun at `d9bed6851a611787fa14f3e67c156d6369b11875`:
+Only completion records change after the tested SHA; this is not a fresh
+test run on the final documentation-bearing commit. The diagnostic script
+and its tests are outside the full grader-source closure, so no active hash,
+source-count, configuration or historical-result change was needed.
 
-```bash
-HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 DO_NOT_TRACK=1 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner "$PILOT_PYTHON" -m pytest -q -o addopts= batch-runner/tests/test_codex_budget_pilot.py::test_pilot_owned_child_tree_reaped_before_next_cell_or_restore batch-runner/tests/test_codex_budget_pilot.py::test_pilot_owned_child_cleanup_refusal_keeps_lock_and_durable_unresolved_cell
-```
+### Review boundary and remaining work
 
-Result: `4 passed in 127.23s (0:02:07)`, exit 0. These cases traverse the
-actual CLI/runner and owned-process transport. The narrow process allowance
-starts the private supervisor, a harmless Python payload, a descendant that
-creates its own session and ignores TERM, and an unrelated harmless control
-process. Tests verify actual descendant disappearance and reaping, the unaffected control
-process, serial-lock retention, no next-cell admission before cleanup,
-repeated restore refusal after lost cleanup acknowledgment, retained partials,
-unchanged expiry, preserved prior admissions and missing receipts. Timeout
-injection and an actual host SIGTERM exercise the interruption boundary; a
-normal payload exit also leaves a descendant for the supervisor to reap.
+This branch starts from `0d6ed6d806fc0360434952792d5ab82327290570` without a
+fetch. Prior #653 review `5283415850` at
+`52f67d68f77fbdeaedf345d520713e38f3fc332f` covers the dispatcher, not this
+diagnostic fix. Earlier dispatcher and experiment evidence remains under
+its original scope in `CHANGELOG.md` and the prior immutable records.
+Review of this fix and final carrying-HEAD CI remain outstanding.
 
-Original inputs and pipeline outputs are synthetic, and budget time uses fake
-clocks. Other cells use the existing fake child transport. In the dispatcher
-test process, SDK/client, credential, network, model/provider and grader
-boundaries stay blocked. The controlled subprocess allowance runs only the
-supervisor and fixed harmless fixtures, with offline flags inherited. No Codex
-app-server, real preparation, dataset, VM, model or grading run occurred.
-Both durations are pytest wall times, not task latency. Both logs are retained
-privately. Partial preservation is checked before ordinary test-fixture
-teardown; original inputs, historical real checkouts and published artifacts
-remain untouched.
+The sealed execution source, campaign, original inputs and 30 pending cells
+remain untouched; plan/order/config/input identities and clocks are
+unchanged. The underlying auth cause and current connectivity remain
+unresolved. Pilot execution and grading remain unrun and require separate
+leader direction. Standing budget authority is unchanged, with no new
+owner-approval wait. No tests beyond the focused selection, dependency
+installation, dataset/preparation operation, CI query, Project edit or PR
+merge occurred.
 
-### Earlier evidence and review boundary
-
-The initial dispatcher result remains `25 passed in 286.25s (0:04:46)`, exit 0,
-at `6967ce8158459fd32506a14c25fa924e5b4747f8`. That invocation used synthetic
-children/capability and provides offline dispatch/persistence evidence, not owned-tree
-cleanup or model consumption. Its full 25-case selection was not rerun here.
-
-The #652 feedback record retains its split evidence: at
-`8805bb7f3b10ad267ea0970fdc6667a388ea1d32`,
-`12 failed, 15 passed in 175.91s (0:02:55)`, exit 1; after a test-only fixture
-correction at `df083e5306793db9e071365efd4a7efeaacfd38e`, only the twelve
-affected cases ran again, reporting `12 passed in 93.91s (0:01:33)`, exit 0.
-Neither selection was rerun here. These are offline feedback/accounting
-results, not this dispatcher's lifecycle evidence or a fresh 27-pass run.
-The complete dispatcher/feedback changelog entries and prior #648/#649/#650/
-#651 evidence remain intact under their original scopes.
-
-The leader supplied #652 FINAL-APPROVE review `5281735646` at
-`b116563744351ab03769e356eb00fcfa39565da9` and all fourteen applicable checks
-before integration. That approval covers the feedback intervention, not this
-dispatcher or cleanup correction. REQUEST-CHANGES review `5282428403` at
-`47e725bc3ff1945f12cc6756c0d610646dc7feb3` identifies the defect addressed here;
-no new approval or carrying-HEAD CI success is claimed.
-
-Full immutable dispatcher review and carrying-HEAD automatic checks remain
-required. Actual local-input/runtime readiness, live execution validation,
-separately directed pilot execution and fixed grading remain outstanding.
-The leader already holds numeric-budget and paid-run authority; this is not
-a new owner-approval wait. No live recovery, quality gain, invoice completeness,
-whole-pilot result or Project-card completion is established.
-
-The full skill catalog was reviewed once. Experiment-design kept seriality,
-order, controls and causal limits fixed; backend/LLM guidance kept cleanup
-within owned process boundaries. Experiment-report-en and im-not-ai-en preserve
-the failed selection, narrow rerun and historical review scopes. UI/animation,
-workflow, core QA, upload, pricing and framework work were outside this task.
-No Azure/HF/provider/model/grader or paid operation, Project edit, PR merge,
-CI query/manual rerun, broad suite or review waiting was performed.
+Backend/LLM guidance kept the change at the reporting boundary.
+Experiment-report-en and im-not-ai-en kept the failed observation, synthetic
+tests, missing receipt and prior review within their distinct scopes.
+No experiment parameters or UI, workflow, QA or upload code changed.

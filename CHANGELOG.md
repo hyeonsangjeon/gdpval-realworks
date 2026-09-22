@@ -13,6 +13,31 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Preserve local authentication failures in the Codex connection diagnostic's
+  JSON output. `auth_command_produced_no_token` already existed but was missing
+  from `VERDICTS`, so `_record()` rejected the failed preflight before output.
+  The verdict is now admitted but remains outside
+  `VERDICTS_THE_PROVIDER_ANSWERED`. The observed auth reason uses the existing
+  redactor; ran/ok/exit_code/produced_a_token, unknown-verdict refusal, cleanup
+  and plan-only defaults retain their meanings. The accepted earlier attempt
+  for `budget_pilot_20260923_01` on source
+  `0d6ed6d806fc0360434952792d5ab82327290570` exited 1 after 2.859043 seconds,
+  including confirmed owned cleanup. Authentication preflight failed before
+  native startup, and no diagnostic JSON was emitted. The auth reason, auth
+  exit code and token-production boolean were not emitted; usage, charges and
+  HTTP counts remain unknown. No model turn was sent. The single offline
+  selection at `1dfa5d0879e04c1b32b39d0fb0c5ba5785992e63` reported
+  `13 passed, 116 deselected in 0.34s`, exit 0. Five new cases exercise real
+  main/probe/record/output handling with synthetic auth observations; eight
+  existing cases cover vocabulary, refusal, redaction and plan semantics.
+  The exact command is in `tasks/LATEST_TASK_RESULT/README.md`. No live auth
+  or diagnostic was rerun, and no replacement receipt was created. No
+  diagnostic rerun or replacement receipt is authorized here. #653
+  review `5283415850` at `52f67d68f77fbdeaedf345d520713e38f3fc332f` covers the
+  dispatcher, not this fix. Immutable review/CI, the underlying auth cause and
+  current connectivity remain unresolved. The diagnostic authorization is
+  consumed; all 30 pilot cells remain pending and grading remains unrun.
+
 - Close the pilot dispatcher's owned-child cleanup gap identified by
   REQUEST-CHANGES review `5282428403` at
   `47e725bc3ff1945f12cc6756c0d610646dc7feb3`. The previous
