@@ -1,43 +1,74 @@
 # Latest substantive task result
 
-## PROJECT5-GPT54-CODEX-COUNTERPART-0914
+## PROJECT5-GPT54-LOCAL-STEP-ONE-0945
 
-Exactly one new real GPT-5.4 run was prepared locally:
+Exactly one local preprocessing command was attempted and executed for
 `gpt54_v2_codex_v1_codex_r1`, condition `codex`, prescribed repeat 1,
-ABBA index 1. One `gpt54_disposable_checkout.prepare_disposable_checkout()`
-call returned its built-in verified checkout marker, exit 0. The result was
-saved at `2026-09-22T00:22:29.193166+00:00`. No separate verification pass ran.
+ABBA index 1. Step 1 exited 1 with `FileNotFoundError` for
+`batch-runner/workspace/step0_needs_files_manifest.json`. Neither intended
+prepared-task nor input-capture output was created. The saved result timestamp
+is `2026-09-22T00:53:36.782715+00:00`.
 
-The previously verified V2 preparation remains intact and was not repeated.
-Two locally prepared conditions are not a paired runtime result or completion
-of the historical five-environment comparison. `commands_executed=false` and
-`provider_observation=null`; no inference, runtime capture or grade was produced.
-The evidence boundary remains `local_reviewed_checkout_and_bundles`.
+The current operation has `commands_executed=true`: one local preprocessing
+command, zero model/inference commands and `provider_observation=null`.
+This is a failed local Step 1 attempt, not successful input capture or model
+consumption. The earlier preparations' `commands_executed=false` records retain
+their earlier preparation-only meaning; no readiness marker was edited.
 
-### New Codex operation and preserved V2 evidence
+### Authorized command and first refusal
 
-Only the successful V2 operation's saved private handoff was read for source
-locators. The new call reused its reference-only root and separate original
-parquet. No replacement source tree was created, and no standalone dataset hash
-check ran. The preparer performed its normal pinned-byte checks and publication.
-Original sources, cache,
-prior handoffs and every V2 artifact remain unchanged. The distinct GHCP output
-bundle was not opened, rehashed or adopted as GPT-5.4 evidence.
+The saved Codex handoff located the already prepared checkout. Its saved
+checkout-ready identity is
+`ea5d6ede676bce62d4302833ecb3dad0c7f75b95609eb35f7b668ab30d66e5f1`;
+that marker was not reopened or rehashed. The retained combined plan supplied
+the existing first argv. From the checkout's `batch-runner` working directory,
+the command ran once, unchanged:
 
-The unchanged `load_plan()` and `compile_grading_plan()` APIs supplied the
-canonical combined plan. Selection took the first entry in `plan.dispatch.runs`
-whose condition is `codex`; its run ID, repeat and ABBA index were derived, not
-invented. The call used the explicit reviewed source SHA, known local inputs
-and one absent destination outside existing artifacts, checkouts and cache.
-No `WorkflowRequest` or `workflow_dispatch` event was synthesized.
-Neither `require_workflow_launch()` nor any compiled command was called.
+```text
+python3 step1_prepare_tasks.py --config comparison-run.json
+```
 
-The new detached Codex checkout, configuration/input bundles, reservation and
-three readiness markers are retained privately. No quarantine was created.
-A new private handoff preserves the destination and source locators. Reading
-the newly emitted marker metadata for this record was not another verification
-pass. Raw inputs, prompts, private host paths, endpoints and credentials are
-absent from the public records.
+An existence-only check found both intended output roles absent before the
+call. The existing installed environment was used with `HF_HUB_OFFLINE=1`,
+`HF_DATASETS_OFFLINE=1`, `HF_HUB_DISABLE_TELEMETRY=1` and `DO_NOT_TRACK=1`.
+`PYTHONDONTWRITEBYTECODE=1` prevented bytecode writes. No argv, configuration,
+pin, source or task-order change was made; nothing was installed or downloaded.
+
+The new error trace ends in `batch-runner/core/needs_files.py:134` (`load`),
+called by `batch-runner/step1_prepare_tasks.py:153` (`_prepare_tasks`). It reports
+the missing Step 0 needs-files manifest named above. The process exited 1;
+the enclosing recorder returned 2 after saving the failure. There was no
+Step 1 completion message and no retry, alternate checkout, cleanup or repair.
+The missing manifest was not generated or substituted.
+
+| Intended new output role | Result | Size / SHA256 |
+| --- | --- | --- |
+| `batch-runner/workspace/step1_tasks_prepared.json` | Not created | Not available |
+| `batch-runner/workspace/pre-execution-input.json` | Not created | Not available |
+
+With no successful returned result, this record keeps `total_tasks=null` and
+`prepared_fingerprint=null`. No output establishes `total_tasks=5` or the
+serialized task order.
+The registered five-task order below is preserved plan evidence only.
+New raw command logs, sanitized failure metadata and a private handoff are
+retained outside the checkout. No partial state was removed or repaired.
+Only the new error output was read to report the refusal; no duplicate bundle
+verification or broader implementation investigation was performed. Raw task
+content, prompts, private host paths, endpoints and credentials are not published.
+
+### Preserved preparation evidence; not repeated
+
+The prior Codex preparation used the unchanged `load_plan()` and
+`compile_grading_plan()` APIs to select the first `codex` dispatch entry.
+One `gpt54_disposable_checkout.prepare_disposable_checkout()` call returned its
+built-in verified marker and exited 0, without an additional verifier. Its
+saved result timestamp is `2026-09-22T00:22:29.193166+00:00`. It reused the
+reference-only source root and separate original parquet from the successful
+V2 handoff, with the preparer's normal pinned-byte checks and publication.
+Its detached checkout, configuration/input bundles, reservation, three readiness
+markers and private handoff remain retained; that preparation created no
+quarantine. This is historical `local_reviewed_checkout_and_bundles` evidence,
+not a successful result from the new Step 1 command.
 
 The earlier V2 operation prepared `gpt54_v2_codex_v1_v2_r1`, condition
 `sandbox_v2`, repeat 1, ABBA index 0. It made one preparer call, exited 0 and
@@ -48,16 +79,24 @@ preserving `reference_files/...`. It placed no parquet, `data/`, logs or unrelat
 files there. This authorized layout correction followed the earlier
 pre-reservation refusal; validators and canonical fields were unchanged.
 Its checkout, bundles, reservation, markers and handoff remain retained without
-quarantine. These V2 facts are preserved evidence, not new measurements.
+quarantine. Neither preparation nor its verifier was repeated. Original inputs,
+cache, prior handoffs, all readiness markers and the entire V2 checkout were
+left unchanged. No input source was recopied or separately rehashed. The GHCP
+output bundle was not opened, rehashed or adopted as GPT-5.4 evidence.
+
+Two locally prepared conditions are not a paired runtime result or completion
+of the historical five-environment comparison. The failed Step 1 attempt adds
+no such result.
 
 ### Exact identities
 
-Both preparations use the exact leader-reviewed source
+The preparations and this Step 1 command use the exact leader-reviewed source
 `778a627bbb5404f33e5e62019382fa107aa47840`, tree
 `2619c0118f4fabdd4715a45726c4c51762487f29`. The manifest's historical
 `source_base_sha` remains `a855c5a9604554499be9eed4e5eb5523e8ad95d5`;
-it is not the source used for these preparations. The source authorization is
-for offline preparation only, not launch or review of the new records.
+it is not the source used for these operations. The latest authorization added
+only this one local Step 1 command, not Step 2, model execution, launch or review
+of the new records.
 
 | Identity | SHA256 |
 | --- | --- |
@@ -67,7 +106,8 @@ for offline preparation only, not launch or review of the new records.
 | Source-pin mapping | `e80f2659ce0cc05784194ba216803435b50266abdaedaac7fe17ad452bdcbe72` |
 | Ordered five-task source projection | `1635898065af9948c5e611ff0bb44d23620f20ad11fa69c9f1202de931dbb090` |
 
-The canonical task order is unchanged:
+The canonical task order is unchanged in the registered plan. It is not a
+successful Step 1 output observation:
 
 ```text
 02aa1805-c658-4069-8a6a-02dec146063a
@@ -77,10 +117,11 @@ The canonical task order is unchanged:
 0818571f-5ff7-4d39-9d2c-ced5ae44299e
 ```
 
-These are emitted artifact identities, not token quantities or model results.
-Paths are relative to the corresponding prepared checkout.
+These are preserved preparation artifact identities, not newly measured output,
+token quantities or model results. Paths are relative to the corresponding
+prepared checkout.
 
-#### Newly observed Codex artifacts
+#### Preserved Codex artifacts; not reverified
 
 | Published role | Bytes | SHA256 |
 | --- | ---: | --- |
@@ -106,8 +147,8 @@ Paths are relative to the corresponding prepared checkout.
 
 #### Original input identities shared by the preparations
 
-The new Codex input marker reports these same pinned bytes. The V2 identities
-above and the shared task order are preserved without reopening its bundles.
+The earlier Codex and V2 input markers reported these same pinned bytes. Those
+identities and the shared task order are preserved without reopening the bundles.
 
 | Published role | Bytes | SHA256 |
 | --- | ---: | --- |
@@ -117,13 +158,13 @@ above and the shared task order are preserved without reopening its bundles.
 
 ### Validation, remaining work and review scope
 
-The Codex preparer's built-in final verification checked the reviewed checkout
-and both bundles before returning the marker. Its actual return is the new
-preparation evidence; no fixture or saved manifest alone substitutes for it.
-The new sanitized result records one call, one prepared Codex run, exit 0 and
-zero additional verifier calls. Record-to-evidence comparison,
-`git diff --check` and scoped editorial fidelity checks passed. None repeated
-preparation or executed a test body.
+The current evidence is the actual Step 1 exit status and newly saved sanitized
+error trace, not a passing test or preprocessing verdict. Record-to-evidence
+comparison, `git diff --check` and scoped editorial fidelity checks passed.
+Those checks examined records only; they did not rerun Step 1, a preparer or
+a verifier. The missing local Step 0 manifest is the precise stopping point.
+Its disposition requires a separate leader decision; no follow-up input
+transformation, generation or implementation is included here.
 
 `launch_enabled`, `launch_allowed`, `dispatch_launch_allowed` and
 `full_220_allowed` are false. No paid execution is authorized. The original
@@ -145,32 +186,34 @@ price or cost decision was added. The published grader configuration is not
 grading or judge-validation evidence. No Project card is completed by these
 two local preparations.
 
-The leader reviewed the complete immutable two-file V2 records diff at
-`1344aa77a6316192b72b785baabd4b65fa16655f` against
-`778a627bbb5404f33e5e62019382fa107aa47840` and identified no correctness or
-evidence-scope findings. This was a read-only review of the earlier one-run
-`sandbox_v2` preparation record only. It does not approve this new Codex
-operation, its artifacts, the new records or launch. The substantive Codex
-records follow that review boundary; this is not an acknowledgment-only change.
+The leader directly reviewed records HEAD
+`569497931d83d404683d0b223312fa2404d088ea`, including the immutable delta from
+`1344aa77a6316192b72b785baabd4b65fa16655f`, and identified no correctness or
+evidence-scope findings in the two-condition preparation records. This read-only
+review covers that records HEAD only. It does not approve this later Step 1
+operation, these new records, launch or merge. The current substantive failure
+record follows that boundary; this is not an acknowledgment-only change.
 
 Only `CHANGELOG.md` and this latest-task record change. Prior GHCP staging and
 infrastructure changelog entries are preserved. Production code, plans, pins,
-workflows and validators are unchanged. These new records extend the existing
-draft PR #646 without waiting for CI or review. No new CI or review verdict is
-claimed, and the earlier checks were not polled.
+workflows and validators are unchanged. This final substantive unit extends
+draft PR #646 and freezes `b/gpt54-one-local-preparation-20260921` after
+publication pending the leader's review/merge decision. No new CI or immutable
+review verdict is claimed; checks were not polled and no review was awaited.
 
 The full skill catalog was reviewed once. `experiment-design` preserved the
-existing tasks, controls and local-preparation-only acceptance boundary.
-`experiment-report-en` separated actual byte/lineage verification from runtime
-claims; `im-not-ai-en` protected hashes, counts, flags and qualifications in the
+existing tasks and controls, with only the authorized local Step 1 attempt added.
+`experiment-report-en` separated the new refusal from historical preparation
+success; `im-not-ai-en` protected hashes, counts, flags and qualifications in the
 English records. No implementation or workflow/security change calls for
 `llm-systems-engineer` or `extreme-reasoner`. UI/animation, grading and
 repo-readiness skills do not apply; no new framework was introduced.
 
-No tests, build, extra verifier, workflow dispatch, Step 1/Step 2
-execution, provider/model call, VM launch, grader, Azure/HF access, credential
-inspection or paid operation ran. No fetch, broad search, sleep or polling was
-needed. GitHub publication of these records is separate from the offline input
-operation. The existing author and committer remain
+Only the authorized Step 1 argv ran. No Step 2, V2 stage, remaining compiled
+command, `require_workflow_launch()`, workflow dispatch, test, build, preparer,
+extra verifier, provider/model call, VM launch, grader, Azure/HF access,
+credential inspection or paid operation ran. No fetch, broad search, sleep or
+polling was needed. GitHub publication of these records is separate from the
+offline operation. The existing author and committer remain
 `hyeonsangjeon <wingnut0310@gmail.com>`, without attribution/session trailers.
 No merge or Project change is authorized. These are pre-merge facts only.
