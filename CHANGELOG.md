@@ -388,6 +388,42 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Add a plan-first local dispatcher and separate preregistration for the Codex
+  external-budget pilot: the existing score-free `advance_check_5` cohort,
+  A/B/C across repetitions 1/2, exactly 30 cells in per-task A1/B1/C1/C2/B2/A2
+  order, with one active child. It compiles the existing GPT-5.4 Foundry/xhigh
+  profile and wires serial Step 1/Step 2 execution with isolated configs,
+  checkouts, outputs, ledgers, native workspaces and host checkpoints. A keeps
+  four fresh attempts; B/C share retention, fixed backoff and the unchanged
+  180-minute cumulative/30-minute attempt policy. C requires the reviewed host
+  error-feedback capability. Default plan-only operation cannot authorize a
+  launch. The single fetched main, `149d89afd43e54a46b6f172b71c2cf23d0cb7a17`,
+  lacks that capability. The plan records `c_host_feedback_capability_missing`,
+  and production `--execute` refuses before checkout or pipeline children.
+  Existing original-input, canonical Step 0, config, clean-source, pinned
+  runtime, host and route guards remain required. Durable state prevents
+  completed-cell redispatch and fresh clocks on restart; partial preparation,
+  missing/corrupt state and colliding roles refuse without clobbering them.
+  Failed/filtered/expired cells stay in the denominator, and missing receipts
+  stay missing or partial. Results and artifact links are not graded quality
+  or invoice completeness; fixed grading remains a separately directed stage.
+  The new focused family at `6967ce8158459fd32506a14c25fa924e5b4747f8`
+  reported `25 passed in 286.25s (0:04:46)`, exit 0. It uses synthetic inputs,
+  fake children/capability and clocks through the actual CLI/command builder,
+  validators, locks and deadline store. This is offline dispatch/persistence
+  evidence, not model consumption, live recovery or a pilot result. The exact
+  command and test boundary are in `tasks/LATEST_TASK_RESULT/README.md`.
+  No shared core or existing active source pin changed; 37/58 source sets,
+  full-grader identities, historical results and prior real artifacts remain
+  intact. The leader's #652 review `5281735646` at
+  `b116563744351ab03769e356eb00fcfa39565da9` covers its feedback intervention,
+  not this dispatcher. Immutable-HEAD review, carrying-HEAD CI, integration of
+  C-capable source, live/input readiness, separately directed pilot execution
+  and grading remain outstanding. No earlier focused selection or full suite
+  was rerun, no dependency was installed and no native/provider/model/grader
+  or paid run occurred. Design/reporting guidance kept the fixed controls and offline
+  evidence boundary explicit; no Project-card completion is claimed.
+
 - Add retained-workspace/native-thread continuation to the existing opt-in
   Codex B/C deadline path. A keeps fresh sessions and four attempts; legacy
   defaults, task/model/effort/context/grading settings, the 180-minute cumulative
