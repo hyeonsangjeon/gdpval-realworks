@@ -446,8 +446,12 @@ def _reference_basenames(reference_files: list[str], reference_file_urls: list[s
 # folded the prompt and every rubric line into one line, so without this the
 # ``.pdf`` of a reference input the task was told to read against satisfies
 # ``final.*\.pdf`` from a trigger word several sentences away. Requiring a space
-# in front is what separates the two readings.
+# in front is what separates the two readings. Parenthesized Word tokens are
+# handled separately below, within an explicit deliverable-format clause.
 _STANDALONE = r"(?<!\S)"
+# A Word extension must end the token, not start .docxm or .docx.bak. A
+# sentence-ending period is still allowed.
+_WORD_TOKEN_END = r"(?![\w/\\-]|\.\S)"
 
 
 def _required_primary_extensions(text: str) -> set[str]:
@@ -455,7 +459,16 @@ def _required_primary_extensions(text: str) -> set[str]:
     exts: set[str] = set()
     strong_patterns = [
         (rf"(single|exactly one|final|primary|deliverable).*{_STANDALONE}\.pdf|single pdf|exactly one .*pdf", {".pdf"}),
-        (rf"(single|exactly one|final|primary|deliverable).*{_STANDALONE}\.docx|single microsoft word|single word file", WORD_EXTENSIONS),
+        (rf"(single|exactly one|final|primary|deliverable).*{_STANDALONE}\.docx{_WORD_TOKEN_END}|single microsoft word|single word file", WORD_EXTENSIONS),
+        # Do not let a distant trigger reach into a parenthesized reference
+        # mention. Only this local output-format declaration admits (.docx).
+        (
+            r"\bdeliverable (?:is|must be) "
+            r"(?:(?:provided|submitted|delivered) )?(?:(?:as|in) )?"
+            r"(?:a )?(?:single )?(?:microsoft )?word "
+            rf"\(\.docx\){_WORD_TOKEN_END}",
+            WORD_EXTENSIONS,
+        ),
         (rf"(single|exactly one|final|primary|deliverable).*{_STANDALONE}\.xlsx|single excel workbook|single workbook", SPREADSHEET_EXTENSIONS),
         (rf"(single|exactly one|final|primary|deliverable).*{_STANDALONE}\.pptx|single powerpoint|single presentation", PRESENTATION_EXTENSIONS),
         (rf"(single|all content|deliverable).*{_STANDALONE}\.zip|single \.zip|single zip", {".zip"}),

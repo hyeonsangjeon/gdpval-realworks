@@ -3,11 +3,14 @@
 No Azure calls, grading, rendering, pandas, parquet, or network access. The
 checked-in contract fixture contains only synthetic selector signals and exact
 public task/source identities; file lists and owner expected targets remain in
-this test module.
+this test module. The parenthesized-docx regression separately uses one
+verbatim rubric criterion and the committed exp035 file manifest, not grades
+or generated file contents.
 """
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import sys
 from typing import Any
@@ -584,3 +587,116 @@ def test_candidates_with_no_document_still_decline_to_choose():
     assert selection.task_class == "ambiguous"
     assert selection.selection_rule == "ambiguous_candidates"
     assert selection.primary_targets == []
+
+
+# Verbatim criterion (score 2) for 15ddd28d-8445-4baa-ac7f-f41372e1344e from
+# openai/gdpval@11e7900cdcac61bc4daf59e65feb238acda98fbf. Only this selection
+# requirement is projected; it is not a substitute prompt or a quality grade.
+PARENTHESIZED_DOCX_REQUIREMENT = (
+    "The deliverable is provided as a single Word (.docx) or PDF (.pdf) document."
+)
+
+
+@pytest.mark.parametrize("reverse_files", [False, True], ids=["recorded", "reversed"])
+def test_parenthesized_docx_selects_recorded_exp035_variant(reverse_files):
+    task_id = "15ddd28d-8445-4baa-ac7f-f41372e1344e"
+    manifest_path = (
+        REPO_ROOT / "batch-runner/docs/run_records"
+        / "exp035_run34685779030_partial/deliverable_manifest.json"
+    )
+    recorded = json.loads(manifest_path.read_text(encoding="utf-8"))[task_id]
+    names = [entry["name"] for entry in recorded]
+    assert names == [
+        "Modlev_Tail_Lamp_Negotiation_Strategy.docx",
+        "modlev_tail_lamp_negotiation_strategy.md",
+    ]
+    paths = [_path(task_id, name) for name in names]
+    selection = select_deliverables(
+        task_id=task_id,
+        deliverable_files=list(reversed(paths)) if reverse_files else paths,
+        rubric_items=[{"criterion": PARENTHESIZED_DOCX_REQUIREMENT, "score": 2}],
+    )
+
+    assert selection.selection_status == "ok"
+    assert selection.task_class == "format_variants"
+    assert selection.selection_rule == "set_diff_then_format_variant"
+    assert [target.paths for target in selection.primary_targets] == [[paths[0]]]
+    assert selection.primary_targets[0].evidence_rule == "format_variant_required_format"
+    assert selection.support_artifacts == [paths[1]]
+    assert selection.reference_files_excluded == []
+    assert selection.selection_error is None
+
+
+@pytest.mark.parametrize(
+    "requirement",
+    [
+        "The final file is a .docx",
+        "The deliverable is a single .docx.",
+        "The deliverable must be a Word (.docx) document.",
+        "The final deliverable is a Word (.DOCX).",
+    ],
+)
+def test_parenthesized_docx_preserves_explicit_word_requirements(requirement):
+    selection = _uniform_selection(["report.md", "report.docx"], [requirement])
+
+    assert selection.selection_status == "ok"
+    assert selection.selection_rule == "set_diff_then_format_variant"
+    assert _selected_names(selection) == {"report.docx"}
+    assert selection.support_artifacts == [_path("uniform", "report.md")]
+
+
+@pytest.mark.parametrize(
+    "mention",
+    [
+        "The final deliverable refers to reference_file.docx.",
+        "The final deliverable refers to reference_file(.docx).",
+        "The deliverable is provided as a single Word report(.docx) document.",
+        "The deliverable is based on a Word (.docx) reference.",
+        "The reference is provided as a single Word (.docx) document.",
+        "Produce the final deliverable. Read the reference Word (.docx) document.",
+    ],
+)
+def test_parenthesized_docx_does_not_promote_filenames_or_references(mention):
+    selection = _uniform_selection(["report.docx", "report.md"], [mention])
+
+    assert selection.selection_status == "selection_error"
+    assert selection.task_class == "format_variants"
+    assert selection.selection_rule == "format_variant_no_match"
+    assert selection.primary_targets == []
+    assert selection.support_artifacts == [
+        _path("uniform", "report.docx"), _path("uniform", "report.md")
+    ]
+
+
+@pytest.mark.parametrize(
+    "token",
+    [
+        "(.docxm)", "(.docx_backup)", "(.docx.bak)", "(.docx)backup",
+        "(.docx).bak", "(.docx)/notes", ".docxm", ".docx_backup",
+        ".docx.bak", ".docx/notes",
+    ],
+)
+def test_parenthesized_docx_does_not_accept_unsupported_token_suffixes(token):
+    selection = _uniform_selection(
+        ["report.docx", "report.md"],
+        [f"The deliverable is provided as a single Word {token} document."],
+    )
+
+    assert selection.selection_status == "selection_error"
+    assert selection.selection_rule == "format_variant_no_match"
+    assert selection.primary_targets == []
+
+
+@pytest.mark.parametrize("reverse_files", [False, True], ids=["forward", "reversed"])
+def test_parenthesized_docx_keeps_multiple_matching_word_variants_ambiguous(reverse_files):
+    names = ["report.docx", "report.md", "other.docx"]
+    selection = _uniform_selection(
+        list(reversed(names)) if reverse_files else names,
+        [PARENTHESIZED_DOCX_REQUIREMENT],
+    )
+
+    assert selection.selection_status == "selection_error"
+    assert selection.task_class == "format_variants"
+    assert selection.selection_rule == "format_variant_no_match"
+    assert selection.primary_targets == []
+    assert set(selection.support_artifacts) == {_path("uniform", name) for name in names}
