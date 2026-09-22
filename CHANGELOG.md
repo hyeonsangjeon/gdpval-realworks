@@ -13,6 +13,35 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Recognize an explicit deliverable-format clause containing standalone
+  `Word (.docx)` without widening the shared extension boundary. The public
+  selector chooses `Modlev_Tail_Lamp_Negotiation_Strategy.docx` for exp035 task
+  `15ddd28d-8445-4baa-ac7f-f41372e1344e` from its unchanged recorded two-file
+  set in both tested orders; the Markdown sibling remains support. The test
+  preserves the real Word-or-PDF rubric wording. Filename/reference mentions,
+  unsupported token suffixes and multiple matching Word files do not become
+  arbitrary primaries. The initial focused invocation at
+  `6cd3360e092fbf1505c672fd37f249ecf09a1a39` reported
+  `42 passed, 19 deselected in 0.29s`, exit 0. A subsequent code read found
+  that the new suffix guard would reject a quoted sentence-ending period.
+  Correction `d0de31307d7cc6e7dfa665d95e97b4eb6e651e25`, based on
+  `6f7c77a9de52678e188f025b86de537ce8825dee`, adds three punctuation cases and
+  preserves those ordinary Word requirements. Both focused invocations used:
+  `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider --tb=short batch-runner/tests/test_deliverable_selector.py batch-runner/tests/test_selector_reads_a_filename_as_a_filename.py -k 'parenthesized_docx or an_extension_written_against_a_name or an_extension_standing_on_its_own or a_trigger_word_cannot_reach_a_filename or the_expert_answer_is_no_longer_refused_for_its_format or the_supplied_file_is_still_kept_out_of_what_gets_graded or a_task_that_really_asks_for_one_format'`.
+  The necessary rerun reported `45 passed, 19 deselected in 0.28s`, exit 0,
+  on the unchanged selector/test bytes committed in the correction above.
+  `git diff --check` passed. Real requirement/file-list evidence and synthetic
+  guard cases establish candidate choice only, not grading quality, score lift
+  or eight restored tasks. Historical grades, results, artifacts, costs and
+  baseline records are unchanged; future grading uses the existing source
+  fingerprint mechanism with the changed selector bytes. No grader, model,
+  rendering or paid operation ran. One GitHub source fetch found main unchanged;
+  no integration was needed and no CI status was queried. The preceding #648 records review
+  `5274558309`, `FINAL-APPROVE` at
+  `ae784cac096bb4cd3338390bddf47309de3e3667`, does not review this implementation.
+  Independent review and final automatic checks remain outstanding. See
+  `tasks/LATEST_TASK_RESULT/README.md` for the scoped evidence and remaining work.
+
 - Require an explicit local canonical Step 0 manifest for GPT-5.4 Codex input
   preparation. The full file is copied to
   `batch-runner/workspace/step0_needs_files_manifest.json`, bound by size/SHA256
