@@ -27,6 +27,7 @@ neighbouring one while still being labelled Codex.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
@@ -1186,8 +1187,7 @@ class CodexAgentRunner(RecordsItsFirstRequest):
         task_text = self.build_task_text(
             task_prompt, workspace, occupation=occupation, perception_text=perception_text,
         )
-        if binding["request_sha256"] != self._continuation_request_digest(task_text, experiment_prompt):
-            raise TaskDeadlineRefused("native continuation rendered request differs from its binding")
+        self._validate_continuation_inputs(binding, task_text, experiment_prompt)
         self._settle_continuation_observations(deadline, binding)
 
     @staticmethod
@@ -1198,6 +1198,37 @@ class CodexAgentRunner(RecordsItsFirstRequest):
             "task_text": task_text,
             "developer_instructions": system.strip() if isinstance(system, str) and system.strip() else None,
         })
+
+    @staticmethod
+    def _native_turn_input(task_text: str, recovery_context: dict | None) -> str:
+        """Keep the base task intact; only C's validated host context is appended."""
+        if recovery_context is None:
+            return task_text
+        return (
+            task_text + "\n\n[HOST RECOVERY CONTEXT]\n"
+            + json.dumps(recovery_context, sort_keys=True, separators=(",", ":"), allow_nan=False)
+            + "\nUse the retained work and native thread to continue the original task. "
+            "Choose your next task-solving strategy using this observed failure. "
+            "The task, model/tools, fixed retry waits and external limits are unchanged; "
+            "you cannot change them. Remaining time is the host's snapshot at this "
+            "attempt's admission and continues to decrease."
+        )
+
+    def _validate_continuation_inputs(
+        self, binding: dict, task_text: str, experiment_prompt: dict | None,
+    ) -> None:
+        """Check both the immutable task and every bound per-turn input before replay.
+
+        The deadline store validates each context against its own preceding
+        observation/admission. This check additionally binds what was actually
+        submitted, including developer instructions, without saving prompt text.
+        """
+        if binding["request_sha256"] != self._continuation_request_digest(task_text, experiment_prompt):
+            raise TaskDeadlineRefused("native continuation rendered request differs from its binding")
+        for turn in binding["turns"]:
+            expected = self._native_turn_input(task_text, turn["recovery_context"])
+            if turn["input_sha256"] != self._continuation_request_digest(expected, experiment_prompt):
+                raise TaskDeadlineRefused("native continuation submitted input differs from its binding")
 
     def _sandbox_preset(self) -> Any:
         """The filesystem policy for the agent: write inside its workspace.
@@ -1543,8 +1574,7 @@ class CodexAgentRunner(RecordsItsFirstRequest):
         try:
             continuation = task_deadline.continuation() if retains_thread else None
             if continuation is not None:
-                if continuation["request_sha256"] != self._continuation_request_digest(task_text, experiment_prompt):
-                    raise TaskDeadlineRefused("native continuation rendered request differs from its binding")
+                self._validate_continuation_inputs(continuation, task_text, experiment_prompt)
             if task_deadline is not None:
                 task_deadline.bound_timeout(self.timeout)
             try:
@@ -1625,11 +1655,17 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                     self._abandon_call(call_id, "deadline refused before the turn started")
                     call_id = None
                     raise
+            turn_input = task_text
             if retains_thread:
-                before_totals = CodexTokenTotals(**task_deadline.begin_turn(attempt_index, call_id))
+                recovery_context = task_deadline.recovery_context(attempt_index)
+                turn_input = self._native_turn_input(task_text, recovery_context)
+                before_totals = CodexTokenTotals(**task_deadline.begin_turn(
+                    attempt_index, call_id, recovery_context=recovery_context,
+                    input_sha256=self._continuation_request_digest(turn_input, experiment_prompt),
+                ))
                 task_deadline.bound_timeout(self.timeout)
             try:
-                turn_handle = thread.turn(task_text)
+                turn_handle = thread.turn(turn_input)
             except Exception as exc:  # noqa: BLE001
                 category = "turn_start_failed"
                 if task_deadline is not None:
@@ -1638,6 +1674,8 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                     if _turn_failure_category(exc) == "content_filtered":
                         category = "content_filtered"
                         task_deadline.stop_content_filter()
+                    elif retains_thread:
+                        task_deadline.observe_turn_start_failure(attempt_index)
                 else:
                     # Preserve the legacy pre-turn accounting boundary.
                     self._abandon_call(call_id, "the turn never started")
@@ -1682,7 +1720,23 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                 if task_deadline is not None and terminal is not None:
                     task_deadline.stop_content_filter()
                 if retains_thread:
-                    task_deadline.observe_turn(attempt_index, asdict(after), terminal_reason=terminal)
+                    # Only host-classified fields enter C's feedback. The pinned
+                    # SDK has no typed retry guidance; do not parse instructions
+                    # or Retry-After values out of its free-form error strings.
+                    failure_observation = None
+                    if (not timed_out and not deadline_expired and _turn_failure_category(
+                        failure, http_status_code=observed.http_status_code,
+                    ) == "rate_limited"):
+                        status = observed.http_status_code
+                        failure_observation = {
+                            "category": "rate_limited",
+                            "http_status_code": status if type(status) is int and 100 <= status <= 599 else None,
+                            "retry_guidance": None,
+                        }
+                    task_deadline.observe_turn(
+                        attempt_index, asdict(after), terminal_reason=terminal,
+                        failure_observation=failure_observation,
+                    )
                 measured = turn_usage_delta(before_totals, after)
                 if measured.is_empty and not retains_thread:
                     return measured
