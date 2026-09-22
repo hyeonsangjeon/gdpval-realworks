@@ -19,28 +19,46 @@ entries land under a fresh dated heading the day they merge to `main`.
   and reread through the unchanged schema 4 / `deliverable_only` canonical
   validator. Missing, wrong, linked, collided or partial inputs cannot report
   ready. The materializer, checkout/API/CLI, verifier, workflow helper, source
-  pins, related fixtures and documentation now cover this role. V2 semantics,
+  pins, related fixtures and documentation cover this role. V2 semantics,
   five-task order, comparison controls, six blockers and false launch flags are
   unchanged. Workflow YAML and the Step 1/canonical validator are unchanged;
   hosted lanes without an explicit manifest source remain fail-closed.
   Directly coupled Foundry/GHCP digest updates change pins only.
-  On implementation `8728c350266578c299dd64b974f9368288de09d7`, based on
-  `778a627bbb5404f33e5e62019382fa107aa47840`, the sole command
+  On implementation `8728c350266578c299dd64b974f9368288de09d7`, originally based
+  on `778a627bbb5404f33e5e62019382fa107aa47840`, the earlier focused command
   `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider --tb=short batch-runner/tests/test_gpt54_run_input_bundle.py batch-runner/tests/test_gpt54_disposable_checkout.py batch-runner/tests/test_gpt54_workflow_gate.py batch-runner/tests/test_gpt54_comparison_preflight.py -k step0_manifest`
-  reported `45 passed, 319 deselected in 18.36s`, exit 0; implementation
-  `git diff --check` passed. Synthetic fixtures with explicit test-only pins
-  exercise the actual materializer, local loader, canonical consumer and
-  Step 1/capture, including the five ordered tasks. This is not a new real-data
-  preparation or Step 1 success. Old artifacts and frozen PR #646 are untouched.
-  Leader review `5273344624`, `FINAL-APPROVE` at
-  `259f50567e95c07b720ac51a3f020453fad449bf`, covers preceding records only,
-  not this implementation. The later completion records are outside the tested
-  implementation commit. One source fetch found main unchanged; no integration
-  merge was needed. Implementation review, fresh final-HEAD CI and an explicit
-  canonical source for any separately authorized real preparation remain.
-  `experiment-design`, backend guidance, `experiment-report-en` and
-  `im-not-ai-en` were applied. No workflow edit required `extreme-reasoner`;
-  UI/animation and repo-readiness do not apply. No live execution was attempted.
+  reported `45 passed, 319 deselected in 18.36s`, exit 0. Synthetic fixtures
+  with explicit test-only pins exercise the actual materializer, local loader, canonical consumer and
+  Step 1/capture, including five ordered tasks; this is not a new real-data
+  preparation or Step 1 success and was not a passing full comparison job.
+  The supplied Backend run `35677536185`, `comparison-contracts` job
+  `106587081789`, completed `2026-09-22T02:14:34Z` at
+  `928f4576848b73f0f22285747685148d9e52a317`, reported
+  `3 failed, 939 passed in 1022.89s (17:02)`. Its `codex_r1`, `codex_r2` and
+  `relocated_codex` cases failed the old unchanged-parent snapshot assertion
+  after successful publication: creating `batch-runner/workspace` changes the
+  existing parent's directory link count on the hosted filesystem.
+  Correction `0c5074665cd01be89e9d380614903471ab819f0f` permits only an unchanged
+  or +1 directory link count when the named intended child is created. Parent
+  mode/type, all existing file bytes/link counts, symlink targets, other rows,
+  exact added-file set, no-clobber and read-only checks remain fixed. One
+  invocation of the three failed cases plus `v2_r1`, `v2_r2`, `relocated_v2`
+  and `existing_data_parent` reported `7 passed in 7.30s`, exit 0; the exact
+  command is in `tasks/LATEST_TASK_RESULT/README.md`. `git diff --check` passed.
+  No production behavior, source pin or workflow changed in this correction;
+  neither the earlier 45-case selection nor the 942-case job was rerun.
+  One fetch and ordinary merge integrated exact baseline
+  `928c3a7e69b28508505479198d329c23c5de8594`, preserving the earlier operational
+  changelog entry and leaving its branch and real artifacts untouched.
+  The leader's diagnosis is not implementation approval. Earlier review
+  `5273344624`, `FINAL-APPROVE` at
+  `259f50567e95c07b720ac51a3f020453fad449bf`, covers records
+  only; final-HEAD CI and implementation review remain required. Completion
+  records follow the tested correction commit. Any separately authorized real
+  preparation still requires an explicit canonical manifest source.
+  `experiment-report-en` and `im-not-ai-en` were applied to this correction's
+  records. No experiment/control change requires `experiment-design`; workflow,
+  UI/animation and repo-readiness skills do not apply. No live execution ran.
 
 - Correct PR #642's pytest target helper so it separates option tokens and
   values from positional targets before any directory inspection. At

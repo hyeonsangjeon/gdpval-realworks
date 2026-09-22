@@ -1,111 +1,99 @@
 # Latest substantive task result
 
-## PROJECT5-GPT54-STEP0-MANIFEST-FIX-1016
+## PROJECT5-PR647-PARENT-SNAPSHOT-1118
 
-GPT-5.4 Codex preparation now requires an explicit local canonical Step 0
-manifest before it can report ready. The input bundle copies its full bytes
-to `batch-runner/workspace/step0_needs_files_manifest.json`, records its size
-and SHA256, and verifies the installed bytes with the unchanged canonical
-validator. The accepted prior real Step 1 exit 1 was not reproduced or retried.
+The GPT-5.4 input-bundle test now permits only the intended parent-directory
+link-count change when publication creates a child directory. The seven
+requested cases passed. This correction changes the existing test and the two
+completion records only; production behavior, canonical validation, source
+pins, task order, controls and workflow YAML are unchanged.
 
-The feature starts from `778a627bbb5404f33e5e62019382fa107aa47840`.
-Tested implementation commit: `8728c350266578c299dd64b974f9368288de09d7`.
-This later records update is outside the tested implementation commit.
+### Source integration and supplied hosted failure
 
-### Implementation and preserved boundaries
+One `git fetch --no-tags origin main` returned 0 and exact main
+`928c3a7e69b28508505479198d329c23c5de8594`. Ordinary merge
+`eac39af656861549e572e9b6b8df24d03bd84580` integrated that baseline into this
+feature branch. Only the expected latest-result conflict required resolution;
+there was no production conflict. The changelog retains the complete earlier
+two-preparation/Step 1 operational entry and the Step 0 fix entry. The old
+records branch and real artifacts were not touched.
 
-The input materializer, disposable-checkout API/CLI and workflow helper accept
-the explicit `step0_manifest` / `--step0-manifest` source. Codex refuses missing,
-unsafe or incompatible sources before reservation/readiness. V2 still requires
-no Step 0 input. Publication retains no-clobber, no-links, held-parent,
-reservation/partial retention and ready-last protections. Verification rereads
-the installed file and does not trust a marker's digest alone.
+The leader supplied Backend run `35677536185`, `comparison-contracts` job
+`106587081789`, completed `2026-09-22T02:14:34Z` at
+`928f4576848b73f0f22285747685148d9e52a317`. It reported
+`3 failed, 939 passed in 1022.89s (17:02)`. All failures were the
+`codex_r1`, `codex_r2` and `relocated_codex` cases of
+`test_run_input_bundle_is_exact_atomic_and_gates_execution` in
+`batch-runner/tests/test_gpt54_run_input_bundle.py`, at the old line 730.
+No hosted logs were queried and the job was not rerun locally.
 
-The unchanged `deliverable_only` policy requires schema 4 and canonical SHA256
-`463fc119841dbe67e427c372da93ff55972139377aa03194764b57d87004c512`.
-The selected source projections, reference records and deliverables must agree.
-The full canonical manifest is retained; a generated five-task substitute is
-not accepted. The fixed task order, controls, repeats and limits are unchanged.
-No bootstrap/download orchestration or ambient-workspace discovery is used.
+`_tree_snapshot()` records mode, link count and regular-file bytes or symlink
+target. Codex intentionally creates `batch-runner/workspace`, which changes
+the existing `batch-runner` directory's link count on the hosted filesystem.
+Publication and `_assert_complete()` had succeeded before the stale parent
+preservation assertion failed. The old assertion exempted only `data`.
 
-The GPT-5.4 source closure now has 36 pins, including the two existing canonical
-reader modules. Directly coupled Foundry shared-source digests and the GHCP
-test's Foundry digest were refreshed without changing their behavior or
-assertions. Documentation and related fixture callers were updated. Step 1,
-the canonical consumer/validator, QA, HF upload code and workflow YAML are
-unchanged. Existing hosted workflow lanes do not supply this new source and
-remain fail-closed; hosted preparation is not established by this fix.
+### Narrow correction and validation
 
-### Focused evidence
+The replacement still compares every previously existing row. For `data` when
+`data/gdpval-local` is created, and for `batch-runner` when Codex creates
+`batch-runner/workspace`, it requires the child to be absent before and a
+directory afterward. It preserves the parent's exact mode/type and payload
+and permits only an unchanged link count or an increase of 1. This accounts
+for filesystem-specific directory metadata; it does not relax single-link
+regular-file requirements.
 
-One invocation on the tested implementation commit, exit 0:
+All other rows remain exactly equal, including existing file bytes/link counts
+and symlink targets. The exact added-file set, canonical manifest binding,
+no-clobber and read-only verification assertions remain intact. V2's
+`batch-runner` parent receives no exemption.
+
+Tested correction commit: `0c5074665cd01be89e9d380614903471ab819f0f`.
+The later completion-record commit is outside that tested commit. Exactly one
+focused invocation ran:
+
+```text
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider --tb=short 'batch-runner/tests/test_gpt54_run_input_bundle.py::test_run_input_bundle_is_exact_atomic_and_gates_execution[codex_r1]' 'batch-runner/tests/test_gpt54_run_input_bundle.py::test_run_input_bundle_is_exact_atomic_and_gates_execution[codex_r2]' 'batch-runner/tests/test_gpt54_run_input_bundle.py::test_run_input_bundle_is_exact_atomic_and_gates_execution[relocated_codex]' 'batch-runner/tests/test_gpt54_run_input_bundle.py::test_run_input_bundle_is_exact_atomic_and_gates_execution[v2_r1]' 'batch-runner/tests/test_gpt54_run_input_bundle.py::test_run_input_bundle_is_exact_atomic_and_gates_execution[v2_r2]' 'batch-runner/tests/test_gpt54_run_input_bundle.py::test_run_input_bundle_is_exact_atomic_and_gates_execution[relocated_v2]' 'batch-runner/tests/test_gpt54_run_input_bundle.py::test_run_input_bundle_is_exact_atomic_and_gates_execution[existing_data_parent]'
+```
+
+Result: `7 passed in 7.30s`, exit 0. No additional changed row, failed local
+attempt or targeted rerun occurred. `git diff --check` passed. This is focused
+synthetic validation, not a passing verdict for the full comparison job.
+
+### Preserved implementation evidence
+
+Implementation `8728c350266578c299dd64b974f9368288de09d7`, originally based on
+`778a627bbb5404f33e5e62019382fa107aa47840`, reported
+`45 passed, 319 deselected in 18.36s`, exit 0, for this earlier command:
 
 ```text
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider --tb=short batch-runner/tests/test_gpt54_run_input_bundle.py batch-runner/tests/test_gpt54_disposable_checkout.py batch-runner/tests/test_gpt54_workflow_gate.py batch-runner/tests/test_gpt54_comparison_preflight.py -k step0_manifest
 ```
 
-Result: `45 passed, 319 deselected in 18.36s`. No targeted failure or rerun
-occurred. `git diff --check` passed for the implementation.
+Those cases used synthetic parquet/reference/manifest bytes and explicit
+test-only pins. They exercised the actual materializer, local loader,
+`NeedsFilesManifest` checks and Step 1/capture, including five ordered tasks.
+That selection remains valid evidence under its original scope; it was not
+rerun and never established a passing full comparison job. Neither result
+establishes a new real-data preparation or original-data Step 1 success.
 
-The integration case uses synthetic parquet, references and a canonical-manifest
-fixture with explicit test-only pins. It exercises the actual materializer,
-local pyarrow loader, `NeedsFilesManifest.load()`, schema/digest/source checks
-and Step 1 serializer/capture, emitting the five ordered tasks and matching
-prepared fingerprint and capture. The full supplied manifest includes an
-unselected fixture entry, so the test also checks that publication does not
-reduce it to the selected cohort. Consumer checks were not stubbed away.
+### Review boundary, remaining work and skills
 
-Other selected cases cover V2 without a manifest, API/CLI forwarding, missing,
-tampered, linked, collided and partial inputs, unsupported schema/policy,
-projection/reference/deliverable drift, held-parent swaps, ready-last
-publication, current-byte verification, forged-marker refusal, source pins
-and unchanged blockers/flags. Workflow helper tests use synthetic request
-metadata only; no workflow was dispatched.
+The leader's diagnosis is not a new implementation approval. Earlier review
+`5273344624`, `FINAL-APPROVE` at `259f50567e95c07b720ac51a3f020453fad449bf`,
+covers operational records only. The current fix/correction still needs implementation review and
+fresh final-HEAD automatic CI; neither was polled or awaited for this result.
 
-This is synthetic integration evidence, not a new real-data preparation or
-real Step 1 success. Original sources, real prepared checkouts, readiness
-markers, private handoffs, failed outputs, caches and the GHCP bundle were
-left untouched. No model/provider, Step 2, VM, grader, paid, Azure/HF or
-credential operation ran. No full suite, manual workflow or real-data retry ran.
+All six preflight blockers and false launch flags are unchanged. Any separately
+authorized real preparation still needs an explicit local source of the
+existing canonical Step 0 manifest bytes. No real prepared checkout, partial,
+input source, cache, handoff or GHCP bundle was opened, repaired or retried. No model,
+provider, Step 2, VM, grading, Azure/HF, credential or paid operation ran.
+No full suite, 942-case job, original 45-case selection or manual workflow ran.
 
-### Review boundary and remaining work
-
-The leader's `FINAL-APPROVE` review `5273344624` at
-`259f50567e95c07b720ac51a3f020453fad449bf` covers only the preceding operational
-records. It does not review this implementation or authorize execution.
-PR #646 and its branch remain frozen. This fix still needs implementation
-review and fresh final-HEAD automatic checks; no new implementation approval
-is claimed.
-
-The single authorized `git fetch --no-tags origin main` returned 0 and found
-main still at `778a627bbb5404f33e5e62019382fa107aa47840`. No integration merge
-was needed. This fix is published separately after the preceding frozen
-records PR; the leader controls review and merge ordering. The fetch was
-GitHub source traffic, not a provider experiment.
-
-A future separately authorized real preparation needs an explicit local source
-containing the existing policy's canonical manifest bytes. No such source was
-sought or acquired here. No old partial is repaired or adopted. The six
-preflight blockers remain:
-
-```text
-v2_reasoning_effort_capability_unverified
-codex_reasoning_effort_capability_unverified
-codex_native_model_call_and_token_limits_unenforced
-live_deployment_identity_and_input_bytes_not_verified
-comparison_materialization_and_workflow_gates_not_wired
-comparison_usage_and_tariff_evidence_unverified
-```
-
-All launch flags remain false. There is no provider, grading, cost, capability
-or comparison-performance evidence and no Project-card completion claim.
-
-### Skills
-
-The full catalog was inspected once. `experiment-design` preserved the
-registered controls and the local input/consumer acceptance boundary.
-`llm-systems-engineer` repository guidance informed the backend change;
-it was not a separate immutable review. `experiment-report-en` and
-`im-not-ai-en` preserved the evidence and review limits in these records.
-No workflow edit required `extreme-reasoner`. UI/animation, repo-readiness,
-grading and new-framework work do not apply to this correction.
+The full skill catalog was inspected once. `experiment-report-en` keeps the
+hosted failure, focused correction and historical synthetic evidence separate;
+`im-not-ai-en` preserves their literals and qualifications. `experiment-design`
+does not apply because no experiment/control changed. No production or
+workflow change requires backend architecture or `extreme-reasoner` guidance.
+UI/animation, repo-readiness and new tooling are outside this correction.
