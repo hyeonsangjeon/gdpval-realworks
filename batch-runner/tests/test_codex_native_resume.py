@@ -191,6 +191,11 @@ class SDKTransport:
         error = script.get("error")
         turn = {"id": turn_id, "items": [], "status": "failed" if error else "completed",
                 "error": {"message": error} if error else None}
+        if error and "http_status_code" in script:
+            turn["error"]["codexErrorInfo"] = {
+                "responseStreamDisconnected": {"httpStatusCode": script["http_status_code"]},
+            }
+            turn["error"]["additionalDetails"] = script.get("additional_details")
         events = []
         if script.get("tokens") is not None:
             count = script["tokens"]
