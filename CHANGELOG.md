@@ -388,6 +388,44 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Add retained-workspace/native-thread continuation to the existing opt-in
+  Codex B/C deadline path. A keeps fresh sessions and four attempts; legacy
+  defaults, task/model/effort/context/grading settings, the 180-minute cumulative
+  clock and 30-minute attempt policy are unchanged. The private host record
+  binds the actual native ID, directory identities, prepared/request and
+  runtime/provider/settings identity, and durable receipt/usage boundaries.
+  The pinned `Codex.thread_resume()` path checks the response ID without
+  restaging partials or falling back to a fresh thread. Missing/corrupt/linked/
+  cross-cell state, uncertain thread creation and changed targets refuse;
+  content-filter stops remain terminal. Cumulative usage is differenced and
+  settlement is idempotent; unknown usage stays partial, not a complete bill.
+  In a new isolated environment, the exact declared `openai-codex==0.147.0`
+  and `openai-codex-cli-bin==0.147.0` pair and necessary declared dependencies
+  installed successfully in two pip commands, each exit 0. The initial venv
+  bootstrap lacked `ensurepip`; existing pip targeted only the private prefix.
+  At `db88d5301dd125704f06122645a049d8518de306`, one focused invocation reported
+  `45 passed in 188.99s (0:03:08)`, exit 0: 41 new resume/binding cases and four
+  deadline/legacy cases. It used the real installed SDK facade/types/collector
+  with a stubbed transport and fake clocks, not a Codex process or provider.
+  Subsequent source inspection found a budgeted-A retry gap for content-filter
+  refusals during turn creation. A corrective commit made those stops durable
+  for A/B/C; its affected-only selection at
+  `ee11f956d53225760b96040c2642e7ef0682b554` reported
+  `8 passed in 18.21s`, exit 0: six filter cases and two refreshed current/stale
+  binding cases. The earlier 45-case result retains its original commit/scope.
+  The exact commands and dependency/contract limits are in the latest result.
+  Active full-template hashes and directly coupled pins were recomputed with
+  the unchanged helper/original template roles; source counts remain 37/58,
+  `WORKFLOW_SHA256` and all false launch flags/blockers remain unchanged.
+  The exact source baseline is `237fdc429420d417909fd109232710d933c5ce63`.
+  #650's reviews `5276488086` and `5276986025`, the latter at
+  `846b7dddc7d4cf674f4da68ca5d6e1d330e3b6b5`, cover only the prior deadline
+  slice/corrections. This continuation implementation is not approved by them.
+  Leader review, carrying-HEAD CI, adaptive policy, the 30-cell dispatcher and
+  separately directed pilot work remain. No live recovery, quality, savings,
+  launch readiness or Project completion is claimed; historical results and
+  all prior operational/preparation artifacts remain untouched.
+
 - Add opt-in cumulative task deadlines to the existing `codex_foundry`
   retry/turn path. `execution.codex.task_deadline` declares A/B/C and repetition
   1/2; each run/task/condition/repetition retains one 180-minute expiry through
