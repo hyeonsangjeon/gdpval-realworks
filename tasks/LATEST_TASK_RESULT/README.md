@@ -1,19 +1,52 @@
 # Latest substantive task result
 
-## PROJECT5-PR649-GRADER-BINDINGS-1553
+## PROJECT5-PR649-ISOLATION-THEN-BUDGET-1710 (Phase 1 only)
 
-Both active grading contracts now bind the current full grader source closure.
-One focused invocation passed all nine cases: current bindings are accepted,
-old expected hashes and changed selector source bytes still refuse, and all
-existing live blockers and false launch flags remain unchanged. This is an
-offline source-contract correction, not a grade or live execution result.
+The Foundry preflight's two active-grader-binding cases now pass in a fresh
+pytest process that selects no other module. The correction moves the genuine
+`step8_grade.compute_grader_source_hash` import to module scope, before the
+offline fixture replaces provider constructors. Production bytes, the current
+source identities, selector tests and every offline guard are unchanged.
+This is test isolation evidence, not a grade or live execution result.
 
-### Defect and supplied CI evidence
+### Isolation defect and new focused result
 
-Work continued from `a2685e91b704218c657da41bd1505f40b6d1da66` on the existing
-feature branch, with integrated main
-`eba56139f95443a715e8309e75c57fe5688c1f2b`. No further fetch was needed.
-The approved selector and its tests were left unchanged.
+The leader supplied Backend run `35698722071`, job `106651380186`,
+`pilot-preflight-contracts`, at exact HEAD
+`9efee401178d2926d7fccf9508af33d3940eaa00`:
+`2 failed, 196 passed, 143 deselected in 658.21s (10:58)`.
+Ten of eleven applicable checks succeeded; the only
+failures were `test_active_grader_template_source_foundry_preflight[current]`
+and `[stale_expected_hash]`. No broad source-drift failures remained.
+
+The function-local import ran after `offline_only` replaced
+`azure_ai_clients.AzureAIClientFactory` with a forbidden function. Importing
+`step8_grade` then traversed `core.grader` and `core.llm_client`, where the
+`owned_factory: AzureAIClientFactory | None` annotation raised `TypeError`.
+The earlier combined nine-case invocation had already imported the module and
+did not establish isolated import behavior. The fix changes only import
+ordering; network, credential, subprocess and provider-construction boundaries
+remain blocked, with the existing empty-call assertions intact.
+
+Exactly one fresh pytest process ran for this correction:
+
+```text
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 DO_NOT_TRACK=1 /usr/bin/python3 -m pytest -q -p no:cacheprovider --tb=short batch-runner/tests/test_gpt56_sol_codex_pilot_preflight.py::test_active_grader_template_source_foundry_preflight
+```
+
+Result: `2 passed in 1.45s`, exit 0. The tested import-order bytes were committed
+unchanged as `f0215aa3f6e4d09520b37804a1bdf68147e06959`; this records update
+follows that commit. Both parameters execute the real hash/contract assertions
+under the offline guards. `git diff --check` passed. No other test module,
+earlier nine-case selection, selector family or full hosted lane was rerun.
+No failure logs were fetched and the unchanged failure was not reproduced.
+
+### Preserved binding defect and supplied CI evidence
+
+The earlier binding correction started from
+`a2685e91b704218c657da41bd1505f40b6d1da66` on the existing feature branch.
+Integrated main remains `eba56139f95443a715e8309e75c57fe5688c1f2b`.
+No further fetch was needed. The approved selector and its tests remain unchanged.
 
 The unchanged `step8_grade.compute_grader_source_hash()` includes all core
 Python files, including `deliverable_selector.py`, plus requirements, schema,
@@ -65,9 +98,9 @@ Historical plans, completed-run configs, grades, results, costs and private
 artifacts were not updated. A refreshed active future binding does not upgrade
 old runs or establish comparable scores.
 
-### Focused validation
+### Earlier nine-case binding validation
 
-Exactly one pytest invocation ran, with no targeted rerun:
+Exactly one pytest invocation ran for the earlier binding correction:
 
 ```text
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 DO_NOT_TRACK=1 /usr/bin/python3 -m pytest -q -p no:cacheprovider --tb=short batch-runner/tests/test_gpt54_comparison_preflight.py::test_active_grader_template_source_comparison batch-runner/tests/test_gpt56_sol_codex_pilot_preflight.py::test_active_grader_template_source_foundry_preflight batch-runner/tests/test_gpt56_pilot_identity_plan.py::test_active_grader_template_source_foundry_identity batch-runner/tests/test_ghcp_vm_gate_contract.py::test_ghcp_vm_gate_contract_preserves_history_foundry_and_backend_partition
@@ -139,9 +172,12 @@ HEAD. It did not approve the stale active grading bindings. The leader then
 supplied `REQUEST-CHANGES` review `5274961797` at
 `a2685e91b704218c657da41bd1505f40b6d1da66` for the coupling defect above.
 Neither review approves this new contract delta or its later records.
-Final-HEAD automatic checks and leader review remain outstanding; the focused
-nine-case result does not establish full-CI success. No CI query, manual rerun
-or review waiting occurred.
+The leader subsequently supplied `REQUEST-CHANGES` review `5275599170` at
+`9efee401178d2926d7fccf9508af33d3940eaa00` for the isolated import failure.
+That diagnosis is not approval of this correction. Final-HEAD automatic checks
+and leader review remain outstanding; neither the earlier nine-case result
+nor the new isolated two-case result establishes full-CI success. The branch
+is frozen after publication. No CI query, manual rerun or review waiting occurred.
 
 The preceding `FINAL-APPROVE` review `5274558309` at records HEAD
 `ae784cac096bb4cd3338390bddf47309de3e3667` for #648 remains limited to the
@@ -149,11 +185,11 @@ earlier real local preparation and Step 1 records, not this selector change.
 Any future grading requires separate authorization; this change grants no
 execution permission or card completion.
 
-The complete skill catalog was inspected once. `experiment-design` was
-applied before changing the active contracts to preserve the registered
-comparison and selection-only evidence boundary. Repository grading-engineer
-guidance, the consolidated grading specification and stable baseline preserved
-historical identities and scoring. `experiment-report-en` and `im-not-ai-en`
-were applied to the bounded changed records, protecting exact source hashes,
-test counts, supplied CI evidence and review limits. UI/animation, workflow,
-QA, upload, pricing, model/provider and new-framework work was not applicable.
+The complete skill catalog was inspected once for this phase.
+`experiment-report-en` and `im-not-ai-en` were applied to the bounded changed
+records, protecting exact source hashes, test counts, supplied CI evidence and
+review limits. This import-order correction changes no experiment or control,
+so `experiment-design` is not applicable here; it was applied to the earlier
+active-contract correction. UI/animation, workflow, QA, upload, pricing,
+model/provider and new-framework work is outside this phase. The independent
+budget implementation is not part of this branch or record.

@@ -54,8 +54,29 @@ entries land under a fresh dated heading the day they merge to `main`.
   `5274748991` at `200a35070bc0ffbf5938fea2a1fc85a470c98544` covers the earlier
   selector/test bytes and records, not this correction. `REQUEST-CHANGES`
   review `5274961797` at `a2685e91b704218c657da41bd1505f40b6d1da66` identifies
-  the stale bindings. The new contract delta and carrying-HEAD checks still
-  need leader review and CI; no new approval or full-CI success is claimed.
+  the stale bindings.
+  The leader later supplied run `35698722071`, `pilot-preflight-contracts`
+  job `106651380186`, at `9efee401178d2926d7fccf9508af33d3940eaa00`:
+  `2 failed, 196 passed, 143 deselected in 658.21s (10:58)`; ten of eleven
+  applicable checks succeeded. Only the two Foundry preflight binding cases
+  failed. Their function-local `step8_grade` import followed the offline
+  fixture's replacement of `AzureAIClientFactory` with a forbidden function,
+  causing `TypeError` in the `owned_factory: AzureAIClientFactory | None`
+  annotation. The earlier nine-case selection pre-imported the module and
+  masked this isolation defect; its result retains that limited scope.
+  Correction `f0215aa3f6e4d09520b37804a1bdf68147e06959` moves the genuine helper
+  import to module scope without changing production bytes, identities or
+  offline guards. One fresh process ran only:
+  `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 DO_NOT_TRACK=1 /usr/bin/python3 -m pytest -q -p no:cacheprovider --tb=short batch-runner/tests/test_gpt56_sol_codex_pilot_preflight.py::test_active_grader_template_source_foundry_preflight`.
+  Result: `2 passed in 1.45s`, exit 0, with real hash/contract assertions and
+  all network, credential, subprocess and provider-construction guards intact.
+  No earlier selection, full lane or unchanged failure was rerun; no logs were
+  fetched. `REQUEST-CHANGES` review `5275599170` at
+  `9efee401178d2926d7fccf9508af33d3940eaa00` identifies the isolation defect,
+  not approval of its correction. Final-HEAD leader review and automatic CI
+  remain outstanding; the branch is frozen after publication. No new approval,
+  full-CI success, live execution or budget-feature implementation is claimed
+  by this correction. Reporting and English copyediting preserve these scopes.
 
 - Recognize an explicit deliverable-format clause containing standalone
   `Word (.docx)` without widening the shared extension boundary. The public
