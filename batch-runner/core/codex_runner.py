@@ -1124,7 +1124,10 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                 "sandbox": "workspace_write", "approval_mode": "deny_all",
                 "task_prompt": task_prompt, "occupation": occupation,
                 "experiment_prompt": experiment_prompt, "perception_text": perception_text,
-                "references": [{"path": str(path), "sha256": getattr(path, "sha256", None),
+                # Private staging locations change per invocation; the declared
+                # input role/order and verified bytes must not change on resume.
+                "references": [{"path": getattr(path, "declared_path", str(path)),
+                                "sha256": getattr(path, "sha256", None),
                                 "size": getattr(path, "size", None)} for path in reference_files or ()],
                 "ledger": (None if self.cost_ledger is None else {
                     "path": str(self.cost_ledger.path.absolute()), "run_id": self.cost_ledger.run_id,

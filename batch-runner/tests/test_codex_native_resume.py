@@ -9,6 +9,7 @@ import socket
 import subprocess
 from contextlib import nullcontext
 from dataclasses import replace
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -27,7 +28,9 @@ import step8_grade as step8
 import gpt54_comparison_preflight as comparison
 import gpt56_sol_codex_pilot_preflight as pilot
 import gpt56_pilot_identity_plan as identity
+import ghcp_vm_gate_preflight as ghcp_gate
 from core import azure_ai_clients, codex_azure_token, codex_runner, codex_runtime_config
+from core import reference_integrity
 from core.codex_task_deadline import (
     ATTEMPT_SECONDS, EXHAUSTED, STATE_REFUSED, TOTAL_SECONDS,
     CodexTaskDeadline, TaskDeadlineRefused,
@@ -475,7 +478,8 @@ def test_native_resume_settlement_crash_replays_same_receipt_without_double_char
         ledger.close()
 
 
-def _restore_through_retry(executor, host, clock, store, *, task=TASK, instruction=None):
+def _restore_through_retry(executor, host, clock, store, *, task=TASK, instruction=None,
+                           task_info=None):
     """Use the production host-only task projection before the outer gate."""
     attempts = []
 
@@ -485,8 +489,9 @@ def _restore_through_retry(executor, host, clock, store, *, task=TASK, instructi
 
     def reconcile():
         assert step2._execute_single_task(
-            {"task_id": task, "instruction": instruction or "Synthetic task; not benchmark input.",
-             "reference_files": [], "needs_files": False},
+            task_info if task_info is not None else {
+                "task_id": task, "instruction": instruction or "Synthetic task; not benchmark input.",
+                "reference_files": [], "needs_files": False},
             CONDITION, executor, "codex_foundry", None, SETTINGS.model,
             run_id="offline-cell-run", condition_name="condition_a",
             upload_root=host / "upload", accounting_only=True,
@@ -498,6 +503,322 @@ def _restore_through_retry(executor, host, clock, store, *, task=TASK, instructi
     )
     assert attempts == []
     return result
+
+
+@pytest.fixture
+def reference_task(host, monkeypatch):
+    """Real declared records and staging; observe only the runner's public boundary."""
+    root = host / "inputs"
+    paths = ["reference_files/specification/terms.txt", "reference_files/tabular/data.csv"]
+    for relative, content in zip(paths, (b"approved", b"id,value\n1,2\n"), strict=True):
+        source = root / relative
+        source.parent.mkdir(parents=True)
+        source.write_bytes(content)
+    records = [{"path": path, **reference_integrity.reference_manifest_record(root, path)} for path in paths]
+    task = SimpleNamespace(
+        root=root, staged=[],
+        info={"task_id": TASK, "instruction": "Synthetic task; not benchmark input.",
+              "reference_files": paths, "reference_file_records": records, "needs_files": False},
+    )
+    monkeypatch.setattr(step2, "DEFAULT_LOCAL_PATH", root)
+    original = codex_runner.CodexAgentRunner.reconcile_task_accounting
+
+    def observe(runner, *args, **kwargs):
+        references = tuple(kwargs["reference_files"])
+        assert all(isinstance(path, reference_integrity.VerifiedReferencePath) for path in references)
+        task.staged.append(references)
+        # No replacement of resolution, staging, byte checks or continuation identity.
+        return original(runner, *args, **kwargs)
+
+    monkeypatch.setattr(codex_runner.CodexAgentRunner, "reconcile_task_accounting", observe)
+    return task
+
+
+def _execute_reference_task(executor, host, task):
+    # strict_inputs is deliberately omitted: exercise Step 2's default verified-copy path.
+    return step2._execute_single_task(
+        task.info, CONDITION, executor, "codex_foundry", None, SETTINGS.model,
+        run_id="offline-cell-run", condition_name="condition_a", upload_root=host / "upload",
+    )
+
+
+def _assert_distinct_staging_with_same_declared_inputs(task, count):
+    assert len(task.staged) == count
+    parents = [Path(paths[0]).parent for paths in task.staged]
+    assert len(set(parents)) == count
+    for parent, paths in zip(parents, task.staged, strict=True):
+        assert parent.name.startswith("gdpval-reference-")
+        assert all(Path(path).parent == parent for path in paths)
+        assert [{"path": path.declared_path, "sha256": path.sha256, "size": path.size}
+                for path in paths] == task.info["reference_file_records"]
+        assert not parent.exists()  # Step 2 cleaned only its invocation-local copies.
+
+
+@pytest.mark.parametrize("condition", ["B", "C"])
+def test_native_resume_stable_reference_retry_and_process_restore(host, monkeypatch, reference_task, condition):
+    clock = Clock()
+    store = store_at(host, clock, condition=condition)
+    ledger = CostReceiptLedger(host / "cost.sqlite", run_id="offline-cell-run")
+    transport = SDKTransport(monkeypatch, clock, [
+        {"tokens": 100, "seconds": 10, "error": RATE},
+        {"tokens": 135, "seconds": 20, "error": RATE}, {"tokens": 170, "seconds": 5},
+    ])
+    try:
+        executor = executor_for(store, ledger)
+
+        def attempt(index):
+            if index == 2:
+                raise InterruptedError("synthetic host restart")
+            result = _execute_reference_task(executor, host, reference_task)
+            assert result["observability"]["error_category"] == "rate_limited"
+            if index == 0:
+                retained_input = transport.workspaces[0].workspace / "terms.txt"
+                retained_input.chmod(0o600)
+                retained_input.write_bytes(b"retained agent edit")
+            return result
+
+        with pytest.raises(InterruptedError):
+            step2.run_with_infra_retries(attempt, max_attempts=4,
+                                        task_deadline=store.for_task(TASK), sleep=clock.sleep)
+        expiry = store.for_task(TASK).as_record()["expires_unix"]
+        retained = transport.workspaces[0].continuation_binding()
+        store.close()
+        ledger.close()
+        clock.advance(300)
+        store = store_at(host, clock, condition=condition, initialize=False)
+        ledger = CostReceiptLedger(host / "cost.sqlite", run_id="offline-cell-run")
+        result = step2.run_with_infra_retries(
+            lambda _: _execute_reference_task(executor_for(store, ledger), host, reference_task),
+            max_attempts=4, task_deadline=store.for_task(TASK), sleep=clock.sleep,
+        )
+        assert result["status"] == "success"
+        record = result["observability"]["task_deadline"]
+        assert record["expires_unix"] == expiry
+        assert record["remaining_seconds"] == TOTAL_SECONDS - 515
+        assert record["attempts_admitted"] == 3 and record["native_resumes"] == 2
+        assert clock.waits == [60, 120] and transport.joins == [ATTEMPT_SECONDS] * 3
+        assert transport.count("thread/start") == 1 and transport.count("thread/resume") == 2
+        assert transport.count("turn/start") == 3 and transport.stage_calls == 1
+        assert all(workspace.continuation_binding() == retained for workspace in transport.workspaces)
+        assert (transport.workspaces[0].workspace / "partial.txt").read_bytes() == b"synthetic partial\n" * 3
+        assert (transport.workspaces[0].workspace / "terms.txt").read_bytes() == b"retained agent edit"
+        assert (reference_task.root / reference_task.info["reference_files"][0]).read_bytes() == b"approved"
+        calls = ledger.calls_for(TASK)
+        assert len(calls) == len({row["call_id"] for row in calls}) == 3
+        assert sorted(row["input_tokens"] for row in calls) == [35, 35, 100]
+        assert ledger.receipt_for(TASK, BUCKET_PROBLEM_SOLVING).status == "partial"
+        _assert_distinct_staging_with_same_declared_inputs(reference_task, 3)
+    finally:
+        store.close()
+        ledger.close()
+
+
+def test_native_resume_stable_reference_a_stays_fresh(host, monkeypatch, reference_task):
+    clock = Clock()
+    store = store_at(host, clock, condition="A")
+    transport = SDKTransport(monkeypatch, clock, [{"tokens": 100, "error": RATE}, {"tokens": 135}])
+    try:
+        executor = executor_for(store)
+        result = step2.run_with_infra_retries(
+            lambda _: _execute_reference_task(executor, host, reference_task), max_attempts=4,
+            task_deadline=store.for_task(TASK), sleep=clock.sleep,
+        )
+        assert result["status"] == "success" and store.control.max_attempts == 4
+        assert transport.count("thread/start") == 2 and transport.count("thread/resume") == 0
+        assert len({workspace.root for workspace in transport.workspaces}) == 2
+        assert transport.stage_calls == 2 and transport.joins == [ATTEMPT_SECONDS] * 2
+        cell = store._read()["cells"][TASK]
+        assert cell["continuation"] is None and len(cell["attempts"]) == 2
+        assert cell["expires_unix"] == cell["started_unix"] + TOTAL_SECONDS
+        _assert_distinct_staging_with_same_declared_inputs(reference_task, 2)
+    finally:
+        store.close()
+
+
+@pytest.mark.parametrize("condition", ["B", "C"])
+@pytest.mark.parametrize("window", ["before_ledger", "before_ack"])
+@pytest.mark.parametrize("stop", ["completed", "content_filter", "expired"])
+def test_native_resume_stable_reference_terminal_accounting(
+    host, monkeypatch, reference_task, condition, window, stop,
+):
+    clock = Clock()
+    store = store_at(host, clock, condition=condition)
+    ledger_path = host / "cost.sqlite"
+    ledger = CostReceiptLedger(ledger_path, run_id="offline-cell-run")
+    script = {"tokens": 100}
+    if stop != "completed":
+        script["error"] = "reason: content_filter" if stop == "content_filter" else RATE
+    transport = SDKTransport(monkeypatch, clock, [script])
+    try:
+        with monkeypatch.context() as patch:
+            def interrupted(*args, **kwargs):
+                raise SystemExit("synthetic settlement interruption")
+            owner, name = ((codex_runner.CodexAgentRunner, "_settle_call") if window == "before_ledger"
+                           else (CodexTaskDeadline, "acknowledge_usage"))
+            patch.setattr(owner, name, interrupted)
+            with pytest.raises(SystemExit):
+                _execute_reference_task(executor_for(store, ledger), host, reference_task)
+
+        expected_cell = store._read()["cells"][TASK]
+        turn = expected_cell["continuation"]["turns"][0]
+        assert turn["phase"] == "observed" and turn["after"]["input_tokens"] == 100
+        assert expected_cell["continuation"]["terminal_reason"] == (None if stop == "expired" else stop)
+        assert expected_cell["terminal_reason"] == ("content_filtered" if stop == "content_filter" else None)
+        assert len(expected_cell["attempts"]) == 1
+        assert expected_cell["expires_unix"] == expected_cell["started_unix"] + TOTAL_SECONDS
+        assert ledger.calls_for(TASK)[0]["state"] == ("reserved" if window == "before_ledger" else "settled")
+        turn["phase"] = "settled"  # Only the validated acknowledgment may change.
+        requests = list(transport.requests)
+        first_receipt = None
+        for _ in range(2):
+            store.close()
+            ledger.close()
+            clock.advance(TOTAL_SECONDS if stop == "expired" else 10)
+            store = store_at(host, clock, condition=condition, initialize=False)
+            ledger = CostReceiptLedger(ledger_path, run_id="offline-cell-run")
+            changes = ledger._connection.total_changes
+            result = _restore_through_retry(
+                executor_for(store, ledger), host, clock, store, task_info=reference_task.info,
+            )
+            assert result["status"] == "error"  # No completed-result reconstruction.
+            assert result["observability"]["error_category"] == (EXHAUSTED if stop == "expired" else STATE_REFUSED)
+            assert store._read()["cells"][TASK] == expected_cell
+            calls = ledger.calls_for(TASK)
+            assert len(calls) == 1 and calls[0]["call_id"] == turn["call_id"]
+            assert calls[0]["state"] == "settled"
+            assert (calls[0]["input_tokens"], calls[0]["output_tokens"]) == (100, 20)
+            assert ledger._connection.total_changes - changes == (
+                1 if first_receipt is None and window == "before_ledger" else 0)
+            if first_receipt is None:
+                first_receipt = calls[0]
+            else:
+                assert calls[0] == first_receipt
+            assert ledger.receipt_for(TASK, BUCKET_PROBLEM_SOLVING).status == "partial"
+            assert transport.requests == requests and len(transport.workspaces) == 1
+            assert transport.stage_calls == 1 and clock.waits == []
+            assert (transport.workspaces[0].workspace / "partial.txt").read_bytes() == b"synthetic partial\n"
+        _assert_distinct_staging_with_same_declared_inputs(reference_task, 3)
+    finally:
+        store.close()
+        ledger.close()
+
+
+@pytest.mark.parametrize("entry", ["retry", "accounting_only"])
+@pytest.mark.parametrize("change", ["declared", "content", "size", "unverified_content",
+                                    "unverified_size", "order", "missing", "symlink", "collision"])
+def test_native_resume_stable_reference_drift_refuses_before_request_or_settlement(
+    host, monkeypatch, reference_task, entry, change,
+):
+    clock = Clock()
+    store = store_at(host, clock)
+    ledger = CostReceiptLedger(host / "cost.sqlite", run_id="offline-cell-run")
+    transport = SDKTransport(monkeypatch, clock, [{"tokens": 100, "error": RATE}])
+    try:
+        with monkeypatch.context() as patch:
+            def interrupted(*args, **kwargs):
+                raise SystemExit("synthetic interruption before ledger commit")
+            patch.setattr(codex_runner.CodexAgentRunner, "_settle_call", interrupted)
+            with pytest.raises(SystemExit):
+                _execute_reference_task(executor_for(store, ledger), host, reference_task)
+        info = reference_task.info
+        relative = info["reference_files"][0]
+        source = reference_task.root / relative
+        if change == "declared":
+            relative = "reference_files/different_role/terms.txt"
+            target = reference_task.root / relative
+            target.parent.mkdir()
+            source.rename(target)
+            info["reference_files"][0] = relative
+            info["reference_file_records"][0]["path"] = relative
+        elif change in {"content", "size", "unverified_content"}:
+            source.write_bytes(b"changed!" if change != "size" else b"approved\n")
+            if change != "unverified_content":
+                info["reference_file_records"][0].update(
+                    reference_integrity.reference_manifest_record(reference_task.root, relative))
+        elif change == "unverified_size":
+            info["reference_file_records"][0]["size"] += 1
+        elif change == "order":
+            info["reference_files"].reverse()
+            info["reference_file_records"].reverse()
+        elif change == "missing":
+            source.unlink()
+        elif change == "symlink":
+            retained = source.with_suffix(".retained")
+            source.rename(retained)
+            source.symlink_to(retained)
+        else:
+            relative = "reference_files/collision/terms.txt"
+            target = reference_task.root / relative
+            target.parent.mkdir()
+            target.write_bytes(b"approved")
+            info["reference_files"].append(relative)
+            info["reference_file_records"].append({
+                "path": relative, **reference_integrity.reference_manifest_record(reference_task.root, relative)})
+
+        expected_cell = store._read()["cells"][TASK]
+        before_calls = ledger.calls_for(TASK)
+        before_requests = list(transport.requests)
+        store.close()
+        if entry == "accounting_only":
+            clock.advance(TOTAL_SECONDS)
+        store = store_at(host, clock, initialize=False)
+        executor = executor_for(store, ledger)
+        result = (_execute_reference_task(executor, host, reference_task) if entry == "retry" else
+                  _restore_through_retry(executor, host, clock, store, task_info=info))
+        assert result["status"] == "error"
+        if entry == "accounting_only" or change in {"declared", "content", "size", "order"}:
+            assert result["observability"]["error_category"] == STATE_REFUSED
+        else:
+            assert result["error"].startswith("reference_input_integrity_failed:")
+        assert store._read()["cells"][TASK] == expected_cell
+        assert ledger.calls_for(TASK) == before_calls
+        assert before_calls[0]["state"] == "reserved" and before_calls[0]["input_tokens"] is None
+        assert transport.requests == before_requests and len(transport.workspaces) == 1
+        assert transport.stage_calls == 1 and clock.waits == []
+        assert (transport.workspaces[0].workspace / "partial.txt").read_bytes() == b"synthetic partial\n"
+    finally:
+        store.close()
+        ledger.close()
+
+
+@pytest.mark.parametrize("gap", ["unobserved", "missing_usage"])
+def test_native_resume_stable_reference_unknown_usage_remains_partial(host, monkeypatch, reference_task, gap):
+    clock = Clock()
+    store = store_at(host, clock)
+    ledger = CostReceiptLedger(host / "cost.sqlite", run_id="offline-cell-run")
+    transport = SDKTransport(monkeypatch, clock, [{"tokens": 100 if gap == "unobserved" else None, "error": RATE}])
+    try:
+        with monkeypatch.context() as patch:
+            def interrupted(*args, **kwargs):
+                raise SystemExit("synthetic interruption with unknown usage")
+            owner, name = ((CodexTaskDeadline, "observe_turn") if gap == "unobserved" else
+                           (codex_runner.CodexAgentRunner, "_settle_call"))
+            patch.setattr(owner, name, interrupted)
+            with pytest.raises(SystemExit):
+                _execute_reference_task(executor_for(store, ledger), host, reference_task)
+        expiry = store._read()["cells"][TASK]["expires_unix"]
+        for _ in range(2):
+            store.close()
+            clock.advance(TOTAL_SECONDS)
+            store = store_at(host, clock, initialize=False)
+            result = _restore_through_retry(
+                executor_for(store, ledger), host, clock, store, task_info=reference_task.info,
+            )
+            assert result["observability"]["error_category"] == EXHAUSTED
+            cell = store._read()["cells"][TASK]
+            assert cell["expires_unix"] == expiry and len(cell["attempts"]) == 1
+            assert cell["continuation"]["turns"][0]["phase"] == ("in_flight" if gap == "unobserved" else "settled")
+            calls = ledger.calls_for(TASK)
+            assert len(calls) == 1 and calls[0]["input_tokens"] is calls[0]["output_tokens"] is None
+            assert calls[0]["state"] == ("reserved" if gap == "unobserved" else "settled")
+            assert ledger.receipt_for(TASK, BUCKET_PROBLEM_SOLVING).status == "partial"
+            assert transport.count("turn/start") == 1 and transport.count("thread/resume") == 0
+            assert len(transport.workspaces) == 1 and transport.stage_calls == 1 and clock.waits == []
+            assert (transport.workspaces[0].workspace / "partial.txt").read_bytes() == b"synthetic partial\n"
+        _assert_distinct_staging_with_same_declared_inputs(reference_task, 3)
+    finally:
+        store.close()
+        ledger.close()
 
 
 @pytest.mark.parametrize("condition", ["B", "C"])
@@ -820,3 +1141,13 @@ def test_native_resume_active_grader_template_source_bindings(stale):
         assert report["launch_blockers"] == list(module.LAUNCH_BLOCKERS)
     assert hashlib.sha256((ROOT / FOUNDRY).read_bytes()).hexdigest() == FOUNDRY_SHA256
     assert hashlib.sha256((ROOT / WORKFLOW).read_bytes()).hexdigest() == WORKFLOW_SHA256
+    gate_plan = ghcp_gate.load_plan()
+    reference_source = "batch-runner/core/reference_integrity.py"
+    current_reference = hashlib.sha256((ROOT / reference_source).read_bytes()).hexdigest()
+    assert gate_plan["source_pins"][reference_source] == ghcp_gate.PINNED_SOURCES[reference_source] == current_reference
+    if stale:
+        gate_plan["source_pins"][reference_source] = "13198897c189a9276494b78ea3359fc2e623211ab2f32554b81ab9b12d9cf19e"
+    gate_report = ghcp_gate.inspect_plan(gate_plan)
+    assert gate_report["configuration_valid"] is not stale
+    assert all(gate_report[flag] is False for flag in ghcp_gate.FALSE_FLAGS)
+    assert gate_report["launch_blockers"] == list(ghcp_gate.LAUNCH_BLOCKERS)
