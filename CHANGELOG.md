@@ -411,11 +411,51 @@ entries land under a fresh dated heading the day they merge to `main`.
   template roles. Only active future source identities/pins and coupled count/
   digest guards were refreshed; historical templates/results, experimental
   controls, live blockers and false launch flags are unchanged.
-  This separate implementation has not received leader review. It does not
-  implement agent-session rehydration, adaptive planning or the 30-cell ABC/CBA
-  dispatcher, and no paid pilot ran. Final-HEAD CI/review, recovery/policy work
-  and separately directed leader launch remain outstanding. Earlier real
-  preprocessing and failed/prepared-artifact evidence below is unchanged.
+  The leader then supplied validate run `35708485032`, job `106683066256`, at
+  `d6dd36557379279dda55add439f6b2118a844424`, completed
+  `2026-09-22T09:07:17Z`: `545 passed, 1 failed, 546 total` Node tests.
+  The onboarding subtest `workflow input tables mirror defaults and watchdog
+  delegation` failed because ordinary `ExperimentConfig.validate()` imported
+  `core.codex_task_deadline`, whose eager persistence import loaded
+  `core.hf_publication` and required unavailable `huggingface_hub`. The installed
+  backend dependencies had masked this lightweight-config regression.
+  One authorized fetch returned exact main
+  `a8872bb1db11fa7420ca1e83e1efb66f853c5127`; an ordinary merge preserved #649's
+  selector, isolated-import correction and active-binding regressions, plus
+  #648's operational history. Correction
+  `57c9548091fb9447727f85d88945f346e6ea9e0e` moves existing persistence and
+  runtime-path imports into host-state operations without duplicating helpers
+  or changing validation, deadline policy or legacy defaults. The genuine
+  original-template hash helper recomputed the combined GPT-5.4 binding as
+  `dd970ba3f5fff8ae4d8e006dfc33c023804e3e32d32123681fb76feadd5f10df`
+  and Foundry binding as
+  `ec77798f9c2fba1043bc1015c855f3f75a96920e78e6b64c007e33785f2e2170`.
+  Only coupled active source pins/constants and the Foundry YAML digest guard
+  changed; equality checks and `WORKFLOW_SHA256` remain intact.
+  The new focused Python invocation at that correction reported
+  `5 failed, 5 passed in 3.73s`, exit 1. Host initialization/restore, three
+  combined-source current/stale cases and the Foundry/GHCP guard passed. Five
+  cold processes failed before validation because `-I` hid the installed
+  user-site PyYAML. Test-only correction
+  `83002a0d0d725321c833ebf23cc100563265c15d` keeps the fresh process and explicit
+  publication/HF import blockers but uses `-B`. Rerunning only those five cases
+  reported `5 passed in 0.78s`, exit 0, covering legacy configurations, valid
+  opt-in and invalid controls. These are two separate focused results, not a
+  fresh full-lane pass. The exact commands are in the latest-result document.
+  The requested Node command was attempted once at
+  `57c9548091fb9447727f85d88945f346e6ea9e0e`
+  and exited 1 before reaching the named subtest: this worktree lacks the
+  JavaScript `yaml` package (`ERR_MODULE_NOT_FOUND`). No dependency was installed,
+  no manifest/workflow was changed, and that subtest remains locally unvalidated.
+  `REQUEST-CHANGES` review `5276176303` covers the earlier `d6dd365...` HEAD;
+  it is not approval of the deadline slice or this later correction. The
+  original 30-case evidence remains scoped to `fe4d772...` and was not rerun.
+  Agent-session rehydration, adaptive planning, end-to-end recovery/equal B/C
+  continuation and the 30-cell ABC/CBA dispatcher remain unfinished. No paid
+  pilot ran. Final-HEAD CI and full implementation review remain outstanding;
+  separately directed leader launch is required, with no new owner-approval
+  wait. Earlier real preprocessing and failed/prepared-artifact evidence is
+  unchanged. No CI query, provider call or real-artifact operation occurred.
 
 - Record one successful real GPT-5.4 Codex local preparation and Step 1 at
   authorized source `6f7c77a9de52678e188f025b86de537ce8825dee`. One source fetch
