@@ -727,7 +727,20 @@ def test_run_input_bundle_is_exact_atomic_and_gates_execution(case, tmp_path, mo
             assert set(manifest["source_pins"]) == preflight.REQUIRED_SOURCES
             assert "comparison_materialization_and_workflow_gates_not_wired" in inspection["launch_blockers"]
         after = _tree_snapshot(root)
-        assert all(after[name] == value for name, value in before.items() if name != "data")
+        new_directory_children = {"data": "data/gdpval-local"}
+        if run.condition == "codex":
+            new_directory_children["batch-runner"] = "batch-runner/workspace"
+        for name, value in before.items():
+            current = after[name]
+            if name in new_directory_children:
+                child = new_directory_children[name]
+                assert child not in before and stat.S_ISDIR(after[child][0])
+                assert stat.S_ISDIR(value[0])
+                assert (current[0], current[2]) == (value[0], value[2])
+                # Some filesystems count new child directories in st_nlink.
+                assert current[1] in (value[1], value[1] + 1)
+            else:
+                assert current == value
         added_files = {name for name, value in after.items()
                        if stat.S_ISREG(value[0]) and name not in before}
         assert added_files == set(files) | {bundle.READY_PATH, bundle.RESERVATION_PATH}
