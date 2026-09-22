@@ -50,15 +50,33 @@ entries land under a fresh dated heading the day they merge to `main`.
   One fetch and ordinary merge integrated exact baseline
   `928c3a7e69b28508505479198d329c23c5de8594`, preserving the earlier operational
   changelog entry and leaving its branch and real artifacts untouched.
-  The leader's diagnosis is not implementation approval. Earlier review
-  `5273344624`, `FINAL-APPROVE` at
-  `259f50567e95c07b720ac51a3f020453fad449bf`, covers records
-  only; final-HEAD CI and implementation review remain required. Completion
-  records follow the tested correction commit. Any separately authorized real
-  preparation still requires an explicit canonical manifest source.
-  `experiment-report-en` and `im-not-ai-en` were applied to this correction's
-  records. No experiment/control change requires `experiment-design`; workflow,
-  UI/animation and repo-readiness skills do not apply. No live execution ran.
+  Leader review `5273753355`, `FINAL-APPROVE` at exact HEAD
+  `0913891fcbcfe2119c2899535a5e2b017cd99eee`, covers the complete Step 0 fix,
+  parent-snapshot correction and records at that HEAD, with no high-confidence
+  correctness findings. Earlier review `5273344624`, `FINAL-APPROVE` at
+  `259f50567e95c07b720ac51a3f020453fad449bf`, covers operational records only.
+  The later single-candidate check and this records update are outside the
+  latest review boundary. That approval does not establish final-HEAD CI
+  success, real canonical-source availability, real Step 1 success or execution
+  permission.
+  The one authorized candidate for `workspace/step0_needs_files_manifest.json`
+  was read once without following links. It was a single-link regular file of
+  `56057` bytes, SHA256
+  `16778d3ae830232e1c59070ad9254b926045e3bff3f67a3d6186b3c593c8a0e7`.
+  The unchanged `deliverable_only` canonical contract requires
+  `463fc119841dbe67e427c372da93ff55972139377aa03194764b57d87004c512`
+  and refused those bytes at the digest check, exit 2; schema 4 acceptance was
+  not reached. The check stopped with no second candidate, copy, repair,
+  accepted-source handoff or preparation. This refusal applies only to the
+  named candidate, not to source availability elsewhere. A separately
+  authorized real preparation still requires an explicit canonical source.
+  Production/test/config/workflow bytes remain frozen at the reviewed HEAD.
+  No tests or earlier runtime validations were rerun, and no fetch, integration
+  or CI query occurred for this handoff. Fresh carrying-HEAD automatic CI
+  remains unobserved. `experiment-report-en` and `im-not-ai-en` were applied to
+  the bounded records. No experiment/control change requires `experiment-design`;
+  workflow, UI/animation and repo-readiness skills do not apply. No live
+  execution ran.
 
 - Correct PR #642's pytest target helper so it separates option tokens and
   values from positional targets before any directory inspection. At
