@@ -14,9 +14,17 @@ The clean feature branch started at
 `6f7c77a9de52678e188f025b86de537ce8825dee`. The tested selector and test bytes
 were committed unchanged as `d0de31307d7cc6e7dfa665d95e97b4eb6e651e25` after
 the focused rerun. Subsequent completion-record changes are outside that tested
-implementation commit. One pre-publication `git fetch --no-tags origin main`
-returned 0 and the same main SHA, so no integration was needed. The preceding
-records work remains separate in #648; its branch was not changed.
+implementation commit. At initial publication, one GitHub source fetch found
+main unchanged and no integration was needed. For the later authorized
+integration, one `git fetch --quiet --no-tags origin main`
+returned 0 and exact main `eba56139f95443a715e8309e75c57fe5688c1f2b`.
+That source baseline was integrated through an ordinary non-destructive merge.
+The only conflict was in this latest-result document; no production or test
+conflict occurred. The complete #648 real canonical-source/preparation/Step 1
+changelog entry and all unrelated entries were preserved. Its detailed
+[historical preprocessing evidence](https://github.com/hyeonsangjeon/gdpval-realworks/blob/eba56139f95443a715e8309e75c57fe5688c1f2b/tasks/LATEST_TASK_RESULT/README.md)
+remains distinct from this selector result. The old branch and real artifacts
+were not changed.
 
 The selector recognizes a standalone parenthesized `.docx` in an explicit
 local deliverable-format clause. It does not widen the shared whitespace
@@ -72,20 +80,36 @@ grades, results, artifacts, costs and baselines remain unchanged, as do all
 successful and failed real-preparation artifacts. No claim is made that all
 eight historical refusals are fixed.
 
+After integration, the selector and test files were compared byte-for-byte
+against approved HEAD `200a35070bc0ffbf5938fea2a1fc85a470c98544` and were
+unchanged. No other non-record file changed relative to that HEAD.
+Whitespace and conflict-marker checks passed for the merged records.
+No tests were rerun; the 42-case and 45-case results above retain their
+original tested-commit scope and are not fresh final-HEAD results.
+
 ### Review boundary and remaining work
 
-The leader supplied `FINAL-APPROVE` review `5274558309` at records HEAD
-`ae784cac096bb4cd3338390bddf47309de3e3667` for #648. That review covers only
-the earlier real local preparation and Step 1 records, not this selector
-implementation. Independent review of this new implementation and its final
-automatic checks remain outstanding; no CI status was queried. The leader
-controls review and merge order. Any future grading requires separate
-authorization; this change grants no execution permission or card completion.
+The leader supplied `FINAL-APPROVE` review `5274748991` at exact HEAD
+`200a35070bc0ffbf5938fea2a1fc85a470c98544`, with no high-confidence
+correctness findings. It covers the selector/test bytes tested as
+`d0de31307d7cc6e7dfa665d95e97b4eb6e651e25` and the records at the reviewed
+HEAD. This later integration/records delta is outside that review. The review
+does not assert CI success, establish a grade or authorize execution.
+Final-HEAD automatic checks and integration review remain outstanding; no
+CI status was queried. The leader controls review and merge order.
 
-The complete skill catalog was inspected once. `experiment-design` kept the
-selection-only evidence boundary fixed. Repository grading-engineer guidance,
-the consolidated grading specification and its stable baseline guided the
-implementation. `experiment-report-en` and `im-not-ai-en` protected the exact
-command, counts, source identities, quotation and non-claims in these records.
-UI/animation, workflow, model/provider and repository-readiness skills were
-not applicable to this bounded selector correction.
+The preceding `FINAL-APPROVE` review `5274558309` at records HEAD
+`ae784cac096bb4cd3338390bddf47309de3e3667` for #648 remains limited to the
+earlier real local preparation and Step 1 records, not this selector change.
+Any future grading requires separate authorization; this change grants no
+execution permission or card completion.
+
+For the selector implementation, `experiment-design` kept the selection-only
+evidence boundary fixed; repository grading-engineer guidance, the consolidated
+grading specification and its stable baseline guided that work. For this
+integration, the complete skill catalog was inspected once.
+`experiment-report-en` and `im-not-ai-en` were applied only to the edited
+record paragraphs, preserving the exact command, counts, identities, quotation
+and non-claims. Experiment/control, implementation, workflow, UI/animation,
+model/provider and repository-readiness guidance was not applicable to this
+integration-only update.
