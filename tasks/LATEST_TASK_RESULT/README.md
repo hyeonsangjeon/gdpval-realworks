@@ -1,12 +1,61 @@
 # Latest task result
 
-## Lightweight deadline validation after main integration
+## Foundry active source-count correction
+
+The eight requested contract cases passed after five test expectations changed
+from literal `57` to literal `58`. The already intentional active source set
+includes `core/codex_task_deadline.py`. Production code, configs, source pins,
+hashes, exact-set equality, ready-last publication and negative/refusal
+assertions are unchanged. This is a test-contract correction, not a new
+experimental control or evidence of a paid pilot.
+
+The leader supplied `pilot-contracts` run `35711874429`, job `106694159365`,
+at `01c773696f65d5395633f87f6601d7cdbbcd5680`, completed
+`2026-09-22T09:51:38Z`: `8 failed, 909 passed in 426.14s (7:06)`.
+All eight failures were the old count literals; the supplied log reported all
+58 mapping entries identical. At intake, thirteen other applicable checks,
+including hosted validate and the old Node onboarding check, had passed;
+deploy was skipped. These are leader-supplied results for that prior HEAD,
+not fresh CI observations for this correction. No logs or CI were queried.
+
+The five corrected sites are in `test_gpt56_foundry_evidence_intake.py:541`,
+`test_gpt56_pilot_config_bundle.py:182`,
+`test_gpt56_pilot_deployment_binding.py:191`,
+`test_gpt56_pilot_identity_plan.py:127` and
+`test_gpt56_pilot_input_bundle.py:258`, all under `batch-runner/tests/`.
+One scoped search of the related `test_gpt56*.py` modules found no other stale
+equivalent count. Three matching assertions in the active preflight tests
+already expected 58 and were left unchanged. No count was removed or derived
+from the set under test.
+
+### Eight-case focused evidence
+
+The tested Git tree is `9affd973f418590c60adb93710427a1c051ff878`, based on
+commit `01c773696f65d5395633f87f6601d7cdbbcd5680` plus the five literal edits.
+This is the pre-record-update tree identity, not a claim that the unchanged
+base commit passed these cases. The tested source/test bytes are retained
+unchanged in the combined test-and-record correction. Main remains
+`a8872bb1db11fa7420ca1e83e1efb66f853c5127`; no fetch or merge was needed.
+
+One focused process ran exactly:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 DO_NOT_TRACK=1 /usr/bin/python3 -m pytest -q -p no:cacheprovider --tb=short 'batch-runner/tests/test_gpt56_foundry_evidence_intake.py::test_active_registration_seals_the_intake_boundary[contract]' 'batch-runner/tests/test_gpt56_pilot_config_bundle.py::test_real_validators_exact_pilot_scope_and_ready_last[False]' 'batch-runner/tests/test_gpt56_pilot_config_bundle.py::test_real_validators_exact_pilot_scope_and_ready_last[True]' 'batch-runner/tests/test_gpt56_pilot_deployment_binding.py::test_exact_hash_bound_candidate_uses_all_real_verifiers_and_parser[False]' 'batch-runner/tests/test_gpt56_pilot_deployment_binding.py::test_exact_hash_bound_candidate_uses_all_real_verifiers_and_parser[True]' 'batch-runner/tests/test_gpt56_pilot_identity_plan.py::test_canonical_recipes_bind_the_real_grader_and_exact_five_tasks' 'batch-runner/tests/test_gpt56_pilot_input_bundle.py::test_exact_local_bundle_uses_real_validators_and_ready_last[False]' 'batch-runner/tests/test_gpt56_pilot_input_bundle.py::test_exact_local_bundle_uses_real_validators_and_ready_last[True]'
+```
+
+Result: `8 passed in 27.97s`, exit 0. Existing real validators operated on
+synthetic fixtures with the offline flags above. No full 917-case lane,
+earlier deadline/binding/cold-process/selector selection or Node check was
+rerun. No dependency was installed, and no production, config or pin change
+was made. This focused result does not establish final-HEAD CI success.
+
+### Preserved lightweight-import correction
 
 Deadline control parsing and config validation no longer import host
 persistence or the HF SDK. The corrected cold-process family passes all five
 cases. Five host-state/binding cases passed in the earlier focused invocation;
-the requested Node subtest remains locally unvalidated because the worktree
-lacks the JavaScript `yaml` package. This is implementation and synthetic
+that local Node attempt could not validate its subtest because the worktree
+lacked the JavaScript `yaml` package. This is implementation and synthetic
 offline evidence, not a pilot result, model observation or execution approval.
 
 One authorized fetch returned exact main
@@ -38,7 +87,7 @@ persistence helper was duplicated, and no dependency/workflow workaround was
 added. The 180-minute cumulative policy, 30-minute attempt timeout and legacy
 defaults are unchanged.
 
-### New focused evidence
+### Earlier focused import evidence
 
 At immutable correction `57c9548091fb9447727f85d88945f346e6ea9e0e`, one process
 ran:
@@ -84,8 +133,9 @@ It exited 1 at module loading with `ERR_MODULE_NOT_FOUND` for the JavaScript
 `yaml` package, before the named subtest ran. The harness reported one failed
 test-file entry, not a new result for the hosted 546-test suite or the selected
 assertions. No packages were installed, no alternate Node run was attempted,
-and no dependency manifest or workflow was changed. Validation of that subtest
-with its declared dependencies remains outstanding.
+and no dependency manifest or workflow was changed. That local refusal remains
+historical; the leader now reports hosted validate, including this onboarding
+check, passed at `01c773696f65d5395633f87f6601d7cdbbcd5680`. It was not rerun.
 
 ### Combined active source identities
 
@@ -196,12 +246,16 @@ Astra Max/1M settings are not a target-model selection. Leader-directed paid
 launch remains separate from this implementation-only authorization.
 
 `REQUEST-CHANGES` review `5276176303` at
-`d6dd36557379279dda55add439f6b2118a844424` identifies the eager-import defect;
-the leader has not approved the first deadline slice. That review and #649's
-earlier approval do not approve this integration/correction or these later
-records. Full implementation review and final-HEAD automatic checks remain
-outstanding. Code inspection is not proof of runtime deadline enforcement;
-the earlier fake-clock tests retain only their stated synthetic scope.
+`d6dd36557379279dda55add439f6b2118a844424` identified the earlier eager-import
+defect. The leader's later full first-slice runtime review `5276488086` at
+`01c773696f65d5395633f87f6601d7cdbbcd5680` remains applicable to the unchanged
+implementation. `REQUEST-CHANGES` review `5276709793` at that same HEAD records
+the remaining test-count issue. Neither review covers this later test/record
+delta or asserts that its carrying-HEAD checks passed. Final carrying-HEAD
+tests and review remain required. Code inspection is not proof of runtime
+deadline enforcement; the earlier fake-clock tests retain only their stated
+synthetic scope. Historical 30/5/5 results retain their recorded test identities
+and scopes, as do the 2/45-case results in the preserved #649 changelog.
 
 The leader already holds delegated budget/paid-run authority; no new owner
 approval wait is introduced. Paid launch still requires a separate leader
@@ -213,12 +267,9 @@ rehydration, adaptive policy or 30-cell dispatcher was added. The branch is
 frozen after this correction's publication. This does not complete the pilot
 or Project card.
 
-The full skill catalog was checked once for this phase. `experiment-design`
-kept the approved controls fixed before active pin edits. Repository backend
-and LLM-systems guidance governed the lazy persistence boundary; grading
-guidance governed genuine source-identity coupling, not grading.
-`experiment-report-en` separated supplied CI, synthetic tests, the local
-dependency refusal and unmeasured outcomes.
-`im-not-ai-en` preserved exact commands, values and qualifications. UI/animation,
-framework, workflow, QA/upload, pricing and repository-publication skills did
-not match this bounded implementation.
+The full skill catalog was checked once for this correction.
+`experiment-report-en` and `im-not-ai-en` apply only to the changed record
+paragraphs, preserving exact evidence and review scopes. Experiment-design
+does not apply: the source dependency was already intentional and no controls
+or active bindings changed. No implementation, UI/animation, workflow, QA/upload,
+pricing or framework work was requested. No new reviewer job was started.

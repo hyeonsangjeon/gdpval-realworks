@@ -446,13 +446,45 @@ entries land under a fresh dated heading the day they merge to `main`.
   `57c9548091fb9447727f85d88945f346e6ea9e0e`
   and exited 1 before reaching the named subtest: this worktree lacks the
   JavaScript `yaml` package (`ERR_MODULE_NOT_FOUND`). No dependency was installed,
-  no manifest/workflow was changed, and that subtest remains locally unvalidated.
+  no manifest/workflow was changed, and that local attempt did not validate the
+  subtest. The leader later reported hosted validate, including the onboarding
+  check, passed at `01c773696f65d5395633f87f6601d7cdbbcd5680`; it was not rerun.
   `REQUEST-CHANGES` review `5276176303` covers the earlier `d6dd365...` HEAD;
   it is not approval of the deadline slice or this later correction. The
   original 30-case evidence remains scoped to `fe4d772...` and was not rerun.
+  A subsequent leader-supplied `pilot-contracts` result at
+  `01c773696f65d5395633f87f6601d7cdbbcd5680`, run `35711874429`, job
+  `106694159365`, completed `2026-09-22T09:51:38Z`, reported
+  `8 failed, 909 passed in 426.14s (7:06)`. Thirteen other applicable checks
+  passed and deploy was skipped. All eight failures were five stale literal
+  57 expectations for the active closure; the supplied log reported all 58
+  source mappings identical. `core/codex_task_deadline.py` was already an
+  explicit source member, so the five test expectations now require literal
+  58. The corrected sites are evidence intake, config bundle, deployment
+  binding, identity plan and input bundle. One scoped search across related
+  `test_gpt56*.py` modules found no further stale equivalent; three matching
+  preflight assertions already expected 58. Exact sets/digests, ready-last
+  publication, negative/refusal assertions and explicit deadline-source
+  membership remain intact. No production/config/pin/hash change was needed.
+  Tested Git tree `9affd973f418590c60adb93710427a1c051ff878` contains base
+  `01c773696f65d5395633f87f6601d7cdbbcd5680` plus only the five literal edits,
+  before the record update. Its source/test bytes are retained unchanged in
+  the combined corrective commit. One focused invocation ran:
+  `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 DO_NOT_TRACK=1 /usr/bin/python3 -m pytest -q -p no:cacheprovider --tb=short 'batch-runner/tests/test_gpt56_foundry_evidence_intake.py::test_active_registration_seals_the_intake_boundary[contract]' 'batch-runner/tests/test_gpt56_pilot_config_bundle.py::test_real_validators_exact_pilot_scope_and_ready_last[False]' 'batch-runner/tests/test_gpt56_pilot_config_bundle.py::test_real_validators_exact_pilot_scope_and_ready_last[True]' 'batch-runner/tests/test_gpt56_pilot_deployment_binding.py::test_exact_hash_bound_candidate_uses_all_real_verifiers_and_parser[False]' 'batch-runner/tests/test_gpt56_pilot_deployment_binding.py::test_exact_hash_bound_candidate_uses_all_real_verifiers_and_parser[True]' 'batch-runner/tests/test_gpt56_pilot_identity_plan.py::test_canonical_recipes_bind_the_real_grader_and_exact_five_tasks' 'batch-runner/tests/test_gpt56_pilot_input_bundle.py::test_exact_local_bundle_uses_real_validators_and_ready_last[False]' 'batch-runner/tests/test_gpt56_pilot_input_bundle.py::test_exact_local_bundle_uses_real_validators_and_ready_last[True]'`.
+  Result: `8 passed in 27.97s`, exit 0, with existing real validators and
+  synthetic fixtures. No full 917-case lane or earlier selection was rerun.
+  Main remains `a8872bb1db11fa7420ca1e83e1efb66f853c5127`; no fetch or merge
+  occurred. Full first-slice runtime review `5276488086` at `01c773696...`
+  remains applicable to the unchanged implementation. `REQUEST-CHANGES`
+  review `5276709793` at that HEAD identifies the test-count issue, not an
+  implementation change. Final carrying-HEAD tests and review of this later
+  test/record delta remain required. Historical 30/5/5 evidence and the
+  preserved #649 2/45-case results retain their original scopes. Reporting
+  and copyediting guidance apply only to these bounded record changes; this
+  does not change experiment controls or require an implementation/UI skill.
   Agent-session rehydration, adaptive planning, end-to-end recovery/equal B/C
   continuation and the 30-cell ABC/CBA dispatcher remain unfinished. No paid
-  pilot ran. Final-HEAD CI and full implementation review remain outstanding;
+  pilot ran. Final carrying-HEAD tests and correction review remain outstanding;
   separately directed leader launch is required, with no new owner-approval
   wait. Earlier real preprocessing and failed/prepared-artifact evidence is
   unchanged. No CI query, provider call or real-artifact operation occurred.
