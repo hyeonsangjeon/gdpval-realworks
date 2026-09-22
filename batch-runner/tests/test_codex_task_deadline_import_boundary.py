@@ -75,7 +75,9 @@ def test_deadline_config_without_publication_sdk_cold_process(case):
         print("cold config boundary: " + case)
     '''
     result = subprocess.run(
-        [sys.executable, "-I", "-c", textwrap.dedent(program),
+        # Keep installed parser dependencies (including user-site PyYAML).
+        # The fresh process and finder, not -I, isolate publication/HF imports.
+        [sys.executable, "-B", "-c", textwrap.dedent(program),
          str(Path(__file__).resolve().parents[1]), case],
         capture_output=True, text=True, timeout=20,
     )
