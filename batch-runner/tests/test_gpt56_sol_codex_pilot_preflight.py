@@ -73,6 +73,32 @@ def offline_only(monkeypatch):
     assert calls == []
 
 
+@pytest.mark.parametrize("change", ["current", "stale_expected_hash"])
+def test_active_grader_template_source_foundry_preflight(change, offline_only):
+    from step8_grade import compute_grader_source_hash
+
+    plan = load_plan(PLAN)
+    expected = compute_grader_source_hash(
+        ROOT / preflight.GRADER, load_plan(ROOT / preflight.GRADER),
+        batch_root=ROOT / "batch-runner",
+    )
+    assert plan["dispatch_grading_identity"]["grader_template_source_hash"] == expected
+    assert preflight.DISPATCH_GRADING_IDENTITY["grader_template_source_hash"] == expected
+    if change == "stale_expected_hash":
+        plan["dispatch_grading_identity"]["grader_template_source_hash"] = (
+            "56fdb74e2f9fd1afbe9d064fc2cb1e1410d5cebec55edcca8324effd1a1dc9e1"
+        )
+    report = inspect_plan(plan)
+    assert report["configuration_valid"] is (change == "current")
+    assert report["configuration_problems"] == (
+        [] if change == "current" else ["dispatch_grading_identity"]
+    )
+    assert plan["launch_enabled"] is plan["pilot"]["full_220_enabled"] is False
+    assert report["launch_allowed"] is report["full_220_allowed"] is False
+    assert report["launch_blockers"] == list(LAUNCH_BLOCKERS)
+    assert offline_only == []
+
+
 @pytest.mark.parametrize(
     "path,value",
     [

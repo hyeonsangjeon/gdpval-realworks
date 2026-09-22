@@ -66,7 +66,7 @@ shared: &shared
     source_sha: a855c5a9604554499be9eed4e5eb5523e8ad95d5
     # Existing helper's full closure with the ORIGINAL template path/bytes.
     # Not the eventual source hash of a materialized, revision-pinned config.
-    template_source_sha256: 40ada97c41117e3966e5a192c19dafcf4db34d4dd2ddd4230c4b729f421d6e08
+    template_source_sha256: c92bf13696fa506c84dbee649d5ba3c03fb33244810f30e2be4a05630ca204e1
     rubric_revision: 11e7900cdcac61bc4daf59e65feb238acda98fbf
     prompt_version: v2.2
     judge_model: gpt-5.6-sol

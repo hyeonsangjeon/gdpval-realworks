@@ -379,6 +379,53 @@ def source_seed():
     return tuple((path.relative_to(root).as_posix(), path.read_bytes()) for path in sorted(root / name for name in names))
 
 
+@pytest.mark.parametrize("change", ["current", "stale_expected_hash", "selector_source_drift"])
+def test_active_grader_template_source_foundry_identity(
+    plan, change, tmp_path, source_seed, monkeypatch,
+):
+    expected = plan["dispatch_grading_identity"]["grader_template_source_hash"]
+    template = pilot.load_plan(pilot.ROOT / pilot.GRADER)
+    assert step8.compute_grader_source_hash(
+        pilot.ROOT / pilot.GRADER, template, batch_root=pilot.ROOT / "batch-runner",
+    ) == expected
+    if change == "stale_expected_hash":
+        plan["dispatch_grading_identity"]["grader_template_source_hash"] = (
+            "56fdb74e2f9fd1afbe9d064fc2cb1e1410d5cebec55edcca8324effd1a1dc9e1"
+        )
+        # Exercise the real closure comparison as well as the public compiler's
+        # earlier refusal of an input that differs from the active contract.
+        with pytest.raises(identity.PilotIdentityRefused, match="grader_template_source_drift"):
+            identity._grader_identity(plan)
+    elif change == "selector_source_drift":
+        root = tmp_path / "source"
+        _copy(source_seed, root)
+        selector = root / "batch-runner/core/deliverable_selector.py"
+        assert selector.relative_to(root).as_posix() not in plan["source_pins"]
+        selector.write_bytes(selector.read_bytes() + b"\n# source identity drift\n")
+        assert step8.compute_grader_source_hash(
+            root / pilot.GRADER, template, batch_root=root / "batch-runner",
+        ) != expected
+        monkeypatch.setattr(pilot, "ROOT", root)
+
+    report = pilot.inspect_plan(plan)
+    assert plan["launch_enabled"] is plan["pilot"]["full_220_enabled"] is False
+    assert report["launch_allowed"] is report["full_220_allowed"] is False
+    assert report["launch_blockers"] == list(pilot.LAUNCH_BLOCKERS)
+    if change == "current":
+        assert report["configuration_valid"] is True
+        document = identity.compile_pilot_identity(plan).as_dict()
+        assert document["grading"]["template_source_hash"] == expected
+        assert document["grading"]["template"]["path"] == pilot.GRADER
+        assert document["grading"]["runnable_config"] is False
+        assert document["launch_allowed"] is document["full_220_allowed"] is False
+        assert document["evidence_linkage"] is None
+    else:
+        code = ("active_contract_mismatch" if change == "stale_expected_hash"
+                else "grader_template_source_drift")
+        with pytest.raises(identity.PilotIdentityRefused, match=code):
+            identity.compile_pilot_identity(plan)
+
+
 @pytest.mark.parametrize("role,damage", [
     (pilot.GRADER, "bytes"), (pilot.ACTIVE_PLAN, "bytes"),
     ("batch-runner/core/grade_payload.py", "missing"),
