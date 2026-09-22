@@ -13,6 +13,35 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Require an explicit local canonical Step 0 manifest for GPT-5.4 Codex input
+  preparation. The full file is copied to
+  `batch-runner/workspace/step0_needs_files_manifest.json`, bound by size/SHA256
+  and reread through the unchanged schema 4 / `deliverable_only` canonical
+  validator. Missing, wrong, linked, collided or partial inputs cannot report
+  ready. The materializer, checkout/API/CLI, verifier, workflow helper, source
+  pins, related fixtures and documentation now cover this role. V2 semantics,
+  five-task order, comparison controls, six blockers and false launch flags are
+  unchanged. Workflow YAML and the Step 1/canonical validator are unchanged;
+  hosted lanes without an explicit manifest source remain fail-closed.
+  Directly coupled Foundry/GHCP digest updates change pins only.
+  On implementation `8728c350266578c299dd64b974f9368288de09d7`, based on
+  `778a627bbb5404f33e5e62019382fa107aa47840`, the sole command
+  `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider --tb=short batch-runner/tests/test_gpt54_run_input_bundle.py batch-runner/tests/test_gpt54_disposable_checkout.py batch-runner/tests/test_gpt54_workflow_gate.py batch-runner/tests/test_gpt54_comparison_preflight.py -k step0_manifest`
+  reported `45 passed, 319 deselected in 18.36s`, exit 0; implementation
+  `git diff --check` passed. Synthetic fixtures with explicit test-only pins
+  exercise the actual materializer, local loader, canonical consumer and
+  Step 1/capture, including the five ordered tasks. This is not a new real-data
+  preparation or Step 1 success. Old artifacts and frozen PR #646 are untouched.
+  Leader review `5273344624`, `FINAL-APPROVE` at
+  `259f50567e95c07b720ac51a3f020453fad449bf`, covers preceding records only,
+  not this implementation. The later completion records are outside the tested
+  implementation commit. One source fetch found main unchanged; no integration
+  merge was needed. Implementation review, fresh final-HEAD CI and an explicit
+  canonical source for any separately authorized real preparation remain.
+  `experiment-design`, backend guidance, `experiment-report-en` and
+  `im-not-ai-en` were applied. No workflow edit required `extreme-reasoner`;
+  UI/animation and repo-readiness do not apply. No live execution was attempted.
+
 - Correct PR #642's pytest target helper so it separates option tokens and
   values from positional targets before any directory inspection. At
   `99032f49c62ead8a39fd099943084a60dbd68418`, the supplied Backend run
