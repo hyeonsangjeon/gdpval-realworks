@@ -242,6 +242,70 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Record the first authorized local Step 1 attempt after the two real GPT-5.4
+  preparations at source `778a627bbb5404f33e5e62019382fa107aa47840`.
+  For `gpt54_v2_codex_v1_codex_r1`, condition `codex`, repeat 1, ABBA index 1,
+  the unchanged first canonical argv,
+  `python3 step1_prepare_tasks.py --config comparison-run.json`, ran once from
+  the prepared checkout's `batch-runner` directory. It exited 1 with
+  `FileNotFoundError` for the relative role
+  `batch-runner/workspace/step0_needs_files_manifest.json`.
+  The new traceback ends in `batch-runner/core/needs_files.py:134`, called
+  from `batch-runner/step1_prepare_tasks.py:153`. Neither the intended
+  `step1_tasks_prepared.json` nor `pre-execution-input.json` was created.
+  With no returned Step 1 result, `total_tasks` and `prepared_fingerprint` are
+  recorded as null; no five-task success is claimed. The command used
+  `HF_HUB_OFFLINE=1`, `HF_DATASETS_OFFLINE=1`,
+  `HF_HUB_DISABLE_TELEMETRY=1` and `DO_NOT_TRACK=1`. New logs and a private
+  handoff are retained; no retry, cleanup, repair, preparer or verifier ran.
+  The current result is `commands_executed=true`: one local preprocessing
+  command and zero model/inference commands. Earlier preparation-only
+  `commands_executed=false` records and all readiness markers remain unchanged.
+  The prior Codex preparer made one call, returned its built-in verified marker
+  and exited 0 without a separate verifier. Its preserved checkout-ready SHA256:
+  `ea5d6ede676bce62d4302833ecb3dad0c7f75b95609eb35f7b668ab30d66e5f1`.
+  Configuration-ready SHA256:
+  `9af32b257de1c84e8372c88dc6d117741d5c89051806c63af5d9c17e081f7a75`;
+  input-ready SHA256:
+  `cd6da95d37da9c2325e0d9a8af29cf8aa50643451c4fe78d5752ba2d59b69faf`.
+  That preparation reused the reference-only source root and separate original
+  parquet from the saved handoff, with the preparer's normal pinned-byte checks.
+  The earlier V2 operation prepared `gpt54_v2_codex_v1_v2_r1`, condition
+  `sandbox_v2`, repeat 1, ABBA index 0, with one call and exit 0. Its preserved
+  checkout-ready SHA256 is
+  `02d38bc3d8fc369d6c384c1c7abd3d4d79265161131b5c39b02f6aec046d8498`.
+  That operation created the reference-only root from exactly two pinned
+  references using exclusive single-link regular-file copies and the existing
+  `reference_files/...` layout. Neither preparation was repeated or reverified.
+  Both checkouts, bundles, reservations, readiness markers and prior handoffs
+  are retained; the preparations created no quarantine. No input source was
+  recopied or independently rehashed for Step 1. Original sources and cache
+  remain unchanged; the distinct GHCP output bundle was not opened or rehashed.
+  The canonical manifest SHA256 is
+  `457b38f870a37b2ab64cdfcaacdd17f14a04ab6aa48d445838a08ecb34ef02c8`;
+  the combined-plan SHA256 is
+  `f33abf80e316117c1c3abdd3de56d055bd79c97394dc6e47b6a124ed45cb3206`.
+  Provider observation is null, and all launch flags remain false with the six
+  blockers unchanged. The missing Step 0 manifest is the concrete stop for this
+  local command; it was not generated or substituted. Two prepared conditions are
+  not a paired runtime result, model consumption, grading or completion of the
+  historical five-environment comparison. No repeat, variance, limit or cost
+  decision was changed.
+  The leader's read-only review of records HEAD
+  `569497931d83d404683d0b223312fa2404d088ea`, including the delta from
+  `1344aa77a6316192b72b785baabd4b65fa16655f`, found no correctness or
+  evidence-scope issues in the two-condition preparation records. It covers
+  those records only, not this later Step 1 attempt, these new records or launch.
+  Only this changelog and `tasks/LATEST_TASK_RESULT/README.md` change; previous
+  GHCP staging and infrastructure entries are preserved. `experiment-design`
+  kept the existing boundary; `experiment-report-en` and `im-not-ai-en` preserved
+  the evidence limits in the English records. Record-to-evidence comparison
+  and `git diff --check` passed. This final substantive unit freezes the branch
+  after publication without waiting for CI or review. No new CI or immutable
+  review verdict is claimed.
+  No tests, build, Step 2, V2 stage, workflow dispatch, VM, provider/model, grader,
+  Azure/HF, credential or paid operation ran.
+
 - Record the bounded GHCP VM infrastructure handoff at source
   `6d6663e7e536a88a58079ddc41ed8e38b0507824`. One authorized GitHub source
   fetch returned 0; fetched main matched that exact SHA and a new clean
