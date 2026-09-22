@@ -77,6 +77,12 @@ def _public_codex_config(value):
     ):
         if key in value:
             output[key] = value[key]
+    if value.get("task_deadline") is not None:
+        from core.codex_task_deadline import CodexTaskDeadlineControl
+
+        output["task_deadline"] = CodexTaskDeadlineControl.from_mapping(
+            value["task_deadline"]
+        ).as_dict()
     return output or None
 
 

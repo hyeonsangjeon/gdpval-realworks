@@ -66,7 +66,7 @@ DISPATCH_GRADING_IDENTITY = {
     "source_base_sha": "ed6c64f0afb90b0b3a6a9e4719e44184384296ec",
     "plan_file": "foundry-pilot-identity-plan.json",
     "ready_marker": "foundry-pilot-identity-ready.json",
-    "grader_template_source_hash": "785352daa052b105f0dfce08d8de7b3f41633a8e6b312111bec5bdbc8806144b",
+    "grader_template_source_hash": "ec77798f9c2fba1043bc1015c855f3f75a96920e78e6b64c007e33785f2e2170",
     "evidence_boundary": "offline_dispatch_grading_identity",
 }
 IDENTITY_SOURCES = {
@@ -175,6 +175,7 @@ REQUIRED_SOURCES = {
     "batch-runner/core/config.py",
     "batch-runner/core/codex_runtime_config.py",
     "batch-runner/core/codex_runner.py",
+    "batch-runner/core/codex_task_deadline.py",
     "batch-runner/core/codex_cost.py",
     "batch-runner/core/executor.py",
     "batch-runner/step1_prepare_tasks.py",

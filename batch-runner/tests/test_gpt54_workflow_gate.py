@@ -579,7 +579,7 @@ def test_workflow_execution_gate(
                 assert not quarantine.exists()  # False launch flags are not failed materialization.
                 assert head.read_bytes() == reviewed_sha.encode() + b"\n"
                 assert json.loads(ready.read_bytes())["abba_index"] == index
-                assert len(inputs["manifest"]["source_pins"]) == 36
+                assert len(inputs["manifest"]["source_pins"]) == 37
                 assert {".github/workflows/agentic-v2-stage-run.yml", ".github/workflows/batch-run.yml",
                         "batch-runner/gpt54_workflow_gate.py"} <= preflight.REQUIRED_SOURCES
                 inspection = preflight.inspect_plan(inputs["manifest"], grading_plan=inputs["combined_plan"])

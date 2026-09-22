@@ -388,6 +388,107 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Add opt-in cumulative task deadlines to the existing `codex_foundry`
+  retry/turn path. `execution.codex.task_deadline` declares A/B/C and repetition
+  1/2; each run/task/condition/repetition retains one 180-minute expiry through
+  retry and process resume. Native waits are bounded by the lesser of the
+  existing 30-minute attempt timeout and remaining time. Backoff consumes that
+  same deadline. A retains four durable attempt admissions; B/C use the
+  cumulative deadline with identical partial-artifact retention. Missing,
+  incompatible, linked or checksum-tampered host state refuses rather than
+  starting a new clock. Exhaustion records `task_deadline_exhausted` without
+  another turn. Existing atomic persistence and cost receipts are reused;
+  observed partial usage does not imply complete API-call or invoice accounting.
+  No existing experiment is opted in, no automatic monetary cutoff is added,
+  and legacy exp035/other-mode retry, timeout and cleanup defaults are unchanged.
+  On implementation `fe4d772df69c1653709bdfaf5bede8d005a6bf01`, based on
+  `eba56139f95443a715e8309e75c57fe5688c1f2b`, one focused invocation reported
+  `30 passed in 40.83s`, exit 0: 29 fake-clock/stub-runtime and active-binding
+  cases plus one coupled Foundry/GHCP digest guard. The exact command is in
+  `tasks/LATEST_TASK_RESULT/README.md`. Tests exercised the real retry,
+  task-executor and native-turn boundary with synthetic inputs, not a provider.
+  Current/stale checks use the unchanged full-template hash helper and original
+  template roles. Only active future source identities/pins and coupled count/
+  digest guards were refreshed; historical templates/results, experimental
+  controls, live blockers and false launch flags are unchanged.
+  The leader then supplied validate run `35708485032`, job `106683066256`, at
+  `d6dd36557379279dda55add439f6b2118a844424`, completed
+  `2026-09-22T09:07:17Z`: `545 passed, 1 failed, 546 total` Node tests.
+  The onboarding subtest `workflow input tables mirror defaults and watchdog
+  delegation` failed because ordinary `ExperimentConfig.validate()` imported
+  `core.codex_task_deadline`, whose eager persistence import loaded
+  `core.hf_publication` and required unavailable `huggingface_hub`. The installed
+  backend dependencies had masked this lightweight-config regression.
+  One authorized fetch returned exact main
+  `a8872bb1db11fa7420ca1e83e1efb66f853c5127`; an ordinary merge preserved #649's
+  selector, isolated-import correction and active-binding regressions, plus
+  #648's operational history. Correction
+  `57c9548091fb9447727f85d88945f346e6ea9e0e` moves existing persistence and
+  runtime-path imports into host-state operations without duplicating helpers
+  or changing validation, deadline policy or legacy defaults. The genuine
+  original-template hash helper recomputed the combined GPT-5.4 binding as
+  `dd970ba3f5fff8ae4d8e006dfc33c023804e3e32d32123681fb76feadd5f10df`
+  and Foundry binding as
+  `ec77798f9c2fba1043bc1015c855f3f75a96920e78e6b64c007e33785f2e2170`.
+  Only coupled active source pins/constants and the Foundry YAML digest guard
+  changed; equality checks and `WORKFLOW_SHA256` remain intact.
+  The new focused Python invocation at that correction reported
+  `5 failed, 5 passed in 3.73s`, exit 1. Host initialization/restore, three
+  combined-source current/stale cases and the Foundry/GHCP guard passed. Five
+  cold processes failed before validation because `-I` hid the installed
+  user-site PyYAML. Test-only correction
+  `83002a0d0d725321c833ebf23cc100563265c15d` keeps the fresh process and explicit
+  publication/HF import blockers but uses `-B`. Rerunning only those five cases
+  reported `5 passed in 0.78s`, exit 0, covering legacy configurations, valid
+  opt-in and invalid controls. These are two separate focused results, not a
+  fresh full-lane pass. The exact commands are in the latest-result document.
+  The requested Node command was attempted once at
+  `57c9548091fb9447727f85d88945f346e6ea9e0e`
+  and exited 1 before reaching the named subtest: this worktree lacks the
+  JavaScript `yaml` package (`ERR_MODULE_NOT_FOUND`). No dependency was installed,
+  no manifest/workflow was changed, and that local attempt did not validate the
+  subtest. The leader later reported hosted validate, including the onboarding
+  check, passed at `01c773696f65d5395633f87f6601d7cdbbcd5680`; it was not rerun.
+  `REQUEST-CHANGES` review `5276176303` covers the earlier `d6dd365...` HEAD;
+  it is not approval of the deadline slice or this later correction. The
+  original 30-case evidence remains scoped to `fe4d772...` and was not rerun.
+  A subsequent leader-supplied `pilot-contracts` result at
+  `01c773696f65d5395633f87f6601d7cdbbcd5680`, run `35711874429`, job
+  `106694159365`, completed `2026-09-22T09:51:38Z`, reported
+  `8 failed, 909 passed in 426.14s (7:06)`. Thirteen other applicable checks
+  passed and deploy was skipped. All eight failures were five stale literal
+  57 expectations for the active closure; the supplied log reported all 58
+  source mappings identical. `core/codex_task_deadline.py` was already an
+  explicit source member, so the five test expectations now require literal
+  58. The corrected sites are evidence intake, config bundle, deployment
+  binding, identity plan and input bundle. One scoped search across related
+  `test_gpt56*.py` modules found no further stale equivalent; three matching
+  preflight assertions already expected 58. Exact sets/digests, ready-last
+  publication, negative/refusal assertions and explicit deadline-source
+  membership remain intact. No production/config/pin/hash change was needed.
+  Tested Git tree `9affd973f418590c60adb93710427a1c051ff878` contains base
+  `01c773696f65d5395633f87f6601d7cdbbcd5680` plus only the five literal edits,
+  before the record update. Its source/test bytes are retained unchanged in
+  the combined corrective commit. One focused invocation ran:
+  `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 DO_NOT_TRACK=1 /usr/bin/python3 -m pytest -q -p no:cacheprovider --tb=short 'batch-runner/tests/test_gpt56_foundry_evidence_intake.py::test_active_registration_seals_the_intake_boundary[contract]' 'batch-runner/tests/test_gpt56_pilot_config_bundle.py::test_real_validators_exact_pilot_scope_and_ready_last[False]' 'batch-runner/tests/test_gpt56_pilot_config_bundle.py::test_real_validators_exact_pilot_scope_and_ready_last[True]' 'batch-runner/tests/test_gpt56_pilot_deployment_binding.py::test_exact_hash_bound_candidate_uses_all_real_verifiers_and_parser[False]' 'batch-runner/tests/test_gpt56_pilot_deployment_binding.py::test_exact_hash_bound_candidate_uses_all_real_verifiers_and_parser[True]' 'batch-runner/tests/test_gpt56_pilot_identity_plan.py::test_canonical_recipes_bind_the_real_grader_and_exact_five_tasks' 'batch-runner/tests/test_gpt56_pilot_input_bundle.py::test_exact_local_bundle_uses_real_validators_and_ready_last[False]' 'batch-runner/tests/test_gpt56_pilot_input_bundle.py::test_exact_local_bundle_uses_real_validators_and_ready_last[True]'`.
+  Result: `8 passed in 27.97s`, exit 0, with existing real validators and
+  synthetic fixtures. No full 917-case lane or earlier selection was rerun.
+  Main remains `a8872bb1db11fa7420ca1e83e1efb66f853c5127`; no fetch or merge
+  occurred. Full first-slice runtime review `5276488086` at `01c773696...`
+  remains applicable to the unchanged implementation. `REQUEST-CHANGES`
+  review `5276709793` at that HEAD identifies the test-count issue, not an
+  implementation change. Final carrying-HEAD tests and review of this later
+  test/record delta remain required. Historical 30/5/5 evidence and the
+  preserved #649 2/45-case results retain their original scopes. Reporting
+  and copyediting guidance apply only to these bounded record changes; this
+  does not change experiment controls or require an implementation/UI skill.
+  Agent-session rehydration, adaptive planning, end-to-end recovery/equal B/C
+  continuation and the 30-cell ABC/CBA dispatcher remain unfinished. No paid
+  pilot ran. Final carrying-HEAD tests and correction review remain outstanding;
+  separately directed leader launch is required, with no new owner-approval
+  wait. Earlier real preprocessing and failed/prepared-artifact evidence is
+  unchanged. No CI query, provider call or real-artifact operation occurred.
+
 - Record one successful real GPT-5.4 Codex local preparation and Step 1 at
   authorized source `6f7c77a9de52678e188f025b86de537ce8825dee`. One source fetch
   returned that exact commit. One unauthenticated public HTTPS GET returned

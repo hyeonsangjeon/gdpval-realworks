@@ -726,6 +726,8 @@ class TaskExecutor:
                 condition_name=condition_name,
                 **({"pilot_wire_receipts": opts["pilot_wire_receipts"]}
                    if opts.get("pilot_wire_receipts") is not None else {}),
+                **({"task_deadline_store": opts["task_deadline_store"]}
+                   if opts.get("task_deadline_store") is not None else {}),
             )
 
         elif mode == "json_renderer":

@@ -76,6 +76,7 @@ REQUIRED_SOURCES = {
     "batch-runner/scripts/run_agentic_v2_stage.py",
     "batch-runner/core/codex_runtime_config.py",
     "batch-runner/core/codex_runner.py",
+    "batch-runner/core/codex_task_deadline.py",
     "batch-runner/core/experiment_config.py",
     "batch-runner/core/executor.py",
     "batch-runner/step1_prepare_tasks.py",
