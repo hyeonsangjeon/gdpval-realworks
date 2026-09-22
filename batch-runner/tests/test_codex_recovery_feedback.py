@@ -50,12 +50,21 @@ def reconcile(executor, host, task):
     ) is None
 
 
-def interrupt_settlement(patch, window):
-    def interrupted(*args, **kwargs):
-        raise SystemExit("synthetic host accounting interruption")
-
+def interrupt_settlement(patch, window, *, pending_only=False):
     owner, name = ((codex_runner.CodexAgentRunner, "_settle_call") if window == "before_ledger"
                    else (CodexTaskDeadline, "acknowledge_usage"))
+    original = getattr(owner, name)
+
+    def interrupted(*args, **kwargs):
+        if pending_only and window == "before_ledger":
+            runner, call_id, _ = args
+            row = next(row for row in runner.cost_ledger.calls_for(TASK) if row["call_id"] == call_id)
+            if row["state"] == "settled":
+                # Startup replays old receipts through the real equality guard.
+                # Interrupt only the new observation's pending ledger commit.
+                return original(*args, **kwargs)
+        raise SystemExit("synthetic host accounting interruption")
+
     patch.setattr(owner, name, interrupted)
 
 
@@ -234,7 +243,7 @@ def test_recovery_feedback_terminal_accounting_never_reopens_native_work(
             if index == 0:
                 return _execute_reference_task(executor_for(store, ledger), host, reference_task)
             with monkeypatch.context() as patch:
-                interrupt_settlement(patch, window)
+                interrupt_settlement(patch, window, pending_only=True)
                 return _execute_reference_task(executor_for(store, ledger), host, reference_task)
 
         with pytest.raises(SystemExit):
@@ -296,7 +305,7 @@ def test_recovery_feedback_forged_or_stale_context_refuses_before_request_and_se
             if index == 0:
                 return _execute_reference_task(executor_for(store, ledger), host, reference_task)
             with monkeypatch.context() as patch:
-                interrupt_settlement(patch, "before_ledger")
+                interrupt_settlement(patch, "before_ledger", pending_only=True)
                 return _execute_reference_task(executor_for(store, ledger), host, reference_task)
 
         with pytest.raises(SystemExit):
