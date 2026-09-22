@@ -52,7 +52,7 @@ def _runtime_fixture(tmp_path, monkeypatch, repeat):
         root, manifest=inputs["manifest"], combined_plan=inputs["combined_plan"], run=run,
     )
     _input_bundle_fixture(root, inputs=inputs, run=run)
-    workspace.mkdir(parents=True)
+    workspace.mkdir(parents=True, exist_ok=True)
     for module in (step1, step2):
         monkeypatch.setattr(module, "WORKSPACE_DIR", workspace)
         monkeypatch.setattr(module, "DEFAULT_LOCAL_PATH", dataset_root)
@@ -374,7 +374,7 @@ def test_codex_comparison_capture_gates_real_step1_and_step2(case, tmp_path, mon
             inspection = preflight.inspect_plan(inputs["manifest"], grading_plan=inputs["combined_plan"])
             assert inspection["configuration_valid"] is True
             assert inspection["codex_pre_execution_capture"]["required_runs"] == list(CodexComparisonCapture.RUN_IDS)
-            assert len(preflight.REQUIRED_SOURCES) == 34
+            assert len(preflight.REQUIRED_SOURCES) == 36
             sol = preflight.load_plan(preflight.ROOT / preflight.ENVELOPE / "gpt56_sol_foundry_codex_pilot.yaml")
             for path in ("batch-runner/gpt54_comparison_preflight.py", "batch-runner/core/experiment_config.py",
                          "batch-runner/step1_prepare_tasks.py", "batch-runner/step2_run_inference.py"):

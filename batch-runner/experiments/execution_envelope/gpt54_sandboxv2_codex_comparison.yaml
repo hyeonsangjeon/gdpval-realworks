@@ -6,6 +6,8 @@
 # checkout, then seals both bundles. No preparation artifact authorizes launch.
 # Registered runtimes also require the checkout-ready marker, reservation and
 # detached HEAD to agree in place, with no quarantine, before provider setup.
+# Codex inputs also require an explicit local copy of the full policy-canonical
+# schema-4 Step 0 manifest; no cohort-only replacement or bootstrap is allowed.
 plan_version: gpt54-sandboxv2-codex-comparison-v1
 base_sha: a855c5a9604554499be9eed4e5eb5523e8ad95d5
 comparison: configuration_bundle
@@ -122,19 +124,21 @@ runs:
 source_pins:
   .github/workflows/agentic-v2-stage-run.yml: f02579edfa09ee9d3e9576cff25510c27f86bb1a9498f311f0bafd9ff4261ae1
   .github/workflows/batch-run.yml: 47f006f69bc079c50e3fba5ec5a7afcee769478e9857dead9c2e0eee22d90c26
-  batch-runner/gpt54_comparison_preflight.py: 604e24b0c3a7c3e9344a997273bb492bb5d5f8546518e97f2e59af2c7914ee80
+  batch-runner/gpt54_comparison_preflight.py: 8893ad540acdb5176b0dd6961a0cb01129cdf5fa34101888e5f215d3a6cccc6f
   batch-runner/gpt54_v2_grading_input.py: 3fae995caf3d785d64fad02280d77a6853389a2ff12be2e7165e4868b4b0b830
   batch-runner/gpt54_codex_grading_input.py: a61fd74012dd588225fb77359a2e7c0880e7a10918b33f9658d2a0d78f0d58c8
   batch-runner/gpt54_prepared_input_attestation.py: 6e78388a36446317d02f80409079e3a338eced6245afc56867f5438c0183ff9a
   batch-runner/gpt54_codex_input_capture.py: f2a31e4ffc4ed26e28e3e8bc0cb88ce6b33887cc94bb8a9d7ee1e6b6170642ec
   batch-runner/gpt54_v2_input_capture.py: 0f1089379a68408ab72d079ed52356be6ec9c934518c541783f322477bbcc93c
   batch-runner/gpt54_run_config_bundle.py: 71b4bd5247fed0aaba827e6d6e54d1cc33b5d91c494760d996f5eb815d527b9d
-  batch-runner/gpt54_run_input_bundle.py: eadbc027b91192a141737926aa723a1c2985e17038c31b7570840ee4691abe07
-  batch-runner/gpt54_disposable_checkout.py: 1674a92096f406e6cafdd9fd9da03760e5d6f920e423d0cc95573ca8dc55c808
-  batch-runner/gpt54_workflow_gate.py: 2fafc4249785fff0d7ccbce267deadbe296c0461b7c4c802656c50b38bfdd55c
+  batch-runner/gpt54_run_input_bundle.py: c4aa8fabad31c8cf37fa60ea6ccf82f56f8ea830b6e1946b9643bae1fe58b922
+  batch-runner/gpt54_disposable_checkout.py: aaa7de1c54df7afc9f3e5b1bfadc831f6658a50d0895491359ff3e5ada11b24b
+  batch-runner/gpt54_workflow_gate.py: 0afde42161d9a954dd997e2c7681130a452e8684acef0e5b7a9219d49e80d190
   batch-runner/prepare_dataset.py: 17ccad9fe7a360daaa02329481c11f89135ca2cf107eb70355836b11fd4b2d5e
   batch-runner/step8_grade.py: ec23fc941aa0edb54e2858750cc1df5a6a6954a1732cd3f3197d9f9b4b3c18f4
   batch-runner/core/config.py: 483d8ad94ddb78b2a11b8712737ceea1e6b4d3696a8f16fabb84f747a786b48c
+  batch-runner/core/needs_files.py: 05c1c0baf36c5bae01bcb6c8b5871249e2633c7165b8e96f94726ece7f5ddd84
+  batch-runner/core/repo_bootstrapper.py: 7e87e75b78d9a86740610bd87cfb8b0eb8bb3dd14a4925af8eca477812e419f3
   batch-runner/core/agentic_v2_preregistration.py: 02ac15ef8483ac367796feb1fcbadf90a27062c2bf5b3147b75b7e17a0c089e0
   batch-runner/core/execution_envelope_tasks.py: dd934314ce447b78efa45ad9d349f198d1e429531eccdf430106b87335dc2ea0
   batch-runner/experiments/execution_envelope/gdpval_task_catalog.json: 5f1eca853979b2b4efe6c6ba656545c3a416da920e3faf067d52f5d8ac4ae0eb

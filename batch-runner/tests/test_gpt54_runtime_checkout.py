@@ -27,7 +27,7 @@ from .test_gpt54_disposable_checkout import (
     _allow_only_temporary_git, _commit_fixture, _fixture_git, _sidecars, _source_state,
 )
 from .test_gpt54_prepared_input_attestation import (
-    _bundle_fixture, _json, _tree_snapshot,
+    _bundle_fixture, _json, _step0_manifest_source, _tree_snapshot,
 )
 from .test_gpt54_run_input_bundle import _input_bundle_seed
 from .test_gpt54_v2_input_capture import _runtime_fixture as _v2_fixture
@@ -206,9 +206,10 @@ def test_runtime_checkout_lineage_precedes_both_providers(
         run, repository=repository, reviewed_source_sha=reviewed_sha, destination=checkout,
         manifest=inputs["manifest"], combined_plan=inputs["combined_plan"],
         dataset_parquet=inputs["dataset_parquet"], reference_root=inputs["reference_root"],
+        step0_manifest=_step0_manifest_source(inputs, run),
     )
     workspace = checkout / "batch-runner/workspace"
-    workspace.mkdir()
+    workspace.mkdir(exist_ok=True)
     _runtime_paths(checkout, monkeypatch)
     if condition == "codex":
         payload = step1.prepare_tasks(str(checkout / writer.CONFIG_PATH))
@@ -356,7 +357,7 @@ def test_runtime_checkout_lineage_precedes_both_providers(
             "git_commands": ["rev-parse"], "external_source_worktree_required": False,
             "evidence_boundary": "local_reviewed_checkout_and_bundles",
         }
-        assert len(inputs["manifest"]["source_pins"]) == 34
+        assert len(inputs["manifest"]["source_pins"]) == 36
         assert set(inputs["manifest"]["source_pins"]) == preflight.REQUIRED_SOURCES
         assert inspection["launch_allowed"] is inspection["full_220_allowed"] is False
     else:

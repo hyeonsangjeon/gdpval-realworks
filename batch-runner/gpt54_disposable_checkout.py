@@ -13,6 +13,7 @@ import json
 import os
 import re
 import subprocess
+from contextlib import ExitStack
 from pathlib import Path
 from typing import Any
 
@@ -42,6 +43,10 @@ from gpt54_run_input_bundle import (
     DATASET_ROOT,
     READY_PATH as INPUT_READY_PATH,
     RESERVATION_PATH as INPUT_RESERVATION_PATH,
+    STEP0_MANIFEST_PATH,
+    RunInputBundleRefused,
+    _step0_bytes,
+    _step0_source,
     materialize_run_input_bundle,
     verify_run_input_bundle,
 )
@@ -154,6 +159,7 @@ def _reviewed_commit(
 
     reserved = set(_files(plan, plan.dispatch.runs[0].run_id)) | {
         CONFIG_READY_PATH, INPUT_READY_PATH, INPUT_RESERVATION_PATH, READY_PATH, DATASET_ROOT,
+        STEP0_MANIFEST_PATH,
     } | {row.experiment_config_path for row in plan.runs}
     # Inspect the whole tree's paths/modes, not the source working tree. A link or
     # submodule outside the pin set must not redirect a subsequent bundle write.
@@ -413,12 +419,15 @@ def prepare_disposable_checkout(
     dispatch_run: ComparisonRunSpec, *, repository: Path, reviewed_source_sha: str,
     destination: Path, manifest: dict[str, Any], combined_plan: dict[str, Any],
     dataset_parquet: Path, reference_root: Path,
+    step0_manifest: Path | None = None,
 ) -> dict[str, Any]:
     """Create one detached checkout and seal its exact config and five-task inputs.
 
     The caller supplies external source-review provenance. No ref is resolved as
     a substitute for that SHA. Failures after reservation retain all remaining
     paths for manual disposal; there is no retry, cleanup or execution fallback.
+    Codex additionally requires explicit local canonical ``step0_manifest``
+    bytes. V2 does not consume this input. Nothing is discovered or downloaded.
     """
     from gpt54_codex_input_capture import _write_no_clobber
 
@@ -435,15 +444,23 @@ def prepare_disposable_checkout(
         parquet = Path(os.path.abspath(parquet))
         _assert_no_symlink_ancestors(parquet)
         references = _root(reference_root)
-        destination = _destination(destination, repository, _root(TRUSTED_ROOT), common, parquet, references)
+        step0 = _step0_source(dispatch_run, step0_manifest)
+        destination = _destination(destination, repository, _root(TRUSTED_ROOT), common, parquet, references,
+                                   *([step0] if step0 is not None else []))
         _absent(destination)
         reviewed = _reviewed_commit(repository, reviewed_source_sha, manifest, plan)
         snapshot = _source_snapshot(plan, parquet, references)
+        step0_data = _step0_bytes(step0, snapshot)
         reservation, quarantine = _sidecars(destination)
         intent = _reservation(plan, index, reviewed_source_sha)
-        with _held_parents(destination.parent, (destination.name,)) as check_parent:
+        with ExitStack() as held, _held_parents(destination.parent, (destination.name,)) as check_parent:
+            check_source = (held.enter_context(_held_parents(step0.parent, (step0.name,)))
+                            if step0 is not None else lambda: None)
+            if _step0_bytes(step0, snapshot) != step0_data:
+                raise DisposableCheckoutRefused("Step 0 source changed before reservation")
             _absent(destination)
             check_parent()
+            check_source()
             phase = "reservation"
             # Even an interrupted first publication quarantines the attempted
             # path; it must not silently become an apparently fresh retry.
@@ -471,12 +488,15 @@ def prepare_disposable_checkout(
                 materialize_run_input_bundle(
                     dispatch_run, manifest=manifest, combined_plan=combined_plan,
                     checkout=destination, dataset_parquet=parquet, reference_root=references,
+                    step0_manifest=step0,
                 )
                 check_parent()
                 check_destination()
                 phase = "ready_verification"
                 _same("source inputs after publication", _source_snapshot(plan, parquet, references).shared_binding,
                       snapshot.shared_binding)
+                if _step0_bytes(step0, snapshot) != step0_data:
+                    raise DisposableCheckoutRefused("Step 0 source changed after publication")
                 _checkout_state(repository, destination, common, reviewed_source_sha, manifest, reviewed)
                 marker = _marker(destination, plan, index, reviewed_source_sha, reviewed)
                 _read_bytes(reservation, **_identity(intent))
@@ -484,6 +504,7 @@ def prepare_disposable_checkout(
                     raise DisposableCheckoutRefused("checkout has been quarantined")
                 check_parent()
                 check_destination()
+                check_source()
                 _write_no_clobber(destination / READY_PATH, _canonical_json(marker).encode("utf-8"))
                 # Ready alone is insufficient if this final verification fails:
                 # a retained quarantine sidecar always takes precedence.
@@ -493,6 +514,7 @@ def prepare_disposable_checkout(
                 )
                 check_parent()
                 check_destination()
+                check_source()
                 return result
     except Exception as error:
         if reserved:
@@ -519,6 +541,8 @@ def prepare_disposable_checkout(
             ) from error
         if isinstance(error, DisposableCheckoutRefused):
             raise
+        if isinstance(error, RunInputBundleRefused):
+            raise DisposableCheckoutRefused(str(error)) from error
         raise DisposableCheckoutRefused("checkout preparation refused before reservation") from error
 
 
@@ -532,6 +556,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--dataset-parquet", required=True, type=Path)
     parser.add_argument("--reference-root", required=True, type=Path)
+    parser.add_argument("--step0-manifest", type=Path,
+                        help="Explicit local canonical schema-4 manifest (required for Codex only)")
     args = parser.parse_args(argv)
     try:
         manifest = yaml.safe_load(_read_bytes(args.manifest))
@@ -542,6 +568,7 @@ def main(argv: list[str] | None = None) -> int:
             run, repository=args.repository, reviewed_source_sha=args.reviewed_source_sha,
             destination=args.destination, manifest=manifest, combined_plan=combined,
             dataset_parquet=args.dataset_parquet, reference_root=args.reference_root,
+            step0_manifest=args.step0_manifest,
         )
     except (OSError, ValueError, TypeError, KeyError, StopIteration, yaml.YAMLError) as error:
         detail = str(error) if isinstance(error, DisposableCheckoutRefused) else "invalid local preparation inputs"

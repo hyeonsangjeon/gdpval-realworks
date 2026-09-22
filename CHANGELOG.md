@@ -13,6 +13,71 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Require an explicit local canonical Step 0 manifest for GPT-5.4 Codex input
+  preparation. The full file is copied to
+  `batch-runner/workspace/step0_needs_files_manifest.json`, bound by size/SHA256
+  and reread through the unchanged schema 4 / `deliverable_only` canonical
+  validator. Missing, wrong, linked, collided or partial inputs cannot report
+  ready. The materializer, checkout/API/CLI, verifier, workflow helper, source
+  pins, related fixtures and documentation cover this role. V2 semantics,
+  five-task order, comparison controls, six blockers and false launch flags are
+  unchanged. Workflow YAML and the Step 1/canonical validator are unchanged;
+  hosted lanes without an explicit manifest source remain fail-closed.
+  Directly coupled Foundry/GHCP digest updates change pins only.
+  On implementation `8728c350266578c299dd64b974f9368288de09d7`, originally based
+  on `778a627bbb5404f33e5e62019382fa107aa47840`, the earlier focused command
+  `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3 -m pytest -q -p no:cacheprovider --tb=short batch-runner/tests/test_gpt54_run_input_bundle.py batch-runner/tests/test_gpt54_disposable_checkout.py batch-runner/tests/test_gpt54_workflow_gate.py batch-runner/tests/test_gpt54_comparison_preflight.py -k step0_manifest`
+  reported `45 passed, 319 deselected in 18.36s`, exit 0. Synthetic fixtures
+  with explicit test-only pins exercise the actual materializer, local loader, canonical consumer and
+  Step 1/capture, including five ordered tasks; this is not a new real-data
+  preparation or Step 1 success and was not a passing full comparison job.
+  The supplied Backend run `35677536185`, `comparison-contracts` job
+  `106587081789`, completed `2026-09-22T02:14:34Z` at
+  `928f4576848b73f0f22285747685148d9e52a317`, reported
+  `3 failed, 939 passed in 1022.89s (17:02)`. Its `codex_r1`, `codex_r2` and
+  `relocated_codex` cases failed the old unchanged-parent snapshot assertion
+  after successful publication: creating `batch-runner/workspace` changes the
+  existing parent's directory link count on the hosted filesystem.
+  Correction `0c5074665cd01be89e9d380614903471ab819f0f` permits only an unchanged
+  or +1 directory link count when the named intended child is created. Parent
+  mode/type, all existing file bytes/link counts, symlink targets, other rows,
+  exact added-file set, no-clobber and read-only checks remain fixed. One
+  invocation of the three failed cases plus `v2_r1`, `v2_r2`, `relocated_v2`
+  and `existing_data_parent` reported `7 passed in 7.30s`, exit 0; the exact
+  command is in `tasks/LATEST_TASK_RESULT/README.md`. `git diff --check` passed.
+  No production behavior, source pin or workflow changed in this correction;
+  neither the earlier 45-case selection nor the 942-case job was rerun.
+  One fetch and ordinary merge integrated exact baseline
+  `928c3a7e69b28508505479198d329c23c5de8594`, preserving the earlier operational
+  changelog entry and leaving its branch and real artifacts untouched.
+  Leader review `5273753355`, `FINAL-APPROVE` at exact HEAD
+  `0913891fcbcfe2119c2899535a5e2b017cd99eee`, covers the complete Step 0 fix,
+  parent-snapshot correction and records at that HEAD, with no high-confidence
+  correctness findings. Earlier review `5273344624`, `FINAL-APPROVE` at
+  `259f50567e95c07b720ac51a3f020453fad449bf`, covers operational records only.
+  The later single-candidate check and this records update are outside the
+  latest review boundary. That approval does not establish final-HEAD CI
+  success, real canonical-source availability, real Step 1 success or execution
+  permission.
+  The one authorized candidate for `workspace/step0_needs_files_manifest.json`
+  was read once without following links. It was a single-link regular file of
+  `56057` bytes, SHA256
+  `16778d3ae830232e1c59070ad9254b926045e3bff3f67a3d6186b3c593c8a0e7`.
+  The unchanged `deliverable_only` canonical contract requires
+  `463fc119841dbe67e427c372da93ff55972139377aa03194764b57d87004c512`
+  and refused those bytes at the digest check, exit 2; schema 4 acceptance was
+  not reached. The check stopped with no second candidate, copy, repair,
+  accepted-source handoff or preparation. This refusal applies only to the
+  named candidate, not to source availability elsewhere. A separately
+  authorized real preparation still requires an explicit canonical source.
+  Production/test/config/workflow bytes remain frozen at the reviewed HEAD.
+  No tests or earlier runtime validations were rerun, and no fetch, integration
+  or CI query occurred for this handoff. Fresh carrying-HEAD automatic CI
+  remains unobserved. `experiment-report-en` and `im-not-ai-en` were applied to
+  the bounded records. No experiment/control change requires `experiment-design`;
+  workflow, UI/animation and repo-readiness skills do not apply. No live
+  execution ran.
+
 - Correct PR #642's pytest target helper so it separates option tokens and
   values from positional targets before any directory inspection. At
   `99032f49c62ead8a39fd099943084a60dbd68418`, the supplied Backend run
