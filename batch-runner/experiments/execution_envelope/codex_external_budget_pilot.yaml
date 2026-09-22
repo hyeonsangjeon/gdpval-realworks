@@ -1,0 +1,37 @@
+# Separate from the V2/Codex comparison: compilation is not launch approval.
+plan_version: codex-external-budget-pilot-v1
+source_baseline: 149d89afd43e54a46b6f172b71c2cf23d0cb7a17
+parent_profile: batch-runner/experiments/exp033_codex_foundry_fixed5.yaml
+profile_controls: batch-runner/experiments/execution_envelope/gpt54_sandboxv2_codex_comparison.yaml
+description: >-
+  Compare fresh attempts (A), mechanical native continuation (B), and the same
+  continuation with host-observed error feedback (C). B versus C isolates the
+  feedback intervention, not external wait optimization. A versus B changes
+  both retention and the attempt policy; it is not a retention-only effect.
+  Two repeats are a finite pilot, not a precision or quality guarantee.
+cohort: advance_check_5
+order_per_task:
+  - {condition: A, repetition: 1}
+  - {condition: B, repetition: 1}
+  - {condition: C, repetition: 1}
+  - {condition: C, repetition: 2}
+  - {condition: B, repetition: 2}
+  - {condition: A, repetition: 2}
+cell_count: 30
+active_children: 1
+cumulative_seconds: 10800
+attempt_seconds: 1800
+a_max_attempts: 4
+bc_max_attempts: null
+cost_policy: observed_usage_no_automatic_monetary_cutoff
+default_mode: plan_only
+c_required_continuation_format: codex-native-continuation-v2
+grading:
+  template: batch-runner/grading_configs/default_v2_sol_max.yaml
+  grades_per_task: 1
+  launch: separately_directed
+analysis:
+  denominator: all_30_declared_cells_including_failed_filtered_expired
+  missing_usage: preserve_missing_and_partial_not_zero
+  quality: dispatch_and_files_are_not_grades
+  stopping: finite_matrix_no_low_score_retries
