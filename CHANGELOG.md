@@ -388,6 +388,98 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Add retained-workspace/native-thread continuation to the existing opt-in
+  Codex B/C deadline path. A keeps fresh sessions and four attempts; legacy
+  defaults, task/model/effort/context/grading settings, the 180-minute cumulative
+  clock and 30-minute attempt policy are unchanged. The private host record
+  binds the actual native ID, directory identities, prepared/request and
+  runtime/provider/settings identity, and durable receipt/usage boundaries.
+  The pinned `Codex.thread_resume()` path checks the response ID without
+  restaging partials or falling back to a fresh thread. Missing/corrupt/linked/
+  cross-cell state, uncertain thread creation and changed targets refuse;
+  content-filter stops remain terminal. Cumulative usage is differenced and
+  settlement is idempotent; unknown usage stays partial, not a complete bill.
+  In a new isolated environment, the exact declared `openai-codex==0.147.0`
+  and `openai-codex-cli-bin==0.147.0` pair and necessary declared dependencies
+  installed successfully in two pip commands, each exit 0. The initial venv
+  bootstrap lacked `ensurepip`; existing pip targeted only the private prefix.
+  At `db88d5301dd125704f06122645a049d8518de306`, one focused invocation reported
+  `45 passed in 188.99s (0:03:08)`, exit 0: 41 new resume/binding cases and four
+  deadline/legacy cases. It used the real installed SDK facade/types/collector
+  with a stubbed transport and fake clocks, not a Codex process or provider.
+  Subsequent source inspection found a budgeted-A retry gap for content-filter
+  refusals during turn creation. A corrective commit made those stops durable
+  for A/B/C; its affected-only selection at
+  `ee11f956d53225760b96040c2642e7ef0682b554` reported
+  `8 passed in 18.21s`, exit 0: six filter cases and two refreshed current/stale
+  binding cases. The earlier 45-case result retains its original commit/scope.
+  REQUEST-CHANGES review `5278280269` at
+  `0f3cbdca6326c4916f282d5f5796fd7bd02be15e` then identified that terminal
+  and expiry gates could strand a persisted usage observation before ledger
+  settlement/acknowledgment. Host-only reconciliation now validates the cell,
+  request, provider, retained directories and ledger before those gates, using
+  the unchanged receipt equality guard. Completed, filtered and expired cells
+  settle/acknowledge known usage without another native request, attempt,
+  expiry extension or terminal-state reset; unknown usage remains partial.
+  No completed task result is reconstructed. One focused invocation at
+  `d486dc456e3caf8c2cacc4cfd480a9828796d0e5` reported
+  `42 passed in 158.33s (0:02:38)`, exit 0: 39 new crash/refusal/unknown-usage
+  cases, one existing nonterminal replay case and two current/stale binding
+  cases. The earlier 45/8 selections were not rerun and did not cover the
+  terminal replay gap. The existing isolated SDK environment was reused
+  without installation. This is synthetic SDK-transport/fake-clock and SQLite
+  evidence, not live recovery or invoice completeness. The leader subsequently
+  reviewed the terminal-accounting delta and 42-case evidence at
+  `0b37bc5991834b12788434c10ebb56e39d3d9db9` and reported all fourteen
+  applicable CI checks passing there. Review `5278280269`'s gate-order defect
+  is addressed for the covered no-reference inputs; that result did not
+  establish reference-bearing continuation.
+  Separate REQUEST-CHANGES review `5280465712` on that HEAD identified that
+  Step 2's per-invocation temporary reference paths were included in the native
+  continuation digest. Identical verified inputs staged on retry or restore
+  therefore refused before native resume or host accounting. The existing
+  `VerifiedReferencePath` now carries the validated declared path, SHA256 and
+  size through verification/copying. Continuation and accounting bind those
+  ordered identities while the string still names the current read location.
+  Current-byte checks, declared roles/order, link and basename-collision
+  protections remain. Retained workspace copies are neither approved sources
+  nor restaged over partials. A stays fresh; B/C share the same continuation
+  path and unchanged 180/30-minute policy. No old binding is silently adopted.
+  One focused invocation at `76178074c1ad1e7a11f7b7a40d0773c26295ef20`
+  reported `43 passed in 165.28s (0:02:45)`, exit 0: 35 new reference-bearing
+  cases, five reference-integrity cases, one existing terminal replay parameter
+  and two current/stale binding cases. With `RESUME_PYTHON` denoting the existing
+  private isolated interpreter, the exact environment and pytest argv were:
+  `HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 DO_NOT_TRACK=1 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner "$RESUME_PYTHON" -m pytest -q -o addopts= batch-runner/tests/test_codex_native_resume.py::test_native_resume_stable_reference_retry_and_process_restore batch-runner/tests/test_codex_native_resume.py::test_native_resume_stable_reference_a_stays_fresh batch-runner/tests/test_codex_native_resume.py::test_native_resume_stable_reference_terminal_accounting batch-runner/tests/test_codex_native_resume.py::test_native_resume_stable_reference_drift_refuses_before_request_or_settlement batch-runner/tests/test_codex_native_resume.py::test_native_resume_stable_reference_unknown_usage_remains_partial batch-runner/tests/test_reference_integrity.py 'batch-runner/tests/test_codex_native_resume.py::test_native_resume_crash_reconciliation_terminal_and_expired[completed-before_ack-outer_retry-B]' batch-runner/tests/test_codex_native_resume.py::test_native_resume_active_grader_template_source_bindings`.
+  The real default `_execute_single_task()` resolution/staging path produced
+  distinct temporary directories from synthetic regular files and validated
+  records. Tests verify B/C native-ID/workspace reuse after failure and process
+  restore, fresh A, retained partials, unchanged deadlines/admissions, and
+  terminal/expired accounting-only reconciliation without another runtime or
+  native request. Invalid reference identity/bytes/size/order, missing or
+  linked files and collisions refuse before a new request or invalid
+  settlement. Unknown usage remains partial. The earlier 45/8/42 selections
+  retain their original commits/scopes and were not rerun in full. `165.28s`
+  is pytest wall time, not task latency or cost. No test retry, installation,
+  real-data operation or live recovery was performed; the private log is
+  retained. Review `5280465712` requests this correction, not approval of it;
+  immutable review and carrying-HEAD CI remain required. No new CI success is
+  claimed and no CI query was made.
+  The exact commands and dependency/contract limits are in the latest result.
+  Active full-template hashes and directly coupled pins were recomputed with
+  the unchanged helper/original template roles; source counts remain 37/58,
+  `WORKFLOW_SHA256` and all false launch flags/blockers remain unchanged.
+  The active GHCP gate's directly coupled reference-source constant and YAML
+  pins were also refreshed; its 19-file source set and strict guard remain.
+  The exact source baseline is `237fdc429420d417909fd109232710d933c5ce63`.
+  #650's reviews `5276488086` and `5276986025`, the latter at
+  `846b7dddc7d4cf674f4da68ca5d6e1d330e3b6b5`, cover only the prior deadline
+  slice/corrections. This continuation implementation is not approved by them.
+  Leader review, carrying-HEAD CI, adaptive policy, the 30-cell dispatcher and
+  separately directed pilot work remain. No live recovery, quality, savings,
+  launch readiness or Project completion is claimed; historical results and
+  all prior operational/preparation artifacts remain untouched.
+
 - Add opt-in cumulative task deadlines to the existing `codex_foundry`
   retry/turn path. `execution.codex.task_deadline` declares A/B/C and repetition
   1/2; each run/task/condition/repetition retains one 180-minute expiry through

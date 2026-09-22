@@ -17,13 +17,18 @@ class ReferenceIntegrityError(ValueError):
 
 
 class VerifiedReferencePath(str):
-    """String-compatible path carrying its approved content identity."""
+    """Read location carrying stable declared-path and approved byte identities."""
 
+    declared_path: str
     sha256: str
     size: int
 
-    def __new__(cls, value: str, *, sha256: str, size: int):
+    def __new__(
+        cls, value: str, *, sha256: str, size: int,
+        declared_path: str | None = None,
+    ) -> VerifiedReferencePath:
         instance = super().__new__(cls, value)
+        instance.declared_path = str(value) if declared_path is None else declared_path
         instance.sha256 = sha256
         instance.size = size
         return instance
@@ -153,6 +158,7 @@ def open_verified_reference(
             str(candidate),
             sha256=actual_sha256,
             size=size,
+            declared_path=getattr(path, "declared_path", None),
         )
         yield stream, verified
         after_consume = os.fstat(stream.fileno())
@@ -227,13 +233,13 @@ def resolve_verified_reference_paths(
         sha256, size = validate_reference_record(
             {key: identity.get(key) for key in ("sha256", "size")}
         )
-        verified.append(
-            verify_reference_path(
-                root.joinpath(*relative.parts),
-                expected_sha256=sha256,
-                expected_size=size,
-            )
+        resolved = verify_reference_path(
+            root.joinpath(*relative.parts),
+            expected_sha256=sha256,
+            expected_size=size,
         )
+        resolved.declared_path = value
+        verified.append(resolved)
     return verified
 
 
@@ -257,6 +263,7 @@ def copy_verified_reference(
                 expected_sha256=verified.sha256,
                 expected_size=verified.size,
             )
+            copied.declared_path = verified.declared_path
             destination.chmod(0o400)
     except (OSError, ReferenceIntegrityError) as exc:
         destination.unlink(missing_ok=True)

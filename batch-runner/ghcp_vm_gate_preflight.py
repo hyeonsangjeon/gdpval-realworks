@@ -40,7 +40,7 @@ MAX_SOURCE_BYTES = 8 * 1024 * 1024
 PINNED_SOURCES = {
     "batch-runner/core/agentic_v2_oci.py": "3828aebc41bc27ed571991b27f7847a7a77f0b2240a2616fe554fd5e0c513337",
     "batch-runner/core/execution_envelope_tasks.py": "dd934314ce447b78efa45ad9d349f198d1e429531eccdf430106b87335dc2ea0",
-    "batch-runner/core/reference_integrity.py": "13198897c189a9276494b78ea3359fc2e623211ab2f32554b81ab9b12d9cf19e",
+    "batch-runner/core/reference_integrity.py": "bef43da8fdb6c62636487b9abdd5792e33c0ecc89e9c85b2a97a3ef19cd7add5",
     "batch-runner/core/source_identity.py": "1a619857e9a7ba8d6d572fa712796da380f648b6c541af727d2c45b6f9848d3b",
     CATALOG: "5f1eca853979b2b4efe6c6ba656545c3a416da920e3faf067d52f5d8ac4ae0eb",
     ADVANCE_PLAN: "9ecf85f1e9eb40ddb0232baa854c10052c3e4457fe2cf174f9b34d4cbecdc26e",

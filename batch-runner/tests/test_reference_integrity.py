@@ -5,6 +5,27 @@ import pytest
 from core import reference_integrity as integrity
 
 
+@pytest.mark.parametrize("declared", [False, True])
+def test_stable_reference_identity_survives_verification_and_copies(tmp_path, declared):
+    relative = "reference_files/specification/input.xlsx"
+    source = tmp_path / relative
+    source.parent.mkdir(parents=True)
+    source.write_bytes(b"approved")
+    record = {"path": relative, **integrity.reference_manifest_record(tmp_path, relative)}
+    resolved = (integrity.resolve_verified_reference_paths(tmp_path, [relative], [record])
+                if declared else [integrity.verify_reference_path(source)])
+    expected_path = relative if declared else str(source)
+
+    with integrity.stage_verified_references(resolved) as first:
+        with integrity.stage_verified_references(first) as second:
+            assert str(first[0]) != str(second[0]) != str(source)
+            for path in (*resolved, *first, *second, integrity.verify_reference_path(second[0])):
+                assert path.declared_path == expected_path
+                assert (path.sha256, path.size) == (record["sha256"], record["size"])
+                assert Path(path).read_bytes() == b"approved"
+            assert all(Path(path).stat().st_mode & 0o777 == 0o400 for path in (*first, *second))
+
+
 def test_staged_reference_isolated_from_source_mutation(tmp_path):
     source = tmp_path / "source" / "input.xlsx"
     source.parent.mkdir()

@@ -10,8 +10,8 @@ directory and a prompt; what it does in between is its own.
 That is also why the shape of this module differs from the other run places.
 ``core/subprocess_runner.py`` asks a model for a program and then runs the
 program itself, so it knows exactly how many requests happened and exactly what
-executed. Here we know neither. What we can control is the boundary — one fresh
-session per task, one directory per task, a wall-clock limit, and a sweep for
+executed. Here we know neither. What we can control is the boundary — fresh
+sessions by default, one task's directories, a wall-clock limit, and a sweep for
 anything still running afterwards — and that boundary is what this module is
 mostly made of.
 
@@ -30,10 +30,12 @@ from __future__ import annotations
 import os
 import re
 import shutil
+import stat
 import subprocess
+import sys
 import tempfile
 import threading
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Optional, Sequence
 
@@ -49,6 +51,8 @@ from core.codex_runtime_config import (
     CodexRuntimeUnavailable,
     FORBIDDEN_STATIC_AZURE_CREDENTIAL_ENV,
     NEUTRALISED_ENV_NAMES,
+    PINNED_CODEX_CLI_VERSION,
+    PINNED_CODEX_SDK_VERSION,
     build_isolated_environment,
     require_pinned_runtime,
     resolve_run_root_base,
@@ -58,6 +62,7 @@ from core.codex_task_deadline import (
     ATTEMPT_SECONDS, ATTEMPTS_EXHAUSTED, EXHAUSTED, STATE_REFUSED,
     CodexTaskDeadline, CodexTaskDeadlineStore,
     TaskDeadlineExhausted, TaskDeadlineRefused,
+    _digest as _deadline_identity_digest,
 )
 from core.cost_receipts import STAGE_GENERATION, RETRY_NONE, make_call_id
 from core.execution_envelope_observed import (
@@ -365,6 +370,53 @@ class CodexWorkspace:
             copied = copy_verified_reference(source, self.workspace)
             names.append(Path(str(copied)).name)
         self.staged_reference_names = tuple(names)
+
+    def continuation_binding(self) -> dict[str, Any]:
+        """Identify retained directories without reading their private contents."""
+        from core.hf_publication import _assert_no_symlink_ancestors
+
+        try:
+            root = _assert_no_symlink_ancestors(self.root)
+            if root.parent != resolve_run_root_base().absolute():
+                raise ValueError("different run root")
+            directories = {}
+            for role, path in (("root", root), ("workspace", self.workspace),
+                               ("codex_home", self.codex_home), ("home", self.home)):
+                path = _assert_no_symlink_ancestors(path)
+                if role != "root" and path != root / role:
+                    raise ValueError("different workspace layout")
+                metadata = path.lstat()
+                if (not stat.S_ISDIR(metadata.st_mode)
+                        or stat.S_IMODE(metadata.st_mode) & 0o022
+                        or (role == "root" and stat.S_IMODE(metadata.st_mode) != 0o700)):
+                    raise ValueError("unsafe retained directory")
+                directories[role] = {"device": metadata.st_dev, "inode": metadata.st_ino}
+            return {"root": str(root), "directories": directories,
+                    "staged_reference_names": list(self.staged_reference_names)}
+        except (OSError, ValueError):
+            raise TaskDeadlineRefused("retained native workspace is missing, linked or unsafe") from None
+
+    @classmethod
+    def restore(cls, binding: dict) -> "CodexWorkspace":
+        """Adopt exactly the bound directories; never recreate or restage them."""
+        try:
+            if (type(binding) is not dict or set(binding) != {
+                "root", "directories", "staged_reference_names",
+            } or type(binding["root"]) is not str
+                    or not Path(binding["root"]).is_absolute()
+                    or type(binding["staged_reference_names"]) is not list
+                    or any(type(name) is not str or Path(name).name != name or name in {"", ".", ".."}
+                           for name in binding["staged_reference_names"])
+                    or len(set(binding["staged_reference_names"])) != len(binding["staged_reference_names"])):
+                raise ValueError("invalid retained layout")
+            root = Path(binding["root"])
+            workspace = cls(root, root / "workspace", root / "codex_home", root / "home",
+                            tuple(binding["staged_reference_names"]))
+            if workspace.continuation_binding() != binding:
+                raise ValueError("replaced retained directory")
+            return workspace
+        except (KeyError, TypeError, OSError, ValueError):
+            raise TaskDeadlineRefused("retained native workspace binding differs from current directories") from None
 
     def is_deliverable(self, relative: Path) -> bool:
         """Return whether a relative name is output rather than input or litter.
@@ -689,7 +741,7 @@ class CodexRunOutcome:
 
 
 class CodexAgentRunner(RecordsItsFirstRequest):
-    """Runs one GDPVal task per Codex session against a Foundry deployment."""
+    """Run a GDPVal task; opted-in B/C cells can retain their native session."""
 
     #: Codex opens its own requests inside a turn and does not report how many.
     #: ``True`` describes the boundary we do control — a new session, and one
@@ -1036,6 +1088,117 @@ class CodexAgentRunner(RecordsItsFirstRequest):
             developer_instructions=developer_instructions,
         )
 
+    def resume_thread(
+        self, codex: Any, workspace: CodexWorkspace, thread_id: str, *,
+        developer_instructions: str | None = None,
+    ) -> Any:
+        """Use openai-codex 0.147.0's real ID-based resume, never fork/start."""
+        return codex.thread_resume(
+            thread_id,
+            model=self.provider.model,
+            model_provider=self.provider.provider_id,
+            cwd=str(workspace.workspace),
+            sandbox=self._sandbox_preset(),
+            approval_mode=self._approval_mode(),
+            developer_instructions=developer_instructions,
+        )
+
+    def _continuation_identity(
+        self, deadline: CodexTaskDeadline, *, task_prompt: str,
+        reference_files: Sequence[str] | None, occupation: str,
+        experiment_prompt: dict | None, perception_text: str | None,
+    ) -> str:
+        """Hash declared settings/input identity, not credentials or transcripts."""
+        if self.codex_bin is not None:
+            raise TaskDeadlineRefused("native continuation requires the pinned companion, not a binary override")
+        try:
+            payload = {
+                "cell": deadline.store.identity, "task_id": deadline.task_id,
+                "sdk_version": PINNED_CODEX_SDK_VERSION,
+                "cli_version": PINNED_CODEX_CLI_VERSION,
+                "python": sys.executable,
+                "provider_type": type(self.provider).__module__ + "." + type(self.provider).__qualname__,
+                # config_overrides() can discover an auth-store location.
+                # The declared dataclass covers target/settings without that I/O.
+                "provider": asdict(self.provider), "timeout": self.timeout,
+                "sandbox": "workspace_write", "approval_mode": "deny_all",
+                "task_prompt": task_prompt, "occupation": occupation,
+                "experiment_prompt": experiment_prompt, "perception_text": perception_text,
+                # Private staging locations change per invocation; the declared
+                # input role/order and verified bytes must not change on resume.
+                "references": [{"path": getattr(path, "declared_path", str(path)),
+                                "sha256": getattr(path, "sha256", None),
+                                "size": getattr(path, "size", None)} for path in reference_files or ()],
+                "ledger": (None if self.cost_ledger is None else {
+                    "path": str(self.cost_ledger.path.absolute()), "run_id": self.cost_ledger.run_id,
+                }),
+            }
+            return _deadline_identity_digest(payload)
+        except (TypeError, ValueError, AttributeError):
+            raise TaskDeadlineRefused("native continuation requires an exact declared request/runtime identity") from None
+
+    def _settle_continuation_observations(self, deadline: CodexTaskDeadline, binding: dict) -> None:
+        """Replay a write-ahead observation through the ledger's equality guard."""
+        try:
+            if self.cost_ledger is not None:
+                receipt_ids = {row["call_id"] for row in self.cost_ledger.calls_for(deadline.task_id)}
+                if any(turn["call_id"] not in receipt_ids for turn in binding["turns"]):
+                    raise TaskDeadlineRefused("native continuation receipt is missing")
+            for turn in binding["turns"]:
+                if turn["phase"] not in {"observed", "settled", "unmetered"}:
+                    continue
+                delta = turn_usage_delta(CodexTokenTotals(**turn["before"]),
+                                         CodexTokenTotals(**turn["after"]))
+                self._settle_call(turn["call_id"], delta)
+                if turn["phase"] == "observed":
+                    deadline.acknowledge_usage(turn["attempt_index"])
+        except (ValueError, RuntimeError):
+            raise TaskDeadlineRefused("native continuation usage/receipt reconciliation refused") from None
+
+    def reconcile_task_accounting(
+        self, task_prompt: str, model: str | None = None,
+        reference_files: Sequence[str] | None = None, occupation: str = "professional",
+        experiment_prompt: dict | None = None, perception_text: str | None = None,
+        run_id: str | None = None, condition_name: str | None = None,
+        task_id: str | None = None,
+    ) -> None:
+        """Settle validated host observations, even when native work is forbidden.
+
+        No workspace is created/staged, attempt admitted, runtime opened or
+        result reconstructed here. Terminal reasons and the original expiry
+        are unchanged; only an observed receipt may advance to acknowledged.
+        """
+        store = getattr(self, "task_deadline_store", None)
+        if (store is None or (model or self.provider.model).strip() != self.provider.model
+                or (run_id is not None and run_id != self.run_id)
+                or (condition_name is not None and condition_name != self.condition_name)):
+            raise TaskDeadlineRefused("accounting request differs from its declared Codex cell")
+        deadline = store.for_task(task_id)
+        identity = self._continuation_identity(
+            deadline, task_prompt=task_prompt, reference_files=reference_files,
+            occupation=occupation, experiment_prompt=experiment_prompt,
+            perception_text=perception_text,
+        ) if deadline.retains_thread else None
+        binding = deadline.accounting_continuation(identity)
+        if binding is None:
+            return
+        workspace = CodexWorkspace.restore(binding["workspace"])
+        task_text = self.build_task_text(
+            task_prompt, workspace, occupation=occupation, perception_text=perception_text,
+        )
+        if binding["request_sha256"] != self._continuation_request_digest(task_text, experiment_prompt):
+            raise TaskDeadlineRefused("native continuation rendered request differs from its binding")
+        self._settle_continuation_observations(deadline, binding)
+
+    @staticmethod
+    def _continuation_request_digest(task_text: str, experiment_prompt: dict | None) -> str:
+        """Bind the actual native turn input as well as its prepared arguments."""
+        system = (experiment_prompt or {}).get("system")
+        return _deadline_identity_digest({
+            "task_text": task_text,
+            "developer_instructions": system.strip() if isinstance(system, str) and system.strip() else None,
+        })
+
     def _sandbox_preset(self) -> Any:
         """The filesystem policy for the agent: write inside its workspace.
 
@@ -1111,7 +1274,7 @@ class CodexAgentRunner(RecordsItsFirstRequest):
         condition_name: Optional[str] = None,
         task_id: Optional[str] = None,
     ) -> dict:
-        """Run one task in a fresh Codex session and return the standard dict.
+        """Run one task; only opted-in B/C cells resume their native session.
 
         ``model`` is accepted for signature compatibility with the other run
         places, but it must match the deployment the provider was configured
@@ -1176,6 +1339,13 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                         or (condition_name is not None and condition_name != self.condition_name)):
                     raise TaskDeadlineRefused("Codex call differs from its declared cell")
                 deadline = store.for_task(task_id)
+                self.reconcile_task_accounting(
+                    task_prompt=task_prompt, model=model, reference_files=reference_files,
+                    occupation=occupation, experiment_prompt=experiment_prompt,
+                    perception_text=perception_text, run_id=run_id,
+                    condition_name=condition_name, task_id=task_id,
+                )
+                deadline.require_resumable()
                 deadline.bound_timeout(self.timeout)
                 if not deadline.attempts_remaining():
                     raise TaskDeadlineExhausted(ATTEMPTS_EXHAUSTED)
@@ -1183,12 +1353,24 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                 result = self._failure(str(exc), category=str(exc))
                 result["task_deadline"] = deadline.as_record()
                 return result
-            except TaskDeadlineRefused:
-                return self._failure(STATE_REFUSED, category=STATE_REFUSED)
+            except TaskDeadlineRefused as exc:
+                return self._failure(str(exc), category=STATE_REFUSED)
 
         workspace: CodexWorkspace | None = None
+        continuation = None
+        continuation_identity = None
         try:
-            workspace = CodexWorkspace.create(task_id=task_id or "task")
+            if deadline is not None and deadline.retains_thread:
+                continuation_identity = self._continuation_identity(
+                    deadline, task_prompt=task_prompt, reference_files=reference_files,
+                    occupation=occupation, experiment_prompt=experiment_prompt,
+                    perception_text=perception_text,
+                )
+                continuation = deadline.continuation(continuation_identity)
+            workspace = (CodexWorkspace.restore(continuation["workspace"]) if continuation is not None
+                         else CodexWorkspace.create(task_id=task_id or "task"))
+        except TaskDeadlineRefused as exc:
+            return self._failure(str(exc), category=STATE_REFUSED)
         except OSError as exc:
             if pilot_session is not None:
                 raise PilotWireReceiptRefused() from None
@@ -1209,7 +1391,10 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                 except TaskDeadlineRefused:
                     return self._failure(STATE_REFUSED, category=STATE_REFUSED)
             try:
-                workspace.stage_references(reference_files)
+                if continuation is None:
+                    workspace.stage_references(reference_files)
+            except TaskDeadlineRefused as exc:
+                return self._failure(str(exc), category=STATE_REFUSED)
             except (ReferenceIntegrityError, OSError) as exc:
                 if pilot_session is not None:
                     raise PilotWireReceiptRefused() from None
@@ -1227,6 +1412,11 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                     occupation=occupation,
                     perception_text=perception_text,
                 )
+                if continuation_identity is not None and continuation is None:
+                    deadline.bind_workspace(
+                        continuation_identity, self._continuation_request_digest(task_text, experiment_prompt),
+                        workspace.continuation_binding(),
+                    )
                 pilot_options = {}
                 if pilot_observer is not None:
                     pilot_observer.bind_task_text(task_text)
@@ -1282,6 +1472,8 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                 if pilot_session is not None:
                     result["pilot_wire_receipt"] = pilot_linkage
                     pilot_host.finish_task(pilot_host_witness, result=result)
+            except TaskDeadlineRefused as exc:
+                return self._failure(str(exc), category=STATE_REFUSED)
             except Exception as exc:
                 if pilot_session is not None:
                     if isinstance(exc, PilotNativeResultHostRefused):
@@ -1347,7 +1539,12 @@ class CodexAgentRunner(RecordsItsFirstRequest):
         before_pids = _descendant_pids(os.getpid())
         call_id: str | None = None
         codex: Any = None
+        retains_thread = task_deadline is not None and task_deadline.retains_thread
         try:
+            continuation = task_deadline.continuation() if retains_thread else None
+            if continuation is not None:
+                if continuation["request_sha256"] != self._continuation_request_digest(task_text, experiment_prompt):
+                    raise TaskDeadlineRefused("native continuation rendered request differs from its binding")
             if task_deadline is not None:
                 task_deadline.bound_timeout(self.timeout)
             try:
@@ -1386,12 +1583,28 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                     developer_instructions=developer_instructions,
                 )
             try:
-                thread = self.start_thread(
-                    codex,
-                    workspace,
-                    developer_instructions=developer_instructions,
-                )
+                resumed = continuation is not None and continuation["phase"] == "bound"
+                if resumed:
+                    thread = self.resume_thread(
+                        codex, workspace, continuation["thread_id"],
+                        developer_instructions=developer_instructions,
+                    )
+                else:
+                    if retains_thread:
+                        task_deadline.thread_starting()
+                    thread = self.start_thread(
+                        codex, workspace, developer_instructions=developer_instructions,
+                    )
+                if retains_thread:
+                    task_deadline.bind_thread(getattr(thread, "id", None), resumed=resumed)
+            except TaskDeadlineRefused:
+                raise
             except Exception as exc:  # noqa: BLE001
+                if retains_thread:
+                    raise TaskDeadlineRefused(
+                        "native resume refused; retained binding was not replaced" if resumed else
+                        "native thread start was not confirmed; retain the uncertain binding"
+                    ) from None
                 return CodexRunOutcome(
                     success=False,
                     text="",
@@ -1412,18 +1625,28 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                     self._abandon_call(call_id, "deadline refused before the turn started")
                     call_id = None
                     raise
+            if retains_thread:
+                before_totals = CodexTokenTotals(**task_deadline.begin_turn(attempt_index, call_id))
+                task_deadline.bound_timeout(self.timeout)
             try:
                 turn_handle = thread.turn(task_text)
             except Exception as exc:  # noqa: BLE001
-                # The turn never started, so nothing was sent and nothing was
-                # billed. This is one of the few places `abandon` is right.
-                self._abandon_call(call_id, "the turn never started")
+                category = "turn_start_failed"
+                if task_deadline is not None:
+                    # A lost response does not prove the native request never
+                    # reached the runtime. Keep the reservation and unknown gap.
+                    if _turn_failure_category(exc) == "content_filtered":
+                        category = "content_filtered"
+                        task_deadline.stop_content_filter()
+                else:
+                    # Preserve the legacy pre-turn accounting boundary.
+                    self._abandon_call(call_id, "the turn never started")
                 call_id = None
                 return CodexRunOutcome(
                     success=False,
                     text="",
                     error=f"the Codex turn would not start: {exc}",
-                    error_category="turn_start_failed",
+                    error_category=category,
                     thread_id=getattr(thread, "id", None),
                 )
 
@@ -1452,12 +1675,20 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                 open, which is the older and still-correct answer.
                 """
                 nonlocal call_id
-                measured = turn_usage_delta(
-                    before_totals, read_thread_totals(observed.usage)
-                )
-                if measured.is_empty:
+                after = read_thread_totals(observed.usage)
+                terminal = ("content_filter" if _turn_failure_category(
+                    observed.failure, http_status_code=observed.http_status_code,
+                ) == "content_filtered" else None)
+                if task_deadline is not None and terminal is not None:
+                    task_deadline.stop_content_filter()
+                if retains_thread:
+                    task_deadline.observe_turn(attempt_index, asdict(after), terminal_reason=terminal)
+                measured = turn_usage_delta(before_totals, after)
+                if measured.is_empty and not retains_thread:
                     return measured
                 self._settle_call(call_id, measured)
+                if retains_thread:
+                    task_deadline.acknowledge_usage(attempt_index)
                 call_id = None
                 return measured
 
@@ -1515,8 +1746,12 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                 )
 
             after_totals = read_thread_totals(getattr(result, "usage", None))
+            if retains_thread:
+                task_deadline.observe_turn(attempt_index, asdict(after_totals), terminal_reason="completed")
             delta = turn_usage_delta(before_totals, after_totals)
             self._settle_call(call_id, delta)
+            if retains_thread:
+                task_deadline.acknowledge_usage(attempt_index)
             call_id = None
 
             files = (
@@ -1539,10 +1774,10 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                 success=False, text="", files=workspace.collect_deliverables(),
                 error=EXHAUSTED, error_category=EXHAUSTED,
             )
-        except TaskDeadlineRefused:
+        except TaskDeadlineRefused as exc:
             return CodexRunOutcome(
                 success=False, text="", files=workspace.collect_deliverables(),
-                error=STATE_REFUSED, error_category=STATE_REFUSED,
+                error=str(exc), error_category=STATE_REFUSED,
             )
         finally:
             if codex is not None:

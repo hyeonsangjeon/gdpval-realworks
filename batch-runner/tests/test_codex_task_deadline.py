@@ -126,7 +126,8 @@ class Runtime:
         def open_runtime(runner, workspace):
             outer.workspaces.append(workspace)
             outer.workspace = workspace
-            return SimpleNamespace(close=lambda: None)
+            return SimpleNamespace(close=lambda: None, thread_resume=lambda thread_id, **kwargs:
+                                   SimpleNamespace(id=thread_id, turn=outer.turn))
 
         def start_thread(runner, client, workspace, **kwargs):
             return SimpleNamespace(id="synthetic-thread", turn=outer.turn)
