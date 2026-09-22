@@ -13,6 +13,50 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Refresh the two active grader-template source bindings after the reviewed
+  selector change. The unchanged `step8_grade.compute_grader_source_hash()`
+  includes `core/deliverable_selector.py` in its full closure. GPT-5.4's
+  `shared.grading.template_source_sha256` changes from
+  `40ada97c41117e3966e5a192c19dafcf4db34d4dd2ddd4230c4b729f421d6e08` to
+  `c92bf13696fa506c84dbee649d5ba3c03fb33244810f30e2be4a05630ca204e1`;
+  Foundry's `dispatch_grading_identity.grader_template_source_hash` changes from
+  `56fdb74e2f9fd1afbe9d064fc2cb1e1410d5cebec55edcca8324effd1a1dc9e1` to
+  `785352daa052b105f0dfce08d8de7b3f41633a8e6b312111bec5bdbc8806144b`.
+  Both were recomputed from each original template path and actual config
+  bytes. The Foundry preflight's matching constant, its active source pin
+  (`df62b761638a9afce831a839bf6a5eba3134919cf728d6b56c9ee5e3222f82a9`)
+  and the GHCP contract's active Foundry YAML digest
+  (`7f7331440f0c13a254353acd4a715f7eb7d3d4c0ba3d9ed32615640cc24ceeef`)
+  are refreshed without weakening equality checks or changing `WORKFLOW_SHA256`.
+  The leader supplied Backend run `35695570658` at
+  `a2685e91b704218c657da41bd1505f40b6d1da66`: job `106641640717`,
+  `comparison-contracts`, reported `559 failed, 71 passed, 312 errors in 99.37s`
+  at `2026-09-22T06:40:15Z`; job `106641640514`, `pilot-preflight-contracts`,
+  reported `161 passed, 143 deselected, 35 errors in 41.54s` at
+  `2026-09-22T06:39:04Z`. These are two representative jobs from seven failing
+  non-core lanes. Their `shared_controls, conditions` and
+  `grader_template_source_drift` refusals reflect one binding problem, not
+  independent selector failures.
+  No logs were fetched and the unchanged failure was not rerun. One focused
+  invocation used:
+  `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 DO_NOT_TRACK=1 /usr/bin/python3 -m pytest -q -p no:cacheprovider --tb=short batch-runner/tests/test_gpt54_comparison_preflight.py::test_active_grader_template_source_comparison batch-runner/tests/test_gpt56_sol_codex_pilot_preflight.py::test_active_grader_template_source_foundry_preflight batch-runner/tests/test_gpt56_pilot_identity_plan.py::test_active_grader_template_source_foundry_identity batch-runner/tests/test_ghcp_vm_gate_contract.py::test_ghcp_vm_gate_contract_preserves_history_foundry_and_backend_partition`.
+  It reported `9 passed in 4.44s`, exit 0; the tested bytes were committed
+  unchanged as `acabb11b383c2b6cfea9291da0d58c9848ba201f`, on integrated
+  baseline `eba56139f95443a715e8309e75c57fe5688c1f2b`. Real hash/validation
+  functions accept the current bindings and refuse old hashes or actual
+  selector-byte mutations in temporary source trees. Existing live blockers
+  and false launch flags remain unchanged. `git diff --check` passed. The
+  selector and its 42/45-case evidence below retain their original scope;
+  no selector suite, broad CI job, dataset/preparation, model or grader ran.
+  Historical templates, source/base identities, scores, results and private
+  artifacts remain unchanged. These active future bindings do not upgrade
+  historical runs or establish score comparability. `FINAL-APPROVE` review
+  `5274748991` at `200a35070bc0ffbf5938fea2a1fc85a470c98544` covers the earlier
+  selector/test bytes and records, not this correction. `REQUEST-CHANGES`
+  review `5274961797` at `a2685e91b704218c657da41bd1505f40b6d1da66` identifies
+  the stale bindings. The new contract delta and carrying-HEAD checks still
+  need leader review and CI; no new approval or full-CI success is claimed.
+
 - Recognize an explicit deliverable-format clause containing standalone
   `Word (.docx)` without widening the shared extension boundary. The public
   selector chooses `Modlev_Tail_Lamp_Negotiation_Strategy.docx` for exp035 task
@@ -43,14 +87,16 @@ entries land under a fresh dated heading the day they merge to `main`.
   document; the complete earlier real canonical-source/preparation/Step 1
   changelog entry and all unrelated entries were preserved. Selector/test
   bytes match approved HEAD `200a35070bc0ffbf5938fea2a1fc85a470c98544`
-  exactly; whitespace and conflict-marker checks passed. No tests were rerun,
-  so the results above retain their original tested-commit scope rather than
+  exactly; whitespace and conflict-marker checks passed. No tests were rerun
+  during that integration, so the results above retain their original
+  tested-commit scope rather than
   becoming final-HEAD validation. The leader's `FINAL-APPROVE` review
   `5274748991` covers that approved HEAD's selector/test bytes and records,
   with no high-confidence correctness findings. It does not cover this later
   integration/records delta or establish CI success, a grade or execution
-  permission. Final-HEAD automatic checks and integration review remain
-  outstanding; no CI status was queried. The preceding #648 `FINAL-APPROVE`
+  permission. Later CI exposed the active grading-binding defect corrected
+  above; that correction is outside the selector review. No CI status was
+  queried during integration. The preceding #648 `FINAL-APPROVE`
   records review `5274558309` at
   `ae784cac096bb4cd3338390bddf47309de3e3667` remains limited
   to that earlier operation's records. See
