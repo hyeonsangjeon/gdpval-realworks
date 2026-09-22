@@ -13,6 +13,46 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Close the pilot dispatcher's owned-child cleanup gap identified by
+  REQUEST-CHANGES review `5282428403` at
+  `47e725bc3ff1945f12cc6756c0d610646dc7feb3`. The previous
+  `subprocess.run(timeout=remaining+60)` could reap Step 2 without proving its
+  Codex/app-server/tool descendants had stopped. Each real child now runs under
+  a private Linux supervisor session that adopts orphaned descendants, uses
+  bounded TERM/KILL cleanup and reaps the entire owned tree. Signals target
+  only verified unreaped direct children, never process names or shared
+  processes. The dispatcher also requires the supervisor to be reaped before
+  releasing its cell slot. A host-owned checkpoint is written before launch;
+  missing, incompatible or unresolved ownership refuses before any later
+  child or terminal-cell skip, even after the physical lock is released.
+  Partials and missing/unknown accounting remain; clocks are not reset.
+  One ordinary merge integrated exact main
+  `9b572a39af8ecd48850e427d1bccf8cb65b7c65a`, preserving the dispatcher and
+  #652 histories. The real integrated C-feedback contract is present; input,
+  runtime and host refusals still apply, and capability is not launch readiness.
+  The initial focused selection at
+  `789995071ed1b7630f2da1e239704301845a36cc` reported
+  `4 failed, 6 passed, 24 deselected, 1 error in 22.00s`, exit 1: this host's
+  `pidfd_open` returns `ENOSYS`, causing four lifecycle failures and a related
+  teardown error. The correction removed that new kernel dependency. Only the
+  four affected cases were rerun at `d9bed6851a611787fa14f3e67c156d6369b11875`:
+  `4 passed in 127.23s (0:02:07)`, exit 0. The earlier six passes retain their
+  original SHA and scope; this is not a fresh ten-pass run. Exact commands and
+  boundaries are in `tasks/LATEST_TASK_RESULT/README.md`. The tests use synthetic
+  inputs, fake budget clocks and harmless local process trees, including a
+  detached TERM-resistant descendant, not Codex/model/provider processes.
+  The earlier `25 passed in 286.25s` at
+  `6967ce8158459fd32506a14c25fa924e5b4747f8` remains synthetic dispatcher
+  evidence and was not rerun as a full selection. The fixed 30-cell order,
+  180/30-minute limits, A-fresh/B-C-retained policies and grader are unchanged.
+  Imported #652 core/binding bytes match main exactly; no additional active
+  hash refresh or source-count change was needed (37/58). #652 approval
+  `5281735646` at `b116563744351ab03769e356eb00fcfa39565da9` does not approve
+  this dispatcher. Full immutable dispatcher review, carrying-HEAD CI, actual
+  input/runtime readiness, separately directed execution and grading remain
+  outstanding. No paid run, historical-result change or Project-card completion
+  is claimed. Reporting/copyediting preserves these split evidence boundaries.
+
 - Refresh the two active grader-template source bindings after the reviewed
   selector change. The unchanged `step8_grade.compute_grader_source_hash()`
   includes `core/deliverable_selector.py` in its full closure. GPT-5.4's
@@ -387,6 +427,42 @@ entries land under a fresh dated heading the day they merge to `main`.
   No provider, model, grader or workflow was executed.
 
 ### Added
+
+- Add a plan-first local dispatcher and separate preregistration for the Codex
+  external-budget pilot: the existing score-free `advance_check_5` cohort,
+  A/B/C across repetitions 1/2, exactly 30 cells in per-task A1/B1/C1/C2/B2/A2
+  order, with one active child. It compiles the existing GPT-5.4 Foundry/xhigh
+  profile and wires serial Step 1/Step 2 execution with isolated configs,
+  checkouts, outputs, ledgers, native workspaces and host checkpoints. A keeps
+  four fresh attempts; B/C share retention, fixed backoff and the unchanged
+  180-minute cumulative/30-minute attempt policy. C requires the reviewed host
+  error-feedback capability. Default plan-only operation cannot authorize a
+  launch. The single fetched main, `149d89afd43e54a46b6f172b71c2cf23d0cb7a17`,
+  lacks that capability. The plan records `c_host_feedback_capability_missing`,
+  and production `--execute` refuses before checkout or pipeline children.
+  Existing original-input, canonical Step 0, config, clean-source, pinned
+  runtime, host and route guards remain required. Durable state prevents
+  completed-cell redispatch and fresh clocks on restart; partial preparation,
+  missing/corrupt state and colliding roles refuse without clobbering them.
+  Failed/filtered/expired cells stay in the denominator, and missing receipts
+  stay missing or partial. Results and artifact links are not graded quality
+  or invoice completeness; fixed grading remains a separately directed stage.
+  The new focused family at `6967ce8158459fd32506a14c25fa924e5b4747f8`
+  reported `25 passed in 286.25s (0:04:46)`, exit 0. It uses synthetic inputs,
+  fake children/capability and clocks through the actual CLI/command builder,
+  validators, locks and deadline store. This is offline dispatch/persistence
+  evidence, not model consumption, live recovery or a pilot result. The exact
+  command and test boundary are in `tasks/LATEST_TASK_RESULT/README.md`.
+  No shared core or existing active source pin changed; 37/58 source sets,
+  full-grader identities, historical results and prior real artifacts remain
+  intact. The leader's #652 review `5281735646` at
+  `b116563744351ab03769e356eb00fcfa39565da9` covers its feedback intervention,
+  not this dispatcher. Immutable-HEAD review, carrying-HEAD CI, integration of
+  C-capable source, live/input readiness, separately directed pilot execution
+  and grading remain outstanding. No earlier focused selection or full suite
+  was rerun, no dependency was installed and no native/provider/model/grader
+  or paid run occurred. Design/reporting guidance kept the fixed controls and offline
+  evidence boundary explicit; no Project-card completion is claimed.
 
 - Add host-generated recovery feedback to condition C in the existing opt-in
   Codex deadline path. After the same eligible `rate_limited` or
