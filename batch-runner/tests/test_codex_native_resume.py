@@ -32,7 +32,7 @@ from core.codex_task_deadline import (
     ATTEMPT_SECONDS, EXHAUSTED, STATE_REFUSED, TOTAL_SECONDS,
     CodexTaskDeadline, TaskDeadlineRefused,
 )
-from core.cost_receipts import BUCKET_PROBLEM_SOLVING, CostReceiptLedger
+from core.cost_receipts import BUCKET_PROBLEM_SOLVING, CallUsage, CostReceiptLedger
 from core.executor import TaskExecutor
 from .test_codex_task_deadline import (
     Clock, CONDITION, ROOT, SETTINGS, TASK, TASK2, execute, host, store_at,
@@ -470,6 +470,241 @@ def test_native_resume_settlement_crash_replays_same_receipt_without_double_char
         assert len(calls) == len({row["call_id"] for row in calls}) == 2
         assert sum(row["input_tokens"] for row in calls) == 130
         assert transport.count("thread/resume") == 1
+    finally:
+        store.close()
+        ledger.close()
+
+
+def _restore_through_retry(executor, host, clock, store, *, task=TASK, instruction=None):
+    """Use the production host-only task projection before the outer gate."""
+    attempts = []
+
+    def forbidden_attempt(index):
+        attempts.append(index)
+        pytest.fail("terminal/expired restore reached an execution attempt")
+
+    def reconcile():
+        assert step2._execute_single_task(
+            {"task_id": task, "instruction": instruction or "Synthetic task; not benchmark input.",
+             "reference_files": [], "needs_files": False},
+            CONDITION, executor, "codex_foundry", None, SETTINGS.model,
+            run_id="offline-cell-run", condition_name="condition_a",
+            upload_root=host / "upload", accounting_only=True,
+        ) is None
+
+    result = step2.run_with_infra_retries(
+        forbidden_attempt, max_attempts=4, task_deadline=store.for_task(task),
+        reconcile_accounting=reconcile, sleep=clock.sleep,
+    )
+    assert attempts == []
+    return result
+
+
+@pytest.mark.parametrize("condition", ["B", "C"])
+@pytest.mark.parametrize("entry", ["runner", "outer_retry"])
+@pytest.mark.parametrize("window", ["before_ledger", "before_ack"])
+@pytest.mark.parametrize("stop", ["completed", "content_filter", "expired"])
+def test_native_resume_crash_reconciliation_terminal_and_expired(
+    host, monkeypatch, condition, entry, window, stop,
+):
+    clock = Clock()
+    store = store_at(host, clock, condition=condition)
+    ledger_path = host / "cost.sqlite"
+    ledger = CostReceiptLedger(ledger_path, run_id="offline-cell-run")
+    script = {"tokens": 100}
+    if stop != "completed":
+        script["error"] = "reason: content_filter" if stop == "content_filter" else RATE
+    transport = SDKTransport(monkeypatch, clock, [script])
+    try:
+        with monkeypatch.context() as patch:
+            def interrupted(*args, **kwargs):
+                raise SystemExit("synthetic settlement interruption")
+
+            owner, name = ((codex_runner.CodexAgentRunner, "_settle_call") if window == "before_ledger"
+                           else (CodexTaskDeadline, "acknowledge_usage"))
+            patch.setattr(owner, name, interrupted)
+            with pytest.raises(SystemExit):
+                execute(executor_for(store, ledger), host)
+
+        cell = store._read()["cells"][TASK]
+        turn = cell["continuation"]["turns"][0]
+        assert turn["phase"] == "observed" and turn["after"]["input_tokens"] == 100
+        assert cell["continuation"]["terminal_reason"] == (None if stop == "expired" else stop)
+        assert cell["terminal_reason"] == ("content_filtered" if stop == "content_filter" else None)
+        assert len(cell["attempts"]) == 1 and cell["expires_unix"] == cell["started_unix"] + TOTAL_SECONDS
+        row = ledger.calls_for(TASK)[0]
+        assert row["call_id"] == turn["call_id"]
+        assert row["state"] == ("reserved" if window == "before_ledger" else "settled")
+        assert row["input_tokens"] == (None if window == "before_ledger" else 100)
+        partial = transport.workspaces[0].workspace / "partial.txt"
+        original_partial = partial.read_bytes()
+        native_requests = list(transport.requests)
+        turn["phase"] = "settled"  # the only allowed change to the cell
+        first_settlement = None
+
+        for _ in range(3):
+            store.close()
+            ledger.close()
+            clock.advance(TOTAL_SECONDS if stop == "expired" else 10)
+            store = store_at(host, clock, condition=condition, initialize=False)
+            ledger = CostReceiptLedger(ledger_path, run_id="offline-cell-run")
+            executor = executor_for(store, ledger)
+            ledger_changes = ledger._connection.total_changes
+            result = (execute(executor, host) if entry == "runner" else
+                      _restore_through_retry(executor, host, clock, store))
+            assert result["status"] == "error"  # completion metadata is not a reconstructed result
+            assert result["observability"]["error_category"] == (EXHAUSTED if stop == "expired" else STATE_REFUSED)
+            assert store._read()["cells"][TASK] == cell
+            calls = ledger.calls_for(TASK)
+            assert len(calls) == 1 and calls[0]["call_id"] == row["call_id"]
+            assert calls[0]["state"] == "settled"
+            assert calls[0]["input_tokens"] == 100 and calls[0]["output_tokens"] == 20
+            assert ledger._connection.total_changes - ledger_changes == (
+                1 if first_settlement is None and window == "before_ledger" else 0
+            )
+            if first_settlement is None:
+                first_settlement = calls[0]
+            else:
+                assert calls[0] == first_settlement  # equality guard, no second ledger commit
+            assert ledger.receipt_for(TASK, BUCKET_PROBLEM_SOLVING).status == "partial"
+            assert partial.read_bytes() == original_partial
+            assert transport.requests == native_requests and len(transport.workspaces) == 1
+            assert transport.stage_calls == 1 and clock.waits == []
+    finally:
+        store.close()
+        ledger.close()
+
+
+@pytest.mark.parametrize("change", [
+    "missing_state", "checksum", "linked_state", "linked_workspace", "cross_task",
+    "request", "provider", "settings", "ledger", "no_ledger", "missing_receipt",
+    "conflicting_receipt", "rendered_request",
+])
+def test_native_resume_crash_reconciliation_refuses_unvalidated_state(host, monkeypatch, change):
+    clock = Clock()
+    store = store_at(host, clock)
+    ledger_path = host / "cost.sqlite"
+    ledger = CostReceiptLedger(ledger_path, run_id="offline-cell-run")
+    other_ledger = None
+    transport = SDKTransport(monkeypatch, clock, [{"tokens": 100}])
+    try:
+        with monkeypatch.context() as patch:
+            def interrupted(*args, **kwargs):
+                raise SystemExit("synthetic interruption before ledger commit")
+            patch.setattr(codex_runner.CodexAgentRunner, "_settle_call", interrupted)
+            with pytest.raises(SystemExit):
+                execute(executor_for(store, ledger), host)
+        partial = transport.workspaces[0].workspace / "partial.txt"
+        original_partial = partial.read_bytes()
+        task, instruction, settings, selected_ledger = TASK, None, SETTINGS, ledger
+        if change == "cross_task":
+            data = store._read()
+            data["cells"][TASK2] = data["cells"][TASK]
+            store._write(data)
+            task = TASK2
+        elif change == "rendered_request":
+            data = store._read()
+            data["cells"][TASK]["continuation"]["request_sha256"] = "0" * 64
+            store._write(data)
+        elif change in {"missing_state", "linked_state"}:
+            store.path.rename(store.path.with_suffix(".retained"))
+            if change == "linked_state":
+                store.path.symlink_to(store.path.with_suffix(".retained"))
+        elif change == "checksum":
+            with store.path.open("ab") as output:
+                output.write(b"damaged")
+        elif change == "linked_workspace":
+            workspace = transport.workspaces[0]
+            retained = workspace.root / "retained-workspace"
+            workspace.workspace.rename(retained)
+            workspace.workspace.symlink_to(retained, target_is_directory=True)
+            partial = retained / "partial.txt"
+        elif change == "request":
+            instruction = "Changed synthetic request."
+        elif change == "provider":
+            settings = replace(SETTINGS, provider_id="different-provider")
+        elif change == "settings":
+            settings = replace(SETTINGS, reasoning_effort="low")
+        elif change == "ledger":
+            other_ledger = CostReceiptLedger(host / "different.sqlite", run_id="offline-cell-run")
+            selected_ledger = other_ledger
+        elif change == "no_ledger":
+            selected_ledger = None
+        elif change == "missing_receipt":
+            ledger.close()
+            retained = host / "retained.sqlite"
+            ledger_path.rename(retained)
+            ledger = CostReceiptLedger(retained, run_id="offline-cell-run")
+            other_ledger = CostReceiptLedger(ledger_path, run_id="offline-cell-run")
+            selected_ledger = other_ledger
+        elif change == "conflicting_receipt":
+            ledger.settle(ledger.calls_for(TASK)[0]["call_id"],
+                          usage=CallUsage(input_tokens=999, output_tokens=20), resolved_model=SETTINGS.model)
+
+        before_calls = ledger.calls_for(TASK)
+        before_requests = list(transport.requests)
+        store.close()
+        clock.advance(TOTAL_SECONDS)
+        if change in {"missing_state", "checksum", "linked_state"}:
+            with pytest.raises(TaskDeadlineRefused):
+                store_at(host, clock, initialize=False)
+        else:
+            store = store_at(host, clock, initialize=False)
+            expected_cell = store._read()["cells"][task]
+            result = _restore_through_retry(
+                executor_for(store, selected_ledger, settings=settings), host, clock, store,
+                task=task, instruction=instruction,
+            )
+            assert result["observability"]["error_category"] == STATE_REFUSED
+            assert store._read()["cells"][task] == expected_cell
+        assert ledger.calls_for(TASK) == before_calls
+        assert partial.read_bytes() == original_partial
+        assert transport.requests == before_requests and len(transport.workspaces) == 1
+        assert clock.waits == []
+    finally:
+        store.close()
+        ledger.close()
+        if other_ledger is not None:
+            other_ledger.close()
+
+
+@pytest.mark.parametrize("gap", ["unobserved", "missing_usage"])
+def test_native_resume_crash_reconciliation_keeps_unknown_usage_partial(host, monkeypatch, gap):
+    clock = Clock()
+    store = store_at(host, clock)
+    ledger_path = host / "cost.sqlite"
+    ledger = CostReceiptLedger(ledger_path, run_id="offline-cell-run")
+    transport = SDKTransport(monkeypatch, clock, [{"tokens": 100 if gap == "unobserved" else None, "error": RATE}])
+    try:
+        with monkeypatch.context() as patch:
+            def interrupted(*args, **kwargs):
+                raise SystemExit("synthetic interruption with unknown usage")
+            owner, name = ((CodexTaskDeadline, "observe_turn") if gap == "unobserved"
+                           else (codex_runner.CodexAgentRunner, "_settle_call"))
+            patch.setattr(owner, name, interrupted)
+            with pytest.raises(SystemExit):
+                execute(executor_for(store, ledger), host)
+        expiry = store._read()["cells"][TASK]["expires_unix"]
+        partial = transport.workspaces[0].workspace / "partial.txt"
+        original_partial = partial.read_bytes()
+        for _ in range(2):
+            store.close()
+            ledger.close()
+            clock.advance(TOTAL_SECONDS)
+            store = store_at(host, clock, initialize=False)
+            ledger = CostReceiptLedger(ledger_path, run_id="offline-cell-run")
+            result = _restore_through_retry(executor_for(store, ledger), host, clock, store)
+            assert result["observability"]["error_category"] == EXHAUSTED
+            cell = store._read()["cells"][TASK]
+            assert cell["expires_unix"] == expiry and len(cell["attempts"]) == 1
+            assert cell["continuation"]["turns"][0]["phase"] == ("in_flight" if gap == "unobserved" else "settled")
+            calls = ledger.calls_for(TASK)
+            assert len(calls) == 1 and calls[0]["input_tokens"] is calls[0]["output_tokens"] is None
+            assert calls[0]["state"] == ("reserved" if gap == "unobserved" else "settled")
+            assert ledger.receipt_for(TASK, BUCKET_PROBLEM_SOLVING).status == "partial"
+            assert partial.read_bytes() == original_partial
+            assert transport.count("turn/start") == 1 and transport.count("thread/resume") == 0
+            assert len(transport.workspaces) == 1 and clock.waits == []
     finally:
         store.close()
         ledger.close()

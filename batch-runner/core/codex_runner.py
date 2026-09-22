@@ -1152,6 +1152,41 @@ class CodexAgentRunner(RecordsItsFirstRequest):
         except (ValueError, RuntimeError):
             raise TaskDeadlineRefused("native continuation usage/receipt reconciliation refused") from None
 
+    def reconcile_task_accounting(
+        self, task_prompt: str, model: str | None = None,
+        reference_files: Sequence[str] | None = None, occupation: str = "professional",
+        experiment_prompt: dict | None = None, perception_text: str | None = None,
+        run_id: str | None = None, condition_name: str | None = None,
+        task_id: str | None = None,
+    ) -> None:
+        """Settle validated host observations, even when native work is forbidden.
+
+        No workspace is created/staged, attempt admitted, runtime opened or
+        result reconstructed here. Terminal reasons and the original expiry
+        are unchanged; only an observed receipt may advance to acknowledged.
+        """
+        store = getattr(self, "task_deadline_store", None)
+        if (store is None or (model or self.provider.model).strip() != self.provider.model
+                or (run_id is not None and run_id != self.run_id)
+                or (condition_name is not None and condition_name != self.condition_name)):
+            raise TaskDeadlineRefused("accounting request differs from its declared Codex cell")
+        deadline = store.for_task(task_id)
+        identity = self._continuation_identity(
+            deadline, task_prompt=task_prompt, reference_files=reference_files,
+            occupation=occupation, experiment_prompt=experiment_prompt,
+            perception_text=perception_text,
+        ) if deadline.retains_thread else None
+        binding = deadline.accounting_continuation(identity)
+        if binding is None:
+            return
+        workspace = CodexWorkspace.restore(binding["workspace"])
+        task_text = self.build_task_text(
+            task_prompt, workspace, occupation=occupation, perception_text=perception_text,
+        )
+        if binding["request_sha256"] != self._continuation_request_digest(task_text, experiment_prompt):
+            raise TaskDeadlineRefused("native continuation rendered request differs from its binding")
+        self._settle_continuation_observations(deadline, binding)
+
     @staticmethod
     def _continuation_request_digest(task_text: str, experiment_prompt: dict | None) -> str:
         """Bind the actual native turn input as well as its prepared arguments."""
@@ -1301,6 +1336,12 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                         or (condition_name is not None and condition_name != self.condition_name)):
                     raise TaskDeadlineRefused("Codex call differs from its declared cell")
                 deadline = store.for_task(task_id)
+                self.reconcile_task_accounting(
+                    task_prompt=task_prompt, model=model, reference_files=reference_files,
+                    occupation=occupation, experiment_prompt=experiment_prompt,
+                    perception_text=perception_text, run_id=run_id,
+                    condition_name=condition_name, task_id=task_id,
+                )
                 deadline.require_resumable()
                 deadline.bound_timeout(self.timeout)
                 if not deadline.attempts_remaining():
@@ -1501,7 +1542,6 @@ class CodexAgentRunner(RecordsItsFirstRequest):
             if continuation is not None:
                 if continuation["request_sha256"] != self._continuation_request_digest(task_text, experiment_prompt):
                     raise TaskDeadlineRefused("native continuation rendered request differs from its binding")
-                self._settle_continuation_observations(task_deadline, continuation)
             if task_deadline is not None:
                 task_deadline.bound_timeout(self.timeout)
             try:

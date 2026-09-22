@@ -66,7 +66,7 @@ shared: &shared
     source_sha: a855c5a9604554499be9eed4e5eb5523e8ad95d5
     # Existing helper's full closure with the ORIGINAL template path/bytes.
     # Not the eventual source hash of a materialized, revision-pinned config.
-    template_source_sha256: fdb0d71b7e02a55d28aef32b35a3e6a3e6cad45af35c5fbda03c766cb8d6c2fa
+    template_source_sha256: 7f4632672a947cfca96a791cbb3d608655514036cec13fe6f7062e6132c00de1
     rubric_revision: 11e7900cdcac61bc4daf59e65feb238acda98fbf
     prompt_version: v2.2
     judge_model: gpt-5.6-sol
@@ -153,9 +153,9 @@ source_pins:
   batch-runner/core/agentic_v2_stage_one_budget.py: 56641403c043d09ef49360a473aedc22ff8fc1f863bb9746dacd9891622324f1
   batch-runner/scripts/run_agentic_v2_stage.py: 3a97f33c77bfcaa199ba349e4547bec12a1949afc0dce52c38bd943206162fc9
   batch-runner/core/codex_runtime_config.py: 3ef7a6bcbfe3523516068dee99f5488163cf33516d03de1c9fe42d8e2aca19b3
-  batch-runner/core/codex_runner.py: 0a9491bce6e1761aa985c0ad2594113aaa7e30f551c995a29ac286df3498ba04
+  batch-runner/core/codex_runner.py: c57130c6ec45195884bb82c85e6891409df9adf84bfc38b886a1e5695ef1d9aa
   batch-runner/core/experiment_config.py: dee343217eebbf1e1adf2981e3c07d94e200d1af8e054a2a22f34470799f233d
   batch-runner/core/executor.py: 31eb831a7a450558192a050cedaf2cc905b992c1e1028dab9e34af4287e64bad
   batch-runner/step1_prepare_tasks.py: 5f3419596655aa5860abc4a8cd776212f8d1c3ba4bc38545f7aab62a06160ae9
-  batch-runner/step2_run_inference.py: 24b69a5bbdc225ee3b0e70213bd55065ec5a16c37a276897a5a71d578e3aa9d3
-  batch-runner/core/codex_task_deadline.py: 133c6513755e7e8a0e8c66efe2fc7d79f12e32bf0694bdc766884d71bd440405
+  batch-runner/step2_run_inference.py: 781cf3a014d4724e6d12169986d832de032c043d4050d9dbe623ae64bc54849b
+  batch-runner/core/codex_task_deadline.py: 4a302076ed8d1ca0c23cff30179d429d80c71d0feb066087f31edf49b015ef05

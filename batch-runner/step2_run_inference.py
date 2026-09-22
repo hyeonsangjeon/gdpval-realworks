@@ -261,6 +261,7 @@ def run_with_infra_retries(
     before_retry: Optional[Callable[[], None]] = None,
     sleep: Callable[[float], None] = time.sleep,
     task_deadline: CodexTaskDeadline | None = None,
+    reconcile_accounting: Optional[Callable[[], None]] = None,
 ) -> dict:
     """Run ``attempt`` again while it fails for a reason another try can fix.
 
@@ -273,6 +274,10 @@ def run_with_infra_retries(
     that bounds the number of paid attempts. It comes from
     ``execution.max_retries`` plus one, which is what every experiment file
     that sets that key has always claimed it did.
+
+    The budgeted caller supplies a host-only ``reconcile_accounting`` hook
+    using the same validated task request. It runs before terminal/expiry
+    gates, outside ``attempt`` and its execution counters.
     """
     if task_deadline is not None:
         result = None
@@ -281,6 +286,11 @@ def run_with_infra_retries(
             try:
                 if result is not None and infra_retry_category(result) is None:
                     return result
+                if infra_attempt == 0 and reconcile_accounting is not None:
+                    # Host settlement is independent of permission to compute.
+                    # In particular, downtime may have exhausted this cell.
+                    reconcile_accounting()
+                task_deadline.require_resumable()
                 if task_deadline.remaining_seconds() <= 0:
                     return task_deadline.refused_result(EXHAUSTED, result)
                 if not task_deadline.attempts_remaining():
@@ -2383,9 +2393,16 @@ def _execute_single_task(
     cost_recorder=None,
     pilot_wire_receipts=None,
     pilot_attempt_index: int = 0,
-) -> dict:
-    """Execute a single task and return result dict."""
+    accounting_only: bool = False,
+) -> dict | None:
+    """Execute a task, or reconcile only its opt-in host accounting at restore."""
     task_id = task_info["task_id"]
+    if accounting_only and (
+        execution_mode != "codex_foundry" or condition.get("preprocessors")
+        or pilot_wire_receipts is not None or run_id == PilotInputCapture.RUN_ID
+        or getattr(executor.runner, "task_deadline_store", None) is None
+    ):
+        raise TaskDeadlineRefused("host accounting requires the budgeted Codex path without preprocessing")
     pilot_host = None
     if run_id == PilotInputCapture.RUN_ID or pilot_wire_receipts is not None:
         from gpt56_pilot_wire_receipt import PilotWireReceiptRefused, PilotWireReceiptSession
@@ -2471,6 +2488,8 @@ def _execute_single_task(
                     task_info.get("reference_file_records", []),
                 )
             except ReferenceIntegrityError as exc:
+                if accounting_only:
+                    raise TaskDeadlineRefused("host accounting reference validation refused") from None
                 return {
                     "task_id": task_id,
                     "status": "error",
@@ -2493,6 +2512,15 @@ def _execute_single_task(
             reference_stage = stage_verified_references(abs_ref_files)
             abs_ref_files = reference_stage.__enter__()
             reference_stage_entered = True
+
+        if accounting_only:
+            executor.runner.reconcile_task_accounting(
+                task_prompt=instruction, model=model, reference_files=abs_ref_files,
+                occupation=task_info.get("occupation", "professional"),
+                experiment_prompt=experiment_prompt, run_id=run_id,
+                condition_name=condition_name, task_id=task_id,
+            )
+            return None
 
         # Enrich the prompt only from private, content-verified task copies.
         preprocessor_prefix = _run_preprocessors(
@@ -2654,6 +2682,8 @@ def _execute_single_task(
             })
 
     except ReferenceIntegrityError as exc:
+        if accounting_only:
+            raise TaskDeadlineRefused("host accounting reference validation refused") from None
         return {
             "task_id": task_id,
             "status": "error",
@@ -2670,6 +2700,10 @@ def _execute_single_task(
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
     except Exception as exc:
+        if accounting_only:
+            if isinstance(exc, TaskDeadlineRefused):
+                raise
+            raise TaskDeadlineRefused("host accounting reconciliation refused") from None
         if pilot_wire_receipts is not None:
             raise PilotWireReceiptRefused() from None
         return {
@@ -4361,28 +4395,32 @@ def _run_inference_impl(
                     # 파일을 생성했을 때 구/신 파일이 공존하게 됨
                     _clear_task_files()
 
+                def _execute(infra_attempt: int, *, accounting_only: bool = False) -> dict | None:
+                    return _execute_single_task(
+                        task, condition, executor, execution_mode,
+                        client, model, manifest,
+                        error_context=last_qa_feedback,
+                        verbose=verbose,
+                        run_id=run_identity,
+                        condition_name=execution_condition,
+                        strict_inputs=hardened_requested,
+                        experiment_id=experiment_id,
+                        upload_root=condition_upload_root,
+                        azure_ai_factory=azure_ai_factory,
+                        azure_ai_route_plan=azure_ai_route_plan,
+                        cost_recorder=cost_recorder,
+                        **({"pilot_wire_receipts": pilot_wire_receipts, "pilot_attempt_index": infra_attempt}
+                           if pilot_wire_receipts is not None else {}),
+                        **({"accounting_only": True} if accounting_only else {}),
+                    )
+
                 def _attempt(infra_attempt: int) -> dict:
                     """One attempt at this task, counted and attributed."""
                     with _solving_scope(
                         STAGE_GENERATION, qa_attempts,
                         infra_attempt=infra_attempt,
                     ):
-                        attempted = _execute_single_task(
-                            task, condition, executor, execution_mode,
-                            client, model, manifest,
-                            error_context=last_qa_feedback,
-                            verbose=verbose,
-                            run_id=run_identity,
-                            condition_name=execution_condition,
-                            strict_inputs=hardened_requested,
-                            experiment_id=experiment_id,
-                            upload_root=condition_upload_root,
-                            azure_ai_factory=azure_ai_factory,
-                            azure_ai_route_plan=azure_ai_route_plan,
-                            cost_recorder=cost_recorder,
-                            **({"pilot_wire_receipts": pilot_wire_receipts, "pilot_attempt_index": infra_attempt}
-                               if pilot_wire_receipts is not None else {}),
-                        )
+                        attempted = _execute(infra_attempt)
                     if metrics_enabled:
                         _record_execution_metrics(attempted)
                     return attempted
@@ -4391,7 +4429,9 @@ def _run_inference_impl(
                     _attempt,
                     max_attempts=infra_max_attempts,
                     before_retry=_clear_task_files,
-                    **({"task_deadline": task_deadline} if task_deadline is not None else {}),
+                    **({"task_deadline": task_deadline,
+                        "reconcile_accounting": lambda: _execute(0, accounting_only=True)}
+                       if task_deadline is not None else {}),
                 )
                 if task_deadline is not None:
                     result.setdefault("model", model)

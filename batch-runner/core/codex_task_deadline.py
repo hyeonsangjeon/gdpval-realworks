@@ -366,10 +366,13 @@ class CodexTaskDeadline:
         return limit is None or len(cell["attempts"]) < limit
 
     def require_resumable(self) -> None:
-        """Content-filter stops apply to fresh A as well as retained B/C."""
+        """Accounting replay never grants permission to reopen a terminal cell."""
         _, cell, _ = self._state()
         if cell["terminal_reason"] is not None:
             raise TaskDeadlineRefused("content filter stopped this deadline cell")
+        binding = cell["continuation"]
+        if binding is not None and binding["terminal_reason"] is not None:
+            raise TaskDeadlineRefused("native continuation is terminal: " + binding["terminal_reason"])
 
     def admit_attempt(self, workspace_root: Path) -> int:
         from core.codex_runtime_config import path_is_within
@@ -390,8 +393,12 @@ class CodexTaskDeadline:
         self.store._write(data)
         return index
 
-    def continuation(self, identity_sha256: str | None = None) -> dict | None:
-        """Get the binding, refusing missing post-admission or uncertain state."""
+    def accounting_continuation(self, identity_sha256: str | None = None) -> dict | None:
+        """Read validated host metadata, including terminal usage, without admission.
+
+        Callers must still validate the request, workspace and receipt ledger
+        before settlement. This view is not permission to resume a thread.
+        """
         _, cell, _ = self._state()
         binding = cell["continuation"]
         if not self.retains_thread:
@@ -404,7 +411,12 @@ class CodexTaskDeadline:
             raise TaskDeadlineRefused("native continuation request/runtime identity mismatch")
         if binding["phase"] == "starting":
             raise TaskDeadlineRefused("native thread creation was interrupted before its identifier was bound")
-        if binding["terminal_reason"] is not None:
+        return binding
+
+    def continuation(self, identity_sha256: str | None = None) -> dict | None:
+        """Get a resumable binding; terminal cells remain terminal after replay."""
+        binding = self.accounting_continuation(identity_sha256)
+        if binding is not None and binding["terminal_reason"] is not None:
             raise TaskDeadlineRefused("native continuation is terminal: " + binding["terminal_reason"])
         return binding
 

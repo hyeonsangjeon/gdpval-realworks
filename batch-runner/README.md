@@ -230,7 +230,12 @@ continuation metadata cannot be adopted as resumable state; do not replace them
 with a new clock. Content-filter stops remain terminal across restarts.
 
 Usage observations are written before settlement, using the existing ledger's
-idempotent equality check and durable attempt/receipt IDs. Resumed thread totals
+idempotent equality check and durable attempt/receipt IDs. On restore, the
+runner and outer retry path reconcile validated host observations before
+checking whether the cell may compute. Completed, filtered or expired cells
+can acknowledge a pending receipt without opening a runtime, admitting an
+attempt or clearing their stop reason. This does not reconstruct a successful
+task result from native completion metadata. Resumed thread totals
 are differenced against the previous observation. A lost response or unobserved
 turn leaves an unknown boundary; its cumulative tokens are not charged again as
 the next turn's usage. Missing observations and per-request/invoice gaps remain
