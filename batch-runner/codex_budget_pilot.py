@@ -104,7 +104,6 @@ def _owned_child_worker(control_fd: int, lock_fd: int, command: list[str]) -> in
     libc = ctypes.CDLL(None, use_errno=True)
     enabled = ctypes.c_int()
     if (os.getsid(0) != os.getpid() or os.getpgrp() != os.getpid()
-            or not hasattr(os, "pidfd_open") or not hasattr(signal, "pidfd_send_signal")
             or not Path("/proc/self/task").is_dir()
             or libc.prctl(36, 1, 0, 0, 0) != 0  # PR_SET_CHILD_SUBREAPER
             or libc.prctl(37, ctypes.byref(enabled), 0, 0, 0) != 0
@@ -139,29 +138,19 @@ def _owned_child_worker(control_fd: int, lock_fd: int, command: list[str]) -> in
     for sig, grace in ((signal.SIGTERM, TERM_GRACE_SECONDS), (signal.SIGKILL, KILL_GRACE_SECONDS)):
         until = time.monotonic() + grace
         while not confirmed and time.monotonic() < until:
-            # Snapshot this private supervisor's tree, not processes by name,
-            # UID, or the dispatcher's other children. Pin each signal target.
+            # Snapshot only this private supervisor's tree. Signal a PID only
+            # while waitpid proves it is our own *unreaped direct child*. No
+            # other thread/reaper exists here, so it cannot be recycled between
+            # this check and kill. Deeper descendants are adopted as parents
+            # exit and are handled on the next SIGCHLD, including setsid tools.
             for pid in _descendant_pids(os.getpid()):
                 try:
-                    reference = os.open(f"/proc/{pid}", os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
-                    try:
-                        handle = os.pidfd_open(pid)
-                        try:
-                            # Reopen through the pre-pidfd /proc reference. If
-                            # that process exited/recycled, this cannot read the
-                            # new occupant, matching the repository's pidfd rule.
-                            status = os.open("stat", os.O_RDONLY | os.O_CLOEXEC, dir_fd=reference)
-                            try:
-                                os.read(status, 4096)
-                            finally:
-                                os.close(status)
-                            if pid in _descendant_pids(os.getpid()):
-                                signal.pidfd_send_signal(handle, sig)
-                        finally:
-                            os.close(handle)
-                    finally:
-                        os.close(reference)
-                except (ProcessLookupError, FileNotFoundError, PermissionError):
+                    waited, status = os.waitpid(pid, os.WNOHANG)
+                    if waited == 0:
+                        os.kill(pid, sig)
+                    elif pid == process.pid:
+                        process.returncode = os.waitstatus_to_exitcode(status)
+                except (ChildProcessError, ProcessLookupError, PermissionError):
                     pass
             confirmed = reaped_all()
             if not confirmed:
@@ -191,6 +180,21 @@ def _owned_response(control: Connection, timeout: float) -> dict:
 
 def _request_owned_stop(process: subprocess.Popen) -> None:
     process.send_signal(signal.SIGTERM)
+
+
+def _reap_supervisor(process: subprocess.Popen, wake: int, timeout: float) -> bool:
+    """Bound the final direct-child reap without requiring pidfd or sleeping."""
+    until = time.monotonic() + timeout
+    while process.poll() is None:
+        remaining = until - time.monotonic()
+        if remaining <= 0:
+            return False
+        if select.select([wake], [], [], remaining)[0]:
+            try:
+                os.read(wake, 65536)
+            except BlockingIOError:
+                pass
+    return True
 
 
 def _owner_state(plan_sha256: str) -> dict:
@@ -384,8 +388,6 @@ class LocalTransport:
 
     def process(self, command: list[str], *, ownership: tuple[Path, dict], **options: Any) -> subprocess.CompletedProcess:
         """Own, stop and reap the entire cell tree before releasing its slot."""
-        if not hasattr(os, "pidfd_open"):
-            raise PilotDispatchRefused("owned_child_pidfd_required")
         path, binding = ownership
         state = {**_owner_state(binding["plan_sha256"]), **binding, "phase": "launching",
                  "tree_reaped": False, "owner_reaped": False}
@@ -394,13 +396,21 @@ class LocalTransport:
         timeout = options.pop("timeout")
         options.pop("check")
         lock, = options.pop("pass_fds")
-        process, handle, response, failure = None, None, None, None
-        previous = {sig: signal.getsignal(sig) for sig in (signal.SIGINT, signal.SIGTERM)}
+        process, response, failure = None, None, None
+        wake_read, wake_write = os.pipe2(os.O_NONBLOCK | os.O_CLOEXEC)
+        previous = {sig: signal.getsignal(sig) for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGCHLD)}
 
         def interrupted(signum: int, frame: Any) -> None:
             raise KeyboardInterrupt
 
+        def child_exited(signum: int, frame: Any) -> None:
+            try:
+                os.write(wake_write, b"1")
+            except BlockingIOError:
+                pass
+
         signal.signal(signal.SIGTERM, interrupted)
+        signal.signal(signal.SIGCHLD, child_exited)
         until = time.monotonic() + timeout
         try:
             process = subprocess.Popen(
@@ -409,7 +419,6 @@ class LocalTransport:
                 start_new_session=True, pass_fds=(lock, inherited.fileno()), **options,
             )
             inherited.close()
-            handle = os.pidfd_open(process.pid)
             state.update(phase="running", pid=process.pid)
             _save(path, state)
             ready = _owned_response(control, min(10.0, until - time.monotonic()))
@@ -424,7 +433,7 @@ class LocalTransport:
         except BaseException as error:
             failure = error
             # A second host interrupt must not bypass bounded cleanup.
-            for sig in previous:
+            for sig in (signal.SIGINT, signal.SIGTERM):
                 signal.signal(sig, signal.SIG_IGN)
             if process is not None:
                 try:
@@ -435,14 +444,12 @@ class LocalTransport:
         finally:
             confirmed = False
             try:
-                if (process is not None and handle is not None and isinstance(response, dict)
+                if (process is not None and isinstance(response, dict)
                         and set(response) == {"phase", "pid", "tree_reaped", "exit_code", "reason"}
                         and response["phase"] == "finished" and response["pid"] == process.pid
                         and response["tree_reaped"] is True
-                        and select.select([handle], [], [], 1.0)[0]):
-                    # pidfd readiness means this wait cannot turn into an unbounded
-                    # cleanup wait. The supervisor already reaped every descendant.
-                    confirmed = process.wait() == 0
+                        and _reap_supervisor(process, wake_read, 1.0)):
+                    confirmed = process.returncode == 0
                 state.update(phase="reaped" if confirmed else "cleanup_unresolved",
                              tree_reaped=confirmed, owner_reaped=confirmed,
                              reason=(response["reason"] if confirmed else "owned_child_cleanup_unconfirmed"),
@@ -451,10 +458,10 @@ class LocalTransport:
             finally:
                 control.close()
                 inherited.close()
-                if handle is not None:
-                    os.close(handle)
                 for sig, handler in previous.items():
                     signal.signal(sig, handler)
+                os.close(wake_read)
+                os.close(wake_write)
         if not confirmed:
             raise OwnedChildCleanupRefused("owned_child_cleanup_unconfirmed") from failure
         if failure is not None:

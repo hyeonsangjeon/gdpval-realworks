@@ -466,6 +466,8 @@ def test_pilot_dispatcher_failed_filtered_and_missing_receipts_stay_in_denominat
 OWNED_TREE_FIXTURE = """
 import json, os, signal, sys
 from pathlib import Path
+if sys.argv[3] == 'exit':
+    signal.signal(signal.SIGUSR1, lambda signum, frame: sys.exit(0))
 ready_read, ready_write = os.pipe()
 descendant = os.fork()
 if descendant == 0:
@@ -482,10 +484,30 @@ assert os.read(ready_read, 1) == b'1'
 os.close(ready_read)
 with open(sys.argv[2], 'w') as stream:
     stream.write(json.dumps({'payload': os.getpid(), 'descendant': descendant}) + '\\n')
-if sys.argv[3] != 'exit':
-    while True:
-        signal.pause()
+while True:
+    signal.pause()
 """
+
+
+def stop_fixture_process(process):
+    """Bounded cleanup of a concrete Popen child created by this test only."""
+    wake_read, wake_write = os.pipe2(os.O_NONBLOCK | os.O_CLOEXEC)
+    previous = signal.getsignal(signal.SIGCHLD)
+
+    def exited(signum, frame):
+        try:
+            os.write(wake_write, b"1")
+        except BlockingIOError:
+            pass
+
+    signal.signal(signal.SIGCHLD, exited)
+    try:
+        process.send_signal(signal.SIGTERM)
+        assert pilot._reap_supervisor(process, wake_read, pilot.CLEANUP_WAIT_SECONDS + 2)
+    finally:
+        signal.signal(signal.SIGCHLD, previous)
+        os.close(wake_read)
+        os.close(wake_write)
 
 
 @pytest.fixture
@@ -498,7 +520,7 @@ def owned_lifecycle(monkeypatch, scenario):
     original_response = pilot._owned_response
     original_stop = pilot._request_owned_stop
     evidence = SimpleNamespace(mode="timeout", processes=[], pids={}, used=False, injected=False,
-                               partial=None, before=None, deadline=None, handles=[])
+                               partial=None, before=None, deadline=None)
 
     def local_only(command, **options):
         assert command[:3] == [sys.executable, str(Path(pilot.__file__).absolute()), pilot.OWNED_CHILD_ARG]
@@ -543,7 +565,6 @@ def owned_lifecycle(monkeypatch, scenario):
             if owner["phase"] == "running" and getattr(evidence, "handshake", False):
                 assert select.select([ready], [], [], 10.0)[0], "owned fixture did not start"
                 evidence.pids = json.loads(os.read(ready, 4096))
-                evidence.handles = [os.pidfd_open(pid) for pid in evidence.pids.values()]
                 assert os.getsid(evidence.pids["descendant"]) == evidence.pids["descendant"]
                 assert evidence.partial.read_bytes() == b"owned fixture partial"
                 held = os.open(scenario.root / "lock", os.O_RDWR)
@@ -558,6 +579,8 @@ def owned_lifecycle(monkeypatch, scenario):
                 if evidence.mode == "interrupt":
                     assert callable(signal.getsignal(signal.SIGTERM))
                     os.kill(os.getpid(), signal.SIGTERM)
+                if evidence.mode == "exit":
+                    os.kill(evidence.pids["payload"], signal.SIGUSR1)
         value = original_response(control, timeout)
         if value.get("phase") == "ready":
             evidence.handshake = True
@@ -577,17 +600,8 @@ def owned_lifecycle(monkeypatch, scenario):
         yield evidence
     finally:
         for process in evidence.processes:
-            handle = os.pidfd_open(process.pid) if process.returncode is None else None
-            try:
-                if handle is not None:
-                    original_stop(process)
-                    assert select.select([handle], [], [], pilot.CLEANUP_WAIT_SECONDS + 2)[0]
-                    process.wait()
-            finally:
-                if handle is not None:
-                    os.close(handle)
-        for handle in evidence.handles:
-            os.close(handle)
+            if process.returncode is None:
+                stop_fixture_process(process)
         os.close(ready)
 
 
@@ -598,7 +612,6 @@ def test_pilot_owned_child_tree_reaped_before_next_cell_or_restore(scenario, own
     unrelated = REAL_POPEN([sys.executable, "-c", "import signal; signal.pause()"],
                            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                            stderr=subprocess.DEVNULL, start_new_session=True)
-    unrelated_handle = os.pidfd_open(unrelated.pid)
     try:
         assert invoke(scenario, "--execute") == (130 if outcome == "interrupt" else 1)
         assert unrelated.poll() is None
@@ -629,10 +642,7 @@ def test_pilot_owned_child_tree_reaped_before_next_cell_or_restore(scenario, own
         assert scenario.transport.calls == calls
         assert owned_lifecycle.partial.read_bytes() == b"owned fixture partial"
     finally:
-        unrelated.terminate()
-        assert select.select([unrelated_handle], [], [], 2.0)[0]
-        unrelated.wait()
-        os.close(unrelated_handle)
+        stop_fixture_process(unrelated)
 
 
 def test_pilot_owned_child_cleanup_refusal_keeps_lock_and_durable_unresolved_cell(scenario, owned_lifecycle):
@@ -661,13 +671,8 @@ def test_pilot_owned_child_cleanup_refusal_keeps_lock_and_durable_unresolved_cel
     # The test alone stops its known harmless supervisor. Even once the physical
     # lock is free, a lost cleanup acknowledgment is not inferred on restore.
     process = owned_lifecycle.processes[0]
-    handle = os.pidfd_open(process.pid)
-    try:
-        process.send_signal(signal.SIGTERM)
-        assert select.select([handle], [], [], pilot.CLEANUP_WAIT_SECONDS + 2)[0]
-        assert process.wait() == 0
-    finally:
-        os.close(handle)
+    stop_fixture_process(process)
+    assert process.returncode == 0
     for _ in range(2):
         assert invoke(scenario, "--execute", "--resume") == 2
         assert scenario.transport.calls == calls
