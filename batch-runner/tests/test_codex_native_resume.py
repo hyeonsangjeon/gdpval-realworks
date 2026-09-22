@@ -532,9 +532,10 @@ def test_native_resume_deadline_admission_and_new_cell_identity(host, monkeypatc
 
 
 @pytest.mark.parametrize("phase", ["turn_start", "stream"])
-def test_native_resume_content_filter_is_terminal_across_restart(host, monkeypatch, phase):
+@pytest.mark.parametrize("condition", ["A", "B", "C"])
+def test_native_resume_content_filter_is_terminal_across_restart(host, monkeypatch, phase, condition):
     clock = Clock()
-    store = store_at(host, clock)
+    store = store_at(host, clock, condition=condition)
     script = ({"turn_error": "reason: content_filter"} if phase == "turn_start" else
               {"tokens": 100, "error": "reason: content_filter"})
     transport = SDKTransport(monkeypatch, clock, [script])
@@ -544,8 +545,9 @@ def test_native_resume_content_filter_is_terminal_across_restart(host, monkeypat
             task_deadline=store.for_task(TASK), sleep=clock.sleep,
         )
         assert result["observability"]["error_category"] == "content_filtered" and clock.waits == []
+        assert result["observability"]["task_deadline"]["terminal_reason"] == "content_filtered"
         store.close()
-        store = store_at(host, clock, initialize=False)
+        store = store_at(host, clock, condition=condition, initialize=False)
         assert execute(executor_for(store), host)["observability"]["error_category"] == STATE_REFUSED
         assert transport.count("turn/start") == 1 and transport.count("thread/resume") == 0
     finally:

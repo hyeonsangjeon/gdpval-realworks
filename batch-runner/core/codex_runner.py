@@ -1301,6 +1301,7 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                         or (condition_name is not None and condition_name != self.condition_name)):
                     raise TaskDeadlineRefused("Codex call differs from its declared cell")
                 deadline = store.for_task(task_id)
+                deadline.require_resumable()
                 deadline.bound_timeout(self.timeout)
                 if not deadline.attempts_remaining():
                     raise TaskDeadlineExhausted(ATTEMPTS_EXHAUSTED)
@@ -1308,8 +1309,8 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                 result = self._failure(str(exc), category=str(exc))
                 result["task_deadline"] = deadline.as_record()
                 return result
-            except TaskDeadlineRefused:
-                return self._failure(STATE_REFUSED, category=STATE_REFUSED)
+            except TaskDeadlineRefused as exc:
+                return self._failure(str(exc), category=STATE_REFUSED)
 
         workspace: CodexWorkspace | None = None
         continuation = None
@@ -1587,16 +1588,15 @@ class CodexAgentRunner(RecordsItsFirstRequest):
             try:
                 turn_handle = thread.turn(task_text)
             except Exception as exc:  # noqa: BLE001
-                # The turn never started, so nothing was sent and nothing was
-                # billed. This is one of the few places `abandon` is right.
                 category = "turn_start_failed"
-                if retains_thread:
+                if task_deadline is not None:
                     # A lost response does not prove the native request never
                     # reached the runtime. Keep the reservation and unknown gap.
                     if _turn_failure_category(exc) == "content_filtered":
                         category = "content_filtered"
-                        task_deadline.stop_continuation("content_filter")
+                        task_deadline.stop_content_filter()
                 else:
+                    # Preserve the legacy pre-turn accounting boundary.
                     self._abandon_call(call_id, "the turn never started")
                 call_id = None
                 return CodexRunOutcome(
@@ -1633,10 +1633,12 @@ class CodexAgentRunner(RecordsItsFirstRequest):
                 """
                 nonlocal call_id
                 after = read_thread_totals(observed.usage)
+                terminal = ("content_filter" if _turn_failure_category(
+                    observed.failure, http_status_code=observed.http_status_code,
+                ) == "content_filtered" else None)
+                if task_deadline is not None and terminal is not None:
+                    task_deadline.stop_content_filter()
                 if retains_thread:
-                    terminal = ("content_filter" if _turn_failure_category(
-                        observed.failure, http_status_code=observed.http_status_code,
-                    ) == "content_filtered" else None)
                     task_deadline.observe_turn(attempt_index, asdict(after), terminal_reason=terminal)
                 measured = turn_usage_delta(before_totals, after)
                 if measured.is_empty and not retains_thread:

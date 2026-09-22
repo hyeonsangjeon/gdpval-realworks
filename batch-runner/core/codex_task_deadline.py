@@ -236,7 +236,7 @@ class CodexTaskDeadlineStore:
                     "cells": {task: {
                         "started_unix": None, "expires_unix": None,
                         "attempts": [], "wait_seconds": 0.0,
-                        "continuation": None,
+                        "continuation": None, "terminal_reason": None,
                     } for task in task_ids},
                 })
             self._read()
@@ -271,11 +271,13 @@ class CodexTaskDeadlineStore:
             if type(last) not in {int, float} or not math.isfinite(last) or self._now() < last:
                 raise TaskDeadlineRefused("deadline clock moved backwards")
             for cell in data["cells"].values():
-                if set(cell) != {"started_unix", "expires_unix", "attempts", "wait_seconds", "continuation"}:
+                if set(cell) != {"started_unix", "expires_unix", "attempts", "wait_seconds", "continuation", "terminal_reason"}:
                     raise TaskDeadlineRefused("deadline cell shape mismatch")
+                if cell["terminal_reason"] not in {None, "content_filtered"}:
+                    raise TaskDeadlineRefused("deadline terminal reason is invalid")
                 start, expiry = cell["started_unix"], cell["expires_unix"]
                 if start is None:
-                    if expiry is not None or cell["attempts"] or cell["wait_seconds"] != 0:
+                    if expiry is not None or cell["attempts"] or cell["wait_seconds"] != 0 or cell["terminal_reason"] is not None:
                         raise TaskDeadlineRefused("unstarted deadline cell has activity")
                 elif (type(start) not in {int, float} or not math.isfinite(start)
                       or start < 0 or start > last or type(expiry) not in {int, float}
@@ -362,6 +364,12 @@ class CodexTaskDeadline:
         _, cell, _ = self._state()
         limit = self.store.control.max_attempts
         return limit is None or len(cell["attempts"]) < limit
+
+    def require_resumable(self) -> None:
+        """Content-filter stops apply to fresh A as well as retained B/C."""
+        _, cell, _ = self._state()
+        if cell["terminal_reason"] is not None:
+            raise TaskDeadlineRefused("content filter stopped this deadline cell")
 
     def admit_attempt(self, workspace_root: Path) -> int:
         from core.codex_runtime_config import path_is_within
@@ -495,13 +503,13 @@ class CodexTaskDeadline:
                 return
         raise TaskDeadlineRefused("native usage observation is missing")
 
-    def stop_continuation(self, reason: str) -> None:
+    def stop_content_filter(self) -> None:
         """Retain a content-filter refusal even if no usage event arrived."""
         data, cell, _ = self._state()
+        cell["terminal_reason"] = "content_filtered"
         binding = cell["continuation"]
-        if binding is None or reason != "content_filter":
-            raise TaskDeadlineRefused("native terminal reason is invalid")
-        binding["terminal_reason"] = reason
+        if binding is not None:
+            binding["terminal_reason"] = "content_filter"
         self.store._write(data)
 
     def wait(self, seconds: float, sleep: Callable[[float], None]) -> None:
@@ -530,6 +538,7 @@ class CodexTaskDeadline:
             "retained_attempts": len(cell["attempts"]),
             "session_policy": "retained_native_thread" if self.retains_thread else "fresh_session",
             "native_resumes": (cell["continuation"] or {}).get("native_resumes", 0),
+            "terminal_reason": cell["terminal_reason"],
             "model_call_accounting": "not_complete", "invoice_accounting": "unavailable",
         }
 
