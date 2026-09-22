@@ -18,7 +18,7 @@ import gpt54_disposable_checkout as preparer
 import gpt54_run_config_bundle as config_bundle
 import gpt54_run_input_bundle as input_bundle
 from .test_gpt54_prepared_input_attestation import (
-    _bundle_fixture, _identity, _json, _tree_snapshot,
+    _bundle_fixture, _identity, _json, _step0_manifest_source, _tree_snapshot,
 )
 from .test_gpt54_run_config_bundle import _guards
 from .test_gpt54_run_input_bundle import _input_bundle_seed
@@ -46,6 +46,77 @@ _FIXTURE_ENV = {
     "GIT_COMMITTER_DATE": "2026-09-19T00:00:00+00:00",
 }
 _PREPARER_SOURCE = "batch-runner/gpt54_disposable_checkout.py"
+
+
+@pytest.fixture
+def _step0_manifest_checkout(tmp_path, monkeypatch, _input_bundle_seed):
+    """Prepare only fresh synthetic source metadata for the focused callers."""
+    forbidden, git_calls = _allow_only_temporary_git(monkeypatch, tmp_path)
+    _input_bundle_seed.install(monkeypatch)
+    oracle = tmp_path / "oracle"
+    oracle.mkdir()
+    inputs, _, _, _, _ = _input_bundle_seed.inputs(oracle, monkeypatch, "identical")
+    plan = _input_bundle_seed.plan
+    run = plan.dispatch.runs[1]
+    repository = tmp_path / "source"
+    _bundle_fixture(repository, manifest=inputs["manifest"], combined_plan=inputs["combined_plan"],
+                    run=run, materialize=False)
+    _fixture_git(repository, "init", "--quiet", "--initial-branch=fixture-main", "--object-format=sha1", "--template=")
+    sha = _commit_fixture(repository, "Synthetic Step 0 source fixture")
+    monkeypatch.setattr(preparer, "TRUSTED_ROOT", repository)
+    yield {
+        "inputs": inputs, "run": run, "repository": repository,
+        "destination": tmp_path / "prepared", "reviewed_sha": sha,
+        "step0_manifest": _step0_manifest_source(inputs, run), "git_calls": git_calls,
+    }
+    assert forbidden == []
+
+
+@pytest.mark.parametrize("case", ["api", "cli", "missing_argument", "missing_file", "tampered"])
+def test_step0_manifest_disposable_checkout_and_cli(case, _step0_manifest_checkout, tmp_path, capsys):
+    fixture = _step0_manifest_checkout
+    inputs, run = fixture["inputs"], fixture["run"]
+    source, destination = fixture["step0_manifest"], fixture["destination"]
+    if case == "missing_file":
+        source.unlink()
+    elif case == "tampered":
+        source.write_bytes(source.read_bytes() + b"\n")
+    kwargs = {
+        "repository": fixture["repository"], "reviewed_source_sha": fixture["reviewed_sha"],
+        "destination": destination, "manifest": inputs["manifest"], "combined_plan": inputs["combined_plan"],
+        "dataset_parquet": inputs["dataset_parquet"], "reference_root": inputs["reference_root"],
+        "step0_manifest": None if case == "missing_argument" else source,
+    }
+    if case.startswith("missing_") or case == "tampered":
+        before = _tree_snapshot(tmp_path)
+        with pytest.raises(preparer.DisposableCheckoutRefused, match="Step 0 manifest"):
+            preparer.prepare_disposable_checkout(run, **kwargs)
+        assert _tree_snapshot(tmp_path) == before
+        assert not destination.exists()
+        assert all(not path.exists() for path in _sidecars(destination))
+        assert not any(args[0] == "worktree" for _, args in fixture["git_calls"])
+        return
+    if case == "cli":
+        combined = tmp_path / "combined-plan.json"
+        combined.write_bytes(_json(inputs["combined_plan"]))
+        capsys.readouterr()
+        assert preparer.main([
+            "--repository", str(fixture["repository"]), "--reviewed-source-sha", fixture["reviewed_sha"],
+            "--destination", str(destination), "--manifest", str(fixture["repository"] / config_bundle.MANIFEST_PATH),
+            "--combined-plan", str(combined), "--run-id", run.run_id,
+            "--dataset-parquet", str(inputs["dataset_parquet"]), "--reference-root", str(inputs["reference_root"]),
+            "--step0-manifest", str(source),
+        ]) == 0
+        marker = json.loads(capsys.readouterr().out)
+    else:
+        marker = preparer.prepare_disposable_checkout(run, **kwargs)
+    input_ready = json.loads((destination / input_bundle.READY_PATH).read_bytes())
+    assert input_ready["files"][input_bundle.STEP0_MANIFEST_PATH] == _identity(source.read_bytes())
+    assert (destination / input_bundle.STEP0_MANIFEST_PATH).read_bytes() == source.read_bytes()
+    assert marker["run_id"] == run.run_id and marker["task_ids"] == list(run.task_ids)
+    assert marker["reviewed_source_sha"] == fixture["reviewed_sha"]
+    assert not _sidecars(destination)[1].exists()
+    assert sum(args[0] == "worktree" for _, args in fixture["git_calls"]) == 1
 
 
 def _git_prefix() -> list[str]:
@@ -214,7 +285,7 @@ def _assert_ready(
     assert [row["task_id"] for row in input_marker["tasks"]] == list(run.task_ids)
     assert len(run.task_ids) == 5
     assert reviewed_sha != plan.dispatch.source_base_sha
-    assert len(manifest["source_pins"]) == 34
+    assert len(manifest["source_pins"]) == 36
     assert set(manifest["source_pins"]) == preflight.REQUIRED_SOURCES
     assert _PREPARER_SOURCE in manifest["source_pins"]
     assert not ({"launch_allowed", "full_220_allowed", "approval"} & marker.keys())
@@ -230,6 +301,8 @@ def _assert_ready(
         input_bundle.PARQUET_PATH: inputs["dataset_parquet"].read_bytes(),
         **{input_bundle.DATASET_ROOT + "/" + name: (inputs["reference_root"] / name).read_bytes()
            for name in records},
+        **({input_bundle.STEP0_MANIFEST_PATH: _step0_manifest_source(inputs, run).read_bytes()}
+           if run.condition == "codex" else {}),
     }
     for name, data in exact_files.items():
         path = destination / name
@@ -240,7 +313,7 @@ def _assert_ready(
     assert symbolic.stdout == b""
     assert (destination / ".git").is_file()
     assert not (destination / "caller-only.txt").exists()
-    assert not (destination / "batch-runner/workspace").exists()
+    assert (destination / "batch-runner/workspace").exists() is (run.condition == "codex")
 
 
 @pytest.mark.parametrize("case", [
@@ -371,6 +444,7 @@ def test_disposable_checkout_is_reviewed_local_and_quarantines_failures(
         return preparer.prepare_disposable_checkout(
             supplied_run, **kwargs, dataset_parquet=inputs["dataset_parquet"],
             reference_root=inputs["reference_root"],
+            step0_manifest=_step0_manifest_source(inputs, run),
         )
 
     real_verify = preparer.verify_disposable_checkout

@@ -37,6 +37,26 @@ def _identity(data):
     return {"sha256": hashlib.sha256(data).hexdigest(), "size": len(data)}
 
 
+def _pin_step0_manifest_fixture(monkeypatch, data):
+    """Bind synthetic manifest bytes at the existing fixture-only pin seam.
+
+    Canonical validation itself stays real. These bytes are not the production
+    full-dataset manifest and are never accepted by its unchanged digest pins.
+    """
+    from core import repo_bootstrapper
+
+    monkeypatch.setattr(repo_bootstrapper, "NEEDS_FILES_POLICY", "deliverable_only")
+    monkeypatch.setattr(repo_bootstrapper, "CANONICAL_MANIFEST_SHA256_BY_POLICY", {
+        **repo_bootstrapper.CANONICAL_MANIFEST_SHA256_BY_POLICY,
+        "deliverable_only": _identity(data)["sha256"],
+    })
+
+
+def _step0_manifest_source(inputs, run):
+    return (inputs["dataset_parquet"].with_name("canonical-step0-manifest.json")
+            if run.condition == "codex" else None)
+
+
 def _write(path, value):
     path.write_bytes(_json(value) + b"\n")
 
@@ -80,6 +100,7 @@ def _input_bundle_fixture(checkout, *, inputs, run):
         run, manifest=inputs["manifest"], combined_plan=inputs["combined_plan"],
         checkout=checkout, dataset_parquet=inputs["dataset_parquet"],
         reference_root=inputs["reference_root"],
+        step0_manifest=_step0_manifest_source(inputs, run),
     )
 
 
@@ -169,12 +190,21 @@ def _fixture(tmp_path, monkeypatch, case):
     monkeypatch.setenv("NEEDS_FILES_POLICY", "deliverable_only")
     needs = NeedsFilesManifest({
         "_schema_version": 4, "_summary": {"active_policy": "deliverable_only"},
+        "_total_tasks": len(rows) + 1,
         "tasks": {row["task_id"]: {
             "needs_files": resolve_needs_files(bool(row["deliverable_files"]), None, "deliverable_only"),
             "source_projection_sha256": digest,
         } for row, digest in zip(rows, projection_hashes)},
         "reference_files": records,
     })
+    # Preserve a non-cohort record too: publication must copy the complete
+    # fixture manifest, not manufacture a five-task replacement.
+    needs._data["tasks"]["unselected-fixture-task"] = {
+        "needs_files": False, "source_projection_sha256": "d" * 64,
+    }
+    step0_data = _json(needs._data)
+    (tmp_path / "canonical-step0-manifest.json").write_bytes(step0_data)
+    _pin_step0_manifest_fixture(monkeypatch, step0_data)
 
     def dataset_loader(*, auto_download):
         assert auto_download is False
@@ -554,7 +584,7 @@ def test_prepared_input_attestation_binds_actual_bytes_without_execution(case, t
                 assert inspection["launch_allowed"] is inspection["full_220_allowed"] is False
                 assert "live_deployment_identity_and_input_bytes_not_verified" in inspection["launch_blockers"]
                 assert "comparison_materialization_and_workflow_gates_not_wired" in inspection["launch_blockers"]
-                assert len(preflight.REQUIRED_SOURCES) == 34
+                assert len(preflight.REQUIRED_SOURCES) == 36
                 assert set(inputs["manifest"]["source_pins"]) == preflight.REQUIRED_SOURCES
                 sol = preflight.load_plan(preflight.ROOT / preflight.ENVELOPE / "gpt56_sol_foundry_codex_pilot.yaml")
                 parser = "batch-runner/gpt54_comparison_preflight.py"

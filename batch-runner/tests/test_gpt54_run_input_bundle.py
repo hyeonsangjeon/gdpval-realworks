@@ -21,8 +21,10 @@ import gpt54_run_input_bundle as bundle
 import step1_prepare_tasks as step1
 import step2_run_inference as step2
 import step8_grade as grading
+from core import needs_files, repo_bootstrapper
 from core.needs_files import NeedsFilesManifest
 from core.source_identity import source_task_projection_sha256
+from prepare_dataset import GDPValDataset
 from scripts import run_agentic_v2_stage as runner
 from . import test_gpt54_codex_input_capture as codex_cases
 from . import test_gpt54_v2_input_capture as v2_cases
@@ -31,13 +33,247 @@ from .test_gpt54_codex_input_capture import (
     test_codex_comparison_capture_gates_real_step1_and_step2 as _codex_regression,
 )
 from .test_gpt54_prepared_input_attestation import (
-    _bundle_fixture, _fixture, _identity, _json, _tree_snapshot,
+    _bundle_fixture, _fixture, _identity, _json, _pin_step0_manifest_fixture,
+    _step0_manifest_source, _tree_snapshot,
 )
 from .test_gpt54_run_config_bundle import _forge_member, _guards
 from .test_gpt54_v2_input_capture import (
     _runtime_fixture as _v2_fixture,
     test_v2_comparison_capture_gates_stage_before_provider as _v2_regression,
 )
+
+_REAL_NEEDS_FILES_LOAD = NeedsFilesManifest.load.__func__
+
+
+@pytest.fixture
+def _step0_manifest_case(tmp_path, monkeypatch, _input_bundle_seed, request):
+    """Fresh synthetic sources/config; no cached verdict or real input access."""
+    forbidden = _guards(monkeypatch)
+    _input_bundle_seed.install(monkeypatch)
+    oracle = tmp_path / "oracle"
+    oracle.mkdir()
+    inputs, captures, _, projections, records = _input_bundle_seed.inputs(oracle, monkeypatch, "identical")
+    plan = _input_bundle_seed.plan
+    index = 0 if getattr(request, "param", "codex") == "sandbox_v2" else 1
+    run = plan.dispatch.runs[index]
+    root = tmp_path / "checkout"
+    _input_bundle_seed.config(root, manifest=inputs["manifest"], combined_plan=inputs["combined_plan"], run=run)
+    case = SimpleNamespace(
+        root=root, run=run, plan=plan, inputs=inputs, source=_step0_manifest_source(inputs, run),
+        capture=captures[index], projections=projections, records=records, forbidden=forbidden,
+    )
+
+    def publish():
+        return bundle.materialize_run_input_bundle(
+            run, manifest=inputs["manifest"], combined_plan=inputs["combined_plan"], checkout=root,
+            dataset_parquet=inputs["dataset_parquet"], reference_root=inputs["reference_root"],
+            step0_manifest=case.source,
+        )
+
+    case.publish = publish
+    for name in ("HF_HUB_OFFLINE", "HF_DATASETS_OFFLINE", "HF_HUB_DISABLE_TELEMETRY", "DO_NOT_TRACK",
+                 "NEEDS_FILES_STRICT"):
+        monkeypatch.setenv(name, "1")
+    yield case
+    assert forbidden == []
+
+
+@pytest.mark.parametrize("_step0_manifest_case", ["codex", "sandbox_v2"], indirect=True)
+def test_step0_manifest_real_materializer_and_step1_consumer(_step0_manifest_case, monkeypatch):
+    case = _step0_manifest_case
+    published = []
+    real_write = writer._write_no_clobber
+
+    def observe(path, data):
+        real_write(path, data)
+        published.append(path.relative_to(case.root).as_posix())
+
+    monkeypatch.setattr(writer, "_write_no_clobber", observe)
+    marker = case.publish()
+    assert published[-1] == bundle.READY_PATH
+    assert [row["task_id"] for row in marker["tasks"]] == list(case.run.task_ids)
+    assert case.plan.as_dict()["launch_allowed"] is False
+    assert case.plan.as_dict()["full_220_allowed"] is False
+    if case.run.condition == "sandbox_v2":
+        assert bundle.STEP0_MANIFEST_PATH not in marker["files"]
+        assert not (case.root / "batch-runner/workspace").exists()
+        assert bundle.verify_run_input_bundle(
+            checkout=case.root, run_id=case.run.run_id, condition=case.run.condition,
+        ) == marker
+        return
+
+    source_data = case.source.read_bytes()
+    assert marker["files"][bundle.STEP0_MANIFEST_PATH] == _identity(source_data)
+    installed = case.root / bundle.STEP0_MANIFEST_PATH
+    assert installed.read_bytes() == source_data
+    assert not installed.is_symlink() and installed.stat().st_nlink == 1
+    assert "unselected-fixture-task" in json.loads(source_data)["tasks"]
+    assert len(json.loads(source_data)["tasks"]) == 6
+    assert str(case.source).encode() not in _json(marker)
+    assert published.index(bundle.STEP0_MANIFEST_PATH) < published.index(bundle.READY_PATH)
+
+    # Undo only the independent oracle's data suppliers. The subject uses the
+    # actual local pyarrow loader and NeedsFilesManifest.load, including its
+    # canonical digest, schema, projection and reference-record checks.
+    workspace = installed.parent
+    monkeypatch.setattr(step1, "GDPValDataLoader", GDPValDataset)
+    monkeypatch.setattr(GDPValDataset, "DEFAULT_LOCAL_PATH", case.root / writer.DATASET_ROOT)
+    monkeypatch.setattr(NeedsFilesManifest, "load", classmethod(_REAL_NEEDS_FILES_LOAD))
+    monkeypatch.setattr(needs_files, "WORKSPACE_DIR", workspace)
+    monkeypatch.setattr(step1, "WORKSPACE_DIR", workspace)
+    monkeypatch.setattr(step1, "DEFAULT_LOCAL_PATH", case.root / writer.DATASET_ROOT)
+    assert NeedsFilesManifest.load.__func__ is _REAL_NEEDS_FILES_LOAD
+    payload = step1.prepare_tasks(str(case.root / writer.CONFIG_PATH))
+    assert payload["total_tasks"] == 5
+    assert [row["task_id"] for row in payload["tasks"]] == list(case.run.task_ids)
+    assert payload["prepared_fingerprint"] == case.capture["consumer"]["prepared_fingerprint"]
+    prepared_data = (case.root / writer.PREPARED_PATH).read_bytes()
+    assert _identity(prepared_data) == case.capture["consumer"]["prepared_file"]
+    assert (case.root / writer.CAPTURE_PATH).read_bytes() == _json(case.capture)
+    assert installed.read_bytes() == source_data
+
+
+@pytest.mark.parametrize("failure", [
+    "missing_argument", "missing_file", "tampered", "cohort_subset", "directory",
+    "symlink", "hardlink", "parent_symlink", "parent_traversal", "source_overlap",
+    "schema", "projection", "reference", "needs_files", "policy_snapshot",
+    "unsupported_policy", "missing_canonical_pin", "workspace_collision", "manifest_collision",
+    "partial_reservation",
+])
+def test_step0_manifest_refuses_invalid_sources_before_ready(failure, _step0_manifest_case, tmp_path, monkeypatch):
+    case = _step0_manifest_case
+    source = case.source
+    if failure == "missing_argument":
+        case.source = None
+    elif failure == "missing_file":
+        source.unlink()
+    elif failure == "tampered":
+        source.write_bytes(source.read_bytes() + b"\n")
+    elif failure == "cohort_subset":
+        value = json.loads(source.read_bytes())
+        value["tasks"].pop("unselected-fixture-task")
+        source.write_bytes(_json(value))  # A subset is not the fixture's canonical bytes.
+    elif failure == "directory":
+        source.rename(tmp_path / "retained-source")
+        source.mkdir()
+    elif failure in {"symlink", "hardlink"}:
+        _link(source, tmp_path / "linked-step0-source", hard=failure == "hardlink")
+    elif failure == "parent_symlink":
+        parent = tmp_path / "linked-parent"
+        parent.symlink_to(source.parent, target_is_directory=True)
+        case.source = parent / source.name
+    elif failure == "parent_traversal":
+        case.source = source.parent / ".." / source.parent.name / source.name
+    elif failure == "source_overlap":
+        case.source = case.root / bundle.STEP0_MANIFEST_PATH
+        case.source.parent.mkdir()
+        case.source.write_bytes(source.read_bytes())
+    elif failure in {"schema", "projection", "reference", "needs_files", "policy_snapshot"}:
+        value = json.loads(source.read_bytes())
+        task = value["tasks"][case.run.task_ids[0]]
+        if failure == "schema":
+            value["_schema_version"] = 3
+        elif failure == "projection":
+            task["source_projection_sha256"] = "0" * 64
+        elif failure == "reference":
+            value["reference_files"][next(iter(case.records))]["sha256"] = "0" * 64
+        elif failure == "needs_files":
+            task["needs_files"] = not task["needs_files"]
+        else:
+            value["_summary"]["active_policy"] = "union"
+        source.write_bytes(_json(value))
+        # Exercise schema/source/reference checks after a genuine digest match;
+        # change the fixture's expected bytes, never the validator function.
+        _pin_step0_manifest_fixture(monkeypatch, source.read_bytes())
+    elif failure == "unsupported_policy":
+        monkeypatch.setattr(repo_bootstrapper, "NEEDS_FILES_POLICY", "unregistered-policy")
+        monkeypatch.setenv("NEEDS_FILES_POLICY", "unregistered-policy")
+    elif failure == "missing_canonical_pin":
+        monkeypatch.setattr(repo_bootstrapper, "CANONICAL_MANIFEST_SHA256_BY_POLICY", {})
+    elif failure in {"workspace_collision", "manifest_collision"}:
+        target = case.root / bundle.STEP0_MANIFEST_PATH
+        target.parent.mkdir()
+        if failure == "manifest_collision":
+            target.write_bytes(b"owned by another publication")
+    else:
+        assert failure == "partial_reservation"
+        (case.root / bundle.RESERVATION_PATH).write_bytes(b"retained partial")
+
+    before = _tree_snapshot(tmp_path)
+    with pytest.raises(bundle.RunInputBundleRefused):
+        case.publish()
+    assert not (case.root / bundle.READY_PATH).exists()
+    if failure != "partial_reservation":
+        assert not (case.root / bundle.RESERVATION_PATH).exists()
+    assert _tree_snapshot(tmp_path) == before
+
+
+@pytest.mark.parametrize("failure", ["write_failure", "collision_race", "source_drift", "source_parent_swap", "target_parent_swap"])
+def test_step0_manifest_partial_publication_is_not_adopted(failure, _step0_manifest_case, tmp_path, monkeypatch):
+    case = _step0_manifest_case
+    source_parent = tmp_path / "manifest-source-only"
+    source_parent.mkdir()
+    source = source_parent / case.source.name
+    case.source.rename(source)
+    case.source = source
+    original_data = source.read_bytes()
+    target = case.root / bundle.STEP0_MANIFEST_PATH
+    real_write = writer._write_no_clobber
+
+    def interrupted(path, data):
+        if path == target and failure == "collision_race":
+            path.write_bytes(b"competing publisher")
+        real_write(path, data)
+        if path != target:
+            return
+        if failure == "write_failure":
+            raise OSError("synthetic interruption after Step 0 publication")
+        if failure == "source_drift":
+            source.write_bytes(original_data + b"\n")
+        elif failure == "source_parent_swap":
+            source_parent.rename(tmp_path / "retained-old-source-parent")
+            source_parent.mkdir()
+            source.write_bytes(original_data)
+        elif failure == "target_parent_swap":
+            target.parent.rename(tmp_path / "retained-old-workspace")
+            target.parent.mkdir()
+            target.write_bytes(original_data)
+
+    with monkeypatch.context() as fault:
+        fault.setattr(writer, "_write_no_clobber", interrupted)
+        with pytest.raises(bundle.RunInputBundleRefused):
+            case.publish()
+    assert (case.root / bundle.RESERVATION_PATH).is_file()
+    assert not (case.root / bundle.READY_PATH).exists()
+    if failure == "collision_race":
+        assert target.read_bytes() == b"competing publisher"
+    before = _tree_snapshot(tmp_path)
+    with pytest.raises(bundle.RunInputBundleRefused):
+        case.publish()
+    with pytest.raises(bundle.RunInputBundleRefused):
+        bundle.verify_run_input_bundle(checkout=case.root, run_id=case.run.run_id, condition="codex")
+    assert _tree_snapshot(tmp_path) == before
+
+
+@pytest.mark.parametrize("failure", ["missing", "tampered", "symlink", "hardlink", "forged_markers"])
+def test_step0_manifest_verifier_rereads_current_bytes(failure, _step0_manifest_case, tmp_path):
+    case = _step0_manifest_case
+    marker = case.publish()
+    path = case.root / bundle.STEP0_MANIFEST_PATH
+    if failure == "missing":
+        path.unlink()
+    elif failure in {"symlink", "hardlink"}:
+        _link(path, tmp_path / "linked-installed-manifest", hard=failure == "hardlink")
+    else:
+        path.write_bytes(path.read_bytes() + b"\n")
+        if failure == "forged_markers":
+            marker["files"][bundle.STEP0_MANIFEST_PATH] = _identity(path.read_bytes())
+            (case.root / bundle.READY_PATH).write_bytes(_json(marker))
+            (case.root / bundle.RESERVATION_PATH).write_bytes(_json(_reservation(marker)))
+    before = _tree_snapshot(tmp_path)
+    with pytest.raises(bundle.RunInputBundleRefused):
+        bundle.verify_run_input_bundle(checkout=case.root, run_id=case.run.run_id, condition="codex")
+    assert _tree_snapshot(tmp_path) == before
 
 
 def _compiler_cache():
@@ -177,6 +413,7 @@ def _input_bundle_seed(tmp_path_factory):
             monkeypatch.setattr(module, "load_task_catalog", lambda: catalog)
             monkeypatch.setattr(module, "catalog_sha256", lambda: catalog_digest)
         monkeypatch.setenv("NEEDS_FILES_POLICY", "deliverable_only")
+        _pin_step0_manifest_fixture(monkeypatch, (directory / "canonical-step0-manifest.json").read_bytes())
 
         def dataset_loader(*, auto_download):
             assert auto_download is False
@@ -215,11 +452,13 @@ def _input_bundle_seed(tmp_path_factory):
     assert _tree_snapshot(root) == original
 
 
-def _files(inputs, records):
+def _files(inputs, records, run):
+    step0 = _step0_manifest_source(inputs, run)
     return {
         bundle.PARQUET_PATH: inputs["dataset_parquet"].read_bytes(),
         **{writer.DATASET_ROOT + "/" + name: (inputs["reference_root"] / name).read_bytes()
            for name in records},
+        **({bundle.STEP0_MANIFEST_PATH: step0.read_bytes()} if step0 is not None else {}),
     }
 
 
@@ -265,7 +504,8 @@ def _assert_complete(root, marker, plan, index, oracle, projections, records, fi
     # The pinned parquet is copied intact despite its reversed physical order;
     # only registered references appear, and no prompt/rubric text is published.
     assert {path.relative_to(root).as_posix()
-            for path in (root / writer.DATASET_ROOT).rglob("*") if path.is_file()} == set(files)
+            for path in (root / writer.DATASET_ROOT).rglob("*") if path.is_file()} == {
+                name for name in files if name.startswith(writer.DATASET_ROOT + "/")}
     for name, data in {
         **files, bundle.READY_PATH: _json(expected),
         bundle.RESERVATION_PATH: _json(_reservation(expected)),
@@ -273,7 +513,7 @@ def _assert_complete(root, marker, plan, index, oracle, projections, records, fi
         path = root / name
         assert path.read_bytes() == data
         assert not path.is_symlink() and path.stat().st_nlink == 1
-    assert not (root / "batch-runner/workspace").exists()
+    assert (root / "batch-runner/workspace").exists() is (run.condition == "codex")
     assert not (root / ".git").exists()
     before = _tree_snapshot(root)
     assert bundle.verify_run_input_bundle(
@@ -320,7 +560,7 @@ def _forge_inputs(root, *, parquet=False):
     marker_path = root / bundle.READY_PATH
     marker = json.loads(marker_path.read_bytes())
     name = bundle.PARQUET_PATH if parquet else next(
-        name for name in marker["files"] if name != bundle.PARQUET_PATH
+        name for name in marker["files"] if name.startswith(writer.DATASET_ROOT + "/reference_files/")
     )
     path = root / name
     path.write_bytes(path.read_bytes() + b"attacker-supplied replacement")
@@ -441,7 +681,7 @@ def test_run_input_bundle_is_exact_atomic_and_gates_execution(case, tmp_path, mo
     combined = plan.as_dict()
     root = tmp_path / "disposable-source"
     _input_bundle_seed.config(root, manifest=manifest, combined_plan=combined, run=run)
-    files = _files(inputs, records)
+    files = _files(inputs, records, run)
     source_before = _tree_snapshot(oracle_root)
     target, parquet, references = root, inputs["dataset_parquet"], inputs["reference_root"]
     reference = references / next(iter(records))
@@ -455,6 +695,7 @@ def test_run_input_bundle_is_exact_atomic_and_gates_execution(case, tmp_path, mo
         return bundle.materialize_run_input_bundle(
             supplied_run, manifest=manifest, combined_plan=combined, checkout=target,
             dataset_parquet=parquet, reference_root=references,
+            step0_manifest=_step0_manifest_source(inputs, run),
         )
 
     if case in {"v2_r1", "codex_r1", "codex_r2", "v2_r2", "relocated_v2", "relocated_codex", "existing_data_parent"}:
@@ -472,11 +713,17 @@ def test_run_input_bundle_is_exact_atomic_and_gates_execution(case, tmp_path, mo
                 "reservation": "comparison-inputs-reserved.json",
                 "dataset_root": "data/gdpval-local",
                 "reference_scope": "advance_check_5_only",
+                "codex_step0_manifest": {
+                    "source": "explicit_local_canonical_bytes",
+                    "path": "batch-runner/workspace/step0_needs_files_manifest.json",
+                    "schema_version": 4, "policy": "deliverable_only",
+                    "generation_or_download": False,
+                },
                 "required_runs": [row.run_id for row in plan.dispatch.runs],
                 "checkout_creation": False,
                 "evidence_boundary": "local_input_bundle_consistency",
             }
-            assert len(preflight.REQUIRED_SOURCES) == 34
+            assert len(preflight.REQUIRED_SOURCES) == 36
             assert set(manifest["source_pins"]) == preflight.REQUIRED_SOURCES
             assert "comparison_materialization_and_workflow_gates_not_wired" in inspection["launch_blockers"]
         after = _tree_snapshot(root)
@@ -491,6 +738,7 @@ def test_run_input_bundle_is_exact_atomic_and_gates_execution(case, tmp_path, mo
             other = bundle.materialize_run_input_bundle(
                 run, manifest=manifest, combined_plan=combined, checkout=relocated,
                 dataset_parquet=parquet, reference_root=references,
+                step0_manifest=_step0_manifest_source(inputs, run),
             )
             _assert_complete(relocated, other, plan, index, captures[index], projections, records, files)
             assert other == marker

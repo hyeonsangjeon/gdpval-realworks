@@ -23,12 +23,59 @@ import gpt54_run_input_bundle as input_bundle
 import gpt54_workflow_gate as gate
 from .test_gpt54_disposable_checkout import (
     _allow_only_temporary_git, _commit_fixture, _fixture_git, _sidecars, _source_state,
+    _step0_manifest_checkout,
 )
-from .test_gpt54_prepared_input_attestation import _bundle_fixture, _json, _tree_snapshot
+from .test_gpt54_prepared_input_attestation import _bundle_fixture, _json, _step0_manifest_source, _tree_snapshot
 from .test_gpt54_run_input_bundle import _copy_files, _input_bundle_seed, _snapshot_files
 
 
 _OWNERS = {"sandbox_v2": "agentic-v2-stage-run", "codex": "batch-run"}
+
+
+@pytest.mark.parametrize("case", ["api", "cli", "missing_argument"])
+def test_step0_manifest_workflow_helper_forwards_explicit_source(
+    case, _step0_manifest_checkout, monkeypatch, capsys,
+):
+    fixture = _step0_manifest_checkout
+    inputs, run = fixture["inputs"], fixture["run"]
+    repository, sha = fixture["repository"], fixture["reviewed_sha"]
+    monkeypatch.setattr(gate, "ROOT", repository)
+    request = _request("codex", _inputs("codex", run.run_id, sha), sha)
+    kwargs = {
+        "repository": repository, "destination": fixture["destination"],
+        "manifest": inputs["manifest"], "combined_plan": inputs["combined_plan"],
+        "dataset_parquet": inputs["dataset_parquet"], "reference_root": inputs["reference_root"],
+        "step0_manifest": None if case == "missing_argument" else fixture["step0_manifest"],
+    }
+    if case == "missing_argument":
+        before = _tree_snapshot(repository.parent)
+        with pytest.raises(gate.WorkflowExecutionRefused, match="Step 0 manifest"):
+            gate.prepare_workflow_execution(request, **kwargs)
+        assert _tree_snapshot(repository.parent) == before
+        assert not fixture["destination"].exists()
+        return
+    if case == "cli":
+        capsys.readouterr()
+        assert gate.main([
+            "--workflow", "batch-run", "--inputs-json", request.inputs_json,
+            "--event-name", "workflow_dispatch", "--event-ref", "refs/heads/main",
+            "--event-sha", sha, "--workflow-sha", sha,
+            "--repository", str(repository), "--destination", str(fixture["destination"]),
+            "--dataset-parquet", str(inputs["dataset_parquet"]), "--reference-root", str(inputs["reference_root"]),
+            "--step0-manifest", str(fixture["step0_manifest"]),
+        ]) == 2  # Local preparation does not waive the launch gate.
+        evidence, refusal = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+        assert refusal["launch_allowed"] is False and "launch flags are false" in refusal["error"]
+    else:
+        prepared = gate.prepare_workflow_execution(request, **kwargs)
+        evidence = gate.verify_workflow_execution(
+            prepared, manifest=inputs["manifest"], combined_plan=inputs["combined_plan"],
+        )
+    assert evidence["commands_executed"] is False
+    assert evidence["launch_allowed"] is evidence["dispatch_launch_allowed"] is False
+    assert (fixture["destination"] / input_bundle.STEP0_MANIFEST_PATH).read_bytes() == fixture["step0_manifest"].read_bytes()
+
+
 _INPUT_DIGESTS = {
     "sandbox_v2": "0c89c66074686e4d92dfe3b7f5c3d6d8bf993d4068fd0882b22c7d2c872529fc",
     "codex": "ec68ac701575dc8bd0e79620b6a4139a9b2bc938cc5902fa8467c612460708fb",
@@ -137,6 +184,7 @@ def _workflow_prepared_seed(tmp_path_factory: Any, _input_bundle_seed: Any) -> A
                 request, repository=repository, destination=checkout,
                 manifest=inputs["manifest"], combined_plan=inputs["combined_plan"],
                 dataset_parquet=inputs["dataset_parquet"], reference_root=inputs["reference_root"],
+                step0_manifest=_step0_manifest_source(inputs, run),
             )
             reservation, quarantine = _sidecars(checkout)
             assert not quarantine.exists()
@@ -385,6 +433,7 @@ def test_workflow_execution_gate(
         "repository": repository, "destination": checkout,
         "manifest": inputs["manifest"], "combined_plan": inputs["combined_plan"],
         "dataset_parquet": inputs["dataset_parquet"], "reference_root": inputs["reference_root"],
+        "step0_manifest": _step0_manifest_source(inputs, run),
     }
     validation = {key: kwargs[key] for key in ("manifest", "combined_plan")}
     if case == "destination_exists":
@@ -457,6 +506,7 @@ def test_workflow_execution_gate(
                 "--repository", str(repository), "--destination", str(checkout),
                 "--dataset-parquet", str(inputs["dataset_parquet"]),
                 "--reference-root", str(inputs["reference_root"]),
+                *(["--step0-manifest", str(_step0_manifest_source(inputs, run))] if condition == "codex" else []),
             ]) == 2
             documents = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
             assert len(documents) == 2 and len(preparations) == 1
@@ -529,7 +579,7 @@ def test_workflow_execution_gate(
                 assert not quarantine.exists()  # False launch flags are not failed materialization.
                 assert head.read_bytes() == reviewed_sha.encode() + b"\n"
                 assert json.loads(ready.read_bytes())["abba_index"] == index
-                assert len(inputs["manifest"]["source_pins"]) == 34
+                assert len(inputs["manifest"]["source_pins"]) == 36
                 assert {".github/workflows/agentic-v2-stage-run.yml", ".github/workflows/batch-run.yml",
                         "batch-runner/gpt54_workflow_gate.py"} <= preflight.REQUIRED_SOURCES
                 inspection = preflight.inspect_plan(inputs["manifest"], grading_plan=inputs["combined_plan"])

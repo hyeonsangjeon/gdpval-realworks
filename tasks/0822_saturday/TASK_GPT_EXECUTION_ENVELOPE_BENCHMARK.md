@@ -8994,12 +8994,27 @@ source 파일이나 기존 data/history는 수정하지 않습니다.
 만들고 descriptor를 유지합니다.
 
 게시하는 입력은 `data/gdpval-local/data/train-00000-of-00001.parquet`와 정확히 등록된
-`data/gdpval-local/reference_files/...`뿐입니다. 각 파일은 #623의 unchanged atomic
+`data/gdpval-local/reference_files/...`입니다. 각 파일은 #623의 unchanged atomic
 no-clobber writer를 사용합니다. 실제 대상 snapshot, 원천 snapshot, config bundle과
 선점 기록을 다시 확인한 뒤 `comparison-inputs-ready.json`을 마지막에 게시합니다.
 중간 실패에는 선점 기록과 일부 디렉터리·완전한 파일이 남지만 ready marker는 없습니다.
 자동 복구·재사용·덮어쓰기·삭제는 하지 않으며, 여러 파일의 단일 트랜잭션이나 power-loss
 durability를 보장하는 프로토콜은 아닙니다.
+
+Codex additionally requires the explicit local `step0_manifest` input. The
+materializer copies the full canonical schema-4 manifest, byte for byte, to
+`batch-runner/workspace/step0_needs_files_manifest.json`; it does not generate a
+five-task substitute. The source follows the existing snapshot convention in
+`core.repo_bootstrapper._restore_manifest_from_snapshot`, without invoking its
+bootstrap or download orchestration. The unchanged
+`require_canonical_manifest_bytes()` contract must accept the bytes for
+`deliverable_only`. Missing bytes, an unsupported policy, schema drift or a
+selected task's source/reference/deliverable mismatch refuse before readiness.
+The input marker includes this file's exact size and SHA256. Publication holds
+its source and destination parents, refuses an existing Codex workspace, and
+rechecks source and installed bytes before writing ready last. The verifier
+rereads the installed manifest; a rewritten marker cannot substitute for the
+canonical digest. V2 does not consume or require this additional input.
 
 marker에는 dataset revision/catalog/parquet size·SHA256, 고정 과제 순서와 source/text
 fingerprints, reference logical path·size·SHA256, run/condition/repeat/ABBA identity,
@@ -9026,7 +9041,7 @@ reference source를 받습니다. grading run은 같은 combined plan에서 도�
 source SHA로 대체하지 않습니다. 두 값은 서로 다른 역할로 marker에 보존됩니다.
 
 쓰기 전 compiler와 같은 Git common directory인지, commit object가 실제로
-존재하는지, commit의 manifest·34 source pin bytes가 정확한지 확인합니다.
+존재하는지, commit의 manifest·36 source pin bytes가 정확한지 확인합니다.
 원본 working tree가 dirty해도 그 파일을 복사하거나 고치지 않고 commit blob을
 읽습니다. tracked symlink·gitlink, source/input/common-dir overlap, 경로 이탈,
 기존 destination 및 sidecar는 거부합니다. 실제 parquet/reference snapshot도
@@ -9075,6 +9090,14 @@ PYTHONPATH=batch-runner /usr/bin/python3 batch-runner/gpt54_disposable_checkout.
   --dataset-parquet /absolute/local/pinned.parquet \
   --reference-root /absolute/local/five-task-references
 ```
+
+For either Codex run, also supply
+`--step0-manifest /absolute/local/canonical-snapshot/step0_needs_files_manifest.json`.
+The preparer checks this explicit source before reserving a checkout and forwards
+it to the input materializer. `gpt54_workflow_gate.py` exposes and forwards the
+same option without changing its launch refusal. Existing workflow lanes do not
+supply or acquire this source; they remain fail-closed. No ambient workspace,
+legacy default, stripped dataset or generated manifest is used as a fallback.
 
 무료 selector는 tmp local Git repositories에서만 실제 detached checkout과 두
 materializer를 검증합니다. ABBA 네 run, five-task 순서, GPT-5.4/xhigh, 한도,

@@ -37,6 +37,42 @@ from gpt54_comparison_preflight import (
 )
 
 
+@pytest.mark.parametrize(("source", "change"), [
+    (None, "valid"),
+    *((source, change) for source in ("batch-runner/core/needs_files.py", "batch-runner/core/repo_bootstrapper.py")
+      for change in ("missing", "drift")),
+])
+def test_step0_manifest_canonical_readers_are_pinned_without_launch_waiver(source, change, monkeypatch):
+    from .test_gpt54_run_config_bundle import _guards
+
+    forbidden = _guards(monkeypatch)
+    manifest = json.loads(json.dumps(load_plan()))
+    assert len(REQUIRED_SOURCES) == 36
+    assert set(manifest["source_pins"]) == REQUIRED_SOURCES
+    if source is not None:
+        if change == "missing":
+            del manifest["source_pins"][source]
+        else:
+            manifest["source_pins"][source] = "0" * 64
+        with pytest.raises(ValueError):
+            compile_grading_plan(manifest)
+    else:
+        report = inspect_plan(manifest)
+        assert report["configuration_valid"] is True
+        assert report["run_input_bundle"]["codex_step0_manifest"] == {
+            "source": "explicit_local_canonical_bytes",
+            "path": "batch-runner/workspace/step0_needs_files_manifest.json",
+            "schema_version": 4, "policy": "deliverable_only", "generation_or_download": False,
+        }
+        assert report["launch_allowed"] is report["full_220_allowed"] is False
+        assert report["launch_blockers"] == list(LAUNCH_BLOCKERS)
+        assert len(LAUNCH_BLOCKERS) == 6 and manifest["launch_enabled"] is False
+        active = load_plan(ROOT / "batch-runner/experiments/execution_envelope/gpt56_sol_foundry_codex_pilot.yaml")
+        for role in ("batch-runner/gpt54_comparison_preflight.py", "batch-runner/gpt54_run_input_bundle.py"):
+            assert active["source_pins"][role] == hashlib.sha256((ROOT / role).read_bytes()).hexdigest()
+    assert forbidden == []
+
+
 @pytest.mark.parametrize(
     "change",
     [
@@ -173,7 +209,7 @@ def test_gpt54_comparison_is_fixed_and_fails_closed(change, tmp_path, capsys):
         # Read actual adapter surfaces, not a mock declaration of readiness.
         voice_fields = {field.name: field for field in fields(AzureFoundryVoice)}
         assert voice_fields["reasoning_effort"].default is None
-        assert len(REQUIRED_SOURCES) == 34
+        assert len(REQUIRED_SOURCES) == 36
         assert set(plan["source_pins"]) == REQUIRED_SOURCES
         # Sol imports this module's plan reader. Refresh its existing digest
         # without changing its contract or running an additional selector.
@@ -234,7 +270,7 @@ def test_gpt54_offline_dispatch_plan_is_bound_and_non_executing(
     if change in {"missing_pin", "changed_pin"}:
         # Every dependency is required and digest-checked, including this
         # compiler, the shared parser, source-relative paths, and task helper.
-        assert len(REQUIRED_SOURCES) == 34
+        assert len(REQUIRED_SOURCES) == 36
         for source in REQUIRED_SOURCES:
             broken = json.loads(original)
             if change == "missing_pin":
@@ -464,7 +500,7 @@ def test_gpt54_pinned_grading_plan_is_bound_and_non_executing(
         assert forbidden_calls == []
 
     if change in {"missing_pin", "changed_pin"}:
-        assert len(REQUIRED_SOURCES) == 34
+        assert len(REQUIRED_SOURCES) == 36
         assert "batch-runner/step8_grade.py" in REQUIRED_SOURCES
         for source in REQUIRED_SOURCES:
             broken = json.loads(original)

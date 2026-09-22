@@ -176,6 +176,7 @@ def prepare_workflow_execution(
     request: WorkflowRequest, *, repository: Path, destination: Path,
     manifest: dict[str, Any], combined_plan: dict[str, Any],
     dataset_parquet: Path, reference_root: Path,
+    step0_manifest: Path | None = None,
 ) -> PreparedWorkflowExecution:
     """Reuse local checkout preparation and runtime lineage without launching.
 
@@ -200,6 +201,7 @@ def prepare_workflow_execution(
                 run, repository=source, reviewed_source_sha=request.reviewed_source_sha,
                 destination=destination, manifest=manifest, combined_plan=combined_plan,
                 dataset_parquet=dataset_parquet, reference_root=reference_root,
+                step0_manifest=step0_manifest,
             )
             try:
                 check_parent()
@@ -311,6 +313,8 @@ def main(argv: list[str] | None = None) -> int:
         parser.add_argument("--" + name, required=True)
     for name in ("repository", "destination", "dataset-parquet", "reference-root"):
         parser.add_argument("--" + name, type=Path, required=True)
+    parser.add_argument("--step0-manifest", type=Path,
+                        help="Explicit local canonical schema-4 manifest (required for Codex only)")
     args = parser.parse_args(argv)
     try:
         request = request_from_inputs(
@@ -325,6 +329,7 @@ def main(argv: list[str] | None = None) -> int:
             request, repository=source, destination=args.destination,
             manifest=manifest, combined_plan=combined,
             dataset_parquet=args.dataset_parquet, reference_root=args.reference_root,
+            step0_manifest=args.step0_manifest,
         )
         print(_canonical_json(verify_workflow_execution(prepared, manifest=manifest, combined_plan=combined)))
         require_workflow_launch(prepared, manifest=manifest, combined_plan=combined)
