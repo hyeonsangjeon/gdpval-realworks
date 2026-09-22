@@ -480,14 +480,58 @@ def test_cumulative_task_deadline_cli_routes_explicit_state_without_execution(ho
     assert received[0]["initialize_codex_deadlines"] is True
 
 
-@pytest.mark.parametrize("stale", [False, True], ids=["current", "stale"])
+def test_cumulative_task_deadline_lazy_persistence_helpers_initialize_and_restore(host, monkeypatch):
+    from core import hf_publication
+
+    calls = []
+    for role, name in (("path", "_assert_no_symlink_ancestors"),
+                       ("read", "_load_private_json_object"),
+                       ("write", "_write_private_json")):
+        original = getattr(hf_publication, name)
+
+        def observed(*args, _original=original, _role=role, **kwargs):
+            calls.append(_role)
+            return _original(*args, **kwargs)
+
+        monkeypatch.setattr(hf_publication, name, observed)
+    clock = Clock()
+    store = store_at(host, clock)
+    try:
+        deadline = store.for_task(TASK)
+        assert deadline.remaining_seconds() == TOTAL_SECONDS
+        expiry = deadline.as_record()["expires_unix"]
+        assert {"path", "read", "write"} <= set(calls)
+    finally:
+        store.close()
+    calls.clear()
+    clock.advance(120)
+    restored = store_at(host, clock, initialize=False)
+    try:
+        assert {"path", "read"} <= set(calls)
+        assert "write" not in calls  # restore reads, never reinvents start time
+        record = restored.for_task(TASK).as_record()
+        assert record["expires_unix"] == expiry
+        assert record["remaining_seconds"] == TOTAL_SECONDS - 120
+        assert "write" in calls
+    finally:
+        restored.close()
+
+
+@pytest.mark.parametrize("stale", [None, "selector", "deadline"],
+                         ids=["current", "selector_only", "deadline_only"])
 def test_cumulative_task_deadline_active_grader_bindings(stale):
-    plans = [(comparison, comparison.load_plan(), "40ada97c41117e3966e5a192c19dafcf4db34d4dd2ddd4230c4b729f421d6e08"),
-             (pilot, pilot.load_plan(pilot.PLAN), "56fdb74e2f9fd1afbe9d064fc2cb1e1410d5cebec55edcca8324effd1a1dc9e1")]
-    for module, plan, old_hash in plans:
+    previous = {
+        "selector": ("c92bf13696fa506c84dbee649d5ba3c03fb33244810f30e2be4a05630ca204e1",
+                     "785352daa052b105f0dfce08d8de7b3f41633a8e6b312111bec5bdbc8806144b"),
+        "deadline": ("fdfb7b9160635859d2c46ee9a79d5d908bc4ad546f9d240893da98159752258d",
+                     "c85f5b7ac5a723266172fedae39d38a69bd93cebae25888c63469f038c97ef01"),
+    }
+    plans = [(comparison, comparison.load_plan()), (pilot, pilot.load_plan(pilot.PLAN))]
+    for index, (module, plan) in enumerate(plans):
         template = ROOT / module.GRADER
         current = step8.compute_grader_source_hash(template, yaml.safe_load(template.read_bytes()), batch_root=ROOT / "batch-runner")
-        assert current != old_hash
+        assert all(current != hashes[index] for hashes in previous.values())
+        old_hash = previous[stale][index] if stale else None
         if module is comparison:
             assert plan["shared"]["grading"]["template_source_sha256"] == current
             if stale:
@@ -502,6 +546,6 @@ def test_cumulative_task_deadline_active_grader_bindings(stale):
             else:
                 assert identity._grader_identity(plan)["template_source_hash"] == current
         report = module.inspect_plan(plan)
-        assert report["configuration_valid"] is not stale
+        assert report["configuration_valid"] is (stale is None)
         assert report["launch_allowed"] is report["full_220_allowed"] is False
         assert report["launch_blockers"] == list(module.LAUNCH_BLOCKERS)

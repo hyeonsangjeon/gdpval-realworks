@@ -7,7 +7,6 @@ new clock. This does not restore an agent session or authorize a paid run.
 
 from __future__ import annotations
 
-import fcntl
 import hashlib
 import json
 import math
@@ -17,17 +16,6 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
-
-from core.codex_runtime_config import (
-    path_is_within,
-    resolve_run_root_base,
-    system_temporary_directory,
-)
-from core.hf_publication import (
-    _assert_no_symlink_ancestors,
-    _load_private_json_object,
-    _write_private_json,
-)
 
 FORMAT = "codex-task-deadline-v1"
 TOTAL_SECONDS = 180 * 60
@@ -126,6 +114,14 @@ class CodexTaskDeadlineStore:
         task_ids: list[str], prepared_fingerprint: str,
         initialize: bool = False, clock: Callable[[], float] = time.time,
     ) -> None:
+        # Config validation also runs without backend SDKs installed. Import
+        # host persistence only when a real state directory is opened.
+        import fcntl
+        from core.codex_runtime_config import (
+            path_is_within, resolve_run_root_base, system_temporary_directory,
+        )
+        from core.hf_publication import _assert_no_symlink_ancestors
+
         self._lock: int | None = None
         try:
             self.root = _assert_no_symlink_ancestors(Path(root))
@@ -192,6 +188,8 @@ class CodexTaskDeadlineStore:
         return float(now)
 
     def _read(self) -> dict:
+        from core.hf_publication import _load_private_json_object
+
         if self._closed:
             raise TaskDeadlineRefused("deadline store is closed")
         try:
@@ -239,6 +237,8 @@ class CodexTaskDeadlineStore:
             raise TaskDeadlineRefused("deadline restore state is missing or invalid") from None
 
     def _write(self, data: dict) -> None:
+        from core.hf_publication import _write_private_json
+
         try:
             _write_private_json(self.path, {"payload": data, "sha256": _digest(data)})
         except (OSError, ValueError, TypeError):
@@ -291,6 +291,8 @@ class CodexTaskDeadline:
         return limit is None or len(cell["attempts"]) < limit
 
     def admit_attempt(self, workspace_root: Path) -> int:
+        from core.codex_runtime_config import path_is_within
+
         data, cell, now = self._state(start=True)
         if now >= cell["expires_unix"]:
             raise TaskDeadlineExhausted(EXHAUSTED)

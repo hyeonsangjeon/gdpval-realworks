@@ -25,7 +25,7 @@ dispatch_grading_identity:
   source_base_sha: ed6c64f0afb90b0b3a6a9e4719e44184384296ec
   plan_file: foundry-pilot-identity-plan.json
   ready_marker: foundry-pilot-identity-ready.json
-  grader_template_source_hash: c85f5b7ac5a723266172fedae39d38a69bd93cebae25888c63469f038c97ef01
+  grader_template_source_hash: ec77798f9c2fba1043bc1015c855f3f75a96920e78e6b64c007e33785f2e2170
   evidence_boundary: offline_dispatch_grading_identity
 
 # Inert runtime template with no deployment/execution, plus grading config and
@@ -259,7 +259,7 @@ source_pins:
   batch-runner/core/result_projection.py: 1b47c4ee0f6d050e5edd4ac5a301203ba834c8d159b1557b04d83046ca965ec6
   batch-runner/schemas/grade.schema.json: 9c611874c2d7aa57018eecdc86b7c0d579aaa9c29dd0df649058eec9ad5175b9
   batch-runner/experiments/execution_envelope/gpt56_sol_copilot_codex_pilot.yaml: 47799d3f61374679722df32c67de14f9d0d56bd6586cf7b28c10076fd41d1901
-  batch-runner/gpt56_sol_codex_pilot_preflight.py: 845c811f6a99e5c9692a3d88a28ac4feef1dbc46ad81d0ba3862070d975d7d21
+  batch-runner/gpt56_sol_codex_pilot_preflight.py: 7313d1c49955449806ad5bdd1545259ccf4bbbab829df9354a8689d68bc0b121
   batch-runner/core/agentic_v2_preregistration.py: 02ac15ef8483ac367796feb1fcbadf90a27062c2bf5b3147b75b7e17a0c089e0
   batch-runner/core/execution_envelope_tasks.py: dd934314ce447b78efa45ad9d349f198d1e429531eccdf430106b87335dc2ea0
   batch-runner/core/azure_ai_clients.py: f7211d1070c0b4dd7aae0204c520bc789bb84a300d061b0bdc4fc9a21738915f
@@ -293,4 +293,4 @@ source_pins:
   batch-runner/core/publication_generation.py: 033eca1c3e012682db54d343dee2fa2bc80360ae7c6d0f09f7e8e5c1dad983c7
   batch-runner/core/data_loader.py: 55a228511981e82553f9910d8177e5b66a74cc65ad633cedc3f835a8af41e1d7
   batch-runner/prepare_dataset.py: 17ccad9fe7a360daaa02329481c11f89135ca2cf107eb70355836b11fd4b2d5e
-  batch-runner/core/codex_task_deadline.py: 6ab2ba4b89c8818074197cd962f7ef1c0eae73bd5c89009f93ebc6f7ef36bcd8
+  batch-runner/core/codex_task_deadline.py: cf9cddabc394d3e3129afc41ddb0ddaba9d29561382768d238840d75fcae250b

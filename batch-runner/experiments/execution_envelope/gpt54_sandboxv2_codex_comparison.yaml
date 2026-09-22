@@ -66,7 +66,7 @@ shared: &shared
     source_sha: a855c5a9604554499be9eed4e5eb5523e8ad95d5
     # Existing helper's full closure with the ORIGINAL template path/bytes.
     # Not the eventual source hash of a materialized, revision-pinned config.
-    template_source_sha256: fdfb7b9160635859d2c46ee9a79d5d908bc4ad546f9d240893da98159752258d
+    template_source_sha256: dd970ba3f5fff8ae4d8e006dfc33c023804e3e32d32123681fb76feadd5f10df
     rubric_revision: 11e7900cdcac61bc4daf59e65feb238acda98fbf
     prompt_version: v2.2
     judge_model: gpt-5.6-sol
@@ -158,4 +158,4 @@ source_pins:
   batch-runner/core/executor.py: 31eb831a7a450558192a050cedaf2cc905b992c1e1028dab9e34af4287e64bad
   batch-runner/step1_prepare_tasks.py: 5f3419596655aa5860abc4a8cd776212f8d1c3ba4bc38545f7aab62a06160ae9
   batch-runner/step2_run_inference.py: 23ab330a8148c049c93259d5c1c0692b118b981b7ec556d7d2df33547a4e3df5
-  batch-runner/core/codex_task_deadline.py: 6ab2ba4b89c8818074197cd962f7ef1c0eae73bd5c89009f93ebc6f7ef36bcd8
+  batch-runner/core/codex_task_deadline.py: cf9cddabc394d3e3129afc41ddb0ddaba9d29561382768d238840d75fcae250b

@@ -66,7 +66,7 @@ DISPATCH_GRADING_IDENTITY = {
     "source_base_sha": "ed6c64f0afb90b0b3a6a9e4719e44184384296ec",
     "plan_file": "foundry-pilot-identity-plan.json",
     "ready_marker": "foundry-pilot-identity-ready.json",
-    "grader_template_source_hash": "c85f5b7ac5a723266172fedae39d38a69bd93cebae25888c63469f038c97ef01",
+    "grader_template_source_hash": "ec77798f9c2fba1043bc1015c855f3f75a96920e78e6b64c007e33785f2e2170",
     "evidence_boundary": "offline_dispatch_grading_identity",
 }
 IDENTITY_SOURCES = {

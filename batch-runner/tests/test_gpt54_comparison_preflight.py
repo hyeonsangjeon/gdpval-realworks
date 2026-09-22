@@ -37,6 +37,71 @@ from gpt54_comparison_preflight import (
 )
 
 
+@pytest.mark.parametrize("change", ["current", "stale_expected_hash", "selector_source_drift"])
+def test_active_grader_template_source_comparison(change, tmp_path, monkeypatch):
+    import gpt54_comparison_preflight as comparison
+    import step8_grade as grading
+    from .test_gpt54_run_config_bundle import _guards
+
+    forbidden = _guards(monkeypatch)
+    manifest = load_plan()
+    template = load_plan(ROOT / GRADER)
+    expected = manifest["shared"]["grading"]["template_source_sha256"]
+    assert grading.compute_grader_source_hash(
+        ROOT / GRADER, template, batch_root=ROOT / "batch-runner",
+    ) == expected
+    assert all(condition["controls"]["grading"]["template_source_sha256"] == expected
+               for condition in manifest["conditions"].values())
+
+    if change == "stale_expected_hash":
+        # The registered YAML aliases share this field across both conditions.
+        manifest["shared"]["grading"]["template_source_sha256"] = (
+            "40ada97c41117e3966e5a192c19dafcf4db34d4dd2ddd4230c4b729f421d6e08"
+        )
+    elif change == "selector_source_drift":
+        # Change real bytes only in a private test source tree. Keep every
+        # relative source/config role and every expected pin unchanged.
+        batch = ROOT / "batch-runner"
+        sources = {ROOT / name for name in REQUIRED_SOURCES}
+        sources.update((batch / "core").rglob("*.py"))
+        sources.update(grading._requirements_closure(batch, batch / "requirements.txt"))
+        sources.update({
+            batch / "scripts/download_inference_from_hf.py",
+            batch / template["prompt"]["template"],
+            batch / grading.resolve_tool_prompt_path(template),
+        })
+        root = tmp_path / "source"
+        for source in sources:
+            target = root / source.relative_to(ROOT)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(source.read_bytes())
+        selector = root / "batch-runner/core/deliverable_selector.py"
+        assert selector.relative_to(root).as_posix() not in manifest["source_pins"]
+        selector.write_bytes(selector.read_bytes() + b"\n# source identity drift\n")
+        assert grading.compute_grader_source_hash(
+            root / GRADER, template, batch_root=root / "batch-runner",
+        ) != expected
+        monkeypatch.setattr(comparison, "ROOT", root)
+
+    report = inspect_plan(manifest)
+    assert manifest["launch_enabled"] is False
+    assert report["launch_allowed"] is report["full_220_allowed"] is False
+    assert report["launch_blockers"] == list(LAUNCH_BLOCKERS)
+    if change == "current":
+        assert report["configuration_valid"] is True
+        assert report["configuration_problems"] == []
+        compiled = compile_grading_plan(manifest).as_dict()
+        assert compiled == report["grading_plan"]
+        assert compiled["launch_allowed"] is compiled["full_220_allowed"] is False
+    else:
+        assert report["configuration_valid"] is False
+        assert report["configuration_problems"] == ["shared_controls", "conditions"]
+        assert report["dispatch_plan"] is report["grading_plan"] is None
+        with pytest.raises(DispatchPlanRefused, match="shared_controls, conditions"):
+            compile_grading_plan(manifest)
+    assert forbidden == []
+
+
 @pytest.mark.parametrize(("source", "change"), [
     (None, "valid"),
     *((source, change) for source in ("batch-runner/core/needs_files.py", "batch-runner/core/repo_bootstrapper.py")
