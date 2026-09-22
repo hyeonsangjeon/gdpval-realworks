@@ -278,6 +278,48 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Record one successful real GPT-5.4 Codex local preparation and Step 1 at
+  authorized source `6f7c77a9de52678e188f025b86de537ce8825dee`. One source fetch
+  returned that exact commit. One unauthenticated public HTTPS GET returned
+  HTTP 200 and `218405` bytes for `step0_needs_files_manifest.json` from
+  `HyeonSang/exp033_codex_foundry_fixed5` revision
+  `6c7e07ee7365f145dfcf898263365b5c8c97b224`; the response's `x-repo-commit`
+  matched. Its SHA256 was
+  `463fc119841dbe67e427c372da93ff55972139377aa03194764b57d87004c512`.
+  The unchanged production canonical digest, schema 4 and `deliverable_only`
+  checks accepted it, exit 0. This public artifact supplied Step 0 metadata
+  only, not historical model results. No rejected local candidate was reread.
+  The current compiler selected `gpt54_v2_codex_v1_codex_r1`, condition
+  `codex`, repeat 1, ABBA index 1, with comparison-manifest seal
+  `b8e25f6548e5829daa77e9330c0157ab295f28318afec17f8615382a33f7a42f`
+  and combined-plan SHA256
+  `4495cfe94f9d1e4f6319143540ddc434273fb38d2222b27ab3c616b1b3a84c2b`.
+  One `prepare_disposable_checkout()` call used the saved original parquet,
+  reference-only root and explicit canonical manifest. Its built-in final
+  verification returned successfully, exit 0, with checkout-ready SHA256
+  `167dfca701803a5fe0a1caa20628cd9e6b649b5311335e17e8769b9985fdb8d2`.
+  No second verifier ran. The unchanged command
+  `python3 step1_prepare_tasks.py --config comparison-run.json` then ran once
+  from the new checkout's `batch-runner` directory with the required offline
+  and no-telemetry settings. It exited 0, emitted `total_tasks=5` in canonical
+  order and prepared fingerprint
+  `12eba3b1bfb6d48fb600f455a1c3391b0630a5378db26365926eb319275712d0`.
+  Prepared-task SHA256 was
+  `41951cb8b4edee9e378fe1197943b42d38950fbb37b51a4a907d2a92c9654d92`
+  (`15980` bytes); pre-execution-input SHA256 was
+  `f12dda6c51c0e532b988daf5e80b389b75ea89ee8acf61f12a035aa8621ed5f1`
+  (`14830` bytes). Full logical roles and readiness identities are recorded in
+  `tasks/LATEST_TASK_RESULT/README.md`; raw files, logs and handoff locators
+  remain private. This is one local preprocessing command and zero
+  inference/model commands. It does not prove model consumption, grading,
+  variance, cost or a paired runtime result. The six live blockers and false
+  launch flags are unchanged. Previous preparations, failed Step 1 evidence,
+  original sources, caches, handoffs and the GHCP bundle remain untouched.
+  Reviews `5273753355` at `0913891fcbcfe2119c2899535a5e2b017cd99eee` and
+  `5273863452` at `6fef8c76a41072cdb335c236c0ac4c1fc2ae4276` cover the prior
+  implementation and records, respectively, not this later operation or its
+  records. No tests, CI queries, later commands or paid operations ran.
+
 - Record the first authorized local Step 1 attempt after the two real GPT-5.4
   preparations at source `778a627bbb5404f33e5e62019382fa107aa47840`.
   For `gpt54_v2_codex_v1_codex_r1`, condition `codex`, repeat 1, ABBA index 1,
