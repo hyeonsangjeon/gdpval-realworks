@@ -18,6 +18,7 @@ from core.codex_runtime_config import (
     resolve_endpoint_setting,
 )
 from core.experiment_config import ExperimentConfig
+from step8_grade import compute_grader_source_hash
 import gpt56_sol_codex_pilot_preflight as preflight
 from gpt56_sol_codex_pilot_preflight import (
     ACTIVE_PLAN,
@@ -75,8 +76,6 @@ def offline_only(monkeypatch):
 
 @pytest.mark.parametrize("change", ["current", "stale_expected_hash"])
 def test_active_grader_template_source_foundry_preflight(change, offline_only):
-    from step8_grade import compute_grader_source_hash
-
     plan = load_plan(PLAN)
     expected = compute_grader_source_hash(
         ROOT / preflight.GRADER, load_plan(ROOT / preflight.GRADER),
