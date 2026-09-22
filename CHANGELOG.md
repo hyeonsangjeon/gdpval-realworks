@@ -13,6 +13,46 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Close the pilot dispatcher's owned-child cleanup gap identified by
+  REQUEST-CHANGES review `5282428403` at
+  `47e725bc3ff1945f12cc6756c0d610646dc7feb3`. The previous
+  `subprocess.run(timeout=remaining+60)` could reap Step 2 without proving its
+  Codex/app-server/tool descendants had stopped. Each real child now runs under
+  a private Linux supervisor session that adopts orphaned descendants, uses
+  bounded TERM/KILL cleanup and reaps the entire owned tree. Signals target
+  only verified unreaped direct children, never process names or shared
+  processes. The dispatcher also requires the supervisor to be reaped before
+  releasing its cell slot. A host-owned checkpoint is written before launch;
+  missing, incompatible or unresolved ownership refuses before any later
+  child or terminal-cell skip, even after the physical lock is released.
+  Partials and missing/unknown accounting remain; clocks are not reset.
+  One ordinary merge integrated exact main
+  `9b572a39af8ecd48850e427d1bccf8cb65b7c65a`, preserving the dispatcher and
+  #652 histories. The real integrated C-feedback contract is present; input,
+  runtime and host refusals still apply, and capability is not launch readiness.
+  The initial focused selection at
+  `789995071ed1b7630f2da1e239704301845a36cc` reported
+  `4 failed, 6 passed, 24 deselected, 1 error in 22.00s`, exit 1: this host's
+  `pidfd_open` returns `ENOSYS`, causing four lifecycle failures and a related
+  teardown error. The correction removed that new kernel dependency. Only the
+  four affected cases were rerun at `d9bed6851a611787fa14f3e67c156d6369b11875`:
+  `4 passed in 127.23s (0:02:07)`, exit 0. The earlier six passes retain their
+  original SHA and scope; this is not a fresh ten-pass run. Exact commands and
+  boundaries are in `tasks/LATEST_TASK_RESULT/README.md`. The tests use synthetic
+  inputs, fake budget clocks and harmless local process trees, including a
+  detached TERM-resistant descendant, not Codex/model/provider processes.
+  The earlier `25 passed in 286.25s` at
+  `6967ce8158459fd32506a14c25fa924e5b4747f8` remains synthetic dispatcher
+  evidence and was not rerun as a full selection. The fixed 30-cell order,
+  180/30-minute limits, A-fresh/B-C-retained policies and grader are unchanged.
+  Imported #652 core/binding bytes match main exactly; no additional active
+  hash refresh or source-count change was needed (37/58). #652 approval
+  `5281735646` at `b116563744351ab03769e356eb00fcfa39565da9` does not approve
+  this dispatcher. Full immutable dispatcher review, carrying-HEAD CI, actual
+  input/runtime readiness, separately directed execution and grading remain
+  outstanding. No paid run, historical-result change or Project-card completion
+  is claimed. Reporting/copyediting preserves these split evidence boundaries.
+
 - Refresh the two active grader-template source bindings after the reviewed
   selector change. The unchanged `step8_grade.compute_grader_source_hash()`
   includes `core/deliverable_selector.py` in its full closure. GPT-5.4's
