@@ -388,6 +388,48 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Add host-generated recovery feedback to condition C in the existing opt-in
+  Codex deadline path. After the same eligible `rate_limited` or
+  `turn_start_failed` failure, B repeats its unchanged request mechanically;
+  C appends a bounded host context to the unchanged base task on the same
+  native thread. It contains the recorded category, observed HTTP status when
+  available, opaque durable attempt IDs and remaining time at admission.
+  The inspected SDK `TurnError` has no typed retry guidance, so that field
+  remains null. Raw exceptions, free-form details, host paths, credentials
+  and grader/gold feedback are excluded. The first request remains identical
+  across A/B/C; A keeps fresh sessions and four attempts. B/C share retained
+  state, fixed backoff, model/provider/effort/context/tools and the unchanged
+  180-minute cumulative/30-minute attempt policy. No wait optimizer is added.
+  The private host record binds failure observations and each B/C turn's full
+  input before submission, separately from the immutable
+  task/reference/runtime identity.
+  Forged, stale or cross-cell context refuses. Continuation-v1 state is not
+  silently upgraded or given a new clock. Terminal/expired accounting replay
+  stays host-only, partial artifacts survive, and missing usage stays partial.
+  On source baseline `149d89afd43e54a46b6f172b71c2cf23d0cb7a17`, the new
+  27-case `test_codex_recovery_feedback.py` family at
+  `8805bb7f3b10ad267ea0970fdc6667a388ea1d32` reported
+  `12 failed, 15 passed in 175.91s (0:02:55)`, exit 1. The crash fixture
+  intercepted already-settled receipt replay before the intended second turn.
+  Test-only correction `df083e5306793db9e071365efd4a7efeaacfd38e` lets that
+  replay use the real equality guard and interrupts the pending commit.
+  Only the twelve affected cases were rerun: `12 passed in 93.91s (0:01:33)`,
+  exit 0. Exact commands and scopes are in `tasks/LATEST_TASK_RESULT/README.md`.
+  This is split offline SDK-facade/stub-transport/fake-clock evidence, not a
+  fresh single 27-pass run, live recovery, task-quality improvement or billing
+  completeness. Production and active-binding bytes did not change between
+  the two runs. The unchanged original-role hash helper refreshed only active
+  future template/source identities and the coupled Foundry YAML guard;
+  source sets remain 37/58, with historical identities/results and false launch
+  flags intact. No SDK install, real-data operation, native process or provider
+  call was made. The leader's #651 approval `5281145545` and fourteen passing
+  checks at `a9daa0ebdb02b60679771ff7f6241f7754e661fa` cover the preceding
+  continuation implementation, not this feedback intervention. Immutable-HEAD
+  review, carrying-HEAD CI, dispatcher, live validation and the separately
+  directed pilot remain outstanding; no Project card completion is claimed.
+  Experiment-design limited the intervention to error feedback, and English
+  reporting/copyediting kept these evidence and approval boundaries explicit.
+
 - Add retained-workspace/native-thread continuation to the existing opt-in
   Codex B/C deadline path. A keeps fresh sessions and four attempts; legacy
   defaults, task/model/effort/context/grading settings, the 180-minute cumulative
