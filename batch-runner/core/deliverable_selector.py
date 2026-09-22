@@ -449,9 +449,9 @@ def _reference_basenames(reference_files: list[str], reference_file_urls: list[s
 # in front is what separates the two readings. Parenthesized Word tokens are
 # handled separately below, within an explicit deliverable-format clause.
 _STANDALONE = r"(?<!\S)"
-# A Word extension must end the token, not start .docxm or .docx.bak. A
-# sentence-ending period is still allowed.
-_WORD_TOKEN_END = r"(?![\w/\\-]|\.\S)"
+# A Word extension must end the token, not start .docxm or .docx.bak.
+# Sentence-ending punctuation is still allowed, including before a quote.
+_WORD_TOKEN_END = r"(?![\w/\\-]|\.+[\w/\\-])"
 
 
 def _required_primary_extensions(text: str) -> set[str]:

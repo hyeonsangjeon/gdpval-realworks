@@ -632,8 +632,11 @@ def test_parenthesized_docx_selects_recorded_exp035_variant(reverse_files):
     [
         "The final file is a .docx",
         "The deliverable is a single .docx.",
+        '"The final file is a .docx."',
+        "The deliverable is a single .docx...",
         "The deliverable must be a Word (.docx) document.",
         "The final deliverable is a Word (.DOCX).",
+        '"The final deliverable is a Word (.docx)."',
     ],
 )
 def test_parenthesized_docx_preserves_explicit_word_requirements(requirement):
