@@ -11,6 +11,78 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Changed
+
+- Reconcile the private-output publisher with exact main
+  `b0abe87275e3aa4d403732a6a8de8dacfe591c7e` in one ordinary non-squash
+  merge from reviewed publisher head
+  `0ff95ba41ce7ce961ee333bbcac9f8e3db539697`. Only the two completion-record
+  overlaps were resolved. Both publisher source/test blobs remain identical
+  to the reviewed parent; every other implementation, workflow and test byte
+  matches incoming main, including HF-originals intake and the equivalent-path
+  redirect fix. Exact blob identities are recorded in the latest task result.
+  No publisher behavior, upload policy, target, active source pin, fixed grader
+  setting or experiment control changed. Publisher review `5289350726` and
+  the leader's initial all-nine-check observation apply to the old publisher
+  head; its `66 passed in 109.70s` remains at
+  `731ec479c742a11bcbeb6ce05d8b4f2da971ed3d`. Redirect review `5289350480`
+  applies to `038f0fa911ec7971e69c03528385019de8c29b5f`; its
+  `28 passed, 63 deselected in 2.81s` remains at
+  `44e276163e8a241a0a146304c14c64d7437e6914`. This reconciliation uses
+  parent/blob comparisons and diff checks only: no test, static counter or
+  earlier audit was rerun. The new integration head is not yet approved.
+  The leader dispatched model-free HF input-check `35847871634` on that
+  exact main at 10:16:49 UTC on 2026-09-23. At the leader's 10:18:55 UTC
+  observation it was **IN_PROGRESS**, with plan/intake still pending;
+  this is neither accepted input nor a failure or pilot-cell result. The
+  original 307 refusal and separate HEAD evidence below remain distinct;
+  the original CI Location is still unknown. No run was queried or repeated.
+  Standalone publication still does not establish CI durability or grade
+  readiness. Final integration-head review/checks, actual HF input acceptance,
+  approved private output-target readiness/publication, workflow wiring,
+  later use of the separately frozen #664 adapter with an observed output
+  revision, ordered 30-cell execution/admission deduplication and fixed grading
+  remain unfinished.
+
+### Fixed
+
+- Correct immutable HF Hub member-path comparison for the observed cache
+  redirect form: `%2F` member separators and literal parentheses. Namespace,
+  repository and revision prefixes still match literally; the exact expected
+  member is compared after one strict decode. Malformed/residual escapes,
+  traversal (including segments URL joining would erase), empty components,
+  backslashes and control bytes refuse. Existing host allowlists, token-free
+  CDN hops, four source pins, canonical archive SHA, offline verification,
+  no-clobber behavior, timeouts, workflow/main guards and 180/30-minute model
+  limits are unchanged. No workflow or experiment input changed.
+  The leader's model-free input-check `35841798539`, job `107118366778`, on
+  `ea5dcc61c2beaad3a287d3d8dd064533ce33ed41` remains a failed observation:
+  `hf_original_redirect_refused`, `stage=hf_reference_1`, HTTP 307 at
+  09:17:25 UTC on 2026-09-23. Plan passed; OIDC/identity/model steps were skipped.
+  One separately authorized unauthenticated HEAD to the contract-derived
+  reference-1 URL started at 09:25:38.658426 UTC and returned 307 in 0.25118
+  seconds (20-second bound), with no redirect followed or body read. Its relative
+  Location stayed on the canonical HTTPS Hub cache route, with the same
+  literal repository/revision prefix and a query present. Once-decoded member
+  bytes matched exactly, but the base guard refused the literal encoding
+  difference. This verifies the guard defect for the retained HEAD response;
+  the original CI response's Location was not captured and is not invented.
+  Neither observation establishes invalid credentials or complete input access.
+  One offline redirect selector at
+  `44e276163e8a241a0a146304c14c64d7437e6914` reported
+  `28 passed, 63 deselected in 2.81s`, exit 0. Synthetic filenames/provenance
+  and fake HF responses exercise the real CLI, serializer/importer, byte
+  checks, refusal and token-isolation paths. The exact command is in
+  `tasks/LATEST_TASK_RESULT/README.md`; no prior family or live check was rerun.
+  Prior #661 review `5288470314` and its 71-case result remain scoped to that
+  earlier intake implementation. At this redirect-fix observation, #662 at
+  `0ff95ba41ce7ce961ee333bbcac9f8e3db539697` still had incomplete leader review;
+  its 66-case evidence was not final approval. Its later approval and current
+  integration are recorded separately above. At that point, live input
+  acceptance, publisher review/output-target readiness, output
+  workflow wiring, the pilot grading adapter, ordered 30-cell execution,
+  admission deduplication and fixed grading remained unfinished.
+
 ### Added
 
 - Add `codex_budget_pilot_output.py`, a standalone, plan-first publisher for
@@ -45,8 +117,8 @@ entries land under a fresh dated heading the day they merge to `main`.
   task record; finalized cell evidence and HF responses are synthetic, while
   canonical compilation, byte/hash/manifest checks, refusal, no-clobber and
   commit-operation construction remain real. No previous family was rerun.
-  This independent branch starts at `9cb1c0d84f299f610ec98c90f3bac9ff9cbbdc75`;
-  frozen #661 review `5288470314` at
+  This independent branch started at `9cb1c0d84f299f610ec98c90f3bac9ff9cbbdc75`;
+  then-frozen #661 review `5288470314` at
   `fcfe5feb7698af78c18d5257807fc0ee0d4351ff` covers its separate HF-originals
   intake code, not this publisher or live HF access. The accepted lifecycle
   trace remains a gap: Step2 leaves real outputs locally and CI uploads only
@@ -56,6 +128,46 @@ entries land under a fresh dated heading the day they merge to `main`.
   paid execution, workflow wiring, the canonical pilot grading-input adapter,
   ordered 30-cell execution/admission deduplication and fixed grading remain.
   No live HF, credential, payload, model, grader or campaign operation ran.
+
+- Add explicitly selected `hf_originals` intake to the existing single-cell CI
+  path. `github_draft` remains the default, with no automatic fallback. The
+  genuine registered contract supplies the original parquet and two reference
+  roles at `openai/gdpval@11e7900cdcac61bc4daf59e65feb238acda98fbf`.
+  Only canonical `step0_needs_files_manifest.json` comes from the existing
+  tracked exp033 target at `6c7e07ee7365f145dfcf898263365b5c8c97b224`.
+  Its retained immutable URL was reconciled locally with the tracked profile's
+  target fingerprint before implementation; this is historical source identity,
+  not evidence of current HF access. The adapter verifies all four byte
+  identities, reuses the bundle producer's deterministic serialization, requires
+  the existing 2,519,040-byte archive/SHA256
+  `757603585405da5d7f6817a6a0a23bd530d4b5e4e38b2fd4dc6f318053d240e3`,
+  and calls the unchanged importer and genuine installed-input reader.
+  Fixed-origin Hub streaming has byte/deadline checks, bounded redirects,
+  explicit token headers and no cache or retry fallback. Only the selected
+  input step receives its existing transport credential; input tokens are
+  absent from HF local verification and subsequent native/model steps. Both
+  environment and SDK offline flags are restored before local verification.
+  Default plan mode performs no fetch. Contradictory GitHub IDs, changed
+  identities, missing credentials and transport/import failures refuse; partial
+  reservations remain non-adoptable. Logs retain only closed role/status
+  context, and only the existing nonsecret completion envelope is uploaded.
+  The mandatory CI/cost review preceded workflow edits. GitHub `contents:read`,
+  pinned host/runtime/model, the 120-second process/3-minute intake envelope,
+  240-minute job ceiling and 180/30-minute cell/attempt limits are unchanged.
+  One focused offline selector at
+  `fbd038173aa36d67bda8d0aad3f3ecb35aa7c8af` reported `71 passed in 3.68s`,
+  exit 0: 70 new synthetic HF-route cases and one directly affected workflow
+  contract. This is not the historical native-host family or a live workflow.
+  The exact selector is in `tasks/LATEST_TASK_RESULT/README.md`.
+  Leader-supplied input-check `35827845408` remains a real exit-2 refusal:
+  `github_draft_or_asset_inaccessible`, `release_metadata`, HTTP 403 at
+  06:42:45 UTC; download/import and OIDC/native work were not reached.
+  Prior #659 review `5287940874` at
+  `3659287caf89c013818d052b54524723e30ac6f3` covers the reader integration,
+  not this transport. Both campaigns and original bytes remain untouched.
+  Current HF access, a live input check, ordered execution of 30 cells,
+  cross-run admission deduplication and fixed grading remain unfinished.
+  No HF credential, real-input transfer, data API or model call was used here.
 
 - Add `codex_budget_pilot_results.py`, a local completion-envelope reader for
   `budget_pilot_ci_20260923_01`. It uses the real pilot compiler and existing CI
