@@ -1,0 +1,29 @@
+# Reserved host decision, not a materialized campaign or an execution receipt.
+plan_version: codex-external-budget-ci-cell-v1
+campaign_id: budget_pilot_ci_20260923_01
+source_baseline: 42c7b8f2f6457463333e386432baceed96182c72
+parent_registration: batch-runner/experiments/execution_envelope/codex_external_budget_pilot.yaml
+description: >-
+  Use the existing repository-OIDC GitHub Actions host for every A/B/C cell,
+  separate from the unexecuted NAS campaign and all historical scores. Inherit
+  the same advance_check_5 inputs, A1/B1/C1/C2/B2/A2 order, model, route, xhigh
+  effort, context, tools, fixed grader and 180/30-minute limits. B/C differ only
+  by C's host-observed error feedback; A/B changes retention and attempt policy.
+  Two repeats remain exploratory, not a precision or quality guarantee.
+host:
+  runner: ubuntu-22.04
+  python: 3.10.12
+  sdk: 0.147.0
+  cli: 0.147.0
+  identity: existing_repository_oidc
+  job_ceiling_minutes: 240
+  same_policy_all_conditions: true
+  cross_runner_restore: false
+  automatic_rerun: refuse_run_attempt_above_one
+default_mode: plan_only
+selection: one_explicit_canonical_cell
+controls: inherit_parent_unchanged
+input_transfer: explicit_approved_handoff_required
+publication: nonsecret_completion_envelope_only
+ordered_30_cell_scheduler: not_implemented
+separate_manual_run_deduplication: not_implemented

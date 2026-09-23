@@ -103,17 +103,26 @@ records.
 
 ### Controls, review boundary and remaining work
 
-This independent branch starts at
-`42c7b8f2f6457463333e386432baceed96182c72` without a fetch. It neither
-stacks on nor changes #655. The leader's supplied FINAL-APPROVE review
-`5285590451` at `4d3c4b4f895da35e3db07b413f66c8066dfa5ad1` and 19-case
-offline evidence cover that one-cell entry only, not this transfer format.
-Its CI was not queried and its tests were not repeated. Only completion
-records change after the tested SHA; no final documentation-bearing test
-run is claimed. These new files are outside the full grader-source closure,
-so active source hashes are unchanged and source counts remain 37/58. Historical
-results, hashes and review scopes remain in the unchanged changelog history
-and immutable prior records.
+This branch started independently at
+`42c7b8f2f6457463333e386432baceed96182c72`. One later source fetch and normal
+non-squash merge integrated exact main
+`ea81fefc7dae1297dee7d68e78327a0f05fb6958`. The actual conflict was confined
+to this latest-result page; both substantive changelog entries were retained,
+with the bundle kept as the latest result. The bundle source and test files
+compare byte-for-byte equal to reviewed
+`df3e3f24404a90f47789051ef99318fb6af2dd20`. The leader's FINAL-APPROVE
+review `5285752981` covers that earlier head and its original 39-case/private
+candidate evidence, not a new run or approval of the integrated head.
+
+#655 review `5285590451` at `4d3c4b4f895da35e3db07b413f66c8066dfa5ad1`
+and its 19-case offline evidence cover the one-cell entry only. The leader
+reported all 10 applicable checks passed before integration; CI was not
+queried here. No tests or packaging were repeated for this merge. The
+`39 passed in 3.19s` result remains tied to
+`3c20adb08e1db62d81855a5184963ad1bf342061`; only completion records followed
+that SHA before this upstream integration. Source counts remain 37/58, with
+no new grader-source or active-hash edits. Prior results and review scopes
+remain in the preserved changelog entries and immutable Git history.
 
 The sealed `budget_pilot_20260923_01` campaign, its source
 `0d6ed6d806fc0360434952792d5ab82327290570`, original inputs and all 30 pending
@@ -127,7 +136,7 @@ Packaging bytes is not execution evidence, consumption, readiness or graded
 quality. No model call, authentication retry, preparation or Step 1/Step 2
 execution occurred.
 
-This change still needs immutable review and CI. Approved transport and
+The integrated head still needs immutable review and CI. Approved transport and
 workflow integration, ordered 30-cell scheduling/aggregation, live CI
 OIDC/current connectivity, separately directed paid execution and grading
 remain unfinished. #655's missing-input refusal is not bypassed by a local
@@ -138,4 +147,6 @@ Experiment-design kept inputs and experimental controls fixed and separated
 transport from execution. Backend guidance kept validation and publication
 on the existing helpers. Experiment-report-en and im-not-ai-en preserved the
 synthetic/real evidence boundary, failure history and privacy-screen limits.
-No workflow, dependency, UI, pricing, upload or QA code changed.
+The bundle implementation adds no workflow, dependency, UI, pricing, upload
+or QA changes. This merge retains #655's reviewed workflow and adapter bytes
+without modifying them.

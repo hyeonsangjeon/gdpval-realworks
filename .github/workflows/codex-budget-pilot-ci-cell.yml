@@ -1,0 +1,179 @@
+# One registered cell, not the 30-cell scheduler. No original-input download or
+# cross-runner native-state restore. Creation/review of this workflow is not a launch.
+name: Codex external-budget pilot — one CI cell
+
+on:
+  workflow_dispatch:
+    inputs:
+      reviewed_source_sha:
+        description: Exact reviewed main/workflow SHA (40 lowercase hex characters)
+        required: true
+        type: string
+      cell_id:
+        description: One canonical advance_check_5 task UUID plus _A_r1/_B_r1/etc.
+        required: true
+        type: string
+      execute:
+        description: Later leader-authorized execution; false only materializes a plan
+        required: false
+        default: false
+        type: boolean
+  workflow_call:
+    inputs:
+      reviewed_source_sha:
+        required: true
+        type: string
+      cell_id:
+        required: true
+        type: string
+      execute:
+        required: false
+        default: false
+        type: boolean
+    secrets:
+      AZURE_CLIENT_ID:
+        required: false
+      AZURE_TENANT_ID:
+        required: false
+      AZURE_SUBSCRIPTION_ID:
+        required: false
+      FOUNDRY_PROJECT_ENDPOINT:
+        required: false
+
+# Same effective identity scope as the reviewed connection diagnostic.
+permissions:
+  contents: read
+  id-token: write
+
+# One active cell for the entire campaign, independent of selected cell.
+# This is not an ordered queue or deduplication ledger for new manual runs.
+concurrency:
+  group: codex-budget-pilot-ci-20260923-01
+  cancel-in-progress: false
+
+jobs:
+  cell:
+    if: github.repository == 'hyeonsangjeon/gdpval-realworks' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 240 # Setup/cleanup headroom; the model cell remains 180 minutes.
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      HF_HUB_OFFLINE: "1"
+      HF_DATASETS_OFFLINE: "1"
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      DO_NOT_TRACK: "1"
+      PILOT_WORKFLOW_SHA: ${{ github.workflow_sha }}
+      REVIEWED_SOURCE_SHA: ${{ inputs.reviewed_source_sha }}
+      SELECTED_CELL: ${{ inputs.cell_id }}
+    steps:
+      - name: Bind reviewed source and refuse workflow reruns before credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_EVENT_NAME" == workflow_dispatch ]]
+          [[ "$GITHUB_REPOSITORY" == hyeonsangjeon/gdpval-realworks ]]
+          [[ "$GITHUB_REF" == refs/heads/main ]]
+          [[ "$GITHUB_RUN_ATTEMPT" == 1 ]]
+          [[ "$REVIEWED_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$GITHUB_SHA" == "$REVIEWED_SOURCE_SHA" ]]
+          [[ "$PILOT_WORKFLOW_SHA" == "$REVIEWED_SOURCE_SHA" ]]
+
+      - name: Check out exact reviewed source
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ inputs.reviewed_source_sha }}
+          persist-credentials: false
+
+      - name: Setup pinned Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.10.12"
+          cache: pip
+          cache-dependency-path: batch-runner/requirements.txt
+
+      - name: Install existing declared dependencies
+        run: python3 -m pip install -r batch-runner/requirements.txt
+
+      - name: Plan one cell and check explicit inputs before OIDC
+        id: plan
+        env:
+          EXECUTE_REQUESTED: ${{ inputs.execute }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          args=(--campaign-id budget_pilot_ci_20260923_01
+                --cell "$SELECTED_CELL" --reviewed-source-sha "$REVIEWED_SOURCE_SHA"
+                --output "$RUNNER_TEMP/budget-pilot-ci-private"
+                --completion-out "$RUNNER_TEMP/budget-pilot-ci-completion.json")
+          if [[ "$EXECUTE_REQUESTED" == true ]]; then
+            # This handoff must be supplied by a separately reviewed transfer.
+            # Missing/changed originals refuse; no download or manifest generation.
+            args+=(--check-inputs
+                   --dataset-parquet "$RUNNER_TEMP/budget-pilot-ci-inputs/original.parquet"
+                   --reference-root "$RUNNER_TEMP/budget-pilot-ci-inputs/reference-only"
+                   --step0-manifest "$RUNNER_TEMP/budget-pilot-ci-inputs/step0-manifest.json")
+          fi
+          python3 batch-runner/codex_budget_pilot_ci.py "${args[@]}"
+
+      - name: Require the existing native sandbox prerequisite
+        if: inputs.execute
+        run: |
+          if ! command -v bwrap >/dev/null; then
+            echo "codex_bubblewrap_unavailable"
+            exit 1
+          fi
+
+      - name: Azure Login (OIDC)
+        if: inputs.execute
+        uses: azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca # v3.0.1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Verify existing Azure OIDC session identity
+        if: inputs.execute
+        env:
+          AZURE_AI_EXPECTED_CLIENT_ID: ${{ vars.AZURE_AI_EXPECTED_CLIENT_ID }}
+          AZURE_AI_EXPECTED_TENANT_ID: ${{ vars.AZURE_AI_EXPECTED_TENANT_ID }}
+          AZURE_AI_EXPECTED_SUBSCRIPTION_ID: ${{ vars.AZURE_AI_EXPECTED_SUBSCRIPTION_ID }}
+        run: python3 batch-runner/scripts/azure_oidc_identity_preflight.py --verify-session
+
+      - name: Execute only the selected cell on this live host
+        if: inputs.execute
+        env:
+          AZURE_AI_ROUTE_PROFILE: direct-v1
+          FOUNDRY_PROJECT_ENDPOINT: ${{ secrets.FOUNDRY_PROJECT_ENDPOINT }}
+          # A future explicit execute decision, never inferred from old connectivity.
+          CODEX_FOUNDRY_CONNECTION_CONFIRMED: "1"
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 batch-runner/codex_budget_pilot_ci.py \
+            --campaign-id budget_pilot_ci_20260923_01 \
+            --cell "$SELECTED_CELL" --reviewed-source-sha "$REVIEWED_SOURCE_SHA" \
+            --output "$RUNNER_TEMP/budget-pilot-ci-private" \
+            --completion-out "$RUNNER_TEMP/budget-pilot-ci-completion.json" \
+            --dataset-parquet "$RUNNER_TEMP/budget-pilot-ci-inputs/original.parquet" \
+            --reference-root "$RUNNER_TEMP/budget-pilot-ci-inputs/reference-only" \
+            --step0-manifest "$RUNNER_TEMP/budget-pilot-ci-inputs/step0-manifest.json" \
+            --resume --execute
+
+      - name: Validate only the nonsecret completion envelope
+        id: publication
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 batch-runner/codex_budget_pilot_ci.py \
+            --verify-envelope "$RUNNER_TEMP/budget-pilot-ci-completion.json"
+          echo "safe=true" >> "$GITHUB_OUTPUT"
+
+      - name: Retain the allowlisted cell envelope only
+        if: always() && steps.publication.outputs.safe == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: budget-pilot-ci-cell-completion
+          path: ${{ runner.temp }}/budget-pilot-ci-completion.json
+          if-no-files-found: error
+          retention-days: 7
