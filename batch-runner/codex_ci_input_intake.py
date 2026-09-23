@@ -8,6 +8,8 @@ Draft visibility is observed at metadata read time, not guaranteed permanently.
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
+from enum import Enum
 import http.client
 import logging
 import os
@@ -16,7 +18,7 @@ import re
 import sys
 import tarfile
 import time
-from typing import Any
+from typing import Any, Iterator
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -37,8 +39,20 @@ ASSET_TYPES = {"application/octet-stream", "application/x-tar"}
 LOG = logging.getLogger(__name__)
 
 
+class GitHubStage(Enum):
+    RELEASE_METADATA = "release_metadata"
+    ASSET_DOWNLOAD = "asset_download"
+    ASSET_REDIRECT = "asset_redirect"
+
+
 class InputIntakeRefused(ValueError):
-    """Closed nonsecret reason; never contains a URL, response body or path."""
+    """Closed reason/context; never contains a URL, response body or path."""
+
+    def __init__(self, reason: str, *, stage: GitHubStage | None = None,
+                 http_status: int | None = None) -> None:
+        super().__init__(reason)
+        self.stage = GitHubStage(stage) if stage is not None else None
+        self.http_status = http_status if type(http_status) is int else None
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -61,18 +75,31 @@ def _remaining(deadline: float) -> float:
     return min(REQUEST_TIMEOUT_SECONDS, remaining)
 
 
-def _response(opener: Any, url: str, *, token: str | None, accept: str, deadline: float) -> Any:
+@contextmanager
+def _response(opener: Any, url: str, *, token: str | None, accept: str, deadline: float,
+              stage: GitHubStage) -> Iterator[Any]:
     # Callers construct only the exact API paths or validate the sole CDN hop.
     # No ambient proxy, auth handler, cookie jar or redirect-following opener.
     headers = {"Accept": accept, "Accept-Encoding": "identity", "User-Agent": "gdpval-private-input-intake"}
     if token is not None:
         headers.update({"Authorization": "Bearer " + token, "X-GitHub-Api-Version": "2022-11-28"})
     request = urllib.request.Request(url, headers=headers, method="GET")
+    status = None
     try:
-        return opener.open(request, timeout=_remaining(deadline))
-    except urllib.error.HTTPError as response:
-        # HTTPError is also a closable response. Do not read/log its error body.
-        return response
+        try:
+            response = opener.open(request, timeout=_remaining(deadline))
+        except urllib.error.HTTPError as error:
+            # HTTPError is also a closable response. Do not read/log its error body.
+            response = error
+        with response:
+            status = response.status
+            yield response
+    except (OSError, ValueError, TypeError, KeyError, AttributeError, StopIteration, RecursionError,
+            http.client.HTTPException) as error:
+        reason = str(error) if isinstance(error, InputIntakeRefused) else "private_input_verification_or_transport_failed"
+        # Only the fixed call-site stage and a received numeric status survive.
+        # An open failure has no response, even after an earlier successful hop.
+        raise InputIntakeRefused(reason, stage=stage, http_status=status) from None
 
 
 def _header(response: Any, name: str) -> str | None:
@@ -119,7 +146,8 @@ def _require_success(response: Any) -> None:
 
 def _asset_metadata(opener: Any, release_id: int, asset_id: int, token: str, deadline: float) -> str:
     release_url, asset_url = API_ROOT + str(release_id), API_ROOT + "assets/" + str(asset_id)
-    with _response(opener, release_url, token=token, accept="application/vnd.github+json", deadline=deadline) as response:
+    with _response(opener, release_url, token=token, accept="application/vnd.github+json", deadline=deadline,
+                   stage=GitHubStage.RELEASE_METADATA) as response:
         if response.geturl() != release_url or 300 <= response.status < 400:
             raise InputIntakeRefused("github_release_metadata_redirect_refused")
         _require_success(response)
@@ -161,7 +189,8 @@ def _asset_redirect(location: str | None) -> str:
 
 
 def _download(opener: Any, asset_url: str, token: str, deadline: float) -> bytes:
-    with _response(opener, asset_url, token=token, accept="application/octet-stream", deadline=deadline) as response:
+    with _response(opener, asset_url, token=token, accept="application/octet-stream", deadline=deadline,
+                   stage=GitHubStage.ASSET_DOWNLOAD) as response:
         if response.geturl() != asset_url:
             raise InputIntakeRefused("github_automatic_redirect_refused")
         if response.status not in (302, 307):
@@ -170,7 +199,8 @@ def _download(opener: Any, asset_url: str, token: str, deadline: float) -> bytes
         target = _asset_redirect(_header(response, "Location"))
     # Exactly one allowlisted hop. Fresh headers contain no Authorization,
     # cookies, Referer, GitHub API headers or credential-bearing input values.
-    with _response(opener, target, token=None, accept="application/octet-stream", deadline=deadline) as response:
+    with _response(opener, target, token=None, accept="application/octet-stream", deadline=deadline,
+                   stage=GitHubStage.ASSET_REDIRECT) as response:
         if response.geturl() != target or 300 <= response.status < 400:
             raise InputIntakeRefused("github_additional_asset_redirect_refused")
         _require_success(response)
@@ -256,7 +286,11 @@ def main(argv: list[str] | None = None, *, _test_github: Any = None,
     except (OSError, ValueError, TypeError, KeyError, AttributeError, StopIteration, RecursionError,
             http.client.HTTPException, tarfile.TarError, yaml.YAMLError) as error:
         reason = str(error) if isinstance(error, InputIntakeRefused) else "private_input_verification_or_transport_failed"
-        LOG.error("Private input intake refused: %s", reason)
+        if isinstance(error, InputIntakeRefused) and error.stage is not None:
+            LOG.error("Private input intake refused: %s (stage=%s, http_status=%s)",
+                      reason, error.stage.value, error.http_status if error.http_status is not None else "null")
+        else:
+            LOG.error("Private input intake refused: %s", reason)
         return 2
 
 
