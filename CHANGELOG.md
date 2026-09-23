@@ -13,6 +13,66 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Integrate exact main `7f089ee005c00f2a37c5f578c295555bd8a51cbb` into
+  reviewed #665 head `79c43ca20bac525d7ff77cc3e7a042ec81bdc2a3` with one
+  ordinary non-squash merge. Only the two completion-record overlaps were
+  resolved. All seven inspection/CLI/publisher-helper/workflow/test blobs match
+  the reviewed #665 parent; every other implementation file matches incoming
+  main, including the four #664 adapter/shared-materializer/source-pin/test
+  blobs. The exact identities are recorded in the latest task result. The
+  incoming materializer source pin remains
+  `9a24f053afde1bf4b039135fdc633d49b32553f5b02a50c596f210dc7e46d1b7`.
+  Parent/blob comparisons and diff checks are the only validation; no tests,
+  counters, dependency validation or audits were rerun. Review `5290860576`
+  applies to the prior #665 head, where the leader observed eight checks passed
+  and native-host-contracts still running. Review `5290860366` and all ten
+  applicable passing checks with deploy skipped apply to #664 at
+  `054761aaa6e1ddae295840a1cf30ede36aa96f81`, now included in supplied main.
+  Neither review approves this new integration head. The original #665 result
+  remains `1 failed, 58 passed in 31.61s` at
+  `faa64ef15fce0e101c3911a092a312563fff2486`; the failed-fixture-only result
+  remains `1 passed in 1.80s` at `668cdbed6574d0b0b458d87cda9e3ad87a1cbfed`.
+  This is not a new 59-case run. The adapter's `46 passed in 52.36s` remains at
+  `bc088ed8473dae362a76fd866763027f90d2a884`, with successful test-double
+  copies distinct from the real native `EINVAL` refusal. Accepted-input run
+  `35847871634` and native-connectivity diagnostic `35817078746` remain
+  separate successful observations, not pilot results or benchmark grades.
+  No live target observation has occurred; source checks prove neither target
+  privacy/write access, publication nor grade readiness. Remaining: new-head
+  review/final checks, one checked CI target-metadata observation, destination
+  approval and write/prefix readiness, private workflow wiring, grading-input
+  installation on the native execution host, ordered 30-cell admission/
+  deduplication/execution and fixed grading. No runtime, workflow behavior,
+  permission, model/grader setting or experiment control changed.
+
+- Integrate exact main `7c3238f18f1e32d76c8f326b29bf674f8364d4a0` into
+  reviewed grading-adapter head `e3653758bff6dde3fadd6e72ff0af5b595566af7`
+  with one ordinary non-squash merge. Only the two completion-record overlaps
+  were resolved. The adapter, shared materializer, coupled source pin and test
+  blobs remain identical to that parent; every other implementation, workflow
+  and test byte matches incoming main, including the private publisher and HF
+  redirect fix. Parent/blob comparisons and diff checks are the only validation;
+  no tests, static counters or audits were rerun. Review `5289680397` and the
+  leader's ten applicable passing checks/deploy skip apply to the reviewed
+  adapter head, not this integration. Its `46 passed in 52.36s` remains at
+  `bc088ed8473dae362a76fd866763027f90d2a884`, with the test-only rename double
+  and real native `EINVAL` refusal kept distinct. Incoming publisher review
+  `5289973671` applies to `fa53c74460aa0c63516eb5d6a34f30f0e12213b9`;
+  the leader reports all nine checks passed after failed-job-only attempt 2
+  succeeded without dependency, pin or source changes.
+  Separately, the leader observed model-free input-check `35847871634`, job
+  `107138294292`, accepting all four original pins at 10:19:28 UTC on
+  2026-09-23, source `b0abe87275e3aa4d403732a6a8de8dacfe591c7e`.
+  The checksum-matched completion has no execution, result or deliverables;
+  OIDC/identity/Execute were skipped. This is accepted input, not a pilot result
+  or grade. At 11:20:13 UTC, the separate NAS target observation made zero HF
+  calls because the process token and known handoff were unavailable; remote
+  privacy/HEAD remain unknown, not refused. Exact receipts and preserved
+  histories are in the latest task record. New integration-head review/checks,
+  CI target observation, destination approval, output publication/wiring,
+  grading-adapter integration/use, ordered 30-cell admission/execution and fixed
+  grading remain unfinished. No runtime, workflow or experiment control changed.
+
 - Reconcile the private-output publisher with exact main
   `b0abe87275e3aa4d403732a6a8de8dacfe591c7e` in one ordinary non-squash
   merge from reviewed publisher head
@@ -133,6 +193,39 @@ entries land under a fresh dated heading the day they merge to `main`.
   and write/prefix readiness, output publication/wiring, grading-adapter
   integration/use, ordered 30-cell admission/execution/deduplication and fixed
   grading. No live metadata, credentials, payload, model or grader were used.
+
+- Add `codex_budget_pilot_grading_input.py`, a local grading-input adapter for
+  one exact compiler-selected cell of `budget_pilot_ci_20260923_01`. It shares
+  the existing Codex materializer's result, artifact, ledger, provenance and
+  atomic no-clobber checks; the parent entry still admits only parent comparison
+  runs. The unchanged external identity schema binds the canonical cell/run,
+  source/config/input declarations and fixed grading plan. A caller-approved
+  identity/hash is not independent authentication of an actual HF output
+  publication. Only the derived result receives the existing provenance fields
+  and recomputed fingerprint; source, deliverable and ledger bytes are not
+  rewritten. The bounded private preparation manifest reports grading `UNRUN`,
+  preserves terminal errors and missing/partial accounting, and is not a public
+  completion envelope. One comparison source pin was refreshed for the shared
+  internal seam; no active full-grader source, judge, prompt, rubric, workflow,
+  experiment control or campaign state changed.
+  The focused offline family at `bc088ed8473dae362a76fd866763027f90d2a884`
+  reported `46 passed in 52.36s`. Successful-copy cases use the existing
+  parent-test rename double; the real native case observed `RENAME_NOREPLACE`
+  errno 22 and fail-closed cleanup, not a successful NAS atomic installation.
+  All 34 refusal cases assert that installation is never reached. Earlier
+  attempts at `f13c2fa156b4a80f43620a2a1b4cf0a25eca241a` reported
+  `11 failed, 34 passed in 51.51s`, then the 11 blocked cases on tmpfs reported
+  `11 failed, 34 deselected in 14.42s`; neither failure is relabeled a pass.
+  Commands and evidence limits are in `tasks/LATEST_TASK_RESULT/README.md`.
+  Leader reviews #662 `5289350726` at
+  `0ff95ba41ce7ce961ee333bbcac9f8e3db539697` and #663 `5289350480` at
+  `038f0fa911ec7971e69c03528385019de8c29b5f` cover only their standalone
+  publisher and redirect-fix scopes. Neither head was changed or imported by
+  that original unit. At that observation, actual HF input acceptance, private
+  output-target readiness/publication, workflow wiring, ordered 30-cell
+  execution/admission deduplication and fixed grading remained unfinished.
+  Later integration and accepted-input evidence are recorded separately above.
+  No real-input transfer, model or grader ran in the adapter task.
 
 - Add `codex_budget_pilot_output.py`, a standalone, plan-first publisher for
   one finalized canonical `budget_pilot_ci_20260923_01` cell. It reuses the
