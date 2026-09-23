@@ -332,7 +332,8 @@ def _entry_contract(context: Context, checkout: Path, revision: str) -> dict:
         renderer = get_renderer_fingerprint() if step8.requires_track2_office_renderer(config) else None
         return {"grade_path": str(absolute.relative_to(checkout)), "config_hash": config_hash,
                 "grader_source_hash": source_hash, "renderer_fingerprint": renderer,
-                "cost_run_id": step8.make_cost_run_id(run.command[2], config_hash, source_hash)}
+                "cost_run_id": step8.make_cost_run_id(experiment_yaml_name=run.command[2],
+                    config_hash=config_hash, grader_source_hash=source_hash)}
 
 
 def prepare(context: Context, root: Path, *, _test_api=None, _test_transport=None) -> dict:

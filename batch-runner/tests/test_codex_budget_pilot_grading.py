@@ -21,6 +21,7 @@ import shutil
 import socket
 import subprocess
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import pandas as pd
 import pytest
@@ -229,11 +230,12 @@ def _seed_outputs(case, tmp_path, *, failed=False, missing=False, ledger=True):
     context, api = case.context, case.api
     cell = context.cell
     config = json.loads(context.grading.dispatch.runs[0].config_json)
-    upload = tmp_path / "synthetic-deliverables"
+    upload = tmp_path / ("synthetic-error-deliverables" if failed else "synthetic-deliverables")
     upload.mkdir(exist_ok=True)
     name = f"deliverable_files/{cell['task_id']}/answer.txt"
-    (upload / name).parent.mkdir(parents=True, exist_ok=True)
-    (upload / name).write_bytes(b"synthetic generated answer\r\n\x00unchanged\n")
+    if not failed:
+        (upload / name).parent.mkdir(parents=True, exist_ok=True)
+        (upload / name).write_bytes(b"synthetic generated answer\r\n\x00unchanged\n")
     rows = bind_deliverable_file_records([{
         "task_id": cell["task_id"], "status": "error" if failed else "success", "model": "gpt-5.4",
         "deliverable_files": [] if failed else [name], "content": None if failed else "synthetic answer",
@@ -410,7 +412,25 @@ def invoke(case, capsys, phase="plan", **changes):
             "--reviewed-source-sha", changes.get("source", SOURCE),
             "--terminal-revision", changes.get("terminal", TERMINAL),
             "--root", str(changes.get("root", case.root)), "--phase", phase]
-    code = connector.main(args, _test_api=case.api, _test_transport=case.transport)
+    diagnostic = []
+    original_context = output._error_context
+    def error_context(error):
+        # Test diagnostics expose locations/types only, never exception text
+        # (which may deliberately contain synthetic secrets/private locators).
+        item = error
+        for _ in range(6):
+            diagnostic.append(type(item).__name__)
+            trace = item.__traceback__
+            while trace is not None:
+                diagnostic.append(f"{Path(trace.tb_frame.f_code.co_filename).name}:{trace.tb_lineno}")
+                trace = trace.tb_next
+            if item.__cause__ is None:
+                break
+            item = item.__cause__
+        return original_context(error)
+    with patch.object(output, "_error_context", error_context):
+        code = connector.main(args, _test_api=case.api, _test_transport=case.transport)
+    case.diagnostic = diagnostic
     capture = capsys.readouterr()
     text = capture.out + capture.err
     for secret in (TOKEN, case.api.repo, str(case.root), "https://", "signed=", "private-secret", "Traceback"):
@@ -422,7 +442,8 @@ def invoke(case, capsys, phase="plan", **changes):
 
 def prepared(case, capsys):
     code, value = invoke(case, capsys, "prepare")
-    assert code == 0, value
+    if code != 0:
+        pytest.fail(pilot._canonical_json(value) + "\n" + ";".join(case.diagnostic))
     assert value["judge_ready"] is True
     return retained._read(case.root / "prepared.json")
 
@@ -430,7 +451,8 @@ def prepared(case, capsys):
 def admitted(case, capsys):
     ready = prepared(case, capsys)
     code, value = invoke(case, capsys, "claim")
-    assert code == 0, value
+    if code != 0:
+        pytest.fail(pilot._canonical_json(value) + "\n" + ";".join(case.diagnostic))
     return ready
 
 
