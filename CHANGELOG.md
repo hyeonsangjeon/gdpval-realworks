@@ -11,6 +11,39 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Changed
+
+- Reconcile the private-output publisher with exact main
+  `b0abe87275e3aa4d403732a6a8de8dacfe591c7e` in one ordinary non-squash
+  merge from reviewed publisher head
+  `0ff95ba41ce7ce961ee333bbcac9f8e3db539697`. Only the two completion-record
+  overlaps were resolved. Both publisher source/test blobs remain identical
+  to the reviewed parent; every other implementation, workflow and test byte
+  matches incoming main, including HF-originals intake and the equivalent-path
+  redirect fix. Exact blob identities are recorded in the latest task result.
+  No publisher behavior, upload policy, target, active source pin, fixed grader
+  setting or experiment control changed. Publisher review `5289350726` and
+  the leader's initial all-nine-check observation apply to the old publisher
+  head; its `66 passed in 109.70s` remains at
+  `731ec479c742a11bcbeb6ce05d8b4f2da971ed3d`. Redirect review `5289350480`
+  applies to `038f0fa911ec7971e69c03528385019de8c29b5f`; its
+  `28 passed, 63 deselected in 2.81s` remains at
+  `44e276163e8a241a0a146304c14c64d7437e6914`. This reconciliation uses
+  parent/blob comparisons and diff checks only: no test, static counter or
+  earlier audit was rerun. The new integration head is not yet approved.
+  The leader dispatched model-free HF input-check `35847871634` on that
+  exact main at 10:16:49 UTC on 2026-09-23. At the leader's 10:18:55 UTC
+  observation it was **IN_PROGRESS**, with plan/intake still pending;
+  this is neither accepted input nor a failure or pilot-cell result. The
+  original 307 refusal and separate HEAD evidence below remain distinct;
+  the original CI Location is still unknown. No run was queried or repeated.
+  Standalone publication still does not establish CI durability or grade
+  readiness. Final integration-head review/checks, actual HF input acceptance,
+  approved private output-target readiness/publication, workflow wiring,
+  later use of the separately frozen #664 adapter with an observed output
+  revision, ordered 30-cell execution/admission deduplication and fixed grading
+  remain unfinished.
+
 ### Fixed
 
 - Correct immutable HF Hub member-path comparison for the observed cache
@@ -42,14 +75,59 @@ entries land under a fresh dated heading the day they merge to `main`.
   checks, refusal and token-isolation paths. The exact command is in
   `tasks/LATEST_TASK_RESULT/README.md`; no prior family or live check was rerun.
   Prior #661 review `5288470314` and its 71-case result remain scoped to that
-  earlier intake implementation. Frozen #662 at
-  `0ff95ba41ce7ce961ee333bbcac9f8e3db539697` still has incomplete leader review
-  at the supplied observation; its 66-case evidence is not final approval.
-  Live input acceptance, publisher review/output-target readiness, output
+  earlier intake implementation. At this redirect-fix observation, #662 at
+  `0ff95ba41ce7ce961ee333bbcac9f8e3db539697` still had incomplete leader review;
+  its 66-case evidence was not final approval. Its later approval and current
+  integration are recorded separately above. At that point, live input
+  acceptance, publisher review/output-target readiness, output
   workflow wiring, the pilot grading adapter, ordered 30-cell execution,
-  admission deduplication and fixed grading remain unfinished.
+  admission deduplication and fixed grading remained unfinished.
 
 ### Added
+
+- Add `codex_budget_pilot_output.py`, a standalone, plan-first publisher for
+  one finalized canonical `budget_pilot_ci_20260923_01` cell. It reuses the
+  compiler, retained plan/state/config/input bindings, dispatcher lock,
+  owned-cleanup check and current-byte result/file helpers. `_finish()` runs
+  on a copy to compare evidence; publication never changes the recorded cell
+  status, accounting or output bytes. Missing results are not adopted, missing
+  usage stays missing, and `grade_ready` remains false. The only payload is
+  the bound inference JSON, validated generated deliverables, an available
+  valid JSONL ledger export and a bounded logical manifest. Original inputs,
+  SQLite, native/auth state, logs and whole workspaces are excluded.
+  Default planning does not look up credentials or construct an HF client.
+  Explicit publication requires a caller-approved existing repository observed
+  as private, its exact expected parent and an absent campaign/cell prefix;
+  the CLI does not issue approval or select a target. One add-only HF commit
+  uses server parent/CAS protection. A flushed private one-use reservation
+  precedes the first request; failed or ambiguous commits remain unresolved
+  and cannot replay. A private receipt retains the actual returned commit and
+  its metadata, never a substituted source Git SHA. The uploaded manifest
+  contains no future commit or output-repository locator. HTTP phase timeouts
+  are at most 30 seconds within a 120-second publication envelope; the scoped
+  HF client also stops SDK-internal upload retries and forwarding of the
+  supplied HF bearer token to another host. These are
+  transfer bounds, not changes to the model's 180/30-minute limits. Privacy is
+  observed at metadata reads, not atomic with the commit, and no remote payload
+  re-download is claimed. The required extreme-reasoner decision preceded
+  implementation and approved only this bounded offline unit with conditions.
+  One new offline CLI/publisher family at
+  `731ec479c742a11bcbeb6ce05d8b4f2da971ed3d` reported
+  `66 passed in 109.70s (0:01:49)`, exit 0. The exact command is in the latest
+  task record; finalized cell evidence and HF responses are synthetic, while
+  canonical compilation, byte/hash/manifest checks, refusal, no-clobber and
+  commit-operation construction remain real. No previous family was rerun.
+  This independent branch started at `9cb1c0d84f299f610ec98c90f3bac9ff9cbbdc75`;
+  then-frozen #661 review `5288470314` at
+  `fcfe5feb7698af78c18d5257807fc0ee0d4351ff` covers its separate HF-originals
+  intake code, not this publisher or live HF access. The accepted lifecycle
+  trace remains a gap: Step2 leaves real outputs locally and CI uploads only
+  completion metadata. No workflow, public completion schema or grader was
+  changed; this standalone unit does not establish CI durability or grade
+  readiness. Live HF input acceptance, approved output-target readiness before
+  paid execution, workflow wiring, the canonical pilot grading-input adapter,
+  ordered 30-cell execution/admission deduplication and fixed grading remain.
+  No live HF, credential, payload, model, grader or campaign operation ran.
 
 - Add explicitly selected `hf_originals` intake to the existing single-cell CI
   path. `github_draft` remains the default, with no automatic fallback. The
