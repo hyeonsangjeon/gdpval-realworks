@@ -597,7 +597,10 @@ jobs:
   # The static contract checks both predicates and exactly-once node coverage.
   native-host-contracts:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # Run 35811169415/job 107022868111 reported 71 passing tests but exhausted
+    # 45 minutes with setup/cleanup. This is CI headroom, not a change to the
+    # pilot's 180-minute cell or 30-minute attempt limits.
+    timeout-minutes: 60
     steps:
       - name: Verify dispatch contract
         if: github.event_name == 'workflow_dispatch'
