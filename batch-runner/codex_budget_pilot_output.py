@@ -1,8 +1,9 @@
 """Plan-first publication of one finalized CI cell to an explicit private target.
 
-No target is selected or approved here. This is not wired to a workflow and
-does not make a cell grade-ready. A retained reservation always forbids replay,
-including after a lost response. Source results and accounting are never edited.
+No target is selected or approved here. Publication is not wired to a workflow
+and does not make a cell grade-ready. The separate metadata inspection cannot
+publish. A retained reservation always forbids replay, including after a lost
+response. Source results and accounting are never edited.
 """
 
 from __future__ import annotations
@@ -11,6 +12,7 @@ import argparse
 from contextlib import contextmanager
 import copy
 from dataclasses import dataclass
+from datetime import datetime, timezone
 import fcntl
 import hashlib
 import io
@@ -48,6 +50,15 @@ MAX_LEDGER_ROWS = 10000
 REQUEST_SECONDS = 30
 PUBLICATION_SECONDS = 120
 HF_ENDPOINT = "https://huggingface.co"
+TARGET_CHECK_SECONDS = 20
+OUTPUT_TARGET_REPO_SHA256 = "88c9f1ba301718d90f8d59d8ddb681ee0c5e8ae7c2cbfd1b9ad246c10e15cccf"
+TARGET_CHECK_REASONS = frozenset({
+    "registered_output_target_mismatch", "explicit_hf_token_required", "existing_timer_refused",
+    "hf_offline_mode", "hf_metadata_request_refused", "hf_metadata_redirect_refused",
+    "hf_metadata_response_refused", "hf_http_failed", "hf_transport_failed",
+    "hf_response_bytes_exceeded", "output_target_identity_mismatch",
+    "output_target_privacy_unavailable", "output_target_head_unavailable", "private_output_target_required",
+})
 
 # These are Step2's supported record fields, not an alternate result schema.
 # Unknown fields are refused, never stripped from an otherwise unchanged file.
@@ -341,18 +352,21 @@ def _remaining(deadline: float) -> float:
 
 
 @contextmanager
-def _hf_client(token: str, deadline: float):
+def _hf_client(token: str, deadline: float, *, metadata_repo: str | None = None,
+               observation: dict | None = None):
     """Scoped supported HF client hook: bounded HTTP, terminal failures, no Xet.
 
     Buffered immutable operations select the SDK's HTTP/LFS path. Responses and
     transport errors become our exception BEFORE SDK http_backoff can retry or
     log URLs. This does not promise one HTTP request for a multipart commit.
+    The optional metadata mode permits only one exact GET, never a redirect.
     """
     import httpx
     from huggingface_hub import HfApi, constants
     from huggingface_hub.utils import _http, are_progress_bars_disabled, disable_progress_bars, enable_progress_bars
 
     _require(not constants.HF_HUB_OFFLINE, "hf_offline_mode")
+    metadata_attempts = 0  # Shared even if the SDK recreates a client/transport.
 
     class Stream(httpx.SyncByteStream):
         def __init__(self, stream, status):
@@ -377,6 +391,13 @@ def _hf_client(token: str, deadline: float):
             self.transport = httpx.HTTPTransport(retries=0, trust_env=False)
 
         def handle_request(self, request):
+            nonlocal metadata_attempts
+            if metadata_repo is not None:
+                expected = f"{HF_ENDPOINT}/api/datasets/{metadata_repo}/revision/main"
+                _require(observation is not None and metadata_attempts == 0
+                         and request.method == "GET" and str(request.url) == expected,
+                         "hf_metadata_request_refused")
+                metadata_attempts += 1
             _require(request.url.scheme == "https", "hf_insecure_request_refused")
             _require(request.url.host == "huggingface.co" or request.headers.get("authorization") != "Bearer " + token,
                      "hf_credential_forwarding_refused")
@@ -385,6 +406,14 @@ def _hf_client(token: str, deadline: float):
                 response = self.transport.handle_request(request)
             except httpx.TransportError as error:
                 raise OutputPublicationRefused("hf_transport_failed") from error
+            if metadata_repo is not None:
+                observation["http_status"] = response.status_code
+                if response.status_code != 200:
+                    status = response.status_code
+                    response.close()
+                    reason = ("hf_http_failed" if status >= 400 else "hf_metadata_redirect_refused"
+                              if 300 <= status < 400 else "hf_metadata_response_refused")
+                    raise OutputPublicationRefused(reason, status)
             if response.status_code >= 400:
                 status = response.status_code
                 response.close()
@@ -401,7 +430,7 @@ def _hf_client(token: str, deadline: float):
         logging.disable(logging.CRITICAL)
         disable_progress_bars()
         _http.set_client_factory(lambda: httpx.Client(transport=Once(), timeout=REQUEST_SECONDS,
-                                                    follow_redirects=True, trust_env=False))
+                                                    follow_redirects=metadata_repo is None, trust_env=False))
         yield HfApi(endpoint=HF_ENDPOINT, token=token)
     finally:
         _http.set_client_factory(old_factory)
@@ -411,7 +440,7 @@ def _hf_client(token: str, deadline: float):
 
 
 @contextmanager
-def _time_bound():
+def _time_bound(seconds: int = PUBLICATION_SECONDS):
     _require(signal.getitimer(signal.ITIMER_REAL) == (0.0, 0.0), "existing_timer_refused")
     previous = {name: signal.getsignal(name) for name in (signal.SIGALRM, signal.SIGTERM)}
 
@@ -421,8 +450,8 @@ def _time_bound():
     try:
         for name in previous:
             signal.signal(name, stop)
-        signal.setitimer(signal.ITIMER_REAL, PUBLICATION_SECONDS)
-        yield time.monotonic() + PUBLICATION_SECONDS
+        signal.setitimer(signal.ITIMER_REAL, seconds)
+        yield time.monotonic() + seconds
     finally:
         signal.setitimer(signal.ITIMER_REAL, 0)
         for name, handler in previous.items():
@@ -449,6 +478,54 @@ def _error_context(error: BaseException) -> tuple[str, int | None]:
             break
         error = error.__cause__
     return ("publication_interrupted" if isinstance(error, KeyboardInterrupt) else "hf_operation_failed", None)
+
+
+def inspect_output_target() -> dict:
+    """One fixed candidate's metadata, not destination approval or write access.
+
+    Called only by the explicitly selected CI mode, before any dispatch/input
+    admission. No token lookup occurs in the ordinary plan path. The public
+    projection never includes the operational repository locator or raw errors.
+    """
+    observed = {
+        "role": "exp033_submission_result", "repository_name_sha256": OUTPUT_TARGET_REPO_SHA256,
+        "exact_identity_match": False, "private": None, "head": None, "http_status": None,
+        "observed_at": None, "eligible_private_target": False, "write_access": "not_established",
+        "publication_authorized": False, "model_requested": False, "reason": None,
+    }
+    try:
+        repo = pilot.load_plan(pilot.ROOT / pilot.CODEX_TEMPLATE)["data"]["source"]
+        _require(type(repo) is str and hashlib.sha256(repo.encode()).hexdigest() == OUTPUT_TARGET_REPO_SHA256,
+                 "registered_output_target_mismatch")
+        _require(validate_hf_dataset_repo_id(repo) == repo, "registered_output_target_mismatch")
+        token = os.environ.get("HF_TOKEN", "")
+        _require(bool(token) and len(token) <= 4096 and all(33 <= ord(char) <= 126 for char in token),
+                 "explicit_hf_token_required")
+        # Reuse the existing reversible environment scope, not an intake call.
+        from codex_ci_input_intake import _hf_environment
+
+        with _time_bound(TARGET_CHECK_SECONDS) as deadline, _hf_environment(online=True):
+            with _hf_client(token, deadline, metadata_repo=repo, observation=observed) as api:
+                metadata = api.repo_info(repo_id=repo, repo_type="dataset", revision="main", token=token,
+                                         timeout=_remaining(deadline))
+                _require(getattr(metadata, "id", None) == repo, "output_target_identity_mismatch")
+                observed["exact_identity_match"] = True
+                private, head = getattr(metadata, "private", None), getattr(metadata, "sha", None)
+                observed["private"] = private if type(private) is bool else None
+                observed["head"] = head if _hash(head, 40) else None
+                _require(type(private) is bool, "output_target_privacy_unavailable")
+                _require(observed["head"] is not None, "output_target_head_unavailable")
+                _require(private is True, "private_output_target_required")
+                _remaining(deadline)
+                observed["eligible_private_target"] = True
+    except (Exception, KeyboardInterrupt) as error:
+        reason, _ = _error_context(error)
+        observed["reason"] = ({"publication_timeout": "output_target_check_timeout",
+                               "publication_interrupted": "output_target_check_interrupted"}.get(reason)
+                              or (reason if reason in TARGET_CHECK_REASONS else "output_target_check_failed"))
+        observed["eligible_private_target"] = False
+    observed["observed_at"] = datetime.now(timezone.utc).isoformat()
+    return observed
 
 
 def publish(snapshot: Snapshot, *, repo: str, expected_parent: str, _test_api=None) -> dict:

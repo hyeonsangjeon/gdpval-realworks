@@ -13,6 +13,38 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Integrate exact main `7f089ee005c00f2a37c5f578c295555bd8a51cbb` into
+  reviewed #665 head `79c43ca20bac525d7ff77cc3e7a042ec81bdc2a3` with one
+  ordinary non-squash merge. Only the two completion-record overlaps were
+  resolved. All seven inspection/CLI/publisher-helper/workflow/test blobs match
+  the reviewed #665 parent; every other implementation file matches incoming
+  main, including the four #664 adapter/shared-materializer/source-pin/test
+  blobs. The exact identities are recorded in the latest task result. The
+  incoming materializer source pin remains
+  `9a24f053afde1bf4b039135fdc633d49b32553f5b02a50c596f210dc7e46d1b7`.
+  Parent/blob comparisons and diff checks are the only validation; no tests,
+  counters, dependency validation or audits were rerun. Review `5290860576`
+  applies to the prior #665 head, where the leader observed eight checks passed
+  and native-host-contracts still running. Review `5290860366` and all ten
+  applicable passing checks with deploy skipped apply to #664 at
+  `054761aaa6e1ddae295840a1cf30ede36aa96f81`, now included in supplied main.
+  Neither review approves this new integration head. The original #665 result
+  remains `1 failed, 58 passed in 31.61s` at
+  `faa64ef15fce0e101c3911a092a312563fff2486`; the failed-fixture-only result
+  remains `1 passed in 1.80s` at `668cdbed6574d0b0b458d87cda9e3ad87a1cbfed`.
+  This is not a new 59-case run. The adapter's `46 passed in 52.36s` remains at
+  `bc088ed8473dae362a76fd866763027f90d2a884`, with successful test-double
+  copies distinct from the real native `EINVAL` refusal. Accepted-input run
+  `35847871634` and native-connectivity diagnostic `35817078746` remain
+  separate successful observations, not pilot results or benchmark grades.
+  No live target observation has occurred; source checks prove neither target
+  privacy/write access, publication nor grade readiness. Remaining: new-head
+  review/final checks, one checked CI target-metadata observation, destination
+  approval and write/prefix readiness, private workflow wiring, grading-input
+  installation on the native execution host, ordered 30-cell admission/
+  deduplication/execution and fixed grading. No runtime, workflow behavior,
+  permission, model/grader setting or experiment control changed.
+
 - Integrate exact main `7c3238f18f1e32d76c8f326b29bf674f8364d4a0` into
   reviewed grading-adapter head `e3653758bff6dde3fadd6e72ff0af5b595566af7`
   with one ordinary non-squash merge. Only the two completion-record overlaps
@@ -112,6 +144,55 @@ entries land under a fresh dated heading the day they merge to `main`.
   admission deduplication and fixed grading remained unfinished.
 
 ### Added
+
+- Add explicit, default-false `output_target_check` to the existing single-cell
+  CI path, mutually exclusive with execution/input checking. The CLI uses the
+  real reviewed-source/canonical-cell gates, then returns before dispatch,
+  input admission or publication. It derives only the tracked exp033
+  `CODEX_TEMPLATE.data.source` candidate and requires name SHA256
+  `88c9f1ba301718d90f8d59d8ddb681ee0c5e8ae7c2cbfd1b9ad246c10e15cccf`.
+  The existing CI `HF_TOKEN` is confined to the selected metadata step. One
+  exact dataset/main `repo_info` GET is allowed within 20 seconds; redirects,
+  retries and second requests refuse. The step has a 30-second process limit,
+  five-second kill grace and one-minute ceiling. The existing reversible HF
+  environment scope restores offline settings and removes ambient input tokens
+  during the request. Only fixed-role/fingerprint, returned identity/privacy/
+  40-hex HEAD, actual HTTP status or null, time and closed refusal metadata
+  reach CLI output. Public, missing, malformed or inaccessible candidates exit
+  2; `write_access=not_established`, `publication_authorized=false` and
+  `model_requested=false` remain unconditional. This neither approves a target
+  nor checks prefix/write readiness. The public completion schema, payload
+  handling, publisher defaults/private gate, permissions, existing job ceilings,
+  runtime/model/grader pins and 180/30-minute controls are unchanged.
+  The mandatory pre-edit extreme-reasoner decision was
+  **APPROVE-WITH-CONDITIONS** for this bounded offline unit, not live operation.
+  One new offline family at `faa64ef15fce0e101c3911a092a312563fff2486`
+  reported `1 failed, 58 passed in 31.61s`, exit 1. The oversized synthetic
+  response was prebuffered and reached JSON parsing instead of the stream guard.
+  Only that fixture changed to an unread stream; production bytes stayed
+  identical. Only its failed case was rerun at
+  `668cdbed6574d0b0b458d87cda9e3ad87a1cbfed`: `1 passed in 1.80s`, exit 0.
+  The 58 passes were not repeated or relabeled as a full final-head pass.
+  Tests use fake HF/CI/source capability, real compiler/CLI/HTTP gates and
+  static YAML assertions, not a workflow execution or live target observation.
+  Exact commands and limitations are in the latest task record.
+  Separately, #664 was normally integrated onto exact main
+  `7c3238f18f1e32d76c8f326b29bf674f8364d4a0`, with completion-record-only
+  resolutions, at `054761aaa6e1ddae295840a1cf30ede36aa96f81`; its four
+  protected blobs and all incoming code match their respective parents.
+  Its 46-case result remains at `bc088ed8473dae362a76fd866763027f90d2a884`,
+  and review `5289680397` applies to its prior reviewed head, not that merge.
+  Incoming #662 review `5289973671` and all nine passing checks apply to
+  unchanged `fa53c74460aa0c63516eb5d6a34f30f0e12213b9`; failed-job-only
+  attempt 2 succeeded without a dependency/pin/code change. Leader-supplied
+  input-check `35847871634` accepted all four pins and the canonical bundle
+  at 10:19:28 UTC on 2026-09-23, with no execution or result. The 11:20:13 UTC
+  NAS target observation instead made zero HF calls because the local token
+  and known handoff were unavailable; that is not remote refusal. Remaining:
+  new-head review/checks, the later CI target observation, destination approval
+  and write/prefix readiness, output publication/wiring, grading-adapter
+  integration/use, ordered 30-cell admission/execution/deduplication and fixed
+  grading. No live metadata, credentials, payload, model or grader were used.
 
 - Add `codex_budget_pilot_grading_input.py`, a local grading-input adapter for
   one exact compiler-selected cell of `budget_pilot_ci_20260923_01`. It shares

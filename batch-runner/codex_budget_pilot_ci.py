@@ -53,6 +53,11 @@ class CICellRefused(pilot.PilotDispatchRefused):
     """A closed, nonsecret refusal code, not a provider exception message."""
 
 
+class _Parser(argparse.ArgumentParser):
+    def error(self, message: str) -> None:
+        raise CICellRefused("invalid_arguments")
+
+
 def _require_ci_context(reviewed_sha: str) -> dict:
     # Check attempts before inspecting/initializing any cell state. A new runner
     # cannot restore the previous runner's inodes or grant another deadline.
@@ -239,7 +244,7 @@ def _publish(path: Path, root: Path, payload: dict) -> None:
 
 
 def main(argv: list[str] | None = None, *, _test_transport: pilot.LocalTransport | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = _Parser(description=__doc__)
     parser.add_argument("--campaign-id", default=CAMPAIGN)
     parser.add_argument("--cell")
     parser.add_argument("--reviewed-source-sha")
@@ -248,22 +253,37 @@ def main(argv: list[str] | None = None, *, _test_transport: pilot.LocalTransport
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--resume", action="store_true", help="Same live job/host only, never a workflow rerun")
     parser.add_argument("--check-inputs", action="store_true", help="Verify explicit originals without auth or a child")
+    parser.add_argument("--output-target-check", action="store_true",
+                        help="Inspect only the fixed output candidate's metadata; no inputs, model or publication")
     parser.add_argument("--dataset-parquet", type=Path)
     parser.add_argument("--reference-root", type=Path)
     parser.add_argument("--step0-manifest", type=Path)
     parser.add_argument("--verify-envelope", type=Path, help="Validate only the exact nonsecret publication file")
-    args = parser.parse_args(argv)
     plan, cell, root, inputs = None, None, None, None
     record_started = False
     try:
+        args = parser.parse_args(argv)
+        if args.output_target_check and any((args.execute, args.check_inputs, args.resume, args.verify_envelope,
+                                            args.dataset_parquet, args.reference_root, args.step0_manifest,
+                                            args.output, args.completion_out)):
+            raise CICellRefused("output_target_check_mode_conflict")
         if args.verify_envelope is not None:
             validate_completion(pilot._load(args.verify_envelope))
             return 0
-        if not all((args.cell, args.reviewed_source_sha, args.output, args.completion_out)):
+        if not all((args.cell, args.reviewed_source_sha)):
+            raise CICellRefused("explicit_cell_and_source_required" if args.output_target_check
+                                else "explicit_cell_source_output_and_completion_required")
+        if not args.output_target_check and not all((args.output, args.completion_out)):
             raise CICellRefused("explicit_cell_source_output_and_completion_required")
         plan, parent, specs, cell = compile_ci_cell(args.campaign_id, args.cell, args.reviewed_source_sha)
         transport = _test_transport or pilot.LocalTransport()
         transport.require_source(plan, parent)
+        if args.output_target_check:
+            from codex_budget_pilot_output import inspect_output_target
+
+            observed = inspect_output_target()
+            print(pilot._canonical_json(observed))
+            return 0 if observed["eligible_private_target"] else 2
         root = pilot._private_root(args.output)
         # The ordinary dispatcher remains responsible for ready-last creation,
         # no-clobber, the serial lock, checkpoints and the full denominator.
