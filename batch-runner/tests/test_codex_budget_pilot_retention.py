@@ -13,6 +13,9 @@ import io
 import json
 import os
 from pathlib import Path
+import socket
+import subprocess
+import time
 from types import SimpleNamespace
 
 from huggingface_hub import CommitOperationAdd, RepoFile, RepoFolder
@@ -23,15 +26,46 @@ import codex_budget_pilot as pilot
 import codex_budget_pilot_ci as ci
 import codex_budget_pilot_output as output
 import codex_budget_pilot_retention as retention
+from core import azure_ai_clients, codex_azure_token, codex_runner
 from core.cost_receipts import CostReceipt
 from core.inference_manifest import bind_deliverable_file_records
 from core.result_fingerprint import inference_result_fingerprint
-from .test_codex_budget_pilot import offline, scenario, read_plan, read_state  # noqa: F401
+from .test_codex_budget_pilot import scenario, read_plan, read_state  # noqa: F401
 from .test_codex_budget_pilot_ci import CICellChildren
 
 TOKEN = "hf_SYNTHETIC_RETENTION_NOT_A_CREDENTIAL"
 SOURCE = "1" * 40
 TOKEN_KEYS = {"HF_TOKEN", "HUGGING_FACE_HUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"}
+
+
+@pytest.fixture(autouse=True)
+def offline(monkeypatch):
+    # This family uses fake children and must not require a native SDK install
+    # merely to forbid one. Block the existing repository constructors as well
+    # as all process/socket/auth/data boundaries; do not fabricate an SDK module.
+    import step8_grade
+    from huggingface_hub import HfApi, hf_api
+    from huggingface_hub.utils import _auth, _headers
+
+    def blocked(*args, **kwargs):
+        raise AssertionError("retained-cell regression crossed a live boundary")
+
+    for target, names in (
+        (subprocess, ("run", "Popen", "check_call", "check_output")),
+        (socket, ("create_connection",)), (socket.socket, ("connect", "connect_ex")),
+        (os, ("system",)), (time, ("sleep",)),
+        (pilot, ("_source_snapshot", "_step0_bytes")),
+        (codex_azure_token, ("acquire_token", "get_bearer_token_provider")),
+        (_auth, ("get_token",)), (_headers, ("get_token",)),
+        (hf_api, ("_get_token_from_file", "_get_token_from_environment", "_get_token_from_google_colab")),
+        (HfApi, ("repo_info", "create_commit", "hf_hub_download", "create_repo", "whoami")),
+    ):
+        for name in names:
+            monkeypatch.setattr(target, name, blocked)
+    for constructor in (azure_ai_clients.AzureAIClientFactory, azure_ai_clients.OpenAI,
+                        azure_ai_clients.AzureOpenAI, azure_ai_clients.DefaultAzureCredential,
+                        codex_runner.CodexAgentRunner, step8_grade.Grader):
+        monkeypatch.setattr(constructor, "__init__", blocked)
 
 
 class MemoryHF:
@@ -167,6 +201,9 @@ class RetainedChildren(CICellChildren):
 @pytest.fixture
 def case(scenario, monkeypatch):
     s = scenario
+    real_version = ci.importlib.metadata.version
+    monkeypatch.setattr(ci.importlib.metadata, "version", lambda name:
+                        "0.147.0" if name in {"openai-codex", "openai-codex-cli-bin"} else real_version(name))
     for key, value in {"GITHUB_ACTIONS": "true", "GITHUB_REPOSITORY": ci.REPOSITORY,
         "GITHUB_REF": "refs/heads/main", "GITHUB_EVENT_NAME": "workflow_dispatch", "GITHUB_SHA": SOURCE,
         "PILOT_WORKFLOW_SHA": SOURCE, "GITHUB_RUN_ATTEMPT": "1", "RUNNER_OS": "Linux", "ImageOS": "ubuntu22",
