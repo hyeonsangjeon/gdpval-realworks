@@ -63,8 +63,16 @@ def compile_cell_grading_plan(
         run = grading.runs[0]
         command = list(run.command)
         command[command.index("--limit") + 1] = str(len(run.task_ids))
+        # Step8 deliberately refuses '__' in its config pathname. The producer
+        # run ID contains it, and is NOT the pathname: keep that identity and
+        # --source-experiment-id intact. A short canonical-index alias also
+        # leaves room for Step8's ledger/checkpoint suffixes without changing
+        # the fixed filename template or grading policy.
+        alias = f"pilot/cell-{plan['order'].index(cell_id):02d}"
+        command[2] = alias
         run = replace(
             run, producer_results_path=pilot.RESULT, command=tuple(command),
+            experiment_config_path=f"batch-runner/experiments/{alias}.yaml",
             input_materialization="codex_budget_pilot_grading_input.materialize_pilot_grading_input",
         )
         return plan, cells[0], replace(grading, runs=(run,))

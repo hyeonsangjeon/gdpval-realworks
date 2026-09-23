@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       experiment_yaml:
-        description: "Experiment YAML name under batch-runner/experiments/, without .yaml (may name one directory, e.g. execution_envelope/exp030_envelope_host_python_process)"
+        description: "Experiment YAML name; reserved pilot/<canonical cell> or pilot/branch-setup uses the isolated private pilot route"
         required: true
         type: string
       grading_config:
@@ -13,7 +13,7 @@ on:
         type: string
         default: "default_v2_sol_max.yaml"
       inference_revision:
-        description: "Full HF dataset commit SHA for resume; blank resolves initial main"
+        description: "Full HF commit for generic resume; pilot cells require the immutable retained terminal-confirmation SHA (never latest main)"
         required: false
         type: string
         default: ""
@@ -88,6 +88,7 @@ concurrency:
 
 jobs:
   validate-request:
+    if: ${{ !startsWith(inputs.experiment_yaml, 'pilot/') }}
     runs-on: ubuntu-24.04
     outputs:
       approval_inherited: ${{ steps.inherit.outputs.approval_inherited }}
@@ -379,6 +380,7 @@ jobs:
     # already-approved lineage (see "Resolve inherited paid approval").
     if: >-
       ${{
+        !startsWith(inputs.experiment_yaml, 'pilot/') &&
         inputs.dry_run == false &&
         inputs.paid_approval == true &&
         needs.validate-request.outputs.approval_inherited != 'true'
@@ -460,7 +462,7 @@ jobs:
   # ---------------------------------------------------------------------------
   grade-dry-run:
     needs: validate-request
-    if: inputs.dry_run == true
+    if: ${{ !startsWith(inputs.experiment_yaml, 'pilot/') && inputs.dry_run == true }}
     runs-on: ubuntu-24.04
     container:
       image: ghcr.io/hyeonsangjeon/gdpval-grading@sha256:0f6782c056e31e1ea1d693fc2f8f873da160b232926fa1b6cde75c24e5344a04
@@ -662,6 +664,7 @@ jobs:
     if: >-
       ${{
         !cancelled() &&
+        !startsWith(inputs.experiment_yaml, 'pilot/') &&
         inputs.dry_run == false &&
         inputs.paid_approval == true &&
         needs.validate-request.result == 'success' &&
@@ -1819,6 +1822,208 @@ jobs:
             ${{ steps.analysis.outputs.analysis_file }}
           retention-days: 30
 
+  # Reserved pilot selectors never enter the generic paid/resume/publication
+  # jobs above. These jobs leave inference completion-v1 and HF main unchanged.
+  pilot-plan:
+    if: ${{ startsWith(inputs.experiment_yaml, 'pilot/') && inputs.dry_run == true }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      GRADE_SELECTOR: ${{ inputs.experiment_yaml }}
+      GRADE_TERMINAL: ${{ inputs.inference_revision }}
+      GRADE_CONFIG: ${{ inputs.grading_config }}
+      GRADE_FORCE: ${{ inputs.force }}
+      GRADE_TASKS_LIMIT: ${{ inputs.tasks_limit }}
+      GRADE_TASKS: ${{ inputs.tasks }}
+      GRADE_RESUME: ${{ inputs.resume }}
+      GRADE_RESUME_CHUNK: ${{ inputs.resume_chunk }}
+      GRADE_SHARD_COUNT: ${{ inputs.shard_count }}
+      GRADE_SHARD_INDEX: ${{ inputs.shard_index }}
+      GRADE_RUN_ORDINAL: ${{ inputs.run_ordinal }}
+      HF_HUB_OFFLINE: '1'
+      HF_DATASETS_OFFLINE: '1'
+      HF_HUB_DISABLE_IMPLICIT_TOKEN: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.11'
+      - name: Install declared dependencies
+        timeout-minutes: 15
+        run: python -m pip install -r batch-runner/requirements.txt
+      - name: Compile the fixed pilot grading request only
+        run: |
+          python batch-runner/codex_budget_pilot_grading.py \
+            --selector "$GRADE_SELECTOR" --reviewed-source-sha "$GITHUB_SHA" \
+            --terminal-revision "$GRADE_TERMINAL" --root "$RUNNER_TEMP/pilot-fixed-grade"
+
+  pilot-live:
+    if: ${{ startsWith(inputs.experiment_yaml, 'pilot/') && inputs.dry_run == false && inputs.paid_approval == true }}
+    runs-on: ubuntu-24.04
+    environment:
+      name: grading
+    # Step8 retains its 240-minute default budget. Its owned host ceiling is
+    # 242 minutes; this separate job reserves setup and private-save headroom.
+    timeout-minutes: 300
+    permissions:
+      contents: read
+      id-token: write
+    container:
+      image: ghcr.io/hyeonsangjeon/gdpval-grading@sha256:0f6782c056e31e1ea1d693fc2f8f873da160b232926fa1b6cde75c24e5344a04
+      volumes:
+        - /opt/hostedtoolcache:/opt/hostedtoolcache
+    defaults:
+      run:
+        shell: bash -e {0}
+    env:
+      GRADE_SELECTOR: ${{ inputs.experiment_yaml }}
+      GRADE_TERMINAL: ${{ inputs.inference_revision }}
+      GRADE_CONFIG: ${{ inputs.grading_config }}
+      GRADE_FORCE: ${{ inputs.force }}
+      GRADE_TASKS_LIMIT: ${{ inputs.tasks_limit }}
+      GRADE_TASKS: ${{ inputs.tasks }}
+      GRADE_RESUME: ${{ inputs.resume }}
+      GRADE_RESUME_CHUNK: ${{ inputs.resume_chunk }}
+      GRADE_SHARD_COUNT: ${{ inputs.shard_count }}
+      GRADE_SHARD_INDEX: ${{ inputs.shard_index }}
+      GRADE_RUN_ORDINAL: ${{ inputs.run_ordinal }}
+      PILOT_WORKFLOW_SHA: ${{ github.workflow_sha }}
+      PILOT_GRADE_PAID_APPROVAL: ${{ inputs.paid_approval }}
+      PILOT_GRADE_DRY_RUN: ${{ inputs.dry_run }}
+      HF_HUB_OFFLINE: '1'
+      HF_DATASETS_OFFLINE: '1'
+      HF_HUB_DISABLE_IMPLICIT_TOKEN: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Trust this container checkout
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.11'
+      - name: Install declared dependencies
+        timeout-minutes: 15
+        run: python -m pip install -r batch-runner/requirements.txt
+      - name: Validate the exact selected pilot route
+        run: |
+          test "$GITHUB_SHA" = "$PILOT_WORKFLOW_SHA"
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          python batch-runner/codex_budget_pilot_grading.py \
+            --selector "$GRADE_SELECTOR" --reviewed-source-sha "$GITHUB_SHA" \
+            --terminal-revision "$GRADE_TERMINAL" --root "$RUNNER_TEMP/pilot-fixed-grade"
+      - name: Explicit one-use grading branch setup
+        if: inputs.experiment_yaml == 'pilot/branch-setup'
+        timeout-minutes: 5
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          umask 077
+          python batch-runner/codex_budget_pilot_grading.py --phase setup \
+            --selector "$GRADE_SELECTOR" --reviewed-source-sha "$GITHUB_SHA" \
+            --root "$RUNNER_TEMP/pilot-fixed-grade"
+      - name: Verify retained bytes and native grading input installation
+        id: pilot_input
+        if: inputs.experiment_yaml != 'pilot/branch-setup'
+        timeout-minutes: 10
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          umask 077
+          python batch-runner/codex_budget_pilot_grading.py --phase prepare \
+            --selector "$GRADE_SELECTOR" --reviewed-source-sha "$GITHUB_SHA" \
+            --terminal-revision "$GRADE_TERMINAL" --root "$RUNNER_TEMP/pilot-fixed-grade"
+      - name: Validate grading OIDC identity
+        if: steps.pilot_input.outputs.judge_ready == 'true'
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          AZURE_AI_EXPECTED_CLIENT_ID: ${{ vars.AZURE_AI_EXPECTED_CLIENT_ID }}
+          AZURE_AI_EXPECTED_TENANT_ID: ${{ vars.AZURE_AI_EXPECTED_TENANT_ID }}
+          AZURE_AI_EXPECTED_SUBSCRIPTION_ID: ${{ vars.AZURE_AI_EXPECTED_SUBSCRIPTION_ID }}
+        run: python batch-runner/scripts/azure_oidc_identity_preflight.py
+      - name: Validate fixed grader Azure route
+        if: steps.pilot_input.outputs.judge_ready == 'true'
+        env:
+          AZURE_AI_ROUTE_PROFILE: direct-v1
+          FOUNDRY_PROJECT_ENDPOINT: ${{ secrets.FOUNDRY_PROJECT_ENDPOINT }}
+          AZURE_AI_REQUIRE_EXPECTED_IDENTITIES: '1'
+          AZURE_AI_EXPECTED_DIRECT_ACCOUNT: ${{ vars.AZURE_AI_EXPECTED_DIRECT_ACCOUNT }}
+          AZURE_AI_WORKLOADS_JSON: ${{ steps.pilot_input.outputs.azure_ai_workloads_json }}
+        run: python batch-runner/scripts/azure_ai_route_preflight.py
+      - name: Grading Azure login (OIDC)
+        if: steps.pilot_input.outputs.judge_ready == 'true'
+        uses: azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca # v3.0.1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Verify grading OIDC session
+        if: steps.pilot_input.outputs.judge_ready == 'true'
+        env:
+          AZURE_AI_EXPECTED_CLIENT_ID: ${{ vars.AZURE_AI_EXPECTED_CLIENT_ID }}
+          AZURE_AI_EXPECTED_TENANT_ID: ${{ vars.AZURE_AI_EXPECTED_TENANT_ID }}
+          AZURE_AI_EXPECTED_SUBSCRIPTION_ID: ${{ vars.AZURE_AI_EXPECTED_SUBSCRIPTION_ID }}
+        run: python batch-runner/scripts/azure_oidc_identity_preflight.py --verify-session
+      - name: Verify fixed grader model connection
+        if: steps.pilot_input.outputs.judge_ready == 'true'
+        env:
+          AZURE_AI_ROUTE_PROFILE: direct-v1
+          FOUNDRY_PROJECT_ENDPOINT: ${{ secrets.FOUNDRY_PROJECT_ENDPOINT }}
+          AZURE_AI_REQUIRE_EXPECTED_IDENTITIES: '1'
+          AZURE_AI_EXPECTED_DIRECT_ACCOUNT: ${{ vars.AZURE_AI_EXPECTED_DIRECT_ACCOUNT }}
+          AZURE_AI_WORKLOADS_JSON: ${{ steps.pilot_input.outputs.azure_ai_workloads_json }}
+        run: python batch-runner/scripts/azure_ai_route_preflight.py --verify-token
+      - name: Claim one private grading admission with parent CAS
+        id: pilot_claim
+        if: steps.pilot_input.outputs.judge_ready == 'true'
+        timeout-minutes: 5
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          umask 077
+          python batch-runner/codex_budget_pilot_grading.py --phase claim \
+            --selector "$GRADE_SELECTOR" --reviewed-source-sha "$GITHUB_SHA" \
+            --terminal-revision "$GRADE_TERMINAL" --root "$RUNNER_TEMP/pilot-fixed-grade"
+      - name: Invoke exactly the compiled fixed Step8 command once
+        id: pilot_judge
+        if: steps.pilot_claim.outcome == 'success' && steps.pilot_input.outputs.judge_ready == 'true'
+        timeout-minutes: 245
+        env:
+          AZURE_AI_ROUTE_PROFILE: direct-v1
+          FOUNDRY_PROJECT_ENDPOINT: ${{ secrets.FOUNDRY_PROJECT_ENDPOINT }}
+          AZURE_AI_REQUIRE_EXPECTED_IDENTITIES: '1'
+          AZURE_AI_EXPECTED_DIRECT_ACCOUNT: ${{ vars.AZURE_AI_EXPECTED_DIRECT_ACCOUNT }}
+        run: |
+          umask 077
+          python batch-runner/codex_budget_pilot_grading.py --phase judge \
+            --selector "$GRADE_SELECTOR" --reviewed-source-sha "$GITHUB_SHA" \
+            --terminal-revision "$GRADE_TERMINAL" --root "$RUNNER_TEMP/pilot-fixed-grade"
+      - name: Retain validated private grade and accounting on the grading branch
+        if: ${{ always() && !cancelled() && steps.pilot_judge.outcome != 'skipped' && steps.pilot_claim.outcome == 'success' }}
+        timeout-minutes: 5
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          umask 077
+          python batch-runner/codex_budget_pilot_grading.py --phase publish \
+            --selector "$GRADE_SELECTOR" --reviewed-source-sha "$GITHUB_SHA" \
+            --terminal-revision "$GRADE_TERMINAL" --root "$RUNNER_TEMP/pilot-fixed-grade"
+      # No Actions artifact or generic completion-envelope step: all grade,
+      # source-identity, ledger, payload and child-log files stay private.
+
   # The job that closes the gap this whole workflow had.
   #
   # `grade` pushes to main with GITHUB_TOKEN. GitHub documents that events
@@ -1848,7 +2053,7 @@ jobs:
     # Not `success()`. A run that pushed its grade and then died at a later
     # step is exactly the run whose published commit is unverified, and gating
     # on the paid job's overall result would skip precisely that case.
-    if: always() && needs.grade.outputs.published_commits != ''
+    if: ${{ always() && !startsWith(inputs.experiment_yaml, 'pilot/') && needs.grade.outputs.published_commits != '' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     # Strictly narrower than the job it follows. This one reads the tree and
