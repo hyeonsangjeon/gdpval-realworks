@@ -163,7 +163,15 @@ def _receipt_fields(value: object) -> None:
             _require(set(raw) <= set(checked), "unsafe_receipt_fields")
 
 
-def _ledger(data: bytes, cell: dict) -> None:
+def _ledger(data: bytes, cell: dict, *, grading_run_id: str | None = None) -> None:
+    # A grading caller supplies Step8's exact derived cost run ID; its '|'
+    # separators and one config-directory slash are not arbitrary ledger text.
+    # Ordinary inference publication retains its existing lexical contract.
+    expected_run = cell["run_id"] if grading_run_id is None else grading_run_id
+    if grading_run_id is not None:
+        _require(type(grading_run_id) is str and re.fullmatch(
+            re.escape(f"pilot/cell-{cell['index']:02d}") + r"\|[0-9a-f]{16}\|[0-9a-f]{64}", grading_run_id) is not None,
+            "fixed_grading_ledger_run_required")
     lines = data.decode("utf-8").splitlines()
     _require(len(lines) <= MAX_LEDGER_ROWS, "ledger_rows_exceeded")
     seen = set()
@@ -177,7 +185,7 @@ def _ledger(data: bytes, cell: dict) -> None:
         _require(type(row[key]) is str and bool(row[key]) and identity not in seen,
                  "ledger_duplicate_or_missing_identity")
         seen.add(identity)
-        _require(row["run_id"] == cell["run_id"] and row["task_id"] in (None, cell["task_id"]),
+        _require(row["run_id"] == expected_run and row["task_id"] in (None, cell["task_id"]),
                  "ledger_cell_mismatch")
         # Do not price, aggregate, instantiate SQLite, or re-export this evidence.
         _safe_record(row)
@@ -205,7 +213,7 @@ def _ledger(data: bytes, cell: dict) -> None:
                     _require(amount.is_finite() and amount >= 0, "ledger_amount_refused")
                 except InvalidOperation as error:
                     raise OutputPublicationRefused("ledger_amount_refused") from error
-            elif name != "missing_reasons":
+            elif name != "missing_reasons" and not (name == "run_id" and grading_run_id is not None):
                 _require(value is None or (type(value) is str and
                          re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.:+-]{0,511}", value) is not None),
                          "ledger_identity_refused")
@@ -366,7 +374,8 @@ def _remaining(deadline: float) -> float:
 @contextmanager
 def _hf_client(token: str, deadline: float, *, metadata_repo: str | None = None,
                observation: dict | None = None, setup_repo: str | None = None,
-               setup_reservation: Path | None = None, setup_identity: dict | None = None):
+               setup_reservation: Path | None = None, setup_identity: dict | None = None,
+               response_bytes_limit: int | None = None):
     """Scoped supported HF client hook: bounded HTTP, terminal failures, no Xet.
 
     Buffered immutable operations select the SDK's HTTP/LFS path. Responses and
@@ -380,6 +389,10 @@ def _hf_client(token: str, deadline: float, *, metadata_repo: str | None = None,
     from huggingface_hub.utils import _http, are_progress_bars_disabled, disable_progress_bars, enable_progress_bars
 
     _require(not constants.HF_HUB_OFFLINE, "hf_offline_mode")
+    if response_bytes_limit is None:
+        response_bytes_limit = MAX_RECORD_BYTES
+    _require(type(response_bytes_limit) is int and 0 < response_bytes_limit <= MAX_FILE_BYTES,
+             "hf_response_limit_refused")
     _require(metadata_repo is None or setup_repo is None, "hf_setup_request_refused")
     metadata_attempts = 0  # Shared even if the SDK recreates a client/transport.
     setup_attempts = 0
@@ -394,7 +407,7 @@ def _hf_client(token: str, deadline: float, *, metadata_repo: str | None = None,
                 for chunk in self.stream:
                     _remaining(deadline)
                     size += len(chunk)
-                    _require(size <= MAX_RECORD_BYTES, "hf_response_bytes_exceeded")
+                    _require(size <= response_bytes_limit, "hf_response_bytes_exceeded")
                     yield chunk
             except httpx.TransportError as error:
                 raise OutputPublicationRefused("hf_transport_failed", self.status) from error

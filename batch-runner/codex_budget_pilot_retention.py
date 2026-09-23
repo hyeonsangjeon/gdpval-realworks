@@ -121,14 +121,15 @@ def _lock(root: Path):
 
 
 @contextmanager
-def _session(api):
+def _session(api, *, response_bytes_limit: int | None = None):
     token = os.environ.get("HF_TOKEN", "")
     require(bool(token) and len(token) <= 4096 and all(33 <= ord(char) <= 126 for char in token),
             "explicit_hf_token_required")
     from codex_ci_input_intake import _hf_environment
 
     with output._time_bound() as deadline, _hf_environment(online=True):
-        with (nullcontext(api) if api is not None else output._hf_client(token, deadline)) as client:
+        with (nullcontext(api) if api is not None else output._hf_client(
+                token, deadline, response_bytes_limit=response_bytes_limit)) as client:
             yield client, token, deadline
 
 
@@ -298,6 +299,17 @@ def _predecessor(api, repo: str, head: str, plan: dict, selected: dict, inputs: 
         require(head == BOOTSTRAP, "first_cell_bootstrap_required")
         return None
     cell = next(row for row in plan["cells"] if row["cell_id"] == plan["order"][ordinal - 1])
+    evidence = _terminal(api, repo, head, plan, cell, inputs, cache, token, deadline)
+    return evidence["observation"]
+
+
+def _terminal(api, repo: str, head: str, plan: dict, cell: dict, inputs: dict,
+              cache: Path, token: str, deadline: float) -> dict:
+    """Read one exact immutable terminal, also used by grading-only intake.
+
+    Selection/order and expected identities remain the caller's compiled
+    contract. This neither adopts a claim nor reads a moving branch tip.
+    """
     claim_path, terminal_path, prefix = _paths(cell)
     terminal, terminal_bytes = _control(api, repo, head, terminal_path, cache, token, deadline, written_at=head)
     require(set(terminal) == {"format", "repository_name_sha256", "claim_commit", "claim_identity",
@@ -334,9 +346,10 @@ def _predecessor(api, repo: str, head: str, plan: dict, selected: dict, inputs: 
     _objects(api, repo, terminal["output_commit"], objects, token, deadline, written_at=terminal["output_commit"])
     _objects(api, repo, head, objects, token, deadline, written_at=terminal["output_commit"])
     _objects(api, repo, head, [_object(claim_path, claim_bytes)], token, deadline, written_at=terminal["claim_commit"])
-    return {"cell_id": cell["cell_id"], "terminal_commit": head,
-            "terminal_sha256": pilot._identity(terminal_bytes)["sha256"],
-            "output_commit": terminal["output_commit"], "manifest_sha256": terminal["manifest_identity"]["sha256"]}
+    return {"terminal": terminal, "claim": claim, "manifest": manifest,
+            "observation": {"cell_id": cell["cell_id"], "terminal_commit": head,
+                "terminal_sha256": pilot._identity(terminal_bytes)["sha256"],
+                "output_commit": terminal["output_commit"], "manifest_sha256": terminal["manifest_identity"]["sha256"]}}
 
 
 def _commit(api, repo: str, parent: str, path: str, value: dict, cache: Path, token: str, deadline: float) -> str:

@@ -11,7 +11,92 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Fixed
+
+- Repair four coupled #668 CI regressions from head
+  `efb5be35ac9750bf03a784f9967f2d4e6341041d`, without changing workflow behavior,
+  the fixed grader/hash closure, configuration or runtime pins. Resolve the HF
+  response limit once at client entry; the shared session forwards the unset
+  sentinel instead of capturing the constant at definition. The ordinary 8 MiB
+  bound, explicit bounded grading-payload override and real stream-overflow
+  refusal remain intact. Register exact paid job `pilot-live` in the actual
+  freeze checker; the new CLI regression proves a hash-moving diff is refused
+  while that job is active even when generic paid jobs are skipped. Dry/skipped
+  and completed runs remain nonblocking. Account for all six ordinal bindings
+  and both isolated pilot jobs while preserving generic ordinal forwarding,
+  approval, rc=7 partial validation, resume and publication assertions.
+  The same extreme-reasoner's bounded pre-edit decision was
+  APPROVE-WITH-CONDITIONS, not implementation approval. At tested SHA
+  `f210a789e2a0afa889fd5261858fcbc0b402327f`, one offline selector returned
+  **5 passed in 3.20s**, exit 0. From `batch-runner/`, it selected only:
+
+  - `tests/test_codex_budget_pilot_output_target.py::test_output_target_no_response_and_parse_failure_never_invent_status[size-200-hf_response_bytes_exceeded]`
+  - `tests/test_gold_ceiling_contract.py::test_workflow_carries_the_ordinal_through_to_the_grader`
+  - `tests/test_grader_hash_freeze.py::TestTheJobNamesStillExistInGradeRun::test_no_other_job_is_gated_on_dry_run_being_false`
+  - `tests/test_step8_grade.py::test_grade_workflow_rc7_requires_valid_committed_partial`
+  - `tests/test_grader_hash_freeze.py::TestTheCommandLine::test_pilot_live_enforces_freeze_with_generic_jobs_skipped`
+
+  The leader's CI observation remains separate: run `35906432566`, job
+  `107335172560`, on the prior head had **4 failed, 13695 passed, 61 skipped,
+  46 deselected in 2047.85s**; the other eight checks passed. The original focused
+  result remains **64 passed in 47.42s** at
+  `f352eb87af8c794a677629229884f37061342535`. Neither run was repeated here.
+  Main remains the supplied `50676dd63b948bc8fa329f9b24871af75fe29c54`.
+  No workflow, grader policy, fixed grading branch or inference-main isolation
+  changed. No live HF/model/grader/Azure operation, dependency installation or CI
+  query ran. Leader review, final exact-head CI, actual grading-host native
+  installation, checked live branch/write readiness and the first paid cell and
+  fixed grade remain outstanding; the offline repair is not live readiness.
+
 ### Changed
+
+- Connect one retained canonical pilot cell to the existing fixed Step8 grader
+  from source `50676dd63b948bc8fa329f9b24871af75fe29c54`. Reserved selectors in
+  `grade-run.yml` use isolated plan/live jobs, not generic paid grading, automatic
+  resume or public artifact publication. Default plan performs no credential
+  lookup, HF access or judge call. Explicit live phases require protected grading
+  approval, first-attempt/exact-source guards and the selected private repository
+  fingerprint. All grading writes use only `pilot-grades-20260923`, explicitly
+  seeded once from `bfc7ae01ed14490817ceb7cb406adcb9bb95f557`; inference HF `main`
+  and completion-v1 remain unchanged. Preparation verifies the immutable retained
+  terminal/claim/manifest and actual output bytes, derives a publication-bound
+  identity for the canonical materializer, stages the compiled fixed source/config
+  and selected pinned rubric inputs, and requires native atomic installation before
+  a one-use per-cell grading claim. That derived identity is not independent
+  provider authentication. Missing/failed inference results remain ungraded.
+  The pilot-only `pilot/cell-00`–`pilot/cell-29` pathname aliases preserve canonical
+  producer IDs and Step8's existing `__` refusal and filename template. After
+  confirmed owned cleanup, only validated grade/progress/ledger bytes and terminal
+  metadata can be committed with expected-parent CAS. Actual returned revisions
+  stay in private receipts; a lost acknowledgment stays unresolved locally, with
+  later verified server state recorded separately and no judge/publication replay.
+  HF tokens are limited to host transfer/claim/publication scopes, absent from the
+  judge. No judge/model/prompt/rubric/retry change, new target, public payload,
+  automatic 30-cell launcher or inference-control change is introduced.
+  The same extreme-reasoner approved the pre-edit design with conditions and the
+  bounded pathname correction; this is not approval of the implementation head.
+  Final focused offline selector `batch-runner/tests/test_codex_budget_pilot_grading.py`:
+  **64 passed in 47.42s**, exit 0, at
+  `f352eb87af8c794a677629229884f37061342535`. The earlier runs remain
+  `27 failed, 34 passed in 21.16s` at `47e417596cd352edb3329614cce9197b1df140b3`
+  and `1 failed, 60 passed in 34.64s` at `7533fcaa0689c9099418dcda858af611a63dcca7`.
+  The first exposed a keyword-only cost-ID call and an error-fixture collision;
+  the second was a fixture expecting success for deliberately unconfirmed cleanup.
+  Exact commands and the intermediate one-case diagnostic scope are recorded below
+  in the latest task result. No prior test family or full suite ran. Synthetic
+  HF/judge/renderer boundaries and successful rename-double staging are not live
+  grading evidence: the actual local native rename returned -1/errno 22 (`EINVAL`)
+  and the CLI refused, exit 2. Actual CI-host atomic installation remains unproven.
+  Leader-supplied accepted-input run `35847871634` and consumed private-setup run
+  `35881609256` remain separate actual observations. #667 review `5294839155` and
+  ten applicable passing checks/deploy skip apply only to
+  `cace64a840867c79362fa9aacd13af700ee9f363`; its split 48-pass/timeout plus
+  18-pass evidence remains at `498c99d09f573707c2f9a9abd6afe8ac7b99e370`.
+  No live admission, inference, output publication or grade was run here.
+  Remaining: exact-head review/final CI, one sealed execution SHA before payment,
+  checked grading-branch setup/write and actual-host installation, first admitted
+  inference/private output, one fixed grade and all 30 recorded outcomes. Setup
+  must not be replayed; no current target-access or grade-readiness claim is made.
 
 - Wire single-cell CI execution to the leader-selected private output target on
   source `053e2e33c22775e23e3c13a13773090613fc200b`. A verified, host-generated

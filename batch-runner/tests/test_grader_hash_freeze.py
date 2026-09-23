@@ -360,6 +360,43 @@ class TestTheCommandLine:
         assert r.returncode == 0
         assert "PASS" in r.stdout
 
+    def test_pilot_live_enforces_freeze_with_generic_jobs_skipped(self, tmp_path: Path) -> None:
+        """Exercise the real checker CLI, not just its paid-name registry."""
+        jobs = yaml.safe_load(
+            (REPO_ROOT / ".github" / "workflows" / "grade-run.yml").read_text(encoding="utf-8")
+        )["jobs"]
+        assert "name" not in jobs["pilot-live"]
+        assert "dry_run == false" in jobs["pilot-live"]["if"]
+        pilot_name = str(jobs["pilot-live"].get("name", "pilot-live"))
+        skipped_generic = [
+            job(str(jobs[key].get("name", key)), "skipped")
+            for key in ("validate-request", "approve-paid", "grade-dry-run", "grade")
+        ]
+        for status, conclusion in (
+            ("queued", None), ("waiting", None), ("in_progress", None),
+            ("in_progress", "success"), ("in_progress", "failure"),
+            ("in_progress", "cancelled"),
+        ):
+            run = live("668", status=status, jobs=[
+                *skipped_generic, job("pilot-plan", "skipped"), job(pilot_name, conclusion),
+            ])
+            result = self._run(tmp_path, ["batch-runner/core/grader.py"], [run])
+            assert result.returncode == 1, (status, conclusion, result.stdout)
+            assert "FROZEN:" in result.stdout and f"paid job not skipped: {pilot_name}" in result.stdout
+            assert "batch-runner/core/grader.py" in result.stdout
+
+        dry = live("669", jobs=[
+            *skipped_generic, job("pilot-plan", "success"), job(pilot_name, "skipped"),
+        ])
+        completed = live("670", status="completed", jobs=[
+            *skipped_generic, job("pilot-plan", "skipped"), job(pilot_name, "success"),
+        ])
+        for run in (dry, completed):
+            result = self._run(tmp_path, ["batch-runner/core/grader.py"], [run])
+            assert result.returncode == 0 and result.stdout.startswith("PASS:")
+        neutral = self._run(tmp_path, ["README.md"], [live("671", jobs=[job(pilot_name, None)])])
+        assert neutral.returncode == 0 and "no grader-source file" in neutral.stdout
+
     def test_malformed_input_is_frozen_not_crashed(self, tmp_path: Path) -> None:
         bad = tmp_path / "bad.json"
         bad.write_text("{not json", encoding="utf-8")

@@ -47,7 +47,7 @@ from typing import Any, Iterable, Sequence
 #: 2. The API lists jobs that were *skipped*. A paid run therefore contains a
 #:    ``grade-dry-run`` entry, and a dry run contains a ``grade`` entry. Job
 #:    presence alone distinguishes nothing; only the conclusion does.
-PAID_JOB_EXACT_NAMES = frozenset({"grade"})
+PAID_JOB_EXACT_NAMES = frozenset({"grade", "pilot-live"})
 PAID_JOB_NAME_PREFIXES = ("Approve paid ",)
 
 #: The one conclusion that proves a job did not happen. Every other value --

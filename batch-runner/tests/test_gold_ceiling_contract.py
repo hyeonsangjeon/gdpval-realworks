@@ -720,7 +720,7 @@ def test_run_ordinal_cap_is_the_same_number_in_the_workflow():
     assert "run_ordinal must be an integer between 1 and 10" in workflow
 
 
-def test_workflow_carries_the_ordinal_through_to_the_grader():
+def test_workflow_carries_the_ordinal_through_to_the_grader(monkeypatch):
     """The flag has to survive four hops: input, env, argument, self-retrigger.
 
     Dropping it at the last hop is the dangerous one -- a repeat that runs out
@@ -728,11 +728,46 @@ def test_workflow_carries_the_ordinal_through_to_the_grader():
     exists to be compared against.
     """
     raw = GRADE_WORKFLOW_PATH.read_text(encoding="utf-8")
+    parsed = yaml.safe_load(raw)
+    jobs = parsed["jobs"]
 
     assert re.search(r"^      run_ordinal:$", raw, re.MULTILINE)
-    assert raw.count("GRADE_RUN_ORDINAL: ${{ inputs.run_ordinal }}") == 4
+    binding = "${{ inputs.run_ordinal }}"
+    assert raw.count("GRADE_RUN_ORDINAL: " + binding) == 6
+    assert {
+        key for key, body in jobs.items()
+        if body.get("env", {}).get("GRADE_RUN_ORDINAL") == binding
+    } == {"validate-request", "grade-dry-run", "grade", "pilot-plan", "pilot-live"}
+    assert [
+        (key, step.get("name"))
+        for key, body in jobs.items()
+        for step in body["steps"]
+        if step.get("env", {}).get("GRADE_RUN_ORDINAL") == binding
+    ] == [("approve-paid", "Record approved request")]
     assert raw.count("ARGS+=(--run-ordinal") == 2
+    for key in ("grade-dry-run", "grade"):
+        runs = "\n".join(step.get("run", "") for step in jobs[key]["steps"])
+        assert runs.count('ARGS+=(--run-ordinal "$GRADE_RUN_ORDINAL")') == 1
     assert '"run_ordinal": os.environ["GRADE_RUN_ORDINAL"]' in raw
+
+    # Pilot jobs forward the same input into their real host validator. Unlike
+    # the generic repeat path, a pilot cell must refuse ordinal overrides.
+    import codex_budget_pilot_grading as pilot_grading
+
+    inputs = parsed.get("on", parsed.get(True))["workflow_dispatch"]["inputs"]
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    for key in ("pilot-plan", "pilot-live"):
+        runs = "\n".join(step.get("run", "") for step in jobs[key]["steps"])
+        assert "python batch-runner/codex_budget_pilot_grading.py" in runs
+        for name, value in jobs[key]["env"].items():
+            match = re.fullmatch(r"\$\{\{ inputs\.(\w+) \}\}", str(value))
+            if match and "default" in inputs[match[1]]:
+                default = inputs[match[1]]["default"]
+                monkeypatch.setenv(name, str(default).lower() if isinstance(default, bool) else str(default))
+        pilot_grading._workflow_inputs()
+        monkeypatch.setenv("GRADE_RUN_ORDINAL", "2")
+        with pytest.raises(pilot_grading.output.OutputPublicationRefused, match="pilot_grade_override_refused"):
+            pilot_grading._workflow_inputs()
 
 
 def test_dispatching_a_repeat_needs_no_flag():
