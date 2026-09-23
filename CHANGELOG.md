@@ -13,6 +13,54 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Connect one retained canonical pilot cell to the existing fixed Step8 grader
+  from source `50676dd63b948bc8fa329f9b24871af75fe29c54`. Reserved selectors in
+  `grade-run.yml` use isolated plan/live jobs, not generic paid grading, automatic
+  resume or public artifact publication. Default plan performs no credential
+  lookup, HF access or judge call. Explicit live phases require protected grading
+  approval, first-attempt/exact-source guards and the selected private repository
+  fingerprint. All grading writes use only `pilot-grades-20260923`, explicitly
+  seeded once from `bfc7ae01ed14490817ceb7cb406adcb9bb95f557`; inference HF `main`
+  and completion-v1 remain unchanged. Preparation verifies the immutable retained
+  terminal/claim/manifest and actual output bytes, derives a publication-bound
+  identity for the canonical materializer, stages the compiled fixed source/config
+  and selected pinned rubric inputs, and requires native atomic installation before
+  a one-use per-cell grading claim. That derived identity is not independent
+  provider authentication. Missing/failed inference results remain ungraded.
+  The pilot-only `pilot/cell-00`–`pilot/cell-29` pathname aliases preserve canonical
+  producer IDs and Step8's existing `__` refusal and filename template. After
+  confirmed owned cleanup, only validated grade/progress/ledger bytes and terminal
+  metadata can be committed with expected-parent CAS. Actual returned revisions
+  stay in private receipts; a lost acknowledgment stays unresolved locally, with
+  later verified server state recorded separately and no judge/publication replay.
+  HF tokens are limited to host transfer/claim/publication scopes, absent from the
+  judge. No judge/model/prompt/rubric/retry change, new target, public payload,
+  automatic 30-cell launcher or inference-control change is introduced.
+  The same extreme-reasoner approved the pre-edit design with conditions and the
+  bounded pathname correction; this is not approval of the implementation head.
+  Final focused offline selector `batch-runner/tests/test_codex_budget_pilot_grading.py`:
+  **64 passed in 47.42s**, exit 0, at
+  `f352eb87af8c794a677629229884f37061342535`. The earlier runs remain
+  `27 failed, 34 passed in 21.16s` at `47e417596cd352edb3329614cce9197b1df140b3`
+  and `1 failed, 60 passed in 34.64s` at `7533fcaa0689c9099418dcda858af611a63dcca7`.
+  The first exposed a keyword-only cost-ID call and an error-fixture collision;
+  the second was a fixture expecting success for deliberately unconfirmed cleanup.
+  Exact commands and the intermediate one-case diagnostic scope are recorded below
+  in the latest task result. No prior test family or full suite ran. Synthetic
+  HF/judge/renderer boundaries and successful rename-double staging are not live
+  grading evidence: the actual local native rename returned -1/errno 22 (`EINVAL`)
+  and the CLI refused, exit 2. Actual CI-host atomic installation remains unproven.
+  Leader-supplied accepted-input run `35847871634` and consumed private-setup run
+  `35881609256` remain separate actual observations. #667 review `5294839155` and
+  ten applicable passing checks/deploy skip apply only to
+  `cace64a840867c79362fa9aacd13af700ee9f363`; its split 48-pass/timeout plus
+  18-pass evidence remains at `498c99d09f573707c2f9a9abd6afe8ac7b99e370`.
+  No live admission, inference, output publication or grade was run here.
+  Remaining: exact-head review/final CI, one sealed execution SHA before payment,
+  checked grading-branch setup/write and actual-host installation, first admitted
+  inference/private output, one fixed grade and all 30 recorded outcomes. Setup
+  must not be replayed; no current target-access or grade-readiness claim is made.
+
 - Wire single-cell CI execution to the leader-selected private output target on
   source `053e2e33c22775e23e3c13a13773090613fc200b`. A verified, host-generated
   absent-prefix/expected-parent CAS claim must precede inference; the first cell

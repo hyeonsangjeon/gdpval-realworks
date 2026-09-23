@@ -1,6 +1,192 @@
 # Latest task result
 
-## PROJECT5-RETAINED-CELL-EXECUTION-0051 / TERMINAL-ADMISSION-POLICY-0122
+## PROJECT5-FIXED-GRADING-WIRING-0255
+
+### Scope and interface
+
+Connect the existing fixed grader to one canonical retained pilot cell, based on
+exact main `50676dd63b948bc8fa329f9b24871af75fe29c54`. This is code/offline work:
+no real HF credential/API call, branch creation, payload transfer, workflow
+dispatch, inference, model, grader or Azure operation ran. CI was neither queried
+nor awaited. This implementation still needs leader review and exact-head checks.
+
+The mandatory extreme-reasoner decision preceded workflow/HF-write edits:
+APPROVE-WITH-CONDITIONS. The same reviewer confirmed that a compiler-derived
+grading pathname alias is a wiring correction, not a new grader policy. The
+grading-engineer guidance and consolidated/stable specifications were applied.
+Experiment-design guidance kept the inputs, five-task × A/B/C × two-repeat
+denominator of 30, canonical inference order A1/B1/C1/C2/B2/A2, 180/30-minute
+limits, A's four fresh attempts, B/C same-host continuation and C-only feedback
+unchanged. Reporting/copyediting preserved the observation and proof boundaries
+below. No additional semantic-audit wait was used.
+
+The existing `grade-run.yml` accepts reserved `pilot/<canonical-cell>` and
+`pilot/branch-setup` selectors through its existing inputs. Prefix routing is not
+cell admission: the real compiler must select an exact registered cell. For a
+cell, `inference_revision` means the explicitly selected immutable **terminal
+confirmation** revision. The actual output revision is extracted only after its
+terminal, claim, completion, manifest, object/history and cleanup checks pass.
+It is not a moving HF HEAD, Git SHA, input revision or planned publication target.
+
+`codex_budget_pilot_grading.py` defaults to local plan only. Its explicit host
+phases are `setup`, `prepare`, `claim`, `judge`, `publish` and read-only remote
+`reconcile`; these are not an automatic campaign launcher. Live workflow routing
+requires explicit approval and the existing protected `grading` environment,
+exact main/workflow/source identity and first attempt. Task, force, resume, chunk,
+shard and repeat overrides are refused. The generic paid/resume/publication jobs
+are excluded from this route. Inference completion-v1 still reports
+`grading_launched=false`; it is not reused for real grading.
+
+### Private branch, inputs and one-use grading
+
+- The selected private repository is fixed by name SHA256
+  `a13dedada5465377761961d050e021a4db8e44d6284179a9ce40b562e4396a44`.
+  All grading mutations explicitly name `pilot-grades-20260923`. Separate,
+  explicitly directed branch setup can create that branch once from recorded
+  bootstrap `bfc7ae01ed14490817ceb7cb406adcb9bb95f557`; an existing branch is
+  refused, never adopted or reset. It does not create a dataset or touch the old
+  public target. Ordinary preparation/grading never creates the branch.
+- Preparation reads only the selected cell's manifest-allowlisted actual outputs
+  and the registered immutable rubric parquet/selected references. Byte sizes,
+  SHA256 identities, safe paths and the existing result/artifact/ledger contracts
+  are checked before the canonical materializer. Original result, deliverable and
+  ledger bytes are not mutated. Only the derived result receives the existing
+  documented provenance augmentation and fingerprint. The identity document and
+  receipt digest are derived from verified host publication/terminal evidence;
+  they are not self-approved caller hashes or independent provider authentication
+  of original inputs. A missing result or a validated error row stays ungraded.
+- The actual execution host must complete the existing native atomic no-clobber
+  installation before any grading claim or paid child. There is no fallback.
+  Exact compiler-emitted source/config/input bytes, selected rubric references,
+  renderer readiness, actual materialized grader-source/config hashes and output
+  filename capacity are checked. Pilot aliases `pilot/cell-00` through
+  `pilot/cell-29` come only from canonical indices; they do not impose a grading
+  order. Canonical producer run IDs, experiment metadata, `--source-experiment-id`,
+  Step8's `__` guard and fixed filename template remain unchanged.
+- The fixed grading branch must be at bootstrap or a fully verified terminal
+  grading tip. Unknown history or an active claim blocks mutation. A new absent
+  canonical-cell prefix must win one expected-parent/CAS claim before precisely
+  the compiled Step8 command is invoked. A local one-use reservation is additional
+  to that remote guard. Existing claims/results, including unresolved or failed
+  attempts, cannot be bypassed using another runner, path, source or run ID.
+- After owned cleanup is confirmed, the connector validates the actual grade
+  schema/source/task/config/rubric coverage, ledger run/digest binding and any
+  existing task-progress checkpoint. One add-only parent-protected commit retains
+  only those bytes and bounded terminal metadata on the grading branch. The
+  manifest never names its own future commit; the private receipt records the
+  actual returned immutable revision. Missing results/accounting remain explicit;
+  partial/failure does not become a successful verdict, zero cost, complete invoice
+  or known HTTP count. Raw SQLite, originals, native/auth state and logs are not
+  published. No private payload or locator is uploaded as a public Actions artifact.
+- A lost result acknowledgment leaves the local receipt unresolved. A bounded
+  fresh read can separately verify an already committed, fully bound server result
+  and permit an absent other cell's later claim. It does not recreate an
+  acknowledgment, rewrite history, or rerun the judge/publication. Invalid/missing
+  proof, uncertain cleanup, conflicting state or a failed read remains blocked.
+  Inference HF `main` is never mutated by any grading-branch action.
+
+HF tokens exist only in the selected host fetch/claim/publication scopes, not the
+judge environment. Hub online mode is scoped and restored; the judge is HF-offline.
+The existing bounded no-retry client is reused; original defaults stay intact,
+with bounded payload reads permitted up to the publisher's existing file ceiling.
+The only ledger exception is the exact compiler/Step8-derived grading cost run ID;
+ordinary inference ledger validation is unchanged. The fixed grader source closure,
+schema, prompts, model/settings, retries, dependency pins and source-pin files were
+not changed. The isolated grading job uses the existing pinned grading image and
+a 300-minute job ceiling around Step8's unchanged 14,400-second default plus a
+14,520-second owned-child ceiling and private-save headroom. The inference job's
+240-minute ceiling and all inference deadlines remain unchanged.
+
+### Offline validation and native-install limit
+
+Final tested SHA: `f352eb87af8c794a677629229884f37061342535`.
+Selector: `batch-runner/tests/test_codex_budget_pilot_grading.py`.
+Result: **64 passed in 47.42s**, exit 0. Only this new family ran; no previous
+66/78/46/71 family or full suite was selected. A private JUnit report also records
+the native boundary; it is not an Actions payload artifact.
+
+```bash
+timeout --signal=TERM --kill-after=5s 180s env -i PATH=/usr/bin:/bin HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 HF_HUB_DISABLE_IMPLICIT_TOKEN=1 DO_NOT_TRACK=1 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3.10 -m pytest -q -o addopts= -o junit_family=legacy -p no:cacheprovider --tb=short --junitxml=<private-test-evidence>/results.xml batch-runner/tests/test_codex_budget_pilot_grading.py
+```
+
+The compiler, canonical materializer, Step8 entry/schema, fixed config, actual
+byte/hash/path/no-clobber checks, private reservations, CAS and returned revision
+binding are real. Source-host approval, retained outputs/rubric bytes, HF,
+renderer and judge boundaries are explicitly synthetic. Cases cover no-network
+plan, exact identities, metadata hashes without valid server evidence, native
+refusal, claim-before-judge, duplicate prevention, immutable input bytes,
+missing/error/partial evidence, private retention, lost acknowledgments and
+inference `main` unchanged across grading-branch operations.
+
+Successful materialization cases use a test-only rename double. The separate
+actual-host call returned `-1`, errno `22` (`EINVAL`), with CLI exit `2`; no claim
+or judge followed. This does not establish native installation on the actual CI
+grading host. The earlier adapter's native `EINVAL` and `46 passed in 52.36s` at
+`bc088ed8473dae362a76fd866763027f90d2a884` retain their original scopes.
+
+Earlier observations in this new family are retained, not relabeled as passes:
+
+- `47e417596cd352edb3329614cce9197b1df140b3`: the same family with a 600-second
+  ceiling, without the JUnit options, returned **27 failed, 34 passed in 21.16s**,
+  exit 1. The common preparation failure was a positional call to Step8's
+  keyword-only `make_cost_run_id`; a separate error fixture left an extra synthetic
+  deliverable. One failed-node diagnostic reproduced the preparation failure:
+  `test_materializes_actual_retained_bytes_without_self_approved_provenance`,
+  **1 failed in 2.95s**, 60-second ceiling, exit 1. That diagnostic ran with
+  uncommitted test-only diagnostics based on the first SHA; it is not claimed as
+  an immutable-head result.
+- `7533fcaa0689c9099418dcda858af611a63dcca7`: the same family with a 180-second
+  ceiling, without the JUnit options, returned **1 failed, 60 passed in 34.64s**,
+  exit 1. The remaining fixture expected success when owned cleanup was deliberately
+  unconfirmed; production correctly refused. The final family also adds explicit
+  schema, full-rubric coverage and exact artifact-path refusal cases.
+
+No real provider latency, model consumption, pricing, invoices, HTTP counts or
+benchmark grades are established by these process/test timings. Code/workflow/test
+bytes in the record commit match the final tested SHA; subsequent checks are
+diff/blob comparisons only, not another test or audit run.
+
+### Separate actual observations, review scope and remaining work
+
+The leader supplied accepted-input run `35847871634`/job `107138294292` on source
+`b0abe87275e3aa4d403732a6a8de8dacfe591c7e`: at 10:19:28 UTC all four pins and the
+canonical 2,519,040-byte archive with SHA256
+`757603585405da5d7f6817a6a0a23bd530d4b5e4e38b2fd4dc6f318053d240e3` were accepted.
+Artifact `10744386417` has verified-inputs SHA256
+`40d815317e1c0b00deccc30426dde9eb75a8e83a5c40acd449d8616e21566c38`:
+pending, execution not requested, zero children and no results/deliverables.
+OIDC/identity/Execute were skipped. It is accepted input, not a pilot result.
+
+The leader supplied private setup run `35881609256`/job `107251200144`, source
+`053e2e33c22775e23e3c13a13773090613fc200b`, at
+`2026-09-23T15:29:34.308692Z`: created, private=true, HTTP 200, stage
+`created_metadata`, reason=null, actual bootstrap
+`bfc7ae01ed14490817ceb7cb406adcb9bb95f557`, and the selected name fingerprint
+above. Its reservation is CREATED/CONSUMED; setup must never be replayed. This is
+destination selection and an actual setup observation, not a grading-branch write,
+cell-prefix readiness or authorization for paid execution here. Native connectivity
+`35817078746`, prior intake failures, private staging and the old public-target
+privacy observation remain distinct historical facts below; none was repeated.
+
+#667 review `5294839155` applies to
+`cace64a840867c79362fa9aacd13af700ee9f363`. The leader reports ten applicable
+exact-head passes/deploy skip and its inclusion in supplied main. Its split
+48-pass reports before timeout/exit 124 plus `18 passed in 208.63s` remain at
+`498c99d09f573707c2f9a9abd6afe8ac7b99e370`, not a single successful 66-case run.
+No live claim, inference or output publication had run at that leader observation.
+Neither that review nor the pre-edit design decision approves this new head.
+
+Remaining: leader exact-head review/final CI and one sealed execution SHA for all
+30 before any paid inference; explicitly directed grading-branch setup/write checks
+and native atomic installation on the actual CI host; first canonical admission,
+inference and private output publication; one fixed grade; then all 30 ordered
+inference outcomes and fixed grading, including failed/ungraded/missing accounting.
+This task authorizes none of those live operations and creates no new budget or
+permission prerequisite. There is no carrying PR's future merge fact in this record.
+
+## Historical record: PROJECT5-RETAINED-CELL-EXECUTION-0051 / TERMINAL-ADMISSION-POLICY-0122
+
+The following retained record describes the earlier implementation and its then-current scope.
 
 ### Current scope
 
