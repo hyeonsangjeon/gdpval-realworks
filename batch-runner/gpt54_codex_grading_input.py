@@ -26,7 +26,7 @@ from core.result_fingerprint import (
     validate_inference_result_fingerprint,
 )
 from core.result_projection import project_result_row
-from gpt54_comparison_preflight import ComparisonGradingRunSpec, compile_grading_plan
+from gpt54_comparison_preflight import ComparisonGradingPlan, ComparisonGradingRunSpec, compile_grading_plan
 
 
 class CodexGradingInputRefused(ValueError):
@@ -110,6 +110,36 @@ def materialize_codex_grading_input(
         if type(run_spec) is not ComparisonGradingRunSpec or run_spec.condition != "codex":
             raise CodexGradingInputRefused("an exact Codex grading run spec is required")
         plan = compile_grading_plan(manifest)
+        return _materialize_bound_codex_grading_input(
+            run_spec, plan=plan, manifest=manifest, inference_results=inference_results,
+            source_upload=source_upload, inference_identity=inference_identity,
+            approved_identity_sha256=approved_identity_sha256, destination=destination,
+        )
+    except CodexGradingInputRefused:
+        raise
+    except (OSError, ValueError, TypeError, KeyError, AttributeError) as error:
+        raise CodexGradingInputRefused(f"Codex grading input refused: {error}") from error
+
+
+def _materialize_bound_codex_grading_input(
+    run_spec: ComparisonGradingRunSpec,
+    *,
+    plan: ComparisonGradingPlan,
+    manifest: dict[str, Any],
+    inference_results: Path,
+    source_upload: Path,
+    inference_identity: Path,
+    approved_identity_sha256: str,
+    destination: Path,
+) -> Path:
+    """Shared checks after a public entry has compiled its exact registered plan.
+
+    This is not an arbitrary-run admission API. The parent entry above and the
+    canonical pilot-cell adapter each compile their own plan before reaching it.
+    """
+    try:
+        if type(run_spec) is not ComparisonGradingRunSpec or run_spec.condition != "codex":
+            raise CodexGradingInputRefused("an exact Codex grading run spec is required")
         expected = next((run for run in plan.runs if run.run_id == run_spec.run_id), None)
         if expected is None:
             raise CodexGradingInputRefused("unknown comparison run")
