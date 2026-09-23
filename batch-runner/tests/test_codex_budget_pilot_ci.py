@@ -348,7 +348,7 @@ def test_ci_registered_cell_workflow_invocation_contract():
     assert "--check-inputs" not in plan["run"] and "--execute" not in plan["run"]
     assert "codex_budget_pilot_ci.py" in plan["run"] and '--cell "$SELECTED_CELL"' in plan["run"]
     intake = next(step for step in steps if step.get("id") == "intake")
-    assert intake["if"] == "(inputs.execute || inputs.input_check) && !inputs.output_target_check" and intake["timeout-minutes"] == 3
+    assert intake["if"] == "(inputs.execute || inputs.input_check) && !inputs.output_target_check && !inputs.output_target_setup" and intake["timeout-minutes"] == 3
     assert intake["env"]["GITHUB_TOKEN"] == "${{ inputs.input_transport != 'hf_originals' && github.token || '' }}"
     assert intake["env"]["HF_TOKEN"] == "${{ inputs.input_transport == 'hf_originals' && secrets.HF_TOKEN || '' }}"
     assert all("GITHUB_TOKEN" not in step.get("env", {}) for step in steps if step != intake)
@@ -358,7 +358,7 @@ def test_ci_registered_cell_workflow_invocation_contract():
     assert intake["run"].index("--input-check") < intake["run"].index("--resume --check-inputs") < intake["run"].index('echo "verified=true"')
     assert '"$INPUT_RELEASE_ID"' in intake["run"] and '"$INPUT_ASSET_ID"' in intake["run"] and '"$INPUT_BUNDLE_SHA256"' in intake["run"]
     login = next(step for step in steps if step.get("uses", "").startswith("azure/login@"))
-    admission = "success() && inputs.execute && !inputs.input_check && !inputs.output_target_check && steps.intake.outputs.verified == 'true'"
+    admission = "success() && inputs.execute && !inputs.input_check && !inputs.output_target_check && !inputs.output_target_setup && steps.intake.outputs.verified == 'true'"
     assert steps.index(plan) < steps.index(intake) < steps.index(login) and login["if"] == admission
     assert set(login["with"]) == {"client-id", "tenant-id", "subscription-id"}
     execution = next(step for step in steps if "--resume --execute" in step.get("run", ""))

@@ -559,7 +559,7 @@ python3() {{
         "Verify existing Azure OIDC session identity", "Execute only the selected cell on this live host",
     }]
     assert len(runtime_steps) == 4
-    assert all(row["if"] == "success() && inputs.execute && !inputs.input_check && !inputs.output_target_check && steps.intake.outputs.verified == 'true'"
+    assert all(row["if"] == "success() && inputs.execute && !inputs.input_check && !inputs.output_target_check && !inputs.output_target_setup && steps.intake.outputs.verified == 'true'"
                for row in runtime_steps)
     # Static GitHub condition contract: false execute/input-check or no verified
     # output closes every native/OIDC stage. No Actions runner is being executed.

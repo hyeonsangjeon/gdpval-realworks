@@ -391,7 +391,7 @@ def test_output_target_workflow_contract_is_static_not_an_actions_execution():
     document = yaml.safe_load((pilot.ROOT / ci.WORKFLOW).read_text())
     triggers = document.get("on", document.get(True))
     for entry in triggers.values():
-        for mode in ("execute", "input_check", "output_target_check"):
+        for mode in ("execute", "input_check", "output_target_check", "output_target_setup"):
             assert entry["inputs"][mode]["default"] is False
     assert document["permissions"] == {"contents": "read", "id-token": "write"}
     assert document["concurrency"] == {"group": "codex-budget-pilot-ci-20260923-01", "cancel-in-progress": False}
@@ -405,17 +405,19 @@ def test_output_target_workflow_contract_is_static_not_an_actions_execution():
     assert all(guard in boundary for guard in ("GITHUB_RUN_ATTEMPT", "GITHUB_SHA", "PILOT_WORKFLOW_SHA", "workflow_dispatch"))
     metadata = next(step for step in steps if step.get("id") == "output_target")
     intake_step = next(step for step in steps if step.get("id") == "intake")
-    assert metadata["if"] == "inputs.output_target_check" and metadata["timeout-minutes"] == 1
+    assert metadata["if"] == "inputs.output_target_check && !inputs.output_target_setup" and metadata["timeout-minutes"] == 1
     assert metadata["env"] == {"HF_TOKEN": "${{ secrets.HF_TOKEN }}"}
     assert "timeout --signal=TERM --kill-after=5s 30s" in metadata["run"]
     assert "--output-target-check" in metadata["run"] and "codex_budget_pilot_ci.py" in metadata["run"]
     assert all(word not in metadata["run"] for word in ("--execute", "--check-inputs", "--publish", "step8", "intake.py"))
-    assert intake_step["if"] == "(inputs.execute || inputs.input_check) && !inputs.output_target_check"
+    assert intake_step["if"] == "(inputs.execute || inputs.input_check) && !inputs.output_target_check && !inputs.output_target_setup"
     assert intake_step["timeout-minutes"] == 3 and "kill-after=5s 120s" in intake_step["run"]
-    admission = "success() && inputs.execute && !inputs.input_check && !inputs.output_target_check && steps.intake.outputs.verified == 'true'"
+    admission = "success() && inputs.execute && !inputs.input_check && !inputs.output_target_check && !inputs.output_target_setup && steps.intake.outputs.verified == 'true'"
     assert len([step for step in steps if step.get("if") == admission]) == 4
+    setup = next(step for step in steps if step.get("id") == "output_setup")
+    assert setup["env"] == {"HF_TOKEN": "${{ secrets.HF_TOKEN }}"}
     assert all(not {"HF_TOKEN", "GITHUB_TOKEN"}.intersection(step.get("env", {}))
-               for step in steps if step not in (intake_step, metadata))
+               for step in steps if step not in (intake_step, metadata, setup))
     assert "HF_TOKEN" not in job["env"] and "GITHUB_TOKEN" not in job["env"]
     uploads = [step for step in steps if step.get("uses", "").startswith("actions/upload-artifact@")]
     assert len(uploads) == 1 and uploads[0]["with"]["path"] == "${{ runner.temp }}/budget-pilot-ci-completion.json"
