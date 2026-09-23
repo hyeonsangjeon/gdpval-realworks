@@ -15,7 +15,7 @@ on:
         required: true
         type: string
       execute:
-        description: Later leader-authorized execution; exclusive with input_check/output_target_check
+        description: Later leader-authorized execution; exclusive with all input/output setup checks
         required: false
         default: false
         type: boolean
@@ -26,6 +26,11 @@ on:
         type: boolean
       output_target_check:
         description: Inspect only the tracked output candidate metadata; no inputs/OIDC/model/publication
+        required: false
+        default: false
+        type: boolean
+      output_target_setup:
+        description: Later authorized creation of the fixed private output dataset only; no inputs/OIDC/model
         required: false
         default: false
         type: boolean
@@ -66,6 +71,10 @@ on:
         default: false
         type: boolean
       output_target_check:
+        required: false
+        default: false
+        type: boolean
+      output_target_setup:
         required: false
         default: false
         type: boolean
@@ -122,6 +131,7 @@ jobs:
       EXECUTE_REQUESTED: ${{ inputs.execute }}
       INPUT_CHECK_REQUESTED: ${{ inputs.input_check }}
       OUTPUT_TARGET_CHECK_REQUESTED: ${{ inputs.output_target_check }}
+      OUTPUT_TARGET_SETUP_REQUESTED: ${{ inputs.output_target_setup }}
       INPUT_TRANSPORT: ${{ inputs.input_transport || 'github_draft' }}
       INPUT_RELEASE_ID: ${{ inputs.input_release_id }}
       INPUT_ASSET_ID: ${{ inputs.input_asset_id }}
@@ -136,6 +146,10 @@ jobs:
           fi
           if [[ "${OUTPUT_TARGET_CHECK_REQUESTED:-false}" == true && ( "$EXECUTE_REQUESTED" == true || "$INPUT_CHECK_REQUESTED" == true ) ]]; then
             echo "output_target_check_mode_conflict"
+            exit 1
+          fi
+          if [[ "${OUTPUT_TARGET_SETUP_REQUESTED:-false}" == true && ( "$EXECUTE_REQUESTED" == true || "$INPUT_CHECK_REQUESTED" == true || "${OUTPUT_TARGET_CHECK_REQUESTED:-false}" == true ) ]]; then
+            echo "output_target_setup_mode_conflict"
             exit 1
           fi
           case "${INPUT_TRANSPORT:-github_draft}" in
@@ -184,7 +198,7 @@ jobs:
 
       - name: Inspect only the tracked output target metadata
         id: output_target
-        if: inputs.output_target_check
+        if: inputs.output_target_check && !inputs.output_target_setup
         timeout-minutes: 1
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
@@ -199,9 +213,28 @@ jobs:
               --cell "$SELECTED_CELL" --reviewed-source-sha "$REVIEWED_SOURCE_SHA" \
               --output-target-check
 
+      - name: Set up only the fixed private output candidate
+        id: output_setup
+        if: inputs.output_target_setup && !inputs.output_target_check && !inputs.execute && !inputs.input_check
+        timeout-minutes: 3
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          # At most four fixed requests within the existing 120-second HF bound.
+          # No marker/payload upload. Private reservation/receipt are not artifacts.
+          timeout --signal=TERM --kill-after=5s 130s \
+            python3 batch-runner/codex_budget_pilot_ci.py \
+              --campaign-id budget_pilot_ci_20260923_01 \
+              --cell "$SELECTED_CELL" --reviewed-source-sha "$REVIEWED_SOURCE_SHA" \
+              --output-target-setup --create-output-target \
+              --setup-state "$RUNNER_TEMP/budget-pilot-output-setup-private"
+
       - name: Import the explicitly selected original inputs before OIDC
         id: intake
-        if: (inputs.execute || inputs.input_check) && !inputs.output_target_check
+        if: (inputs.execute || inputs.input_check) && !inputs.output_target_check && !inputs.output_target_setup
         timeout-minutes: 3
         env:
           # Only the selected existing input credential is exposed to this step.
@@ -234,7 +267,7 @@ jobs:
           echo "verified=true" >> "$GITHUB_OUTPUT"
 
       - name: Require the existing native sandbox prerequisite
-        if: success() && inputs.execute && !inputs.input_check && !inputs.output_target_check && steps.intake.outputs.verified == 'true'
+        if: success() && inputs.execute && !inputs.input_check && !inputs.output_target_check && !inputs.output_target_setup && steps.intake.outputs.verified == 'true'
         run: |
           if ! command -v bwrap >/dev/null; then
             echo "codex_bubblewrap_unavailable"
@@ -242,7 +275,7 @@ jobs:
           fi
 
       - name: Azure Login (OIDC)
-        if: success() && inputs.execute && !inputs.input_check && !inputs.output_target_check && steps.intake.outputs.verified == 'true'
+        if: success() && inputs.execute && !inputs.input_check && !inputs.output_target_check && !inputs.output_target_setup && steps.intake.outputs.verified == 'true'
         uses: azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca # v3.0.1
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -250,7 +283,7 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Verify existing Azure OIDC session identity
-        if: success() && inputs.execute && !inputs.input_check && !inputs.output_target_check && steps.intake.outputs.verified == 'true'
+        if: success() && inputs.execute && !inputs.input_check && !inputs.output_target_check && !inputs.output_target_setup && steps.intake.outputs.verified == 'true'
         env:
           AZURE_AI_EXPECTED_CLIENT_ID: ${{ vars.AZURE_AI_EXPECTED_CLIENT_ID }}
           AZURE_AI_EXPECTED_TENANT_ID: ${{ vars.AZURE_AI_EXPECTED_TENANT_ID }}
@@ -258,7 +291,7 @@ jobs:
         run: python3 batch-runner/scripts/azure_oidc_identity_preflight.py --verify-session
 
       - name: Execute only the selected cell on this live host
-        if: success() && inputs.execute && !inputs.input_check && !inputs.output_target_check && steps.intake.outputs.verified == 'true'
+        if: success() && inputs.execute && !inputs.input_check && !inputs.output_target_check && !inputs.output_target_setup && steps.intake.outputs.verified == 'true'
         env:
           AZURE_AI_ROUTE_PROFILE: direct-v1
           FOUNDRY_PROJECT_ENDPOINT: ${{ secrets.FOUNDRY_PROJECT_ENDPOINT }}

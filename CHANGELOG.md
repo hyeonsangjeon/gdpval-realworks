@@ -37,8 +37,8 @@ entries land under a fresh dated heading the day they merge to `main`.
   copies distinct from the real native `EINVAL` refusal. Accepted-input run
   `35847871634` and native-connectivity diagnostic `35817078746` remain
   separate successful observations, not pilot results or benchmark grades.
-  No live target observation has occurred; source checks prove neither target
-  privacy/write access, publication nor grade readiness. Remaining: new-head
+  At that integration, no live target observation had occurred; source checks
+  prove neither target privacy/write access, publication nor grade readiness. Remaining: new-head
   review/final checks, one checked CI target-metadata observation, destination
   approval and write/prefix readiness, private workflow wiring, grading-input
   installation on the native execution host, ordered 30-cell admission/
@@ -144,6 +144,53 @@ entries land under a fresh dated heading the day they merge to `main`.
   admission deduplication and fixed grading remained unfinished.
 
 ### Added
+
+- Add plan-first `output_target_setup` to the existing single-cell CLI/workflow
+  on source `9366a3bb6bb2ff768b037f56f6b2e268b172d8b8`. The fixed candidate
+  uses only the namespace of the fingerprint-validated tracked exp033 source
+  and basename `gdpval-codex-budget-pilot-ci-20260923`; neither existing dataset
+  is modified. Default plan reads no credential and makes no request. Explicit
+  setup is exclusive with inspection/input-check/execute and returns before
+  input transfer, OIDC, native execution, grading or output publication.
+  The mandatory pre-edit extreme-reasoner decision was
+  **APPROVE-WITH-CONDITIONS** for the bounded, no-marker code/offline design.
+  A later authorized setup permits at most four fixed HF requests: exact user
+  namespace, repository-level absence, one `private=True`/`exist_ok=False`
+  creation, and exact private metadata with an actual 40-hex HEAD. A 404 is
+  only a prerequisite, not proof against hidden/concurrent state. Existing
+  targets refuse; there is no adoption, alternate name, privacy change, marker
+  upload or retry. A private fsynced no-clobber reservation precedes requests
+  and mutation; a separate receipt retains actual stage/status/acknowledgment
+  and HEAD. Ambiguous creation, missing HEAD or receipt failure stays unresolved.
+  This local reservation is not durable cross-run deduplication. The existing
+  client bounds apply: 30 seconds/request, 120 seconds overall, 130-second
+  process limit plus five-second kill grace and a three-minute selected step.
+  Only the existing step-scoped HF token is used; safe CLI output contains no
+  operational locator, raw error, token or payload. The public completion
+  schema, publisher PRIVATE/parent/prefix gates, source pins, permissions and
+  pilot/model/grader controls remain unchanged. Creation does not authorize
+  publication or inference, establish full write/prefix readiness, or wire
+  durable cell output.
+  One focused offline family at
+  `46d3bd32c3317e0e0cc41b4741c7087dd3584e42` reported
+  `78 passed in 58.90s`, exit 0, using synthetic CI/account/HTTP evidence and
+  real compiler/CLI/SDK/no-clobber/request guards. The exact selector/command is
+  in the latest task result. Coupled static workflow expectations were updated;
+  prior families were not rerun. Separately, the leader's completed metadata
+  run `35870090309`/job `107211610516` observed the historical target at
+  13:54:56 UTC on 2026-09-23: exact identity, HTTP 200, `private=false`, HEAD
+  `6c7e07ee7365f145dfcf898263365b5c8c97b224`, and intentional
+  `private_output_target_required` refusal/exit 2. This is a successful privacy
+  observation, not bad credentials. The old name fingerprint remains
+  `88c9f1ba301718d90f8d59d8ddb681ee0c5e8ae7c2cbfd1b9ad246c10e15cccf`;
+  the new candidate's live existence/privacy/HEAD is untested. Prior #665
+  review `5291537877` and nine passing checks apply only to
+  `dc4f1bc2dc6ea59e73612ef89452f7de23f5740c`, not this new code/head.
+  No live HF or model/grader operation occurred here. Remaining: new-head
+  review/checks, explicit live-setup authorization and observed readiness,
+  destination approval/write-prefix checks, private publication and grading
+  workflow wiring/native-host installation, ordered 30-cell admission/
+  deduplication/execution and fixed grading.
 
 - Add explicit, default-false `output_target_check` to the existing single-cell
   CI path, mutually exclusive with execution/input checking. The CLI uses the

@@ -1,9 +1,9 @@
 """Plan-first publication of one finalized CI cell to an explicit private target.
 
-No target is selected or approved here. Publication is not wired to a workflow
-and does not make a cell grade-ready. The separate metadata inspection cannot
-publish. A retained reservation always forbids replay, including after a lost
-response. Source results and accounting are never edited.
+No output publication target is approved here. Publication is not wired to a
+workflow and does not make a cell grade-ready. Separate inspection and fixed-name
+setup cannot publish cell outputs. A retained local reservation forbids replay,
+including after a lost response. Source results and accounting are never edited.
 """
 
 from __future__ import annotations
@@ -58,6 +58,17 @@ TARGET_CHECK_REASONS = frozenset({
     "hf_metadata_response_refused", "hf_http_failed", "hf_transport_failed",
     "hf_response_bytes_exceeded", "output_target_identity_mismatch",
     "output_target_privacy_unavailable", "output_target_head_unavailable", "private_output_target_required",
+})
+OUTPUT_SETUP_BASENAME = "gdpval-codex-budget-pilot-ci-20260923"
+SETUP_RESERVATION = "output-target-setup-reserved.json"
+SETUP_RECEIPT = "output-target-setup-receipt.json"
+SETUP_REASONS = TARGET_CHECK_REASONS | frozenset({
+    "output_target_setup_mode_conflict", "output_target_setup_state_required",
+    "output_target_setup_already_reserved", "output_target_setup_reservation_changed",
+    "authenticated_output_namespace_mismatch", "output_target_already_exists",
+    "output_target_setup_create_identity_mismatch", "setup_head_unavailable",
+    "hf_setup_request_refused", "hf_setup_create_body_refused", "hf_setup_response_refused",
+    "hf_setup_redirect_refused",
 })
 
 # These are Step2's supported record fields, not an alternate result schema.
@@ -353,20 +364,24 @@ def _remaining(deadline: float) -> float:
 
 @contextmanager
 def _hf_client(token: str, deadline: float, *, metadata_repo: str | None = None,
-               observation: dict | None = None):
+               observation: dict | None = None, setup_repo: str | None = None,
+               setup_reservation: Path | None = None, setup_identity: dict | None = None):
     """Scoped supported HF client hook: bounded HTTP, terminal failures, no Xet.
 
     Buffered immutable operations select the SDK's HTTP/LFS path. Responses and
     transport errors become our exception BEFORE SDK http_backoff can retry or
     log URLs. This does not promise one HTTP request for a multipart commit.
     The optional metadata mode permits only one exact GET, never a redirect.
+    Fixed-target setup permits only its four ordered requests, without redirects.
     """
     import httpx
     from huggingface_hub import HfApi, constants
     from huggingface_hub.utils import _http, are_progress_bars_disabled, disable_progress_bars, enable_progress_bars
 
     _require(not constants.HF_HUB_OFFLINE, "hf_offline_mode")
+    _require(metadata_repo is None or setup_repo is None, "hf_setup_request_refused")
     metadata_attempts = 0  # Shared even if the SDK recreates a client/transport.
+    setup_attempts = 0
 
     class Stream(httpx.SyncByteStream):
         def __init__(self, stream, status):
@@ -391,7 +406,35 @@ def _hf_client(token: str, deadline: float, *, metadata_repo: str | None = None,
             self.transport = httpx.HTTPTransport(retries=0, trust_env=False)
 
         def handle_request(self, request):
-            nonlocal metadata_attempts
+            nonlocal metadata_attempts, setup_attempts
+            if setup_repo is not None:
+                if observation is not None:
+                    observation["http_status"] = None
+                # Four fixed attempts, not a generic provisioning transport.
+                routes = (("GET", "/api/whoami-v2"),
+                          ("GET", f"/api/datasets/{setup_repo}"),
+                          ("POST", "/api/repos/create"),
+                          ("GET", f"/api/datasets/{setup_repo}/revision/main"))
+                _require(observation is not None and setup_attempts < len(routes)
+                         and (request.method, str(request.url)) == (
+                             routes[setup_attempts][0], HF_ENDPOINT + routes[setup_attempts][1])
+                         and request.headers.get("authorization") == "Bearer " + token,
+                         "hf_setup_request_refused")
+                if setup_attempts == 2:
+                    _require(setup_reservation is not None and setup_identity is not None,
+                             "output_target_setup_reservation_changed")
+                    pilot._regular_private(setup_reservation)
+                    _bytes(setup_reservation, limit=MAX_MANIFEST_BYTES, expected=setup_identity)
+                    _require(len(request.content) <= 1024, "hf_setup_create_body_refused")
+                    body = pilot._json_object(request.content)
+                    namespace, name = setup_repo.split("/")
+                    common = {"organization": namespace, "name": name, "type": "dataset"}
+                    _require(body == {**common, "visibility": "private"}
+                             or (body == {**common, "private": True} and body.get("private") is True),
+                             "hf_setup_create_body_refused")
+                else:
+                    _require(not request.content, "hf_setup_request_refused")
+                setup_attempts += 1
             if metadata_repo is not None:
                 expected = f"{HF_ENDPOINT}/api/datasets/{metadata_repo}/revision/main"
                 _require(observation is not None and metadata_attempts == 0
@@ -406,6 +449,19 @@ def _hf_client(token: str, deadline: float, *, metadata_repo: str | None = None,
                 response = self.transport.handle_request(request)
             except httpx.TransportError as error:
                 raise OutputPublicationRefused("hf_transport_failed") from error
+            if setup_repo is not None:
+                observation["http_status"] = response.status_code
+                observation["responses"].append({"stage": observation["stage"],
+                                                 "http_status": response.status_code})
+                allowed = (200, 201) if setup_attempts == 3 else (200,)
+                if response.status_code not in allowed:
+                    status = response.status_code
+                    response.close()
+                    reason = ("hf_http_failed" if status >= 400 else "hf_setup_redirect_refused"
+                              if 300 <= status < 400 else "hf_setup_response_refused")
+                    # This also intercepts whoami's credential-cache diagnostics
+                    # and create_repo's special 409 retry before SDK handling.
+                    raise OutputPublicationRefused(reason, status)
             if metadata_repo is not None:
                 observation["http_status"] = response.status_code
                 if response.status_code != 200:
@@ -430,7 +486,8 @@ def _hf_client(token: str, deadline: float, *, metadata_repo: str | None = None,
         logging.disable(logging.CRITICAL)
         disable_progress_bars()
         _http.set_client_factory(lambda: httpx.Client(transport=Once(), timeout=REQUEST_SECONDS,
-                                                    follow_redirects=metadata_repo is None, trust_env=False))
+                                                    follow_redirects=metadata_repo is None and setup_repo is None,
+                                                    trust_env=False))
         yield HfApi(endpoint=HF_ENDPOINT, token=token)
     finally:
         _http.set_client_factory(old_factory)
@@ -526,6 +583,123 @@ def inspect_output_target() -> dict:
         observed["eligible_private_target"] = False
     observed["observed_at"] = datetime.now(timezone.utc).isoformat()
     return observed
+
+
+def setup_output_target(*, create: bool = False, state_root: Path | None = None,
+                        source_sha: str | None = None) -> dict:
+    """Plan one fixed candidate; explicit creation never publishes cell outputs.
+
+    The local reservation is not a cross-run ledger. A repository-level 404
+    permits one exist_ok=False create, not adoption of hidden/concurrent state.
+    No marker initialization is attempted if the new repository lacks a HEAD.
+    """
+    result = {"role": "pilot_private_output_candidate", "repository_name_sha256": None,
+              "private": None, "head": None, "http_status": None, "outcome": "plan_only",
+              "stage": "plan", "reason": None, "recorded_at": None,
+              "write_access": "not_established", "prefix_readiness": "not_established",
+              "publication_authorized": False, "model_requested": False, "grading_launched": False}
+    evidence = {"stage": "plan", "http_status": None, "responses": []}
+    reserved, mutation_started, acknowledged = False, False, False
+    attempt = None
+
+    def phase(stage: str) -> None:
+        evidence.update(stage=stage, http_status=None)
+
+    def metadata_fields(metadata, repo: str) -> None:
+        _require(getattr(metadata, "id", None) == repo, "output_target_identity_mismatch")
+        private, head = getattr(metadata, "private", None), getattr(metadata, "sha", None)
+        result["private"] = private if type(private) is bool else None
+        result["head"] = head if _hash(head, 40) else None
+
+    try:
+        historical = pilot.load_plan(pilot.ROOT / pilot.CODEX_TEMPLATE)["data"]["source"]
+        _require(type(historical) is str
+                 and hashlib.sha256(historical.encode()).hexdigest() == OUTPUT_TARGET_REPO_SHA256,
+                 "registered_output_target_mismatch")
+        namespace = validate_hf_dataset_repo_id(historical).split("/")[0]
+        repo = validate_hf_dataset_repo_id(namespace + "/" + OUTPUT_SETUP_BASENAME)
+        result["repository_name_sha256"] = hashlib.sha256(repo.encode()).hexdigest()
+        _require(type(create) is bool and (state_root is not None) == create,
+                 "output_target_setup_mode_conflict")
+        if not create:
+            return result
+        _require(isinstance(state_root, Path) and _hash(source_sha, 40),
+                 "output_target_setup_state_required")
+        phase("reservation")
+        state_root = pilot._private_root(state_root)
+        _require(not os.path.lexists(state_root), "output_target_setup_already_reserved")
+        token = os.environ.get("HF_TOKEN", "")
+        _require(bool(token) and len(token) <= 4096 and all(33 <= ord(char) <= 126 for char in token),
+                 "explicit_hf_token_required")
+        state_root.mkdir(mode=0o700)  # Exclusive; an existing or partial tree is never adopted.
+        _fsync_directory(state_root.parent)
+        attempt = {"format": "codex-private-output-setup-v1", "outcome": "unresolved",
+                   "output_repository": repo, "reviewed_source_sha": source_sha,
+                   "campaign_id": ci.CAMPAIGN, "marker_upload": False,
+                   "model_requested": False, "grading_launched": False}
+        data = (pilot._canonical_json(attempt) + "\n").encode()
+        reservation = state_root / SETUP_RESERVATION
+        _write_no_clobber(reservation, data)
+        _fsync_directory(state_root)
+        reserved = True
+        from codex_ci_input_intake import _hf_environment
+
+        with _time_bound() as deadline, _hf_environment(online=True):
+            with _hf_client(token, deadline, setup_repo=repo, observation=evidence,
+                            setup_reservation=reservation, setup_identity=pilot._identity(data)) as api:
+                phase("account")
+                account = api.whoami(token=token, cache=False)
+                _require(type(account) is dict and account.get("type") == "user"
+                         and account.get("name") == namespace, "authenticated_output_namespace_mismatch")
+                phase("candidate_absence")
+                try:
+                    existing = api.repo_info(repo_id=repo, repo_type="dataset", token=token,
+                                             timeout=_remaining(deadline))
+                except OutputPublicationRefused as error:
+                    if not (str(error) == "hf_http_failed" and error.http_status == 404
+                            and evidence["http_status"] == 404):
+                        raise
+                else:
+                    metadata_fields(existing, repo)
+                    raise OutputPublicationRefused("output_target_already_exists")
+                phase("create")
+                mutation_started = True
+                created = api.create_repo(repo_id=repo, repo_type="dataset", token=token,
+                                          private=True, exist_ok=False)
+                _require(getattr(created, "endpoint", None) == HF_ENDPOINT
+                         and getattr(created, "repo_type", None) == "dataset"
+                         and getattr(created, "repo_id", None) == repo
+                         and str(created) == f"{HF_ENDPOINT}/datasets/{repo}",
+                         "output_target_setup_create_identity_mismatch")
+                acknowledged = True
+                phase("created_metadata")
+                metadata = api.repo_info(repo_id=repo, repo_type="dataset", revision="main", token=token,
+                                         timeout=_remaining(deadline))
+                metadata_fields(metadata, repo)
+                _require(result["private"] is True, "private_output_target_required")
+                _require(result["head"] is not None, "setup_head_unavailable")
+                _remaining(deadline)
+                result["outcome"] = "created"
+    except (Exception, KeyboardInterrupt) as error:
+        reason, _ = _error_context(error)
+        result["reason"] = ({"publication_timeout": "output_target_setup_timeout",
+                             "publication_interrupted": "output_target_setup_interrupted"}.get(reason)
+                            or (reason if reason in SETUP_REASONS else "output_target_setup_failed"))
+        result["outcome"] = "unresolved" if mutation_started else "refused"
+    finally:
+        result.update(stage=evidence["stage"], http_status=evidence["http_status"],
+                      recorded_at=datetime.now(timezone.utc).isoformat())
+        if reserved:
+            receipt = {**attempt, **result, "create_acknowledged": acknowledged,
+                       "responses": evidence["responses"], "privacy_atomic_with_create": False}
+            try:
+                _write_no_clobber(state_root / SETUP_RECEIPT,
+                                  (pilot._canonical_json(receipt) + "\n").encode())
+                _fsync_directory(state_root)
+            except (Exception, KeyboardInterrupt):
+                result.update(outcome="unresolved", reason="output_target_setup_receipt_unavailable")
+                # The original reservation remains unresolved; never replace or replay it.
+    return result
 
 
 def publish(snapshot: Snapshot, *, repo: str, expected_parent: str, _test_api=None) -> dict:

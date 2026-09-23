@@ -255,6 +255,11 @@ def main(argv: list[str] | None = None, *, _test_transport: pilot.LocalTransport
     parser.add_argument("--check-inputs", action="store_true", help="Verify explicit originals without auth or a child")
     parser.add_argument("--output-target-check", action="store_true",
                         help="Inspect only the fixed output candidate's metadata; no inputs, model or publication")
+    parser.add_argument("--output-target-setup", action="store_true",
+                        help="Plan the fixed new private output target; no token or network by default")
+    parser.add_argument("--create-output-target", action="store_true",
+                        help="Explicit setup mutation only; requires --output-target-setup and --setup-state")
+    parser.add_argument("--setup-state", type=Path, help="New absent private setup reservation/receipt directory")
     parser.add_argument("--dataset-parquet", type=Path)
     parser.add_argument("--reference-root", type=Path)
     parser.add_argument("--step0-manifest", type=Path)
@@ -263,6 +268,13 @@ def main(argv: list[str] | None = None, *, _test_transport: pilot.LocalTransport
     record_started = False
     try:
         args = parser.parse_args(argv)
+        if ((args.create_output_target or args.setup_state is not None) and not args.output_target_setup
+                or args.output_target_setup and any((args.output_target_check, args.execute, args.check_inputs,
+                    args.resume, args.verify_envelope, args.dataset_parquet, args.reference_root,
+                    args.step0_manifest, args.output, args.completion_out))):
+            raise CICellRefused("output_target_setup_mode_conflict")
+        if args.output_target_setup and args.create_output_target != (args.setup_state is not None):
+            raise CICellRefused("output_target_setup_state_required")
         if args.output_target_check and any((args.execute, args.check_inputs, args.resume, args.verify_envelope,
                                             args.dataset_parquet, args.reference_root, args.step0_manifest,
                                             args.output, args.completion_out)):
@@ -271,13 +283,20 @@ def main(argv: list[str] | None = None, *, _test_transport: pilot.LocalTransport
             validate_completion(pilot._load(args.verify_envelope))
             return 0
         if not all((args.cell, args.reviewed_source_sha)):
-            raise CICellRefused("explicit_cell_and_source_required" if args.output_target_check
+            raise CICellRefused("explicit_cell_and_source_required" if args.output_target_check or args.output_target_setup
                                 else "explicit_cell_source_output_and_completion_required")
-        if not args.output_target_check and not all((args.output, args.completion_out)):
+        if not (args.output_target_check or args.output_target_setup) and not all((args.output, args.completion_out)):
             raise CICellRefused("explicit_cell_source_output_and_completion_required")
         plan, parent, specs, cell = compile_ci_cell(args.campaign_id, args.cell, args.reviewed_source_sha)
         transport = _test_transport or pilot.LocalTransport()
         transport.require_source(plan, parent)
+        if args.output_target_setup:
+            from codex_budget_pilot_output import setup_output_target
+
+            observed = setup_output_target(create=args.create_output_target, state_root=args.setup_state,
+                                           source_sha=args.reviewed_source_sha)
+            print(pilot._canonical_json(observed))
+            return 0 if observed["outcome"] in {"plan_only", "created"} else 2
         if args.output_target_check:
             from codex_budget_pilot_output import inspect_output_target
 
