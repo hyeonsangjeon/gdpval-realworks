@@ -453,6 +453,51 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Add `codex_ci_input_bundle.py` with local `produce` and `import` commands
+  for the four registered originals: normalized parquet, two declared
+  references and canonical schema-4 `deliverable_only` Step 0. The producer
+  uses the genuine original-input reader and preserves their bytes in a
+  deterministic, uncompressed USTAR archive with one bounded logical-role
+  manifest. The importer requires an external expected bundle SHA256,
+  validates exact member order/types/sizes/hashes and canonical headers before
+  publication, and refuses links, traversal, duplicates, extras, compression,
+  oversized or truncated data and content drift. Existing no-clobber helpers
+  retain partial reservations; installed roles pass the real input verifier
+  before the ready marker is written last. No transfer service, workflow,
+  credential route, dependency or experiment control changes.
+  The first focused selection at
+  `ed70d862ed98a8645a38691f65f714cc1c82e78d` reported
+  `33 failed, 6 passed in 2.97s`, exit 1: the adapter returned the result of
+  a path validator that returns `None`, causing an early `AttributeError`.
+  Five source-negative passes occurred before their intended verifier and
+  are not counted as verifier evidence. The correction returns the validated
+  path and checks that those cases actually reach the source reader. The same
+  selection at `3c20adb08e1db62d81855a5184963ad1bf342061` reported
+  `39 passed in 3.19s`, exit 0. Tests use tiny synthetic parquet provenance
+  and fixture-only Step 0 pins while retaining real CLI, archive, current-byte,
+  reference-tree, canonical-manifest and publication/refusal paths. The exact
+  command and complete candidate identities are in
+  `tasks/LATEST_TASK_RESULT/README.md`; no prior suite was rerun.
+  One authorized real producer call at the corrected SHA verified the named
+  original-source handoff and created a private candidate: 2,519,040 bytes,
+  SHA256 `757603585405da5d7f6817a6a0a23bd530d4b5e4e38b2fd4dc6f318053d240e3`,
+  exit 0, 0.591994 seconds for the producer call only. It used Python 3.10.12
+  and the existing 0.147.0 SDK/companion environment; no process/network
+  attempt occurred. The bounded Step 0 structured-field/path screen found no
+  match, not a comprehensive privacy audit or publication clearance. The
+  candidate remains private; no real import or transfer ran. This branch
+  starts at source baseline `42c7b8f2f6457463333e386432baceed96182c72`.
+  #655's supplied FINAL-APPROVE review `5285590451` at
+  `4d3c4b4f895da35e3db07b413f66c8066dfa5ad1` and 19-case offline evidence
+  cover only the one-cell entry, not this bundle. No full-grader-closure file
+  changed, so active hashes and source counts (37/58) remain unchanged.
+  Only completion records follow the tested SHA. All original inputs, the
+  sealed NAS campaign's 30 pending cells and fixed 180/30-minute policies are
+  untouched. Review/CI for this change, approved transport integration, ordered
+  30-cell scheduling/aggregation, live CI OIDC/connectivity, separately directed
+  execution and grading remain outstanding. No workflow, auth, model, task
+  preparation, campaign materialization or external publication occurred.
+
 - Add a plan-first local dispatcher and separate preregistration for the Codex
   external-budget pilot: the existing score-free `advance_check_5` cohort,
   A/B/C across repetitions 1/2, exactly 30 cells in per-task A1/B1/C1/C2/B2/A2
