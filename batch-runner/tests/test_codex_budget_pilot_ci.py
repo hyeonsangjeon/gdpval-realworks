@@ -315,8 +315,11 @@ def test_ci_registered_cell_workflow_invocation_contract():
     assert set(triggers) == {"workflow_dispatch", "workflow_call"}
     for trigger in triggers.values():
         assert trigger["inputs"]["execute"]["default"] is False
+        assert trigger["inputs"]["input_check"]["default"] is False
         assert trigger["inputs"]["reviewed_source_sha"]["required"] is True
         assert trigger["inputs"]["cell_id"]["required"] is True
+        for key in ("input_release_id", "input_asset_id", "input_bundle_sha256"):
+            assert trigger["inputs"][key]["type"] == "string" and trigger["inputs"][key]["required"] is False
     assert workflow["permissions"] == {"contents": "read", "id-token": "write"}
     assert workflow["concurrency"] == {"group": "codex-budget-pilot-ci-20260923-01", "cancel-in-progress": False}
     assert len(workflow["jobs"]) == 1
@@ -342,13 +345,23 @@ def test_ci_registered_cell_workflow_invocation_contract():
     python = next(step for step in steps if step.get("uses", "").startswith("actions/setup-python@"))
     assert python["with"]["python-version"] == "3.10.12"
     plan = next(step for step in steps if step.get("id") == "plan")
-    assert "--check-inputs" in plan["run"] and "--execute" not in plan["run"]
+    assert "--check-inputs" not in plan["run"] and "--execute" not in plan["run"]
     assert "codex_budget_pilot_ci.py" in plan["run"] and '--cell "$SELECTED_CELL"' in plan["run"]
+    intake = next(step for step in steps if step.get("id") == "intake")
+    assert intake["if"] == "inputs.execute || inputs.input_check" and intake["timeout-minutes"] == 3
+    assert intake["env"]["GITHUB_TOKEN"] == "${{ github.token }}"
+    assert all("GITHUB_TOKEN" not in step.get("env", {}) for step in steps if step != intake)
+    assert "timeout --signal=TERM --kill-after=5s 120s" in intake["run"]
+    assert "codex_ci_input_intake.py --input-check" in intake["run"]
+    assert "--resume --check-inputs" in intake["run"] and "--execute" not in intake["run"]
+    assert intake["run"].index("--input-check") < intake["run"].index("--resume --check-inputs") < intake["run"].index('echo "verified=true"')
+    assert '"$INPUT_RELEASE_ID"' in intake["run"] and '"$INPUT_ASSET_ID"' in intake["run"] and '"$INPUT_BUNDLE_SHA256"' in intake["run"]
     login = next(step for step in steps if step.get("uses", "").startswith("azure/login@"))
-    assert steps.index(plan) < steps.index(login) and login["if"] == "inputs.execute"
+    admission = "success() && inputs.execute && !inputs.input_check && steps.intake.outputs.verified == 'true'"
+    assert steps.index(plan) < steps.index(intake) < steps.index(login) and login["if"] == admission
     assert set(login["with"]) == {"client-id", "tenant-id", "subscription-id"}
     execution = next(step for step in steps if "--resume --execute" in step.get("run", ""))
-    assert execution["if"] == "inputs.execute" and '--cell "$SELECTED_CELL"' in execution["run"]
+    assert execution["if"] == admission and '--cell "$SELECTED_CELL"' in execution["run"]
     assert execution["env"]["CODEX_FOUNDRY_CONNECTION_CONFIRMED"] == "1"
     assert execution["env"]["AZURE_AI_ROUTE_PROFILE"] == "direct-v1"
     publication = next(step for step in steps if step.get("id") == "publication")

@@ -1,5 +1,6 @@
-# One registered cell, not the 30-cell scheduler. No original-input download or
-# cross-runner native-state restore. Creation/review of this workflow is not a launch.
+# One registered cell, not the 30-cell scheduler or cross-runner state restore.
+# Explicit private draft intake is separate from model admission. No public fallback.
+# Creation/review of this workflow is not authorization to transfer or launch.
 name: Codex external-budget pilot — one CI cell
 
 on:
@@ -14,10 +15,27 @@ on:
         required: true
         type: string
       execute:
-        description: Later leader-authorized execution; false only materializes a plan
+        description: Later leader-authorized cell execution; mutually exclusive with input_check
         required: false
         default: false
         type: boolean
+      input_check:
+        description: Explicit private original-input intake/check only; no Azure OIDC or model
+        required: false
+        default: false
+        type: boolean
+      input_release_id:
+        description: Positive numeric ID of the explicitly selected same-repository DRAFT release
+        required: false
+        type: string
+      input_asset_id:
+        description: Positive numeric ID of its uploaded registered input-bundle asset
+        required: false
+        type: string
+      input_bundle_sha256:
+        description: Externally supplied SHA256 of the registered private bundle
+        required: false
+        type: string
   workflow_call:
     inputs:
       reviewed_source_sha:
@@ -30,6 +48,19 @@ on:
         required: false
         default: false
         type: boolean
+      input_check:
+        required: false
+        default: false
+        type: boolean
+      input_release_id:
+        required: false
+        type: string
+      input_asset_id:
+        required: false
+        type: string
+      input_bundle_sha256:
+        required: false
+        type: string
     secrets:
       AZURE_CLIENT_ID:
         required: false
@@ -65,11 +96,17 @@ jobs:
       PILOT_WORKFLOW_SHA: ${{ github.workflow_sha }}
       REVIEWED_SOURCE_SHA: ${{ inputs.reviewed_source_sha }}
       SELECTED_CELL: ${{ inputs.cell_id }}
+      EXECUTE_REQUESTED: ${{ inputs.execute }}
+      INPUT_CHECK_REQUESTED: ${{ inputs.input_check }}
     steps:
       - name: Bind reviewed source and refuse workflow reruns before credentials
         shell: bash
         run: |
           set -euo pipefail
+          if [[ "$EXECUTE_REQUESTED" == true && "$INPUT_CHECK_REQUESTED" == true ]]; then
+            echo "input_check_and_execute_are_mutually_exclusive"
+            exit 1
+          fi
           [[ "$GITHUB_EVENT_NAME" == workflow_dispatch ]]
           [[ "$GITHUB_REPOSITORY" == hyeonsangjeon/gdpval-realworks ]]
           [[ "$GITHUB_REF" == refs/heads/main ]]
@@ -94,10 +131,8 @@ jobs:
       - name: Install existing declared dependencies
         run: python3 -m pip install -r batch-runner/requirements.txt
 
-      - name: Plan one cell and check explicit inputs before OIDC
+      - name: Plan one cell on the reviewed source before any intake or OIDC
         id: plan
-        env:
-          EXECUTE_REQUESTED: ${{ inputs.execute }}
         shell: bash
         run: |
           set -euo pipefail
@@ -105,18 +140,41 @@ jobs:
                 --cell "$SELECTED_CELL" --reviewed-source-sha "$REVIEWED_SOURCE_SHA"
                 --output "$RUNNER_TEMP/budget-pilot-ci-private"
                 --completion-out "$RUNNER_TEMP/budget-pilot-ci-completion.json")
-          if [[ "$EXECUTE_REQUESTED" == true ]]; then
-            # This handoff must be supplied by a separately reviewed transfer.
-            # Missing/changed originals refuse; no download or manifest generation.
-            args+=(--check-inputs
-                   --dataset-parquet "$RUNNER_TEMP/budget-pilot-ci-inputs/original.parquet"
-                   --reference-root "$RUNNER_TEMP/budget-pilot-ci-inputs/reference-only"
-                   --step0-manifest "$RUNNER_TEMP/budget-pilot-ci-inputs/step0-manifest.json")
-          fi
           python3 batch-runner/codex_budget_pilot_ci.py "${args[@]}"
 
+      - name: Import the explicit private draft asset and verify originals before OIDC
+        id: intake
+        if: inputs.execute || inputs.input_check
+        timeout-minutes: 3
+        env:
+          # Existing read scope only. Its ability to read this draft is UNPROVEN.
+          # Inaccessible assets refuse; never widen permission or publish a fallback.
+          GITHUB_TOKEN: ${{ github.token }}
+          INPUT_RELEASE_ID: ${{ inputs.input_release_id }}
+          INPUT_ASSET_ID: ${{ inputs.input_asset_id }}
+          INPUT_BUNDLE_SHA256: ${{ inputs.input_bundle_sha256 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout --signal=TERM --kill-after=5s 120s \
+            python3 batch-runner/codex_ci_input_intake.py --input-check \
+              --release-id "$INPUT_RELEASE_ID" --asset-id "$INPUT_ASSET_ID" \
+              --expected-sha256 "$INPUT_BUNDLE_SHA256" \
+              --bundle-out "$RUNNER_TEMP/budget-pilot-ci-input.tar" \
+              --out "$RUNNER_TEMP/budget-pilot-ci-inputs"
+          python3 batch-runner/codex_budget_pilot_ci.py \
+            --campaign-id budget_pilot_ci_20260923_01 \
+            --cell "$SELECTED_CELL" --reviewed-source-sha "$REVIEWED_SOURCE_SHA" \
+            --output "$RUNNER_TEMP/budget-pilot-ci-private" \
+            --completion-out "$RUNNER_TEMP/budget-pilot-ci-completion.json" \
+            --dataset-parquet "$RUNNER_TEMP/budget-pilot-ci-inputs/original.parquet" \
+            --reference-root "$RUNNER_TEMP/budget-pilot-ci-inputs/reference-only" \
+            --step0-manifest "$RUNNER_TEMP/budget-pilot-ci-inputs/step0-manifest.json" \
+            --resume --check-inputs
+          echo "verified=true" >> "$GITHUB_OUTPUT"
+
       - name: Require the existing native sandbox prerequisite
-        if: inputs.execute
+        if: success() && inputs.execute && !inputs.input_check && steps.intake.outputs.verified == 'true'
         run: |
           if ! command -v bwrap >/dev/null; then
             echo "codex_bubblewrap_unavailable"
@@ -124,7 +182,7 @@ jobs:
           fi
 
       - name: Azure Login (OIDC)
-        if: inputs.execute
+        if: success() && inputs.execute && !inputs.input_check && steps.intake.outputs.verified == 'true'
         uses: azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca # v3.0.1
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -132,7 +190,7 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Verify existing Azure OIDC session identity
-        if: inputs.execute
+        if: success() && inputs.execute && !inputs.input_check && steps.intake.outputs.verified == 'true'
         env:
           AZURE_AI_EXPECTED_CLIENT_ID: ${{ vars.AZURE_AI_EXPECTED_CLIENT_ID }}
           AZURE_AI_EXPECTED_TENANT_ID: ${{ vars.AZURE_AI_EXPECTED_TENANT_ID }}
@@ -140,7 +198,7 @@ jobs:
         run: python3 batch-runner/scripts/azure_oidc_identity_preflight.py --verify-session
 
       - name: Execute only the selected cell on this live host
-        if: inputs.execute
+        if: success() && inputs.execute && !inputs.input_check && steps.intake.outputs.verified == 'true'
         env:
           AZURE_AI_ROUTE_PROFILE: direct-v1
           FOUNDRY_PROJECT_ENDPOINT: ${{ secrets.FOUNDRY_PROJECT_ENDPOINT }}
