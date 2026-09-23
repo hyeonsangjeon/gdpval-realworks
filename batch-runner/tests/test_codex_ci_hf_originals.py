@@ -516,7 +516,8 @@ def test_hf_originals_workflow_route_and_publication_contract():
     setup = next(step for step in steps if step.get("id") == "output_setup")
     assert setup["env"] == {"HF_TOKEN": "${{ secrets.HF_TOKEN }}"}
     assert all(not {"HF_TOKEN", "GITHUB_TOKEN"}.intersection(step.get("env", {}))
-               for step in steps if step not in (selected, metadata, setup))
+               for step in steps if step not in (selected, metadata, setup)
+               and step.get("id") not in {"admission", "retention"})
     assert '--input-transport "${INPUT_TRANSPORT:-github_draft}"' in selected["run"]
     assert selected["run"].index("unset GITHUB_TOKEN HF_TOKEN") < selected["run"].index("--resume --check-inputs")
     assert "HF_HUB_OFFLINE=0" not in selected["run"]
@@ -567,6 +568,8 @@ python3() {{
         assert "installed check reached" not in result.stdout
     admission = "success() && inputs.execute && !inputs.input_check && !inputs.output_target_check && !inputs.output_target_setup && steps.intake.outputs.verified == 'true'"
     downstream = [step for step in workflow()["jobs"]["cell"]["steps"] if step.get("if") == admission]
-    assert len(downstream) == 4
+    assert len(downstream) == 2
+    assert len([step for step in workflow()["jobs"]["cell"]["steps"]
+                if step.get("if") == admission + " && steps.admission.outputs.admitted == 'true'"]) == 3
     # Static Actions condition check plus real local bash with fake commands;
     # not an executed workflow or evidence of HF/OIDC/model access.

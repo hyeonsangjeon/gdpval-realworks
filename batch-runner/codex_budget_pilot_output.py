@@ -1,7 +1,8 @@
 """Plan-first publication of one finalized CI cell to an explicit private target.
 
-No output publication target is approved here. Publication is not wired to a
-workflow and does not make a cell grade-ready. Separate inspection and fixed-name
+This standalone entry does not approve a target or make a cell grade-ready.
+The CI retention adapter supplies its separately reviewed fixed target and CAS
+admission; arbitrary callers retain the explicit-target contract. Inspection and fixed-name
 setup cannot publish cell outputs. A retained local reservation forbids replay,
 including after a lost response. Source results and accounting are never edited.
 """
@@ -702,13 +703,23 @@ def setup_output_target(*, create: bool = False, state_root: Path | None = None,
     return result
 
 
-def publish(snapshot: Snapshot, *, repo: str, expected_parent: str, _test_api=None) -> dict:
+def publish(snapshot: Snapshot, *, repo: str, expected_parent: str, _test_api=None,
+            _deadline: float | None = None, _token: str | None = None,
+            _failure_metadata: bool = False) -> dict:
     """One reservation and one CAS commit; never reconcile/retry a lost reply."""
-    _require(bool(snapshot.files), "bound_inference_result_required")
+    # Only the retained-CI adapter may preserve explicit terminal failure
+    # metadata without a result. The standalone publisher's default is unchanged.
+    _require(bool(snapshot.files) or (_failure_metadata
+             and snapshot.manifest["status"] in {"failed", "stopped"}
+             and snapshot.manifest["cleanup_confirmed"] is True
+             and snapshot.manifest["grade_ready"] is False
+             and snapshot.manifest["files"] == []
+             and "bound_inference_result" in snapshot.manifest["missing"]),
+             "bound_inference_result_required")
     _require(validate_hf_dataset_repo_id(repo) == repo and _hash(expected_parent, 40), "explicit_target_parent_required")
     reservation, receipt_path = snapshot.cell_root / RESERVATION, snapshot.cell_root / RECEIPT
     _require(not os.path.lexists(reservation) and not os.path.lexists(receipt_path), "publication_already_reserved")
-    token = os.environ.get("HF_TOKEN", "")
+    token = os.environ.get("HF_TOKEN", "") if _token is None else _token
     _require(bool(token) and len(token) <= 4096 and all(33 <= ord(char) <= 126 for char in token),
              "explicit_hf_token_required")
     manifest_bytes = (pilot._canonical_json(snapshot.manifest) + "\n").encode()
@@ -721,8 +732,9 @@ def publish(snapshot: Snapshot, *, repo: str, expected_parent: str, _test_api=No
     stage, returned, before, after = "target_metadata", None, None, None
     outcome, reason, status = "unresolved", None, None
     try:
-        with _time_bound() as deadline:
-            from contextlib import nullcontext
+        from contextlib import nullcontext
+
+        with (_time_bound() if _deadline is None else nullcontext(_deadline)) as deadline:
             from huggingface_hub import RepoFolder
 
             with (nullcontext(_test_api) if _test_api is not None else _hf_client(token, deadline)) as api:

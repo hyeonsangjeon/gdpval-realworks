@@ -114,8 +114,8 @@ def compile_ci_cell(campaign: str, cell_id: str, reviewed_sha: str) -> tuple[dic
         "parent_registration": str(pilot.REGISTRATION.relative_to(pilot.ROOT)),
         "host": HOST_POLICY, "default_mode": "plan_only", "selection": "one_explicit_canonical_cell",
         "controls": "inherit_parent_unchanged", "input_transfer": "explicit_approved_handoff_required",
-        "publication": "nonsecret_completion_envelope_only", "ordered_30_cell_scheduler": "not_implemented",
-        "separate_manual_run_deduplication": "not_implemented",
+        "publication": "private_cell_outputs_and_nonsecret_completion_envelope", "ordered_30_cell_scheduler": "not_implemented",
+        "separate_manual_run_deduplication": "fixed_private_claim_cas_canonical_successor_only",
     }
     pilot._same("CI registration", {key: value for key, value in registration.items() if key != "description"}, expected)
     plan, parent, specs = pilot.compile_pilot(campaign, reviewed_sha)
@@ -322,6 +322,14 @@ def main(argv: list[str] | None = None, *, _test_transport: pilot.LocalTransport
             else:
                 pilot._save(admission, binding)
         if args.execute:
+            from codex_budget_pilot_retention import require_admission
+
+            # A workflow condition is not execution authority. The token-free
+            # CLI checks the same-host, acknowledged remote claim before child
+            # admission, including same-live-host restores of the original clock.
+            if any(os.environ.get(key) for key in ("HF_TOKEN", "HUGGING_FACE_HUB_TOKEN", "GITHUB_TOKEN", "GH_TOKEN")):
+                raise CICellRefused("input_or_output_token_in_execution_environment")
+            require_admission(plan, cell, root, inputs)
             summary = pilot.dispatch(plan, parent, specs, root=root, execute=True, resume=True,
                                      sources=sources, transport=transport, selected_cell_id=cell["cell_id"])
         state = next(row for row in summary["cells"] if row["cell_id"] == cell["cell_id"])

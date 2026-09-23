@@ -413,11 +413,13 @@ def test_output_target_workflow_contract_is_static_not_an_actions_execution():
     assert intake_step["if"] == "(inputs.execute || inputs.input_check) && !inputs.output_target_check && !inputs.output_target_setup"
     assert intake_step["timeout-minutes"] == 3 and "kill-after=5s 120s" in intake_step["run"]
     admission = "success() && inputs.execute && !inputs.input_check && !inputs.output_target_check && !inputs.output_target_setup && steps.intake.outputs.verified == 'true'"
-    assert len([step for step in steps if step.get("if") == admission]) == 4
+    assert len([step for step in steps if step.get("if") == admission]) == 2
+    assert len([step for step in steps if step.get("if") == admission + " && steps.admission.outputs.admitted == 'true'"]) == 3
     setup = next(step for step in steps if step.get("id") == "output_setup")
     assert setup["env"] == {"HF_TOKEN": "${{ secrets.HF_TOKEN }}"}
     assert all(not {"HF_TOKEN", "GITHUB_TOKEN"}.intersection(step.get("env", {}))
-               for step in steps if step not in (intake_step, metadata, setup))
+               for step in steps if step not in (intake_step, metadata, setup)
+               and step.get("id") not in {"admission", "retention"})
     assert "HF_TOKEN" not in job["env"] and "GITHUB_TOKEN" not in job["env"]
     uploads = [step for step in steps if step.get("uses", "").startswith("actions/upload-artifact@")]
     assert len(uploads) == 1 and uploads[0]["with"]["path"] == "${{ runner.temp }}/budget-pilot-ci-completion.json"

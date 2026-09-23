@@ -82,6 +82,12 @@ class CICellChildren(FakeChildren):
 
 @pytest.fixture
 def ci_scenario(scenario, monkeypatch):
+    # This earlier family isolates dispatcher/projection behavior. The new
+    # retained-cell family exercises the actual remote-admission gate and CAS;
+    # it imports the child helper, not this admission-substituting fixture.
+    import codex_budget_pilot_retention as retention
+
+    monkeypatch.setattr(retention, "require_admission", lambda *args: None)
     for name, value in {
         "GITHUB_ACTIONS": "true", "GITHUB_REPOSITORY": ci.REPOSITORY,
         "GITHUB_REF": "refs/heads/main", "GITHUB_EVENT_NAME": "workflow_dispatch",
@@ -359,10 +365,11 @@ def test_ci_registered_cell_workflow_invocation_contract():
     assert '"$INPUT_RELEASE_ID"' in intake["run"] and '"$INPUT_ASSET_ID"' in intake["run"] and '"$INPUT_BUNDLE_SHA256"' in intake["run"]
     login = next(step for step in steps if step.get("uses", "").startswith("azure/login@"))
     admission = "success() && inputs.execute && !inputs.input_check && !inputs.output_target_check && !inputs.output_target_setup && steps.intake.outputs.verified == 'true'"
-    assert steps.index(plan) < steps.index(intake) < steps.index(login) and login["if"] == admission
+    claimed = admission + " && steps.admission.outputs.admitted == 'true'"
+    assert steps.index(plan) < steps.index(intake) < steps.index(login) and login["if"] == claimed
     assert set(login["with"]) == {"client-id", "tenant-id", "subscription-id"}
     execution = next(step for step in steps if "--resume --execute" in step.get("run", ""))
-    assert execution["if"] == admission and '--cell "$SELECTED_CELL"' in execution["run"]
+    assert execution["if"] == claimed and '--cell "$SELECTED_CELL"' in execution["run"]
     assert execution["env"]["CODEX_FOUNDRY_CONNECTION_CONFIRMED"] == "1"
     assert execution["env"]["AZURE_AI_ROUTE_PROFILE"] == "direct-v1"
     publication = next(step for step in steps if step.get("id") == "publication")
