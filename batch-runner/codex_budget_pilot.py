@@ -339,9 +339,8 @@ class LocalTransport:
     def feedback_available(self) -> bool:
         return _feedback_available()
 
-    def require_execution(self, plan: dict, parent: Any) -> dict:
-        if not self.feedback_available():
-            raise PilotDispatchRefused("c_host_feedback_capability_missing")
+    def require_source(self, plan: dict, parent: Any) -> dict:
+        """Validate reviewed source without auth, runtime startup or a child."""
         _, common = _repository(ROOT)
         _safe_checkout_configuration(ROOT)
         sha = plan["reviewed_source_sha"]
@@ -349,6 +348,12 @@ class LocalTransport:
                 or _git(ROOT, "status", "--porcelain", "--untracked-files=normal").stdout):
             raise PilotDispatchRefused("reviewed_clean_source_required")
         reviewed = _reviewed_commit(ROOT, sha, load_plan(), parent)
+        return {"tree_sha": reviewed["tree_sha"], "common": str(common)}
+
+    def require_execution(self, plan: dict, parent: Any) -> dict:
+        if not self.feedback_available():
+            raise PilotDispatchRefused("c_host_feedback_capability_missing")
+        reviewed = self.require_source(plan, parent)
         from core.codex_runtime_config import require_pinned_runtime
         from core.azure_ai_clients import AzureAIRouteSettings
         import step2_run_inference as step2
@@ -362,7 +367,7 @@ class LocalTransport:
             raise PilotDispatchRefused("registered_route_required")
         condition = json.loads(next(run for run in parent.dispatch.runs if run.condition == "codex").config_json)["condition_a"]
         routes = step2.preflight_routes(step2.inference_route_workloads(condition, "codex_foundry"), settings=settings)
-        return {"tree_sha": reviewed["tree_sha"], "routes": routes, "common": str(common)}
+        return {**reviewed, "routes": routes}
 
     def inputs(self, parent: Any, sources: InputSources) -> VerifiedInputs:
         snapshot = _source_snapshot(parent, sources.parquet, sources.references)
@@ -615,8 +620,13 @@ def _finish(root: Path, cell: dict, state: dict, exit_code: int | None) -> None:
 
 def dispatch(plan: dict, parent: Any, specs: dict[str, ComparisonRunSpec], *, root: Path,
              execute: bool, resume: bool, sources: InputSources | None,
-             transport: LocalTransport) -> dict:
+             transport: LocalTransport, selected_cell_id: str | None = None) -> dict:
     """Materialize or serially run the registered cells; restore is explicit."""
+    if selected_cell_id is not None and (
+        plan["order"].count(selected_cell_id) != 1
+        or sum(cell["cell_id"] == selected_cell_id for cell in plan["cells"]) != 1
+    ):
+        raise PilotDispatchRefused("canonical_selected_cell_required")
     root = _private_root(root)
     execution, inputs = None, None
     if execute:
@@ -656,6 +666,15 @@ def dispatch(plan: dict, parent: Any, specs: dict[str, ComparisonRunSpec], *, ro
         # A lost supervisor/cleanup acknowledgment requires explicit resolution,
         # not another child, even after an inherited OS lock is released.
         _require_quiet_owner(root, plan)
+        if selected_cell_id is not None:
+            # Validate the *whole* retained matrix before admitting the selected
+            # child, including cells that occur later in the canonical order.
+            for cell in plan["cells"]:
+                state = _load(root / cell["roles"]["checkpoint"])
+                _validate_state(plan, cell, state)
+                _read_bytes(root / cell["roles"]["config"], sha256=cell["config_sha256"])
+                if cell["cell_id"] != selected_cell_id and state != _cell_state(plan, cell):
+                    raise PilotDispatchRefused("unselected_cell_has_activity")
         if execute:
             binding = {"plan_sha256": _digest(plan), "execution": execution, "files": inputs.identities(),
                        "source_projection": inputs.snapshot.shared_binding}
@@ -672,7 +691,8 @@ def dispatch(plan: dict, parent: Any, specs: dict[str, ComparisonRunSpec], *, ro
             state = _load(state_path)
             _validate_state(plan, cell, state)
             _read_bytes(root / cell["roles"]["config"], sha256=cell["config_sha256"])
-            if not execute or state["status"] in TERMINAL:
+            if (not execute or state["status"] in TERMINAL
+                    or (selected_cell_id is not None and cell["cell_id"] != selected_cell_id)):
                 if execute and state["result"] is not None:
                     if state["result"]["path"] != cell["roles"]["result"]:
                         raise PilotDispatchRefused("recorded_result_role_mismatch")

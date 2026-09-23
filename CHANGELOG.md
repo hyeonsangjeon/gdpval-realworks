@@ -11,6 +11,45 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Added
+
+- Add a plan-first CLI and manual/reusable GitHub Actions entry for one
+  explicitly selected external-budget pilot cell. The preregistration reserves
+  `budget_pilot_ci_20260923_01` for the existing repository-OIDC execution path;
+  no real CI campaign was materialized or executed. Every arm uses the same
+  Ubuntu 22.04, Python 3.10.12 and SDK/companion 0.147.0 host policy. The existing
+  compiler still fixes five `advance_check_5` tasks, A/B/C and repetitions 1/2
+  in per-task A1/B1/C1/C2/B2/A2 order. Only the selected cell can launch a child;
+  the other 29 remain unrun. Plan-only is the default. Explicit execution keeps
+  the reviewed-source, original-input, C-feedback, runtime, host and route
+  guards, existing OIDC scope and owned-tree cleanup. Missing original parquet,
+  reference-only root or canonical Step0 manifest refuses before OIDC; this
+  slice does not implement their transfer. The 240-minute job ceiling supplies
+  setup/cleanup headroom, not a larger model budget: cells retain 180 cumulative
+  minutes, 30 minutes per attempt and A's four-attempt limit. Same-live-host
+  restart retains state and expiry; workflow reruns above attempt 1 and changed
+  host identities refuse. Only a strictly allowlisted nonsecret completion
+  envelope may be uploaded, with missing usage left missing. There is no
+  cross-runner native-state recovery or deduplication across separate new
+  manual workflow runs. The initial focused invocation at
+  `9a9fe8ab47788ac2eb2e101d0b8dd5c5bf6115b9` stopped at a test-fixture import:
+  `1 error in 1.31s`, exit 2, with no cases run. After the package-relative
+  import correction, the same selection at
+  `cb3e5dd308f769812809249f1c60ed2fdf2ade58` reported
+  `19 passed in 93.52s (0:01:33)`, exit 0. The exact command and synthetic
+  boundaries are in `tasks/LATEST_TASK_RESULT/README.md`; these tests verify
+  supervisor forwarding, not new live process-cleanup evidence. The branch
+  starts from `42c7b8f2f6457463333e386432baceed96182c72`. Prior #653 review
+  `5283415850` at `52f67d68f77fbdeaedf345d520713e38f3fc332f` covers the
+  dispatcher, and #654 review `5284861560` at
+  `cd1d3cf6ba168f92b7868495d6e8ff25f731b831` covers diagnostic reporting;
+  neither approves this entry. Immutable implementation review/CI, ordered
+  30-cell scheduling/aggregation, approved input transfer, live OIDC/connection
+  validation, execution and grading remain outstanding. No auth, workflow,
+  native/model/provider or real-input operation ran. The sealed NAS campaign,
+  its 30 pending cells and historical records remain untouched. Full grader
+  source sets remain 37/58; no coupled active source member or hash changed.
+
 ### Fixed
 
 - Preserve local authentication failures in the Codex connection diagnostic's
