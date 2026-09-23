@@ -1,5 +1,121 @@
 # Latest task result
 
+## Native-only mode for the existing CI connection diagnostic
+
+The existing workflow now has an opt-in `native_only` mode. Its focused offline
+selection at `f09ffb62b717f9818dedd4e59a9a45c483ca4f42` reported
+`42 passed, 155 deselected in 4.92s`, exit 0. This checks local command/reporting
+behavior and the workflow's static contract, not current CI connectivity or
+benchmark performance. No diagnostic was dispatched.
+
+### Implemented boundary
+
+`native_only` defaults to false, preserving the legacy commands, order and
+behavior, including unservable probes when all send flags are false. With
+native-only enabled, the first local step rejects `send_valid_request` or
+`send_closing_sweep` before checkout, setup, OIDC or native work. All five legacy
+probe steps are skipped: models listing, bearer discrimination,
+transmission/header sweep, plain-urllib servable request and closing sweep.
+The unchanged legacy summary is gated off; the native-only summary labels these
+probes intentionally skipped, not measured.
+
+Native-only plan mode sends no model turn. A later dispatch would still perform
+the existing OIDC and plan auth preflight; plan-only is not network-free.
+Sending retains the existing plan, endpoint-fingerprint confirmation and sole
+native send path. The main-only guard, existing OIDC scope/expected identity,
+Ubuntu 22.04, Python 3.10.12, SDK/companion 0.147.0, prompt, provider retry pins,
+runtime, redaction and cleanup paths remain unchanged. Both provider retry
+counters remain 0, but the runtime can refresh a token after a 401 and resend.
+One native turn is not a measured HTTP-request count or a complete invoice.
+
+The workflow ceiling remains 20 minutes. The script still defaults its timeout
+argument to 120 seconds and forwards it to the runner. This unit does not add
+timeout enforcement or establish a hard live stream deadline. Its tests check
+existing close/workspace-cleanup calls, not a live owned-process tree. The
+diagnostic sets no reasoning-effort or context-window override; those runtime
+defaults are not the pilot's `xhigh` control. No prompt or runtime setting was
+changed to make the diagnostic match the benchmark.
+
+The summary distinguishes requested sending from observed `turn_sent`, and
+provider replies from successful connectivity. Failed or unobserved auth,
+completed turns and final-response presence keep their separate meanings. If a
+requested send has no valid record, its observations remain unknown rather
+than falling back to the plan's `turn_sent=false`. Only controlled fields are
+rendered after a successful redaction check. Known thread-total and
+most-recent-request usage stay separate; missing usage is not zero cost.
+Evidence upload still requires that check to succeed and retains the same
+seven explicit JSON paths. No token, raw error, endpoint, answer, native state
+or private locator is added to the summary or upload allowlist.
+
+### Focused offline evidence
+
+One invocation used the existing isolated Python 3.10.12 interpreter, named
+`NATIVE_CI_PYTHON` below, with SDK and companion 0.147.0, from `batch-runner`:
+
+```bash
+HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 DO_NOT_TRACK=1 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. "$NATIVE_CI_PYTHON" -m pytest -q -o addopts= -p no:cacheprovider --tb=short tests/test_codex_foundry_connection_probe.py tests/test_codex_auth_discriminator.py 'tests/test_a_step_reference_that_names_nothing.py::test_each_workflow_on_its_own[codex-foundry-connection-diagnostic.yml]' -k 'native_only or test_each_workflow_on_its_own'
+```
+
+The 42 cases cover all 16 input combinations, early contradictory-flag refusal,
+native-only plan/send and unchanged legacy routing, the actual fingerprint and
+send shell, missing-output refusal, safe summaries and existing redaction.
+The real `main`, plan/probe, record and output paths run with synthetic auth
+observations and SDK-shaped native transport. Live subprocess, credential
+discovery and socket boundaries are forbidden in those entry tests. Action
+pins, permissions, ref/identity gates, timeouts, step references and publication
+conditions are checked statically; no GitHub Actions execution occurred.
+The 4.92 seconds are pytest wall time, not model latency. Only completion
+records change after the tested SHA; this is not a fresh run on the final
+documentation-bearing HEAD. Earlier selections and packaging were not rerun.
+
+### Source, prior reviews and remaining work
+
+This branch starts from exact main
+`ea81fefc7dae1297dee7d68e78327a0f05fb6958`, independently of #656. The mandatory
+extreme-reasoner decision preceded the workflow edits and covered only this
+bounded implementation/offline check, with conditions. It used the available
+inherited agent, not the charter's unavailable named preset.
+
+Prior #655 review `5285590451` at
+`4d3c4b4f895da35e3db07b413f66c8066dfa5ad1` covers the one-cell CI entry and its
+19-case offline evidence. Prior #656 review `5285752981` at
+`df3e3f24404a90f47789051ef99318fb6af2dd20` covers the 39-case local bundle
+evidence and private 2519040-byte candidate, not external publication or live
+readiness. Its separate, normal integration commit
+`ca41664cf36f7b2183ef8bdd02df8cd0f822eb04` preserved the reviewed bundle source
+and tests byte-for-byte and retained both completion histories. That integration
+did not rerun the 39 cases or obtain a new final-head approval; #656 is frozen
+again. Neither earlier review approves this native-only change.
+
+Current CI connectivity, approved input transport, whole-pilot ordered CI
+scheduling, deduplication/aggregation, execution and fixed grading remain
+unfinished. Immutable review and carrying-HEAD CI are still required. Both
+campaigns, original inputs and the private candidate remain untouched. No SDK,
+credential, permission, source-fingerprint or experiment-control change, live
+auth/model call, CI query or bundle operation occurred. Standing owner budget
+authority is unchanged; this implementation authorizes no dispatch.
+
+For a later leader-authorized native send on reviewed main, the intended
+`workflow_dispatch` inputs are:
+
+```yaml
+deployment: gpt-5.4
+native_only: true
+send_request: true
+send_valid_request: false
+send_closing_sweep: false
+```
+
+Experiment-design kept the diagnostic separate from benchmark evidence.
+Backend guidance preserved the existing command, identity and cleanup seams.
+Reporting/copyediting preserved the test units, unknowns and review boundaries.
+
+## Prior one-cell CI entry record
+
+The following record retains its original source/test/review scope. Its
+outstanding-review statements describe that earlier handoff, not the later
+leader-supplied #655 approval or this diagnostic change.
+
 ## Plan-first CI entry for one registered pilot cell
 
 The new CLI selects one canonical cell through the existing compiler and

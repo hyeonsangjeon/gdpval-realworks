@@ -13,6 +13,36 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Add an opt-in `native_only` mode to the existing Foundry connection-diagnostic
+  workflow. With the mode on, incompatible legacy paid flags refuse before
+  checkout or OIDC; all five listing/discrimination/sweep/urllib probes are
+  skipped. Plan mode sends no native turn, and sending uses the existing one-turn
+  native path. With the mode off, legacy behavior and the legacy summary body
+  remain unchanged. Main/ref, OIDC identity, runtime, endpoint fingerprint,
+  retry, redaction and seven-file evidence-upload guards are retained. The job
+  ceiling stays 20 minutes; the script's default timeout argument stays 120
+  seconds. The new summary separates sending intent, observed turns, auth
+  failures, provider refusals and final-response presence. Missing send evidence
+  never falls back to the plan as proof that nothing was sent. Known token totals
+  stay separate from missing usage, HTTP counts and invoice completeness; the
+  runtime can refresh a 401 token and resend despite its zero retry pins.
+  One offline selection at `f09ffb62b717f9818dedd4e59a9a45c483ca4f42` reported
+  `42 passed, 155 deselected in 4.92s`, exit 0. It executes local shell and real
+  CLI/reporting paths with stubbed auth/native transport; YAML workflow checks
+  are static, not a live Actions run or process-cleanup measurement. The exact
+  command is in `tasks/LATEST_TASK_RESULT/README.md`. No live auth, native/model
+  request, workflow dispatch, bundle operation or campaign change occurred.
+  Prior #655 review `5285590451` at
+  `4d3c4b4f895da35e3db07b413f66c8066dfa5ad1` covers single-cell entry, and
+  #656 review `5285752981` at `df3e3f24404a90f47789051ef99318fb6af2dd20`
+  covers the local bundle and private candidate, not publication or readiness.
+  Neither approves this workflow change. Current connectivity, input transport,
+  ordered whole-pilot scheduling/deduplication, execution and grading remain
+  unfinished; immutable review and carrying-HEAD CI are still required.
+  The intended later send on reviewed main uses deployment `gpt-5.4`,
+  `native_only=true`, `send_request=true`, `send_valid_request=false` and
+  `send_closing_sweep=false`; this task did not dispatch it.
+
 - Add a plan-first CLI and manual/reusable GitHub Actions entry for one
   explicitly selected external-budget pilot cell. The preregistration reserves
   `budget_pilot_ci_20260923_01` for the existing repository-OIDC execution path;
