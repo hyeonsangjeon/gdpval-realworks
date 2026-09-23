@@ -13,6 +13,44 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Repair the grading source-entry ownership/trust incompatibility from exact
+  source `02a9682747e371d8675d1d0afb63155f3c3bce82`. Real temporary Git with
+  `GIT_TEST_ASSUME_DIFFERENT_OWNER=1` confirmed that the isolated helper ignores
+  a global exact-path trust entry and refuses with exit 128; command-local trust
+  for the validated, code-defined checkout succeeds. No filesystem ownership
+  was changed. This confirms the local mechanism, **not the historical CI cause**.
+  `_git` now adds exactly that path's `safe.directory` only when it equals the
+  validated repository. Foreign paths receive no allowance; wildcard/control
+  paths are refused. Global/system isolation, hooks/fsmonitor/filter/include and
+  lazy-transport protections, bounded subprocesses, clean-source/object/tree/pin
+  checks remain. Only the checkout helper's coupled source pin changed, to
+  `de40ae571d66635f121d2ca538f30114125c2fbf12e679db854c4ae46d6b9862`.
+  No workflow/fetch-depth, Python/dependency/runtime, fixed-grader/model/rubric or
+  inference-control change was made. Three closed CLI stage/reason pairs now
+  identify source preflight, setup-root/lock entry and final branch-receipt
+  persistence failures without raw diagnostics. `remote_mutation_possible` is
+  false for the first two boundaries, conservatively true at receipt failure,
+  and null for unrelated outer failures; it describes only the current
+  invocation, never prior branch state or retry authority.
+  One offline selector, `batch-runner/tests/test_codex_budget_pilot_grading_source.py`,
+  returned **28 passed in 29.37s**, exit 0, at
+  `13032a864a115c0150f944e18aa277a1e212e541`. It uses real source checks and
+  temporary Git, with in-memory branch operations and no live access. The
+  existing extreme-reasoner's pre-edit APPROVE-WITH-CONDITIONS is a design
+  decision, not approval of this head. The leader's original run `35920355055`,
+  job `107382432896`, remains a separate observation: plan passed at
+  `21:09:59.868579 UTC`; setup emitted `grading_contract_refused`, HTTP null,
+  exit 2 at `21:10:01.622976 UTC`, with judge/publication skipped. Its failing
+  stage and possible branch side effects remain unknown; the reservation is
+  **UNRESOLVED/CONSUMED** and the source seal **BLOCKED_PRE_EXECUTION**. Dataset
+  setup `35881609256` and bootstrap `bfc7ae01ed14490817ceb7cb406adcb9bb95f557`
+  remain valid and consumed. #668 review `5296511923` and ten passing checks
+  apply to `d97d250cfc1a6f2f6ad485d9bb44a8fa58d79227`, not this correction.
+  Remaining: review/final CI, separately authorized checked read-only branch
+  reconciliation, explicit reseal/live gates, actual grading-host readiness
+  and the first paid cell/grade. No setup retry, remote read/write, CI query,
+  payload transfer, model/grader or Azure call ran.
+
 - Repair four coupled #668 CI regressions from head
   `efb5be35ac9750bf03a784f9967f2d4e6341041d`, without changing workflow behavior,
   the fixed grader/hash closure, configuration or runtime pins. Resolve the HF
