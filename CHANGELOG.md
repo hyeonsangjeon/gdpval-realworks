@@ -11,6 +11,44 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Fixed
+
+- Correct immutable HF Hub member-path comparison for the observed cache
+  redirect form: `%2F` member separators and literal parentheses. Namespace,
+  repository and revision prefixes still match literally; the exact expected
+  member is compared after one strict decode. Malformed/residual escapes,
+  traversal (including segments URL joining would erase), empty components,
+  backslashes and control bytes refuse. Existing host allowlists, token-free
+  CDN hops, four source pins, canonical archive SHA, offline verification,
+  no-clobber behavior, timeouts, workflow/main guards and 180/30-minute model
+  limits are unchanged. No workflow or experiment input changed.
+  The leader's model-free input-check `35841798539`, job `107118366778`, on
+  `ea5dcc61c2beaad3a287d3d8dd064533ce33ed41` remains a failed observation:
+  `hf_original_redirect_refused`, `stage=hf_reference_1`, HTTP 307 at
+  09:17:25 UTC on 2026-09-23. Plan passed; OIDC/identity/model steps were skipped.
+  One separately authorized unauthenticated HEAD to the contract-derived
+  reference-1 URL started at 09:25:38.658426 UTC and returned 307 in 0.25118
+  seconds (20-second bound), with no redirect followed or body read. Its relative
+  Location stayed on the canonical HTTPS Hub cache route, with the same
+  literal repository/revision prefix and a query present. Once-decoded member
+  bytes matched exactly, but the base guard refused the literal encoding
+  difference. This verifies the guard defect for the retained HEAD response;
+  the original CI response's Location was not captured and is not invented.
+  Neither observation establishes invalid credentials or complete input access.
+  One offline redirect selector at
+  `44e276163e8a241a0a146304c14c64d7437e6914` reported
+  `28 passed, 63 deselected in 2.81s`, exit 0. Synthetic filenames/provenance
+  and fake HF responses exercise the real CLI, serializer/importer, byte
+  checks, refusal and token-isolation paths. The exact command is in
+  `tasks/LATEST_TASK_RESULT/README.md`; no prior family or live check was rerun.
+  Prior #661 review `5288470314` and its 71-case result remain scoped to that
+  earlier intake implementation. Frozen #662 at
+  `0ff95ba41ce7ce961ee333bbcac9f8e3db539697` still has incomplete leader review
+  at the supplied observation; its 66-case evidence is not final approval.
+  Live input acceptance, publisher review/output-target readiness, output
+  workflow wiring, the pilot grading adapter, ordered 30-cell execution,
+  admission deduplication and fixed grading remain unfinished.
+
 ### Added
 
 - Add explicitly selected `hf_originals` intake to the existing single-cell CI
