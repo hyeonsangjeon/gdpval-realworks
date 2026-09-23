@@ -13,6 +13,39 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Restore runtime checkout independence from the preparation compiler directory
+  on the existing #669 branch, starting at
+  `2b64888cb422d7a5a9d0df847a063b8a84002b95`. The leader reported comparison CI
+  `35926036972`, job `107401241366`: **6 failed, 939 passed in 1294.77s**.
+  `_git` eagerly validated `TRUSTED_ROOT` even for another repository, so a
+  deliberately unavailable external source prevented the six runtime tests
+  from reaching their intended provider or post-validation HEAD-move boundary.
+  Now every actual command repository still passes `_root`, but the trusted
+  root is compared lexically and receives filesystem validation only when its
+  exact-path allowance is selected. An unrelated existing, missing or aliased
+  root grants no ownership trust and is not inspected. Wildcard/control and
+  selected symlink/traversal refusals, isolated global/system configuration,
+  command hardening and all runtime HEAD/tree/pin/lineage checks remain.
+  The six runtime tests and assertions are unchanged. The directly affected
+  unsafe-path fixture now supplies the unsafe command repository and keeps its
+  no-Git assertion. Only the helper's coupled source pin changed again, from
+  `de40ae571d66635f121d2ca538f30114125c2fbf12e679db854c4ae46d6b9862` to
+  `0dbbab8911e1cba106745087aed471dca0a8b7f904058b4958df1e07864bb885`.
+  One selector containing the six reported runtime nodes and six directly
+  affected trust/path cases returned **12 passed in 17.92s**, exit 0, at
+  `3790e4d370f25700ea7a18d46233575135e4191b`; its exact command is in the latest
+  task result. The initial **28 passed in 29.37s** remains at
+  `13032a864a115c0150f944e18aa277a1e212e541`; that family, the 945-case comparison
+  run and the full suite were not rerun. The same reviewer's bounded pre-edit
+  clarification was APPROVE-WITH-CONDITIONS, not head approval. No workflow,
+  dependency, runtime configuration, model, grader or branch-policy change was
+  made. Main remains the supplied `02a9682747e371d8675d1d0afb63155f3c3bce82`;
+  its seal remains **BLOCKED_PRE_EXECUTION**. Setup `35920355055` still has
+  unknown branch side effects and an **UNRESOLVED/CONSUMED** reservation. No
+  HF read/write, retry, setup replay, reseal, model/grader/Azure operation, CI query or
+  audit loop ran. Review/final CI, separately authorized checked branch
+  reconciliation, explicit reseal/live gates and the first paid cell remain.
+
 - Repair the grading source-entry ownership/trust incompatibility from exact
   source `02a9682747e371d8675d1d0afb63155f3c3bce82`. Real temporary Git with
   `GIT_TEST_ASSUME_DIFFERENT_OWNER=1` confirmed that the isolated helper ignores
