@@ -13,6 +13,37 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Add `codex_budget_pilot_grading_input.py`, a local grading-input adapter for
+  one exact compiler-selected cell of `budget_pilot_ci_20260923_01`. It shares
+  the existing Codex materializer's result, artifact, ledger, provenance and
+  atomic no-clobber checks; the parent entry still admits only parent comparison
+  runs. The unchanged external identity schema binds the canonical cell/run,
+  source/config/input declarations and fixed grading plan. A caller-approved
+  identity/hash is not independent authentication of an actual HF output
+  publication. Only the derived result receives the existing provenance fields
+  and recomputed fingerprint; source, deliverable and ledger bytes are not
+  rewritten. The bounded private preparation manifest reports grading `UNRUN`,
+  preserves terminal errors and missing/partial accounting, and is not a public
+  completion envelope. One comparison source pin was refreshed for the shared
+  internal seam; no active full-grader source, judge, prompt, rubric, workflow,
+  experiment control or campaign state changed.
+  The focused offline family at `bc088ed8473dae362a76fd866763027f90d2a884`
+  reported `46 passed in 52.36s`. Successful-copy cases use the existing
+  parent-test rename double; the real native case observed `RENAME_NOREPLACE`
+  errno 22 and fail-closed cleanup, not a successful NAS atomic installation.
+  All 34 refusal cases assert that installation is never reached. Earlier
+  attempts at `f13c2fa156b4a80f43620a2a1b4cf0a25eca241a` reported
+  `11 failed, 34 passed in 51.51s`, then the 11 blocked cases on tmpfs reported
+  `11 failed, 34 deselected in 14.42s`; neither failure is relabeled a pass.
+  Commands and evidence limits are in `tasks/LATEST_TASK_RESULT/README.md`.
+  Leader reviews #662 `5289350726` at
+  `0ff95ba41ce7ce961ee333bbcac9f8e3db539697` and #663 `5289350480` at
+  `038f0fa911ec7971e69c03528385019de8c29b5f` cover only their standalone
+  publisher and redirect-fix scopes. Neither head was changed or imported.
+  Actual HF input acceptance, private output-target readiness/publication,
+  workflow wiring, ordered 30-cell execution/admission deduplication and fixed
+  grading remain unfinished. No real-input transfer, model or grader ran here.
+
 - Add explicitly selected `hf_originals` intake to the existing single-cell CI
   path. `github_draft` remains the default, with no automatic fallback. The
   genuine registered contract supplies the original parquet and two reference
