@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
+from datetime import datetime, timezone
 import fcntl
 import hashlib
 import io
@@ -39,6 +40,21 @@ PROOF = "verified_publication_derived_not_independent_provider_authentication"
 # ceiling leaves two minutes to stop/reap its owned tree, not another attempt.
 CHILD_SECONDS = 14_520
 require = output._require
+
+
+_INSPECTION_REASONS = output.TARGET_CHECK_REASONS | frozenset({
+    "selected_private_target_mismatch", "explicit_first_attempt_reviewed_grading_context_required",
+    "grading_run_identity_required", "pilot_grade_override_refused", "reviewed_grading_source_required",
+    "branch_inspection_has_no_inference_revision", "pilot_grade_mode_conflict",
+    "grading_source_preflight_refused", "hf_revision_not_found", "grading_branch_absent",
+    "grading_branch_identity_mismatch", "grading_branch_privacy_unavailable",
+    "private_grading_branch_required", "grading_branch_head_unavailable",
+    "recorded_bootstrap_required", "grading_branch_seed_mismatch",
+})
+_INSPECTION_DRIFT = frozenset({
+    "grading_branch_identity_mismatch", "private_grading_branch_required",
+    "recorded_bootstrap_required", "grading_branch_seed_mismatch",
+})
 
 
 _ENTRY_REFUSALS = {
@@ -78,8 +94,9 @@ class Context:
 def compile_request(selector: str, source: str, terminal: str = "") -> Context | None:
     retained._target()  # Fixed tracked namespace/fingerprint, never an endpoint input.
     require(output._hash(source, 40), "reviewed_grading_source_required")
-    if selector == "pilot/branch-setup":
-        require(terminal == "", "branch_setup_has_no_inference_revision")
+    if selector in {"pilot/branch-setup", "pilot/branch-inspect"}:
+        require(terminal == "", "branch_setup_has_no_inference_revision" if selector == "pilot/branch-setup"
+                else "branch_inspection_has_no_inference_revision")
         return None
     require(selector.startswith("pilot/"), "canonical_pilot_selector_required")
     plan, cell, grading = adapter.compile_cell_grading_plan(ci.CAMPAIGN, selector[6:], source)
@@ -153,6 +170,72 @@ def _observation(outcome="unresolved", *, stage: str) -> dict:
 
 def _failed(observed: dict, error: BaseException) -> None:
     observed["reason"], observed["http_status"] = output._error_context(error)
+
+
+def _inspection_observation() -> dict:
+    return {"role": "fixed_private_pilot_grading_branch_inspection", "repository_name_sha256": retained.TARGET_SHA256,
+            "outcome": "plan_only", "stage": "plan", "reason": None, "http_status": None,
+            "branch_state": "inaccessible_or_unknown", "head": None, "matches_bootstrap": None,
+            "exact_identity_match": False, "private": None, "bootstrap_access_verified": False,
+            "observed_at": None, "remote_mutation_possible": False, "judge_entry_requested": False,
+            "inference_requested": False, "grade_success": False, "automatic_retry": False}
+
+
+def _inspection_failed(observed: dict, reason: str) -> None:
+    observed["reason"] = ({"publication_timeout": "grading_branch_inspection_timeout",
+                           "publication_interrupted": "grading_branch_inspection_interrupted"}.get(reason)
+                          or (reason if reason in _INSPECTION_REASONS else "grading_branch_inspection_failed"))
+    observed["outcome"] = "blocked_drift" if reason in _INSPECTION_DRIFT else "refused"
+
+
+def inspect_branch(source: str) -> dict:
+    """Two bounded metadata reads, never setup replay or historical acknowledgment.
+
+    No grading root or receipt is opened. These responses are not an atomic
+    snapshot, write permission, grading readiness, or authority to create/reset.
+    """
+    observed = _inspection_observation()
+    observed.update(outcome="refused", stage="inspection_preflight")
+    try:
+        _ci_authority(source)
+        repo = retained._target()
+        token = os.environ.get("HF_TOKEN", "")
+        require(bool(token) and len(token) <= 4096 and all(33 <= ord(char) <= 126 for char in token),
+                "explicit_hf_token_required")
+        from codex_ci_input_intake import _hf_environment
+
+        with output._time_bound(output.TARGET_CHECK_SECONDS) as deadline, _hf_environment(online=True):
+            for revision, stage in ((retained.BOOTSTRAP, "bootstrap_metadata"), (BRANCH, "branch_metadata")):
+                observed.update(stage=stage, http_status=None)
+                with output._hf_client(token, deadline, metadata_repo=repo, metadata_revision=revision,
+                                       observation=observed) as api:
+                    metadata = api.repo_info(repo_id=repo, repo_type="dataset", revision=revision, token=token,
+                                             timeout=output._remaining(deadline))
+                observed["exact_identity_match"] = getattr(metadata, "id", None) == repo
+                private = getattr(metadata, "private", None)
+                observed["private"] = private if type(private) is bool else None
+                require(observed["exact_identity_match"], "grading_branch_identity_mismatch")
+                require(type(private) is bool, "grading_branch_privacy_unavailable")
+                require(private is True, "private_grading_branch_required")
+                head = getattr(metadata, "sha", None)
+                require(output._hash(head, 40), "grading_branch_head_unavailable")
+                if stage == "bootstrap_metadata":
+                    require(head == retained.BOOTSTRAP, "recorded_bootstrap_required")
+                    observed["bootstrap_access_verified"] = True
+                else:
+                    observed.update(branch_state="present", head=head, matches_bootstrap=head == retained.BOOTSTRAP)
+                    require(observed["matches_bootstrap"], "grading_branch_seed_mismatch")
+                output._remaining(deadline)
+            observed["outcome"] = "observed"
+    except (Exception, KeyboardInterrupt) as error:
+        reason, status = output._error_context(error)
+        if (observed["bootstrap_access_verified"] and observed["stage"] == "branch_metadata"
+                and reason == "hf_revision_not_found" and status == 404):
+            observed.update(outcome="observed", branch_state="absent", reason="grading_branch_absent")
+        else:
+            _inspection_failed(observed, reason)
+    observed["observed_at"] = datetime.now(timezone.utc).isoformat()
+    return observed
 
 
 def setup(root: Path, source: str, *, _test_api=None) -> dict:
@@ -905,17 +988,23 @@ def main(argv=None, *, _test_api=None, _test_transport=None) -> int:
     parser.add_argument("--reviewed-source-sha", required=True)
     parser.add_argument("--terminal-revision", default="")
     parser.add_argument("--root", required=True, type=Path)
-    parser.add_argument("--phase", choices=("plan", "setup", "prepare", "claim", "judge", "publish", "reconcile"), default="plan")
+    parser.add_argument("--phase", choices=("plan", "inspect", "setup", "prepare", "claim", "judge", "publish", "reconcile"), default="plan")
+    args = None
     try:
         args = parser.parse_args(argv)
         _workflow_inputs()
         context = compile_request(args.selector, args.reviewed_source_sha, args.terminal_revision)
-        require((context is None and args.phase in {"plan", "setup"}) or
-                (context is not None and args.phase != "setup"), "pilot_grade_mode_conflict")
+        reserved = {"pilot/branch-setup": {"plan", "setup"}, "pilot/branch-inspect": {"plan", "inspect"}}
+        require(args.phase in reserved[args.selector] if args.selector in reserved
+                else args.phase not in {"setup", "inspect"}, "pilot_grade_mode_conflict")
         if args.phase != "plan":
             with _entry_boundary("source_preflight"):
                 source_plan, source_parent, _ = pilot.compile_pilot(ci.CAMPAIGN, args.reviewed_source_sha)
                 (_test_transport or pilot.LocalTransport()).require_source(source_plan, source_parent)
+        if args.selector == "pilot/branch-inspect":
+            observed = _inspection_observation() if args.phase == "plan" else inspect_branch(args.reviewed_source_sha)
+            print(pilot._canonical_json(observed))
+            return 0 if observed["outcome"] in {"plan_only", "observed"} else 2
         observed = _observation("plan_only", stage="plan")
         ready = False
         if args.phase == "setup":
@@ -957,6 +1046,12 @@ def main(argv=None, *, _test_api=None, _test_transport=None) -> int:
             reason, status = output._error_context(error)
             if reason == "hf_operation_failed":
                 reason = "grading_contract_refused"
+        if args is not None and args.selector == "pilot/branch-inspect":
+            observed = _inspection_observation()
+            observed["stage"] = stage or "inspection_preflight"
+            _inspection_failed(observed, reason)
+            print(pilot._canonical_json(observed), file=sys.stderr)
+            return 2
         print(pilot._canonical_json({"role": "fixed_private_pilot_grading", "outcome": "refused",
             "stage": stage, "reason": reason, "http_status": status,
             # Current invocation only: false never proves an absent remote

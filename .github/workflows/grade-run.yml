@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       experiment_yaml:
-        description: "Experiment YAML name; reserved pilot/<canonical cell> or pilot/branch-setup uses the isolated private pilot route"
+        description: "Experiment YAML name; reserved pilot/<canonical cell>, pilot/branch-setup or pilot/branch-inspect uses the isolated private pilot route"
         required: true
         type: string
       grading_config:
@@ -1933,15 +1933,24 @@ jobs:
           python batch-runner/codex_budget_pilot_grading.py --phase setup \
             --selector "$GRADE_SELECTOR" --reviewed-source-sha "$GITHUB_SHA" \
             --root "$RUNNER_TEMP/pilot-fixed-grade"
+      - name: Read-only observation of the fixed grading branch
+        if: inputs.experiment_yaml == 'pilot/branch-inspect'
+        timeout-minutes: 2
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          python batch-runner/codex_budget_pilot_grading.py --phase inspect \
+            --selector "$GRADE_SELECTOR" --reviewed-source-sha "$GITHUB_SHA" \
+            --terminal-revision "$GRADE_TERMINAL" --root "$RUNNER_TEMP/pilot-fixed-grade"
       - name: Verify the pinned grading renderer before admission
-        if: inputs.experiment_yaml != 'pilot/branch-setup'
+        if: inputs.experiment_yaml != 'pilot/branch-setup' && inputs.experiment_yaml != 'pilot/branch-inspect'
         timeout-minutes: 2
         run: |
           cd batch-runner
           python scripts/preflight_grading_renderer.py
       - name: Verify retained bytes and native grading input installation
         id: pilot_input
-        if: inputs.experiment_yaml != 'pilot/branch-setup'
+        if: inputs.experiment_yaml != 'pilot/branch-setup' && inputs.experiment_yaml != 'pilot/branch-inspect'
         timeout-minutes: 10
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}

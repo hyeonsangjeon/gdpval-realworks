@@ -373,6 +373,7 @@ def _remaining(deadline: float) -> float:
 
 @contextmanager
 def _hf_client(token: str, deadline: float, *, metadata_repo: str | None = None,
+               metadata_revision: str = "main",
                observation: dict | None = None, setup_repo: str | None = None,
                setup_reservation: Path | None = None, setup_identity: dict | None = None,
                response_bytes_limit: int | None = None):
@@ -381,7 +382,7 @@ def _hf_client(token: str, deadline: float, *, metadata_repo: str | None = None,
     Buffered immutable operations select the SDK's HTTP/LFS path. Responses and
     transport errors become our exception BEFORE SDK http_backoff can retry or
     log URLs. This does not promise one HTTP request for a multipart commit.
-    The optional metadata mode permits only one exact GET, never a redirect.
+    The optional metadata mode permits one exact revision GET, never a redirect.
     Fixed-target setup permits only its four ordered requests, without redirects.
     """
     import httpx
@@ -394,6 +395,10 @@ def _hf_client(token: str, deadline: float, *, metadata_repo: str | None = None,
     _require(type(response_bytes_limit) is int and 0 < response_bytes_limit <= MAX_FILE_BYTES,
              "hf_response_limit_refused")
     _require(metadata_repo is None or setup_repo is None, "hf_setup_request_refused")
+    _require((metadata_repo is None and metadata_revision == "main") or
+             (metadata_repo is not None and type(metadata_revision) is str
+              and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", metadata_revision) is not None),
+             "hf_metadata_request_refused")
     metadata_attempts = 0  # Shared even if the SDK recreates a client/transport.
     setup_attempts = 0
 
@@ -450,9 +455,11 @@ def _hf_client(token: str, deadline: float, *, metadata_repo: str | None = None,
                     _require(not request.content, "hf_setup_request_refused")
                 setup_attempts += 1
             if metadata_repo is not None:
-                expected = f"{HF_ENDPOINT}/api/datasets/{metadata_repo}/revision/main"
+                expected = f"{HF_ENDPOINT}/api/datasets/{metadata_repo}/revision/{metadata_revision}"
                 _require(observation is not None and metadata_attempts == 0
-                         and request.method == "GET" and str(request.url) == expected,
+                         and request.method == "GET" and str(request.url) == expected
+                         and not request.content
+                         and request.headers.get("authorization") == "Bearer " + token,
                          "hf_metadata_request_refused")
                 metadata_attempts += 1
             _require(request.url.scheme == "https", "hf_insecure_request_refused")
@@ -480,8 +487,11 @@ def _hf_client(token: str, deadline: float, *, metadata_repo: str | None = None,
                 observation["http_status"] = response.status_code
                 if response.status_code != 200:
                     status = response.status_code
+                    revision_missing = (metadata_revision != "main" and status == 404
+                                        and response.headers.get("X-Error-Code") == "RevisionNotFound")
                     response.close()
-                    reason = ("hf_http_failed" if status >= 400 else "hf_metadata_redirect_refused"
+                    reason = ("hf_revision_not_found" if revision_missing else
+                              "hf_http_failed" if status >= 400 else "hf_metadata_redirect_refused"
                               if 300 <= status < 400 else "hf_metadata_response_refused")
                     raise OutputPublicationRefused(reason, status)
             if response.status_code >= 400:
