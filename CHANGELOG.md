@@ -147,6 +147,50 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Integrate exact main `0f0911b435d7f704db8e2f2131a00ade310d5c1f` into
+  the private-intake branch with ordinary non-squash merge
+  `8806971ca06516e02cba12f090e4bf0bed3d47ae`. Only the two completion records
+  conflicted; both substantive changelog histories are retained. All seven
+  protected #658 workflow/intake/test blobs match reviewed source
+  `082a7dab19f3e5e80b94b32f55ad25f8493b63a9`; all four incoming #657
+  diagnostic workflow/test blobs match exact main, including the corrected
+  transmission-sweep contract. The backend workflow still has raw SHA256
+  `08291d29670966d52a88ec216b71e68811a05bd599c13df040460a72204849ac`.
+  No workflow behavior, source guard, budget or test selection changed.
+  #658 review `5286767574` stays attached to its pre-integration source;
+  `1 passed in 6.76s` stays at `572326c4933cd26870ffe1cfa500979ce8a0f89b`.
+  #657 review `5286611655` stays at
+  `ae4c73b834337001102a0a7fc0e78a3d608a7044`; its `1 passed in 0.25s`
+  stays at `e6445a0544e0e6c0bb3d5ef6bee4a232be96ccff`. Original 67/42-case
+  evidence and the cancelled 45-minute job retain their original scopes;
+  no tests or CI queries were repeated. Separately, one newly authorized
+  standard `gh release upload` invocation succeeded after an exclusive private
+  reservation and an exact draft/label/target/empty-assets check. Release
+  `394272629` retained label `project5-ci-inputs-20260923-01` and target
+  `266ef7a05335d900304214da0c0d680331fb346c`; its post-upload metadata showed
+  `draft=true`, asset `582945947`, state `uploaded`, 2,519,040 bytes and
+  provider digest
+  `sha256:757603585405da5d7f6817a6a0a23bd530d4b5e4e38b2fd4dc6f318053d240e3`.
+  The original private regular archive and one named byte-for-byte copy
+  independently matched that external size/SHA pin. Upload exit 0 took
+  1.733163 seconds; the full observer exited 0 after 3.365667 seconds, within
+  the 60/240-second bounds. Bounded stdout/stderr/outcome are retained privately;
+  this successful command emitted zero stdout/stderr bytes. There was no
+  second upload invocation, clobber, payload download/import, publication,
+  tag/ref mutation, new credential or permission change. The first HTTP
+  400/exit-1 upload, its 2.506628-second observer exit 2 and lost captured
+  stdout/stderr remain separate; no cause is inferred or old receipt replaced.
+  The prior conditional correction did not run. Draft status was observed,
+  not guaranteed permanently; owner-account staging does not prove CI
+  `contents:read` access. The leader separately reported diagnostic run
+  `35817078746` on exact main as QUEUED AT OBSERVATION with native-only
+  send enabled for `gpt-5.4` and both legacy paid flags disabled. That run was
+  not queried or acted on here; no connectivity, usage, exactly-one-HTTP or
+  graded-result claim is made. New-head review/checks, CI read-token input-check,
+  current native connectivity, ordered 30-cell scheduling/deduplication/
+  aggregation, execution and grading remain unfinished. Both campaigns and
+  their original controls remain unchanged; staging is not pilot readiness.
+
 - Increase only `backend-tests.yml`'s `native-host-contracts` ceiling from 45
   to 60 minutes for its CI setup/cleanup envelope. The leader-supplied run
   `35811169415`/job `107022868111` was cancelled at the 45-minute maximum even
