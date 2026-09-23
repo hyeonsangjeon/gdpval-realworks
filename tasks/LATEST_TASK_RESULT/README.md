@@ -1,6 +1,102 @@
 # Latest task result
 
-## PROJECT5-FIXED-GRADING-WIRING-0255
+## PROJECT5-GRADING-CI-FIXES-0458
+
+### Scope and observed blocker
+
+Repair only four directly coupled regressions on the existing #668 branch,
+starting at `efb5be35ac9750bf03a784f9967f2d4e6341041d`. The supplied main remains
+`50676dd63b948bc8fa329f9b24871af75fe29c54`; no integration or new branch was made.
+The leader read CI run `35906432566`, job `107335172560`: **4 failed, 13695 passed,
+61 skipped, 46 deselected in 2047.85s**, with the other eight checks passing.
+Those are test failures on the prior head, not a dependency-install failure or
+evidence of live grading. This task did not query CI or repeat that suite.
+
+The same extreme-reasoner returned APPROVE-WITH-CONDITIONS before changing the
+HF helper and freeze-checker behavior. This bounded decision covers the repair
+design, not approval of the resulting head. No workflow edit was needed.
+Reporting/copyediting guidance keeps the leader's CI observation, the earlier
+focused result and the new five-test result separate.
+
+### Concrete corrections and freeze coverage
+
+1. `_hf_client` now resolves an unset response limit to the current
+   `MAX_RECORD_BYTES` once at context entry. `_session` forwards that unset
+   sentinel. Exact-integer/positive/file-ceiling validation is unchanged, as are
+   the ordinary 8 MiB default and the explicit bounded grading-payload override.
+   The original 64-byte/65-byte real-stream test is unchanged and again reports
+   `hf_response_bytes_exceeded`, HTTP 200 and exit 2. A JSON parse failure is not
+   relabeled as a successful observation.
+2. The ordinal contract verifies all six bindings: five job environments and
+   the approval step. Both generic CLI flag paths and self-retrigger forwarding
+   remain asserted. The pilot jobs pass the declared defaults to the real host
+   validator, which accepts ordinal 1 and refuses ordinal 2. No repeat policy
+   changed.
+3. The real `check_grader_hash_freeze.py` now recognizes exact paid job name
+   `pilot-live`. The existing freeze workflow collects unfinished `grade-run.yml`
+   runs and their job conclusions, then invokes that checker under
+   `set -euo pipefail`. A new offline CLI regression uses the actual workflow job
+   identity and verifies exit 1 for a hash-moving diff with skipped generic paid
+   jobs and a queued, approval-waiting or active pilot job; success/failure/cancelled
+   job conclusions still block while the workflow is unfinished. Runs with every
+   paid job skipped and completed-run cases return exit 0, as does a hash-neutral
+   diff.
+   The hashed-path set, classification predicates and fail-closed handling are
+   unchanged. This tests checker enforcement, not repository branch-protection
+   configuration or a live paid run.
+4. The rc=7 contract includes `pilot-plan` and `pilot-live` and the already-present
+   generic pilot-exclusion conditions. Every existing generic approval,
+   committed-partial validation, resume, publication and verification assertion
+   remains. Added assertions require separate pilot dry/live routing, protected
+   paid approval, restricted permissions, no generic dependency or inherited
+   approval path, no automatic resume and no public pilot artifacts.
+
+The fixed grader source/hash closure, prompt/schema/configuration, runtime pins,
+workflow bytes, one-use grading semantics and `pilot-grades-20260923` branch
+policy are unchanged. Inference HF `main` isolation is unchanged. No hash guard
+was relaxed or source pin rewritten.
+
+### Focused offline validation
+
+Tested SHA: `f210a789e2a0afa889fd5261858fcbc0b402327f`.
+Result: **5 passed in 3.20s**, exit 0. One command selected only the four reported
+failure nodes and the single new freeze-enforcement regression. It ran from
+`batch-runner/` with a finite process deadline and a cleared environment:
+
+```bash
+timeout --signal=TERM --kill-after=5s 180s env -i PATH=/usr/bin:/bin HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 HF_HUB_DISABLE_IMPLICIT_TOKEN=1 DO_NOT_TRACK=1 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /usr/bin/python3.10 -m pytest -q -o addopts= -o junit_family=legacy -p no:cacheprovider --tb=short --junitxml=<private-test-evidence>/results.xml \
+  'tests/test_codex_budget_pilot_output_target.py::test_output_target_no_response_and_parse_failure_never_invent_status[size-200-hf_response_bytes_exceeded]' \
+  tests/test_gold_ceiling_contract.py::test_workflow_carries_the_ordinal_through_to_the_grader \
+  tests/test_grader_hash_freeze.py::TestTheJobNamesStillExistInGradeRun::test_no_other_job_is_gated_on_dry_run_being_false \
+  tests/test_step8_grade.py::test_grade_workflow_rc7_requires_valid_committed_partial \
+  tests/test_grader_hash_freeze.py::TestTheCommandLine::test_pilot_live_enforces_freeze_with_generic_jobs_skipped
+```
+
+The original connector result remains **64 passed in 47.42s** at
+`f352eb87af8c794a677629229884f37061342535`. That family, the earlier
+grading/retention/setup families and the full suite were not rerun. The original
+local native installation returned `-1`, errno `22` (`EINVAL`), with CLI exit 2;
+successful staging in that family used an explicit test double. This repair
+does not validate native installation on the actual CI grading host. Only the
+two completion records change after the new tested SHA.
+
+### Review boundary and remaining work
+
+The leader's #667 review `5294839155` remains scoped to
+`cace64a840867c79362fa9aacd13af700ee9f363`; it does not approve #668 or this repair.
+Accepted-input observation `35847871634` and consumed private setup
+`35881609256` retain their separate scopes below. Neither was repeated. No live
+claim, inference, output publication or grade is established here.
+
+Remaining: leader review and final exact-head CI; one sealed execution SHA for
+all 30 cells before payment; native atomic installation on the real grading
+host; checked live grading-branch/write readiness; first admitted paid cell and
+retained output; one fixed grade and all 30 outcomes. This task used no real HF
+credential/API, branch creation, payload transfer, dependency installation,
+workflow dispatch, setup replay, grant change, Azure/model/grader operation or
+CI query/wait. The following wiring record is historical, not new validation.
+
+## Historical PROJECT5-FIXED-GRADING-WIRING-0255
 
 ### Scope and interface
 

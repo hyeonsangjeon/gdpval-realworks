@@ -11,6 +11,43 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Fixed
+
+- Repair four coupled #668 CI regressions from head
+  `efb5be35ac9750bf03a784f9967f2d4e6341041d`, without changing workflow behavior,
+  the fixed grader/hash closure, configuration or runtime pins. Resolve the HF
+  response limit once at client entry; the shared session forwards the unset
+  sentinel instead of capturing the constant at definition. The ordinary 8 MiB
+  bound, explicit bounded grading-payload override and real stream-overflow
+  refusal remain intact. Register exact paid job `pilot-live` in the actual
+  freeze checker; the new CLI regression proves a hash-moving diff is refused
+  while that job is active even when generic paid jobs are skipped. Dry/skipped
+  and completed runs remain nonblocking. Account for all six ordinal bindings
+  and both isolated pilot jobs while preserving generic ordinal forwarding,
+  approval, rc=7 partial validation, resume and publication assertions.
+  The same extreme-reasoner's bounded pre-edit decision was
+  APPROVE-WITH-CONDITIONS, not implementation approval. At tested SHA
+  `f210a789e2a0afa889fd5261858fcbc0b402327f`, one offline selector returned
+  **5 passed in 3.20s**, exit 0. From `batch-runner/`, it selected only:
+
+  - `tests/test_codex_budget_pilot_output_target.py::test_output_target_no_response_and_parse_failure_never_invent_status[size-200-hf_response_bytes_exceeded]`
+  - `tests/test_gold_ceiling_contract.py::test_workflow_carries_the_ordinal_through_to_the_grader`
+  - `tests/test_grader_hash_freeze.py::TestTheJobNamesStillExistInGradeRun::test_no_other_job_is_gated_on_dry_run_being_false`
+  - `tests/test_step8_grade.py::test_grade_workflow_rc7_requires_valid_committed_partial`
+  - `tests/test_grader_hash_freeze.py::TestTheCommandLine::test_pilot_live_enforces_freeze_with_generic_jobs_skipped`
+
+  The leader's CI observation remains separate: run `35906432566`, job
+  `107335172560`, on the prior head had **4 failed, 13695 passed, 61 skipped,
+  46 deselected in 2047.85s**; the other eight checks passed. The original focused
+  result remains **64 passed in 47.42s** at
+  `f352eb87af8c794a677629229884f37061342535`. Neither run was repeated here.
+  Main remains the supplied `50676dd63b948bc8fa329f9b24871af75fe29c54`.
+  No workflow, grader policy, fixed grading branch or inference-main isolation
+  changed. No live HF/model/grader/Azure operation, dependency installation or CI
+  query ran. Leader review, final exact-head CI, actual grading-host native
+  installation, checked live branch/write readiness and the first paid cell and
+  fixed grade remain outstanding; the offline repair is not live readiness.
+
 ### Changed
 
 - Connect one retained canonical pilot cell to the existing fixed Step8 grader
