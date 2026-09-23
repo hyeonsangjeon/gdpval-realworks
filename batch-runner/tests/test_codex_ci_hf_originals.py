@@ -14,6 +14,7 @@ import json
 import logging
 import os
 from types import SimpleNamespace
+from urllib.parse import quote, urlsplit
 
 import httpx
 import pytest
@@ -319,6 +320,100 @@ def test_hf_originals_wrong_origin_or_revision_redirect_never_receives_auth(hf_c
     assert invoke(hf_case) == 2
     assert_refused(hf_case, caplog, capsys, "hf_original_redirect_refused")
     assert len(hf_case.hub.calls) == 1
+
+
+def reference_cache_redirect(case):
+    """Synthetic member with the observed %2F/literal-parenthesis cache shape."""
+    _, repo, revision, member, role = case.origins[1]
+    assert role == intake.HFRole.REFERENCE_1 and "(" in member
+    original = hf_hub_url(repo, member, repo_type="dataset", revision=revision)
+    prefix = f"/api/resolve-cache/datasets/{repo}/{revision}/"
+    return original, prefix, quote(member, safe="()")
+
+
+@pytest.mark.parametrize("originals", [
+    ("reference_files/first/one (1).txt", "reference_files/second/two.txt"),
+], indirect=True, ids=["synthetic-escaped-reference"])
+@pytest.mark.parametrize("form", ["observed", "lowercase_escapes", "literal_path", "cdn_hop"])
+def test_hf_originals_redirect_equivalent_reference_survives_real_cli(hf_case, caplog, capsys, form):
+    case = hf_case
+    original, prefix, member = reference_cache_redirect(case)
+    if form == "lowercase_escapes":
+        member = member.replace("%2F", "%2f")
+    elif form == "literal_path":
+        member = urlsplit(original).path.split("/resolve/" + case.revision + "/", 1)[1]
+    location = prefix + member + "?synthetic-query=private"
+    target = "https://huggingface.co" + location
+    first = HubResponse(PRIVATE.encode(), status=307, headers={"location": location})
+    redirects = [first]
+    if form == "cdn_hop":
+        redirects.append(HubResponse(PRIVATE.encode(), status=302, headers={"location": CDN}))
+    case.hub.responses[1:1] = redirects
+    handles = list(case.hub.responses)
+    assert invoke(case) == 0
+    output = capsys.readouterr()
+    report = json.loads(output.out)
+    assert report["original_inputs_verified"] is True and report["bundle"] == case.identity
+    assert report["oidc_requested"] is report["model_requested"] is report["publication_authorized"] is False
+    assert case.stage.read_bytes() == case.archive
+    assert all((case.installed / name).read_bytes() == data for name, data in case.files.items())
+    assert (case.installed / bundle.READY).is_file() and len(case.transport.calls) == 1
+    assert len(case.hub.calls) == 4 + len(redirects)
+    assert [call[1] for call in case.hub.calls[1:3]] == [original, target]
+    for _, url, options in case.hub.calls:
+        assert options["headers"].get("authorization") == (None if url == CDN else "Bearer " + HF_TOKEN)
+        assert options["follow_redirects"] is False and options["max_retries"] == 0
+        assert options["retry_on_status_codes"] == options["retry_on_exceptions"] == ()
+    assert all(response.closed for response in handles)
+    assert all(response.reads == [] for response in redirects)
+    assert not any(value in output.out + output.err + caplog.text
+                   for value in (HF_TOKEN, PRIVATE, STEP0_REPO, CDN, str(case.parent), location, original))
+
+
+@pytest.mark.parametrize("originals", [
+    ("reference_files/first/one (1).txt", "reference_files/second/two.txt"),
+], indirect=True, ids=["synthetic-escaped-reference"])
+@pytest.mark.parametrize("defect", [
+    "repository", "revision", "mutable_revision", "host", "encoded_prefix", "wrong_member",
+    "double_slash_escape", "double_parenthesis_escape", "malformed_escape", "literal_traversal",
+    "encoded_traversal", "encoded_dot", "encoded_empty_component", "encoded_backslash",
+    "encoded_control", "encoded_del", "literal_control",
+])
+def test_hf_originals_redirect_reference_identity_or_encoding_refuses_in_cli(hf_case, caplog, capsys, defect):
+    case = hf_case
+    original, prefix, member = reference_cache_redirect(case)
+    location = prefix + member
+    changes = {
+        "repository": prefix.replace("/openai/gdpval/", "/other/gdpval/") + member,
+        "revision": prefix.replace(case.revision, "a" * 40) + member,
+        "mutable_revision": prefix.replace(case.revision, "main") + member,
+        "host": "https://huggingface.co.unapproved.example" + location,
+        "encoded_prefix": prefix.replace("/openai/gdpval/", "/openai%2Fgdpval/") + member,
+        "wrong_member": location.replace("one", "two"),
+        "double_slash_escape": location.replace("%2F", "%252F"),
+        "double_parenthesis_escape": location.replace("(", "%2528"),
+        "malformed_escape": location.replace("%2F", "%2G", 1),
+        # urljoin alone would erase the literal traversal, yielding the exact
+        # expected path. Both literal and encoded traversal must be rejected.
+        "literal_traversal": prefix + "unregistered/../" + member,
+        "encoded_traversal": prefix + "unregistered%2F%2e%2e%2F" + member,
+        "encoded_dot": prefix + "%2e%2F" + member,
+        "encoded_empty_component": location.replace("%2F", "%2F%2F", 1),
+        "encoded_backslash": location.replace("%2F", "%5C", 1),
+        "encoded_control": location.replace("one", "one%00"),
+        "encoded_del": location.replace("one", "one%7F"),
+        "literal_control": location.replace("one", "one\t"),
+    }
+    location = changes[defect] + "?synthetic-query=private"
+    response = HubResponse(PRIVATE.encode(), status=307, headers={"location": location})
+    case.hub.responses.insert(1, response)
+    assert invoke(case) == 2
+    assert_refused(case, caplog, capsys, "hf_original_redirect_refused")
+    assert "stage=hf_reference_1, http_status=307" in caplog.text
+    assert len(case.hub.calls) == 2 and case.hub.calls[-1][1] == original
+    assert response.closed and response.reads == []
+    assert not case.stage.exists() and reservation(case.stage).exists() and case.transport.calls == []
+    assert location not in caplog.text and original not in caplog.text
 
 
 def test_hf_originals_shared_clock_is_bounded(hf_case, monkeypatch, caplog, capsys):

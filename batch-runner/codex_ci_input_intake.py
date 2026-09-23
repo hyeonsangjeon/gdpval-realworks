@@ -329,15 +329,41 @@ def _hf_environment(*, online: bool) -> Iterator[None]:
                 os.environ[name] = value
 
 
+def _hf_path_bytes(path: str) -> bytes:
+    """Decode once, without normalizing ambiguous escapes or path components."""
+    if re.search(r"%(?![0-9a-fA-F]{2})", path):
+        raise InputIntakeRefused("hf_original_redirect_refused")
+    decoded = urllib.parse.unquote_to_bytes(path)
+    if (b"%" in decoded or b"\\" in decoded or b"//" in decoded
+            or any(part in (b".", b"..") for part in decoded.split(b"/"))
+            or any(byte < 32 or byte == 127 for byte in decoded)):
+        raise InputIntakeRefused("hf_original_redirect_refused")
+    return decoded
+
+
 def _hf_redirect(location: str, current: str, original: str) -> str:
     """Follow only Hub/cache or HF-owned CDN hops; never authenticate a CDN."""
     if (len(location) > 8192 or any(ord(char) < 33 or ord(char) > 126 for char in location)):
         raise InputIntakeRefused("hf_original_redirect_refused")
     target = urllib.parse.urljoin(current, location)
     parsed, origin = urllib.parse.urlsplit(target), urllib.parse.urlsplit(original)
-    cache_path = origin.path.replace("/datasets/", "/api/resolve-cache/datasets/", 1).replace("/resolve/", "/", 1)
+    hub_path_matches = False
+    if parsed.netloc == "huggingface.co":
+        # Validate the raw path so urljoin cannot hide literal dot segments. The Hub encodes
+        # member separators as %2F and may leave parentheses literal in cache
+        # redirects. Only that exact member is compared after one decode;
+        # namespace/repository/revision prefixes must still match literally.
+        _hf_path_bytes(urllib.parse.urlsplit(location).path)
+        namespace, _, tail = origin.path.partition("/resolve/")
+        revision, _, member = tail.partition("/")
+        prefixes = (f"{namespace}/resolve/{revision}/", f"/api/resolve-cache{namespace}/{revision}/")
+        hub_path_matches = any(
+            parsed.path.startswith(prefix)
+            and _hf_path_bytes(parsed.path[len(prefix):]) == _hf_path_bytes(member)
+            for prefix in prefixes
+        )
     if (parsed.scheme != "https" or parsed.fragment or parsed.username is not None or parsed.port is not None
-            or not (parsed.netloc == "huggingface.co" and parsed.path in (origin.path, cache_path)
+            or not (parsed.netloc == "huggingface.co" and hub_path_matches
                     or parsed.netloc == "cdn-lfs.huggingface.co" or parsed.netloc.endswith(".hf.co"))):
         raise InputIntakeRefused("hf_original_redirect_refused")
     return target
