@@ -2,10 +2,14 @@
 
 No original inputs or provider state are accessed. HF repository/revision and
 prepared fingerprint values below are deliberately synthetic external claims;
-selection, result/artifact/ledger byte checks and atomic installation are real.
+selection, result/artifact/ledger checks and private staging are real. As in
+the parent materializer's tests, successful copies use a single-threaded test
+double only at renameat2; a separate native case observes success or refusal.
 """
 
 import copy
+import ctypes
+import errno
 import hashlib
 import json
 import os
@@ -20,6 +24,7 @@ import codex_budget_pilot as pilot
 import codex_budget_pilot_ci as ci
 import codex_budget_pilot_grading_input as adapter
 import gpt54_codex_grading_input as parent_entry
+import gpt54_v2_grading_input as primitives
 import step8_grade as grading
 from core.codex_runtime_config import CodexProviderSettings
 from core.cost_receipts import build_receipt, ledger_reference
@@ -134,7 +139,8 @@ def no_execution(monkeypatch):
 
 CASES = [
     "valid_a1", "valid_b1", "valid_c1", "valid_c2", "valid_b2", "valid_last_a2",
-    "parent_compatibility", "parent_refuses_pilot", "terminal_error", "ledger_absent", "ledger_null", "missing_accounting",
+    "parent_compatibility", "parent_refuses_pilot", "native_rename_boundary",
+    "terminal_error", "ledger_absent", "ledger_null", "missing_accounting",
     "foreign_cell", "wrong_campaign", "invalid_source", "source_binding", "config_binding",
     "approval_hash", "extra_identity", "input_repo_as_output", "input_revision_as_output",
     "git_revision_as_output", "mutable_revision", "wrong_run", "foreign_task", "duplicate_task",
@@ -251,8 +257,38 @@ def test_pilot_cell_grading_input(case, compiled, tmp_path, monkeypatch, capsys)
     destination_before = (list(inputs["destination"].iterdir())
                           if inputs["destination"].is_dir() else None)
     accepted = case.startswith("valid_") or case in {
-        "parent_compatibility", "terminal_error", "ledger_absent", "ledger_null", "missing_accounting",
+        "parent_compatibility", "native_rename_boundary", "terminal_error", "ledger_absent", "ledger_null", "missing_accounting",
     }
+    native_outcomes = []
+    if case == "native_rename_boundary":
+        native_rename = primitives._no_replace_rename()
+
+        def observed_rename(*args):
+            result = native_rename(*args)
+            native_outcomes.append((result, ctypes.get_errno()))
+            return result
+
+        monkeypatch.setattr(primitives, "_no_replace_rename", lambda: observed_rename)
+    elif accepted:
+        def fixture_rename(source_fd, source, target_fd, target, flags):
+            # Existing parent-test pattern, not a production portability fallback
+            # or evidence of race-safe atomic commit on this NAS kernel.
+            assert source_fd == target_fd and flags == 1
+            assert not os.path.isabs(source) and not os.path.isabs(target)
+            try:
+                os.stat(target, dir_fd=target_fd, follow_symlinks=False)
+            except FileNotFoundError:
+                os.rename(source, target, src_dir_fd=source_fd, dst_dir_fd=target_fd)
+                return 0
+            ctypes.set_errno(errno.EEXIST)
+            return -1
+
+        monkeypatch.setattr(primitives, "_no_replace_rename", lambda: fixture_rename)
+    else:
+        def unexpected_install(*args, **kwargs):
+            pytest.fail("invalid input reached publication instead of refusing at validation")
+
+        monkeypatch.setattr(primitives, "_install", unexpected_install)
     if case == "parent_compatibility":
         result = parent_entry.materialize_codex_grading_input(run, manifest=load_plan(), **inputs)
         assert run.command[run.command.index("--limit") + 1] == "5"
@@ -273,6 +309,15 @@ def test_pilot_cell_grading_input(case, compiled, tmp_path, monkeypatch, capsys)
         captured = capsys.readouterr()
         assert str(tmp_path) not in captured.out + captured.err
         assert "private-fixture-marker" not in captured.out + captured.err
+        if case == "native_rename_boundary" and code == 2:
+            assert len(native_outcomes) == 1 and native_outcomes[0][0] == -1
+            assert native_outcomes[0][1] in {errno.EINVAL, errno.ENOSYS, errno.EOPNOTSUPP}
+            assert captured.out == "" and not inputs["destination"].exists()
+            assert not list(tmp_path.glob(".*.tmp-*"))
+            assert all(path.read_bytes() == data for path, data in before.items())
+            with capsys.disabled():
+                print(f"\nNative RENAME_NOREPLACE refused without residue (errno {native_outcomes[0][1]}); no fallback.")
+            return
         assert code == (0 if accepted else 2)
         if not accepted:
             assert captured.out == "" and captured.err.startswith("Pilot grading input refused: ")
