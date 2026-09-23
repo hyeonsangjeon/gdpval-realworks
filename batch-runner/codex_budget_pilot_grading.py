@@ -297,10 +297,25 @@ def _stage_rubric(context: Context, checkout: Path, api, cache: Path, token: str
             "rubric_fingerprint": rubric_order_fingerprint([item.rubric_item_id for item in task.rubric_items])}
 
 
+def _grade_path(context: Context, config_hash: str, source_hash: str, revision: str) -> Path:
+    import step8_grade as step8
+
+    config = json.loads(context.run.grader_config_json)
+    path = step8.resolve_grade_output_path(config, experiment_id=context.run.command[2],
+        judge_slug=step8._judge_slug(config["judge"]["model"]), config_hash=config_hash,
+        rubric_sha=config["rubric"]["revision"], rubric_short_sha=config["rubric"]["revision"][:7],
+        prompt_version=config["prompt"]["version"], inference_sha=revision, grader_source_hash=source_hash,
+        diagnostic_task_scope_sha=step8._ordered_task_ids_sha256([context.cell["task_id"]]))
+    relative = Path(os.path.normpath(str(Path("batch-runner") / path)))
+    require(not relative.is_absolute() and relative.parts[:2] == ("data", "grades") and ".." not in relative.parts,
+            "grading_output_path_escape")
+    return relative
+
+
 def _entry_contract(context: Context, checkout: Path, revision: str) -> dict:
     """Real local entry validation and actual materialized source/path hashes."""
     import step8_grade as step8
-    from core.tools import get_renderer_fingerprint
+    from core.tools import ReadDeliverableError, get_renderer_fingerprint
 
     run = context.run
     with _cwd(checkout / "batch-runner"):
@@ -317,20 +332,17 @@ def _entry_contract(context: Context, checkout: Path, revision: str) -> dict:
                 "materialized_experiment_mismatch")
         config_hash = step8.hash_config("comparison-grading.json")
         source_hash = step8.compute_grader_source_hash("comparison-grading.json", config)
-        path = step8.resolve_grade_output_path(config, experiment_id=run.command[2],
-            judge_slug=step8._judge_slug(config["judge"]["model"]), config_hash=config_hash,
-            rubric_sha=config["rubric"]["revision"], rubric_short_sha=config["rubric"]["revision"][:7],
-            prompt_version=config["prompt"]["version"], inference_sha=revision, grader_source_hash=source_hash,
-            diagnostic_task_scope_sha=step8._ordered_task_ids_sha256([context.cell["task_id"]]))
-        absolute = path.resolve()
-        require(absolute.is_relative_to(checkout), "grading_output_path_escape")
+        path = _grade_path(context, config_hash, source_hash, revision)
         from core.task_checkpoint import checkpoint_path
         names = [path.name, path.stem + ".cost_ledger.jsonl", checkpoint_path(path, context.cell["task_id"]).name]
         names += [path.stem + ".cost_ledger.sqlite3" + suffix for suffix in ("", "-wal", "-shm", "-journal")]
         limit = os.pathconf(checkout, "PC_NAME_MAX")
         require(all(len(name.encode()) <= limit for name in names), "grading_filename_capacity_refused")
-        renderer = get_renderer_fingerprint() if step8.requires_track2_office_renderer(config) else None
-        return {"grade_path": str(absolute.relative_to(checkout)), "config_hash": config_hash,
+        try:
+            renderer = get_renderer_fingerprint() if step8.requires_track2_office_renderer(config) else None
+        except ReadDeliverableError as error:
+            raise output.OutputPublicationRefused("fixed_renderer_readiness_refused") from error
+        return {"grade_path": str(path), "config_hash": config_hash,
                 "grader_source_hash": source_hash, "renderer_fingerprint": renderer,
                 "cost_run_id": step8.make_cost_run_id(experiment_yaml_name=run.command[2],
                     config_hash=config_hash, grader_source_hash=source_hash)}
@@ -487,6 +499,15 @@ def _grade_terminal(api, repo: str, revision: str, context: Context, entry: dict
     require(set(claim) == {"format", "binding", "expected_parent", "predecessor"}
             and claim["format"] == CLAIM_FORMAT and claim["binding"] == terminal["binding"]
             and output._hash(claim["expected_parent"], 40), "grade_terminal_claim_mismatch")
+    previous = claim["predecessor"]
+    if claim["expected_parent"] == retained.BOOTSTRAP:
+        require(previous is None, "grade_bootstrap_claim_mismatch")
+    else:
+        require(type(previous) is dict and set(previous) == {"cell_id", "revision", "size", "sha256"}
+                and previous["cell_id"] in context.plan["order"] and previous["cell_id"] != context.cell["cell_id"]
+                and previous["revision"] == claim["expected_parent"] and output._hash(previous["sha256"])
+                and type(previous["size"]) is int and 0 < previous["size"] <= output.MAX_MANIFEST_BYTES,
+                "grade_predecessor_binding_mismatch")
     child = terminal["child"]
     require(set(child) == {"entry_invoked", "exit_code", "timed_out", "cleanup_confirmed"}
             and child["entry_invoked"] is True and child["cleanup_confirmed"] is True
@@ -495,11 +516,16 @@ def _grade_terminal(api, repo: str, revision: str, context: Context, entry: dict
     records, roles, total = terminal["files"], [], 0
     require(type(records) is list and len(records) <= 3, "grade_artifact_roles_refused")
     prefix = terminal_path.rsplit("/", 1)[0] + "/"
+    from core.task_checkpoint import checkpoint_path
+    path = _grade_path(context, entry["config_hash"], entry["grader_source_hash"],
+                       terminal["binding"]["retained"]["output_commit"])
+    allowed = {"grade_result": prefix + str(path),
+               "grade_cost_ledger": prefix + str(path.with_name(path.stem + ".cost_ledger.jsonl")),
+               "grade_task_progress": prefix + str(checkpoint_path(path, context.cell["task_id"]))}
     for record in records:
         require(set(record) == {"role", "path", "size", "sha256", "git_blob_sha1"}
                 and record["role"] in {"grade_result", "grade_cost_ledger", "grade_task_progress"}
-                and type(record["path"]) is str and record["path"].startswith(prefix + "data/grades/")
-                and ".." not in Path(record["path"]).parts and "\\" not in record["path"]
+                and type(record["path"]) is str and record["path"] == allowed[record["role"]]
                 and type(record["size"]) is int and 0 <= record["size"] <= output.MAX_RECORD_BYTES
                 and output._hash(record["sha256"]) and output._hash(record["git_blob_sha1"], 40),
                 "grade_artifact_roles_refused")
@@ -680,7 +706,10 @@ def _validate_grade(payload: dict, context: Context, prepared: dict, checkout: P
     entry = prepared["entry"]
     _no_raw_grade(payload)
     with _cwd(checkout / "batch-runner"):
-        step8._validate_schema(payload)
+        try:
+            step8._validate_schema(payload)
+        except (step8.SchemaError, step8.ValidationError) as error:
+            raise output.OutputPublicationRefused("fixed_grade_schema_refused") from error
         step8._validate_grade_resume_identity(payload, experiment_id=context.run.command[2],
             rubric_commit_sha=config["rubric"]["revision"], prompt_version=config["prompt"]["version"],
             config_hash=entry["config_hash"], source_inference_repo_id=retained._target(),
@@ -695,6 +724,10 @@ def _validate_grade(payload: dict, context: Context, prepared: dict, checkout: P
     ids = [row["task_id"] for row in payload["tasks"]]
     require(ids == [context.cell["task_id"]] or (ids == [] and payload["run_status"] == "partial"),
             "grade_task_set_mismatch")
+    for task in payload["tasks"]:
+        if not task.get("error"):
+            require([item["rubric_item_id"] for item in task["items"]] == prepared["rubric"]["rubric_item_ids"],
+                    "grade_rubric_coverage_mismatch")
     expected_judge = {key: config["judge"][key] for key in ("provider", "api", "model", "deployment", "api_version")}
     expected_judge.update(reasoning_effort=config["judge"]["reasoning"]["effort"],
         temperature=config["judge"]["generation"]["temperature"], seed=config["judge"]["generation"]["seed"],
@@ -887,7 +920,8 @@ def main(argv=None, *, _test_api=None, _test_transport=None) -> int:
                     ], separators=(",", ":")) + "\n")
         return 0 if observed["outcome"] in {"plan_only", "prepared", "ungraded", "acknowledged",
                 "owned_cleanup_confirmed", "verified_server_state"} else 2
-    except (OSError, ValueError, TypeError, KeyError, AttributeError, RecursionError) as error:
+    except (OSError, ValueError, TypeError, KeyError, AttributeError, RecursionError,
+            subprocess.SubprocessError, ImportError, KeyboardInterrupt) as error:
         reason, status = output._error_context(error)
         if reason == "hf_operation_failed":
             reason = "grading_contract_refused"

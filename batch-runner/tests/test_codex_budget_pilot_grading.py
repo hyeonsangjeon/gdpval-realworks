@@ -381,11 +381,11 @@ def _judge_output(case, mode):
         loader = RubricLoader(config["rubric"]["repo_id"], config["rubric"]["revision"], config["rubric"]["cache_dir"])
         result = step8.load_local_inference_results()
         task = TaskGrade(task_id=case.context.cell["task_id"], sector="s", occupation="o", items=[
-            ItemGrade(rubric_item_id="ri-1", criterion="synthetic criterion", max_score=2, awarded_score=2,
+            ItemGrade(rubric_item_id=item_id, criterion="synthetic criterion", max_score=2, awarded_score=2,
                 verdict="pass", decided_by="precheck", required=None, evidence="synthetic generated evidence",
-                precheck_pattern_id="file_exists_or_name")],
-            total_awarded=2, total_max=2, pct=100, critical_fail=False, gold_referenced=False,
-            judge_call_count=0, precheck_count=1, judge_total_latency_ms=0, judge_input_tokens=0, judge_output_tokens=0,
+                precheck_pattern_id="file_exists_or_name") for item_id in prepared["rubric"]["rubric_item_ids"]],
+            total_awarded=4, total_max=4, pct=100, critical_fail=False, gold_referenced=False,
+            judge_call_count=0, precheck_count=2, judge_total_latency_ms=0, judge_input_tokens=0, judge_output_tokens=0,
             error="synthetic_runtime_failure" if mode == "error" else None)
         tasks = [] if mode == "partial" else [step8._task_to_dict(task, grading_wall_time_ms=1.0)]
         for row in tasks:
@@ -459,7 +459,7 @@ def admitted(case, capsys):
 def judged(case, capsys, mode="grade"):
     ready = admitted(case, capsys)
     case.transport.mode = mode
-    assert invoke(case, capsys, "judge")[0] == 0
+    assert invoke(case, capsys, "judge")[0] == (2 if mode == "cleanup_lost" else 0)
     return ready
 
 
@@ -587,7 +587,7 @@ def test_failed_retained_result_stays_failed_and_explicitly_ungraded(case, capsy
 
 
 @pytest.mark.parametrize("native", ["forced_unavailable", "actual_host"])
-def test_native_install_boundary_is_not_a_test_double_readiness_claim(case, capsys, monkeypatch, native):
+def test_native_install_boundary_is_not_a_test_double_readiness_claim(case, capsys, monkeypatch, record_property, native):
     observed = []
     real = case.native_rename()
     def rename(*args):
@@ -599,6 +599,7 @@ def test_native_install_boundary_is_not_a_test_double_readiness_claim(case, caps
     monkeypatch.setattr(primitives, "_no_replace_rename", lambda: rename)
     code, value = invoke(case, capsys, "prepare")
     assert observed
+    record_property("native_install_observation", f"{native}:return={observed[0][0]},errno={observed[0][1]},cli={code}")
     if observed[0][0] == 0:
         assert native == "actual_host" and code == 0
     else:
@@ -674,16 +675,21 @@ def test_one_claim_one_entry_validated_private_outputs_and_missing_accounting(ca
     assert ready["materialization"]["grading"]["state"] == "UNRUN"
 
 
-@pytest.mark.parametrize("failure", ["cleanup", "lost_output", "failed_output", "invalid_grade", "wrong_ledger"])
+@pytest.mark.parametrize("failure", ["cleanup", "lost_output", "failed_output", "invalid_grade", "invalid_schema", "missing_items", "wrong_ledger"])
 def test_failed_or_lost_publication_blocks_replay_and_keeps_observations_separate(case, capsys, failure):
     ready = judged(case, capsys, "cleanup_lost" if failure == "cleanup" else "grade")
     if failure in {"lost_output", "failed_output"}:
         setattr(case.api, "lost" if failure == "lost_output" else "fail", "grade_output")
-    if failure in {"invalid_grade", "wrong_ledger"}:
+    if failure in {"invalid_grade", "invalid_schema", "missing_items", "wrong_ledger"}:
         path = case.root / "source" / ready["entry"]["grade_path"]
-        if failure == "invalid_grade":
+        if failure in {"invalid_grade", "invalid_schema", "missing_items"}:
             payload = json.loads(path.read_bytes())
-            payload["source_inference_revision"] = SOURCE
+            if failure == "invalid_grade":
+                payload["source_inference_revision"] = SOURCE
+            elif failure == "invalid_schema":
+                payload.pop("judge")
+            else:
+                payload["tasks"][0]["items"].pop()
             path.write_bytes(_json(payload))
         else:
             path.with_name(path.stem + ".cost_ledger.jsonl").write_bytes(_ledger("foreign", case.context.cell["task_id"]))
@@ -722,7 +728,7 @@ def test_lost_grade_ack_valid_server_tip_can_admit_only_an_absent_other_cell(cas
     assert invoke(case, capsys, "claim")[0] == 2 and case.transport.calls == 1
 
 
-@pytest.mark.parametrize("damage", ["missing", "conflicting", "read_failed"])
+@pytest.mark.parametrize("damage", ["missing", "conflicting", "arbitrary_path", "read_failed"])
 def test_unverified_grade_server_state_stays_blocked(case, capsys, damage):
     judged(case, capsys)
     case.api.lost = "grade_output"
@@ -732,9 +738,12 @@ def test_unverified_grade_server_state_stays_blocked(case, capsys, damage):
     head = case.api.branches[connector.BRANCH]
     if damage == "missing":
         case.api.trees[head].pop(path)
-    elif damage == "conflicting":
+    elif damage in {"conflicting", "arbitrary_path"}:
         terminal = json.loads(case.api.trees[head][path])
-        terminal["binding"]["publication_receipt_sha256"] = "0" * 64
+        if damage == "conflicting":
+            terminal["binding"]["publication_receipt_sha256"] = "0" * 64
+        else:
+            terminal["files"][0]["path"] = path.rsplit("/", 1)[0] + "/data/grades/arbitrary.json"
         case.api.trees[head][path] = retained._encoded(terminal)
     else:
         case.api.read_fail = True

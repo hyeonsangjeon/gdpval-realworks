@@ -1933,6 +1933,12 @@ jobs:
           python batch-runner/codex_budget_pilot_grading.py --phase setup \
             --selector "$GRADE_SELECTOR" --reviewed-source-sha "$GITHUB_SHA" \
             --root "$RUNNER_TEMP/pilot-fixed-grade"
+      - name: Verify the pinned grading renderer before admission
+        if: inputs.experiment_yaml != 'pilot/branch-setup'
+        timeout-minutes: 2
+        run: |
+          cd batch-runner
+          python scripts/preflight_grading_renderer.py
       - name: Verify retained bytes and native grading input installation
         id: pilot_input
         if: inputs.experiment_yaml != 'pilot/branch-setup'
