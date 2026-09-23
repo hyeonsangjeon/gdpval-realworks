@@ -16,7 +16,7 @@ import codex_budget_pilot as pilot
 import codex_budget_pilot_ci as ci
 from core.cost_receipts import CostReceipt
 from core.result_fingerprint import inference_result_fingerprint
-from test_codex_budget_pilot import FakeChildren, offline, read_plan, read_state, scenario  # noqa: F401
+from .test_codex_budget_pilot import FakeChildren, offline, read_plan, read_state, scenario  # noqa: F401
 
 
 class CICellChildren(FakeChildren):
