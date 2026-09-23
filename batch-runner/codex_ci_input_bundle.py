@@ -73,7 +73,9 @@ def _registered() -> tuple[Any, str, dict[str, dict]]:
 def _safe_path(path: Path) -> Path:
     if ".." in path.parts:
         raise InputBundleRefused("parent_traversal_refused")
-    return _assert_no_symlink_ancestors(Path(os.path.abspath(path)))
+    absolute = Path(os.path.abspath(path))
+    _assert_no_symlink_ancestors(absolute)
+    return absolute
 
 
 def _destination(path: Path, sources: tuple[Path, ...]) -> tuple[Path, Path]:

@@ -265,6 +265,7 @@ def test_ci_input_bundle_current_source_refusal(originals, defect):
         (case.references / ".env").write_bytes(b"synthetic-forbidden-file")
     output = case.parent / "refused.tar"
     assert produce(case, output) == 2
+    assert len(case.transport.calls) == 1
     assert not output.exists() and not reservation(output).exists()
 
 
