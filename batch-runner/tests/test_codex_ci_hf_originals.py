@@ -508,10 +508,13 @@ def test_hf_originals_workflow_route_and_publication_contract():
     assert "HF_TOKEN" not in job["env"] and "GITHUB_TOKEN" not in job["env"]
     steps = job["steps"]
     selected = next(step for step in steps if step.get("id") == "intake")
-    assert selected["if"] == "inputs.execute || inputs.input_check" and selected["timeout-minutes"] == 3
+    assert selected["if"] == "(inputs.execute || inputs.input_check) && !inputs.output_target_check" and selected["timeout-minutes"] == 3
     assert selected["env"]["HF_TOKEN"] == "${{ inputs.input_transport == 'hf_originals' && secrets.HF_TOKEN || '' }}"
     assert selected["env"]["GITHUB_TOKEN"] == "${{ inputs.input_transport != 'hf_originals' && github.token || '' }}"
-    assert all(not {"HF_TOKEN", "GITHUB_TOKEN"}.intersection(step.get("env", {})) for step in steps if step != selected)
+    metadata = next(step for step in steps if step.get("id") == "output_target")
+    assert metadata["env"] == {"HF_TOKEN": "${{ secrets.HF_TOKEN }}"}
+    assert all(not {"HF_TOKEN", "GITHUB_TOKEN"}.intersection(step.get("env", {}))
+               for step in steps if step not in (selected, metadata))
     assert '--input-transport "${INPUT_TRANSPORT:-github_draft}"' in selected["run"]
     assert selected["run"].index("unset GITHUB_TOKEN HF_TOKEN") < selected["run"].index("--resume --check-inputs")
     assert "HF_HUB_OFFLINE=0" not in selected["run"]
@@ -560,7 +563,7 @@ python3() {{
     assert (tmp_path / "step-output").exists() == (failure is None)
     if failure == "fetch":
         assert "installed check reached" not in result.stdout
-    admission = "success() && inputs.execute && !inputs.input_check && steps.intake.outputs.verified == 'true'"
+    admission = "success() && inputs.execute && !inputs.input_check && !inputs.output_target_check && steps.intake.outputs.verified == 'true'"
     downstream = [step for step in workflow()["jobs"]["cell"]["steps"] if step.get("if") == admission]
     assert len(downstream) == 4
     # Static Actions condition check plus real local bash with fake commands;
