@@ -484,6 +484,10 @@ class LocalTransport:
         # Never inherit a Python search path pointing at a different feature checkout.
         environment.pop("PYTHONPATH", None)
         environment.pop("PYTHONHOME", None)
+        # Input/retention credentials belong to separate host-only steps, never
+        # the preparation, native/model or continuation process tree.
+        for key in ("HF_TOKEN", "HUGGING_FACE_HUB_TOKEN", "GITHUB_TOKEN", "GH_TOKEN"):
+            environment.pop(key, None)
         command = [sys.executable]
         if stage == "prepare":
             command += ["step1_prepare_tasks.py", "--config", "pilot-run.json"]
@@ -772,6 +776,9 @@ def dispatch(plan: dict, parent: Any, specs: dict[str, ComparisonRunSpec], *, ro
                     _save(state_path, state)
                     raise
                 except subprocess.TimeoutExpired:
+                    # Owned cleanup has completed. Bind an already produced,
+                    # valid partial result without changing the timeout outcome.
+                    _finish(root, cell, state, None)
                     state.update(status="stopped", phase="finished", reason="child_timeout_partial_accounting", exit_code=None)
                 else:
                     _finish(root, cell, state, code)

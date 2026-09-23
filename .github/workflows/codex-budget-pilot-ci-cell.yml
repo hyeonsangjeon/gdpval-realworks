@@ -109,7 +109,8 @@ permissions:
   id-token: write
 
 # One active cell for the entire campaign, independent of selected cell.
-# This is not an ordered queue or deduplication ledger for new manual runs.
+# Concurrency is not admission. The private CAS claim below admits only the
+# immediate canonical successor; this workflow never launches the other cells.
 concurrency:
   group: codex-budget-pilot-ci-20260923-01
   cancel-in-progress: false
@@ -274,8 +275,26 @@ jobs:
             exit 1
           fi
 
-      - name: Azure Login (OIDC)
+      - name: Claim only the next canonical cell before inference
+        id: admission
         if: success() && inputs.execute && !inputs.input_check && !inputs.output_target_check && !inputs.output_target_setup && steps.intake.outputs.verified == 'true'
+        timeout-minutes: 3
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          # Fixed leader-selected private target/bootstrap, not a new input.
+          # One CAS claim; failed or ambiguous outcomes never replay a cell.
+          timeout --signal=TERM --kill-after=5s 130s \
+            python3 batch-runner/codex_budget_pilot_retention.py \
+              --cell "$SELECTED_CELL" --reviewed-source-sha "$REVIEWED_SOURCE_SHA" \
+              --output "$RUNNER_TEMP/budget-pilot-ci-private" --admit
+          echo "admitted=true" >> "$GITHUB_OUTPUT"
+
+      - name: Azure Login (OIDC)
+        if: success() && inputs.execute && !inputs.input_check && !inputs.output_target_check && !inputs.output_target_setup && steps.intake.outputs.verified == 'true' && steps.admission.outputs.admitted == 'true'
         uses: azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca # v3.0.1
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -283,7 +302,7 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Verify existing Azure OIDC session identity
-        if: success() && inputs.execute && !inputs.input_check && !inputs.output_target_check && !inputs.output_target_setup && steps.intake.outputs.verified == 'true'
+        if: success() && inputs.execute && !inputs.input_check && !inputs.output_target_check && !inputs.output_target_setup && steps.intake.outputs.verified == 'true' && steps.admission.outputs.admitted == 'true'
         env:
           AZURE_AI_EXPECTED_CLIENT_ID: ${{ vars.AZURE_AI_EXPECTED_CLIENT_ID }}
           AZURE_AI_EXPECTED_TENANT_ID: ${{ vars.AZURE_AI_EXPECTED_TENANT_ID }}
@@ -291,7 +310,8 @@ jobs:
         run: python3 batch-runner/scripts/azure_oidc_identity_preflight.py --verify-session
 
       - name: Execute only the selected cell on this live host
-        if: success() && inputs.execute && !inputs.input_check && !inputs.output_target_check && !inputs.output_target_setup && steps.intake.outputs.verified == 'true'
+        id: execution
+        if: success() && inputs.execute && !inputs.input_check && !inputs.output_target_check && !inputs.output_target_setup && steps.intake.outputs.verified == 'true' && steps.admission.outputs.admitted == 'true'
         env:
           AZURE_AI_ROUTE_PROFILE: direct-v1
           FOUNDRY_PROJECT_ENDPOINT: ${{ secrets.FOUNDRY_PROJECT_ENDPOINT }}
@@ -309,6 +329,23 @@ jobs:
             --reference-root "$RUNNER_TEMP/budget-pilot-ci-inputs/reference-only" \
             --step0-manifest "$RUNNER_TEMP/budget-pilot-ci-inputs/step0-manifest.json" \
             --resume --execute
+
+      - name: Retain confirmed terminal output on this same live host
+        id: retention
+        if: always() && inputs.execute && !inputs.input_check && !inputs.output_target_check && !inputs.output_target_setup && steps.admission.outputs.admitted == 'true'
+        timeout-minutes: 3
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          # Failed/stopped output is not success. Uncertain cleanup or output
+          # publication refuses terminal confirmation and blocks advancement.
+          timeout --signal=TERM --kill-after=5s 130s \
+            python3 batch-runner/codex_budget_pilot_retention.py \
+              --cell "$SELECTED_CELL" --reviewed-source-sha "$REVIEWED_SOURCE_SHA" \
+              --output "$RUNNER_TEMP/budget-pilot-ci-private" --retain
 
       - name: Validate only the nonsecret completion envelope
         id: publication
