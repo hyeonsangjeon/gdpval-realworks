@@ -13,6 +13,44 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Add an opt-in `native_only` mode to the existing Foundry connection-diagnostic
+  workflow. With the mode on, incompatible legacy paid flags refuse before
+  checkout or OIDC; all five listing/discrimination/sweep/urllib probes are
+  skipped. Plan mode sends no native turn, and sending uses the existing one-turn
+  native path. With the mode off, legacy behavior and the legacy summary body
+  remain unchanged. Main/ref, OIDC identity, runtime, endpoint fingerprint,
+  retry, redaction and seven-file evidence-upload guards are retained. The job
+  ceiling stays 20 minutes; the script's default timeout argument stays 120
+  seconds. The new summary separates sending intent, observed turns, auth
+  failures, provider refusals and final-response presence. Missing send evidence
+  never falls back to the plan as proof that nothing was sent. Known token totals
+  stay separate from missing usage, HTTP counts and invoice completeness; the
+  runtime can refresh a 401 token and resend despite its zero retry pins.
+  One offline selection at `f09ffb62b717f9818dedd4e59a9a45c483ca4f42` reported
+  `42 passed, 155 deselected in 4.92s`, exit 0. It executes local shell and real
+  CLI/reporting paths with stubbed auth/native transport; YAML workflow checks
+  are static, not a live Actions run or process-cleanup measurement. The exact
+  command is in `tasks/LATEST_TASK_RESULT/README.md`. No live auth, native/model
+  request, workflow dispatch, bundle operation or campaign change occurred.
+  Prior #655 review `5285590451` at
+  `4d3c4b4f895da35e3db07b413f66c8066dfa5ad1` covers single-cell entry, and
+  #656 review `5285752981` at `df3e3f24404a90f47789051ef99318fb6af2dd20`
+  covers the local bundle and private candidate, not publication or readiness.
+  Neither approves this workflow change. Current connectivity, input transport,
+  ordered whole-pilot scheduling/deduplication, execution and grading remain
+  unfinished; immutable review and carrying-HEAD CI are still required.
+  The intended later send on reviewed main uses deployment `gpt-5.4`,
+  `native_only=true`, `send_request=true`, `send_valid_request=false` and
+  `send_closing_sweep=false`; this task did not dispatch it.
+  The leader later supplied FINAL-APPROVE review `5286077604` at
+  `0f291f4041bb321817ce93e6d8b4bfe0c4f2cfb0`. One normal upstream merge then
+  integrated exact main `266ef7a05335d900304214da0c0d680331fb346c`, with only
+  completion-record overlap. The reviewed workflow/test blobs are unchanged;
+  incoming bundle implementation/tests match that main. Both substantive
+  changelog entries are preserved and native-only stays the latest result.
+  The 42-case result remains at its original tested SHA, not a new test run or
+  approval of the integration HEAD. No CI query, diagnostic or packaging ran.
+
 - Add a plan-first CLI and manual/reusable GitHub Actions entry for one
   explicitly selected external-budget pilot cell. The preregistration reserves
   `budget_pilot_ci_20260923_01` for the existing repository-OIDC execution path;
@@ -51,6 +89,50 @@ entries land under a fresh dated heading the day they merge to `main`.
   source sets remain 37/58; no coupled active source member or hash changed.
 
 ### Fixed
+
+- Correct the stale transmission-sweep test after the reviewed native-only
+  workflow change. The leader supplied run `35809373961`, job `107017506054`,
+  at `2e89f411efc4294a47831a1b58cb8b0c99c90418`: the contract at
+  `tests/test_codex_transmission_sweep.py:625` still required `"if" not in step`.
+  REQUEST-CHANGES review `5286466233` records that test failure, not a runtime
+  failure. The renamed test/docstring now require exactly
+  `${{ !inputs.native_only }}`, matching the discriminator counterpart, and
+  retain `--transmission-sweep` presence and `--send-request` absence assertions.
+  No workflow, diagnostic, runtime, settings or source-hash change was made.
+  The correction was committed at `e6445a0544e0e6c0bb3d5ef6bee4a232be96ccff`
+  before its single targeted invocation: `1 passed in 0.25s`, exit 0. The exact
+  command is in `tasks/LATEST_TASK_RESULT/README.md`; this is a static YAML/command
+  check, not native execution. The original `42 passed, 155 deselected in 4.92s`
+  remains at `f09ffb62b717f9818dedd4e59a9a45c483ca4f42`, without a rerun.
+  Separately, one authorized private staging transaction verified the existing
+  private regular archive: 2,519,040 bytes/SHA256
+  `757603585405da5d7f6817a6a0a23bd530d4b5e4e38b2fd4dc6f318053d240e3`.
+  With the existing verified `hyeonsangjeon` account and an exclusive private
+  reservation, it created release `394272629`, label
+  `project5-ci-inputs-20260923-01`, targeting exact main
+  `266ef7a05335d900304214da0c0d680331fb346c`. The selected release was verified
+  as unpublished with `draft=true` before upload, and its ID was saved
+  immediately. The named tag ref was absent before and after creation; no
+  tag/ref mutation or publication API was called. The one upload attempt for
+  `budget-pilot-originals-20260923-01.tar` (`application/x-tar`) returned HTTP
+  400, `gh` exit 1; no asset ID was captured. The observer exited 2 after 2.506628
+  seconds and stopped without retry, fallback, clobber or deletion. Post-upload
+  metadata was not reached; asset existence/state/size and provider digest are
+  unobserved, not proof of absence or completed staging. No underlying auth,
+  account or permission cause is inferred. The reservation, release receipt
+  and stopped observation remain private; the external digest is unchanged.
+  Owner-account draft access does not prove CI `contents:read` access. No
+  importer, repackaging, asset retrieval, live intake, OIDC, native/model,
+  grader, workflow dispatch or campaign change occurred. Prior #657 review
+  `5286254682` covers native-only scope, not this correction. #658 review
+  `5286466150` at `e5d5fcb647129e86d9faf742fc19df1e1e800c15` covers intake
+  implementation/offline evidence only; its 67-case evidence was not rerun and
+  that branch remains untouched. Existing model/host/180-30-minute controls
+  remain fixed. New immutable-HEAD review/checks, unresolved upload/asset
+  receipt, CI read-token input-check, current CI native connectivity, ordered
+  30-cell scheduling/deduplication/aggregation, execution and grading remain
+  unfinished. No CI was queried, and staging is not public redistribution or
+  pilot readiness. Standing spend authority is unchanged.
 
 - Preserve local authentication failures in the Codex connection diagnostic's
   JSON output. `auth_command_produced_no_token` already existed but was missing

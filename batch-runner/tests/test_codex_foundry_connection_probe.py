@@ -16,11 +16,14 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
 import socket
 import subprocess
 import sys
 from enum import Enum
+from itertools import product
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import yaml
@@ -1999,3 +2002,399 @@ def test_the_published_summary_carries_no_answer_text():
     events = [_event(_item_completed(_agent_message(secret)))]
     summary, _, _ = module.observe_stream(events, turn_id="turn-1")
     assert secret not in json.dumps(summary)
+
+
+# ── The opt-in native-only workflow contract ────────────────────────────────
+# These execute the actual local shell/CLI/reporting boundaries. Condition
+# routing below is a bounded YAML contract check, not a GitHub Actions run.
+
+def _native_only_shell_env(**extra):
+    return {
+        "PATH": str(Path(sys.executable).parent) + os.pathsep + os.environ["PATH"],
+        "PYTHONDONTWRITEBYTECODE": "1",
+        **extra,
+    }
+
+
+def _native_only_argv(step, tmp_path):
+    command = next(
+        line.strip() for line in step["run"].replace("\\\n", "").splitlines()
+        if line.strip().startswith("python3 scripts/diagnose_codex_foundry_connection.py ")
+    )
+    words = shlex.split(command)
+    if "||" in words:
+        words = words[:words.index("||")]
+    assert words[:2] == ["python3", "scripts/diagnose_codex_foundry_connection.py"]
+    return [
+        DEPLOYMENT if word == "${DEPLOYMENT}" else
+        str(tmp_path / Path(word).name) if word.startswith("/tmp/codex-foundry-") else word
+        for word in words[2:]
+    ]
+
+
+@pytest.mark.parametrize(
+    "native_only,send_request,send_valid_request,send_closing_sweep",
+    list(product((False, True), repeat=4)),
+)
+def test_native_only_all_flag_combinations_route_or_refuse_before_oidc(
+    tmp_path, native_only, send_request, send_valid_request, send_closing_sweep,
+):
+    steps = _steps()
+    guard = steps["Reject incompatible native-only inputs"]
+    assert next(iter(steps)) == guard["name"]
+    flags = dict(zip(
+        ("native_only", "send_request", "send_valid_request", "send_closing_sweep"),
+        (native_only, send_request, send_valid_request, send_closing_sweep),
+    ))
+    assert guard["env"] == {
+        name.upper(): "${{ inputs." + name + " }}"
+        for name in ("native_only", "send_valid_request", "send_closing_sweep")
+    }
+    result = subprocess.run(
+        ["bash", "-c", guard["run"]], capture_output=True, text=True,
+        env=_native_only_shell_env(**{k.upper(): str(v).lower() for k, v in flags.items()}),
+    )
+    refused = native_only and (send_valid_request or send_closing_sweep)
+    assert result.returncode == int(refused), result.stdout + result.stderr
+    if refused:
+        assert "::error::native_only cannot be combined" in result.stdout
+        return  # Ordinary success gating stops before checkout, setup and OIDC.
+
+    # Evaluate only the successful-prior-step conjunctions used by these
+    # actual commands. Unknown expression syntax fails, rather than assuming
+    # a step runs. This does not emulate the Actions service or OIDC.
+    terms = {f"inputs.{key}": value for key, value in flags.items()}
+    terms["!inputs.native_only"] = not native_only
+    terms["steps.pinned.outputs.confirmed == 'yes'"] = True
+    invoked = []
+    for step in steps.values():
+        if "scripts/diagnose_codex_foundry_connection.py \\" not in step.get("run", ""):
+            continue
+        condition = step.get("if", "")
+        assert "always()" not in condition
+        if condition and not all(terms[term.strip()] for term in
+                                 condition.removeprefix("${{").removesuffix("}}").split("&&")):
+            continue
+        argv = _native_only_argv(step, tmp_path)
+        modes = [word for word in argv if word in {
+            "--read-only-probe", "--auth-discriminator", "--transmission-sweep",
+            "--valid-request", "--closing-sweep", "--send-request",
+        }]
+        invoked.append(modes[0] if modes else "plan")
+    expected = ["plan"]
+    if not native_only:
+        expected += ["--read-only-probe", "--auth-discriminator", "--transmission-sweep"]
+        if send_valid_request:
+            expected += ["--valid-request"]
+        if send_closing_sweep:
+            expected += ["--closing-sweep"]
+    if send_request:
+        expected += ["--send-request"]
+    assert invoked == expected
+
+
+def test_native_only_retains_ref_identity_runtime_timeout_and_publication_gates():
+    import scripts.diagnose_codex_foundry_connection as module
+
+    text, parsed = _workflow()
+    triggers = parsed.get("on", parsed.get(True))
+    assert set(triggers) == {"workflow_dispatch"}
+    inputs = triggers["workflow_dispatch"]["inputs"]
+    for name in ("native_only", "send_request", "send_valid_request", "send_closing_sweep"):
+        assert inputs[name]["type"] == "boolean"
+        assert inputs[name]["default"] is False
+    assert parsed["permissions"] == {"contents": "read", "id-token": "write"}
+    assert parsed["concurrency"] == {
+        "group": "codex-foundry-connection-diagnostic", "cancel-in-progress": False,
+    }
+    job = parsed["jobs"]["diagnose"]
+    assert job["if"] == "github.ref == 'refs/heads/main'"
+    assert job["runs-on"] == "ubuntu-22.04"
+    assert job["timeout-minutes"] == 20
+    assert job["env"]["EXPECTED_HOST_FINGERPRINT"] == PINNED
+    steps = _steps()
+    ordered = list(steps)
+    required = [
+        "Reject incompatible native-only inputs", "Check out", "Setup Python",
+        "Refuse to continue unless the pinned runtime is installed", "Azure Login (OIDC)",
+        "Verify Azure OIDC session identity", "Fix the request before anything is sent",
+        CONFIRM_STEP, "Send the one turn",
+        "Confirm the record names no resource and carries no token", "Keep the record",
+    ]
+    assert [ordered.index(name) for name in required] == sorted(ordered.index(name) for name in required)
+    for name in required[1:7]:
+        assert "if" not in steps[name]  # Prior failure must stop OIDC/native work.
+    assert steps["Check out"]["with"]["persist-credentials"] is False
+    assert steps["Setup Python"]["with"]["python-version"] == "3.10.12"
+    expected_actions = {
+        "Check out": "actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09",
+        "Setup Python": "actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+        "Azure Login (OIDC)": "azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca",
+        "Keep the record": "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+    }
+    assert {name: steps[name]["uses"] for name in expected_actions} == expected_actions
+    assert steps["Azure Login (OIDC)"]["with"] == {
+        "client-id": "${{ secrets.AZURE_CLIENT_ID }}",
+        "tenant-id": "${{ secrets.AZURE_TENANT_ID }}",
+        "subscription-id": "${{ secrets.AZURE_SUBSCRIPTION_ID }}",
+    }
+    identity = steps["Verify Azure OIDC session identity"]
+    assert "azure_oidc_identity_preflight.py --verify-session" in identity["run"]
+    for suffix in ("CLIENT_ID", "TENANT_ID", "SUBSCRIPTION_ID"):
+        assert identity["env"]["AZURE_AI_EXPECTED_" + suffix] == (
+            "${{ vars.AZURE_AI_EXPECTED_" + suffix + " }}"
+        )
+    send = steps["Send the one turn"]
+    assert send["if"] == "${{ inputs.send_request && steps.pinned.outputs.confirmed == 'yes' }}"
+    assert send["env"] == steps["Fix the request before anything is sent"]["env"]
+    assert send["env"]["AZURE_AI_ROUTE_PROFILE"] == "direct-v1"
+    assert "--timeout" not in send["run"]
+    assert module.DEFAULT_TIMEOUT_SECONDS == 120
+    assert describe_settings(_settings())["retries"] == {
+        "request_max_retries": 0, "stream_max_retries": 0,
+    }
+    assert describe_settings(_settings())["pinned"] == {
+        "openai-codex": "0.147.0", "openai-codex-cli-bin": "0.147.0",
+    }
+    assert steps["Summary"]["if"] == "always() && !inputs.native_only"
+    assert steps["Native-only summary"]["if"] == "always() && inputs.native_only"
+    leak = steps["Confirm the record names no resource and carries no token"]
+    assert leak["if"] == "always()"
+    upload = steps["Keep the record"]
+    assert upload["if"] == "always() && steps.leak_check.conclusion == 'success'"
+    assert upload["if"].replace("==", "!=") == steps["Say that the record was withheld"]["if"]
+    assert upload["with"]["path"].splitlines() == [
+        f"/tmp/codex-foundry-{name}.json" for name in (
+            "plan", "readonly", "auth-discriminator", "transmission-sweep",
+            "valid-request", "closing-sweep", "connection",
+        )
+    ]
+    assert upload["with"]["retention-days"] == 90
+    assert upload["with"]["if-no-files-found"] == "warn"
+    assert "CODEX_HOME" not in upload["with"]["path"]
+    assert "AZURE_AI_EXPECTED_PROJECT_ACCOUNT" not in text
+
+
+@pytest.mark.parametrize("expected,measured,sending,confirmed", [
+    (PINNED, PINNED, "true", True),
+    (PINNED, "sha256:0000000000000000", "true", False),
+    ("", PINNED, "true", False),
+    (PINNED, "sha256:0000000000000000", "false", False),
+])
+def test_native_only_still_requires_the_real_fingerprint_gate(
+    tmp_path, expected, measured, sending, confirmed,
+):
+    result, output = _run_confirm(tmp_path, expected=expected, measured=measured, send_request=sending)
+    assert (result.returncode == 0) is confirmed
+    assert ("confirmed=yes" in output) is confirmed
+
+
+@pytest.mark.parametrize("sending,auth_ok", list(product((False, True), repeat=2)))
+def test_native_only_workflow_argv_drives_real_main_plan_and_native_entry(
+    tmp_path, monkeypatch, capsys, auth_command_failure_output_boundary, sending, auth_ok,
+):
+    """Real main/plan/probe/record/emit, with only auth/native transport stubbed."""
+    from openai_codex.generated.v2_all import TurnCompletedNotification
+
+    install, forbidden_calls = auth_command_failure_output_boundary
+    fake = install(_probe(exit_code=0 if auth_ok else 1, produced_a_token=auth_ok))
+    calls = []
+    settings_seen = []
+
+    def turn(prompt):
+        calls.append(("turn", prompt))
+        return SimpleNamespace(id="turn-1", stream=lambda: iter([
+            _event(TurnCompletedNotification(
+                thread_id="thread-1", turn=_turn([_agent_message(EXPECTED_REPLY)]),
+            )),
+        ]))
+
+    def open_runtime(workspace):
+        calls.append(("runtime", workspace))
+        return SimpleNamespace(close=lambda: calls.append(("close", workspace)))
+
+    def start_thread(codex, workspace):
+        calls.append(("thread", workspace))
+        return SimpleNamespace(turn=turn)
+
+    # The fixture still forbids subprocess, sockets and credential discovery.
+    fake.open_runtime = open_runtime
+    fake.start_thread = start_thread
+    import scripts.diagnose_codex_foundry_connection as module
+
+    real_settings = module.settings_from_environment
+
+    def capture_settings(deployment):
+        settings = real_settings(deployment, ROUTED)
+        settings_seen.append(settings)
+        return settings
+
+    monkeypatch.setattr(module, "settings_from_environment", capture_settings)
+    sequence = ["Fix the request before anything is sent"]
+    if sending:
+        sequence += ["Send the one turn"]
+    for name in sequence:
+        argv = _native_only_argv(_steps()[name], tmp_path)
+        code = main(argv)
+        record = json.loads(capsys.readouterr().out)
+        assert record == json.loads(Path(argv[argv.index("--out") + 1]).read_text())
+        is_send = name == "Send the one turn"
+        assert code == (1 if is_send and not auth_ok else 0)
+        assert record["verdict"] == (
+            VERDICT_CONNECTED if is_send and auth_ok else
+            VERDICT_AUTH_COMMAND_FAILED if is_send else VERDICT_NOT_SENT
+        )
+        assert record["observed"]["turn_sent"] is (is_send and auth_ok)
+        assert record["observed"]["auth_command"]["ok"] is auth_ok
+        assert record["observed"]["usage"] is None
+        assert all(not workspace.root.exists() for workspace in fake.workspaces)
+    assert [name for name, _ in calls] == (["runtime", "thread", "turn", "close"] if sending and auth_ok else [])
+    if calls:
+        assert calls[2] == ("turn", PROMPT)
+    if sending:
+        assert fake.timeout == 120
+    assert len(fake.workspaces) == len(sequence)
+    assert all(setting.reasoning_effort is None and setting.model_context_window is None
+               for setting in settings_seen)
+    assert not any(forbidden_calls.values())
+
+
+@pytest.mark.parametrize("emit_record", [False, True])
+def test_native_only_send_shell_preserves_failure_evidence_but_refuses_no_output(tmp_path, emit_record):
+    script = _steps()["Send the one turn"]["run"].replace(
+        "/tmp/codex-foundry-connection.json", str(tmp_path / "connection.json"),
+    )
+    shim = """python3() {
+      printf '%s\\n' "$*" >> "$CALL_LOG"
+      if [ "$EMIT_RECORD" = true ]; then printf '%s\\n' "$FAILURE_RECORD" > "$RESULT_FILE"; fi
+      return 1
+    }
+    """
+    record = _record(verdict=VERDICT_AUTH_COMMAND_FAILED, description=describe_settings(_settings()),
+                     observed=_empty_observation())
+    result = subprocess.run(
+        ["bash", "-c", shim + script], capture_output=True, text=True,
+        env=_native_only_shell_env(
+            DEPLOYMENT=DEPLOYMENT, EMIT_RECORD=str(emit_record).lower(),
+            FAILURE_RECORD=json.dumps(record), RESULT_FILE=str(tmp_path / "connection.json"),
+            CALL_LOG=str(tmp_path / "calls.txt"),
+        ),
+    )
+    assert result.returncode == (0 if emit_record else 1)
+    assert len((tmp_path / "calls.txt").read_text().splitlines()) == 1
+    if emit_record:
+        assert json.loads((tmp_path / "connection.json").read_text()) == record
+    else:
+        assert not (tmp_path / "connection.json").exists()
+
+
+def _run_native_only_summary(tmp_path, *, sending=True, record=None, leak="success"):
+    # Always retain an earlier plan, so missing send evidence cannot quietly
+    # fall back to that plan's confident turn_sent=false.
+    plan = tmp_path / "summary-plan.json"
+    plan.write_text(json.dumps(_real_record()), encoding="utf-8")
+    selected = tmp_path / "summary-connection.json" if sending else plan
+    if record is not None:
+        selected.write_text(record if isinstance(record, str) else json.dumps(record), encoding="utf-8")
+    script = _steps()["Native-only summary"]["run"].replace(
+        "/tmp/codex-foundry-plan.json", str(plan),
+    ).replace("/tmp/codex-foundry-connection.json", str(tmp_path / "summary-connection.json"))
+    summary = tmp_path / "summary.md"
+    result = subprocess.run(
+        ["bash", "-c", script], cwd=WORKFLOW_PATH.resolve().parents[2],
+        capture_output=True, text=True,
+        env=_native_only_shell_env(
+            SEND_REQUEST=str(sending).lower(), LEAK_CHECK=leak, GITHUB_STEP_SUMMARY=str(summary),
+        ),
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    return summary.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("case", [
+    "plan_failed_auth", "plan_unobserved_auth", "connected", "completed_without_reply",
+    "provider_refusal", "auth_failure", "missing", "malformed", "invalid_shape",
+    "leak_failed", "leak_skipped",
+])
+def test_native_only_summary_keeps_observation_failure_and_unknowns_separate(tmp_path, case):
+    observed = _empty_observation()
+    observed["auth_command"] = _probe().as_record()
+    verdict = VERDICT_CONNECTED
+    sending = not case.startswith("plan_")
+    if sending:
+        observed.update(thread_started=True, turn_sent=True, turn_status="completed", final_response_present=True)
+    else:
+        verdict = VERDICT_NOT_SENT
+        observed["auth_command"] = (
+            None if case == "plan_unobserved_auth" else
+            _probe(exit_code=1, produced_a_token=False).as_record()
+        )
+    if case == "completed_without_reply":
+        observed["final_response_present"] = False
+    if case == "provider_refusal":
+        verdict = VERDICT_AUTHENTICATION_REJECTED
+        observed.update(turn_status="failed", final_response_present=False)
+    if case == "auth_failure":
+        verdict = VERDICT_AUTH_COMMAND_FAILED
+        observed = _empty_observation()
+        observed["auth_command"] = _probe(exit_code=1, produced_a_token=False).as_record()
+    if case == "connected":
+        observed["usage"] = {
+            "thread_total": {"input_tokens": 37, "cache_write_input_tokens": 3, "output_tokens": 7},
+            "most_recent_request": {"input_tokens": 11, "output_tokens": 2},
+        }
+    record = _record(verdict=verdict, description=describe_settings(_settings()), observed=observed)
+    # Even the successful leak-check branch prints only controlled fields,
+    # never the reason, note, answer, native path, resource or endpoint.
+    private = "synthetic-private-value"
+    record["note"] = private
+    record["observed"]["error"] = {"message": private}
+    if case == "missing":
+        record = None
+    elif case == "malformed":
+        record = "{not-json"
+    elif case == "invalid_shape":
+        record = {"schema": SCHEMA, "verdict": private, "observed": {}}
+    leak = "failure" if case == "leak_failed" else "skipped" if case == "leak_skipped" else "success"
+    summary = _run_native_only_summary(tmp_path, sending=sending, record=record, leak=leak)
+    assert "intentionally skipped" in summary
+    assert f"Native send requested: {str(sending).lower()}." in summary
+    for value in (private, ACCOUNT, PROJECT, ENDPOINT, "/home/somebody/.azure"):
+        assert value not in summary
+    unknown = case in ("missing", "malformed", "invalid_shape", "leak_failed", "leak_skipped")
+    assert f"turn_sent: {'unknown' if unknown else str(observed['turn_sent']).lower()}." in summary
+    assert f"Verdict: {'unknown' if unknown else verdict}." in summary
+    if unknown:
+        assert "provider_answered: unknown." in summary
+        assert "auth_command.ok: unknown." in summary
+    else:
+        assert f"provider_answered: {str(verdict in VERDICTS_THE_PROVIDER_ANSWERED).lower()}." in summary
+        assert f"final_response_present: {str(observed['final_response_present']).lower()}." in summary
+    if case == "plan_unobserved_auth":
+        assert "auth_command.ran: unknown." in summary
+        assert "auth_command.ok: unknown." in summary
+    elif case in ("plan_failed_auth", "auth_failure"):
+        assert "auth_command.ran: true." in summary
+        assert "auth_command.ok: false." in summary
+    if case == "connected":
+        assert "usage.thread_total.input_tokens: 37." in summary
+        assert "usage.most_recent_request.input_tokens: 11." in summary
+        assert "usage.thread_total.cache_write_input_tokens: 3." in summary
+        assert "usage.most_recent_request.cache_write_input_tokens: unknown." in summary
+    else:
+        assert "usage.thread_total.input_tokens: unknown." in summary
+    assert "not a measured HTTP-request count" in summary
+    assert "Missing usage stays unknown, not zero cost" in summary
+
+
+@pytest.mark.parametrize("unsafe", [False, True])
+def test_native_only_evidence_still_runs_the_real_redaction_check(tmp_path, unsafe):
+    record = _record(verdict=VERDICT_AUTH_COMMAND_FAILED, description=describe_settings(_settings()),
+                     observed=_empty_observation())
+    if unsafe:
+        record["note"] = ENDPOINT
+    checked = _run_redaction_check(tmp_path, record)
+    assert checked.returncode == int(unsafe), checked.stdout + checked.stderr
+    summary = _run_native_only_summary(tmp_path, record=record, leak="failure" if unsafe else "success")
+    assert ENDPOINT not in summary
+    assert ("Evidence: withheld" in summary) is unsafe

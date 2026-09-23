@@ -608,8 +608,11 @@ def test_the_sweep_record_is_published_with_the_others():
     assert "/tmp/codex-foundry-transmission-sweep.json" in keep["with"]["path"]
 
 
-def test_the_sweep_step_is_free_and_ungated_and_cannot_buy_a_turn():
-    """Seven requests, none of which can select a deployment.
+def test_native_only_skips_the_sweep_and_legacy_cannot_buy_a_turn():
+    """Native-only skips the sweep; legacy dispatches retain its seven requests.
+
+    Only native-only mode excludes this step. None of its requests can select
+    a deployment.
 
     ``--send-request`` on this step would buy a turn from a step whose comment
     says it cannot, so its absence is asserted rather than trusted -- the same
@@ -622,7 +625,7 @@ def test_the_sweep_step_is_free_and_ungated_and_cannot_buy_a_turn():
     parsed = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
     steps = parsed["jobs"]["diagnose"]["steps"]
     step = next(s for s in steps if s.get("id") == "transmission_sweep")
-    assert "if" not in step, step.get("if")
+    assert step["if"] == "${{ !inputs.native_only }}"
     assert "--transmission-sweep" in step["run"]
     assert "--send-request" not in step["run"]
 
