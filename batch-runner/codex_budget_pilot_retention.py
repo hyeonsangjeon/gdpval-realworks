@@ -121,7 +121,7 @@ def _lock(root: Path):
 
 
 @contextmanager
-def _session(api, *, response_bytes_limit: int = output.MAX_RECORD_BYTES):
+def _session(api, *, response_bytes_limit: int | None = None):
     token = os.environ.get("HF_TOKEN", "")
     require(bool(token) and len(token) <= 4096 and all(33 <= ord(char) <= 126 for char in token),
             "explicit_hf_token_required")

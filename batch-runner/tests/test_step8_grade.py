@@ -3474,6 +3474,8 @@ def test_grade_workflow_rc7_requires_valid_committed_partial():
         "approve-paid",
         "grade-dry-run",
         "grade",
+        "pilot-plan",
+        "pilot-live",
         "verify-published",
     ]
     assert parsed["permissions"] == {"contents": "read"}
@@ -3482,10 +3484,12 @@ def test_grade_workflow_rc7_requires_valid_committed_partial():
     approval_job = parsed["jobs"]["approve-paid"]
     dry_run_job = parsed["jobs"]["grade-dry-run"]
     grade_job = parsed["jobs"]["grade"]
+    assert _gh_expr(validate_job["if"]) == "!startsWith(inputs.experiment_yaml, 'pilot/')"
     assert approval_job["needs"] == "validate-request"
     # A paid request goes to the protected environment unless validate-request
     # proved the run inherits the approval already given for this shard.
     assert _gh_expr(approval_job["if"]) == (
+        "!startsWith(inputs.experiment_yaml, 'pilot/') && "
         "inputs.dry_run == false && "
         "inputs.paid_approval == true && "
         "needs.validate-request.outputs.approval_inherited != 'true'"
@@ -3493,7 +3497,9 @@ def test_grade_workflow_rc7_requires_valid_committed_partial():
     assert approval_job["environment"] == {"name": "grading"}
     assert "permissions" not in approval_job
     assert dry_run_job["needs"] == "validate-request"
-    assert dry_run_job["if"] == "inputs.dry_run == true"
+    assert _gh_expr(dry_run_job["if"]) == (
+        "!startsWith(inputs.experiment_yaml, 'pilot/') && inputs.dry_run == true"
+    )
     assert dry_run_job["permissions"] == {"contents": "read"}
     assert "environment" not in dry_run_job
     dry_steps = dry_run_job["steps"]
@@ -3520,6 +3526,7 @@ def test_grade_workflow_rc7_requires_valid_committed_partial():
     # click nor a proof, which is the whole thing this gate exists to prevent.
     assert _gh_expr(grade_job["if"]) == (
         "!cancelled() && "
+        "!startsWith(inputs.experiment_yaml, 'pilot/') && "
         "inputs.dry_run == false && "
         "inputs.paid_approval == true && "
         "needs.validate-request.result == 'success' && "
@@ -3567,6 +3574,41 @@ def test_grade_workflow_rc7_requires_valid_committed_partial():
     # The job list above is pinned rather than checked for membership, so that
     # nothing joins a workflow that spends money without being described here.
     # Adding a name to it weakens that unless the newcomer is pinned too.
+    pilot_plan = parsed["jobs"]["pilot-plan"]
+    pilot_live = parsed["jobs"]["pilot-live"]
+    assert _gh_expr(pilot_plan["if"]) == (
+        "startsWith(inputs.experiment_yaml, 'pilot/') && inputs.dry_run == true"
+    )
+    assert _gh_expr(pilot_live["if"]) == (
+        "startsWith(inputs.experiment_yaml, 'pilot/') && "
+        "inputs.dry_run == false && inputs.paid_approval == true"
+    )
+    assert pilot_plan["permissions"] == {"contents": "read"}
+    assert "environment" not in pilot_plan
+    assert "secrets." not in yaml.safe_dump(pilot_plan)
+    assert pilot_live["permissions"] == {"contents": "read", "id-token": "write"}
+    assert pilot_live["environment"] == {"name": "grading"}
+    for pilot_job in (pilot_plan, pilot_live):
+        assert "needs" not in pilot_job
+        assert "outputs" not in pilot_job
+        assert pilot_job["env"]["HF_HUB_OFFLINE"] == "1"
+        pilot_dump = yaml.safe_dump(pilot_job)
+        assert "actions/upload-artifact@" not in pilot_dump
+        assert "workflow_dispatch" not in pilot_dump
+        assert "PUBLISHED_COMMITS_FILE" not in pilot_dump
+        assert "approval_inherited" not in pilot_dump
+        assert "git push" not in pilot_dump
+        assert "codex_budget_pilot_grading.py" in pilot_dump
+        assert "Auto-retrigger next chunk" not in pilot_dump
+    assert "--phase judge" not in yaml.safe_dump(pilot_plan)
+    pilot_judge = next(step for step in pilot_live["steps"] if step.get("id") == "pilot_judge")
+    assert "--phase judge" in pilot_judge["run"]
+    assert _gh_expr(pilot_judge["if"]) == (
+        "steps.pilot_claim.outcome == 'success' && "
+        "steps.pilot_input.outputs.judge_ready == 'true'"
+    )
+    assert "HF_TOKEN" not in pilot_judge.get("env", {})
+
     verify_job = parsed["jobs"]["verify-published"]
     assert verify_job["needs"] == ["grade"]
     # Not `success()`. A run that pushed its grade and then died later is
@@ -3574,7 +3616,8 @@ def test_grade_workflow_rc7_requires_valid_committed_partial():
     # the paid job's overall result would skip precisely that case. Pinned so
     # the condition cannot be "simplified" back into skipping it.
     assert _gh_expr(verify_job["if"]) == (
-        "always() && needs.grade.outputs.published_commits != ''"
+        "always() && !startsWith(inputs.experiment_yaml, 'pilot/') && "
+        "needs.grade.outputs.published_commits != ''"
     )
     # Strictly narrower than the job it follows, and asserted rather than
     # assumed: this one reads the tree and reports. Write access would let a

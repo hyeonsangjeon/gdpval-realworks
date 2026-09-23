@@ -375,7 +375,7 @@ def _remaining(deadline: float) -> float:
 def _hf_client(token: str, deadline: float, *, metadata_repo: str | None = None,
                observation: dict | None = None, setup_repo: str | None = None,
                setup_reservation: Path | None = None, setup_identity: dict | None = None,
-               response_bytes_limit: int = MAX_RECORD_BYTES):
+               response_bytes_limit: int | None = None):
     """Scoped supported HF client hook: bounded HTTP, terminal failures, no Xet.
 
     Buffered immutable operations select the SDK's HTTP/LFS path. Responses and
@@ -389,6 +389,8 @@ def _hf_client(token: str, deadline: float, *, metadata_repo: str | None = None,
     from huggingface_hub.utils import _http, are_progress_bars_disabled, disable_progress_bars, enable_progress_bars
 
     _require(not constants.HF_HUB_OFFLINE, "hf_offline_mode")
+    if response_bytes_limit is None:
+        response_bytes_limit = MAX_RECORD_BYTES
     _require(type(response_bytes_limit) is int and 0 < response_bytes_limit <= MAX_FILE_BYTES,
              "hf_response_limit_refused")
     _require(metadata_repo is None or setup_repo is None, "hf_setup_request_refused")
