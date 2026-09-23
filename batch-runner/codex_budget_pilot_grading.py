@@ -8,7 +8,7 @@ authentication of the original inputs. No inference completion-v1 is emitted.
 
 from __future__ import annotations
 
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
 import fcntl
 import hashlib
@@ -39,6 +39,28 @@ PROOF = "verified_publication_derived_not_independent_provider_authentication"
 # ceiling leaves two minutes to stop/reap its owned tree, not another attempt.
 CHILD_SECONDS = 14_520
 require = output._require
+
+
+_ENTRY_REFUSALS = {
+    "source_preflight": ("grading_source_preflight_refused", False),
+    "branch_root": ("grading_root_refused", False),
+    "branch_receipt": ("grading_receipt_refused", True),
+}
+
+
+class _EntryRefused(ValueError):
+    def __init__(self, stage: str):
+        super().__init__(_ENTRY_REFUSALS[stage][0])
+        self.stage = stage
+
+
+@contextmanager
+def _entry_boundary(stage: str):
+    """Closed local diagnostics, never exception text or retry authority."""
+    try:
+        yield
+    except (Exception, KeyboardInterrupt) as error:
+        raise _EntryRefused(stage) from error
 
 
 @dataclass
@@ -136,9 +158,11 @@ def _failed(observed: dict, error: BaseException) -> None:
 def setup(root: Path, source: str, *, _test_api=None) -> dict:
     """Explicit branch creation only, never implicit in preparation/grading."""
     github_run = _ci_authority(source)
-    root = _root(root, new=True)
     result = _observation(stage="branch_setup")
-    with _lock(root):
+    with ExitStack() as stack:
+        with _entry_boundary("branch_root"):
+            root = _root(root, new=True)
+            stack.enter_context(_lock(root))
         try:
             with retained._session(_test_api) as (api, token, deadline):
                 repo = retained._target()
@@ -163,7 +187,8 @@ def setup(root: Path, source: str, *, _test_api=None) -> dict:
                 result.update(outcome="acknowledged", stage="branch_verified")
         except (Exception, KeyboardInterrupt) as error:
             _failed(result, error)
-        _record(root / "branch-receipt.json", result)
+        with _entry_boundary("branch_receipt"):
+            _record(root / "branch-receipt.json", result)
     return result
 
 
@@ -888,8 +913,9 @@ def main(argv=None, *, _test_api=None, _test_transport=None) -> int:
         require((context is None and args.phase in {"plan", "setup"}) or
                 (context is not None and args.phase != "setup"), "pilot_grade_mode_conflict")
         if args.phase != "plan":
-            source_plan, source_parent, _ = pilot.compile_pilot(ci.CAMPAIGN, args.reviewed_source_sha)
-            (_test_transport or pilot.LocalTransport()).require_source(source_plan, source_parent)
+            with _entry_boundary("source_preflight"):
+                source_plan, source_parent, _ = pilot.compile_pilot(ci.CAMPAIGN, args.reviewed_source_sha)
+                (_test_transport or pilot.LocalTransport()).require_source(source_plan, source_parent)
         observed = _observation("plan_only", stage="plan")
         ready = False
         if args.phase == "setup":
@@ -922,11 +948,20 @@ def main(argv=None, *, _test_api=None, _test_transport=None) -> int:
                 "owned_cleanup_confirmed", "verified_server_state"} else 2
     except (OSError, ValueError, TypeError, KeyError, AttributeError, RecursionError,
             subprocess.SubprocessError, ImportError, KeyboardInterrupt) as error:
-        reason, status = output._error_context(error)
-        if reason == "hf_operation_failed":
-            reason = "grading_contract_refused"
+        stage, mutation_possible = None, None
+        if isinstance(error, _EntryRefused):
+            stage = error.stage
+            reason, mutation_possible = _ENTRY_REFUSALS[stage]
+            status = None
+        else:
+            reason, status = output._error_context(error)
+            if reason == "hf_operation_failed":
+                reason = "grading_contract_refused"
         print(pilot._canonical_json({"role": "fixed_private_pilot_grading", "outcome": "refused",
-            "reason": reason, "http_status": status, "inference_requested": False,
+            "stage": stage, "reason": reason, "http_status": status,
+            # Current invocation only: false never proves an absent remote
+            # branch or an unused reservation from an earlier invocation.
+            "remote_mutation_possible": mutation_possible, "inference_requested": False,
             "grade_success": False, "automatic_retry": False}), file=sys.stderr)
         return 2
 

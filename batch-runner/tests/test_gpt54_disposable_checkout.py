@@ -138,8 +138,13 @@ def _allow_only_temporary_git(monkeypatch: Any, tmp_path: Path) -> tuple[list, l
     prefix = _git_prefix()
 
     def checked(command: Any, kwargs: dict[str, Any]) -> tuple[Path, tuple[str, ...], bool]:
+        selected_prefix = prefix
+        trusted_prefix = [*prefix[:-1], "-c", "safe.directory=" + str(preparer.TRUSTED_ROOT), "-C"]
+        if isinstance(command, (list, tuple)) and list(command[:len(trusted_prefix)]) == trusted_prefix:
+            selected_prefix = trusted_prefix
         if (type(command) not in (list, tuple) or not all(type(item) is str for item in command)
-                or list(command[:len(prefix)]) != prefix or len(command) <= len(prefix) + 1
+                or list(command[:len(selected_prefix)]) != selected_prefix
+                or len(command) <= len(selected_prefix) + 1
                 or kwargs.get("shell") or kwargs.get("executable") is not None
                 or kwargs.get("cwd") is not None
                 or kwargs.get("stdin") != subprocess.DEVNULL
@@ -151,10 +156,12 @@ def _allow_only_temporary_git(monkeypatch: Any, tmp_path: Path) -> tuple[list, l
         if not fixture and environment != _GIT_ENV:
             # Never include environment contents in assertion output.
             pytest.fail("Git attempted to inherit caller configuration or credentials")
-        repository = Path(command[len(prefix)])
+        repository = Path(command[len(selected_prefix)])
+        if selected_prefix != prefix and repository != preparer.TRUSTED_ROOT:
+            pytest.fail("command-local ownership trust escaped the exact compiler checkout")
         if not repository.is_absolute() or not repository.resolve().is_relative_to(tmp_path.resolve()):
             pytest.fail("Git escaped the per-case temporary repository")
-        args = tuple(command[len(prefix) + 1:])
+        args = tuple(command[len(selected_prefix) + 1:])
         read_commands = {"rev-parse", "for-each-ref", "status", "cat-file", "ls-tree", "symbolic-ref"}
         if args[0] == "worktree":
             if len(args) == 6 and args[:4] == ("worktree", "add", "--detach", "--"):
