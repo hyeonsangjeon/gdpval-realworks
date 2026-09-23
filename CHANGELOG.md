@@ -109,6 +109,50 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Increase only `backend-tests.yml`'s `native-host-contracts` ceiling from 45
+  to 60 minutes for its CI setup/cleanup envelope. The leader-supplied run
+  `35811169415`/job `107022868111` was cancelled at the 45-minute maximum even
+  though pytest printed `71 passed, 84 deselected in 2562.66s (0:42:42)`.
+  Setup began `02:38:39Z`, the test command began `02:40:54Z`, and tests/cleanup
+  ended `03:23:38Z`; eight other checks passed. This does not turn the
+  cancelled job into success or clear GATE-BLOCKED review `5286611715`.
+  The required pre-edit CI/cost decision constrained this change to the job
+  envelope and its exact static expectations. The unchanged command still
+  selects `-k native_result_host`; complementary predicates, exactly-once
+  coverage, guards, permissions, action pins and every other 45-minute backend
+  job ceiling remain intact. The general pytest timeout warning is unchanged.
+  Only the native-host timeout expectation and directly coupled whole-workflow
+  SHA256 expectation were updated; no historical/Foundry digest or hash guard
+  was weakened. One static selector at
+  `572326c4933cd26870ffe1cfa500979ce8a0f89b` reported `1 passed in 6.76s`,
+  exit 0. Its scoped collection-only subprocesses did not run native-host
+  test bodies. The exact command is in `tasks/LATEST_TASK_RESULT/README.md`.
+  No 71/67/42-case family, full suite or workflow was rerun. Separately, the
+  leader's selected release `394272629` observation found `draft=true`, the
+  registered target/label and `assets=[]`, resolving absence at that read.
+  The original upload remains HTTP 400/`gh` exit 1 with no captured asset ID.
+  Local inspection showed that the retained observer did not persist the
+  captured `gh` stdout/stderr, retaining only exit/status and
+  `github_operation_failed_no_retry`. The request construction alone does
+  not establish a client-format, authentication or permission cause. The
+  conditional correction precondition was unmet, so no corrected upload,
+  reservation, release read, candidate rehash, import or campaign operation
+  occurred. Original private receipts remain unchanged; no replacement or
+  remote asset metadata is invented. The external 2,519,040-byte expectation
+  and SHA256 `757603585405da5d7f6817a6a0a23bd530d4b5e4e38b2fd4dc6f318053d240e3`
+  remain historical candidate evidence, not a new packaging/transfer result.
+  #658 review `5286466150` at `e5d5fcb647129e86d9faf742fc19df1e1e800c15`
+  covers unchanged intake code and its original 67-case offline evidence at
+  `f4a984d8bed0f6845e405c5b6d9f82b3b96757e0`. #657 review `5286611655` at
+  `ae4c73b834337001102a0a7fc0e78a3d608a7044` covers its correction; its
+  `1 passed in 0.25s` remains at `e6445a0544e0e6c0bb3d5ef6bee4a232be96ccff`.
+  #657 and both campaigns remain untouched. The 180-minute cell, 30-minute
+  attempt and 240-minute execution-job limits are unchanged. New-head
+  review/checks, private source transfer/read-token input-check, current CI
+  OIDC/native connectivity, ordered 30-cell scheduling/deduplication,
+  execution and grading remain unfinished. No CI query/manual rerun, auth,
+  OIDC, native/model/grader operation or public distribution occurred here.
+
 - Preserve local authentication failures in the Codex connection diagnostic's
   JSON output. `auth_command_produced_no_token` already existed but was missing
   from `VERDICTS`, so `_record()` rejected the failed preflight before output.
