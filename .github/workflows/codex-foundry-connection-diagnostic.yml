@@ -21,7 +21,7 @@
 # discards — it consumes the turn stream itself rather than calling `run()` —
 # so a refused sign-in (401/403), a rejected payload (400), an absent
 # deployment (404) and a content filter each come back under their own name,
-# from the same one request. That is the entire reason this is a workflow and
+# from the same native turn. That is the entire reason this is a workflow and
 # not a toggle.
 #
 # What it deliberately does NOT do:
@@ -41,7 +41,7 @@
 #     instead, and every runtime message passes through a redactor first. The
 #     step below re-checks that after the fact rather than trusting it.
 #
-# Cost. One turn and retries pinned off in the provider table the runtime
+# Native-only cost. One turn and retries pinned off in the provider table the runtime
 # actually reads — not merely asserted in the plan. That distinction was real:
 # until the pins existed, the plan said `retries_configured: 0` while the
 # runtime used its own defaults, and one turn against a 500 sent thirty
@@ -58,14 +58,15 @@
 # `tool_choice: auto`, and 5 KB of `input` — and no prompt wording or config
 # key removes the tools. Measured in
 # `batch-runner/tests/test_what_one_codex_turn_actually_sends.py`. The turn is
-# still cheap and still one request; the prompt length is simply not what
-# makes it so, and a contrast against the direct Python path cannot be matched
-# on body size.
+# still one native turn, not necessarily one HTTP request; the prompt length
+# is not a billing measure, and a contrast against the direct Python path
+# cannot be matched on body size.
 #
-# `send_request: false` is the default, and with it nothing is sent to the
-# deployment at all — the job prints the plan, fingerprinted, and stops. The
-# plan and the result share a schema, so what was fixed beforehand and what
-# happened can be compared field by field.
+# With `native_only: true`, `send_request: false` sends no model turn: the job
+# records the plan and checks its fingerprint. Sending opts into the existing
+# one-turn native path, without the legacy probes or sweeps. With native_only
+# off, the legacy behavior is unchanged, including its unservable probes even
+# when all send flags are false. The plan and native result share a schema.
 #
 # The plan does run one thing: the provider's auth command, in the isolated
 # environment Codex would run it in. That is a call to the identity platform
@@ -82,8 +83,15 @@ on:
         description: Deployment to call (required; there is no default)
         required: true
         type: string
+      native_only:
+        description: >-
+          Only plan or send the native turn; skip all legacy probes. Cannot be
+          combined with send_valid_request or send_closing_sweep.
+        required: false
+        default: false
+        type: boolean
       send_request:
-        description: Actually send the one turn. Off means print the plan only.
+        description: Send the native turn. With native_only on, off means plan only.
         required: false
         default: false
         type: boolean
@@ -150,6 +158,20 @@ jobs:
       EXPECTED_HOST_FINGERPRINT: "sha256:69057d59166a82e3"
 
     steps:
+      - name: Reject incompatible native-only inputs
+        env:
+          NATIVE_ONLY: ${{ inputs.native_only }}
+          SEND_VALID_REQUEST: ${{ inputs.send_valid_request }}
+          SEND_CLOSING_SWEEP: ${{ inputs.send_closing_sweep }}
+        run: |
+          set -euo pipefail
+          if [ "${NATIVE_ONLY}" = "true" ] && {
+            [ "${SEND_VALID_REQUEST}" = "true" ] || [ "${SEND_CLOSING_SWEEP}" = "true" ];
+          }; then
+            echo "::error::native_only cannot be combined with send_valid_request or send_closing_sweep."
+            exit 1
+          fi
+
       - name: Check out
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
@@ -271,7 +293,7 @@ jobs:
           # does not buy itself a request.
           echo "confirmed=yes" >> "${GITHUB_OUTPUT}"
 
-      # Free, and it runs on every dispatch including the dry ones. A listing
+      # Legacy only, including its dry dispatches. A listing
       # is not a turn: no prompt, no completion, nothing to generate.
       #
       # It exists because run 34319880025's 401 survived every offline check.
@@ -302,6 +324,7 @@ jobs:
       # check below now separates "the host refused" from "we never asked".
       - name: Ask the host what it will admit to, without sending a turn
         id: readonly
+        if: ${{ !inputs.native_only }}
         working-directory: batch-runner
         env:
           AZURE_AI_ROUTE_PROFILE: direct-v1
@@ -379,6 +402,7 @@ jobs:
       # `test -s` is not covered by it -- no record at all is a defect here.
       - name: Ask which check this host runs first, without sending a turn
         id: auth_discriminator
+        if: ${{ !inputs.native_only }}
         working-directory: batch-runner
         env:
           AZURE_AI_ROUTE_PROFILE: direct-v1
@@ -446,6 +470,7 @@ jobs:
       # exits non-zero and is a finding worth keeping, not a broken job.
       - name: Ask which request property closes a gate the plain request clears
         id: transmission_sweep
+        if: ${{ !inputs.native_only }}
         working-directory: batch-runner
         env:
           AZURE_AI_ROUTE_PROFILE: direct-v1
@@ -520,7 +545,7 @@ jobs:
       # fallback. Pinned by batch-runner/tests/test_codex_valid_request.py.
       - name: Send one request the route can actually serve
         id: valid_request
-        if: ${{ inputs.send_valid_request && steps.pinned.outputs.confirmed == 'yes' }}
+        if: ${{ !inputs.native_only && inputs.send_valid_request && steps.pinned.outputs.confirmed == 'yes' }}
         working-directory: batch-runner
         env:
           AZURE_AI_ROUTE_PROFILE: direct-v1
@@ -591,7 +616,7 @@ jobs:
       # batch-runner/tests/test_codex_closing_sweep.py.
       - name: Add what Codex adds, one property at a time
         id: closing_sweep
-        if: ${{ inputs.send_closing_sweep && steps.pinned.outputs.confirmed == 'yes' }}
+        if: ${{ !inputs.native_only && inputs.send_closing_sweep && steps.pinned.outputs.confirmed == 'yes' }}
         working-directory: batch-runner
         env:
           AZURE_AI_ROUTE_PROFILE: direct-v1
@@ -844,7 +869,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Summary
-        if: always()
+        if: always() && !inputs.native_only
         run: |
           set -euo pipefail
           RECORD=/tmp/codex-foundry-connection.json
@@ -1082,3 +1107,92 @@ jobs:
             echo "\`deployment_not_found\`는 그 배포가 없다는 뜻으로, 셋은 고치는"
             echo "곳이 서로 다릅니다."
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Native-only summary
+        if: always() && inputs.native_only
+        env:
+          SEND_REQUEST: ${{ inputs.send_request }}
+          LEAK_CHECK: ${{ steps.leak_check.conclusion }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          import sys
+          from pathlib import Path
+
+          sending = os.environ["SEND_REQUEST"] == "true"
+          lines = [
+              "### Native-only connection diagnostic", "",
+              "Legacy listing, bearer discrimination, transmission/header probes, "
+              "plain-urllib requests and closing sweep: intentionally skipped.",
+              f"Native send requested: {str(sending).lower()}.",
+              "Script/runner timeout argument: 120 seconds (default); job ceiling: 20 minutes.",
+              "The diagnostic keeps its own settings, without benchmark effort/context overrides.",
+          ]
+          record = {}
+          evidence = "withheld: redaction check did not succeed"
+          if os.environ.get("LEAK_CHECK") == "success":
+              # A requested send must have its own record. Never use the earlier
+              # plan's turn_sent=false to answer for a missing/failed send.
+              path = Path("/tmp/codex-foundry-connection.json" if sending else
+                          "/tmp/codex-foundry-plan.json")
+              try:
+                  candidate = json.loads(path.read_text(encoding="utf-8"))
+              except (OSError, ValueError):
+                  evidence = "unavailable: selected record is missing or malformed"
+              else:
+                  sys.path.insert(0, "batch-runner")
+                  from scripts.diagnose_codex_foundry_connection import SCHEMA, VERDICTS
+
+                  if (isinstance(candidate, dict) and candidate.get("schema") == SCHEMA
+                          and candidate.get("verdict") in VERDICTS
+                          and isinstance(candidate.get("observed"), dict)):
+                      record = candidate
+                      evidence = "native result" if sending else "plan only"
+                  else:
+                      evidence = "unavailable: selected record has an invalid shape"
+
+          def mapping(value):
+              return value if isinstance(value, dict) else {}
+
+          def boolean(value):
+              return str(value).lower() if type(value) is bool else "unknown"
+
+          def number(value):
+              return str(value) if type(value) is int else "unknown"
+
+          observed = mapping(record.get("observed"))
+          auth = mapping(observed.get("auth_command"))
+          retries = mapping(mapping(record.get("request")).get("retries_configured"))
+          lines += ["", f"Evidence: {evidence}.",
+                    "Verdict: " + record.get("verdict", "unknown") + ".",
+                    "provider_answered: " + boolean(record.get("provider_answered")) + "."]
+          for key in ("ran", "ok", "produced_a_token"):
+              lines.append(f"auth_command.{key}: {boolean(auth.get(key))}.")
+          lines.append("auth_command.exit_code: " + number(auth.get("exit_code")) + ".")
+          for key in ("thread_started", "turn_sent", "final_response_present",
+                      "final_response_matched_instruction", "tool_execution_observed"):
+              lines.append(f"{key}: {boolean(observed.get(key))}.")
+          status = observed.get("turn_status")
+          lines.append("turn_status: " + (status if status in
+                       ("completed", "failed", "interrupted", "inProgress") else "unknown") + ".")
+          for key in ("request_max_retries", "stream_max_retries"):
+              lines.append(f"{key}: {number(retries.get(key))}.")
+          usage = mapping(observed.get("usage"))
+          for scope in ("thread_total", "most_recent_request"):
+              totals = mapping(usage.get(scope))
+              for key in ("input_tokens", "cached_input_tokens", "cache_write_input_tokens",
+                          "output_tokens", "reasoning_output_tokens"):
+                  lines.append(f"usage.{scope}.{key}: {number(totals.get(key))}.")
+          lines += ["",
+              "provider_answered can describe a refusal; job success or a completed turn "
+              "is not proof that a final response was observed.",
+              "The provider retry pins do not suppress the runtime's 401 token refresh/resend. "
+              "One native turn is not a measured HTTP-request count.",
+              "Missing usage stays unknown, not zero cost. Totals are not an invoice. "
+              "This diagnostic establishes no benchmark recovery, tool execution or graded quality.",
+          ]
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
+              summary.write("\n".join(lines) + "\n")
+          PY

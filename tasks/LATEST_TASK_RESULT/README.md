@@ -1,6 +1,41 @@
 # Latest task result
 
-## Native-host CI envelope correction and staging reconciliation
+## Private-intake integration with native-only main
+
+One ordinary non-squash merge combines the reviewed #658 source
+`082a7dab19f3e5e80b94b32f55ad25f8493b63a9` with exact main
+`0f0911b435d7f704db8e2f2131a00ade310d5c1f`. Only this completion record and
+`CHANGELOG.md` conflicted. Both substantive changelog histories are retained;
+no implementation conflict or workflow-behavior edit occurred.
+
+Git blob comparisons verified all seven protected #658 intake/workflow/test
+files against its reviewed source, and all four incoming #657 diagnostic
+workflow/test files against exact main. The corrected transmission-sweep
+contract is included unchanged. The backend workflow retains raw SHA256
+`08291d29670966d52a88ec216b71e68811a05bd599c13df040460a72204849ac`,
+including the 60-minute native-host ceiling and its coupled assertion.
+No test selection was rerun.
+
+#658 FINAL-APPROVE review `5286767574` applies to
+`082a7dab19f3e5e80b94b32f55ad25f8493b63a9`; the static result remains
+`1 passed in 6.76s` at `572326c4933cd26870ffe1cfa500979ce8a0f89b`.
+#657 review `5286611655` applies to
+`ae4c73b834337001102a0a7fc0e78a3d608a7044`; its correction result remains
+`1 passed in 0.25s` at `e6445a0544e0e6c0bb3d5ef6bee4a232be96ccff`.
+The leader reports all nine exact-head checks passed before #657 entered the
+incoming main. Neither review is approval of this integration head.
+
+The [incoming native-only correction and staging record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/ae4c73b834337001102a0a7fc0e78a3d608a7044/tasks/LATEST_TASK_RESULT/README.md)
+and unchanged changelog entries preserve #657's complete evidence. The prior
+#658 record below is retained under its original observation scope; its
+then-current main, frozen-branch statements and unattempted conditional upload
+are historical, not claims about this integration or the separately authorized
+standard-client upload. That new upload has not run at this merge boundary.
+
+The new integration head needs leader review and ordinary final-head checks.
+No CI query, diagnostic dispatch or campaign operation was performed.
+
+## Prior #658 result: CI envelope correction and staging reconciliation
 
 Only the `native-host-contracts` job ceiling changes from 45 to 60 minutes.
 The test selection, guards and pilot budgets are unchanged. The sole local

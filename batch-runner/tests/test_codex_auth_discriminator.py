@@ -561,13 +561,12 @@ def test_the_discriminator_record_is_published_with_the_others():
     assert "/tmp/codex-foundry-auth-discriminator.json" in keep["with"]["path"]
 
 
-def test_the_discriminator_step_is_free_and_ungated():
-    """It must run on the dry dispatches, which are the only ones left.
+def test_native_only_skips_the_discriminator_but_legacy_dry_dispatches_keep_it():
+    """The new mode skips this probe; legacy dry dispatches still run it.
 
     The paid turn is behind ``inputs.send_request`` and a fingerprint check.
-    This step is behind neither, because it costs nothing and because a
-    diagnostic that only runs on the dispatches that spend money is not
-    available when it is most needed. It also must not carry
+    This legacy step is behind neither; only native-only mode excludes it.
+    It also must not carry
     ``--send-request``: that flag on this step would buy a turn from a step
     documented as free.
     """
@@ -576,6 +575,6 @@ def test_the_discriminator_step_is_free_and_ungated():
     parsed = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
     steps = parsed["jobs"]["diagnose"]["steps"]
     step = next(s for s in steps if s.get("id") == "auth_discriminator")
-    assert "if" not in step, step.get("if")
+    assert step["if"] == "${{ !inputs.native_only }}"
     assert "--auth-discriminator" in step["run"]
     assert "--send-request" not in step["run"]
