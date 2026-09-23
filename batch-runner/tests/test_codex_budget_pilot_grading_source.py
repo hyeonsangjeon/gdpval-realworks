@@ -119,10 +119,14 @@ def test_real_git_global_trust_is_ignored_but_exact_command_trust_works(source, 
     foreign = tmp_path / "foreign"
     foreign.mkdir()
     _fixture_git(foreign, "init", "--quiet", "--initial-branch=fixture-main", "--template=")
-    monkeypatch.setattr(checkout, "TRUSTED_ROOT", foreign)
-    # The caller's exact global allowance still cannot affect hardened Git.
-    with pytest.raises(checkout.DisposableCheckoutRefused, match=r"local Git rev-parse refused \(128\)"):
-        checkout._repository(source.repository)
+    alias = tmp_path / "aliased-source"
+    alias.symlink_to(source.repository, target_is_directory=True)
+    for unrelated in (foreign, tmp_path / "unavailable-external-source", alias):
+        monkeypatch.setattr(checkout, "TRUSTED_ROOT", unrelated)
+        # Existing, missing and aliased roots grant no foreign ownership trust.
+        # The caller's exact global allowance still cannot affect hardened Git.
+        with pytest.raises(checkout.DisposableCheckoutRefused, match=r"local Git rev-parse refused \(128\)"):
+            checkout._repository(source.repository)
     assert source.ownership_commands
 
 
@@ -187,7 +191,8 @@ def test_unsafe_trusted_root_never_reaches_git(source, tmp_path, monkeypatch, ki
     monkeypatch.setattr(checkout, "TRUSTED_ROOT", unsafe)
     before = len(source.calls)
     with pytest.raises(ValueError):
-        checkout._repository(source.repository)
+        # Test the selected unsafe path, not an unrelated compiler directory.
+        checkout._repository(unsafe)
     assert len(source.calls) == before
 
 
