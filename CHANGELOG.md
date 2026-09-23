@@ -13,6 +13,53 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Add `codex_budget_pilot_results.py`, a local completion-envelope reader for
+  `budget_pilot_ci_20260923_01`. It uses the real pilot compiler and existing CI
+  completion validator, always retaining 30 rows in canonical per-task
+  A1/B1/C1/C2/B2/A2 order. Missing envelopes become `NOT_OBSERVED`, not success
+  or zero cost; each job's other-29-unrun declaration is not summed. Duplicate
+  cells, foreign cells, malformed envelopes and mismatched campaign/source/
+  config/input/order/registration/host-policy bindings refuse before publication.
+  A non-null verified-input fingerprint requires an external expected
+  `files_sha256`, not the bundle SHA or the first envelope's own claim. Null
+  input proof stays unavailable. Per-job plan hashes may differ: the v1 envelope
+  does not expose the plan preimage or runner-instance binding, so the reader
+  explicitly reports that proof unavailable. It preserves per-cell execution,
+  cleanup, receipt, usage, cost and artifact identities without token/cost totals,
+  guessed prices, HTTP counts, grades or A/B/C rankings. This reader does not
+  deduplicate remote execution. Explicit local files are bounded to 64 KiB each;
+  a result is bounded to 2 MiB and atomically published without replacing an
+  existing file. One offline CLI family at
+  `deefb34ad684a00494ef689db86f4c461dbca004` reported
+  `31 passed in 36.01s`, exit 0. The exact selector and command are in
+  `tasks/LATEST_TASK_RESULT/README.md`; observations are synthetic, while the
+  compiler, validator, checksum, refusal and publication paths are real. No
+  previous test family or original-input, campaign, workflow or live operation ran.
+  Separately, the leader supplied completed native-only diagnostic run
+  `35817078746`, job `107040793256`, artifact `10731833980`, on exact main
+  `0f0911b435d7f704db8e2f2131a00ade310d5c1f`: `connected`, provider answered,
+  auth preflight succeeded and one native turn completed with the requested
+  response. Plan/result settings fingerprints both equal
+  `sha256:af46cb5548b7224a3c0117b37a450fced3765efdc4ed2b6c12994376c9462150`.
+  Runtime thread-total and most-recent-request views each report 10,982 input,
+  0 cached input, 0 cache-write input and 29 output tokens, including 22 reasoning
+  tokens; neither the views nor reasoning are added again. The observed context
+  window is 258,400. This is diagnostic-default GPT-5.4/direct-v1 with pinned
+  SDK/companion 0.147.0, not pilot `xhigh`, supervisor Astra 1M, tool/file/recovery
+  evidence or graded quality. Five legacy probes were skipped; HTTP count,
+  price and invoice remain unestablished. The leader also supplied selected
+  owner-account metadata: draft release `394272629`, asset `582945947`,
+  `uploaded`, 2,519,040 bytes, provider digest
+  `sha256:757603585405da5d7f6817a6a0a23bd530d4b5e4e38b2fd4dc6f318053d240e3`.
+  Neither observation was repeated here; the earlier HTTP 400/lost-error record
+  remains historical. Draft staging does not prove CI read-token access.
+  Frozen #658 review `5286955706` at
+  `7a4711f319f57d56e71678f85f0a110fd78f5546` covers the earlier intake, CI job-ceiling,
+  integration and staging changes, not this reader. New reader review and
+  final-head checks, CI `input_check`, ordered execution, cross-run admission
+  deduplication and fixed grading remain outstanding. All experiment controls,
+  prior outputs, source bindings and sealed campaign state remain unchanged.
+
 - Add an opt-in `native_only` mode to the existing Foundry connection-diagnostic
   workflow. With the mode on, incompatible legacy paid flags refuse before
   checkout or OIDC; all five listing/discrimination/sweep/urllib probes are
