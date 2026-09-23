@@ -148,7 +148,10 @@ def case(monkeypatch, caplog):
         if state.failure == "json":
             return httpx.Response(200, content=RAW.encode())
         if state.failure == "size":
-            return httpx.Response(200, content=b"x" * (output.MAX_RECORD_BYTES + 1))
+            # Like HTTPTransport, expose an unread stream so the real byte
+            # guard sees it before the SDK's JSON parser. Prebuffered content
+            # would bypass Response.read(), unlike a network response.
+            return httpx.Response(200, stream=httpx.ByteStream(b"x" * (output.MAX_RECORD_BYTES + 1)))
         return httpx.Response(state.status, json=state.metadata, headers={"location": "https://signed.invalid/?secret=value"})
 
     monkeypatch.setattr(HfApi, "repo_info", repo_info)
