@@ -13,6 +13,63 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Add explicit private draft-release-asset intake before the single-cell CI
+  workflow's Azure OIDC/model admission. Default plan-only does not transfer
+  inputs. The mutually exclusive `input_check` mode imports and checks inputs
+  without requesting OIDC or native/model work; execution requires successful
+  intake and the existing installed-input check. The existing job-level OIDC
+  permission remains, not a new grant. Explicit positive release/asset IDs
+  select only `hyeonsangjeon/gdpval-realworks`; the external registered
+  expectation is 2,519,040 bytes/SHA256
+  `757603585405da5d7f6817a6a0a23bd530d4b5e4e38b2fd4dc6f318053d240e3`.
+  The intake validates release identity, literal draft status, selected asset
+  membership, uploaded state, type, size and bounded response bytes before
+  staging. It uses only the existing `contents:read` token, constructs API paths
+  locally, refuses
+  metadata redirects and strips authorization from the sole allowed GitHub
+  asset CDN hop. No release enumeration, public fallback, permission widening
+  or raw response/signed-URL/token/private-path output is added. Metadata is
+  bounded to 256 KiB/100 assets; network operations have at most 30 seconds
+  within a shared 120-second transfer deadline. The workflow enforces TERM at
+  120 seconds, KILL after 5 seconds and a 3-minute intake/check step ceiling.
+  The genuine unchanged bundle importer publishes the exact original parquet,
+  reference-only and canonical Step 0 roles, then verifies installed bytes.
+  No-clobber reservations and partials remain non-adoptable. Existing reviewed
+  source/cell guards precede intake; pinned actions/runtime/host, model budgets
+  and completion-envelope-only upload are preserved. A declared read scope is
+  not evidence of private draft access, and draft visibility is only observed
+  at metadata-read time. Inaccessible assets refuse without a fallback.
+  One focused invocation at `f4a984d8bed0f6845e405c5b6d9f82b3b96757e0`
+  reported `67 passed, 18 deselected in 4.66s`, exit 0: 66 new intake cases and
+  one directly affected workflow contract. Fake GitHub responses and explicit
+  synthetic provenance/anchor fixtures exercise the real CLI/importer/readers,
+  hash/type/no-clobber/refusal paths, plus controlled shell and static workflow
+  contracts. This is not a workflow run, live access or connectivity evidence.
+  The exact command and intended later no-model input-check invocation are in
+  `tasks/LATEST_TASK_RESULT/README.md`. Existing Python 3.10.12 and
+  SDK/companion 0.147.0 were reused without an install. No earlier bundle,
+  dispatcher or diagnostic family was rerun. The branch starts independently
+  at `266ef7a05335d900304214da0c0d680331fb346c`; active full-grader sources,
+  hashes and 37/58 source-set guards are unchanged. Separately, a normal merge
+  integrated that exact main into #657 as
+  `2e89f411efc4294a47831a1b58cb8b0c99c90418`, with only completion-record
+  conflict resolution and verified unchanged reviewed workflow/tests and
+  incoming bundle implementation. #657 was pushed and frozen without another
+  test or diagnostic run. #655 review `5285590451` at
+  `4d3c4b4f895da35e3db07b413f66c8066dfa5ad1` covers the one-cell entry;
+  #656 review `5285752981` at `df3e3f24404a90f47789051ef99318fb6af2dd20`
+  covers only the local bundle/private candidate; #657 review `5286077604` at
+  `0f291f4041bb321817ce93e6d8b4bfe0c4f2cfb0` covers native-only mode. Their
+  original 19/39/42-case evidence stays at its original tested SHAs in the
+  completion record; none approves this intake or the #657 integration head.
+  Both campaigns, original inputs and the historical private candidate remain
+  untouched. No real transfer/import, release API, auth, native/model, grading
+  or CI observation ran. Immutable review/CI, private draft-access/source
+  transfer, current CI OIDC/native connectivity, ordered 30-cell scheduling,
+  deduplication/aggregation, execution and grading remain unfinished. Standing
+  spend authority is unchanged; the unresolved transport boundary is technical,
+  not a new owner-approval wait or authority for public redistribution.
+
 - Add a plan-first CLI and manual/reusable GitHub Actions entry for one
   explicitly selected external-budget pilot cell. The preregistration reserves
   `budget_pilot_ci_20260923_01` for the existing repository-OIDC execution path;
