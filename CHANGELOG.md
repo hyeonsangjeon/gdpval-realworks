@@ -11,6 +11,46 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Added
+
+- Add the explicit `pilot/branch-inspect` selector and `inspect` phase on the
+  existing #669 branch, starting at
+  `685454f030a4128b39761402d69712bd8f705def`. Planning remains local, with no
+  credential lookup or HF request. Inspection preserves source and CI admission
+  checks, then permits at most two bodyless, authenticated metadata GETs within
+  one 20-second deadline: first the fixed private repository at recorded
+  bootstrap `bfc7ae01ed14490817ceb7cb406adcb9bb95f557`, then only
+  `pilot-grades-20260923`. The target name must retain SHA256
+  `a13dedada5465377761961d050e021a4db8e44d6284179a9ce40b562e4396a44`.
+  Only verified bootstrap access followed by a branch 404 with the exact
+  `RevisionNotFound` discriminator establishes observed absence. Bare 404s,
+  repository-not-found responses and unavailable access remain unknown and
+  refuse. Identity/privacy or non-bootstrap HEAD drift also refuses; no state
+  is adopted, reset or mutated. The existing one-GET HF guard retains its `main`
+  default, byte limits and no-retry/no-redirect behavior for metadata. Safe CLI
+  output contains only bounded identities/statuses and explicit no-mutation,
+  no-inference and no-judge flags. Inspection never opens setup state or receipts.
+  The existing protected workflow route adds one two-minute inspection step
+  with step-scoped `HF_TOKEN`; renderer/preparation, rubric transfer, OIDC,
+  claim/judge/publication and generic jobs are excluded. No inputs, permissions,
+  fixed-grader controls or other mode semantics changed.
+  One new offline selector,
+  `tests/test_codex_budget_pilot_grading_branch_inspect.py`, returned
+  **29 passed in 4.67s**, exit 0, at
+  `2066971d10bcad322420fdadd89fa71d1511318c`. CLI/compiler/HTTP guards are real;
+  source admission and HTTP responses are synthetic, and workflow checks are
+  static. The reviewed Git helper and its source pin are byte-identical to the
+  starting head. Prior review `5297818844` covers only that head's source-trust
+  and closed-diagnostic corrections, not this addition. Original **28 PASS**,
+  comparison **6 FAIL / 939 PASS**, and targeted **12 PASS** evidence remains
+  separate below. Setup `35920355055` remains **UNRESOLVED/CONSUMED**, with
+  unknown remote effects; this task neither reconstructs its acknowledgment nor
+  proves it mutation-free. Main `02a9682747e371d8675d1d0afb63155f3c3bce82` remains
+  **BLOCKED_PRE_EXECUTION**. New head review/final CI, one separately authorized
+  live read-only observation, the leader's decision/reseal and live gates, and
+  the first paid cell remain. No live HF call, setup replay, CI query or workflow
+  dispatch, inference, grading or reseal occurred.
+
 ### Fixed
 
 - Restore runtime checkout independence from the preparation compiler directory

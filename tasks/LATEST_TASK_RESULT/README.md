@@ -1,5 +1,136 @@
 # Latest task result
 
+## PROJECT5-READONLY-BRANCH-OBSERVATION-0801
+
+### Result and authority boundary
+
+Added an explicit read-only grading-branch inspection on the existing #669
+branch, starting at `685454f030a4128b39761402d69712bd8f705def`. The one new
+offline selector returned **29 passed in 4.67s**, exit 0, at
+`2066971d10bcad322420fdadd89fa71d1511318c`. No actual HF observation, setup
+replay, mutation, payload transfer, judge invocation or source reseal occurred.
+
+The leader supplied FINAL-APPROVE `5297818844` for the starting head's
+source-trust and closed-diagnostics scope. It does not cover this new inspection
+behavior. Final CI was still running at the supplied observation; it was not
+queried or awaited. Main remains the supplied
+`02a9682747e371d8675d1d0afb63155f3c3bce82`, with its seal
+**BLOCKED_PRE_EXECUTION**. This branch does not replace that seal.
+
+Exact comparisons against the starting head found no changes to
+`batch-runner/gpt54_disposable_checkout.py` or
+`batch-runner/experiments/execution_envelope/gpt54_sandboxv2_codex_comparison.yaml`.
+The helper retains SHA256
+`0dbbab8911e1cba106745087aed471dca0a8b7f904058b4958df1e07864bb885`
+and Git blob `b0a4ec719a48d43ab7463ba885ef75b29ad154e1`; the complete envelope
+file retains blob `1ea111dfc16c4dc08139bbadf6f232c01526caa7`.
+
+### Inspection contract
+
+The existing grading CLI accepts `--selector pilot/branch-inspect` with either
+the default `plan` phase or explicit `--phase inspect`. Plan performs no source
+execution, token lookup or network request. The inspect selector cannot select
+setup, preparation, claim, judge, publication or reconciliation. Conversely,
+branch setup and canonical cell selectors cannot select inspection. Both branch
+selectors require an empty terminal revision. The existing `--root` argument
+is retained for interface compatibility, but inspection does not open, create
+or alter that directory, its reservation or its receipts.
+
+Live inspection, if separately authorized later, retains the actual source
+preflight, exact-source/main/first-attempt checks and protected `grading`
+environment policy. It derives only the existing fixed private target with
+repository-name SHA256
+`a13dedada5465377761961d050e021a4db8e44d6284179a9ce40b562e4396a44`.
+It first requests metadata at recorded bootstrap
+`bfc7ae01ed14490817ceb7cb406adcb9bb95f557`, validating exact repository identity,
+strict private status and actual immutable SHA. Only then can it request
+metadata for `pilot-grades-20260923`.
+
+Each client scope permits one exact, bodyless, explicitly authenticated GET.
+Both reads share a single 20-second deadline and the existing response-byte
+bound. Redirects, SDK retries, extra requests, other methods, payload paths and
+revision metacharacters are refused. The shared client's existing metadata
+default remains `main`; ordinary publication and setup behavior is unchanged.
+The workflow adds only an exact-selector inspection step with a two-minute
+timeout and step-scoped `HF_TOKEN`. Its short online scope removes ambient
+credentials and restores offline settings afterward. Inspection excludes
+renderer/preparation, rubric transfer, OIDC, claim, judge, grade publication and
+generic jobs, and never writes a judge-readiness output or public artifact.
+There are no new workflow inputs or permissions.
+
+Safe CLI output distinguishes `present`, `absent` and
+`inaccessible_or_unknown`, with the actual validated branch HEAD when available,
+its bootstrap match, received HTTP status, closed stage/reason, observation time
+and explicit no-mutation/no-inference/no-judge flags. A present branch at the
+bootstrap or verified absence is an observation, not setup acknowledgment or
+permission to create, retry or grade. A branch 404 counts as absence only after
+verified bootstrap access and the exact provider discriminator
+`RevisionNotFound`. Bare 404s, `RepoNotFound`, missing discriminators and
+bootstrap/auth/transport failures remain unknown and refuse. Identity/private
+status or non-bootstrap HEAD drift also refuses without adoption or reset.
+No raw locator, header, body, token, URL, private path or exception is printed.
+The two responses are not an atomic snapshot or a historical causal record.
+
+### Focused offline validation
+
+Tested SHA: `2066971d10bcad322420fdadd89fa71d1511318c`.
+Result: **29 passed in 4.67s**, exit 0. One invocation from `batch-runner/`:
+
+```bash
+timeout --signal=TERM --kill-after=5s 180s env -i PATH=/usr/bin:/bin HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 HF_HUB_DISABLE_IMPLICIT_TOKEN=1 DO_NOT_TRACK=1 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /usr/bin/python3.10 -m pytest -q -o addopts= -o junit_family=legacy -p no:cacheprovider --tb=short --junitxml=<private-test-evidence>/branch-inspection-results.xml tests/test_codex_budget_pilot_grading_branch_inspect.py
+```
+
+The private JUnit report has SHA256
+`edc151ae77fa0f0cbf23558a5847eab59d39a351834195e37b4d52c70848cec5`.
+The CLI, cached genuine compiler, selector/CI gates, HfApi parsing, HTTP guard,
+response-byte bound, shared timer, environment restoration and setup-fixture byte
+checks are real. Source admission is an explicit test double; provider metadata
+and transport failures are synthetic. Workflow checks are static, not an Actions
+execution or native-host capability observation.
+
+The selector covers present/verified-absent/ambiguous-404 results, bootstrap
+failures, identity/private/HEAD drift, missing auth without discovery, bounded
+stream/transport/timeout failures, redirect/mutation/extra-request refusal,
+selector cross-use, no-network default planning and closed output redaction.
+Forbidden boundary calls are tracked even if production error handling catches
+their exception. The synthetic consumed setup files remain unchanged, and no
+grading-state or workflow-output file is written. The existing workflow contract
+assertion now accounts for the fifth token-scoped step while retaining the four
+existing phase restrictions; its old family was not rerun. No prior 28-, 12- or
+64-case family, comparison run, full suite, native-install check or live test ran.
+Only these two completion records change after the tested source snapshot.
+
+### Preserved history and remaining gates
+
+The same extreme-reasoner gave a bounded pre-edit **APPROVE-WITH-CONDITIONS**
+decision for this route, including the revision-specific 404 discriminator.
+That is a design decision, not approval of the new head or a live operation.
+English reporting/copyediting guidance preserves the observation, test-double
+and approval boundaries. No new audit loop was started.
+
+The historical evidence remains separate and unchanged below:
+
+- **28 passed in 29.37s** at `13032a864a115c0150f944e18aa277a1e212e541`.
+- Comparison CI `35926036972`, job `107401241366`, on
+  `2b64888cb422d7a5a9d0df847a063b8a84002b95`: **6 failed, 939 passed in 1294.77s**.
+- **12 passed in 17.92s** at `3790e4d370f25700ea7a18d46233575135e4191b`.
+
+Original setup `35920355055`, job `107382432896`, retains its reported generic
+`grading_contract_refused`, null HTTP status and exit 2. Its failing stage and
+remote effects remain unknown. Its reservation is **UNRESOLVED/CONSUMED**; this
+inspection addition neither acknowledges that setup nor proves it mutation-free.
+The original receipt and dataset setup `35881609256` remain untouched. Accepted
+inputs and the consumed private dataset bootstrap remain separate from paid-cell
+outputs or grades.
+
+Remaining: new head review and final exact-head CI; one explicitly authorized
+live read-only branch observation; the leader's decision and explicit source
+reseal/live gates; actual native grading-host capability; the first paid cell,
+its retained output and one fixed grade, then all 30 recorded outcomes. No HF
+credential/API call, setup replay, branch mutation, payload transfer, workflow
+dispatch, permission change, Azure/model/grader operation, CI query or reseal
+occurred. Current remote branch state is **NOT_ESTABLISHED**.
+
 ## PROJECT5-RUNTIME-SOURCE-INDEPENDENCE-0730
 
 ### Result and live evidence boundary
