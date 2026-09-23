@@ -349,7 +349,8 @@ def test_ci_registered_cell_workflow_invocation_contract():
     assert "codex_budget_pilot_ci.py" in plan["run"] and '--cell "$SELECTED_CELL"' in plan["run"]
     intake = next(step for step in steps if step.get("id") == "intake")
     assert intake["if"] == "inputs.execute || inputs.input_check" and intake["timeout-minutes"] == 3
-    assert intake["env"]["GITHUB_TOKEN"] == "${{ github.token }}"
+    assert intake["env"]["GITHUB_TOKEN"] == "${{ inputs.input_transport != 'hf_originals' && github.token || '' }}"
+    assert intake["env"]["HF_TOKEN"] == "${{ inputs.input_transport == 'hf_originals' && secrets.HF_TOKEN || '' }}"
     assert all("GITHUB_TOKEN" not in step.get("env", {}) for step in steps if step != intake)
     assert "timeout --signal=TERM --kill-after=5s 120s" in intake["run"]
     assert "codex_ci_input_intake.py --input-check" in intake["run"]

@@ -1,5 +1,5 @@
 # One registered cell, not the 30-cell scheduler or cross-runner state restore.
-# Explicit private draft intake is separate from model admission. No public fallback.
+# Explicit input transport is separate from model admission. No automatic fallback.
 # Creation/review of this workflow is not authorization to transfer or launch.
 name: Codex external-budget pilot — one CI cell
 
@@ -24,6 +24,14 @@ on:
         required: false
         default: false
         type: boolean
+      input_transport:
+        description: Explicit source route; hf_originals reads only the four registered immutable originals
+        required: false
+        default: github_draft
+        type: choice
+        options:
+          - github_draft
+          - hf_originals
       input_release_id:
         description: Positive numeric ID of the explicitly selected same-repository DRAFT release
         required: false
@@ -52,6 +60,10 @@ on:
         required: false
         default: false
         type: boolean
+      input_transport:
+        required: false
+        default: github_draft
+        type: string
       input_release_id:
         required: false
         type: string
@@ -62,6 +74,8 @@ on:
         required: false
         type: string
     secrets:
+      HF_TOKEN:
+        required: false
       AZURE_CLIENT_ID:
         required: false
       AZURE_TENANT_ID:
@@ -98,6 +112,9 @@ jobs:
       SELECTED_CELL: ${{ inputs.cell_id }}
       EXECUTE_REQUESTED: ${{ inputs.execute }}
       INPUT_CHECK_REQUESTED: ${{ inputs.input_check }}
+      INPUT_TRANSPORT: ${{ inputs.input_transport || 'github_draft' }}
+      INPUT_RELEASE_ID: ${{ inputs.input_release_id }}
+      INPUT_ASSET_ID: ${{ inputs.input_asset_id }}
     steps:
       - name: Bind reviewed source and refuse workflow reruns before credentials
         shell: bash
@@ -107,6 +124,15 @@ jobs:
             echo "input_check_and_execute_are_mutually_exclusive"
             exit 1
           fi
+          case "${INPUT_TRANSPORT:-github_draft}" in
+            github_draft) ;;
+            hf_originals)
+              if [[ -n "${INPUT_RELEASE_ID:-}" || -n "${INPUT_ASSET_ID:-}" ]]; then
+                echo "hf_originals_rejects_github_ids"
+                exit 1
+              fi ;;
+            *) echo "unknown_input_transport"; exit 1 ;;
+          esac
           [[ "$GITHUB_EVENT_NAME" == workflow_dispatch ]]
           [[ "$GITHUB_REPOSITORY" == hyeonsangjeon/gdpval-realworks ]]
           [[ "$GITHUB_REF" == refs/heads/main ]]
@@ -142,26 +168,29 @@ jobs:
                 --completion-out "$RUNNER_TEMP/budget-pilot-ci-completion.json")
           python3 batch-runner/codex_budget_pilot_ci.py "${args[@]}"
 
-      - name: Import the explicit private draft asset and verify originals before OIDC
+      - name: Import the explicitly selected original inputs before OIDC
         id: intake
         if: inputs.execute || inputs.input_check
         timeout-minutes: 3
         env:
-          # Existing read scope only. Its ability to read this draft is UNPROVEN.
-          # Inaccessible assets refuse; never widen permission or publish a fallback.
-          GITHUB_TOKEN: ${{ github.token }}
-          INPUT_RELEASE_ID: ${{ inputs.input_release_id }}
-          INPUT_ASSET_ID: ${{ inputs.input_asset_id }}
+          # Only the selected existing input credential is exposed to this step.
+          # Draft access failed with 403; HF access is untested. Never fall back.
+          GITHUB_TOKEN: ${{ inputs.input_transport != 'hf_originals' && github.token || '' }}
+          HF_TOKEN: ${{ inputs.input_transport == 'hf_originals' && secrets.HF_TOKEN || '' }}
           INPUT_BUNDLE_SHA256: ${{ inputs.input_bundle_sha256 }}
         shell: bash
         run: |
           set -euo pipefail
           timeout --signal=TERM --kill-after=5s 120s \
             python3 batch-runner/codex_ci_input_intake.py --input-check \
+              --input-transport "${INPUT_TRANSPORT:-github_draft}" \
               --release-id "$INPUT_RELEASE_ID" --asset-id "$INPUT_ASSET_ID" \
               --expected-sha256 "$INPUT_BUNDLE_SHA256" \
               --bundle-out "$RUNNER_TEMP/budget-pilot-ci-input.tar" \
               --out "$RUNNER_TEMP/budget-pilot-ci-inputs"
+          # HF goes online only inside the intake's bounded fetch scope. Its
+          # importer and this unchanged gate stay offline, without input tokens.
+          unset GITHUB_TOKEN HF_TOKEN HUGGING_FACE_HUB_TOKEN
           python3 batch-runner/codex_budget_pilot_ci.py \
             --campaign-id budget_pilot_ci_20260923_01 \
             --cell "$SELECTED_CELL" --reviewed-source-sha "$REVIEWED_SOURCE_SHA" \
