@@ -29,11 +29,11 @@ from .test_codex_budget_pilot import offline  # noqa: F401
 
 
 @pytest.fixture
-def originals(tmp_path, monkeypatch):
+def originals(tmp_path, monkeypatch, request):
     root = tmp_path / "synthetic-originals"
     root.mkdir()
     references = root / "references"
-    names = ("reference_files/first/one.txt", "reference_files/second/two.txt")
+    names = getattr(request, "param", ("reference_files/first/one.txt", "reference_files/second/two.txt"))
     records = {}
     for index, name in enumerate(names):
         path = references / name
