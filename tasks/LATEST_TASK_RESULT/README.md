@@ -1,119 +1,179 @@
 # Latest task result
 
-## PROJECT5-PRIVATE-OUTPUT-SETUP-2248
+## PROJECT5-RETAINED-CELL-EXECUTION-0051 / TERMINAL-ADMISSION-POLICY-0122
 
 ### Current scope
 
-Add a small, plan-first setup mode on exact source
-`9366a3bb6bb2ff768b037f56f6b2e268b172d8b8`. This is code/offline work only:
-no live account lookup, metadata check, target creation, upload/download,
-credential use, workflow dispatch, model or grader call occurred. The new head
-needs leader review and ordinary final-head checks; no CI state was queried or
-awaited. It does not inherit an earlier approval.
+Wire the existing single-cell CI execution to private CAS admission, same-runner
+output publication and terminal confirmation, starting from exact main
+`053e2e33c22775e23e3c13a13773090613fc200b`. This task is code/offline only.
+No real HF credential, request, claim, publication, setup replay, original payload
+transfer, workflow dispatch, Azure, model or grader operation occurred. No CI
+state was queried or awaited. The new head needs leader review and final checks;
+the design decision and earlier approvals do not approve this implementation head.
 
-The only candidate uses the namespace from the fingerprint-validated tracked
-`CODEX_TEMPLATE.data.source` and the reserved basename
-`gdpval-codex-budget-pilot-ci-20260923`. There is no caller-supplied target or
-namespace fallback. Neither the historical exp033 repository nor the original
-`openai/gdpval` dataset can be mutated by this mode. Operational locators stay
-private; public output carries only the candidate name fingerprint and safe
-status metadata.
+The mandatory extreme-reasoner decision preceded workflow/HF-write-path edits:
+**APPROVE-WITH-CONDITIONS**. The same reviewer closed the pending terminal-response
+condition after the leader's `PROJECT5-TERMINAL-ADMISSION-POLICY-0122` decision.
+There was no new audit loop or additional owner-budget approval requirement.
+Experiment-design guidance kept the inputs, controls, order and denominator fixed;
+English reporting/copyediting preserved the distinctions below.
 
-### Setup contract and limits
+### Admission, retention and confirmation
 
-`codex_budget_pilot_ci.py --output-target-setup` is a local plan after the real
-campaign/canonical-cell/reviewed-source/CI gates. It reads no credential, makes
-no request and creates no setup files. Creation additionally requires both
-`--create-output-target` and `--setup-state <new-absent-private-directory>`.
-Setup refuses inspection, input-check, execute, resume, original-input and
-ordinary output/completion arguments. It returns before dispatch or input
-admission; it cannot invoke native inference, grading or the cell publisher.
+`codex_budget_pilot_retention.py` defaults to local plan/validation without token
+lookup or network. Its internal `--admit` and `--retain` entry points reuse the
+real compiler, existing CI bindings, private file helpers, publisher and completion
+projection. They add no dispatch inputs, scheduler, service, arbitrary target or
+grading entry. The fixed target is derived from the fingerprint-matched tracked
+namespace and must have name SHA256
+`a13dedada5465377761961d050e021a4db8e44d6284179a9ce40b562e4396a44`.
 
-The mandatory extreme-reasoner decision preceded workflow/setup-path edits:
-**APPROVE-WITH-CONDITIONS** for the reduced no-marker implementation, not a
-live-operation authorization. A later explicitly authorized setup permits only
-this closed sequence through the existing bounded HF client:
+1. Before inference, admission requires the exact private target, verified local
+   inputs and pristine local cell state. At the same immutable parent, both the
+   selected claim and output prefixes must be absent. The first canonical cell
+   requires bootstrap `bfc7ae01ed14490817ceb7cb406adcb9bb95f557`. Later cells require
+   a verified terminal record for the immediately preceding compiler-ordered cell.
+   A tiny host-generated claim binds campaign/cell/order, source/config/input
+   identities, actual CI run/job/attempt, workflow, host instance and expected parent.
+   One add-only server-parent/CAS commit is verified before a private acknowledged
+   admission receipt is written. The token-free CI `--execute` gate checks that
+   receipt itself; a workflow condition alone is insufficient.
+2. After the existing dispatcher finishes and owned cleanup is confirmed, the
+   publisher uses the actual admission commit as its exact parent. It preserves
+   the validated result, deliverables and valid ledger bytes. Failed/stopped cells
+   without a result may retain only an explicit failure manifest, with missing
+   result/ledger/usage still missing and `grade_ready=false`. The standalone
+   publisher still refuses missing results by default. A narrow dispatcher fix
+   binds an already written valid result on timeout without changing its stopped
+   status, original deadline, bytes or accounting.
+3. Only acknowledged publication with a durably saved private receipt and verified
+   immutable output objects may produce a terminal confirmation. That confirmation
+   is one CAS commit against the actual output revision. It binds the claim,
+   existing output manifest, completion/status/cleanup and byte identities; it
+   does not name its own future commit. No Git SHA or input revision is used as
+   an HF publication revision.
 
-1. One authenticated account request must return the exact namespace with
-   type `user`. Organization membership or another identity is not sufficient.
-2. One repository-level candidate lookup, without a revision, must return an
-   actual 404. Any existing target, including public or headless, refuses.
-3. One dataset creation uses the fixed identity, `private=True` and
-   `exist_ok=False`. The returned endpoint/type/repository identity must match.
-4. One dataset/main lookup must return the exact identity, literal
-   `private=true` and an actual lowercase 40-hex HEAD. No Git SHA, input revision
-   or planned future commit is substituted.
+The server terminal state, not delivery of its response, is authoritative for
+**only the immediate successor**. A bounded fresh read checks the terminal,
+claim and output manifest at their immutable commits, plus provider Git/LFS object
+metadata for the already verified output bytes. It does not redownload generated
+payloads. Per-run instance hashes may differ; each writer's own plan/run binding
+and the common host policy must validate. Unknown tips, partial markers, foreign
+identities, changed bytes and unverified hashes refuse.
 
-A repository-level 404 is a prerequisite, not proof against hidden or concurrent
-existence. `exist_ok=False` prevents adoption; a conflict is terminal. The HTTP
-guard validates the exact method/host/path/auth and create body before transfer,
-rejects redirects, and retains its four-attempt counter across SDK client
-recreation. It intercepts SDK retry and credential-cache error handling. Existing
-bounds remain 30 seconds/request and 120 seconds overall, with a 130-second
-process limit plus five-second kill grace and a three-minute selected step.
+A lost terminal response remains unresolved in the original local receipt. The
+next runner writes a separate verified-server-state observation without claiming
+that the prior writer received an acknowledgment. There is no acknowledgment-of-
+acknowledgment chain. Ambiguous **output publication**, absent/invalid confirmation,
+unconfirmed cleanup or a failed reconciliation read remains blocked. The successor
+must still win its own absent-prefix/CAS claim. The same claimed cell cannot be
+re-admitted on a new runner, skipped, replayed or given a new clock. Failed/stopped
+rows are not changed to success. Missing/partial accounting is not changed to
+complete accounting or zero cost. A local reservation remains distinct from the
+durable remote claim.
 
-A private 0700 directory and 0600 single-link, no-clobber/fsynced unresolved
-reservation precede requests and mutation. Current reservation bytes are checked
-again at the create boundary. A separate no-clobber private receipt retains
-actual request stage/status, creation acknowledgment and observed HEAD. Failed
-or ambiguous creation, interrupted response, invalid/missing HEAD or receipt
-failure cannot become success or trigger replay, deletion or another name.
-No marker initialization is implemented: absent initial HEAD remains unresolved,
-even if creation was acknowledged. The manifest/reservation never claims its own
-future commit. Local files are not a durable cross-run admission ledger and are
-not uploaded by the public completion-artifact step.
+Admission and retention have separate HF-token steps and short online scopes,
+using the existing 30-second request and 120-second operation bounds, a 130-second
+process limit plus five-second kill grace, and three-minute steps. SDK retries and
+debug output remain suppressed. Execution refuses input/output tokens, and the
+child launcher strips them. Ordinary plan, input-check, historical inspection and
+setup retain their existing modes. No setup or old public dataset is touched.
+Private receipts/locators/payloads do not enter the public artifact; only the
+unchanged allowlisted completion envelope is uploaded. Safe retention CLI output
+contains closed metadata, not raw errors, paths, URLs, credentials or native state.
+Observed privacy and CAS do not atomically lock repository visibility.
 
-Workflow input `output_target_setup` defaults false and is mutually exclusive
-with historical inspection, input-check and execute before credentials. Selecting
-it is the explicit setup request; any later dispatch still requires separate
-leader authorization. Only its step receives the already configured `HF_TOKEN`.
-The reversible HF-online scope removes ambient credentials, suppresses debug/
-retries and restores offline settings. Input transfer, OIDC/native/model,
-grading and cell-output publication remain excluded. Historical target inspection
-retains its original fixed target and semantics. Ordinary plan/input/execute
-behavior, the public completion schema, publisher PRIVATE/expected-parent/
-absent-prefix gates, source pins, dependency manifest, permissions, job ceilings
-and pilot/model/grader settings, including the 180/30-minute controls, are
-unchanged.
-
-Public setup JSON contains a fixed logical role/name hash, observed privacy/HEAD,
-actual HTTP status or null, closed stage/reason/outcome and timestamp. It never
-contains a raw locator, body, header, token, URL, payload or private path.
-`write_access` and `prefix_readiness` remain `not_established`;
-`publication_authorized`, `model_requested` and `grading_launched` remain false.
-Creating a target would not by itself approve output publication/inference,
-establish all write/prefix checks, preserve CI deliverables or make a cell grade-ready.
+The global concurrency guard, reviewed-main/attempt-one/source gates,
+`contents:read`, 240-minute job ceiling, 180-minute cumulative/30-minute attempt
+limits, A's four fresh attempts, B/C same-live-host continuation and C-only feedback
+are unchanged. The canonical order remains A1/B1/C1/C2/B2/A2 for each of five tasks;
+the denominator remains 30, including failed/stopped/missing outcomes. No automatic
+30-run launcher or grading is added. Dependency/runtime/model/grader settings and
+the active grading source pin are unchanged.
 
 ### Focused offline validation
 
-Tested SHA: `46d3bd32c3317e0e0cc41b4741c7087dd3584e42`.
-The implementation and test bytes in the documentation head remain identical to
-this tested commit. One family ran once, using the existing Python 3.10.12,
+The only selected family was
+`batch-runner/tests/test_codex_budget_pilot_retention.py` (66 new cases, not the
+earlier publisher family). The command used the existing Python 3.10.12,
 pytest 9.1.1 and huggingface_hub 1.23.0; no dependency install/resolution ran.
 
 ```bash
-timeout --signal=TERM --kill-after=5s 300s env -i PATH=/usr/bin:/bin HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 DO_NOT_TRACK=1 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3.10 -m pytest -q -o addopts= -p no:cacheprovider --tb=short batch-runner/tests/test_codex_budget_pilot_output_setup.py
+timeout --signal=TERM --kill-after=5s 480s env -i PATH=/usr/bin:/bin HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 DO_NOT_TRACK=1 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner /usr/bin/python3.10 -m pytest -q -o addopts= -p no:cacheprovider --tb=short batch-runner/tests/test_codex_budget_pilot_retention.py
 ```
 
-Result: **`78 passed in 58.90s`**, exit 0. This is pytest wall time, not HF or
-model latency. CI/source capability, pinned-runtime version metadata, account
-identity and HTTP responses are synthetic. The real compiler, CLI gates,
-installed SDK, bounded request guard and private byte/no-clobber checks are used;
-socket, cached-token, input, native-execution and publisher boundaries are blocked.
-No grader is invoked.
-Static YAML assertions are not Actions execution or live setup evidence.
+At `a0c39e042b93ac2938c6f18d97693d2b0cc5091a`, the invocation ended with
+**`66 errors in 4.03s`**, exit 1: the imported fixture required an absent
+`openai_codex` package, so no test body ran. A test-only correction blocks the
+repository's native/model/auth constructors without requiring that package and
+supplies explicitly synthetic pinned-version metadata. Production pins and
+execution checks were not relaxed; no native installation was established.
 
-Coverage includes no-token/no-network plans; incompatible modes; canonical
-source/cell gates; fixed namespace and target; organization/foreign/public/
-existing refusal; exact private create body; actual HEAD receipts; null status
-without a response; malformed/oversized replies; time/interruption and retry
-refusal; reservation races/tampering/hardlinks; unchanged receipts/no replay;
-safe output and restored environment. Four existing test files received only
-coupled workflow exclusion/token-scope expectation updates. Their families and
-all earlier 66/46/71/31/19 families were not rerun. No full suite, live check or
-additional semantic audit ran.
+Corrected tested SHA: **`498c99d09f573707c2f9a9abd6afe8ac7b99e370`**.
+The same selector emitted **48 passing case reports**, then reached its
+480-second process limit, exit **124**, without a full pytest summary. It is not
+a successful full-family command. Only the 18 unfinished cases were then selected
+at that same SHA, with the same offline environment/options and a 300-second limit:
+**`18 passed in 208.63s (0:03:28)`**, exit 0. The completed cases were not repeated.
+This is split evidence, not an invented single `66 passed` invocation. The
+process/test times are not model latency or changes to any CI/model budget.
+
+The remaining-only selector used these explicit nodes in the same file:
+
+```text
+test_retention_invalid_predecessor_or_same_cell_never_advances[source]
+test_retention_invalid_predecessor_or_same_cell_never_advances[manifest_hash]
+test_retention_invalid_predecessor_or_same_cell_never_advances[output_bytes]
+test_retention_invalid_predecessor_or_same_cell_never_advances[claim_bytes]
+test_retention_invalid_predecessor_or_same_cell_never_advances[acknowledged]
+test_retention_invalid_predecessor_or_same_cell_never_advances[unknown_tip]
+test_retention_invalid_predecessor_or_same_cell_never_advances[read_failed]
+test_retention_invalid_predecessor_or_same_cell_never_advances[same_cell]
+test_retention_unconfirmed_cleanup_and_changed_output_refuse_before_network
+test_retention_output_rechecks_private_identity_and_exact_admission_parent
+test_retention_raw_errors_are_redacted_and_no_response_status_is_not_guessed
+test_retention_target_fingerprint_refuses_before_credential_or_network
+test_retention_current_byte_mismatch_refuses_before_publication
+test_retention_conflicting_modes_refuse_before_token
+test_retention_workflow_token_scopes_and_existing_controls
+```
+
+The real compiler, dispatcher/deadline, publisher, file/hash/no-clobber/CAS and
+completion logic ran behind fake HF/child boundaries and synthetic input provenance,
+CI/source capability and SDK-version metadata. Cases cover claim-before-child,
+token isolation, strict canonical order/private/parent/duplicate refusals,
+unchanged bytes, failed/stopped/partial/missing accounting, actual fake-returned
+commit binding, cleanup/publication failure, and lost terminal response with valid
+server proof admitting only the successor. Socket/process/auth/grader and real
+HF boundaries were blocked. No original inputs or native SDK were exercised.
+
+The source, workflow and test bytes in the documentation head match the corrected
+tested SHA. Diff/identity checks also confirm unchanged dependency, backend-CI,
+fixed-grader/shared-materializer and profile-control files. Five older test files
+received coupled fixture or workflow-guard/token-scope updates; those families and
+the prior 78/66/46/71/31/19 families were not rerun. No full suite, live check,
+additional audit or CI wait ran.
 
 ### Separate observations and review scopes
+
+The leader supplied actual setup success from run `35881609256`, job
+`107251200144`, on exact source `053e2e33c22775e23e3c13a13773090613fc200b`:
+at `2026-09-23T15:29:34.308692Z`, `outcome=created`, `private=true`, HTTP 200,
+`stage=created_metadata`, `reason=null`, actual HF HEAD
+`bfc7ae01ed14490817ceb7cb406adcb9bb95f557`, and candidate name SHA256
+`a13dedada5465377761961d050e021a4db8e44d6284179a9ce40b562e4396a44`.
+The source gate bound the authenticated user/namespace, repository-level 404,
+one private create and post-create metadata. Input/OIDC/Execute were skipped;
+publication/model/grading were false and write/prefix readiness was not established.
+The leader's durable setup reservation is CREATED/CONSUMED and must not be replayed.
+The leader selected only that repository as the output destination. This is not
+authorization for live writes/inference in this task or proof that retention ran.
+
+Review `5293033879` applies to #666 at
+`a45e5bb66c350ee2de432f0e9488d39ec3cabf34`. Its setup-family result remains
+`78 passed in 58.90s` at `46d3bd32c3317e0e0cc41b4741c7087dd3584e42`, not live
+setup evidence and not this implementation's validation or approval.
 
 The leader supplied completed metadata run `35870090309`, job `107211610516`,
 at 13:54:56 UTC on 2026-09-23. The historical target matched name SHA256
@@ -124,7 +184,8 @@ reason `private_output_target_required`, exit 2. Write access was not establishe
 publication was not authorized and no model was requested. Input transfer,
 OIDC and model steps were skipped. This was a successful privacy observation
 and intentional refusal, not invalid credentials or failure to fetch. It says
-nothing about the new candidate's current existence, privacy or HEAD.
+nothing about the new destination by itself; its later setup is a separate
+observation above. The old public repository remains untouched.
 
 The earlier NAS observation at 11:20:13 UTC made zero HF calls because the
 process token/known handoff were unavailable. That remains local unavailability,
@@ -144,7 +205,7 @@ Publisher review `5289973671` applies to `fa53c74460aa0c63516eb5d6a34f30f0e12213
 its `66 passed in 109.70s` remains at `731ec479c742a11bcbeb6ce05d8b4f2da971ed3d`.
 Unchanged-head failed-install-only CI recovery did not establish the historical
 index/cache cause or justify dependency changes. None of these approvals covers
-the new setup code or this head.
+the new retention code or this head.
 
 Accepted-input run `35847871634`/job `107138294292` on
 `b0abe87275e3aa4d403732a6a8de8dacfe591c7e` verified all four pins at
@@ -161,14 +222,15 @@ The earlier GitHub metadata 403, HF redirect 307, separate HEAD observation,
 initial upload 400/lost stderr and later private staging success remain distinct;
 the original CI Location is still not reconstructed. Full prior commands,
 identities and histories remain in the
-[source record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/9366a3bb6bb2ff768b037f56f6b2e268b172d8b8/tasks/LATEST_TASK_RESULT/README.md)
+[source record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/053e2e33c22775e23e3c13a13773090613fc200b/tasks/LATEST_TASK_RESULT/README.md)
 and changelog, not relabeled as new validation.
 
 ### Remaining work
 
-New-head leader review/final checks; explicit live-setup authorization and actual
-account/absence/private-HEAD observations; separate destination approval and
-write/prefix readiness; private output-publication and grading-adapter workflow
-wiring plus native-host grading-input installation; ordered 30-cell admission/
-deduplication/execution; fixed grading. No cell execution or publication is
-authorized or automatically triggered by this setup unit.
+New-head leader review/final checks; separately authorized, checked live admission,
+write/prefix and output-publication observations; the first paid cell; canonical
+grading-adapter workflow wiring using an actual output revision and Ubuntu 22.04
+atomic grading-input installation; all 30 ordered cell outcomes and fixed grading.
+The code now supplies serial next-cell admission and private retention, but no
+live claim, retained pilot output, executed pilot cell or grade was observed here.
+There is no automatic campaign launch, model retry, setup replay or new target.

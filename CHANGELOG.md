@@ -13,6 +13,58 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Wire single-cell CI execution to the leader-selected private output target on
+  source `053e2e33c22775e23e3c13a13773090613fc200b`. A verified, host-generated
+  absent-prefix/expected-parent CAS claim must precede inference; the first cell
+  requires observed bootstrap `bfc7ae01ed14490817ceb7cb406adcb9bb95f557`, and only
+  verified terminal evidence for the immediate compiler-ordered predecessor may
+  admit a later cell. The existing publisher preserves validated result,
+  deliverable and ledger bytes against the actual admission commit, then a
+  terminal CAS confirmation binds the acknowledged output revision, manifest,
+  status/accounting and confirmed owned cleanup. Failed/stopped missing-result
+  cells retain explicit failure metadata, never invented results or grade readiness.
+  A narrow timeout fix binds an already written valid partial result while
+  retaining stopped status and the original deadline. The same reviewer's
+  pre-edit extreme-reasoner decision was APPROVE-WITH-CONDITIONS; the leader's
+  terminal policy closed its pending condition. A separately verified server
+  confirmation can authorize only the successor even if its response was lost.
+  Original local lost-response receipts remain unresolved; reconciliation is a
+  separate observation. Ambiguous output, invalid/missing confirmation, uncertain
+  cleanup, unknown history or same-cell replay remains blocked. No acknowledgment-
+  of-acknowledgment chain, automatic scheduler, new target or grading is added.
+  HF tokens stay in separate admission/publication steps and are refused/stripped
+  from native children. The public completion schema, ten dispatch inputs,
+  contents-read permission, global concurrency, 240-minute job, 180/30-minute
+  limits, A's four fresh attempts, B/C same-host continuation, C-only feedback,
+  original inputs and fixed grader remain unchanged. Readback is bounded control
+  JSON/object metadata, not payload
+  redownload. Privacy observations and CAS do not atomically lock visibility.
+  Validation selected only the new `test_codex_budget_pilot_retention.py` family:
+  `66 errors in 4.03s` at `a0c39e042b93ac2938c6f18d97693d2b0cc5091a` were fixture
+  setup errors from an absent native SDK, before any test body. The test-only
+  correction uses blocked native boundaries and synthetic version metadata, not
+  an installation or relaxed production pin. At corrected tested SHA
+  `498c99d09f573707c2f9a9abd6afe8ac7b99e370`, 48 passing case reports preceded the
+  480-second process limit (exit 124, no full summary); only the remaining 18 cases
+  then ran: `18 passed in 208.63s (0:03:28)`, exit 0. This is split evidence, not a
+  single successful 66-case command or model timing. Exact selectors are in the
+  latest task result; no completed cases or prior families were repeated.
+  Separately, leader-supplied setup run `35881609256`/job `107251200144` observed
+  `created`, private=true, HTTP 200 at `2026-09-23T15:29:34.308692Z` on the source
+  above, with that actual bootstrap and name SHA256
+  `a13dedada5465377761961d050e021a4db8e44d6284179a9ce40b562e4396a44`.
+  Setup's durable reservation is CREATED/CONSUMED; destination selection is not
+  a live write/inference authorization. #666 review `5293033879` remains scoped
+  to `a45e5bb66c350ee2de432f0e9488d39ec3cabf34`, and its `78 passed in 58.90s`
+  remains at `46d3bd32c3317e0e0cc41b4741c7087dd3584e42`. Accepted inputs
+  `35847871634`, connected native diagnostic `35817078746`, the old public-target
+  observation and earlier intake/upload failures remain separate facts, not pilot
+  output or grades. This task used no real HF credentials/API/writes, original
+  payloads, setup replay, workflow dispatch, Azure, model or grader. Remaining:
+  new-head review/final checks, checked live claim/write/publication, first paid
+  cell, grading-adapter wiring/Ubuntu 22.04 atomic installation, all ordered
+  30-cell outcomes and fixed grading. No earlier review approves this new head.
+
 - Integrate exact main `7f089ee005c00f2a37c5f578c295555bd8a51cbb` into
   reviewed #665 head `79c43ca20bac525d7ff77cc3e7a042ec81bdc2a3` with one
   ordinary non-squash merge. Only the two completion-record overlaps were
