@@ -292,11 +292,11 @@ def test_backend_jobs_partition_the_comparison_contracts():
     }
     assert "secrets." not in text
     assert "id-token" not in text
-    for job in jobs.values():
+    for name, job in jobs.items():
         # No renamed check, matrix, dependencies, credentials or job-level skip.
         assert set(job) == {"runs-on", "timeout-minutes", "steps"}
         assert job["runs-on"] == "ubuntu-latest"
-        assert job["timeout-minutes"] == 45
+        assert job["timeout-minutes"] == (60 if name == "native-host-contracts" else 45)
 
     core = jobs["pytest"]["steps"]
     comparison = jobs["comparison-contracts"]["steps"]

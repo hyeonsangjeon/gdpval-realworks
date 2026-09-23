@@ -60,6 +60,63 @@ entries land under a fresh dated heading the day they merge to `main`.
   deduplication and fixed grading remain outstanding. All experiment controls,
   prior outputs, source bindings and sealed campaign state remain unchanged.
 
+- Add explicit private draft-release-asset intake before the single-cell CI
+  workflow's Azure OIDC/model admission. Default plan-only does not transfer
+  inputs. The mutually exclusive `input_check` mode imports and checks inputs
+  without requesting OIDC or native/model work; execution requires successful
+  intake and the existing installed-input check. The existing job-level OIDC
+  permission remains, not a new grant. Explicit positive release/asset IDs
+  select only `hyeonsangjeon/gdpval-realworks`; the external registered
+  expectation is 2,519,040 bytes/SHA256
+  `757603585405da5d7f6817a6a0a23bd530d4b5e4e38b2fd4dc6f318053d240e3`.
+  The intake validates release identity, literal draft status, selected asset
+  membership, uploaded state, type, size and bounded response bytes before
+  staging. It uses only the existing `contents:read` token, constructs API paths
+  locally, refuses
+  metadata redirects and strips authorization from the sole allowed GitHub
+  asset CDN hop. No release enumeration, public fallback, permission widening
+  or raw response/signed-URL/token/private-path output is added. Metadata is
+  bounded to 256 KiB/100 assets; network operations have at most 30 seconds
+  within a shared 120-second transfer deadline. The workflow enforces TERM at
+  120 seconds, KILL after 5 seconds and a 3-minute intake/check step ceiling.
+  The genuine unchanged bundle importer publishes the exact original parquet,
+  reference-only and canonical Step 0 roles, then verifies installed bytes.
+  No-clobber reservations and partials remain non-adoptable. Existing reviewed
+  source/cell guards precede intake; pinned actions/runtime/host, model budgets
+  and completion-envelope-only upload are preserved. A declared read scope is
+  not evidence of private draft access, and draft visibility is only observed
+  at metadata-read time. Inaccessible assets refuse without a fallback.
+  One focused invocation at `f4a984d8bed0f6845e405c5b6d9f82b3b96757e0`
+  reported `67 passed, 18 deselected in 4.66s`, exit 0: 66 new intake cases and
+  one directly affected workflow contract. Fake GitHub responses and explicit
+  synthetic provenance/anchor fixtures exercise the real CLI/importer/readers,
+  hash/type/no-clobber/refusal paths, plus controlled shell and static workflow
+  contracts. This is not a workflow run, live access or connectivity evidence.
+  The exact command and intended later no-model input-check invocation are in
+  `tasks/LATEST_TASK_RESULT/README.md`. Existing Python 3.10.12 and
+  SDK/companion 0.147.0 were reused without an install. No earlier bundle,
+  dispatcher or diagnostic family was rerun. The branch starts independently
+  at `266ef7a05335d900304214da0c0d680331fb346c`; active full-grader sources,
+  hashes and 37/58 source-set guards are unchanged. Separately, a normal merge
+  integrated that exact main into #657 as
+  `2e89f411efc4294a47831a1b58cb8b0c99c90418`, with only completion-record
+  conflict resolution and verified unchanged reviewed workflow/tests and
+  incoming bundle implementation. #657 was pushed and frozen without another
+  test or diagnostic run. #655 review `5285590451` at
+  `4d3c4b4f895da35e3db07b413f66c8066dfa5ad1` covers the one-cell entry;
+  #656 review `5285752981` at `df3e3f24404a90f47789051ef99318fb6af2dd20`
+  covers only the local bundle/private candidate; #657 review `5286077604` at
+  `0f291f4041bb321817ce93e6d8b4bfe0c4f2cfb0` covers native-only mode. Their
+  original 19/39/42-case evidence stays at its original tested SHAs in the
+  completion record; none approves this intake or the #657 integration head.
+  Both campaigns, original inputs and the historical private candidate remain
+  untouched. No real transfer/import, release API, auth, native/model, grading
+  or CI observation ran. Immutable review/CI, private draft-access/source
+  transfer, current CI OIDC/native connectivity, ordered 30-cell scheduling,
+  deduplication/aggregation, execution and grading remain unfinished. Standing
+  spend authority is unchanged; the unresolved transport boundary is technical,
+  not a new owner-approval wait or authority for public redistribution.
+
 - Add an opt-in `native_only` mode to the existing Foundry connection-diagnostic
   workflow. With the mode on, incompatible legacy paid flags refuse before
   checkout or OIDC; all five listing/discrimination/sweep/urllib probes are
@@ -136,6 +193,113 @@ entries land under a fresh dated heading the day they merge to `main`.
   source sets remain 37/58; no coupled active source member or hash changed.
 
 ### Fixed
+
+- Integrate exact main `84c18b778d2e9aa1def9d5f7912ac9f03edaee11` into
+  the completion-reader branch with one ordinary non-squash merge. Only the
+  two completion records conflicted; both substantive changelog entries remain
+  and the reader remains the latest result. The reader/test blobs match
+  reviewed `eca512dec96f2d5143e14ff65c37b454e5bdef79` byte-for-byte; every
+  other implementation/workflow/test file matches the incoming main, including
+  private intake, the 60-minute native-host CI ceiling and native-only diagnostic.
+  Review `5287148513` and `31 passed in 36.01s` at
+  `deefb34ad684a00494ef689db86f4c461dbca004` retain their original scopes,
+  not a new test or approval of this integration. Prior #658 review
+  `5286955706` stays attached to `7a4711f319f57d56e71678f85f0a110fd78f5546`.
+  Separately, the leader reported intake run `35821215749`, job `107053260372`,
+  on that main: plan creation passed, but intake refused at 05:11:35 UTC with
+  `github_draft_or_asset_inaccessible`, exit 2; Azure login, OIDC identity and
+  execution were skipped. The grouped reason establishes neither HTTP status
+  nor failing transfer stage or cause. No test, CI query, intake retry or live
+  operation ran here. Integration review/checks, CI input acceptance, ordered
+  30-cell execution, cross-run admission/deduplication and fixed grading remain.
+
+- Integrate exact main `0f0911b435d7f704db8e2f2131a00ade310d5c1f` into
+  the private-intake branch with ordinary non-squash merge
+  `8806971ca06516e02cba12f090e4bf0bed3d47ae`. Only the two completion records
+  conflicted; both substantive changelog histories are retained. All seven
+  protected #658 workflow/intake/test blobs match reviewed source
+  `082a7dab19f3e5e80b94b32f55ad25f8493b63a9`; all four incoming #657
+  diagnostic workflow/test blobs match exact main, including the corrected
+  transmission-sweep contract. The backend workflow still has raw SHA256
+  `08291d29670966d52a88ec216b71e68811a05bd599c13df040460a72204849ac`.
+  No workflow behavior, source guard, budget or test selection changed.
+  #658 review `5286767574` stays attached to its pre-integration source;
+  `1 passed in 6.76s` stays at `572326c4933cd26870ffe1cfa500979ce8a0f89b`.
+  #657 review `5286611655` stays at
+  `ae4c73b834337001102a0a7fc0e78a3d608a7044`; its `1 passed in 0.25s`
+  stays at `e6445a0544e0e6c0bb3d5ef6bee4a232be96ccff`. Original 67/42-case
+  evidence and the cancelled 45-minute job retain their original scopes;
+  no tests or CI queries were repeated. Separately, one newly authorized
+  standard `gh release upload` invocation succeeded after an exclusive private
+  reservation and an exact draft/label/target/empty-assets check. Release
+  `394272629` retained label `project5-ci-inputs-20260923-01` and target
+  `266ef7a05335d900304214da0c0d680331fb346c`; its post-upload metadata showed
+  `draft=true`, asset `582945947`, state `uploaded`, 2,519,040 bytes and
+  provider digest
+  `sha256:757603585405da5d7f6817a6a0a23bd530d4b5e4e38b2fd4dc6f318053d240e3`.
+  The original private regular archive and one named byte-for-byte copy
+  independently matched that external size/SHA pin. Upload exit 0 took
+  1.733163 seconds; the full observer exited 0 after 3.365667 seconds, within
+  the 60/240-second bounds. Bounded stdout/stderr/outcome are retained privately;
+  this successful command emitted zero stdout/stderr bytes. There was no
+  second upload invocation, clobber, payload download/import, publication,
+  tag/ref mutation, new credential or permission change. The first HTTP
+  400/exit-1 upload, its 2.506628-second observer exit 2 and lost captured
+  stdout/stderr remain separate; no cause is inferred or old receipt replaced.
+  The prior conditional correction did not run. Draft status was observed,
+  not guaranteed permanently; owner-account staging does not prove CI
+  `contents:read` access. The leader separately reported diagnostic run
+  `35817078746` on exact main as QUEUED AT OBSERVATION with native-only
+  send enabled for `gpt-5.4` and both legacy paid flags disabled. That run was
+  not queried or acted on here; no connectivity, usage, exactly-one-HTTP or
+  graded-result claim is made. New-head review/checks, CI read-token input-check,
+  current native connectivity, ordered 30-cell scheduling/deduplication/
+  aggregation, execution and grading remain unfinished. Both campaigns and
+  their original controls remain unchanged; staging is not pilot readiness.
+
+- Increase only `backend-tests.yml`'s `native-host-contracts` ceiling from 45
+  to 60 minutes for its CI setup/cleanup envelope. The leader-supplied run
+  `35811169415`/job `107022868111` was cancelled at the 45-minute maximum even
+  though pytest printed `71 passed, 84 deselected in 2562.66s (0:42:42)`.
+  Setup began `02:38:39Z`, the test command began `02:40:54Z`, and tests/cleanup
+  ended `03:23:38Z`; eight other checks passed. This does not turn the
+  cancelled job into success or clear GATE-BLOCKED review `5286611715`.
+  The required pre-edit CI/cost decision constrained this change to the job
+  envelope and its exact static expectations. The unchanged command still
+  selects `-k native_result_host`; complementary predicates, exactly-once
+  coverage, guards, permissions, action pins and every other 45-minute backend
+  job ceiling remain intact. The general pytest timeout warning is unchanged.
+  Only the native-host timeout expectation and directly coupled whole-workflow
+  SHA256 expectation were updated; no historical/Foundry digest or hash guard
+  was weakened. One static selector at
+  `572326c4933cd26870ffe1cfa500979ce8a0f89b` reported `1 passed in 6.76s`,
+  exit 0. Its scoped collection-only subprocesses did not run native-host
+  test bodies. The exact command is in `tasks/LATEST_TASK_RESULT/README.md`.
+  No 71/67/42-case family, full suite or workflow was rerun. Separately, the
+  leader's selected release `394272629` observation found `draft=true`, the
+  registered target/label and `assets=[]`, resolving absence at that read.
+  The original upload remains HTTP 400/`gh` exit 1 with no captured asset ID.
+  Local inspection showed that the retained observer did not persist the
+  captured `gh` stdout/stderr, retaining only exit/status and
+  `github_operation_failed_no_retry`. The request construction alone does
+  not establish a client-format, authentication or permission cause. The
+  conditional correction precondition was unmet, so no corrected upload,
+  reservation, release read, candidate rehash, import or campaign operation
+  occurred. Original private receipts remain unchanged; no replacement or
+  remote asset metadata is invented. The external 2,519,040-byte expectation
+  and SHA256 `757603585405da5d7f6817a6a0a23bd530d4b5e4e38b2fd4dc6f318053d240e3`
+  remain historical candidate evidence, not a new packaging/transfer result.
+  #658 review `5286466150` at `e5d5fcb647129e86d9faf742fc19df1e1e800c15`
+  covers unchanged intake code and its original 67-case offline evidence at
+  `f4a984d8bed0f6845e405c5b6d9f82b3b96757e0`. #657 review `5286611655` at
+  `ae4c73b834337001102a0a7fc0e78a3d608a7044` covers its correction; its
+  `1 passed in 0.25s` remains at `e6445a0544e0e6c0bb3d5ef6bee4a232be96ccff`.
+  #657 and both campaigns remain untouched. The 180-minute cell, 30-minute
+  attempt and 240-minute execution-job limits are unchanged. New-head
+  review/checks, private source transfer/read-token input-check, current CI
+  OIDC/native connectivity, ordered 30-cell scheduling/deduplication,
+  execution and grading remain unfinished. No CI query/manual rerun, auth,
+  OIDC, native/model/grader operation or public distribution occurred here.
 
 - Correct the stale transmission-sweep test after the reviewed native-only
   workflow change. The leader supplied run `35809373961`, job `107017506054`,
