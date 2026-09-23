@@ -13,6 +13,46 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Add explicitly selected `hf_originals` intake to the existing single-cell CI
+  path. `github_draft` remains the default, with no automatic fallback. The
+  genuine registered contract supplies the original parquet and two reference
+  roles at `openai/gdpval@11e7900cdcac61bc4daf59e65feb238acda98fbf`.
+  Only canonical `step0_needs_files_manifest.json` comes from the existing
+  tracked exp033 target at `6c7e07ee7365f145dfcf898263365b5c8c97b224`.
+  Its retained immutable URL was reconciled locally with the tracked profile's
+  target fingerprint before implementation; this is historical source identity,
+  not evidence of current HF access. The adapter verifies all four byte
+  identities, reuses the bundle producer's deterministic serialization, requires
+  the existing 2,519,040-byte archive/SHA256
+  `757603585405da5d7f6817a6a0a23bd530d4b5e4e38b2fd4dc6f318053d240e3`,
+  and calls the unchanged importer and genuine installed-input reader.
+  Fixed-origin Hub streaming has byte/deadline checks, bounded redirects,
+  explicit token headers and no cache or retry fallback. Only the selected
+  input step receives its existing transport credential; input tokens are
+  absent from HF local verification and subsequent native/model steps. Both
+  environment and SDK offline flags are restored before local verification.
+  Default plan mode performs no fetch. Contradictory GitHub IDs, changed
+  identities, missing credentials and transport/import failures refuse; partial
+  reservations remain non-adoptable. Logs retain only closed role/status
+  context, and only the existing nonsecret completion envelope is uploaded.
+  The mandatory CI/cost review preceded workflow edits. GitHub `contents:read`,
+  pinned host/runtime/model, the 120-second process/3-minute intake envelope,
+  240-minute job ceiling and 180/30-minute cell/attempt limits are unchanged.
+  One focused offline selector at
+  `fbd038173aa36d67bda8d0aad3f3ecb35aa7c8af` reported `71 passed in 3.68s`,
+  exit 0: 70 new synthetic HF-route cases and one directly affected workflow
+  contract. This is not the historical native-host family or a live workflow.
+  The exact selector is in `tasks/LATEST_TASK_RESULT/README.md`.
+  Leader-supplied input-check `35827845408` remains a real exit-2 refusal:
+  `github_draft_or_asset_inaccessible`, `release_metadata`, HTTP 403 at
+  06:42:45 UTC; download/import and OIDC/native work were not reached.
+  Prior #659 review `5287940874` at
+  `3659287caf89c013818d052b54524723e30ac6f3` covers the reader integration,
+  not this transport. Both campaigns and original bytes remain untouched.
+  Current HF access, a live input check, ordered execution of 30 cells,
+  cross-run admission deduplication and fixed grading remain unfinished.
+  No HF credential, real-input transfer, data API or model call was used here.
+
 - Add `codex_budget_pilot_results.py`, a local completion-envelope reader for
   `budget_pilot_ci_20260923_01`. It uses the real pilot compiler and existing CI
   completion validator, always retaining 30 rows in canonical per-task
