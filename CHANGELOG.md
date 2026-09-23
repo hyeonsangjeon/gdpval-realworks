@@ -194,6 +194,34 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Bring the completion-reader branch onto exact main
+  `427a03223fb7c70eb8070fff85fdde8bcfcfac0d` with one ordinary non-squash
+  merge. Only the two completion records conflicted. The reader/test blobs
+  remain `79aaf179eea991a2461e67c7cd7501efb1422731` /
+  `e8d4478a1e48d6e044eccb3373252bca4fbb0c73`; all other implementation,
+  workflow and test bytes match incoming main, including #660's safe HTTP
+  context. Both substantive changelog histories and the reader's latest-result
+  scope are retained. The leader's review `5287498697` and nine passed checks
+  stay attached to reader head `b1b0a74d99060bd7011cc561fcf089f00da3356c`;
+  review `5287498840` and nine passed checks stay attached to #660 head
+  `a6e1a9a0f772a795ed7b500e9e5493e97fbb245f`. Neither is approval of this
+  new integration. Historical `31 passed in 36.01s` remains at
+  `deefb34ad684a00494ef689db86f4c461dbca004`; `19 passed, 62 deselected in
+  2.38s` remains at `d3a4f3430e7554a93d4a6486cfbf11f64b15ba0e`.
+  Validation here is limited to blob/parent comparison and diff checks; no
+  suite, static counter or previous audit was rerun. Separately, the leader
+  reported model-free input-check run `35827845408`, created 06:40:21 UTC on
+  exact incoming main, as QUEUED AT LEADER OBSERVATION. Its canonical cell is
+  `02aa1805-c658-4069-8a6a-02dec146063a_A_r1`, with `execute=false`,
+  `input_check=true`, release `394272629`, asset `582945947` and external SHA256
+  `757603585405da5d7f6817a6a0a23bd530d4b5e4e38b2fd4dc6f318053d240e3`.
+  No result or HTTP stage/status was observed here. The original failed intake
+  `35821215749`, failed/successful private upload attempts and connected native
+  diagnostic `35817078746` remain distinct historical observations. No run or
+  API query, payload transfer, OIDC or model operation ran. New-head review and
+  automatic checks, actual CI input acceptance, ordered 30-cell execution,
+  cross-run admission/deduplication and fixed grading remain outstanding.
+
 - Integrate exact main `84c18b778d2e9aa1def9d5f7912ac9f03edaee11` into
   the completion-reader branch with one ordinary non-squash merge. Only the
   two completion records conflicted; both substantive changelog entries remain
@@ -212,6 +240,41 @@ entries land under a fresh dated heading the day they merge to `main`.
   nor failing transfer stage or cause. No test, CI query, intake retry or live
   operation ran here. Integration review/checks, CI input acceptance, ordered
   30-cell execution, cross-run admission/deduplication and fixed grading remain.
+
+- Retain safe HTTP failure context in the private-input intake's existing
+  request/CLI error boundary. The compatibility reason and exit 2 remain;
+  request failures now append one closed stage (`release_metadata`,
+  `asset_download` or `asset_redirect`) and the actual received numeric
+  `http_status`. A failure without a response records `null`, never an earlier
+  hop's status. Response bodies, URLs, signed queries, headers, tokens, private
+  paths and arbitrary exception text are not logged. HTTP-error bodies remain
+  unread and responses close before refusal. Same-repository/draft/asset,
+  external digest, bounded transfer, no-clobber and pre-OIDC gates, permissions,
+  default plan-only behavior and experiment controls are unchanged. This is not
+  another live access attempt or an auth/permission diagnosis. The leader's
+  run `35821215749`, job `107053260372`, on exact source
+  `84c18b778d2e9aa1def9d5f7912ac9f03edaee11` passed plan creation but refused
+  intake at 05:11:35 UTC with `github_draft_or_asset_inaccessible`, exit 2;
+  Azure login, OIDC identity and execution were skipped. Its actual HTTP status,
+  failing transfer stage and cause remain unknown. One offline invocation at
+  `d3a4f3430e7554a93d4a6486cfbf11f64b15ba0e`, selecting `error_context` in
+  `batch-runner/tests/test_codex_ci_input_intake.py`, reported
+  `19 passed, 62 deselected in 2.38s`, exit 0. It exercises real CLI logging
+  with fake GitHub I/O and synthetic inputs: 401/403/404/500 at all three stages,
+  no-response `null`, body-read failure after HTTP 200, closed stage vocabulary,
+  redaction, response cleanup and retained reservations without input import.
+  No prior suite or live operation was repeated. The exact command is in the
+  completion record. Separately, #659's completion-only normal merge of that
+  main is `b1b0a74d99060bd7011cc561fcf089f00da3356c`; reader/test blobs match
+  reviewed `eca512dec96f2d5143e14ff65c37b454e5bdef79` and all other code
+  matches incoming main. Review `5287148513` and the historical 31-case result
+  retain their reader scope. #658 review `5286955706` at
+  `7a4711f319f57d56e71678f85f0a110fd78f5546` covers the earlier intake,
+  CI-envelope/integration and staging work, not this fix or accepted CI inputs.
+  Independent native diagnostic `35817078746` and private asset `582945947`
+  remain separate observations; neither was repeated. New-head review/checks,
+  CI input acceptance, ordered 30-cell execution, cross-run admission and fixed
+  grading remain outstanding.
 
 - Integrate exact main `0f0911b435d7f704db8e2f2131a00ade310d5c1f` into
   the private-intake branch with ordinary non-squash merge

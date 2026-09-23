@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import copy
 from email.message import Message
+import http.client
 import io
 import json
 import os
@@ -101,6 +102,19 @@ def github(case, *, payload=None, metadata=None, status=200):
                    Response(case.archive if payload is None else payload)])
 
 
+def github_failure_at(case, stage, failure):
+    http = github(case)
+    if stage == "release_metadata":
+        http.responses[0] = failure
+    elif stage == "asset_download":
+        http.responses[1] = failure
+    else:
+        assert stage == "asset_redirect"
+        http.responses[1] = Response(b"unread redirect body", status=302, headers=[("Location", SIGNED_TARGET)])
+        http.responses.append(failure)
+    return http
+
+
 def invoke(case, transport, argv=None):
     return intake.main(case.argv if argv is None else argv, _test_github=transport, _test_transport=case.transport)
 
@@ -108,6 +122,24 @@ def invoke(case, transport, argv=None):
 def assert_no_install(case):
     assert not case.stage.exists() and not case.installed.exists()
     assert case.transport.calls == []
+
+
+def assert_error_context(case, http, caplog, capsys, *, stage, status, reason):
+    # Real main() logging, not an exception string or a prebuilt CLI result.
+    assert [row.getMessage() for row in caplog.records if row.name == intake.LOG.name] == [
+        f"Private input intake refused: {reason} (stage={stage}, http_status={status})",
+    ]
+    output = capsys.readouterr()
+    assert output.out == ""
+    public = caplog.text + output.out + output.err
+    for private in (SYNTHETIC_TOKEN, SIGNED_TARGET, "/synthetic/private/auth", "sensitive remote error",
+                    str(case.parent), "Authorization", "X-Private-Context"):
+        assert private not in public
+    assert len(http.calls) == {"release_metadata": 1, "asset_download": 2, "asset_redirect": 3}[stage]
+    if stage == "asset_redirect":
+        assert http.calls[2][0].get_header("Authorization") is None
+    assert reservation(case.stage).exists()
+    assert_no_install(case)
 
 
 def workflow():
@@ -243,19 +275,32 @@ def test_ci_input_intake_metadata_must_bind_the_private_uploaded_asset(intake_ca
     assert_no_install(case)
 
 
-@pytest.mark.parametrize("stage,status", [(0, 403), (0, 404), (1, 401)])
-def test_ci_input_intake_draft_access_is_observed_not_assumed(intake_case, caplog, stage, status):
+@pytest.mark.parametrize("stage", ["release_metadata", "asset_download", "asset_redirect"])
+@pytest.mark.parametrize("status", [401, 403, 404, 500])
+def test_ci_input_intake_draft_access_error_context_is_observed_not_assumed(intake_case, caplog, capsys, stage, status):
     case = intake_case
-    http = github(case)
-    secret_body = Response(b"synthetic token or private resource reason must stay unread")
-    error = urllib.error.HTTPError(intake.API_ROOT + ("101" if stage == 0 else "assets/202"), status,
-                                   "sensitive remote error", Message(), secret_body)
-    http.responses[stage] = error
+    secret = "sensitive remote error " + SYNTHETIC_TOKEN + " " + SIGNED_TARGET + " /synthetic/private/auth"
+    secret_body = Response(secret.encode())
+    headers = Message()
+    headers["Authorization"], headers["X-Private-Context"] = SYNTHETIC_TOKEN, secret
+    url = {"release_metadata": intake.API_ROOT + "101", "asset_download": intake.API_ROOT + "assets/202",
+           "asset_redirect": SIGNED_TARGET}[stage]
+    error = urllib.error.HTTPError(url, status, secret, headers, secret_body)
+    http = github_failure_at(case, stage, error)
+    handles = list(http.responses)
     assert invoke(case, http) == 2
-    assert "github_draft_or_asset_inaccessible" in caplog.text
-    assert "sensitive remote" not in caplog.text and secret_body.reads == [] and secret_body.closed
-    assert len(http.calls) == stage + 1
-    assert_no_install(case)
+    reason = "github_draft_or_asset_inaccessible" if status in (401, 403, 404) else "github_response_status_refused"
+    assert_error_context(case, http, caplog, capsys, stage=stage, status=status, reason=reason)
+    assert secret_body.reads == [] and secret_body.closed
+    assert all(response.closed for response in handles[:len(http.calls)])
+
+
+def test_ci_input_intake_error_context_stage_vocabulary_is_closed():
+    assert {stage.value for stage in intake.GitHubStage} == {
+        "release_metadata", "asset_download", "asset_redirect",
+    }
+    with pytest.raises(ValueError):
+        intake.InputIntakeRefused("github_draft_or_asset_inaccessible", stage="unregistered_stage")
 
 
 @pytest.mark.parametrize("defect", ["bytes", "assets", "invalid_json", "duplicate_key"])
@@ -353,13 +398,32 @@ def test_ci_input_intake_real_opener_disables_proxy_and_automatic_redirects(inta
     assert handlers[1].redirect_request(None, None, 302, "", {}, "https://evil.example") is None
 
 
-def test_ci_input_intake_transport_errors_never_print_remote_or_private_fields(intake_case, capsys, caplog):
-    secret = SYNTHETIC_TOKEN + " https://private.example/?sig=hidden /synthetic/private/auth"
-    http = GitHub([urllib.error.URLError(secret)])
+@pytest.mark.parametrize("stage", ["release_metadata", "asset_download", "asset_redirect"])
+def test_ci_input_intake_transport_error_context_has_no_unobserved_status(intake_case, capsys, caplog, stage):
+    secret = "sensitive remote error " + SYNTHETIC_TOKEN + " " + SIGNED_TARGET + " /synthetic/private/auth"
+    http = github_failure_at(intake_case, stage, urllib.error.URLError(secret))
+    prior_responses = http.responses[:{"release_metadata": 0, "asset_download": 1, "asset_redirect": 2}[stage]]
     assert invoke(intake_case, http) == 2
-    assert "private_input_verification_or_transport_failed" in caplog.text
-    assert secret not in caplog.text + capsys.readouterr().out
-    assert_no_install(intake_case)
+    assert_error_context(intake_case, http, caplog, capsys, stage=stage, status="null",
+                         reason="private_input_verification_or_transport_failed")
+    assert all(response.closed for response in prior_responses)
+
+
+@pytest.mark.parametrize("stage", ["release_metadata", "asset_download", "asset_redirect"])
+def test_ci_input_intake_body_error_context_retains_received_status(intake_case, monkeypatch, capsys, caplog, stage):
+    case = intake_case
+    response = (Response(json.dumps(case.metadata).encode(), content_type="application/json")
+                if stage == "release_metadata" else Response(case.archive))
+
+    def interrupted_body(size):
+        raise http.client.IncompleteRead((SYNTHETIC_TOKEN + " " + SIGNED_TARGET + " /synthetic/private/auth").encode())
+
+    monkeypatch.setattr(response, "read1", interrupted_body)
+    http_transport = github_failure_at(case, stage, response)
+    assert invoke(case, http_transport) == 2
+    assert_error_context(case, http_transport, caplog, capsys, stage=stage, status=200,
+                         reason="private_input_verification_or_transport_failed")
+    assert response.closed
 
 
 @pytest.mark.parametrize("role", ["staging", "reservation", "installed"])
