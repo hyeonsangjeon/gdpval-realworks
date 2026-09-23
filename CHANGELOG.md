@@ -42,6 +42,14 @@ entries land under a fresh dated heading the day they merge to `main`.
   The intended later send on reviewed main uses deployment `gpt-5.4`,
   `native_only=true`, `send_request=true`, `send_valid_request=false` and
   `send_closing_sweep=false`; this task did not dispatch it.
+  The leader later supplied FINAL-APPROVE review `5286077604` at
+  `0f291f4041bb321817ce93e6d8b4bfe0c4f2cfb0`. One normal upstream merge then
+  integrated exact main `266ef7a05335d900304214da0c0d680331fb346c`, with only
+  completion-record overlap. The reviewed workflow/test blobs are unchanged;
+  incoming bundle implementation/tests match that main. Both substantive
+  changelog entries are preserved and native-only stays the latest result.
+  The 42-case result remains at its original tested SHA, not a new test run or
+  approval of the integration HEAD. No CI query, diagnostic or packaging ran.
 
 - Add a plan-first CLI and manual/reusable GitHub Actions entry for one
   explicitly selected external-budget pilot cell. The preregistration reserves
@@ -521,6 +529,62 @@ entries land under a fresh dated heading the day they merge to `main`.
   No provider, model, grader or workflow was executed.
 
 ### Added
+
+- Add `codex_ci_input_bundle.py` with local `produce` and `import` commands
+  for the four registered originals: normalized parquet, two declared
+  references and canonical schema-4 `deliverable_only` Step 0. The producer
+  uses the genuine original-input reader and preserves their bytes in a
+  deterministic, uncompressed USTAR archive with one bounded logical-role
+  manifest. The importer requires an external expected bundle SHA256,
+  validates exact member order/types/sizes/hashes and canonical headers before
+  publication, and refuses links, traversal, duplicates, extras, compression,
+  oversized or truncated data and content drift. Existing no-clobber helpers
+  retain partial reservations; installed roles pass the real input verifier
+  before the ready marker is written last. No transfer service, workflow,
+  credential route, dependency or experiment control changes.
+  The first focused selection at
+  `ed70d862ed98a8645a38691f65f714cc1c82e78d` reported
+  `33 failed, 6 passed in 2.97s`, exit 1: the adapter returned the result of
+  a path validator that returns `None`, causing an early `AttributeError`.
+  Five source-negative passes occurred before their intended verifier and
+  are not counted as verifier evidence. The correction returns the validated
+  path and checks that those cases actually reach the source reader. The same
+  selection at `3c20adb08e1db62d81855a5184963ad1bf342061` reported
+  `39 passed in 3.19s`, exit 0. Tests use tiny synthetic parquet provenance
+  and fixture-only Step 0 pins while retaining real CLI, archive, current-byte,
+  reference-tree, canonical-manifest and publication/refusal paths. The exact
+  command and complete candidate identities are in
+  `tasks/LATEST_TASK_RESULT/README.md`; no prior suite was rerun.
+  One authorized real producer call at the corrected SHA verified the named
+  original-source handoff and created a private candidate: 2,519,040 bytes,
+  SHA256 `757603585405da5d7f6817a6a0a23bd530d4b5e4e38b2fd4dc6f318053d240e3`,
+  exit 0, 0.591994 seconds for the producer call only. It used Python 3.10.12
+  and the existing 0.147.0 SDK/companion environment; no process/network
+  attempt occurred. The bounded Step 0 structured-field/path screen found no
+  match, not a comprehensive privacy audit or publication clearance. The
+  candidate remains private; no real import or transfer ran. This branch
+  starts at source baseline `42c7b8f2f6457463333e386432baceed96182c72`.
+  #655's supplied FINAL-APPROVE review `5285590451` at
+  `4d3c4b4f895da35e3db07b413f66c8066dfa5ad1` and 19-case offline evidence
+  cover only the one-cell entry, not this bundle. No full-grader-closure file
+  changed, so active hashes and source counts (37/58) remain unchanged.
+  Only completion records follow the tested SHA. All original inputs, the
+  sealed NAS campaign's 30 pending cells and fixed 180/30-minute policies are
+  untouched. Review/CI for this change, approved transport integration, ordered
+  30-cell scheduling/aggregation, live CI OIDC/connectivity, separately directed
+  execution and grading remain outstanding. No workflow, auth, model, task
+  preparation, campaign materialization or external publication occurred.
+  A later authorized source fetch and normal non-squash merge integrated exact
+  main `ea81fefc7dae1297dee7d68e78327a0f05fb6958`. Only the latest-result page
+  conflicted; both substantive changelog entries were preserved, with the
+  bundle retained as the latest result. Bundle source/tests compare byte-for-byte
+  equal to `df3e3f24404a90f47789051ef99318fb6af2dd20`, the head covered by
+  FINAL-APPROVE review `5285752981`. That review accepts the original 39-case
+  result and private candidate within their stated scope, not a new test run,
+  external publication, live readiness or approval of this integration head.
+  The original tested SHA remains `3c20adb08e1db62d81855a5184963ad1bf342061`.
+  No tests, packaging or CI queries were repeated during integration; the
+  merged head still requires its own immutable review/CI.
 
 - Add a plan-first local dispatcher and separate preregistration for the Codex
   external-budget pilot: the existing score-free `advance_check_5` cohort,
