@@ -13,6 +13,53 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Add `codex_budget_pilot_results.py`, a local completion-envelope reader for
+  `budget_pilot_ci_20260923_01`. It uses the real pilot compiler and existing CI
+  completion validator, always retaining 30 rows in canonical per-task
+  A1/B1/C1/C2/B2/A2 order. Missing envelopes become `NOT_OBSERVED`, not success
+  or zero cost; each job's other-29-unrun declaration is not summed. Duplicate
+  cells, foreign cells, malformed envelopes and mismatched campaign/source/
+  config/input/order/registration/host-policy bindings refuse before publication.
+  A non-null verified-input fingerprint requires an external expected
+  `files_sha256`, not the bundle SHA or the first envelope's own claim. Null
+  input proof stays unavailable. Per-job plan hashes may differ: the v1 envelope
+  does not expose the plan preimage or runner-instance binding, so the reader
+  explicitly reports that proof unavailable. It preserves per-cell execution,
+  cleanup, receipt, usage, cost and artifact identities without token/cost totals,
+  guessed prices, HTTP counts, grades or A/B/C rankings. This reader does not
+  deduplicate remote execution. Explicit local files are bounded to 64 KiB each;
+  a result is bounded to 2 MiB and atomically published without replacing an
+  existing file. One offline CLI family at
+  `deefb34ad684a00494ef689db86f4c461dbca004` reported
+  `31 passed in 36.01s`, exit 0. The exact selector and command are in
+  `tasks/LATEST_TASK_RESULT/README.md`; observations are synthetic, while the
+  compiler, validator, checksum, refusal and publication paths are real. No
+  previous test family or original-input, campaign, workflow or live operation ran.
+  Separately, the leader supplied completed native-only diagnostic run
+  `35817078746`, job `107040793256`, artifact `10731833980`, on exact main
+  `0f0911b435d7f704db8e2f2131a00ade310d5c1f`: `connected`, provider answered,
+  auth preflight succeeded and one native turn completed with the requested
+  response. Plan/result settings fingerprints both equal
+  `sha256:af46cb5548b7224a3c0117b37a450fced3765efdc4ed2b6c12994376c9462150`.
+  Runtime thread-total and most-recent-request views each report 10,982 input,
+  0 cached input, 0 cache-write input and 29 output tokens, including 22 reasoning
+  tokens; neither the views nor reasoning are added again. The observed context
+  window is 258,400. This is diagnostic-default GPT-5.4/direct-v1 with pinned
+  SDK/companion 0.147.0, not pilot `xhigh`, supervisor Astra 1M, tool/file/recovery
+  evidence or graded quality. Five legacy probes were skipped; HTTP count,
+  price and invoice remain unestablished. The leader also supplied selected
+  owner-account metadata: draft release `394272629`, asset `582945947`,
+  `uploaded`, 2,519,040 bytes, provider digest
+  `sha256:757603585405da5d7f6817a6a0a23bd530d4b5e4e38b2fd4dc6f318053d240e3`.
+  Neither observation was repeated here; the earlier HTTP 400/lost-error record
+  remains historical. Draft staging does not prove CI read-token access.
+  Frozen #658 review `5286955706` at
+  `7a4711f319f57d56e71678f85f0a110fd78f5546` covers the earlier intake, CI job-ceiling,
+  integration and staging changes, not this reader. New reader review and
+  final-head checks, CI `input_check`, ordered execution, cross-run admission
+  deduplication and fixed grading remain outstanding. All experiment controls,
+  prior outputs, source bindings and sealed campaign state remain unchanged.
+
 - Add explicit private draft-release-asset intake before the single-cell CI
   workflow's Azure OIDC/model admission. Default plan-only does not transfer
   inputs. The mutually exclusive `input_check` mode imports and checks inputs
@@ -146,6 +193,53 @@ entries land under a fresh dated heading the day they merge to `main`.
   source sets remain 37/58; no coupled active source member or hash changed.
 
 ### Fixed
+
+- Bring the completion-reader branch onto exact main
+  `427a03223fb7c70eb8070fff85fdde8bcfcfac0d` with one ordinary non-squash
+  merge. Only the two completion records conflicted. The reader/test blobs
+  remain `79aaf179eea991a2461e67c7cd7501efb1422731` /
+  `e8d4478a1e48d6e044eccb3373252bca4fbb0c73`; all other implementation,
+  workflow and test bytes match incoming main, including #660's safe HTTP
+  context. Both substantive changelog histories and the reader's latest-result
+  scope are retained. The leader's review `5287498697` and nine passed checks
+  stay attached to reader head `b1b0a74d99060bd7011cc561fcf089f00da3356c`;
+  review `5287498840` and nine passed checks stay attached to #660 head
+  `a6e1a9a0f772a795ed7b500e9e5493e97fbb245f`. Neither is approval of this
+  new integration. Historical `31 passed in 36.01s` remains at
+  `deefb34ad684a00494ef689db86f4c461dbca004`; `19 passed, 62 deselected in
+  2.38s` remains at `d3a4f3430e7554a93d4a6486cfbf11f64b15ba0e`.
+  Validation here is limited to blob/parent comparison and diff checks; no
+  suite, static counter or previous audit was rerun. Separately, the leader
+  reported model-free input-check run `35827845408`, created 06:40:21 UTC on
+  exact incoming main, as QUEUED AT LEADER OBSERVATION. Its canonical cell is
+  `02aa1805-c658-4069-8a6a-02dec146063a_A_r1`, with `execute=false`,
+  `input_check=true`, release `394272629`, asset `582945947` and external SHA256
+  `757603585405da5d7f6817a6a0a23bd530d4b5e4e38b2fd4dc6f318053d240e3`.
+  No result or HTTP stage/status was observed here. The original failed intake
+  `35821215749`, failed/successful private upload attempts and connected native
+  diagnostic `35817078746` remain distinct historical observations. No run or
+  API query, payload transfer, OIDC or model operation ran. New-head review and
+  automatic checks, actual CI input acceptance, ordered 30-cell execution,
+  cross-run admission/deduplication and fixed grading remain outstanding.
+
+- Integrate exact main `84c18b778d2e9aa1def9d5f7912ac9f03edaee11` into
+  the completion-reader branch with one ordinary non-squash merge. Only the
+  two completion records conflicted; both substantive changelog entries remain
+  and the reader remains the latest result. The reader/test blobs match
+  reviewed `eca512dec96f2d5143e14ff65c37b454e5bdef79` byte-for-byte; every
+  other implementation/workflow/test file matches the incoming main, including
+  private intake, the 60-minute native-host CI ceiling and native-only diagnostic.
+  Review `5287148513` and `31 passed in 36.01s` at
+  `deefb34ad684a00494ef689db86f4c461dbca004` retain their original scopes,
+  not a new test or approval of this integration. Prior #658 review
+  `5286955706` stays attached to `7a4711f319f57d56e71678f85f0a110fd78f5546`.
+  Separately, the leader reported intake run `35821215749`, job `107053260372`,
+  on that main: plan creation passed, but intake refused at 05:11:35 UTC with
+  `github_draft_or_asset_inaccessible`, exit 2; Azure login, OIDC identity and
+  execution were skipped. The grouped reason establishes neither HTTP status
+  nor failing transfer stage or cause. No test, CI query, intake retry or live
+  operation ran here. Integration review/checks, CI input acceptance, ordered
+  30-cell execution, cross-run admission/deduplication and fixed grading remain.
 
 - Retain safe HTTP failure context in the private-input intake's existing
   request/CLI error boundary. The compatibility reason and exit 2 remain;
