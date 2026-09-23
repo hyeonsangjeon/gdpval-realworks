@@ -1,237 +1,188 @@
 # Latest task result
 
-## Local 30-cell completion reader: final source integration
+## Private single-cell output publisher: standalone offline unit
 
-One ordinary non-squash merge brings exact main
-`427a03223fb7c70eb8070fff85fdde8bcfcfac0d` into the existing reader branch
-from `b1b0a74d99060bd7011cc561fcf089f00da3356c`. Only these two completion
-records conflicted. Both substantive changelog histories remain; the reader
-remains the latest result. No implementation conflict occurred.
+`PROJECT5-PRIVATE-CELL-OUTPUT-1740` adds a plan-first local CLI and an explicit
+private HF publication path on a clean branch from exact main
+`9cb1c0d84f299f610ec98c90f3bac9ff9cbbdc75`. It does not wire a workflow,
+select or approve an output target, change the public completion schema, or
+change the grader. No live publication or pilot execution occurred.
 
-The reader and its test retain Git blobs
-`79aaf179eea991a2461e67c7cd7501efb1422731` and
-`e8d4478a1e48d6e044eccb3373252bca4fbb0c73`, identical to the reviewed reader
-source. A whole-tree diff excluding only those two additions and the completion
-records confirms that every other implementation, workflow and test byte matches
-incoming main. This includes #660's safe HTTP context, private intake, the
-60-minute native-host CI ceiling and the native-only diagnostic/corrected sweep
-contract. The incoming intake/test blobs are
-`5234139014c6eae2227ecfc86856e67b4547ab2d` and
-`97612ecf2f4679c6c1b2222d2fd4a4708f3dbe58`.
+### Capability and evidence limits
 
-Validation is limited to blob/parent comparisons and diff checks. No reader,
-error-context, native-host or full suite, static counter or previous audit was
-rerun. One source fetch was needed; no API/CI/run query or live operation ran.
-The historical reader result remains `31 passed in 36.01s`, exit 0, at
-`deefb34ad684a00494ef689db86f4c461dbca004`. These are synthetic-envelope
-tests, not pilot execution or grading, and not a new integration-head pass.
+[The publisher](../../batch-runner/codex_budget_pilot_output.py) accepts one
+canonical cell plus the caller's expected campaign, reviewed execution-source
+SHA and config SHA256. It uses `codex_budget_pilot.compile_pilot`, the retained
+plan/ready/state/config/input bindings, dispatcher lock and owned-cleanup check.
+Only a finalized cell with confirmed cleanup is eligible. Existing current-byte
+result and deliverable helpers remain the authority: `_finish()` runs on a copy
+and its evidence is compared with the retained record. Its status updates are
+not applied to the cell. No original input is reopened or rematerialized.
 
-Leader FINAL-APPROVE `5287498697` and all nine passed checks apply to the
-pre-integration reader head `b1b0a74d99060bd7011cc561fcf089f00da3356c`.
-Review `5287498840` and all nine passed checks apply to #660 head
-`a6e1a9a0f772a795ed7b500e9e5493e97fbb245f`, now part of incoming main.
-These are leader-supplied prior-head observations, not approval or final checks
-of this new merge. The new head needs its own leader review and automatic checks.
+The payload consists only of unchanged bytes under these logical roles:
 
-### Reader behavior and limits
+- The bound condition result, named `step2_inference_results.json` remotely.
+- Validated generated files under `deliverable_files/<task-id>/...`.
+- The available bound `cost_ledger_condition_a.jsonl` export, with existing
+  column/vocabulary, type, run/task, uniqueness and finite-amount validation.
+- `output-manifest.json`, containing cell/source/config/input/order/policy
+  bindings, observed status/accounting, explicit gaps and logical file hashes
+  and sizes. It contains neither a future commit ID nor the output target.
 
-[The reader](../../batch-runner/codex_budget_pilot_results.py) calls
-`codex_budget_pilot.compile_pilot` for the canonical cohort, cell order and
-config identities, and `codex_budget_pilot_ci.validate_completion` for the
-existing closed envelope contract. It does not materialize a plan, open original
-inputs, construct a provider or call the CI execution-context guard.
+Original parquet/reference trees, native/auth state, transcripts, raw logs,
+SQLite and the whole workspace are not publication sources. Unsupported result
+fields refuse rather than being silently stripped. Deliverables are treated as
+generated content, not scanned or rewritten. Files are bounded to 128 generated
+deliverables, 64 MiB each and 128 MiB total; result/ledger records are bounded to
+8 MiB, ledger exports to 10,000 rows and the manifest to 128 KiB.
 
-- The denominator is always five `advance_check_5` tasks x A/B/C x repetitions
-  1/2 = 30. Rows follow the compiler's per-task A1/B1/C1/C2/B2/A2 order regardless
-  of file order. Each envelope's other-29-unrun declaration is local to that job;
-  30 envelopes do not create a denominator of 900.
-- Missing envelopes produce `NOT_OBSERVED` rows with null execution, cleanup,
-  receipt, usage and artifact observations. An observed `pending` envelope is
-  distinct from no envelope. Failed, stopped and unresolved cells remain in the
-  denominator; a reported success does not establish cost completeness or quality.
-- Before publication, the reader checks the producer's payload checksum and
-  matching campaign, caller-supplied reviewed source SHA, canonical config,
-  declared inputs, order, registration and common host-policy fingerprints.
-  Duplicate cells are rejected even when their records are identical. Foreign cells,
-  mismatches, malformed JSON and non-allowlisted fields also refuse.
-- Any non-null `verified_inputs_sha256` requires an external
-  `--expected-verified-inputs-sha256` expectation matching the existing reader's
-  `files_sha256`. This is not the transfer archive's SHA. The first envelope is
-  not its own trust anchor; absent input proof remains null rather than being
-  filled from the expectation. This unit does not reverify original bytes.
-- Different CI jobs may carry different plan hashes. Completion v1 omits the
-  plan preimage and runner-instance binding, so their independent verification
-  is explicitly unavailable. The receipt preimage is likewise unavailable.
-  The source SHA is a caller assertion, not review approval issued by this CLI.
-- Only validated execution/cleanup fields, per-cell receipt/usage/cost fields
-  and artifact hashes/sizes are projected. No filenames, private host paths,
-  native/auth state, guessed prices, HTTP counts or grades are published. No
-  token or cost totals are computed: thread-total and most-recent-request views
-  are not combined, and reasoning is not added to output again. Missing cost
-  stays missing; a genuine recorded zero is not assigned to other cells.
+Missing bound results are not replaced with late files found on disk. A plan
+reports `can_publish=false` in that case, and explicit publication refuses.
+Missing ledger/usage remain explicit; an empty usage object is not evidence
+of zero consumption. Failed/stopped status, null exit codes, timeout and partial
+accounting stay recorded as such. No cost or token totals, HTTP counts, prices
+or grades are inferred. Reasoning is not added to output tokens again.
+`grade_ready=false` and `workflow_wired=false` remain unconditional.
 
-The CLI reads at most 30 explicit local files, each at most 64 KiB, without
-following links or accepting a changed file. Its JSON result is bounded to
-2 MiB. The existing no-clobber helper writes complete bytes before atomically
-linking the absent output file; that single file is the ready publication.
-Existing partial or complete destinations are retained and refused, not adopted.
-Stdout and the output file contain equivalent JSON. Errors use closed codes
-without input filenames or exception bodies.
-
-This is a reader, not a scheduler, remote admission lock or execution receipt
-issuer. Rejecting duplicate local envelopes does not deduplicate remote runs.
-It does not rank A/B/C, regrade low scores or establish that any pilot cell ran.
-
-Example interface, with explicit placeholders rather than private locators:
+Default local validation, with placeholders rather than private locators:
 
 ```bash
-"$PILOT_RESULTS_PYTHON" batch-runner/codex_budget_pilot_results.py \
-  --reviewed-source-sha <reviewed-execution-sha> \
-  --expected-verified-inputs-sha256 <external-files-sha256> \
-  --envelope <local-cell-completion.json> \
-  --out <absent-local-result.json>
+"$PILOT_OUTPUT_PYTHON" batch-runner/codex_budget_pilot_output.py \
+  --campaign-root '<retained-private-campaign-root>' \
+  --campaign-id budget_pilot_ci_20260923_01 \
+  --cell '<one-canonical-cell>' \
+  --reviewed-source-sha '<reviewed-execution-sha>' \
+  --expected-config-sha256 '<expected-cell-config-sha256>'
 ```
 
-Repeat `--envelope` for additional distinct cells. With no envelopes, omit the
-input expectation to report 30 `NOT_OBSERVED` rows; this creates no campaign.
+This default does not read an HF credential, construct an HF client or transfer
+files. Publication additionally requires `--publish`, `--output-repo` and
+`--expected-parent`, with an explicit process-local `HF_TOKEN`. Approval is
+external caller authority; these arguments are not an approval certificate.
+No output repository is supplied or approved by this task.
 
-### Historical offline evidence, not rerun
+### Private publication contract
 
-The reader implementation and [test family](../../batch-runner/tests/test_codex_budget_pilot_results.py)
-were committed at `deefb34ad684a00494ef689db86f4c461dbca004` before this
-original invocation. `PILOT_RESULTS_PYTHON` named the existing isolated
-Python 3.10.12 and SDK/companion 0.147.0 environment from the private handoff.
+Before its first HF request, publication flushes a private no-clobber one-use
+reservation in the selected cell's private directory. Any existing reservation
+or receipt, including malformed, partial or unresolved state, refuses replay.
+The client checks the exact named dataset repository's actual `private=true`
+metadata and expected main-branch commit, then checks the absent
+`cell-outputs/<campaign>/<cell>` prefix and its ancestors at that commit.
+It never creates a repository, changes privacy, deletes or overwrites files,
+chooses an alternate target, merges dataset rows or falls back to public storage.
+
+Existing HF commit-operation helpers build one add-only payload-plus-manifest
+commit with `parent_commit` CAS protection. A private completion receipt records
+the actual returned immutable commit and metadata read at that commit. A failed
+post-check retains a known returned commit but stays unresolved; an ambiguous
+commit response is never reconciled by adopting a later HEAD. No result's
+`source_revision` is filled from a Git SHA, input revision or guess.
+
+HTTP phase timeouts are at most 30 seconds inside a 120-second publication envelope.
+The scoped supported HF HTTP client hook turns failed HTTP/transport responses
+into terminal safe errors before SDK backoff can retry or log them. Buffered
+immutable operations use that HTTP/LFS path rather than native Xet transfer.
+One commit operation is not a promise of one HTTP request.
+The guard blocks forwarding the supplied bearer token to another host. Stdout
+contains only bounded logical-role/hash/size/outcome metadata; the target and
+returned revision remain in the private receipt. Errors retain safe codes and
+an actual HTTP status when available, not raw messages, bodies, URLs or paths.
+
+The required extreme-reasoner decision was **APPROVE-WITH-CONDITIONS** before
+implementation. Its conditions shaped the read-only `_finish()` comparison,
+closed payload validation, flushed one-use reservation, exact-parent commit,
+terminal SDK retry guard and unresolved-response handling. It did not approve
+a target or live use. Metadata checks cannot make repository privacy atomic
+with the commit: a concurrent administrator change is outside this unit's
+guarantee. `privacy_atomic_with_commit=false` and `download_verified=false`
+remain explicit; no remote payload re-download is performed.
+
+### One focused offline validation
+
+Implementation/tested SHA: `731ec479c742a11bcbeb6ce05d8b4f2da971ed3d`.
+Only the new publisher and [its test family](../../batch-runner/tests/test_codex_budget_pilot_output.py)
+were committed before this single invocation. `PILOT_OUTPUT_PYTHON` named the
+existing isolated Python 3.10.12 interpreter from the known private handoff;
+installed `huggingface_hub` 1.24.0 and pytest 9.1.1 were reused without installs.
 
 ```bash
-HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 DO_NOT_TRACK=1 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner "$PILOT_RESULTS_PYTHON" -m pytest -q -o addopts= -p no:cacheprovider --tb=short batch-runner/tests/test_codex_budget_pilot_results.py
+HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 DO_NOT_TRACK=1 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner "$PILOT_OUTPUT_PYTHON" -m pytest -q -o addopts= -p no:cacheprovider --tb=short batch-runner/tests/test_codex_budget_pilot_output.py
 ```
 
-Historical result: `31 passed in 36.01s`, exit 0. Every case exercises the real
-CLI; the compiler, completion projection/validator, checksum and atomic
-publication helper remain real. Host-instance and input fingerprints, statuses,
-receipts and artifacts are explicitly synthetic. Dispatch, original-input
-readers, child-process, network and sleep boundaries are blocked by the fixture.
+Observed result: `66 passed in 109.70s (0:01:49)`, exit 0. This is pytest wall
+time, not model or live transfer latency. Synthetic finalized cell records and
+fake HF metadata/commit/HTTP responses exercise the real CLI, canonical compiler,
+result/file validation, hashes, manifest, no-clobber writes and commit operations.
+The fixture blocks sockets, subprocesses, dispatch, original-input reads,
+execution admission and sleep. The real scoped HF client guard is tested at a
+fake HTTP transport boundary, including SDK backoff refusal; no live HF client
+request or credential store was used.
 
-The family covers empty, sparse and full 30-cell inputs; canonical order with
-distinct CI instances; duplicate/foreign/mismatched refusal; failed, partial,
-null and recorded-zero accounting; no token double-counting; malformed/private
-fields; bounded local reads; and existing-output and final-link collision
-refusal. The 36.01 seconds are pytest wall time, not native latency or model
-consumption. Only the two reader/test files changed before that validation;
-later record edits and integrations do not turn it into a later-HEAD run.
+Coverage includes default no-network/no-token planning; cell/source/config and
+retained-input/cleanup refusal; current-byte/type/link/size checks; closed result
+and ledger fields; unchanged allowlisted bytes; private/existing-parent/prefix
+gates; actual returned-commit receipt binding; failed/stopped/missing/partial
+accounting; HTTP, lost-response, interruption, timeout and receipt-write failures;
+and refusal to replay complete or partial reservations. Neither the reader 31,
+error-context 19, native-host 71 nor any previous/full family was rerun. Only
+the two completion records changed after this test; no later-HEAD test pass or
+review is claimed.
 
-The incoming #660 error-context result remains `19 passed, 62 deselected in
-2.38s`, exit 0, at `d3a4f3430e7554a93d4a6486cfbf11f64b15ba0e`:
+### Accepted lifecycle gap and separate history
 
-```bash
-HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 DO_NOT_TRACK=1 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=batch-runner "$INTAKE_ERROR_PYTHON" -m pytest -q -o addopts= -p no:cacheprovider --tb=short batch-runner/tests/test_codex_ci_input_intake.py -k error_context
-```
+The accepted read-only lifecycle trace established that Step2 and `_finish()`
+leave generated deliverables, result and ledger bytes on the cell-local runner.
+The single-cell workflow uploads only nonsecret completion metadata. Those
+hashes do not preserve the bytes after runner teardown. This task did not repeat
+that trace. The standalone publisher is not yet invoked there, so it establishes
+neither durable CI outputs nor recovery after a lost job.
 
-That historical selection used the existing isolated interpreter, fake GitHub
-I/O and synthetic inputs. It exercised real CLI logging for 401/403/404/500 at
-all three request stages, null status without a response, body-read failure
-after HTTP 200, the closed stage vocabulary, redaction, response cleanup and
-retained reservations without input import. Its elapsed value is pytest wall
-time, not live transport latency. The [immutable #660 record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/a6e1a9a0f772a795ed7b500e9e5493e97fbb245f/tasks/LATEST_TASK_RESULT/README.md)
-preserves its scope. No new tests or packages were used for this reconciliation.
+Same-job grading is also not ready: the existing local schema2 requires an
+actual inference HF repository/revision, and the parent grading materializer
+does not accept arbitrary pilot cells. This unit supplies a future private
+receipt boundary; it neither relaxes that schema nor admits pilot IDs to it.
 
-### New input-check dispatch: queued at leader observation only
+Frozen #661 review `5288470314` applies only to HF-originals intake head
+`fcfe5feb7698af78c18d5257807fc0ee0d4351ff`. Its `71 passed in 3.68s` evidence
+remains at `fbd038173aa36d67bda8d0aad3f3ecb35aa7c8af`, not a live HF access
+observation or this publisher's test result. That branch, workflow and tests
+were not changed, queried or rerun. The prior reader review `5287940874`
+applies to `3659287caf89c013818d052b54524723e30ac6f3`, not this new source.
 
-The leader reported one separately authorized model-free
-[input-check run 35827845408](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/35827845408),
-created 06:40:21 UTC on exact main
-`427a03223fb7c70eb8070fff85fdde8bcfcfac0d`, as
-**QUEUED AT LEADER OBSERVATION**. Its selected cell is
-`02aa1805-c658-4069-8a6a-02dec146063a_A_r1`, with `execute=false`,
-`input_check=true`, release `394272629`, asset `582945947` and external SHA256
-`757603585405da5d7f6817a6a0a23bd530d4b5e4e38b2fd4dc6f318053d240e3`.
+The leader's separate input-check run `35827845408`, job `107073437115`, on
+`427a03223fb7c70eb8070fff85fdde8bcfcfac0d` failed at 06:42:45 UTC with
+`github_draft_or_asset_inaccessible`, `stage=release_metadata`,
+`http_status=403`, exit 2. Plan passed; download/import and OIDC/native work
+were not reached. The earlier `35821215749` grouped-error failure, initial
+HTTP 400 upload with lost error detail, later private upload of asset
+`582945947` to draft `394272629`, and connected native diagnostic
+`35817078746` remain distinct observations. None was repeated or queried here.
+Owner-account staging does not establish CI token access; the connected
+diagnostic is not pilot `xhigh`, file/recovery evidence or a grade. The
+[prior immutable record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/9cb1c0d84f299f610ec98c90f3bac9ff9cbbdc75/tasks/LATEST_TASK_RESULT/README.md)
+and preserved changelog entries retain their detailed evidence and earlier
+tested/reviewed SHAs. No underlying account, credential or permission cause is
+inferred from the 403.
 
-Its purpose is to observe the newly retained actual HTTP status and stage.
-No result, HTTP status, failing stage or accepted input was observed here.
-Queued is not proof of access. This task did not query, wait for, rerun or
-dispatch it, and did not invoke OIDC, native or model work. The leader owns the
-follow-up observation and gate.
+### Controls and remaining work
 
-### Separate earlier observations
+Both campaign identities, sealed NAS source, original inputs and all 30 NAS
+pending cells remain untouched. The registered CI cohort/order, common host,
+SDK/runtime/settings, GPT-5.4/direct-v1/xhigh, fixed grader and A/B/C retention
+and feedback distinctions are unchanged. A still has at most four attempts;
+the cumulative 180-minute and per-attempt 30-minute model limits, and the
+240-minute CI job ceiling, are unchanged. Publication bounds are separate.
 
-The leader previously reported [intake run 35821215749](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/35821215749),
-job `107053260372`, on `84c18b778d2e9aa1def9d5f7912ac9f03edaee11`.
-Plan creation passed; at 05:11:35 UTC intake printed
-`Private input intake refused: github_draft_or_asset_inaccessible` and exited 2.
-Azure login, OIDC identity verification and execution were skipped. That grouped
-reason does not reveal the actual HTTP status or whether release metadata,
-asset download or the CDN hop failed. It does not establish expired credentials,
-a missing asset or a need for write permission. The new dispatch does not
-replace or reconstruct this earlier failed observation.
+Remaining: this source's leader review and automatic final-head checks; one
+separately directed live HF input check; approved output-target readiness before
+any paid cell; private workflow wiring; the canonical pilot grading-input adapter
+using an observed output revision; ordered 30-cell execution and cross-run
+admission/deduplication; and fixed grading. The local publication reservation is
+not a remote inference-admission lock. No target readiness, live HF access,
+durable CI output, model result or graded quality is established here.
 
-The leader's independent owner-account metadata observation showed release
-`394272629` as `draft=true`; asset `582945947` was `uploaded`, 2,519,040 bytes,
-with provider digest
-`sha256:757603585405da5d7f6817a6a0a23bd530d4b5e4e38b2fd4dc6f318053d240e3`.
-That matches the external bundle pin, which remains the intake trust anchor.
-The original HTTP 400/exit-1 upload and lost error explanation remain separate
-from the later successful standard-client upload and metadata observation.
-Owner-account staging does not prove CI token access. No payload was uploaded,
-downloaded, imported or repackaged here; no release metadata was queried.
-
-The leader also supplied completed [diagnostic run 35817078746](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/35817078746),
-job `107040793256`, artifact `10731833980` (`codex-foundry-connection`), on exact
-main `0f0911b435d7f704db8e2f2131a00ade310d5c1f`. The plan and result both have
-settings fingerprint
-`sha256:af46cb5548b7224a3c0117b37a450fced3765efdc4ed2b6c12994376c9462150`.
-
-The supplied result is `connected`, `provider_answered=true`. Auth-command
-`ran`, `ok` and `produced_a_token` are true, with exit 0; `thread_started` and
-`turn_sent` are true, `turn_status=completed`, and `final_response_present` and
-`matched_instruction` are true. `error=null`, `tools=false`, `served_model=null`.
-Five legacy probes were skipped.
-
-| Runtime-reported view | Input tokens | Cached input | Cache-write input | Output tokens | Reasoning output |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| `thread_total` | 10,982 | 0 | 0 | 29 | 22 |
-| `most_recent_request` | 10,982 | 0 | 0 | 29 | 22 |
-
-These are two views of the observation, not additive charges. Reasoning output
-22 is part of output 29, not 29 + 22. The observed `model_context_window` is
-258,400. Requested deployment/route were `gpt-5.4`/`direct-v1`, with pinned
-SDK/companion 0.147.0. These were diagnostic defaults, not pilot `xhigh` or the
-supervisor's Astra 1M. This establishes connectivity for that CI diagnostic,
-not NAS authentication, input access, benchmark recovery, tool/file execution
-or graded quality. HTTP count, price and invoice remain unestablished; token
-refresh may involve more than one HTTP request. No pilot envelope was ingested
-from it, and the diagnostic was not queried or repeated here.
-
-### Source history, controls and remaining work
-
-The reader originally branched from exact main
-`0f0911b435d7f704db8e2f2131a00ade310d5c1f`. The prior normal merge of
-`84c18b778d2e9aa1def9d5f7912ac9f03edaee11` is retained at
-`b1b0a74d99060bd7011cc561fcf089f00da3356c`; this merge adds exact
-`427a03223fb7c70eb8070fff85fdde8bcfcfac0d` without rewriting either history.
-The [prior reader record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/b1b0a74d99060bd7011cc561fcf089f00da3356c/tasks/LATEST_TASK_RESULT/README.md)
-retains the original reader/test scope and earlier review `5287148513` at
-`eca512dec96f2d5143e14ff65c37b454e5bdef79`. The [prior #658 record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/7a4711f319f57d56e71678f85f0a110fd78f5546/tasks/LATEST_TASK_RESULT/README.md)
-retains review `5286955706`, its original tested SHAs, the cancelled 45-minute
-CI envelope, 60-minute correction and distinct staging attempts. Unchanged
-changelog entries preserve earlier dispatcher, auth-reporting, one-cell,
-bundle and native-only scopes. No historical pass is claimed for this new head.
-
-Both campaign identities, the sealed NAS source and all 30 NAS pending cells
-remain untouched. No campaign was materialized or executed by this task.
-Original inputs, per-task order, GPT-5.4/direct-v1/xhigh,
-model/provider/effort/context/tools, fixed grader and common CI host policy are
-unchanged. A retains at most four fresh attempts; B/C share retained continuation
-and backoff, with only C receiving host error feedback. The 180-minute cumulative
-and 30-minute attempt limits and 240-minute cell-job setup/cleanup ceiling remain
-unchanged. No efficacy or causal improvement is inferred from a reader test or
-the separate connectivity diagnostic.
-
-Remaining work: review and automatic final checks for this integration; actual
-CI input acceptance; ordered 30-cell execution and cross-run admission/
-deduplication; fixed grading after execution. Standing spend authority is
-unchanged. No workflow behavior, runtime, permission or experiment control was
-changed, and no API, auth, cloud, model or grader operation was performed.
-
-English reporting and copyediting keep the historical tests, prior-head reviews,
-failed intake, private staging, connected diagnostic and queued follow-up
-separate. No additional semantic-audit agent or static counter check was used.
+Design guidance kept transport separate from the experiment controls. English
+reporting/copyediting kept synthetic tests, accepted source findings, prior
+reviews and live-history observations separate. No additional audit agent or
+CI/review wait was used. Standing budget authority is unchanged.

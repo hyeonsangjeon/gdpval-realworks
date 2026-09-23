@@ -13,6 +13,50 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Add `codex_budget_pilot_output.py`, a standalone, plan-first publisher for
+  one finalized canonical `budget_pilot_ci_20260923_01` cell. It reuses the
+  compiler, retained plan/state/config/input bindings, dispatcher lock,
+  owned-cleanup check and current-byte result/file helpers. `_finish()` runs
+  on a copy to compare evidence; publication never changes the recorded cell
+  status, accounting or output bytes. Missing results are not adopted, missing
+  usage stays missing, and `grade_ready` remains false. The only payload is
+  the bound inference JSON, validated generated deliverables, an available
+  valid JSONL ledger export and a bounded logical manifest. Original inputs,
+  SQLite, native/auth state, logs and whole workspaces are excluded.
+  Default planning does not look up credentials or construct an HF client.
+  Explicit publication requires a caller-approved existing repository observed
+  as private, its exact expected parent and an absent campaign/cell prefix;
+  the CLI does not issue approval or select a target. One add-only HF commit
+  uses server parent/CAS protection. A flushed private one-use reservation
+  precedes the first request; failed or ambiguous commits remain unresolved
+  and cannot replay. A private receipt retains the actual returned commit and
+  its metadata, never a substituted source Git SHA. The uploaded manifest
+  contains no future commit or output-repository locator. HTTP phase timeouts
+  are at most 30 seconds within a 120-second publication envelope; the scoped
+  HF client also stops SDK-internal upload retries and forwarding of the
+  supplied HF bearer token to another host. These are
+  transfer bounds, not changes to the model's 180/30-minute limits. Privacy is
+  observed at metadata reads, not atomic with the commit, and no remote payload
+  re-download is claimed. The required extreme-reasoner decision preceded
+  implementation and approved only this bounded offline unit with conditions.
+  One new offline CLI/publisher family at
+  `731ec479c742a11bcbeb6ce05d8b4f2da971ed3d` reported
+  `66 passed in 109.70s (0:01:49)`, exit 0. The exact command is in the latest
+  task record; finalized cell evidence and HF responses are synthetic, while
+  canonical compilation, byte/hash/manifest checks, refusal, no-clobber and
+  commit-operation construction remain real. No previous family was rerun.
+  This independent branch starts at `9cb1c0d84f299f610ec98c90f3bac9ff9cbbdc75`;
+  frozen #661 review `5288470314` at
+  `fcfe5feb7698af78c18d5257807fc0ee0d4351ff` covers its separate HF-originals
+  intake code, not this publisher or live HF access. The accepted lifecycle
+  trace remains a gap: Step2 leaves real outputs locally and CI uploads only
+  completion metadata. No workflow, public completion schema or grader was
+  changed; this standalone unit does not establish CI durability or grade
+  readiness. Live HF input acceptance, approved output-target readiness before
+  paid execution, workflow wiring, the canonical pilot grading-input adapter,
+  ordered 30-cell execution/admission deduplication and fixed grading remain.
+  No live HF, credential, payload, model, grader or campaign operation ran.
+
 - Add `codex_budget_pilot_results.py`, a local completion-envelope reader for
   `budget_pilot_ci_20260923_01`. It uses the real pilot compiler and existing CI
   completion validator, always retaining 30 rows in canonical per-task
