@@ -307,19 +307,21 @@ def test_unbound_or_malformed_result_has_no_trusted_diagnostic(diagnostic_case, 
     assert len(s.transport.produced) == 1
 
 
-@pytest.mark.parametrize("change", ["bytes", "idle_owner", "foreign_owner", "unreaped_owner", "log_io"])
+@pytest.mark.parametrize("change", ["bytes", "idle_owner", "foreign_owner", "unreaped_owner", "log_io", "unexpected"])
 def test_diagnostic_rechecks_bytes_and_owned_cleanup_without_rewriting_completion(
-    diagnostic_case, caplog, monkeypatch, change,
+    diagnostic_case, caplog, capsys, monkeypatch, change,
 ):
     s = diagnostic_case
     real_publish = ci._publish
     finalized = []
+    finalized_bytes = []
 
     def publish(path, root, payload):
         real_publish(path, root, payload)
         if payload["status"] != "failed":
             return
         finalized.append(copy.deepcopy(payload))
+        finalized_bytes.append(path.read_bytes())
         plan = read_plan(s)
         if change == "bytes":
             result_path = root / "cells" / s.selected / "checkout" / pilot.RESULT
@@ -337,13 +339,36 @@ def test_diagnostic_rechecks_bytes_and_owned_cleanup_without_rewriting_completio
     def log_failure(*args, **kwargs):
         raise RuntimeError(PRIVATE)
 
+    def unexpected_failure(*args, **kwargs):
+        raise AssertionError(PRIVATE)
+
     monkeypatch.setattr(ci, "_publish", publish)
     if change == "log_io":
         monkeypatch.setattr(ci.LOG, "warning", log_failure)
+    elif change == "unexpected":
+        monkeypatch.setattr(ci, "project_result_row", unexpected_failure)
     assert invoke(s, "--execute") == 1
     assert len(finalized) == 1 and pilot._load(s.envelope) == finalized[0]
+    assert s.envelope.read_bytes() == finalized_bytes[0]
     assert finalized[0]["reason"] == "child_nonzero_exit" and finalized[0]["receipt"]["status"] == "partial"
-    assert diagnostics(caplog) == [] and PRIVATE not in caplog.text
+    assert diagnostics(caplog) == []
+    captured = capsys.readouterr()
+    for surface in (caplog.text, captured.out, captured.err):
+        assert all(canary not in surface for canary in (PRIVATE, *PRIVATE.split(), str(s.host)))
+    unavailable = [record.getMessage() for record in caplog.records
+                   if record.name == ci.LOG.name and record.getMessage().startswith("CI cell diagnostic unavailable: ")]
+    if change == "log_io":
+        assert unavailable == []
+        assert captured.err == (
+            'CI cell diagnostic unavailable: '
+            '{"authoritative":false,"reason":"diagnostic_emission_unavailable"}\n'
+        )
+    elif change in {"bytes", "unexpected"}:
+        assert unavailable == [
+            'CI cell diagnostic unavailable: '
+            '{"authoritative":false,"reason":"diagnostic_evidence_unavailable"}'
+        ]
+        assert captured.err == ""
 
 
 def test_unconfirmed_cleanup_never_emits_category(diagnostic_case, caplog):

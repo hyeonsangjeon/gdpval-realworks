@@ -272,6 +272,10 @@ def _publish(path: Path, root: Path, payload: dict) -> None:
 
 def _log_failure_category(root: Path, plan: dict, cell: dict, state: dict, record: dict) -> None:
     """One non-authoritative CLI observation; never alter retained facts on failure."""
+    evidence_unavailable = (
+        'CI cell diagnostic unavailable: '
+        '{"authoritative":false,"reason":"diagnostic_evidence_unavailable"}'
+    )
     try:
         validate_completion(record)
         pilot._validate_state(plan, cell, state)
@@ -303,13 +307,27 @@ def _log_failure_category(root: Path, plan: dict, cell: dict, state: dict, recor
             category = "unavailable"  # A successful row cannot explain a nonzero child exit.
         elif type(category) is not str or category not in RECORDED_FAILURE_CATEGORIES:
             category = "unclassified"
-        LOG.warning("CI cell recorded failure category: %s", pilot._canonical_json({
+        message = "CI cell recorded failure category: " + pilot._canonical_json({
             **binding, "error_category": category,
-        }))
+        })
+    except (OSError, ValueError, TypeError, KeyError, IndexError):
+        message = evidence_unavailable
     except Exception:
-        # No raw fallback error. This optional diagnostic grants no authority;
-        # read/validation/logging failure must not rewrite completion or exit.
-        return
+        # Unexpected diagnostic errors also grant no authority and must not
+        # replace the original exit result or expose partially validated data.
+        message = evidence_unavailable
+    try:
+        LOG.warning("%s", message)
+    except Exception:
+        # A failing sink gets one fixed stderr attempt, never a category retry
+        # or exception text. If that sink also fails, preserve completion/exit.
+        try:
+            sys.stderr.write(
+                'CI cell diagnostic unavailable: '
+                '{"authoritative":false,"reason":"diagnostic_emission_unavailable"}\n'
+            )
+        except Exception:
+            pass
 
 
 def main(argv: list[str] | None = None, *, _test_transport: pilot.LocalTransport | None = None) -> int:
