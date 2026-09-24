@@ -271,7 +271,7 @@ def _publish(path: Path, root: Path, payload: dict) -> None:
 
 
 def _log_failure_category(root: Path, plan: dict, cell: dict, state: dict, record: dict) -> None:
-    """One non-authoritative CLI observation; never alter retained facts on failure."""
+    """One non-authoritative CLI observation with bounded failure handling."""
     evidence_unavailable = (
         'CI cell diagnostic unavailable: '
         '{"authoritative":false,"reason":"diagnostic_evidence_unavailable"}'
@@ -312,21 +312,24 @@ def _log_failure_category(root: Path, plan: dict, cell: dict, state: dict, recor
         })
     except (OSError, ValueError, TypeError, KeyError, IndexError):
         message = evidence_unavailable
-    except Exception:
-        # Unexpected diagnostic errors also grant no authority and must not
-        # replace the original exit result or expose partially validated data.
-        message = evidence_unavailable
+    except AssertionError:
+        # The supported internal assertion is distinct from unavailable input;
+        # no assertion details escape. Other programming faults are not caught.
+        message = (
+            'CI cell diagnostic unavailable: '
+            '{"authoritative":false,"reason":"diagnostic_internal_unavailable"}'
+        )
     try:
         LOG.warning("%s", message)
-    except Exception:
-        # A failing sink gets one fixed stderr attempt, never a category retry
-        # or exception text. If that sink also fails, preserve completion/exit.
+    except (OSError, RuntimeError):
+        # Supported logger failures get one fixed stderr attempt, never a
+        # category retry or exception text. Only fallback I/O failure is caught.
         try:
             sys.stderr.write(
                 'CI cell diagnostic unavailable: '
                 '{"authoritative":false,"reason":"diagnostic_emission_unavailable"}\n'
             )
-        except Exception:
+        except OSError:
             pass
 
 

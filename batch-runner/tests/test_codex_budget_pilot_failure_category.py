@@ -363,10 +363,16 @@ def test_diagnostic_rechecks_bytes_and_owned_cleanup_without_rewriting_completio
             'CI cell diagnostic unavailable: '
             '{"authoritative":false,"reason":"diagnostic_emission_unavailable"}\n'
         )
-    elif change in {"bytes", "unexpected"}:
+    elif change == "bytes":
         assert unavailable == [
             'CI cell diagnostic unavailable: '
             '{"authoritative":false,"reason":"diagnostic_evidence_unavailable"}'
+        ]
+        assert captured.err == ""
+    elif change == "unexpected":
+        assert unavailable == [
+            'CI cell diagnostic unavailable: '
+            '{"authoritative":false,"reason":"diagnostic_internal_unavailable"}'
         ]
         assert captured.err == ""
 
