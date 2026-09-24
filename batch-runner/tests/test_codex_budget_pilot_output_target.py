@@ -413,7 +413,11 @@ def test_output_target_workflow_contract_is_static_not_an_actions_execution():
     assert intake_step["if"] == "(inputs.execute || inputs.input_check) && !inputs.output_target_check && !inputs.output_target_setup"
     assert intake_step["timeout-minutes"] == 3 and "kill-after=5s 120s" in intake_step["run"]
     admission = "success() && inputs.execute && !inputs.input_check && !inputs.output_target_check && !inputs.output_target_setup && steps.intake.outputs.verified == 'true'"
-    assert len([step for step in steps if step.get("if") == admission]) == 2
+    assert len([step for step in steps if step.get("if") == admission]) == 4
+    assert {step["name"] for step in steps if step.get("if") == admission} == {
+        "Install the existing native sandbox prerequisite", "Require the existing native sandbox prerequisite",
+        "Require the existing native sandbox capability", "Claim only the next canonical cell before inference",
+    }
     assert len([step for step in steps if step.get("if") == admission + " && steps.admission.outputs.admitted == 'true'"]) == 3
     setup = next(step for step in steps if step.get("id") == "output_setup")
     assert setup["env"] == {"HF_TOKEN": "${{ secrets.HF_TOKEN }}"}
