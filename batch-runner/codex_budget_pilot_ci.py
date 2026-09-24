@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import importlib.metadata
 import logging
@@ -17,6 +18,7 @@ import yaml
 
 import codex_budget_pilot as pilot
 from core.cost_projection import COST_STATUSES, project_cost_receipt
+from core.result_projection import project_result_row
 
 CAMPAIGN = "budget_pilot_ci_20260924_02"
 INFERENCE_BRANCH = "pilot-inference-20260924-02"
@@ -45,6 +47,17 @@ PUBLIC_REASONS = frozenset({
     "preparation_timeout_partial_output", "child_timeout_partial_accounting",
     "recorded_task_non_success", "c_host_feedback_capability_missing", "registered_route_required",
     "reviewed_clean_source_required", "unselected_cell_has_activity",
+})
+# Exact existing Codex runner/deadline and execution_errors categories. Step2's
+# observability projection bounds length, not vocabulary: never publish it raw
+# or classify private error text here. New producer values require review.
+RECORDED_FAILURE_CATEGORIES = frozenset({
+    "model_mismatch", "workspace_error", "reference_error", "runtime_unavailable",
+    "runtime_start_failed", "session_start_failed", "turn_start_failed", "turn_failed",
+    "task_deadline_exhausted", "task_attempt_budget_exhausted", "task_deadline_state_refused",
+    "rate_limited", "content_filtered", "transport_error", "timeout", "out_of_memory",
+    "binary_decode_error", "syntax_error", "schema_error", "api_compatibility",
+    "import_error", "permission_error", "file_not_found", "type_error", "value_error",
 })
 PUBLIC_FIXED = {
     "format": "codex-budget-ci-cell-completion-v1", "campaign_id": CAMPAIGN,
@@ -257,6 +270,69 @@ def _publish(path: Path, root: Path, payload: dict) -> None:
     pilot._save(path, validate_completion(payload))
 
 
+def _log_failure_category(root: Path, plan: dict, cell: dict, state: dict, record: dict) -> None:
+    """One non-authoritative CLI observation with bounded failure handling."""
+    evidence_unavailable = (
+        'CI cell diagnostic unavailable: '
+        '{"authoritative":false,"reason":"diagnostic_evidence_unavailable"}'
+    )
+    try:
+        validate_completion(record)
+        pilot._validate_state(plan, cell, state)
+        if (record["cleanup_confirmed"] is not True or state["status"] not in {"failed", "stopped"}
+                or state["result"] is None or state["child_invocations"] < 1):
+            return
+        binding = {"source_sha": plan["reviewed_source_sha"], "cell_id": cell["cell_id"], "status": state["status"]}
+        pilot._same("diagnostic public binding", {key: record[key] for key in binding}, binding)
+        pilot._same("diagnostic selected cell", plan["ci"]["selected_cell_id"], cell["cell_id"])
+        pilot._require_quiet_owner(root, plan)
+        owner = pilot._load(root / "owned-child.json")
+        if owner["phase"] != "reaped" or owner["cell_id"] != cell["cell_id"] or owner["stage"] != "infer":
+            return
+        pilot._same("diagnostic result role", state["result"]["path"], cell["roles"]["result"])
+        data = pilot._read_bytes(root / cell["roles"]["result"],
+                                 sha256=state["result"]["sha256"], size=state["result"]["size"])
+        checked = copy.deepcopy(state)
+        pilot._finish(root, cell, checked, state["exit_code"])
+        for key in ("result", "receipt", "accounting", "artifacts"):
+            pilot._same("diagnostic recorded evidence", checked[key], state[key])
+        # The exact bytes above are bound to the revalidated result. Discard
+        # _finish's status/reason updates, including its timeout projection.
+        row = project_result_row({}, pilot._json_object(data)["results"][0])
+        observed = row["observability"]
+        if type(observed) is not dict or row["status"] not in {"success", "error", "pending", "qa_failed"}:
+            return
+        category = observed.get("error_category")
+        if row["status"] == "success" or category is None:
+            category = "unavailable"  # A successful row cannot explain a nonzero child exit.
+        elif type(category) is not str or category not in RECORDED_FAILURE_CATEGORIES:
+            category = "unclassified"
+        message = "CI cell recorded failure category: " + pilot._canonical_json({
+            **binding, "error_category": category,
+        })
+    except (OSError, ValueError, TypeError, KeyError, IndexError):
+        message = evidence_unavailable
+    except AssertionError:
+        # The supported internal assertion is distinct from unavailable input;
+        # no assertion details escape. Other programming faults are not caught.
+        message = (
+            'CI cell diagnostic unavailable: '
+            '{"authoritative":false,"reason":"diagnostic_internal_unavailable"}'
+        )
+    try:
+        LOG.warning("%s", message)
+    except (OSError, RuntimeError):
+        # Supported logger failures get one fixed stderr attempt, never a
+        # category retry or exception text. Only fallback I/O failure is caught.
+        try:
+            sys.stderr.write(
+                'CI cell diagnostic unavailable: '
+                '{"authoritative":false,"reason":"diagnostic_emission_unavailable"}\n'
+            )
+        except OSError:
+            pass
+
+
 def main(argv: list[str] | None = None, *, _test_transport: pilot.LocalTransport | None = None) -> int:
     parser = _Parser(description=__doc__)
     parser.add_argument("--campaign-id", default=CAMPAIGN)
@@ -322,6 +398,7 @@ def main(argv: list[str] | None = None, *, _test_transport: pilot.LocalTransport
         # no-clobber, the serial lock, checkpoints and the full denominator.
         summary = pilot.dispatch(plan, parent, specs, root=root, execute=False, resume=args.resume,
                                  sources=None, transport=transport, selected_cell_id=cell["cell_id"])
+        previous = next(row for row in summary["cells"] if row["cell_id"] == cell["cell_id"])
         _publish(args.completion_out, root, completion(plan, cell, execute=args.execute,
                  reason="execution_not_finalized" if args.execute else None))
         record_started = True
@@ -349,8 +426,10 @@ def main(argv: list[str] | None = None, *, _test_transport: pilot.LocalTransport
         state = next(row for row in summary["cells"] if row["cell_id"] == cell["cell_id"])
         owner = pilot._load(root / "owned-child.json")
         cleanup = owner["tree_reaped"] and owner["owner_reaped"] if owner["phase"] == "reaped" else None
-        _publish(args.completion_out, root, completion(plan, cell, execute=args.execute, state=state,
-                                                      inputs=inputs, cleanup=cleanup))
+        record = completion(plan, cell, execute=args.execute, state=state, inputs=inputs, cleanup=cleanup)
+        _publish(args.completion_out, root, record)
+        if args.execute and previous["phase"] != "finished":
+            _log_failure_category(root, plan, cell, state, record)
         return int(args.execute and state["status"] != "succeeded")
     except (KeyboardInterrupt, OSError, ValueError, TypeError, KeyError) as error:
         reason = "interrupted_same_host_state_retained" if isinstance(error, KeyboardInterrupt) else (

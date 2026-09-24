@@ -1,75 +1,173 @@
 # Latest task result
 
-## PROJECT5-LEDGER-NOTE-CONTRACT-1917
+## PROJECT5-BOUNDED-DIAGNOSTIC-2151
 
-### Future-code-only ledger contract repair
+### Diagnostic exception handling is bounded, not authoritative
 
-The publisher now accepts the three exact, nonsecret note literals written by
-the existing Codex producer. Work started in a new clean worktree from main
-`4aac36b6f92d2a14b8cac02d793356d6687ace6d`. The leader supplied #672 review
-`5302019274` and all 10 CI checks passed for the preceding #672 change. Those
-checks and that review do not approve this repair. A bounded pre-edit extreme-reasoner
-decision approved only the narrow future-code contract below, with both
-admitted source/claim histories frozen.
+Addressed leader REQUEST-CHANGES `5304688416` at
+`9aa4b617f241d39df63f3fbf2ef2d2b51cd0a0a6` on the same clean #674 branch.
+This addresses the remaining bounded-handling requirement from review `5304339793` at
+`f33bcd7dfbdbf579ecd7d995ac0ed493c2233afb`; it does not imply new-head approval.
+Main remains `e1eef7e8b880e4dbc6066f54c6fba5ab8e1befc6`. The leader reported
+7 checks passed and 2 running at the initial read, without source approval or
+authorization to merge or run live. This task did not query those checks.
+The existing reviewer confirmed only the narrowed exception families before
+edits; new-head delta review and CI remain.
 
-`CodexAgentRunner._reserve_call` and the two `_abandon_call` callers write:
+The CI CLI now logs one closed, producer-recorded failure category for a
+selected finalized failed/stopped cell after confirmed owned cleanup and before
+private retention. The original diagnostic was implemented from that main.
+The leader supplied #673 review
+`5303368449` at `70d1651bbf7bd005daca764b2f0dc75097afab73` and all 9 checks
+passed for the preceding ledger-note repair. That review does not approve this
+diagnostic. The approved publisher repair, its tests, producer/runtime code,
+source pins, workflow and grading code remain byte-identical to this base.
 
-- `one Codex turn; the model requests inside it are not individually reported`
-- `deadline refused before the turn started`
-- `the turn never started`
+The bounded pre-edit extreme-reasoner decision permits only this future-run
+diagnostic. The CLI reuses the selected-cell state, owned-cleanup validator,
+recorded result role/size/SHA256, `_finish` on a copy and the existing result-row
+projection. Revalidation must preserve result, receipt, accounting and artifact
+identities. It does not adopt a late result when none was recorded. Logging
+runs only after the existing completion publication; `_finish` stays silent,
+including when the publisher revalidates a copy. A CLI invocation that finds
+the cell already finalized emits no second diagnostic and admits no new child.
 
-The old publisher rejected these at both its note-specific regex and its
-generic string-field check. A consumer-local immutable allowlist now accepts
-only these literals alongside the existing null/strict-code notes. Only a call
-row's already-validated `note` bypasses the generic lexical recheck. No note is
-trimmed, normalized or re-exported. Allowlist membership is not proof of producer
-provenance, request reachability, success or billing. All other schema, privacy,
-identity, byte/hash/path, accounting, cleanup and publication-authority checks
-remain intact. There is no new withholding fallback. Producer/runtime code,
-workflow, source pins, prices and inference/grading controls are unchanged.
+The short structured line contains only the already-public source SHA, cell ID,
+failed/stopped status and an exact allowlisted category from existing Codex,
+deadline and execution-error semantics. Missing/null categories become
+`unavailable`; present unknown or nonstring categories become `unclassified`.
+Neither case prints the supplied value. A successful result row cannot explain
+a nonzero child exit, so its category is `unavailable` even if it carries a stale
+allowlisted value. Successful cells emit no failure diagnostic. The CLI emits
+no trusted category when evidence is malformed or unbound, bytes have changed,
+or cleanup is uncertain or belongs to another cell. The supported diagnostic
+failures below leave completion facts and the CLI exit result unchanged.
 
-This confirmed source mismatch also prevents otherwise-safe successful output
-from being retained: settlement leaves the reservation note unchanged, and
-the publisher validates that ledger regardless of the cell's success status.
-The focused offline test covers that success path as well as failed paths.
-Neither this source finding nor the tests identify the precise note in the
-missing live payload, and neither explains a native child's nonzero exit.
+The previous correction supplied unavailable signals but retained three
+`except Exception` catch-alls. They are now limited to concrete families:
 
-### One focused selector, with the fixture failure preserved
+- Evidence reads/validation catch `OSError`, `ValueError`, `TypeError`,
+  `KeyError` and `IndexError`, yielding `diagnostic_evidence_unavailable`.
+- The explicitly supported internal `AssertionError` yields the distinct
+  `diagnostic_internal_unavailable`, never an ordinary evidence-failure signal.
+- The separate logger boundary catches only `OSError` and the existing tested
+  `RuntimeError`, then attempts one fixed `diagnostic_emission_unavailable`
+  line directly on stderr. That fallback catches only `OSError`.
 
-From `batch-runner/`, only
-`tests/test_codex_budget_pilot_ledger_notes.py` was selected. The first run at
-`53c541cbe03c4579c6e63c75cee05e1a0f754bec` returned **31 failed in 53.31s**,
-exit 1. Seventeen cases lacked a test-owned `GDPVAL_CODEX_RUN_ROOT` after
-credentials and the user environment were removed. Fourteen cases cleared
-their synthetic deliverable list while leaving the reused success fixture's
-test-owned file in that tree. These were new-fixture errors before the intended
-publication assertions, not additional live failures.
+All unavailable signals use `authoritative=false` and contain no exception
+type, text, arguments, private values or partially validated bindings. There
+is no category retry or recursive logging. Known I/O failures at both sinks
+leave the finalized completion and original exit unchanged, but delivery is
+best effort and is not guaranteed. Other programming faults are outside these
+handlers; they are not silently normalized into evidence unavailability.
+This is not a promise to contain every arbitrary exception. None of these
+signals grants terminal, admission or publication authority. Success,
+plan/input-only and already-finalized cases retain their existing silence.
 
-After setting the isolated synthetic run root and making the failed-result
-fixture's file tree agree with its declared files, the same selector returned
-**31 passed in 68.87s**, exit 0, at tested SHA
-`14bcae565a1b2212f3a0405d2ddf90f37e55d4cb`. Production code did not change
-between these runs. Only completion records changed after the passing snapshot.
+A recorded category is not proof of the child's underlying cause. No error
+body, prompt, payload, token, URL, path, note, native log or stack trace enters
+the line. There is no new artifact, workflow input, completion-schema version,
+experiment axis or publication authority. Failed status/reason, partial usage,
+cost and immutable result/ledger bytes remain unchanged. Neither historical
+missing payload is diagnosed or recovered, and the ledger-note repair is not
+evidence that native execution now succeeds.
 
-Both runs used the existing SDK-capable Python 3.10.12 interpreter, `env -i`,
-HF/data/transformer offline defaults, disabled plugin autoload and a 240-second
-timeout with a 10-second termination grace. The passing pytest invocation used
-`-q -o addopts= -p no:cacheprovider --tb=short --maxfail=1` and retained a private
-JUnit report. No prior 35/25/8-case family or full suite was rerun.
+### Focused offline validation
 
-The selector uses real Codex reservation, settlement and abandonment callers,
-genuine CostReceiptLedger SQLite/export serialization, canonical compiler, deadline
-persistence, byte checks, completion projection and publisher validation.
-Runtime/model observations, deliverables and HF transport are synthetic; native
-processes, credentials and network operations are forbidden. Coverage includes
-successful and failed turns with usage, a failure without usage, deadline refusal
-before a turn, legacy turn-start failure, ordinary strict-code notes, and refusal
-of unknown prose, synthetic tokens, URLs, paths and control characters. The
-tests also retain other-field/schema, byte identity, hash, token-count, amount
-and recorded-accounting failures. Fake publication preserves original ledger
-and result bytes, actual fake returned commit binding, partial receipt identity
-and failed status. It is not evidence of a live write, cleanup, invoice or grade.
+At tested SHA `14b44aa2e04d018c27d41d9be01c8d6ecf1e9895`, one invocation from
+`batch-runner/` ran only these selectors:
+
+- `tests/test_codex_budget_pilot_failure_category.py::test_diagnostic_rechecks_bytes_and_owned_cleanup_without_rewriting_completion[bytes]`
+- `tests/test_codex_budget_pilot_failure_category.py::test_diagnostic_rechecks_bytes_and_owned_cleanup_without_rewriting_completion[log_io]`
+- `tests/test_codex_budget_pilot_failure_category.py::test_diagnostic_rechecks_bytes_and_owned_cleanup_without_rewriting_completion[unexpected]`
+
+Result: **3 passed in 20.15s**, exit 0. The existing unexpected-error case
+injects `AssertionError` with a private canary into diagnostic projection.
+The logging case retains its private-canary `RuntimeError`. These are fake
+failure boundaries, not observed live errors. Each case checks that no trusted
+category is emitted, the evidence/internal/emission signals stay distinct,
+no private canary appears in captured logs/stdout/stderr, finalized completion
+bytes are identical and the original exit remains 1. The byte case still
+changes the already-bound result after completion publication to exercise the
+real read/hash refusal. Partial accounting remains unchanged.
+
+The invocation used the existing Python 3.10.12 interpreter, credential-free
+`env -i`, HF/data/transformer offline flags, disabled plugin autoload,
+`-q -o addopts= -p no:cacheprovider --tb=short --maxfail=1`, a private JUnit report
+and a 120-second timeout with a 10-second termination grace. No dependency was
+installed. The existing real producer/serialization/validation and fake
+runtime/transport boundaries described below remain in use. Only completion
+records changed after this tested snapshot. No 27/31/35/25/8-case family, full
+suite or live diagnostic was rerun.
+
+### Prior diagnostic validation, not rerun
+
+The same three-node selection previously returned **3 passed in 22.91s**,
+exit 0, at `249d733f96941ce00269e3e19f8f43d613b8636c`. That observation covered
+the earlier fixed signals with catch-all handling, not this narrowed revision.
+Only completion records changed between that snapshot and
+`9aa4b617f241d39df63f3fbf2ef2d2b51cd0a0a6`. It remains separate from this
+invocation and the original full-family result below.
+
+The original selector was
+`tests/test_codex_budget_pilot_failure_category.py`. At tested SHA
+`48868b2af70860285d8611b6a22d0e50c211b0aa`, it returned **27 passed in 178.61s**,
+exit 0. Only completion records changed between that passing snapshot and
+`f33bcd7dfbdbf579ecd7d995ac0ed493c2233afb`. That earlier invocation used the
+existing Python 3.10.12 interpreter, credential-free
+`env -i`, HF/data/transformer offline flags, disabled plugin autoload,
+`-q -o addopts= -p no:cacheprovider --tb=short --maxfail=1`, a private JUnit report
+and a 240-second timeout with a 10-second termination grace.
+
+Compiler, dispatcher, deadline persistence, Codex category production, Step2
+serialization/projection, CostReceiptLedger export, fingerprint/byte validation,
+cleanup validation and CLI completion/logging are real. Input provenance,
+reviewed-source/host-version admission, runtime observations and child transport
+are explicit test doubles. Network, auth, native launch and HF publication are
+forbidden. The SDK is not installed in this local interpreter; the test's fake
+host-version metadata is not native-install or execution-capability evidence.
+
+Coverage includes actual producer `rate_limited` and `runtime_start_failed`
+branches, stopped output, missing/unknown/private-looking/nonstring categories,
+hash/cell/run mismatch, missing/malformed output, nonzero exit with a successful
+row, no diagnostic on success, changed result bytes, idle/foreign/unreaped
+owners, logging failure, plan/input-only modes and later publisher refusal.
+The public completion schema, original partial accounting and bytes are checked
+unchanged. Revalidation and same-host final-state inspection neither repeat the
+diagnostic nor invoke another child. No prior 31/35/25/8-case family or full
+suite was rerun; no live cleanup, provider cause, write, invoice or grade is
+established by these synthetic tests.
+
+Earlier attempts of this same selector remain separate fixture evidence:
+
+- `e9a1dc355c7e8b40f316e5fceb96074ffbe5e0c8`: **1 setup error in 1.68s**, exit 1,
+  before the first case, because a reused older guard imported the absent
+  `openai_codex` SDK merely to forbid its constructors.
+- `8b92c0e1b01b1aeed17ecd0ae00cb16a60c6245b`: **1 failed in 8.88s**, exit 1.
+  The fake turn observation used an unsupported constructor argument and did
+  not reach the intended producer-category assertion.
+- `6b215335bc558aa4232b3e54e3eca58c93bc668a`: **1 failed in 9.27s**, exit 1.
+  An explicit producer-reached assertion exposed that same fixture error:
+  HTTP status belongs in structured turn-error metadata, not a
+  `TurnObservation` constructor argument.
+
+The fixture now uses the existing SDK-independent boundary-guard convention
+and the correct fake turn-error shape. No production code changed between
+these attempts and the passing snapshot, and no dependency was installed.
+
+### Prior ledger-note evidence, not rerun
+
+The #673 repair accepts only the three exact nonsecret Codex note literals
+alongside null/strict-code notes at both publisher checks, without rewriting
+ledger bytes. That confirmed source mismatch also blocked otherwise-safe
+successful output retention; it did not identify either historical child cause.
+Its selector `tests/test_codex_budget_pilot_ledger_notes.py` remains **31 passed
+in 68.87s** at `14bcae565a1b2212f3a0405d2ddf90f37e55d4cb`, exit 0, separately
+from the initial **31 failed in 53.31s** at
+`53c541cbe03c4579c6e63c75cee05e1a0f754bec`, exit 1. Those initial fixture
+failures comprised 17 cases missing a test-owned `GDPVAL_CODEX_RUN_ROOT` and
+14 cases whose empty deliverable list disagreed with the test-owned file tree.
+They were not additional live failures. This task did not repeat those tests.
 
 ### Two independent admitted failures remain frozen
 
@@ -129,7 +227,7 @@ either existing admission.
 
 ### Remaining authority and unchanged controls
 
-New-head review and CI, followed by an explicit leader decision about any
+New-head delta review and CI, followed by an explicit leader decision about any
 future run, remain. There is no epoch03, rerun, next-cell, grading or source
 reseal authorization. Neither target/ref was recreated; neither existing claim,
 clock or receipt was adopted, rewritten, replayed or deleted. The code retains
@@ -141,12 +239,12 @@ automatic monetary cutoff, epoch/storage framework or model/grader change was
 introduced. No live HF/model/grader or Azure-management request, workflow
 dispatch, source reseal or CI polling occurred.
 
-The full skill catalog was checked once. Experiment-design kept the admitted
-sources and budget controls immutable. Experiment-report-en preserved partial
-usage/cost units and the distinction between the source mismatch, synthetic
-validation and unavailable live evidence; im-not-ai-en copyedited only the
-bounded English records without changing those claims. No UI work or broader
-public-repository handoff required UI or repo-readiness guidance. Earlier
+The full skill catalog was checked once. Experiment-report-en preserved partial
+usage/cost units and the distinction between recorded categories, synthetic
+validation and unavailable historical causes; im-not-ai-en copyedited only the
+bounded English records without changing those claims. No new experiment,
+configuration axis, UI work or broader public-repository handoff required
+experiment-design, UI or repo-readiness guidance. Earlier
 records below remain unchanged historical observations.
 
 ## PROJECT5-REGISTRATION-FIXTURE-1715
