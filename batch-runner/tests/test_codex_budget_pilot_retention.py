@@ -91,7 +91,7 @@ class MemoryHF:
     def repo_info(self, **kwargs):
         self.record("metadata", kwargs)
         assert 0 < kwargs["timeout"] <= output.REQUEST_SECONDS
-        revision = self.head if kwargs["revision"] == "main" else kwargs["revision"]
+        revision = self.head if kwargs["revision"] == retention.BRANCH else kwargs["revision"]
         assert revision in self.trees
         return SimpleNamespace(id=self.repo if self.id_matches else "synthetic-foreign/target", private=self.private, sha=revision)
 
@@ -126,7 +126,7 @@ class MemoryHF:
 
     def create_commit(self, **kwargs):
         self.record("commit", kwargs)
-        assert kwargs["revision"] == "main" and kwargs["num_threads"] == 1
+        assert kwargs["revision"] == retention.BRANCH and kwargs["num_threads"] == 1
         assert kwargs["run_as_future"] is False and kwargs["create_pr"] is False
         records = {}
         for operation in kwargs["operations"]:

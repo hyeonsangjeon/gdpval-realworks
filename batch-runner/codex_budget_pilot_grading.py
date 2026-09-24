@@ -1,8 +1,9 @@
 """One retained pilot cell, the fixed Step8 grader, and a separate private branch.
 
 Plan is local and free of credential lookup. Live phases are explicit, one-use
-host operations; they are not a launcher or permission grant. Inference main is
-read-only here. A publication-derived identity is not independent provider
+host operations; they are not a launcher or permission grant. Grading never
+advances the inference ref; explicit setup creates only one selected fixed ref.
+A publication-derived identity is not independent provider
 authentication of the original inputs. No inference completion-v1 is emitted.
 """
 
@@ -31,7 +32,13 @@ import gpt54_v2_grading_input as primitives
 from core.hf_publication import _PublicationFile, _publication_additions, _remote_download_file
 from core.result_fingerprint import validate_inference_result_fingerprint
 
-BRANCH = "pilot-grades-20260923"
+BRANCH = ci.GRADING_BRANCH
+BRANCH_ROUTES = {
+    "pilot/branch-setup": ("setup", BRANCH),
+    "pilot/branch-inspect": ("inspect", BRANCH),
+    "pilot/inference-branch-setup": ("setup", retained.BRANCH),
+    "pilot/inference-branch-inspect": ("inspect", retained.BRANCH),
+}
 WORKFLOW = ".github/workflows/grade-run.yml"
 CLAIM_FORMAT = "codex-pilot-grade-claim-v1"
 RESULT_FORMAT = "codex-pilot-grade-terminal-v1"
@@ -93,9 +100,10 @@ class Context:
 
 def compile_request(selector: str, source: str, terminal: str = "") -> Context | None:
     retained._target()  # Fixed tracked namespace/fingerprint, never an endpoint input.
+    ci._registration_bytes()
     require(output._hash(source, 40), "reviewed_grading_source_required")
-    if selector in {"pilot/branch-setup", "pilot/branch-inspect"}:
-        require(terminal == "", "branch_setup_has_no_inference_revision" if selector == "pilot/branch-setup"
+    if selector in BRANCH_ROUTES:
+        require(terminal == "", "branch_setup_has_no_inference_revision" if BRANCH_ROUTES[selector][0] == "setup"
                 else "branch_inspection_has_no_inference_revision")
         return None
     require(selector.startswith("pilot/"), "canonical_pilot_selector_required")
@@ -159,6 +167,7 @@ def _record(path: Path, value: dict) -> None:
 
 
 def _paths(cell: dict) -> tuple[str, str]:
+    require(cell["run_id"] == ci.CAMPAIGN + "__" + cell["cell_id"], "retained_epoch_mismatch")
     prefix = f"cell-grades/{ci.CAMPAIGN}/{cell['cell_id']}"
     return prefix + "/claim.json", prefix + "/terminal.json"
 
@@ -172,8 +181,11 @@ def _failed(observed: dict, error: BaseException) -> None:
     observed["reason"], observed["http_status"] = output._error_context(error)
 
 
-def _inspection_observation() -> dict:
-    return {"role": "fixed_private_pilot_grading_branch_inspection", "repository_name_sha256": retained.TARGET_SHA256,
+def _inspection_observation(branch: str = BRANCH) -> dict:
+    require(branch in {BRANCH, retained.BRANCH}, "fixed_epoch_branch_required")
+    role = "grading" if branch == BRANCH else "inference"
+    return {"role": f"fixed_private_pilot_{role}_branch_inspection", "repository_name_sha256": retained.TARGET_SHA256,
+            "campaign_id": ci.CAMPAIGN, "branch": branch,
             "outcome": "plan_only", "stage": "plan", "reason": None, "http_status": None,
             "branch_state": "inaccessible_or_unknown", "head": None, "matches_bootstrap": None,
             "exact_identity_match": False, "private": None, "bootstrap_access_verified": False,
@@ -188,13 +200,14 @@ def _inspection_failed(observed: dict, reason: str) -> None:
     observed["outcome"] = "blocked_drift" if reason in _INSPECTION_DRIFT else "refused"
 
 
-def inspect_branch(source: str) -> dict:
+def inspect_branch(source: str, *, branch: str = BRANCH) -> dict:
     """Two bounded metadata reads, never setup replay or historical acknowledgment.
 
     No grading root or receipt is opened. These responses are not an atomic
     snapshot, write permission, grading readiness, or authority to create/reset.
     """
-    observed = _inspection_observation()
+    observed = _inspection_observation(branch)
+    observed["source_sha"] = source if output._hash(source, 40) else None
     observed.update(outcome="refused", stage="inspection_preflight")
     try:
         _ci_authority(source)
@@ -205,7 +218,7 @@ def inspect_branch(source: str) -> dict:
         from codex_ci_input_intake import _hf_environment
 
         with output._time_bound(output.TARGET_CHECK_SECONDS) as deadline, _hf_environment(online=True):
-            for revision, stage in ((retained.BOOTSTRAP, "bootstrap_metadata"), (BRANCH, "branch_metadata")):
+            for revision, stage in ((retained.BOOTSTRAP, "bootstrap_metadata"), (branch, "branch_metadata")):
                 observed.update(stage=stage, http_status=None)
                 with output._hf_client(token, deadline, metadata_repo=repo, metadata_revision=revision,
                                        observation=observed) as api:
@@ -238,38 +251,50 @@ def inspect_branch(source: str) -> dict:
     return observed
 
 
-def setup(root: Path, source: str, *, _test_api=None) -> dict:
+def setup(root: Path, source: str, *, branch: str = BRANCH, _test_api=None) -> dict:
     """Explicit branch creation only, never implicit in preparation/grading."""
+    require(branch in {BRANCH, retained.BRANCH}, "fixed_epoch_branch_required")
     github_run = _ci_authority(source)
     result = _observation(stage="branch_setup")
     with ExitStack() as stack:
         with _entry_boundary("branch_root"):
             root = _root(root, new=True)
             stack.enter_context(_lock(root))
+        repo = retained._target()
+        reservation = {"repository_name_sha256": retained.TARGET_SHA256, "campaign_id": ci.CAMPAIGN,
+                       "branch": branch, "bootstrap": retained.BOOTSTRAP, "source_sha": source,
+                       "github_run": github_run}
+        observed = {"stage": "bootstrap_metadata", "http_status": None, "responses": []}
         try:
-            with retained._session(_test_api) as (api, token, deadline):
-                repo = retained._target()
+            with retained._session(_test_api, _branch_setup={"setup_repo": repo, "setup_branch": branch,
+                    "setup_reservation": root / "branch-reserved.json",
+                    "setup_identity": pilot._identity(retained._encoded(reservation)),
+                    "observation": observed}) as (api, token, deadline):
                 require(output._metadata(api, repo, retained.BOOTSTRAP, token, deadline)["sha"]
                         == retained.BOOTSTRAP, "recorded_bootstrap_required")
+                observed.update(stage="branch_absence", http_status=None)
                 try:
-                    output._metadata(api, repo, BRANCH, token, deadline)
+                    output._metadata(api, repo, branch, token, deadline)
                 except output.OutputPublicationRefused as error:
-                    require(error.http_status == 404, "grading_branch_absence_not_established")
+                    require(str(error) == "hf_revision_not_found" and error.http_status == 404,
+                            "grading_branch_absence_not_established")
                 else:
                     raise output.OutputPublicationRefused("grading_branch_already_exists")
-                _record(root / "branch-reserved.json", {
-                    "repository_name_sha256": retained.TARGET_SHA256, "branch": BRANCH,
-                    "bootstrap": retained.BOOTSTRAP, "source_sha": source, "github_run": github_run,
-                })
+                _record(root / "branch-reserved.json", reservation)
+                observed.update(stage="branch_create", http_status=None)
                 output._remaining(deadline)
-                api.create_branch(repo_id=repo, repo_type="dataset", branch=BRANCH,
+                api.create_branch(repo_id=repo, repo_type="dataset", branch=branch,
                                   revision=retained.BOOTSTRAP, exist_ok=False, token=token)
-                head = output._metadata(api, repo, BRANCH, token, deadline)["sha"]
+                observed.update(stage="branch_readback", http_status=None)
+                head = output._metadata(api, repo, branch, token, deadline)["sha"]
                 result["returned_commit"] = head
                 require(head == retained.BOOTSTRAP, "grading_branch_seed_mismatch")
-                result.update(outcome="acknowledged", stage="branch_verified")
+                result.update(outcome="acknowledged", stage="branch_verified", http_status=observed["http_status"])
         except (Exception, KeyboardInterrupt) as error:
             _failed(result, error)
+            result["stage"] = observed["stage"]
+            result["http_status"] = observed["http_status"] if observed["http_status"] is not None else result["http_status"]
+        result.update(campaign_id=ci.CAMPAIGN, branch=branch, source_sha=source, responses=observed["responses"])
         with _entry_boundary("branch_receipt"):
             _record(root / "branch-receipt.json", result)
     return result
@@ -468,6 +493,7 @@ def prepare(context: Context, root: Path, *, _test_api=None, _test_transport=Non
             evidence = _retained_input(context, api, repo, cache, token, deadline)
             manifest = evidence["manifest"]
             prepared = {"cell_id": context.cell["cell_id"], "source_sha": context.plan["reviewed_source_sha"],
+                "campaign_id": ci.CAMPAIGN, "inference_branch": retained.BRANCH, "grading_branch": BRANCH,
                 "terminal_revision": context.terminal_revision, "evidence": evidence,
                 "proof_boundary": PROOF, "grading_state": "UNRUN", "judge_ready": False}
             if "bound_inference_result" in manifest["missing"]:
@@ -526,6 +552,8 @@ def prepare(context: Context, root: Path, *, _test_api=None, _test_transport=Non
 def _ready(context: Context, root: Path) -> dict:
     prepared = retained._read(root / "prepared.json")
     require(prepared["cell_id"] == context.cell["cell_id"]
+            and prepared["campaign_id"] == ci.CAMPAIGN
+            and prepared["inference_branch"] == retained.BRANCH and prepared["grading_branch"] == BRANCH
             and prepared["source_sha"] == context.plan["reviewed_source_sha"]
             and prepared["terminal_revision"] == context.terminal_revision
             and prepared["proof_boundary"] == PROOF and prepared["grading_state"] == "UNRUN"
@@ -540,9 +568,10 @@ def _ready(context: Context, root: Path) -> dict:
 
 
 def _binding(context: Context, prepared: dict, run: dict) -> dict:
+    require(context.plan["run_id"] == ci.CAMPAIGN, "retained_epoch_mismatch")
     evidence = prepared["evidence"]
     return {
-        "repository_name_sha256": retained.TARGET_SHA256, "branch": BRANCH,
+        "repository_name_sha256": retained.TARGET_SHA256, "branch": BRANCH, "inference_branch": retained.BRANCH,
         "campaign_id": ci.CAMPAIGN, "cell_id": context.cell["cell_id"], "run_id": context.cell["run_id"],
         "task_id": context.cell["task_id"], "source_sha": context.plan["reviewed_source_sha"],
         "config_sha256": context.cell["config_sha256"], "order_sha256": pilot._digest(context.plan["order"]),
@@ -683,7 +712,7 @@ def _absent(api, repo: str, revision: str, cell: dict, token: str, deadline: flo
 
 
 def _commit(api, repo: str, parent: str, files: dict[str, bytes], token: str, deadline: float, observed: dict) -> str:
-    """One add-only CAS, ALWAYS the fixed grading branch, NEVER inference main."""
+    """One add-only CAS on the fixed grading ref, never inference or dataset main."""
     staged = tuple(_PublicationFile(name, io.BytesIO(data), len(data), hashlib.sha256(data).hexdigest())
                    for name, data in sorted(files.items()))
     try:
@@ -994,21 +1023,23 @@ def main(argv=None, *, _test_api=None, _test_transport=None) -> int:
         args = parser.parse_args(argv)
         _workflow_inputs()
         context = compile_request(args.selector, args.reviewed_source_sha, args.terminal_revision)
-        reserved = {"pilot/branch-setup": {"plan", "setup"}, "pilot/branch-inspect": {"plan", "inspect"}}
-        require(args.phase in reserved[args.selector] if args.selector in reserved
+        reserved = BRANCH_ROUTES.get(args.selector)
+        require(args.phase in {"plan", reserved[0]} if reserved is not None
                 else args.phase not in {"setup", "inspect"}, "pilot_grade_mode_conflict")
         if args.phase != "plan":
             with _entry_boundary("source_preflight"):
                 source_plan, source_parent, _ = pilot.compile_pilot(ci.CAMPAIGN, args.reviewed_source_sha)
                 (_test_transport or pilot.LocalTransport()).require_source(source_plan, source_parent)
-        if args.selector == "pilot/branch-inspect":
-            observed = _inspection_observation() if args.phase == "plan" else inspect_branch(args.reviewed_source_sha)
+        if reserved is not None and reserved[0] == "inspect":
+            observed = (_inspection_observation(reserved[1]) if args.phase == "plan"
+                        else inspect_branch(args.reviewed_source_sha, branch=reserved[1]))
+            observed["source_sha"] = args.reviewed_source_sha if output._hash(args.reviewed_source_sha, 40) else None
             print(pilot._canonical_json(observed))
             return 0 if observed["outcome"] in {"plan_only", "observed"} else 2
         observed = _observation("plan_only", stage="plan")
         ready = False
         if args.phase == "setup":
-            observed = setup(args.root, args.reviewed_source_sha, _test_api=_test_api)
+            observed = setup(args.root, args.reviewed_source_sha, branch=reserved[1], _test_api=_test_api)
         elif args.phase == "prepare":
             prepared = prepare(context, args.root, _test_api=_test_api, _test_transport=_test_transport)
             ready = prepared["judge_ready"]
@@ -1019,10 +1050,14 @@ def main(argv=None, *, _test_api=None, _test_transport=None) -> int:
         elif args.phase in {"claim", "publish", "reconcile"}:
             observed = {"claim": claim, "publish": publish, "reconcile": reconcile}[args.phase](context, args.root, _test_api=_test_api)
         public = {"role": "fixed_private_pilot_grading", "repository_name_sha256": retained.TARGET_SHA256,
+            "campaign_id": ci.CAMPAIGN, "source_sha": args.reviewed_source_sha,
+            "branch": BRANCH if reserved is None else reserved[1], "inference_branch": retained.BRANCH,
             "cell_id": None if context is None else context.cell["cell_id"], "judge_ready": ready,
             **{key: observed[key] for key in ("outcome", "stage", "reason", "http_status")},
             "inference_requested": False, "invoice_complete": False, "http_request_count": None,
             "judge_entry_requested": args.phase == "judge", "automatic_retry": False}
+        if reserved is not None:
+            public.update(returned_commit=observed.get("returned_commit"), grade_success=False, model_requested=False)
         print(pilot._canonical_json(public))
         if args.phase == "prepare" and os.environ.get("GITHUB_OUTPUT"):
             with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as stream:
@@ -1046,8 +1081,9 @@ def main(argv=None, *, _test_api=None, _test_transport=None) -> int:
             reason, status = output._error_context(error)
             if reason == "hf_operation_failed":
                 reason = "grading_contract_refused"
-        if args is not None and args.selector == "pilot/branch-inspect":
-            observed = _inspection_observation()
+        if args is not None and args.selector in BRANCH_ROUTES and BRANCH_ROUTES[args.selector][0] == "inspect":
+            observed = _inspection_observation(BRANCH_ROUTES[args.selector][1])
+            observed["source_sha"] = args.reviewed_source_sha if output._hash(args.reviewed_source_sha, 40) else None
             observed["stage"] = stage or "inspection_preflight"
             _inspection_failed(observed, reason)
             print(pilot._canonical_json(observed), file=sys.stderr)

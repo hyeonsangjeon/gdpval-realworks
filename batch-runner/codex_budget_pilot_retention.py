@@ -25,8 +25,9 @@ import codex_budget_pilot_output as output
 from core.hf_publication import _PublicationFile, _publication_additions, _remote_download_file
 from core.inference_manifest import canonical_deliverable_path
 
-TARGET_SHA256 = "a13dedada5465377761961d050e021a4db8e44d6284179a9ce40b562e4396a44"
-BOOTSTRAP = "bfc7ae01ed14490817ceb7cb406adcb9bb95f557"
+TARGET_SHA256 = ci.STORAGE["repository_name_sha256"]
+BOOTSTRAP = ci.STORAGE["bootstrap"]
+BRANCH = ci.INFERENCE_BRANCH
 CLAIM_FORMAT = "codex-ci-cell-admission-v1"
 TERMINAL_FORMAT = "codex-ci-cell-terminal-v1"
 ADMISSION_RESERVED = "admission-reserved.json"
@@ -64,12 +65,15 @@ def _target() -> str:
 
 
 def _paths(cell: dict) -> tuple[str, str, str]:
+    require(cell["run_id"] == ci.CAMPAIGN + "__" + cell["cell_id"], "retained_epoch_mismatch")
     prefix = f"cell-claims/{ci.CAMPAIGN}/{cell['cell_id']}"
     return prefix + "/admission.json", prefix + "/terminal.json", f"cell-outputs/{ci.CAMPAIGN}/{cell['cell_id']}"
 
 
 def _binding(plan: dict, cell: dict, inputs: dict, *, host: dict | None = None,
              run: dict | None = None) -> dict:
+    require(plan["run_id"] == ci.CAMPAIGN and cell["run_id"] == ci.CAMPAIGN + "__" + cell["cell_id"],
+            "retained_epoch_mismatch")
     host = plan["ci"]["host"] if host is None else host
     run = {"id": os.environ.get("GITHUB_RUN_ID"), "job": os.environ.get("GITHUB_JOB"),
            "attempt": 1} if run is None else run
@@ -86,7 +90,7 @@ def _binding(plan: dict, cell: dict, inputs: dict, *, host: dict | None = None,
     # Per-job instance hashes intentionally differ. Reconstruct that writer's
     # own plan binding, never require its raw plan hash to equal the next job's.
     writer_plan = {**plan, "ci": {**plan["ci"], "host": host, "selected_cell_id": cell["cell_id"]}}
-    return {"repository_name_sha256": TARGET_SHA256, "campaign_id": ci.CAMPAIGN,
+    return {"repository_name_sha256": TARGET_SHA256, "campaign_id": ci.CAMPAIGN, "inference_branch": BRANCH,
             "cell_id": cell["cell_id"], "run_id": cell["run_id"], "task_id": cell["task_id"],
             "ordinal": plan["order"].index(cell["cell_id"]), "source_sha": plan["reviewed_source_sha"],
             "config_sha256": cell["config_sha256"], "plan_sha256": pilot._digest(writer_plan),
@@ -121,7 +125,7 @@ def _lock(root: Path):
 
 
 @contextmanager
-def _session(api, *, response_bytes_limit: int | None = None):
+def _session(api, *, response_bytes_limit: int | None = None, _branch_setup: dict | None = None):
     token = os.environ.get("HF_TOKEN", "")
     require(bool(token) and len(token) <= 4096 and all(33 <= ord(char) <= 126 for char in token),
             "explicit_hf_token_required")
@@ -129,7 +133,8 @@ def _session(api, *, response_bytes_limit: int | None = None):
 
     with output._time_bound() as deadline, _hf_environment(online=True):
         with (nullcontext(api) if api is not None else output._hf_client(
-                token, deadline, response_bytes_limit=response_bytes_limit)) as client:
+                token, deadline, response_bytes_limit=response_bytes_limit,
+                **({} if _branch_setup is None else _branch_setup))) as client:
             yield client, token, deadline
 
 
@@ -254,6 +259,8 @@ def _manifest(value: dict, completed: dict, cell: dict) -> None:
     expected = {key: completed[key] for key in fields}
     expected.update(format=output.FORMAT, grade_ready=False, grading_launched=False,
                     accounting="missing" if completed["receipt"] is None else completed["receipt"]["status"])
+    if "inference_branch" in value:
+        expected["inference_branch"] = BRANCH
     require(set(value) == set(expected) | {"files", "missing"} | ({"withheld"} if "withheld" in value else set())
             and all(value[key] == item for key, item in expected.items()), "terminal_manifest_binding_mismatch")
     _encoded(value)  # Apply the same bounded control-record serialization.
@@ -328,10 +335,11 @@ def _terminal(api, repo: str, head: str, plan: dict, cell: dict, inputs: dict,
     """
     claim_path, terminal_path, prefix = _paths(cell)
     terminal, terminal_bytes = _control(api, repo, head, terminal_path, cache, token, deadline, written_at=head)
-    require(set(terminal) == {"format", "repository_name_sha256", "claim_commit", "claim_identity",
+    require(set(terminal) == {"format", "repository_name_sha256", "inference_branch", "claim_commit", "claim_identity",
         "output_commit", "manifest_identity", "publication_receipt_sha256", "publication_acknowledged",
         "output_objects", "completion"} and terminal["format"] == TERMINAL_FORMAT
         and terminal["repository_name_sha256"] == TARGET_SHA256
+        and terminal["inference_branch"] == BRANCH
         and terminal["publication_acknowledged"] is True
         and output._hash(terminal["publication_receipt_sha256"])
         and all(output._hash(terminal[key], 40) for key in ("claim_commit", "output_commit"))
@@ -347,6 +355,7 @@ def _terminal(api, repo: str, head: str, plan: dict, cell: dict, inputs: dict,
     manifest, manifest_bytes = _control(api, repo, terminal["output_commit"], manifest_path, cache, token, deadline,
         expected=terminal["manifest_identity"], written_at=terminal["output_commit"])
     _manifest(manifest, completed, cell)
+    require(manifest.get("inference_branch") == BRANCH, "terminal_inference_branch_mismatch")
     expected = {prefix + "/" + row["path"]: {key: row[key] for key in ("size", "sha256")} for row in manifest["files"]}
     expected[manifest_path] = pilot._identity(manifest_bytes)
     objects = terminal["output_objects"]
@@ -374,7 +383,7 @@ def _commit(api, repo: str, parent: str, path: str, value: dict, cache: Path, to
     try:
         output._remaining(deadline)
         operations = _publication_additions((staged,))
-        response = api.create_commit(repo_id=repo, repo_type="dataset", revision="main", token=token,
+        response = api.create_commit(repo_id=repo, repo_type="dataset", revision=BRANCH, token=token,
             parent_commit=parent, operations=operations, commit_message="Record one private pilot cell boundary",
             num_threads=1, run_as_future=False, create_pr=False)
         commit = getattr(response, "oid", None)
@@ -424,7 +433,7 @@ def admit(plan: dict, cell: dict, root: Path, *, _test_api=None) -> dict:
             cache = cell_root / "admission-readback"
             cache.mkdir(mode=0o700)
             with _session(_test_api) as (api, token, deadline):
-                head = output._metadata(api, repo, "main", token, deadline)["sha"]
+                head = output._metadata(api, repo, BRANCH, token, deadline)["sha"]
                 _absent(api, repo, head, cell, token, deadline)
                 predecessor = _predecessor(api, repo, head, plan, cell, inputs, cache, token, deadline)
                 if predecessor is not None:
@@ -452,6 +461,9 @@ def retain(plan: dict, cell: dict, root: Path, *, _test_api=None) -> dict:
     snapshot = output.prepare(root=root, campaign=ci.CAMPAIGN, cell_id=cell["cell_id"],
                               source_sha=plan["reviewed_source_sha"], config_sha=cell["config_sha256"],
                               _failure_metadata=True)
+    # Add only host storage provenance; the approved payload/withholding
+    # validator and all original bytes remain unchanged.
+    snapshot.manifest = {**snapshot.manifest, "inference_branch": BRANCH}
     with _lock(root):
         pilot._require_quiet_owner(root, plan)
         state = output._checkpoint(root / cell["roles"]["checkpoint"])
@@ -469,7 +481,7 @@ def retain(plan: dict, cell: dict, root: Path, *, _test_api=None) -> dict:
             cache.mkdir(mode=0o700)
             with _session(_test_api) as (api, token, deadline):
                 receipt = output.publish(snapshot, repo=repo, expected_parent=admission["returned_commit"],
-                    _test_api=api, _deadline=deadline, _token=token, _failure_metadata=True)
+                    _test_api=api, _deadline=deadline, _token=token, _failure_metadata=True, _retained_ref=True)
                 if receipt["outcome"] != "acknowledged":
                     raise output.OutputPublicationRefused("output_publication_not_acknowledged", receipt["http_status"])
                 require(_read(cell_root / output.RECEIPT) == receipt, "durable_publication_receipt_required")
@@ -487,11 +499,11 @@ def retain(plan: dict, cell: dict, root: Path, *, _test_api=None) -> dict:
                 manifest, _ = _control(api, repo, revision, prefix + "/" + output.MANIFEST, cache,
                                       token, deadline, expected=receipt["manifest"], written_at=revision)
                 require(manifest == snapshot.manifest, "published_manifest_mismatch")
-                require(output._metadata(api, repo, "main", token, deadline)["sha"] == revision,
+                require(output._metadata(api, repo, BRANCH, token, deadline)["sha"] == revision,
                         "terminal_parent_changed")
                 require(api.get_paths_info(repo_id=repo, repo_type="dataset", revision=revision,
                     paths=[terminal_path], token=token) == [], "terminal_already_exists")
-                terminal = {"format": TERMINAL_FORMAT, "repository_name_sha256": TARGET_SHA256,
+                terminal = {"format": TERMINAL_FORMAT, "repository_name_sha256": TARGET_SHA256, "inference_branch": BRANCH,
                     "claim_commit": admission["returned_commit"], "claim_identity": admission["claim_identity"],
                     "output_commit": revision, "manifest_identity": receipt["manifest"],
                     "publication_receipt_sha256": pilot._identity(_encoded(receipt))["sha256"],
@@ -527,6 +539,7 @@ def main(argv: list[str] | None = None, *, _test_api=None, _test_transport=None)
         # Private receipts/repository/path/file names never enter the public run
         # record. The existing CI completion-envelope schema is unchanged.
         print(pilot._canonical_json({"role": "selected_private_pilot_output", "repository_name_sha256": TARGET_SHA256,
+            "campaign_id": ci.CAMPAIGN, "source_sha": plan["reviewed_source_sha"], "inference_branch": BRANCH,
             "cell_id": cell["cell_id"], "ordinal": cell["index"],
             **{key: observed[key] for key in ("outcome", "stage", "reason", "http_status")},
             "model_requested": False, "grading_launched": False, "grade_ready": False}))

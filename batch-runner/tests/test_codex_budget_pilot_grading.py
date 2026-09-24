@@ -83,7 +83,7 @@ class GradeHF(MemoryHF):
             revision = self.head
         elif revision == connector.BRANCH:
             if revision not in self.branches:
-                raise output.OutputPublicationRefused("hf_http_failed", 404)
+                raise output.OutputPublicationRefused("hf_revision_not_found", 404)
             revision = self.branches[revision]
         if revision not in self.trees:
             raise output.OutputPublicationRefused("hf_http_failed", 404)
@@ -280,7 +280,8 @@ def _seed_outputs(case, tmp_path, *, failed=False, missing=False, ledger=True):
     fields = ("campaign_id", "cell_id", "source_sha", "config_sha256", "plan_sha256", "order_sha256",
               "verified_inputs_sha256", "host_policy_sha256", "status", "exit_code", "reason", "timeout", "cleanup_confirmed", "receipt")
     manifest = {key: completed[key] for key in fields}
-    manifest.update(format=output.FORMAT, grade_ready=False, grading_launched=False, accounting="missing",
+    manifest.update(format=output.FORMAT, inference_branch=retained.BRANCH,
+        grade_ready=False, grading_launched=False, accounting="missing",
         files=[{"role": roles[name], "path": name, **pilot._identity(data)} for name, data in sorted(files.items())],
         missing=(["bound_inference_result", "validated_deliverables", "bound_ledger_export"] if missing else
                  ["bound_ledger_export"] if not ledger else []) + ["usage"])
@@ -289,6 +290,7 @@ def _seed_outputs(case, tmp_path, *, failed=False, missing=False, ledger=True):
     remote = {prefix + "/" + name: data for name, data in files.items()}
     remote[prefix + "/" + output.MANIFEST] = retained._encoded(manifest)
     terminal = {"format": retained.TERMINAL_FORMAT, "repository_name_sha256": retained.TARGET_SHA256,
+        "inference_branch": retained.BRANCH,
         "claim_commit": CLAIM, "claim_identity": pilot._identity(retained._encoded(claim)),
         "output_commit": OUTPUT, "manifest_identity": pilot._identity(retained._encoded(manifest)),
         "publication_receipt_sha256": "7" * 64, "publication_acknowledged": True,
@@ -788,7 +790,8 @@ def test_workflow_isolates_private_pilot_from_legacy_publication_and_inference()
     assert len(token_steps) == 5
     assert all(any("--phase " + phase in step["run"] for phase in ("setup", "inspect", "prepare", "claim", "publish")) for step in token_steps)
     inspection = next(step for step in token_steps if "--phase inspect" in step["run"])
-    assert inspection["if"] == "inputs.experiment_yaml == 'pilot/branch-inspect'"
+    assert inspection["if"] == ("inputs.experiment_yaml == 'pilot/branch-inspect' || "
+                                "inputs.experiment_yaml == 'pilot/inference-branch-inspect'")
     assert all("inputs.experiment_yaml != 'pilot/branch-inspect'" in step["if"]
                for step in live["steps"] if step.get("id") == "pilot_input" or "preflight_grading_renderer.py" in step.get("run", ""))
     judge = next(step for step in live["steps"] if step.get("id") == "pilot_judge")

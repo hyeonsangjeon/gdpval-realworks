@@ -13,6 +13,57 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Prepare the closed independent epoch `budget_pilot_ci_20260924_02` from
+  `e23d8acc1d032b3e937ec099324e3221334c9b4b`, preserving the historical
+  registration and all old claims/worktrees. The leader supplied #671 review
+  `5300302955` at `2ff94450d52fb4b5c80cded3ba0505321bac3a2f` and all 9 checks
+  passed for the preceding withholding repair, not this new head. The bounded
+  pre-edit extreme-reasoner decision permits code/offline preparation only.
+  The existing private dataset fingerprint
+  `a13dedada5465377761961d050e021a4db8e44d6284179a9ce40b562e4396a44` and recorded
+  bootstrap `bfc7ae01ed14490817ceb7cb406adcb9bb95f557` are fixed. New inference
+  and grading refs are `pilot-inference-20260924-02` and
+  `pilot-grades-20260924-02`; their actual state was not observed here.
+  Reuse setup/inspection through fixed selectors, one ref per invocation with
+  its own no-clobber reservation/receipt. The real bounded HF transport permits
+  at most four setup requests and accepts absence only after verified private
+  bootstrap access and a genuine `RevisionNotFound`/404. Existing refs, generic
+  404s, redirects, identity/parent drift and ambiguous outcomes refuse without
+  recreation, adoption or automatic second-ref creation. Planning remains
+  offline; inspection remains read-only and cannot rewrite an earlier receipt.
+  Route inference admission, publication and terminal boundaries to the new
+  inference ref, and grading writes to the separate new grading ref. Bind
+  campaign/source/ref identities through the existing validators and provenance.
+  Dataset `main`, `pilot-grades-20260923` and old01 paths are not retained-route
+  write targets. Standalone publication keeps its default; approved payload
+  validation/withholding, private/CAS/cleanup gates, fixed grader/source/runtime
+  pins, workflow permissions and token isolation remain unchanged.
+  One new selector, `tests/test_codex_budget_pilot_epoch02.py`, returned
+  **34 passed, 1 failed in 80.16s**, exit 1, at
+  `63afe729b9edab8c59f888fc86c4b4b642999b71`. The new test used the raw input
+  checksum envelope instead of the validated payload. After a test-only reader
+  correction, only
+  `tests/test_codex_budget_pilot_epoch02.py::test_real_retention_predecessor_and_grading_cas_use_distinct_refs`
+  was rerun at `d514d811374d80bb7e14ad051e10a21e402c5575`: **1 passed in 27.90s**,
+  exit 0. This is split evidence, not a fresh 35-case pass. Compiler, byte,
+  deadline, CAS, terminal and grading-binding checks are real; source/runtime,
+  child/HF boundaries and outputs are synthetic. No judge or native-install
+  proof is claimed. The prior 25-pass family and full suite were not rerun.
+  Old01/source `2fe1c6925e6d76c03b85851046d52216bee74a16` remains frozen with
+  1 admitted failed/unretained A1 and 29 not run. Run `35954811341`, job
+  `107490761123`, and known partial cost **USD 0.175163** remain historical;
+  the estimate is null, `invoice_complete=false`, and the unsafe field/raw
+  files/current remote claim state remain unknown or unavailable. Proposed
+  new30 plus old1 would mean 31 admitted cells across two histories if later
+  authorized, not completion of the original30. The five tasks, ABC/CBA order,
+  GPT-5.4/direct-v1/xhigh, SDK 0.147.0, 180/30-minute limits, A4/B-C continuation,
+  C feedback, one inference slot, one fixed grade per eligible result and no
+  automatic monetary cutoff remain fixed. New-head review/CI, separately
+  authorized actual ref setup/readback and one common final source/cell binding,
+  live admission/publication, grading-host capability and all new30 results
+  remain. No live setup/inspection/execution, old-claim settlement, source reseal,
+  workflow dispatch, HF/model/grader/Azure operation or CI polling occurred.
+
 - Add the explicit `pilot/branch-inspect` selector and `inspect` phase on the
   existing #669 branch, starting at
   `685454f030a4128b39761402d69712bd8f705def`. Planning remains local, with no
@@ -52,6 +103,56 @@ entries land under a fresh dated heading the day they merge to `main`.
   dispatch, inference, grading or reseal occurred.
 
 ### Fixed
+
+- Repair only the grading-source test fixture after leader REQUEST-CHANGES
+  `5301707351` at `263ce086813afb8a251a39ab3cd05f7d28e98fdb`. Copy genuine parent
+  and closed epoch02 registration metadata into the temporary repository before
+  its synthetic Git commit, then rebind both module registration paths alongside
+  `pilot.ROOT` before compilation. Metadata bytes, strict registration/source
+  validation, real temporary-Git ownership checks and all assertions stay intact.
+  No production, workflow, pin, ownership or epoch/storage policy changed;
+  source approval `5301378872` remains scoped to that unchanged production.
+  The leader reported run `35970394062`, job `107538875886`, with **8 failed,
+  13820 passed, 61 skipped, 46 deselected in 2052.50s**; nine other checks
+  succeeded and deploy was skipped. The eight CLI cases stopped at the mixed
+  registration coordinates before their intended source/root/receipt boundaries.
+  One offline invocation of the four specified CLI selectors in
+  `tests/test_codex_budget_pilot_grading_source.py` returned **8 passed in 12.75s**,
+  exit 0, at `19280b44dad5e4842b681b32d38175ad5a40d7a1`. External operations are
+  fake or forbidden; the result does not establish live setup or native readiness.
+  No whole source, 35-case, 25-case, 2-case or full-suite family was rerun. Earlier
+  split observations and old01/source `2fe1c6925e6d76c03b85851046d52216bee74a16`,
+  its admitted claim, partial cost and unknown state remain unchanged. Epoch02
+  stays preparation-only. New-head delta review/CI and leader live-source,
+  actual bootstrap and cell authorization remain. No live HF/model/grader call,
+  workflow dispatch, reseal or CI polling occurred; only completion records
+  changed after testing.
+
+- Correct setup HTTP status attribution after leader REQUEST-CHANGES
+  `5301122695` at `0a863d91204554ecbed4dcc62cd4494bb52f6b2d`. Three existing
+  `grading.setup` transitions now clear the current status to null before the
+  next operation. Actual response statuses/history, phase attribution,
+  reservations, request counts, private/parent/role checks and no-replay guards
+  stay unchanged. The existing transport already resets on entry; this closes
+  the earlier operation-local refusal gap without changing transport or workflow
+  behavior. Null does not establish that remote mutation did not occur. The
+  existing extreme-reasoner approved only this bounded reporting change before
+  edits. At `4b6f196441b330ae4e177cfd7aeb29e2a3306d16`, one offline invocation of
+  `tests/test_codex_budget_pilot_epoch02.py::test_setup_refusals_keep_reservation_and_never_create_other_ref`
+  cases `[create_lost-3-True]` and `[readback_unavailable-4-True]` returned
+  **2 passed in 3.23s**, exit 0. These real CLI/SDK guards use fake HTTP responses.
+  They verify null status and exact prior-response history but do not demonstrate
+  a live stale-status event. The existing `create_parent` case received the same
+  assertions but was not run. Prior **34 passed, 1 failed in 80.16s** at
+  `63afe729b9edab8c59f888fc86c4b4b642999b71` and separate **1 passed in 27.90s** at
+  `d514d811374d80bb7e14ad051e10a21e402c5575` remain unchanged; no full family was
+  rerun. Old01/source `2fe1c6925e6d76c03b85851046d52216bee74a16`, its one admitted
+  failed/unretained A1, partial cost and unknown remote claim state remain frozen.
+  Proposed new30 remains independent, not completion of old01. New-head delta
+  review/CI and leader live-source, actual bootstrap and selected-cell
+  authorization remain. No live HF/setup/inspection/model/grader operation,
+  workflow dispatch, reseal or CI polling occurred. Only completion records
+  changed after the tested snapshot.
 
 - Add a retention-only metadata path for a finalized failed/stopped cell whose
   identity-bound result is refused with exactly `unsafe_result_fields`. After

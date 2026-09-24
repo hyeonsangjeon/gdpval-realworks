@@ -1,5 +1,257 @@
 # Latest task result
 
+## PROJECT5-REGISTRATION-FIXTURE-1715
+
+### Fixture-only registration correction
+
+Addressed leader REQUEST-CHANGES `5301707351` at
+`263ce086813afb8a251a39ab3cd05f7d28e98fdb` on the same #672 branch. Existing
+source approval `5301378872` remains scoped to unchanged production; it is not
+approval of the new test delta. No production code, registration metadata,
+source/runtime pins, workflow, ownership policy or existing assertion changed.
+
+The leader reported completed CI run `35970394062`, job `107538875886`:
+**8 failed, 13820 passed, 61 skipped, 46 deselected in 2052.50s**. Nine other
+checks succeeded, pytest failed and deploy was skipped. All eight failures were
+the four CLI selectors below, which returned `grading_contract_refused` with
+stage null before their intended boundary; fake branch creation was not reached.
+This supplied full-CI observation is separate from the local validation below.
+
+The fixture rebound `pilot.ROOT` without moving its import-time parent and CI
+registration paths. The real `ci._registration_bytes` validation could not
+compute `pilot.REGISTRATION.relative_to(pilot.ROOT)` in those mixed coordinates.
+The fixture now copies the genuine parent and closed epoch02 registration bytes
+into the temporary checkout before its synthetic Git commit, then binds both
+`pilot.REGISTRATION` and `ci.REGISTRATION` there before compiling the plan.
+Clean-source checks remain meaningful; registration validation is not stubbed.
+
+### One offline invocation, eight cases
+
+At tested SHA `19280b44dad5e4842b681b32d38175ad5a40d7a1`, one invocation from
+`batch-runner/` ran exactly these four selectors:
+
+- `tests/test_codex_budget_pilot_grading_source.py::test_cli_plan_does_not_run_source_preflight_or_setup`
+- `tests/test_codex_budget_pilot_grading_source.py::test_cli_source_refusal_has_closed_stage_before_local_or_remote_mutation`
+- `tests/test_codex_budget_pilot_grading_source.py::test_cli_root_refusal_is_before_session_and_retains_partial_local_state`
+- `tests/test_codex_budget_pilot_grading_source.py::test_cli_receipt_failure_preserves_reservation_and_unknown_mutation_without_replay`
+
+Result: **8 passed in 12.75s**, exit 0, using the existing Python 3.10.12
+interpreter, credential-free `env -i`, HF offline defaults and a 180-second
+timeout. Tests retain real temporary Git and its test-only different-owner
+switch, genuine registration/compiler/source checks, and forbidden auth, HF and
+runtime boundaries. Plan, source refusal, root refusal and receipt failure reach
+their intended assertions. Receipt cases use in-memory fake branch creation;
+no remote branch, actual ownership change or native execution is demonstrated.
+Only completion records changed after this tested snapshot.
+
+### Preserved history and remaining authority
+
+Earlier results remain separate: **34 passed, 1 failed in 80.16s** at
+`63afe729b9edab8c59f888fc86c4b4b642999b71`, **1 passed in 27.90s** at
+`d514d811374d80bb7e14ad051e10a21e402c5575`, and **2 passed in 3.23s** at
+`4b6f196441b330ae4e177cfd7aeb29e2a3306d16`. The whole source family, 35-case,
+25-case, 2-case and full-suite families were not rerun.
+
+Old01/source `2fe1c6925e6d76c03b85851046d52216bee74a16` and its admitted claim,
+partial accounting and unknown remote state remain frozen. Epoch02 and its
+proposed new30 remain preparation-only, not continuation of old01. New-head
+delta review and CI, then leader authorization of the exact live source,
+actual ref bootstrap and selected cell, remain. No live HF/model/grader or
+Azure-management operation, workflow dispatch, source reseal or CI polling
+occurred. Existing historical records below are unchanged.
+
+The full skill catalog was checked once. Experiment-report-en and im-not-ai-en
+kept the supplied CI failure, bounded local result and review scopes separate.
+No new experimental axis or UI work required design or UI skills.
+
+## PROJECT5-SETUP-HTTP-STATUS-1613
+
+### Setup status belongs to the current operation
+
+Addressed leader REQUEST-CHANGES `5301122695` at
+`0a863d91204554ecbed4dcc62cd4494bb52f6b2d` on the same #672 branch. The existing
+extreme-reasoner approved this bounded CI/HF reporting correction before edits;
+that decision is not approval of the resulting head.
+
+`grading.setup` now clears `http_status` to null at its existing
+`branch_absence`, `branch_create` and `branch_readback` transitions. The status
+stays null until that operation receives a response. Bootstrap already starts
+at null, and each real response remains in the `responses` list. Phase names,
+reservation order, operation counts, ambiguity/no-replay handling and all
+parent/role/private checks are unchanged. No workflow or HF transport changed.
+
+The source distinction is important: `_hf_client` already clears status when
+its transport is entered. The new resets also cover local refusals before that
+entry, including the pre-request deadline checks. The selected transport-failure
+tests preserve this contract; they do not demonstrate a live stale-status event.
+Null means no response observed for the current operation, not that no remote
+mutation occurred. A lost create response still leaves its reservation unresolved.
+
+### Two-case offline evidence
+
+At tested SHA `4b6f196441b330ae4e177cfd7aeb29e2a3306d16`, one invocation from
+`batch-runner/` ran only these exact nodes:
+
+- `tests/test_codex_budget_pilot_epoch02.py::test_setup_refusals_keep_reservation_and_never_create_other_ref[create_lost-3-True]`
+- `tests/test_codex_budget_pilot_epoch02.py::test_setup_refusals_keep_reservation_and_never_create_other_ref[readback_unavailable-4-True]`
+
+Result: **2 passed in 3.23s**, exit 0. The existing Python 3.10.12 interpreter ran
+under credential-free `env -i`, HF offline defaults and a 180-second timeout.
+The CLI, installed SDK, bounded transport guards and receipt serialization are
+real; HF responses and mutation/lost-response scenarios are synthetic.
+
+Both cases assert null current status and the exact stage in public output and
+the private receipt. Lost creation preserves bootstrap 200 and absence 404;
+unavailable readback additionally preserves creation 200. Neither inserts a
+response for the lost operation. Existing no-clobber, reservation, replay and
+other-ref exclusion assertions remain. The same status/history assertions also
+cover the existing `create_parent` pre-request refusal case, which was not run.
+
+Prior evidence remains separate: **34 passed, 1 failed in 80.16s** at
+`63afe729b9edab8c59f888fc86c4b4b642999b71`, then **1 passed in 27.90s** at
+`d514d811374d80bb7e14ad051e10a21e402c5575` after the test-only checkpoint-reader
+correction. No 35-case, 25-case or full family was rerun. Only these completion
+records changed after the new two-case tested snapshot.
+
+### Unchanged histories and remaining authority
+
+Old01/source `2fe1c6925e6d76c03b85851046d52216bee74a16` remains frozen with
+1 admitted failed/unretained A1, 29 not run and known partial cost USD 0.175163
+(`invoice_complete=false`). Its claim, raw-file identities, uncertainty and
+receipts remain historical. Proposed new30 is independent; old1 plus new30 would
+mean 31 admitted cells across the histories only if later authorized. No epoch,
+namespace, source-binding, model, grader or experiment-control policy changed.
+
+New-head delta review and CI remain, followed by the leader's exact live-source,
+actual branch bootstrap and selected-cell authorization. No live HF setup or
+inspection, model/grader call, workflow dispatch, source reseal or CI polling
+occurred. The full skill catalog was checked once; experiment-report-en and
+im-not-ai-en preserve evidence scope and English clarity. Experiment-design and
+UI skills did not apply because no experimental axis or interface changed.
+
+The sections below remain historical records at their stated sources.
+
+## PROJECT5-EPOCH02-PREP-1511
+
+### Closed replacement epoch, preparation only
+
+Implemented the independent `budget_pilot_ci_20260924_02` on a new worktree from
+`e23d8acc1d032b3e937ec099324e3221334c9b4b`. No epoch02 HF setup, inspection,
+admission, inference or grading was performed. The leader reported #671 review
+`5300302955` at `2ff94450d52fb4b5c80cded3ba0505321bac3a2f` and all 9 checks
+passed for the preceding withholding repair. That review does not cover this
+epoch02 implementation. The existing extreme-reasoner approved its bounded
+CI/HF/cost contract with conditions before edits, for code/offline preparation
+only. This base and the local test SHAs are not an execution-source seal.
+
+Old01 remains frozen at `2fe1c6925e6d76c03b85851046d52216bee74a16`, with
+1 admitted failed/unretained A1 and 29 not run. Its run `35954811341`, job
+`107490761123`, execution exit 1 and retention exit 2 (`unsafe_result_fields`)
+remain historical. Known partial cost is USD 0.175163, with a null estimate and
+`invoice_complete=false`; it is not an invoice total or a request count. The raw
+result/ledger, precise child cause, unsafe field and current remote claim state
+remain unavailable or unknown as recorded below. No claim was settled, adopted,
+deleted, overwritten, replayed or used as an epoch02 comparison result.
+
+The proposed new scope is 30 independent cells, not the old remaining 29.
+If all new cells are later admitted, old1 plus new30 means 31 admitted cells
+across two histories. The same five original tasks, A1/B1/C1/C2/B2/A2 order,
+GPT-5.4/direct-v1/xhigh, SDK/CLI 0.147.0, 180-minute cumulative budget including
+wait/recovery, 30-minute attempts, A4 fresh attempts, B/C retained continuation,
+C-only feedback, one inference slot and one fixed grade per eligible result
+remain unchanged. There is no automatic monetary cutoff or automatic launcher.
+
+### Fixed refs and existing gates
+
+The new closed registration preserves the old registration. It names only the
+existing private dataset fingerprint
+`a13dedada5465377761961d050e021a4db8e44d6284179a9ce40b562e4396a44` and recorded
+bootstrap `bfc7ae01ed14490817ceb7cb406adcb9bb95f557`. The fixed refs are
+`pilot-inference-20260924-02` and `pilot-grades-20260924-02`. Their actual
+existence and current state have not been observed in this task.
+
+The existing grading entry accepts `pilot/inference-branch-setup` and
+`pilot/inference-branch-inspect` for the inference ref. `pilot/branch-setup` and
+`pilot/branch-inspect` now select the new grading ref. Each explicit setup
+invocation handles one ref and its own private no-clobber root, reservation and
+receipt. Four logical requests at most verify exact private bootstrap access,
+establish genuine revision absence, create once with `exist_ok=false`, and
+verify readback at the actual bootstrap. Generic 404s, inaccessible/public or
+foreign targets, existing refs, redirects, changed parents and ambiguous
+responses refuse. No automatic second-ref creation, adoption, deletion or replay
+is available. Inspection remains two bounded reads and cannot acknowledge an
+earlier setup. Default planning does not look up tokens or make network calls.
+
+Admission reads, claim/output/terminal CAS writes and terminal-parent checks use
+only the new inference ref. Claims, output manifests/receipts, terminal records
+and grading provenance bind the campaign, actual source and designated ref.
+A1 requires the recorded bootstrap and an absent prefix; later cells require
+the exact immediately preceding canonical terminal at the same source. Grading
+writes only its new ref. Neither route writes dataset `main`,
+`pilot-grades-20260923` or old01 paths. Standalone publication retains its `main`
+default; it cannot publish a ref-tagged retained snapshot through that default.
+
+The approved result-validation/withholding implementation is byte-identical to
+the base. Failed/stopped withheld outputs still retain only bounded metadata,
+unchanged local artifact identities and partial/missing accounting; missing
+results remain ungraded. Privacy, source, hash, byte, path, cleanup, no-clobber,
+CAS and acknowledgment gates remain. Unacknowledged output cannot authorize a
+terminal or next cell. Workflow inputs, permissions, concurrency, runtime/model
+controls and fixed-grader pins did not change. HF tokens remain in short host
+scopes, outside model/judge children. No coupled source pin required an update.
+
+### Focused offline evidence
+
+From `batch-runner/`, the new selector
+`tests/test_codex_budget_pilot_epoch02.py` returned **34 passed, 1 failed in
+80.16s**, exit 1, at `63afe729b9edab8c59f888fc86c4b4b642999b71`. The failed test
+read the checksummed input envelope as a raw retention record, causing
+`KeyError: files_sha256`. The test now uses the existing validating checkpoint
+reader; production code did not change after that run.
+
+Only the failed node,
+`tests/test_codex_budget_pilot_epoch02.py::test_real_retention_predecessor_and_grading_cas_use_distinct_refs`,
+was rerun at `d514d811374d80bb7e14ad051e10a21e402c5575`: **1 passed in 27.90s**,
+exit 0. This is split evidence, not a fresh 35-case pass. Both invocations used
+the existing Python 3.10.12 interpreter, a credential-free `env -i` environment,
+HF offline defaults and private JUnit/log files. Pytest options were
+`-q -o addopts= -p no:cacheprovider --tb=short`; finite timeout bounds were
+600 seconds for the selector and 180 seconds for the failed node.
+
+The compiler, checksum/byte checks, serialization, deadline, admission,
+publication/CAS, terminal validation and grading binding/ref-CAS helpers are
+real. Inputs/outputs, source/runtime capability, child execution and HF replies
+are synthetic. Setup uses the installed SDK and real bounded HTTP guard with
+fake responses. Grading-CAS tests do not establish native atomic installation,
+judge readiness or a grade. The prior 25-pass withholding family was not rerun;
+its original SHA/result remains below. Only completion records changed after
+the failed-node test snapshot.
+
+### Remaining authority and observations
+
+New immutable-head review and CI remain. The leader must separately authorize
+each live ref setup and bind its actual readback/bootstrap, one common final
+execution SHA for all new 30 cells, and one selected cell before admission.
+Checked live write/admission/publication, the first epoch02 cell, actual grading
+host installation and one fixed grade, and complete new 30-cell results remain.
+This task grants no live permission and does not reseal old01.
+
+Dataset setup `35881609256` stays consumed. Old grading setup `35939410006`
+remains acknowledged/branch_verified; original setup `35920355055` remains
+unresolved/consumed. Earlier failed A1 dispatches `35941493214` and `35943806328`
+remain separate from the admitted failure. Their detailed receipts, hashes and
+partial costs below are unchanged. No live HF/model/grader/Azure operation,
+payload transfer, workflow dispatch or CI polling occurred.
+
+The full skill catalog was checked once. Experiment-design kept this a closed
+replacement with unchanged axes and an explicit old1/new30 denominator.
+Experiment-report-en and im-not-ai-en preserved the split test evidence, partial
+cost and unknown-state limits. UI/animation and repo-readiness guidance did not
+apply to this bounded internal routing/evidence change.
+
+The sections below are historical records at their stated sources, not epoch02
+execution authority.
+
 ## PROJECT5-FAILED-RETENTION-1339
 
 ### Future-code repair and frozen admitted cell
