@@ -254,8 +254,9 @@ def _manifest(value: dict, completed: dict, cell: dict) -> None:
     expected = {key: completed[key] for key in fields}
     expected.update(format=output.FORMAT, grade_ready=False, grading_launched=False,
                     accounting="missing" if completed["receipt"] is None else completed["receipt"]["status"])
-    require(set(value) == set(expected) | {"files", "missing"}
+    require(set(value) == set(expected) | {"files", "missing"} | ({"withheld"} if "withheld" in value else set())
             and all(value[key] == item for key, item in expected.items()), "terminal_manifest_binding_mismatch")
+    _encoded(value)  # Apply the same bounded control-record serialization.
     files = value["files"]
     require(type(files) is list and len(files) <= output.MAX_FILES + 2, "terminal_manifest_files_refused")
     by_role = {"inference_result": [], "generated_deliverable": [], "cost_ledger_export": []}
@@ -277,12 +278,27 @@ def _manifest(value: dict, completed: dict, cell: dict) -> None:
     require(names == sorted(set(names)) and sum(record["size"] for record in files) <= output.MAX_TOTAL_BYTES,
             "terminal_manifest_files_refused")
     artifacts = completed["artifacts"]
-    require(by_role["inference_result"] == ([] if artifacts["result"] is None else [artifacts["result"]])
-            and by_role["cost_ledger_export"] == ([] if artifacts["ledger"] is None else [artifacts["ledger"]])
-            and sorted(by_role["generated_deliverable"], key=pilot._canonical_json)
-            == sorted(artifacts["deliverables"], key=pilot._canonical_json), "terminal_artifacts_mismatch")
+    withheld = "withheld" in value
+    if withheld:
+        evidence = value["withheld"]
+        require(type(evidence) is dict and set(evidence) == {"reason", "artifacts"}
+                and evidence["reason"] == "unsafe_result_fields" and evidence["artifacts"] == artifacts
+                and artifacts["result"] is not None and completed["status"] in {"failed", "stopped"}
+                and files == [], "terminal_withheld_artifacts_mismatch")
+        require(len(artifacts["deliverables"]) <= output.MAX_FILES
+                and all(item is not None and item["size"] <= output.MAX_FILE_BYTES
+                        for item in artifacts["deliverables"])
+                and all(item is None or item["size"] <= output.MAX_RECORD_BYTES
+                        for item in (artifacts["result"], artifacts["ledger"]))
+                and sum(item["size"] for item in (artifacts["result"], artifacts["ledger"], *artifacts["deliverables"])
+                        if item is not None) <= output.MAX_TOTAL_BYTES, "terminal_withheld_artifacts_mismatch")
+    else:
+        require(by_role["inference_result"] == ([] if artifacts["result"] is None else [artifacts["result"]])
+                and by_role["cost_ledger_export"] == ([] if artifacts["ledger"] is None else [artifacts["ledger"]])
+                and sorted(by_role["generated_deliverable"], key=pilot._canonical_json)
+                == sorted(artifacts["deliverables"], key=pilot._canonical_json), "terminal_artifacts_mismatch")
     missing = []
-    if artifacts["result"] is None:
+    if artifacts["result"] is None or withheld:
         require(completed["status"] in {"failed", "stopped"} and files == [], "missing_result_not_success")
         missing = ["bound_inference_result", "validated_deliverables", "bound_ledger_export"]
     elif artifacts["ledger"] is None:
@@ -434,7 +450,8 @@ def retain(plan: dict, cell: dict, root: Path, *, _test_api=None) -> dict:
     inputs, cell_root = _local(plan, cell, root)
     admission = require_admission(plan, cell, root, inputs)
     snapshot = output.prepare(root=root, campaign=ci.CAMPAIGN, cell_id=cell["cell_id"],
-                              source_sha=plan["reviewed_source_sha"], config_sha=cell["config_sha256"])
+                              source_sha=plan["reviewed_source_sha"], config_sha=cell["config_sha256"],
+                              _failure_metadata=True)
     with _lock(root):
         pilot._require_quiet_owner(root, plan)
         state = output._checkpoint(root / cell["roles"]["checkpoint"])
