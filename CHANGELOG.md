@@ -104,6 +104,61 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Accept only the three exact, nonsecret note literals emitted by the Codex
+  reservation/abandon paths, alongside the publisher's existing null/strict-code
+  note contract. After that dedicated check, exempt only a call row's `note`
+  from the generic string check. No trimming, normalization, arbitrary prose,
+  other-field exception, ledger re-export or withholding fallback was added.
+  Producer, runtime, workflow, source pins, prices, accounting, byte/hash/path,
+  privacy, cleanup and publication-authority guards remain unchanged. The
+  bounded pre-edit extreme-reasoner decision permits future code only, not
+  publication or recovery under an admitted claim. The source mismatch also
+  blocks otherwise-safe successful retention: settlement preserves the original
+  reservation note. This does not explain either native child failure or prove
+  which note was in the unavailable live ledger.
+  Base/main and frozen epoch02 source are
+  `4aac36b6f92d2a14b8cac02d793356d6687ace6d`; leader-supplied #672 review
+  `5302019274` and all **10 CI checks passed** cover the preceding #672 change,
+  not this repair. The single new selector,
+  `tests/test_codex_budget_pilot_ledger_notes.py`, initially returned **31 failed
+  in 53.31s**, exit 1, at `53c541cbe03c4579c6e63c75cee05e1a0f754bec`:
+  17 cases lacked a synthetic run root in the credential-free environment, and
+  14 retained an undeclared file from the reused success fixture. After only
+  those new-fixture corrections, the same selector returned **31 passed in
+  68.87s**, exit 0, at `14bcae565a1b2212f3a0405d2ddf90f37e55d4cb`.
+  Real Codex reserve/settle/abandon callers, deadline persistence, CostReceiptLedger
+  export, compiler, serialization and publisher validation use fake model/HF
+  boundaries. Tests preserve successful/failed status, original result/ledger
+  bytes and partial receipts; reject unknown prose, synthetic token/URL/path
+  and control-character notes; and retain identity, hash, usage, amount and
+  accounting refusals. No old family or full suite was rerun. Only completion
+  records changed after the corrected tested snapshot.
+  The leader observed epoch02 refs `pilot-inference-20260924-02` and
+  `pilot-grades-20260924-02` as `branch_verified` at bootstrap
+  `bfc7ae01ed14490817ceb7cb406adcb9bb95f557` in runs `35980633861` and
+  `35980667641`, before A1 admission. A1 run `35983583688`, job `107580952943`,
+  then exited **1 at 10:03:03 UTC**; retention exited **2** with
+  `unsafe_ledger_note` at **10:03:07.2463912 UTC**. Verified public artifact
+  `10801891703`, envelope SHA256
+  `f2b445662539281197c548794c1060b57034b2d06ae8e4810d74c84dd750e298`, reports
+  failed/`child_nonzero_exit`, one child, confirmed cleanup, no timeout,
+  no deliverables and **29 other cells not run**. Partial usage is **89161
+  input**, **5442 output**, **47872 cached-input** and **4073 reasoning tokens**;
+  known partial cost is **USD 0.196821**, estimate null, invoice incomplete
+  and HTTP count null. Old01/source `2fe1c6925e6d76c03b85851046d52216bee74a16`
+  independently remains frozen after run `35954811341` / job `107490761123`
+  failed with `unsafe_result_fields`; its partial **55033 input**, **4387
+  output**, **12544 cached-input**, **3566 reasoning tokens** and **USD 0.175163**
+  are not replaced or merged into epoch02. Neither receipt is an invoice total,
+  complete cost or request count. Both raw results/ledgers remain unavailable;
+  their recorded byte/hash identities remain unchanged in the current task
+  record. The precise offending fields/notes and child causes remain unknown.
+  Each history has one admitted failed/unretained cell and 29 not run. Neither
+  claim, source or clock was settled, adopted, replayed or resealed. New-head
+  review/CI and an explicit leader decision on any future run remain. No
+  epoch03, next cell, grade, live HF/model/grader call, workflow dispatch,
+  Azure-management operation or CI polling was performed or authorized here.
+
 - Repair only the grading-source test fixture after leader REQUEST-CHANGES
   `5301707351` at `263ce086813afb8a251a39ab3cd05f7d28e98fdb`. Copy genuine parent
   and closed epoch02 registration metadata into the temporary repository before

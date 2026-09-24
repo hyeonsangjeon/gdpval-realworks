@@ -1,5 +1,154 @@
 # Latest task result
 
+## PROJECT5-LEDGER-NOTE-CONTRACT-1917
+
+### Future-code-only ledger contract repair
+
+The publisher now accepts the three exact, nonsecret note literals written by
+the existing Codex producer. Work started in a new clean worktree from main
+`4aac36b6f92d2a14b8cac02d793356d6687ace6d`. The leader supplied #672 review
+`5302019274` and all 10 CI checks passed for the preceding #672 change. Those
+checks and that review do not approve this repair. A bounded pre-edit extreme-reasoner
+decision approved only the narrow future-code contract below, with both
+admitted source/claim histories frozen.
+
+`CodexAgentRunner._reserve_call` and the two `_abandon_call` callers write:
+
+- `one Codex turn; the model requests inside it are not individually reported`
+- `deadline refused before the turn started`
+- `the turn never started`
+
+The old publisher rejected these at both its note-specific regex and its
+generic string-field check. A consumer-local immutable allowlist now accepts
+only these literals alongside the existing null/strict-code notes. Only a call
+row's already-validated `note` bypasses the generic lexical recheck. No note is
+trimmed, normalized or re-exported. Allowlist membership is not proof of producer
+provenance, request reachability, success or billing. All other schema, privacy,
+identity, byte/hash/path, accounting, cleanup and publication-authority checks
+remain intact. There is no new withholding fallback. Producer/runtime code,
+workflow, source pins, prices and inference/grading controls are unchanged.
+
+This confirmed source mismatch also prevents otherwise-safe successful output
+from being retained: settlement leaves the reservation note unchanged, and
+the publisher validates that ledger regardless of the cell's success status.
+The focused offline test covers that success path as well as failed paths.
+Neither this source finding nor the tests identify the precise note in the
+missing live payload, and neither explains a native child's nonzero exit.
+
+### One focused selector, with the fixture failure preserved
+
+From `batch-runner/`, only
+`tests/test_codex_budget_pilot_ledger_notes.py` was selected. The first run at
+`53c541cbe03c4579c6e63c75cee05e1a0f754bec` returned **31 failed in 53.31s**,
+exit 1. Seventeen cases lacked a test-owned `GDPVAL_CODEX_RUN_ROOT` after
+credentials and the user environment were removed. Fourteen cases cleared
+their synthetic deliverable list while leaving the reused success fixture's
+test-owned file in that tree. These were new-fixture errors before the intended
+publication assertions, not additional live failures.
+
+After setting the isolated synthetic run root and making the failed-result
+fixture's file tree agree with its declared files, the same selector returned
+**31 passed in 68.87s**, exit 0, at tested SHA
+`14bcae565a1b2212f3a0405d2ddf90f37e55d4cb`. Production code did not change
+between these runs. Only completion records changed after the passing snapshot.
+
+Both runs used the existing SDK-capable Python 3.10.12 interpreter, `env -i`,
+HF/data/transformer offline defaults, disabled plugin autoload and a 240-second
+timeout with a 10-second termination grace. The passing pytest invocation used
+`-q -o addopts= -p no:cacheprovider --tb=short --maxfail=1` and retained a private
+JUnit report. No prior 35/25/8-case family or full suite was rerun.
+
+The selector uses real Codex reservation, settlement and abandonment callers,
+genuine CostReceiptLedger SQLite/export serialization, canonical compiler, deadline
+persistence, byte checks, completion projection and publisher validation.
+Runtime/model observations, deliverables and HF transport are synthetic; native
+processes, credentials and network operations are forbidden. Coverage includes
+successful and failed turns with usage, a failure without usage, deadline refusal
+before a turn, legacy turn-start failure, ordinary strict-code notes, and refusal
+of unknown prose, synthetic tokens, URLs, paths and control characters. The
+tests also retain other-field/schema, byte identity, hash, token-count, amount
+and recorded-accounting failures. Fake publication preserves original ledger
+and result bytes, actual fake returned commit binding, partial receipt identity
+and failed status. It is not evidence of a live write, cleanup, invoice or grade.
+
+### Two independent admitted failures remain frozen
+
+The following observations and artifact identities were supplied by the leader;
+this task did not fetch logs, artifacts or private files.
+
+**Epoch02.** Source `4aac36b6f92d2a14b8cac02d793356d6687ace6d` remains frozen.
+Before admission, runs `35980633861` and `35980667641` actually verified the new
+refs `pilot-inference-20260924-02` and `pilot-grades-20260924-02` at bootstrap
+`bfc7ae01ed14490817ceb7cb406adcb9bb95f557`. A1 run `35983583688`, job
+`107580952943`, claimed the cell, then execution exited 1 at **10:03:03 UTC**
+and retention exited 2 with `unsafe_ledger_note` at **10:03:07.2463912 UTC**.
+This was after admission. The earlier branch verification is not a claim that
+the current inference ref still points to bootstrap.
+
+**Old01.** Source `2fe1c6925e6d76c03b85851046d52216bee74a16` independently
+remains frozen. A1 run `35954811341`, job `107490761123`, passed real input,
+full sandbox and private claim, then execution exited 1 at **04:20:18 UTC**
+and retention exited 2 with `unsafe_result_fields` at **04:20:21.6482243 UTC**.
+That observation is not reinterpreted as the ledger-note defect.
+
+Each public envelope reports failed/`child_nonzero_exit`, one child invocation,
+confirmed cleanup, no timeout, no deliverables and **29 other cells not run**.
+There are two admitted failed/unretained A1 cells across separate histories,
+not two completed comparison results or a completed 30-cell campaign.
+
+| History | Input tokens | Output tokens | Cached-input tokens | Reasoning tokens | Known partial cost (USD) |
+|---|---:|---:|---:|---:|---:|
+| Old01 | 55033 | 4387 | 12544 | 3566 | 0.175163 |
+| Epoch02 | 89161 | 5442 | 47872 | 4073 | 0.196821 |
+
+Both cost estimates are null and both receipts have `invoice_complete=false`;
+epoch02's HTTP count is null. These are partial usage/cost observations, not
+invoice totals, complete costs or request counts. The two histories' accounting
+is kept separate, and old01 A1 is not a result in the epoch02 comparison.
+
+The unavailable raw files remain bound only by the supplied identities:
+
+- Epoch02: public artifact `10801891703`, envelope SHA256
+  `f2b445662539281197c548794c1060b57034b2d06ae8e4810d74c84dd750e298`;
+  result **8987 bytes**, SHA256
+  `02440bfbb6cec71edf042a1d6eb8d36cf3f3ffa6f5a55552ec74fff288e52f0e`;
+  ledger **3561 bytes**, SHA256
+  `6c9ab614e2b8e287a165730b24837d51777515c0c8a3e61935253bc670be8048`.
+- Old01: public artifact `10789759614`, envelope SHA256
+  `570b0bc196a21efaa0a23123958a46d0ae2b2a52a16d19fb0661aae6d8b046e6`;
+  result **7460 bytes**, SHA256
+  `c9313667c3890a1b4bc876d7bb771b41e430c2f595515c1a4bc0041e9fa1175b`;
+  ledger **1838 bytes**, SHA256
+  `116561470c73f4fbeae18a7db81c74947991e1b46f695411842f5bbd6153d93a`.
+
+No raw result/ledger was available or reconstructed from these hashes. The
+precise offending field/note and actual child failure cause remain unknown in
+both histories. No current remote claim state was inspected or settled here.
+The new code cannot recover lost files or authorize a different source under
+either existing admission.
+
+### Remaining authority and unchanged controls
+
+New-head review and CI, followed by an explicit leader decision about any
+future run, remain. There is no epoch03, rerun, next-cell, grading or source
+reseal authorization. Neither target/ref was recreated; neither existing claim,
+clock or receipt was adopted, rewritten, replayed or deleted. The code retains
+the five-task/30-cell design and canonical A1/B1/C1/C2/B2/A2 order, GPT-5.4,
+direct-v1/xhigh, SDK 0.147.0, 180-minute cumulative budget including wait/recovery,
+30-minute attempts, A4 fresh attempts, B/C retained continuation, C-only feedback,
+one inference slot and one fixed grade per eligible result. No budget axis,
+automatic monetary cutoff, epoch/storage framework or model/grader change was
+introduced. No live HF/model/grader or Azure-management request, workflow
+dispatch, source reseal or CI polling occurred.
+
+The full skill catalog was checked once. Experiment-design kept the admitted
+sources and budget controls immutable. Experiment-report-en preserved partial
+usage/cost units and the distinction between the source mismatch, synthetic
+validation and unavailable live evidence; im-not-ai-en copyedited only the
+bounded English records without changing those claims. No UI work or broader
+public-repository handoff required UI or repo-readiness guidance. Earlier
+records below remain unchanged historical observations.
+
 ## PROJECT5-REGISTRATION-FIXTURE-1715
 
 ### Fixture-only registration correction
