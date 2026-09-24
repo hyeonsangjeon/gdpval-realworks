@@ -62,6 +62,7 @@ def produce(cell, tmp_path, monkeypatch, branch="success", *, abandon_note=None)
             host = Path(resources.enter_context(tempfile.TemporaryDirectory(
                 prefix=".ledger-note-deadline-", dir=pilot.ROOT,
             )))
+            monkeypatch.setenv("GDPVAL_CODEX_RUN_ROOT", str(host / "agent-work"))
             store = CodexTaskDeadlineStore(
                 host / "deadline", run_id=cell.cell["run_id"], experiment_id=cell.cell["run_id"],
                 condition_key="condition_a", control=CodexTaskDeadlineControl("A", 1),
@@ -134,7 +135,11 @@ def produce(cell, tmp_path, monkeypatch, branch="success", *, abandon_note=None)
     row.update(status="success" if outcome.success else "error", content=outcome.text,
                problem_solving_cost=receipt)
     if not outcome.success:
+        # The reused success fixture created this test-owned file. A synthetic
+        # no-deliverable failure needs an empty tree before genuine rebinding.
+        (cell.upload / cell.name).unlink()
         row["deliverable_files"] = []
+        row.pop("deliverable_file_records", None)
     bind(cell, data)
     pilot._finish(cell.root, cell.cell, cell.state, 0 if outcome.success else 1)
     pilot._save(cell.root / cell.cell["roles"]["checkpoint"], cell.state)
