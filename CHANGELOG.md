@@ -104,6 +104,30 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Repair only the grading-source test fixture after leader REQUEST-CHANGES
+  `5301707351` at `263ce086813afb8a251a39ab3cd05f7d28e98fdb`. Copy genuine parent
+  and closed epoch02 registration metadata into the temporary repository before
+  its synthetic Git commit, then rebind both module registration paths alongside
+  `pilot.ROOT` before compilation. Metadata bytes, strict registration/source
+  validation, real temporary-Git ownership checks and all assertions stay intact.
+  No production, workflow, pin, ownership or epoch/storage policy changed;
+  source approval `5301378872` remains scoped to that unchanged production.
+  The leader reported run `35970394062`, job `107538875886`, with **8 failed,
+  13820 passed, 61 skipped, 46 deselected in 2052.50s**; nine other checks
+  succeeded and deploy was skipped. The eight CLI cases stopped at the mixed
+  registration coordinates before their intended source/root/receipt boundaries.
+  One offline invocation of the four specified CLI selectors in
+  `tests/test_codex_budget_pilot_grading_source.py` returned **8 passed in 12.75s**,
+  exit 0, at `19280b44dad5e4842b681b32d38175ad5a40d7a1`. External operations are
+  fake or forbidden; the result does not establish live setup or native readiness.
+  No whole source, 35-case, 25-case, 2-case or full-suite family was rerun. Earlier
+  split observations and old01/source `2fe1c6925e6d76c03b85851046d52216bee74a16`,
+  its admitted claim, partial cost and unknown state remain unchanged. Epoch02
+  stays preparation-only. New-head delta review/CI and leader live-source,
+  actual bootstrap and cell authorization remain. No live HF/model/grader call,
+  workflow dispatch, reseal or CI polling occurred; only completion records
+  changed after testing.
+
 - Correct setup HTTP status attribution after leader REQUEST-CHANGES
   `5301122695` at `0a863d91204554ecbed4dcc62cd4494bb52f6b2d`. Three existing
   `grading.setup` transitions now clear the current status to null before the

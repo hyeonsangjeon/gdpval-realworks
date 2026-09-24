@@ -1,5 +1,69 @@
 # Latest task result
 
+## PROJECT5-REGISTRATION-FIXTURE-1715
+
+### Fixture-only registration correction
+
+Addressed leader REQUEST-CHANGES `5301707351` at
+`263ce086813afb8a251a39ab3cd05f7d28e98fdb` on the same #672 branch. Existing
+source approval `5301378872` remains scoped to unchanged production; it is not
+approval of the new test delta. No production code, registration metadata,
+source/runtime pins, workflow, ownership policy or existing assertion changed.
+
+The leader reported completed CI run `35970394062`, job `107538875886`:
+**8 failed, 13820 passed, 61 skipped, 46 deselected in 2052.50s**. Nine other
+checks succeeded, pytest failed and deploy was skipped. All eight failures were
+the four CLI selectors below, which returned `grading_contract_refused` with
+stage null before their intended boundary; fake branch creation was not reached.
+This supplied full-CI observation is separate from the local validation below.
+
+The fixture rebound `pilot.ROOT` without moving its import-time parent and CI
+registration paths. The real `ci._registration_bytes` validation could not
+compute `pilot.REGISTRATION.relative_to(pilot.ROOT)` in those mixed coordinates.
+The fixture now copies the genuine parent and closed epoch02 registration bytes
+into the temporary checkout before its synthetic Git commit, then binds both
+`pilot.REGISTRATION` and `ci.REGISTRATION` there before compiling the plan.
+Clean-source checks remain meaningful; registration validation is not stubbed.
+
+### One offline invocation, eight cases
+
+At tested SHA `19280b44dad5e4842b681b32d38175ad5a40d7a1`, one invocation from
+`batch-runner/` ran exactly these four selectors:
+
+- `tests/test_codex_budget_pilot_grading_source.py::test_cli_plan_does_not_run_source_preflight_or_setup`
+- `tests/test_codex_budget_pilot_grading_source.py::test_cli_source_refusal_has_closed_stage_before_local_or_remote_mutation`
+- `tests/test_codex_budget_pilot_grading_source.py::test_cli_root_refusal_is_before_session_and_retains_partial_local_state`
+- `tests/test_codex_budget_pilot_grading_source.py::test_cli_receipt_failure_preserves_reservation_and_unknown_mutation_without_replay`
+
+Result: **8 passed in 12.75s**, exit 0, using the existing Python 3.10.12
+interpreter, credential-free `env -i`, HF offline defaults and a 180-second
+timeout. Tests retain real temporary Git and its test-only different-owner
+switch, genuine registration/compiler/source checks, and forbidden auth, HF and
+runtime boundaries. Plan, source refusal, root refusal and receipt failure reach
+their intended assertions. Receipt cases use in-memory fake branch creation;
+no remote branch, actual ownership change or native execution is demonstrated.
+Only completion records changed after this tested snapshot.
+
+### Preserved history and remaining authority
+
+Earlier results remain separate: **34 passed, 1 failed in 80.16s** at
+`63afe729b9edab8c59f888fc86c4b4b642999b71`, **1 passed in 27.90s** at
+`d514d811374d80bb7e14ad051e10a21e402c5575`, and **2 passed in 3.23s** at
+`4b6f196441b330ae4e177cfd7aeb29e2a3306d16`. The whole source family, 35-case,
+25-case, 2-case and full-suite families were not rerun.
+
+Old01/source `2fe1c6925e6d76c03b85851046d52216bee74a16` and its admitted claim,
+partial accounting and unknown remote state remain frozen. Epoch02 and its
+proposed new30 remain preparation-only, not continuation of old01. New-head
+delta review and CI, then leader authorization of the exact live source,
+actual ref bootstrap and selected cell, remain. No live HF/model/grader or
+Azure-management operation, workflow dispatch, source reseal or CI polling
+occurred. Existing historical records below are unchanged.
+
+The full skill catalog was checked once. Experiment-report-en and im-not-ai-en
+kept the supplied CI failure, bounded local result and review scopes separate.
+No new experimental axis or UI work required design or UI skills.
+
 ## PROJECT5-SETUP-HTTP-STATUS-1613
 
 ### Setup status belongs to the current operation
