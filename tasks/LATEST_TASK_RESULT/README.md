@@ -1,16 +1,24 @@
 # Latest task result
 
-## PROJECT5-FAILURE-CATEGORY-2019
+## PROJECT5-DIAGNOSTIC-UNAVAILABLE-2120
 
-### Future-run observability only
+### Diagnostic unavailability is explicit, not authoritative
+
+Addressed leader REQUEST-CHANGES `5304339793` at
+`f33bcd7dfbdbf579ecd7d995ac0ed493c2233afb` on the same clean #674 branch.
+Main remains `e1eef7e8b880e4dbc6066f54c6fba5ab8e1befc6`. The leader reported
+7 checks passed and 2 running at the initial read, without source approval or
+authorization to merge or run live. This task did not query those checks. The existing
+reviewer approved only the bounded logging correction before edits; new-head
+delta review and CI remain.
 
 The CI CLI now logs one closed, producer-recorded failure category for a
 selected finalized failed/stopped cell after confirmed owned cleanup and before
-private retention. Work started in a new clean worktree from main
-`e1eef7e8b880e4dbc6066f54c6fba5ab8e1befc6`. The leader supplied #673 review
+private retention. The original diagnostic was implemented from that main.
+The leader supplied #673 review
 `5303368449` at `70d1651bbf7bd005daca764b2f0dc75097afab73` and all 9 checks
 passed for the preceding ledger-note repair. That review does not approve this
-new diagnostic. The approved publisher repair, its tests, producer/runtime code,
+diagnostic. The approved publisher repair, its tests, producer/runtime code,
 source pins, workflow and grading code remain byte-identical to this base.
 
 The bounded pre-edit extreme-reasoner decision permits only this future-run
@@ -31,10 +39,23 @@ a nonzero child exit, so its category is `unavailable` even if it carries a stal
 allowlisted value. Successful cells emit no failure diagnostic. The CLI emits
 no trusted category when evidence is malformed or unbound, bytes have changed,
 or cleanup is uncertain or belongs to another cell. Diagnostic read, validation
-or logging errors leave completion facts
-and the CLI exit result unchanged.
+or logging errors leave completion facts and the CLI exit result unchanged.
 
-This records a category, not proof of the child's underlying cause. No error
+The previous blanket catch silently discarded evidence and emission failures.
+Expected read/validation exceptions now produce the fixed
+`diagnostic_evidence_unavailable` reason with `authoritative=false` and no
+partially validated binding or category. An unexpected evidence exception is
+contained with the same fixed signal, never its type, text or arguments.
+Message construction stays inside evidence handling; logging is separate.
+If logging raises, the CLI attempts exactly one fixed
+`diagnostic_emission_unavailable` line on stderr. It does not retry the category,
+log recursively or print a traceback. If stderr also fails, that failure is
+contained without changing the original completion or exit. These signals are
+best effort; their delivery is not guaranteed and they grant no terminal,
+admission or publication authority. Success, plan/input-only and
+already-finalized cases retain their existing silence.
+
+A recorded category is not proof of the child's underlying cause. No error
 body, prompt, payload, token, URL, path, note, native log or stack trace enters
 the line. There is no new artifact, workflow input, completion-schema version,
 experiment axis or publication authority. Failed status/reason, partial usage,
@@ -44,11 +65,40 @@ evidence that native execution now succeeds.
 
 ### Focused offline validation
 
-From `batch-runner/`, the sole selector was
+At tested SHA `249d733f96941ce00269e3e19f8f43d613b8636c`, one invocation from
+`batch-runner/` ran only these selectors:
+
+- `tests/test_codex_budget_pilot_failure_category.py::test_diagnostic_rechecks_bytes_and_owned_cleanup_without_rewriting_completion[bytes]`
+- `tests/test_codex_budget_pilot_failure_category.py::test_diagnostic_rechecks_bytes_and_owned_cleanup_without_rewriting_completion[log_io]`
+- `tests/test_codex_budget_pilot_failure_category.py::test_diagnostic_rechecks_bytes_and_owned_cleanup_without_rewriting_completion[unexpected]`
+
+Result: **3 passed in 22.91s**, exit 0. The single added unexpected-error case
+injects `AssertionError` with a private canary into diagnostic projection.
+The logging case retains its private-canary `RuntimeError`. These are fake
+failure boundaries, not observed live errors. Each case checks that no trusted
+category is emitted, the closed unavailable signal matches the failed stage,
+no private canary appears in captured logs/stdout/stderr, finalized completion
+bytes are identical and the original exit remains 1. The byte case still
+changes the already-bound result after completion publication to exercise the
+real read/hash refusal. Partial accounting remains unchanged.
+
+The invocation used the existing Python 3.10.12 interpreter, credential-free
+`env -i`, HF/data/transformer offline flags, disabled plugin autoload,
+`-q -o addopts= -p no:cacheprovider --tb=short --maxfail=1`, a private JUnit report
+and a 120-second timeout with a 10-second termination grace. No dependency was
+installed. The existing real producer/serialization/validation and fake
+runtime/transport boundaries described below remain in use. Only completion
+records changed after this tested snapshot. No 27/31/35/25/8-case family, full
+suite or live diagnostic was rerun.
+
+### Prior diagnostic validation, not rerun
+
+The original selector was
 `tests/test_codex_budget_pilot_failure_category.py`. At tested SHA
 `48868b2af70860285d8611b6a22d0e50c211b0aa`, it returned **27 passed in 178.61s**,
-exit 0. Only completion records changed after this passing code/test snapshot.
-The invocation used the existing Python 3.10.12 interpreter, credential-free
+exit 0. Only completion records changed between that passing snapshot and
+`f33bcd7dfbdbf579ecd7d995ac0ed493c2233afb`. That earlier invocation used the
+existing Python 3.10.12 interpreter, credential-free
 `env -i`, HF/data/transformer offline flags, disabled plugin autoload,
 `-q -o addopts= -p no:cacheprovider --tb=short --maxfail=1`, a private JUnit report
 and a 240-second timeout with a 10-second termination grace.
@@ -161,7 +211,7 @@ either existing admission.
 
 ### Remaining authority and unchanged controls
 
-New-head review and CI, followed by an explicit leader decision about any
+New-head delta review and CI, followed by an explicit leader decision about any
 future run, remain. There is no epoch03, rerun, next-cell, grading or source
 reseal authorization. Neither target/ref was recreated; neither existing claim,
 clock or receipt was adopted, rewritten, replayed or deleted. The code retains
@@ -173,12 +223,12 @@ automatic monetary cutoff, epoch/storage framework or model/grader change was
 introduced. No live HF/model/grader or Azure-management request, workflow
 dispatch, source reseal or CI polling occurred.
 
-The full skill catalog was checked once. Experiment-design kept the admitted
-sources and budget controls immutable. Experiment-report-en preserved partial
+The full skill catalog was checked once. Experiment-report-en preserved partial
 usage/cost units and the distinction between recorded categories, synthetic
 validation and unavailable historical causes; im-not-ai-en copyedited only the
-bounded English records without changing those claims. No UI work or broader
-public-repository handoff required UI or repo-readiness guidance. Earlier
+bounded English records without changing those claims. No new experiment,
+configuration axis, UI work or broader public-repository handoff required
+experiment-design, UI or repo-readiness guidance. Earlier
 records below remain unchanged historical observations.
 
 ## PROJECT5-REGISTRATION-FIXTURE-1715
