@@ -104,6 +104,32 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Correct setup HTTP status attribution after leader REQUEST-CHANGES
+  `5301122695` at `0a863d91204554ecbed4dcc62cd4494bb52f6b2d`. Three existing
+  `grading.setup` transitions now clear the current status to null before the
+  next operation. Actual response statuses/history, phase attribution,
+  reservations, request counts, private/parent/role checks and no-replay guards
+  stay unchanged. The existing transport already resets on entry; this closes
+  the earlier operation-local refusal gap without changing transport or workflow
+  behavior. Null does not establish that remote mutation did not occur. The
+  existing extreme-reasoner approved only this bounded reporting change before
+  edits. At `4b6f196441b330ae4e177cfd7aeb29e2a3306d16`, one offline invocation of
+  `tests/test_codex_budget_pilot_epoch02.py::test_setup_refusals_keep_reservation_and_never_create_other_ref`
+  cases `[create_lost-3-True]` and `[readback_unavailable-4-True]` returned
+  **2 passed in 3.23s**, exit 0. These real CLI/SDK guards use fake HTTP responses.
+  They verify null status and exact prior-response history but do not demonstrate
+  a live stale-status event. The existing `create_parent` case received the same
+  assertions but was not run. Prior **34 passed, 1 failed in 80.16s** at
+  `63afe729b9edab8c59f888fc86c4b4b642999b71` and separate **1 passed in 27.90s** at
+  `d514d811374d80bb7e14ad051e10a21e402c5575` remain unchanged; no full family was
+  rerun. Old01/source `2fe1c6925e6d76c03b85851046d52216bee74a16`, its one admitted
+  failed/unretained A1, partial cost and unknown remote claim state remain frozen.
+  Proposed new30 remains independent, not completion of old01. New-head delta
+  review/CI and leader live-source, actual bootstrap and selected-cell
+  authorization remain. No live HF/setup/inspection/model/grader operation,
+  workflow dispatch, reseal or CI polling occurred. Only completion records
+  changed after the tested snapshot.
+
 - Add a retention-only metadata path for a finalized failed/stopped cell whose
   identity-bound result is refused with exactly `unsafe_result_fields`. After
   all existing source/config/input, fingerprint, path/link/size, artifact-byte,

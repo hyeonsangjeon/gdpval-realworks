@@ -1,5 +1,72 @@
 # Latest task result
 
+## PROJECT5-SETUP-HTTP-STATUS-1613
+
+### Setup status belongs to the current operation
+
+Addressed leader REQUEST-CHANGES `5301122695` at
+`0a863d91204554ecbed4dcc62cd4494bb52f6b2d` on the same #672 branch. The existing
+extreme-reasoner approved this bounded CI/HF reporting correction before edits;
+that decision is not approval of the resulting head.
+
+`grading.setup` now clears `http_status` to null at its existing
+`branch_absence`, `branch_create` and `branch_readback` transitions. The status
+stays null until that operation receives a response. Bootstrap already starts
+at null, and each real response remains in the `responses` list. Phase names,
+reservation order, operation counts, ambiguity/no-replay handling and all
+parent/role/private checks are unchanged. No workflow or HF transport changed.
+
+The source distinction is important: `_hf_client` already clears status when
+its transport is entered. The new resets also cover local refusals before that
+entry, including the pre-request deadline checks. The selected transport-failure
+tests preserve this contract; they do not demonstrate a live stale-status event.
+Null means no response observed for the current operation, not that no remote
+mutation occurred. A lost create response still leaves its reservation unresolved.
+
+### Two-case offline evidence
+
+At tested SHA `4b6f196441b330ae4e177cfd7aeb29e2a3306d16`, one invocation from
+`batch-runner/` ran only these exact nodes:
+
+- `tests/test_codex_budget_pilot_epoch02.py::test_setup_refusals_keep_reservation_and_never_create_other_ref[create_lost-3-True]`
+- `tests/test_codex_budget_pilot_epoch02.py::test_setup_refusals_keep_reservation_and_never_create_other_ref[readback_unavailable-4-True]`
+
+Result: **2 passed in 3.23s**, exit 0. The existing Python 3.10.12 interpreter ran
+under credential-free `env -i`, HF offline defaults and a 180-second timeout.
+The CLI, installed SDK, bounded transport guards and receipt serialization are
+real; HF responses and mutation/lost-response scenarios are synthetic.
+
+Both cases assert null current status and the exact stage in public output and
+the private receipt. Lost creation preserves bootstrap 200 and absence 404;
+unavailable readback additionally preserves creation 200. Neither inserts a
+response for the lost operation. Existing no-clobber, reservation, replay and
+other-ref exclusion assertions remain. The same status/history assertions also
+cover the existing `create_parent` pre-request refusal case, which was not run.
+
+Prior evidence remains separate: **34 passed, 1 failed in 80.16s** at
+`63afe729b9edab8c59f888fc86c4b4b642999b71`, then **1 passed in 27.90s** at
+`d514d811374d80bb7e14ad051e10a21e402c5575` after the test-only checkpoint-reader
+correction. No 35-case, 25-case or full family was rerun. Only these completion
+records changed after the new two-case tested snapshot.
+
+### Unchanged histories and remaining authority
+
+Old01/source `2fe1c6925e6d76c03b85851046d52216bee74a16` remains frozen with
+1 admitted failed/unretained A1, 29 not run and known partial cost USD 0.175163
+(`invoice_complete=false`). Its claim, raw-file identities, uncertainty and
+receipts remain historical. Proposed new30 is independent; old1 plus new30 would
+mean 31 admitted cells across the histories only if later authorized. No epoch,
+namespace, source-binding, model, grader or experiment-control policy changed.
+
+New-head delta review and CI remain, followed by the leader's exact live-source,
+actual branch bootstrap and selected-cell authorization. No live HF setup or
+inspection, model/grader call, workflow dispatch, source reseal or CI polling
+occurred. The full skill catalog was checked once; experiment-report-en and
+im-not-ai-en preserve evidence scope and English clarity. Experiment-design and
+UI skills did not apply because no experimental axis or interface changed.
+
+The sections below remain historical records at their stated sources.
+
 ## PROJECT5-EPOCH02-PREP-1511
 
 ### Closed replacement epoch, preparation only
