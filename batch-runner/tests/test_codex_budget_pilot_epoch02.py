@@ -339,7 +339,7 @@ def test_real_retention_predecessor_and_grading_cas_use_distinct_refs(epoch, cap
     assert claim["binding"]["inference_branch"] == terminal["inference_branch"] == retained.BRANCH
     assert claim["expected_parent"] == retained.BOOTSTRAP and claim["predecessor"] is None
     assert s.api.events == ["admission", "child", "child", "output", "terminal"]
-    inputs = retained._read(s.root / "ci-inputs.json")
+    inputs = output._checkpoint(s.root / "ci-inputs.json")
     for field, wrong in (("campaign_id", OLD_CAMPAIGN), ("source_sha", OLD_SOURCE), ("inference_branch", "main")):
         damaged = copy.deepcopy(claim)
         damaged["binding"][field] = wrong
