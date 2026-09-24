@@ -38,6 +38,7 @@ TOKEN = "hf_SYNTHETIC_BRANCH_INSPECTION"
 RAW = "synthetic-secret https://private.invalid/signed?token=secret /private/raw-path"
 SELECTOR = "pilot/branch-inspect"
 FIELDS = {
+    "campaign_id", "source_sha", "branch",
     "role", "repository_name_sha256", "outcome", "stage", "reason", "http_status",
     "branch_state", "head", "matches_bootstrap", "exact_identity_match", "private",
     "bootstrap_access_verified", "observed_at", "remote_mutation_possible",
@@ -396,8 +397,10 @@ def test_workflow_inspection_is_isolated_without_new_inputs_or_paid_routes():
     phases = {phase: next(step for step in token_steps if "--phase " + phase in step["run"])
               for phase in ("setup", "inspect", "prepare", "claim", "publish")}
     assert len(token_steps) == len(phases) == 5
-    assert phases["setup"]["if"] == "inputs.experiment_yaml == 'pilot/branch-setup'"
-    assert phases["inspect"]["if"] == "inputs.experiment_yaml == 'pilot/branch-inspect'"
+    assert phases["setup"]["if"] == ("inputs.experiment_yaml == 'pilot/branch-setup' || "
+                                     "inputs.experiment_yaml == 'pilot/inference-branch-setup'")
+    assert phases["inspect"]["if"] == ("inputs.experiment_yaml == 'pilot/branch-inspect' || "
+                                       "inputs.experiment_yaml == 'pilot/inference-branch-inspect'")
     assert phases["inspect"]["timeout-minutes"] == 2 and "--terminal-revision" in phases["inspect"]["run"]
     assert "inputs.experiment_yaml != 'pilot/branch-inspect'" in phases["prepare"]["if"]
     renderer = next(step for step in live["steps"] if "preflight_grading_renderer.py" in step.get("run", ""))

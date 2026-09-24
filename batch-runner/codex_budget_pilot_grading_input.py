@@ -46,13 +46,11 @@ def compile_cell_grading_plan(
         cells = [cell for cell in plan["cells"] if cell["cell_id"] == cell_id]
         if len(cells) != 1 or plan["order"].count(cell_id) != 1:
             raise PilotGradingInputRefused("canonical_selected_cell_required")
-        registration = load_plan(ci.REGISTRATION)
-        primitives._same("CI campaign", registration["campaign_id"], ci.CAMPAIGN)
-        primitives._same("CI host policy", registration["host"], ci.HOST_POLICY)
+        registration_bytes = ci._registration_bytes()
         # Bind the real pilot's inputs, order, source and controls, plus the
         # recorded common host policy. No live-runner identity is invented.
         binding = {
-            "pilot": plan, "ci_registration_sha256": pilot._identity(pilot._read_bytes(ci.REGISTRATION))["sha256"],
+            "pilot": plan, "ci_registration_sha256": pilot._identity(registration_bytes)["sha256"],
             "host_policy": ci.HOST_POLICY,
         }
         dispatch = replace(

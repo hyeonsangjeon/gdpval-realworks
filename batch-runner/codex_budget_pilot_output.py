@@ -402,6 +402,7 @@ def _remaining(deadline: float) -> float:
 def _hf_client(token: str, deadline: float, *, metadata_repo: str | None = None,
                metadata_revision: str = "main",
                observation: dict | None = None, setup_repo: str | None = None,
+               setup_branch: str | None = None,
                setup_reservation: Path | None = None, setup_identity: dict | None = None,
                response_bytes_limit: int | None = None):
     """Scoped supported HF client hook: bounded HTTP, terminal failures, no Xet.
@@ -422,6 +423,10 @@ def _hf_client(token: str, deadline: float, *, metadata_repo: str | None = None,
     _require(type(response_bytes_limit) is int and 0 < response_bytes_limit <= MAX_FILE_BYTES,
              "hf_response_limit_refused")
     _require(metadata_repo is None or setup_repo is None, "hf_setup_request_refused")
+    _require(setup_branch is None or (
+        setup_branch in {ci.INFERENCE_BRANCH, ci.GRADING_BRANCH} and type(setup_repo) is str
+        and hashlib.sha256(setup_repo.encode()).hexdigest() == ci.STORAGE["repository_name_sha256"]),
+        "hf_setup_request_refused")
     _require((metadata_repo is None and metadata_revision == "main") or
              (metadata_repo is not None and type(metadata_revision) is str
               and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", metadata_revision) is not None),
@@ -461,6 +466,11 @@ def _hf_client(token: str, deadline: float, *, metadata_repo: str | None = None,
                           ("GET", f"/api/datasets/{setup_repo}"),
                           ("POST", "/api/repos/create"),
                           ("GET", f"/api/datasets/{setup_repo}/revision/main"))
+                if setup_branch is not None:
+                    routes = (("GET", f"/api/datasets/{setup_repo}/revision/{ci.STORAGE['bootstrap']}"),
+                              ("GET", f"/api/datasets/{setup_repo}/revision/{setup_branch}"),
+                              ("POST", f"/api/datasets/{setup_repo}/branch/{setup_branch}"),
+                              ("GET", f"/api/datasets/{setup_repo}/revision/{setup_branch}"))
                 _require(observation is not None and setup_attempts < len(routes)
                          and (request.method, str(request.url)) == (
                              routes[setup_attempts][0], HF_ENDPOINT + routes[setup_attempts][1])
@@ -473,11 +483,14 @@ def _hf_client(token: str, deadline: float, *, metadata_repo: str | None = None,
                     _bytes(setup_reservation, limit=MAX_MANIFEST_BYTES, expected=setup_identity)
                     _require(len(request.content) <= 1024, "hf_setup_create_body_refused")
                     body = pilot._json_object(request.content)
-                    namespace, name = setup_repo.split("/")
-                    common = {"organization": namespace, "name": name, "type": "dataset"}
-                    _require(body == {**common, "visibility": "private"}
-                             or (body == {**common, "private": True} and body.get("private") is True),
-                             "hf_setup_create_body_refused")
+                    if setup_branch is not None:
+                        _require(body == {"startingPoint": ci.STORAGE["bootstrap"]}, "hf_setup_create_body_refused")
+                    else:
+                        namespace, name = setup_repo.split("/")
+                        common = {"organization": namespace, "name": name, "type": "dataset"}
+                        _require(body == {**common, "visibility": "private"}
+                                 or (body == {**common, "private": True} and body.get("private") is True),
+                                 "hf_setup_create_body_refused")
                 else:
                     _require(not request.content, "hf_setup_request_refused")
                 setup_attempts += 1
@@ -504,8 +517,11 @@ def _hf_client(token: str, deadline: float, *, metadata_repo: str | None = None,
                 allowed = (200, 201) if setup_attempts == 3 else (200,)
                 if response.status_code not in allowed:
                     status = response.status_code
+                    revision_missing = (setup_branch is not None and setup_attempts == 2 and status == 404
+                                        and response.headers.get("X-Error-Code") == "RevisionNotFound")
                     response.close()
-                    reason = ("hf_http_failed" if status >= 400 else "hf_setup_redirect_refused"
+                    reason = ("hf_revision_not_found" if revision_missing else
+                              "hf_http_failed" if status >= 400 else "hf_setup_redirect_refused"
                               if 300 <= status < 400 else "hf_setup_response_refused")
                     # This also intercepts whoami's credential-cache diagnostics
                     # and create_repo's special 409 retry before SDK handling.
@@ -755,7 +771,7 @@ def setup_output_target(*, create: bool = False, state_root: Path | None = None,
 
 def publish(snapshot: Snapshot, *, repo: str, expected_parent: str, _test_api=None,
             _deadline: float | None = None, _token: str | None = None,
-            _failure_metadata: bool = False) -> dict:
+            _failure_metadata: bool = False, _retained_ref: bool = False) -> dict:
     """One reservation and one CAS commit; never reconcile/retry a lost reply."""
     # Only the retained-CI adapter may preserve explicit terminal failure
     # metadata without a result. The standalone publisher's default is unchanged.
@@ -767,6 +783,15 @@ def publish(snapshot: Snapshot, *, repo: str, expected_parent: str, _test_api=No
              and "bound_inference_result" in snapshot.manifest["missing"]),
              "bound_inference_result_required")
     _require(validate_hf_dataset_repo_id(repo) == repo and _hash(expected_parent, 40), "explicit_target_parent_required")
+    _require(type(_retained_ref) is bool, "retained_output_ref_required")
+    if _retained_ref:
+        _require(snapshot.manifest.get("inference_branch") == ci.INFERENCE_BRANCH
+                 and snapshot.manifest["campaign_id"] == ci.CAMPAIGN
+                 and hashlib.sha256(repo.encode()).hexdigest() == ci.STORAGE["repository_name_sha256"],
+                 "retained_output_ref_required")
+    else:
+        _require("inference_branch" not in snapshot.manifest, "retained_output_ref_required")
+    revision = ci.INFERENCE_BRANCH if _retained_ref else "main"
     reservation, receipt_path = snapshot.cell_root / RESERVATION, snapshot.cell_root / RECEIPT
     _require(not os.path.lexists(reservation) and not os.path.lexists(receipt_path), "publication_already_reserved")
     token = os.environ.get("HF_TOKEN", "") if _token is None else _token
@@ -777,6 +802,8 @@ def publish(snapshot: Snapshot, *, repo: str, expected_parent: str, _test_api=No
     attempt = {"format": FORMAT, "outcome": "unresolved", "output_repository": repo,
                "expected_parent": expected_parent, "prefix": prefix, "manifest": pilot._identity(manifest_bytes),
                "cell": snapshot.manifest, "returned_commit": None, "grade_ready": False}
+    if _retained_ref:
+        attempt["inference_branch"] = revision
     _write_no_clobber(reservation, (pilot._canonical_json(attempt) + "\n").encode())
     _fsync_directory(snapshot.cell_root)
     stage, returned, before, after = "target_metadata", None, None, None
@@ -788,7 +815,7 @@ def publish(snapshot: Snapshot, *, repo: str, expected_parent: str, _test_api=No
             from huggingface_hub import RepoFolder
 
             with (nullcontext(_test_api) if _test_api is not None else _hf_client(token, deadline)) as api:
-                before = _metadata(api, repo, "main", token, deadline)
+                before = _metadata(api, repo, revision, token, deadline)
                 _require(before["sha"] == expected_parent, "publication_parent_changed")
                 stage = "prefix_check"
                 ancestors = ["cell-outputs", prefix.rsplit("/", 1)[0]]
@@ -808,7 +835,7 @@ def publish(snapshot: Snapshot, *, repo: str, expected_parent: str, _test_api=No
                     stage = "commit"
                     _remaining(deadline)
                     operations = _publication_additions(staged)
-                    response = api.create_commit(repo_id=repo, repo_type="dataset", revision="main", token=token,
+                    response = api.create_commit(repo_id=repo, repo_type="dataset", revision=revision, token=token,
                         parent_commit=expected_parent, operations=operations,
                         commit_message="Preserve one private pilot cell output", num_threads=1, run_as_future=False,
                         create_pr=False)

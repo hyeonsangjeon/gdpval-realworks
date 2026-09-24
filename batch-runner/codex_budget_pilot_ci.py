@@ -18,10 +18,17 @@ import yaml
 import codex_budget_pilot as pilot
 from core.cost_projection import COST_STATUSES, project_cost_receipt
 
-CAMPAIGN = "budget_pilot_ci_20260923_01"
+CAMPAIGN = "budget_pilot_ci_20260924_02"
+INFERENCE_BRANCH = "pilot-inference-20260924-02"
+GRADING_BRANCH = "pilot-grades-20260924-02"
+STORAGE = {
+    "repository_name_sha256": "a13dedada5465377761961d050e021a4db8e44d6284179a9ce40b562e4396a44",
+    "bootstrap": "bfc7ae01ed14490817ceb7cb406adcb9bb95f557",
+    "inference_branch": INFERENCE_BRANCH, "grading_branch": GRADING_BRANCH,
+}
 REPOSITORY = "hyeonsangjeon/gdpval-realworks"
 WORKFLOW = ".github/workflows/codex-budget-pilot-ci-cell.yml"
-REGISTRATION = pilot.REGISTRATION.with_name("codex_external_budget_ci_pilot.yaml")
+REGISTRATION = pilot.REGISTRATION.with_name("codex_external_budget_ci_pilot_epoch02.yaml")
 HOST_POLICY = {
     "runner": "ubuntu-22.04", "python": "3.10.12", "sdk": "0.147.0", "cli": "0.147.0",
     "identity": "existing_repository_oidc", "job_ceiling_minutes": 240,
@@ -102,22 +109,29 @@ def _require_ci_context(reviewed_sha: str) -> dict:
             "workflow": caller, "workflow_sha": reviewed_sha, "run_attempt": 1}
 
 
-def compile_ci_cell(campaign: str, cell_id: str, reviewed_sha: str) -> tuple[dict, Any, dict, dict]:
-    """Reuse the genuine 30-cell compiler; bind the separate host decision."""
-    if campaign != CAMPAIGN:
-        raise CICellRefused("registered_ci_campaign_required")
+def _registration_bytes() -> bytes:
+    """One closed replacement epoch; the historical registration is untouched."""
     registration_bytes = pilot._read_bytes(REGISTRATION)
     registration = yaml.safe_load(registration_bytes)
     expected = {
         "plan_version": "codex-external-budget-ci-cell-v1", "campaign_id": CAMPAIGN,
-        "source_baseline": "42c7b8f2f6457463333e386432baceed96182c72",
+        "source_baseline": "e23d8acc1d032b3e937ec099324e3221334c9b4b",
         "parent_registration": str(pilot.REGISTRATION.relative_to(pilot.ROOT)),
         "host": HOST_POLICY, "default_mode": "plan_only", "selection": "one_explicit_canonical_cell",
         "controls": "inherit_parent_unchanged", "input_transfer": "explicit_approved_handoff_required",
         "publication": "private_cell_outputs_and_nonsecret_completion_envelope", "ordered_30_cell_scheduler": "not_implemented",
         "separate_manual_run_deduplication": "fixed_private_claim_cas_canonical_successor_only",
+        "storage": STORAGE,
     }
     pilot._same("CI registration", {key: value for key, value in registration.items() if key != "description"}, expected)
+    return registration_bytes
+
+
+def compile_ci_cell(campaign: str, cell_id: str, reviewed_sha: str) -> tuple[dict, Any, dict, dict]:
+    """Reuse the genuine 30-cell compiler; bind the separate host decision."""
+    if campaign != CAMPAIGN:
+        raise CICellRefused("registered_ci_campaign_required")
+    registration_bytes = _registration_bytes()
     plan, parent, specs = pilot.compile_pilot(campaign, reviewed_sha)
     matches = [cell for cell in plan["cells"] if cell["cell_id"] == cell_id]
     if len(matches) != 1 or plan["order"].count(cell_id) != 1:

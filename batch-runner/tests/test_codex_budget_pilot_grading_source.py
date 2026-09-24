@@ -292,7 +292,7 @@ def test_cli_receipt_failure_preserves_reservation_and_unknown_mutation_without_
             assert revision in {retained.BOOTSTRAP, connector.BRANCH}
             calls.append(("metadata", revision))
             if revision == connector.BRANCH and not created:
-                raise output.OutputPublicationRefused("hf_http_failed", 404)
+                raise output.OutputPublicationRefused("hf_revision_not_found", 404)
             return SimpleNamespace(id=repo, private=True, sha=retained.BOOTSTRAP)
 
         def create_branch(self, **kwargs):
@@ -306,7 +306,9 @@ def test_cli_receipt_failure_preserves_reservation_and_unknown_mutation_without_
                 raise OSError(RAW_ERROR)
 
     @contextmanager
-    def fake_session(*args):
+    def fake_session(*args, **kwargs):
+        assert kwargs["_branch_setup"]["setup_repo"] == repo
+        assert kwargs["_branch_setup"]["setup_branch"] == connector.BRANCH
         yield FakeBranch(), token, time.monotonic() + 20
 
     record = connector._record

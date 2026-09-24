@@ -1,0 +1,35 @@
+# Independent replacement, not recovery of epoch01 or live execution authority.
+plan_version: codex-external-budget-ci-cell-v1
+campaign_id: budget_pilot_ci_20260924_02
+source_baseline: e23d8acc1d032b3e937ec099324e3221334c9b4b
+parent_registration: batch-runner/experiments/execution_envelope/codex_external_budget_pilot.yaml
+description: >-
+  Prepare a separate 30-cell comparison with the same five originals,
+  A1/B1/C1/C2/B2/A2 order and unchanged model, route, effort, tools, fixed grader
+  and 180/30-minute controls. Epoch01 retains its one admitted failed/unretained
+  A1 and 29 not run, including partial cost. If later authorized, old1 plus new30
+  means 31 admitted cells across separate histories, not a recovered original30.
+  The leader must bind one final reviewed source, actual ref bootstraps and one
+  cell before live use. This registration grants no setup or paid authority.
+host:
+  runner: ubuntu-22.04
+  python: 3.10.12
+  sdk: 0.147.0
+  cli: 0.147.0
+  identity: existing_repository_oidc
+  job_ceiling_minutes: 240
+  same_policy_all_conditions: true
+  cross_runner_restore: false
+  automatic_rerun: refuse_run_attempt_above_one
+default_mode: plan_only
+selection: one_explicit_canonical_cell
+controls: inherit_parent_unchanged
+input_transfer: explicit_approved_handoff_required
+publication: private_cell_outputs_and_nonsecret_completion_envelope
+ordered_30_cell_scheduler: not_implemented
+separate_manual_run_deduplication: fixed_private_claim_cas_canonical_successor_only
+storage:
+  repository_name_sha256: a13dedada5465377761961d050e021a4db8e44d6284179a9ce40b562e4396a44
+  bootstrap: bfc7ae01ed14490817ceb7cb406adcb9bb95f557
+  inference_branch: pilot-inference-20260924-02
+  grading_branch: pilot-grades-20260924-02

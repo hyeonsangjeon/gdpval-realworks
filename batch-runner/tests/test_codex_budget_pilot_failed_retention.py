@@ -127,7 +127,7 @@ def test_failed_retention_withholds_only_payload_and_preserves_recorded_facts(ca
     assert terminal["publication_acknowledged"] is True
     assert set(s.api.trees[s.api.head]) == {claim_path, terminal_path, prefix + "/" + output.MANIFEST}
     published = s.api.trees[terminal["output_commit"]][prefix + "/" + output.MANIFEST]
-    assert json.loads(published) == manifest
+    assert json.loads(published) == {**manifest, "inference_branch": retention.BRANCH}
     assert terminal["manifest_identity"] == pilot._identity(published)
     retention._manifest(json.loads(published), completed, cell)
     assert all(CANARY.encode() not in data for tree in s.api.trees.values() for data in tree.values())
