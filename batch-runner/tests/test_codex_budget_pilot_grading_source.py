@@ -75,14 +75,19 @@ def source(tmp_path, monkeypatch):
     repository = tmp_path / "source"
     repository.mkdir()
     manifest = preflight.load_plan()
+    parent_registration = pilot.REGISTRATION.relative_to(pilot.ROOT)
+    ci_registration = ci.REGISTRATION.relative_to(pilot.ROOT)
     # Only tracked source metadata/code, never original parquet/reference data.
-    for role in (*manifest["source_pins"], MANIFEST_PATH):
+    # Include both genuine registrations in the clean synthetic commit.
+    for role in (*manifest["source_pins"], MANIFEST_PATH, parent_registration, ci_registration):
         destination = repository / role
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_bytes((preflight.ROOT / role).read_bytes())
     _fixture_git(repository, "init", "--quiet", "--initial-branch=fixture-main", "--object-format=sha1", "--template=")
     sha = _commit_fixture(repository, "Synthetic reviewed source fixture")
     monkeypatch.setattr(pilot, "ROOT", repository)
+    monkeypatch.setattr(pilot, "REGISTRATION", repository / parent_registration)
+    monkeypatch.setattr(ci, "REGISTRATION", repository / ci_registration)
     monkeypatch.setattr(checkout, "TRUSTED_ROOT", repository)
     plan, parent, _ = pilot.compile_pilot(ci.CAMPAIGN, sha)
 
