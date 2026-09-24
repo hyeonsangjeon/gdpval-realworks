@@ -13,6 +13,53 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Prepare the closed first-A1 acceptance gate `budget_pilot_ci_20260924_03`
+  from exact main `c739e5596cf874ef3f48d0943404101f10500372`. The leader supplied
+  #674 FINAL-APPROVE `5305021240` at `075ab8f065d88207d9b7ad0de5d02df487867793`
+  and all 9 checks passed for the preceding diagnostic, not this activation.
+  The bounded pre-edit extreme-reasoner decision permits only a new closed
+  registration, active campaign/ref/source-baseline bindings, five workflow
+  campaign literals and directly coupled assertions. Historical registrations,
+  approved ledger-note/closed-diagnostic implementation bytes, source pins,
+  generic defaults and setup/admission/publication/terminal/grading algorithms
+  remain unchanged. No new workflow input or scheduler was added.
+  Only `02aa1805-c658-4069-8a6a-02dec146063a_A_r1` may receive later leader
+  live authorization. The existing 30-cell compile shape/order remains; the
+  other 29 have no execution authority. The one-cell restriction is a leader
+  dispatch boundary, not a new runtime cap. The fixed private target name SHA256
+  `a13dedada5465377761961d050e021a4db8e44d6284179a9ce40b562e4396a44` and bootstrap
+  `bfc7ae01ed14490817ceb7cb406adcb9bb95f557` are reused with new fixed refs
+  `pilot-inference-20260924-03` and `pilot-grades-20260924-03`. Their actual
+  state was not observed or changed here. Existing four-request, one-ref setup,
+  strict absence checks, one-use reservation/readback and CAS isolation remain.
+  At tested SHA `bda13885f4eee9d489e150bd2be97c1f043bedd8`, the sole offline
+  selector `tests/test_codex_budget_pilot_epoch03_gate.py` returned
+  **13 passed in 23.30s**, exit 0. Real compiler/routing/deadline/byte/receipt/
+  admission/publisher/terminal/grading-binding helpers used synthetic inputs,
+  source/host capability, child/HF boundaries and grading preparation identities.
+  Coverage includes fixed03 setup, no replay/adoption, cross-epoch refusals,
+  successful retention, failed/ungraded withholding and grading-ref isolation.
+  No native installation, actual ref setup, paid output or grade was observed;
+  no prior family/full suite was rerun. Only completion records changed after
+  that snapshot. Old01/source `2fe1c6925e6d76c03b85851046d52216bee74a16`/run
+  `35954811341` and epoch02/source `4aac36b6f92d2a14b8cac02d793356d6687ace6d`/run
+  `35983583688` each retain one admitted failed/unretained A1 and 29 unrun.
+  Their partial costs, **USD 0.175163** and **USD 0.196821**, remain separate,
+  with null estimates, incomplete invoices, unavailable raw files and unknown
+  child causes. Only a later gate admission would make old2 plus new1 **3
+  admitted cells across separate histories**, not 32 or a pooled comparison.
+  New-head review/CI, actual verification of both refs, exact final source and
+  one-cell authorization remain leader-owned. Later acceptance requires owned
+  cleanup and a valid retained terminal/receipt without raw leakage; successful
+  output needs deliverables before fixed grading, while a failed cell remains
+  failed and must retain its available closed category. A recorded category is
+  not proof of the child's underlying cause. Missing diagnostics or unretained
+  terminal state block expansion. Stop after the gate regardless of
+  outcome; no successor, replacement, rerun or automatic epoch04 is authorized.
+  Model/input/budget controls remain unchanged. No live HF/model/grader/Azure
+  request, workflow dispatch, source reseal, claim settlement or CI polling
+  occurred. Prior test and live observations below remain separate evidence.
+
 - Add a future-run, closed failure-category diagnostic to the existing CI CLI
   from main `e1eef7e8b880e4dbc6066f54c6fba5ab8e1befc6`. The leader supplied
   #673 review `5303368449` at `70d1651bbf7bd005daca764b2f0dc75097afab73`
