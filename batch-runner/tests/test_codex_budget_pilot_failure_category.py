@@ -141,6 +141,7 @@ class DiagnosticChildren(CICellChildren):
                 "codex_foundry", None, "gpt-5.4", run_id=payload["run_id"],
                 condition_name="condition_a", upload_root=upload,
             )
+            assert self.produced, row.get("error")  # Synthetic fixture failures must not stand in for the producer.
             row["problem_solving_cost"] = ledger.receipt_for(task["task_id"], BUCKET_PROBLEM_SOLVING).as_dict()
             ledger_path = cwd / "workspace" / Path(pilot.LEDGER).name
             digest = ledger.export_jsonl(ledger_path)
