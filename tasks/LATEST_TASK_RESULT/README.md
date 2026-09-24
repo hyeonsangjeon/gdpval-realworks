@@ -1,5 +1,78 @@
 # Latest task result
 
+## PROJECT5-BOOTSTRAP-COUNTS-1207
+
+### Test-only correction and review scope
+
+Updated only the three coupled expectations on the existing #670 branch,
+starting at `9cee38e586c859c47be54fa7ef1bc1ed2110736c`:
+
+- Setup routing now expects **10** excluded steps instead of **8** and explicitly
+  includes the installation and full-capability steps.
+- Output-target routing now expects **4** exact shared-admission matches instead
+  of **2**, with the four intended step names fixed in the assertion.
+- The three parameterized HF-originals failure-gate cases now expect the same
+  **4** downstream steps instead of **2**, with exact names.
+
+The shared predicates, setup exclusion, input-failure checks, prior-success
+requirements and downstream admission/OIDC/retention assertions are unchanged.
+There is no dynamic-count substitute, skip, xfail or helper framework. The
+29-line workflow addition, capability helper, runtime/config/source pins and
+`tests/test_codex_budget_pilot_bootstrap.py` remain byte-identical to the starting
+head. No production change or new CI/cost review was needed.
+
+The leader supplied source approval `5299044787` for that head's workflow/helper
+scope and exact-head REQUEST-CHANGES `5299205667` for these test expectations.
+Neither review approves this new delta. Main remains
+`c463bc57139a484214264adc2a22c655cd33ca47`; no merge or reseal occurred.
+
+### CI evidence and single local invocation
+
+The leader reported eight applicable checks passing and pytest failing on the
+starting head. Completed full CI run `35947002035`, job `107467086938`, recorded
+**5 failed, 13763 passed, 61 skipped, 46 deselected in 2039.71s**. All five
+reported failures were the three stale count assertions, including three HF
+parameter cases. The CI-captured `hf_original_inaccessible`/403 belongs to a
+synthetic negative-path fixture, not a new live HF or authentication failure.
+
+Tested SHA: `629b3365c0621b070cddc6a9aae84a157ede2c14`.
+The one permitted invocation used the existing Python 3.10.12 environment and
+only these three selectors from `batch-runner/`:
+
+```bash
+timeout --signal=TERM --kill-after=5s 180s env -i PATH=/usr/bin:/bin HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 HF_HUB_DISABLE_IMPLICIT_TOKEN=1 DO_NOT_TRACK=1 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /usr/bin/python3.10 -m pytest -q -o addopts= -p no:cacheprovider --tb=short --junitxml=<private-test-evidence>/results.xml tests/test_codex_budget_pilot_output_setup.py::test_setup_workflow_routing_is_static_and_keeps_model_input_and_publication_closed tests/test_codex_budget_pilot_output_target.py::test_output_target_workflow_contract_is_static_not_an_actions_execution tests/test_codex_ci_hf_originals.py::test_hf_originals_actual_cli_failure_cannot_open_workflow_oidc_gate
+```
+
+Result: **2 passed, 3 errors in 1.96s**, exit 1. The two static workflow contracts
+passed. The HF cases (`fetch`, `installed_check`, `None`) stopped before their
+bodies ran: the existing `offline` fixture could not import `openai_codex`.
+This is a local environment limitation, not an observed assertion regression
+or HF call. Those three cases remain locally unvalidated. No dependency install,
+test double replacement, assertion weakening or second invocation was attempted.
+The private JUnit report has SHA256
+`6e35511b5ad9dc6810076424573ac098acc1ec1a958ffe35aa108f41ecafe6bb`.
+Only these two records changed after the tested snapshot.
+
+### Preserved evidence and remaining gates
+
+The original **11 passed in 0.99s** at
+`771e79a56e1928d839dc50901b96011a91306fa9` remains a separate result; its
+bootstrap selector was not rerun and is not combined with this invocation.
+The failed/consumed A1 runs `35941493214` (omitted hash) and `35943806328`
+(accepted originals, then unavailable `bwrap`) retain their histories below.
+Acknowledged/`branch_verified` setup `35939410006` remains distinct from
+unresolved/consumed original setup `35920355055`; no target or branch was replayed.
+No paid cell has been admitted by these failed runs.
+
+Remaining are new-head delta review, final CI including the three locally
+unexecuted HF cases, explicit leader reseal and actual runner admission.
+No CI query/rerun, full suite, live diagnostic, HF/model/grader call, Azure
+management operation, permission change or paid action occurred. English
+reporting/copyediting guidance kept the CI assertion failures, local fixture
+errors and original bootstrap evidence separate. Experiment-design, repo-readiness
+and UI/animation skills were not applicable: no experimental axis, new public
+handoff or interface changed.
+
 ## PROJECT5-BUBBLEWRAP-BOOTSTRAP-1105
 
 ### Result and scope

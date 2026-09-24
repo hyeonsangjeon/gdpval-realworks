@@ -53,6 +53,31 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Correct only the three coupled pilot-workflow test expectations on #670:
+  setup-excluded steps **8 → 10**, output-target shared-admission steps **2 → 4**,
+  and HF-originals downstream steps **2 → 4**. Explicit step-name assertions
+  include the installation and full-capability steps; all existing predicates,
+  setup exclusions, failure and downstream gates remain. The workflow, helper,
+  runtime/config/source pins and bootstrap test file are byte-identical to
+  `9cee38e586c859c47be54fa7ef1bc1ed2110736c`. Source review `5299044787` covers
+  that head's workflow/helper scope; REQUEST-CHANGES `5299205667` requests this
+  test-only correction. The leader reported full CI `35947002035`, job
+  `107467086938`: **5 failed, 13763 passed, 61 skipped, 46 deselected in 2039.71s**.
+  One invocation of the three requested selectors at
+  `629b3365c0621b070cddc6a9aae84a157ede2c14` returned **2 passed, 3 errors in
+  1.96s**, exit 1. The setup/output-target contracts passed; all three HF cases
+  stopped in fixture setup because this Python environment could not import
+  `openai_codex`. Those cases remain locally unvalidated. No dependency was
+  changed or installed, and the invocation was not repeated. The earlier
+  CI-captured `hf_original_inaccessible`/403 is a synthetic negative-path result,
+  not a live HF/auth failure. Original **11 passed in 0.99s** at
+  `771e79a56e1928d839dc50901b96011a91306fa9` remains separate, not a fresh
+  combined result. Failed/consumed A1 runs `35941493214` and `35943806328`,
+  acknowledged setup `35939410006` and unresolved/consumed setup `35920355055`
+  retain their recorded scopes below. New-head delta review, final CI, explicit
+  leader reseal and actual runner admission remain. No live operation or CI
+  query/rerun occurred.
+
 - Bootstrap the existing Ubuntu 22.04 bubblewrap prerequisite for an executable
   pilot cell only after verified input intake, before private admission and
   OIDC. Reuse the existing bounded Ubuntu `apt` convention with one update/install
