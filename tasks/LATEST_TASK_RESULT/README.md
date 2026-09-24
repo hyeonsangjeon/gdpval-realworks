@@ -1,5 +1,143 @@
 # Latest task result
 
+## PROJECT5-FAILED-RETENTION-1339
+
+### Future-code repair and frozen admitted cell
+
+Added a retention-only opt-in for an already finalized failed/stopped cell whose
+bound result is refused with the exact code `unsafe_result_fields`. It retains
+only a bounded metadata manifest after all other validation passes. It does not
+recover the admitted A1 or change its source, claim, clock, status or accounting.
+One new offline selector returned **25 passed in 288.82s**, exit 0, at
+`3276b32761579af86392909b6d472c9c7f8f604b`.
+
+The branch starts from leader-supplied main and ACTIVE pilot source
+`2fe1c6925e6d76c03b85851046d52216bee74a16`. The leader reported #670 review
+`5299471328` and all **9 checks passed** for the preceding bootstrap/count
+correction. That review does not cover this repair. The existing extreme-reasoner
+returned **APPROVE-WITH-CONDITIONS, future-code implementation only**, before
+the publication-path edits. No new-head approval, live recovery or reseal is
+asserted here.
+
+### Observed failure and evidence limits
+
+The leader supplied A1 run `35954811341`, job `107490761123`, on that active
+source. Real input intake, the full sandbox gate and private claim passed.
+Execution exited **1 at 04:20:18 UTC**; retention exited **2** with
+`unsafe_result_fields` at **04:20:21.6482243 UTC**. One paid child was admitted.
+This is not another bootstrap, original-input or authentication diagnosis.
+
+Verified public completion artifact `10789759614` has envelope SHA256
+`570b0bc196a21efaa0a23123958a46d0ae2b2a52a16d19fb0661aae6d8b046e6`.
+It reports `failed` / `child_nonzero_exit`, `timeout=false`,
+`child_invocations=1`, `cleanup_confirmed=true`, `other_cells_not_run=29` and
+`deliverables=[]`. Its partial receipt reports **55033 input tokens**,
+**4387 output tokens**, **12544 cached-input tokens** and **3566 reasoning
+tokens**. Known cost is **USD 0.175163**; the estimate is **null** and
+`invoice_complete=false`. These are not invoice totals or request counts.
+
+Only identities are available for the bound result and ledger:
+
+- Result: **7460 bytes**, SHA256
+  `c9313667c3890a1b4bc876d7bb771b41e430c2f595515c1a4bc0041e9fa1175b`.
+- Ledger: **1838 bytes**, SHA256
+  `116561470c73f4fbeae18a7db81c74947991e1b46f695411842f5bbd6153d93a`.
+
+The raw bytes are unavailable here. Hashes neither preserve nor reconstruct
+them. The child failure's precise cause and the unsafe field remain unknown.
+The source trace confirms that `retain` calls `prepare` before
+`TERMINAL_RESERVED`, the HF session and publication, so this retention invocation
+published neither result nor terminal metadata. The refusal code is shared by
+top-level, recursive and row/`failure_evidence` guards. The current remote claim
+state is **not established**; no read or reconciliation was attempted.
+
+### Guard-preserving behavior
+
+Only retention opts into the new path. Standalone preparation/publication and
+unsafe successful results still refuse. Eligibility requires failed/stopped
+state, confirmed selected-cell cleanup and readable current result bytes matching
+the recorded identity. Campaign/source/config/plan/host/input bindings, result
+fingerprint and canonical identity, path/link/size limits, deliverable and ledger
+bytes, and receipt/accounting checks remain mandatory. `_finish` rechecks a copy;
+it never rewrites the original state. Recursive validation checks every branch's
+depth before reporting unsafe fields, so an early field refusal cannot hide a
+structure failure. No arbitrary exception or other refusal code gains a fallback.
+
+The existing missing-payload path now also produces the withheld manifest:
+`files=[]`, the existing missing-payload list, and exactly
+`withheld={reason: unsafe_result_fields, artifacts: unchanged completion.artifacts}`.
+The optional `withheld` field records local identities, not remote payload
+availability. No rejected result, deliverable or ledger bytes are published.
+The symmetric terminal validator requires exact fields, identities, failure
+status, cleanup, empty published files and the existing bounds. Missing usage
+remains missing; partial accounting, the execution reason and failed/ungraded
+state are preserved. The public completion schema is unchanged.
+Failed/stopped/missing outcomes remain in the 30-cell denominator.
+
+Private-target and expected-parent checks, one-use reservations, CAS publication,
+durable acknowledgment, remote-object checks and terminal confirmation remain
+required. An unacknowledged output write cannot create a terminal record or
+authorize advancement. Workflow, compiler, source pins, dependency/runtime pins,
+model/budget/order controls and the fixed grader are unchanged.
+
+### Single offline validation
+
+Tested SHA: `3276b32761579af86392909b6d472c9c7f8f604b`.
+Selector: `tests/test_codex_budget_pilot_failed_retention.py`.
+Result: **25 passed in 288.82s**, exit 0. One invocation used the existing
+Python 3.10.12 environment from `batch-runner/`; only the private JUnit path is
+replaced below:
+
+```bash
+timeout --signal=TERM --kill-after=5s 300s env -i PATH=/usr/bin:/bin HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 HF_HUB_DISABLE_IMPLICIT_TOKEN=1 DO_NOT_TRACK=1 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /usr/bin/python3.10 -m pytest -q -o addopts= -p no:cacheprovider --tb=short --junitxml=<private-test-evidence>/results.xml tests/test_codex_budget_pilot_failed_retention.py
+```
+
+Private JUnit SHA256:
+`af92c85b66dc61a3035090f6af56d25c0f5bdf5468e0d2ef875a173858301136`.
+The cases use synthetic finalized outputs and the existing fake child/HF
+boundaries with real JSON serialization, fingerprints, compiler, state/byte
+checks, publisher/CAS and terminal validation. They cover failed/stopped field
+variants, manifest-only publication without a private canary, unchanged files,
+checkpoints and partial/missing accounting, safe success, unsafe-success and
+standalone refusal, closed withheld identities/bounds, identity/source/path/byte/
+cleanup/accounting/structure refusals, and lost-publication no-replay/no-advance.
+Runtime/SDK admission and native execution are synthetic in the reused fixture;
+this is not a native installation or live publication result. The cases do not
+identify A1's lost field. No previous family or full suite was rerun. Only these
+two completion records changed after the tested code/test snapshot.
+
+### Required leader decision before any live use
+
+The admitted A1 remains frozen at `2fe1c6925e6d76c03b85851046d52216bee74a16`.
+Its unavailable raw files cannot satisfy the new byte checks. The reviewer
+requires separate leader authorization for an exact reviewed future source and
+a new campaign/source epoch with noncolliding claim/output identity and an
+approved bootstrap/parent. Any paid execution also needs explicit authorization
+and the common-source requirement. This patch implements neither epoch migration
+nor settlement, adoption, replay, reconciliation or replacement of the old claim.
+No clock is reset. New-head review/final CI, that source/epoch decision and any
+separately authorized claim settlement remain before further live activity.
+No next cell or grade is authorized. Complete 30-cell results remain unavailable.
+
+Historical failed/consumed A1 runs `35941493214` (omitted input hash before
+intake) and `35943806328` (accepted inputs, then missing `bwrap`) remain distinct;
+those earlier runs admitted no paid cell. Dataset setup `35881609256` remains
+consumed. Grading setup `35939410006`, job `107443765950`, was acknowledged /
+`branch_verified` at **00:43:02.5104178 UTC**; original setup `35920355055` remains
+**UNRESOLVED/CONSUMED**. None was replayed or changed. No HF API call, workflow
+dispatch or CI query, model/grader request, Azure operation, original-payload
+transfer or live claim operation occurred in this task. Git source/handoff
+operations are separate from those live boundaries.
+
+The full skill catalog was checked once. Experiment-design guidance preserved
+the immutable-source/claim boundary and unchanged experimental axes.
+Experiment-report-en and im-not-ai-en kept partial accounting, observed failure,
+synthetic validation and unknown causes separate. UI skills and repo-readiness
+were not applicable to this bounded code/evidence correction.
+
+The sections below preserve earlier observations and their then-current limits;
+they do not replace the active-source and admitted-cell status above.
+
 ## PROJECT5-BOOTSTRAP-COUNTS-1207
 
 ### Test-only correction and review scope

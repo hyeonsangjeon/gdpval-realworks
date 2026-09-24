@@ -144,14 +144,21 @@ def _checkpoint(path: Path) -> dict:
 
 def _safe_record(value: object, depth: int = 0) -> None:
     """Reject raw-state fields; generated text remains text, not executable data."""
-    _require(depth <= 24, "unsafe_result_structure")
-    if isinstance(value, dict):
-        _require(not {str(key).lower() for key in value} & FORBIDDEN_KEYS, "unsafe_result_fields")
-        for item in value.values():
-            _safe_record(item, depth + 1)
-    elif isinstance(value, list):
-        for item in value:
-            _safe_record(item, depth + 1)
+    def inspect(item: object, level: int) -> bool:
+        _require(level <= 24, "unsafe_result_structure")
+        if isinstance(item, dict):
+            unsafe = bool({str(key).lower() for key in item} & FORBIDDEN_KEYS)
+            children = item.values()
+        elif isinstance(item, list):
+            unsafe, children = False, item
+        else:
+            return False
+        for child in children:
+            # Check every branch's structure even if a prior field is unsafe.
+            unsafe = inspect(child, level + 1) or unsafe
+        return unsafe
+
+    _require(not inspect(value, depth), "unsafe_result_fields")
 
 
 def _receipt_fields(value: object) -> None:
@@ -226,7 +233,16 @@ class Snapshot:
     cell_root: Path
 
 
-def prepare(*, root: Path, campaign: str, cell_id: str, source_sha: str, config_sha: str) -> Snapshot:
+def _missing_payload(manifest: dict, cell_root: Path) -> Snapshot:
+    manifest["missing"] = ["bound_inference_result", "validated_deliverables", "bound_ledger_export"]
+    if manifest["receipt"] is None or manifest["receipt"]["usage"] is None:
+        manifest["missing"].append("usage")
+    _require(len(pilot._canonical_json(manifest).encode()) <= MAX_MANIFEST_BYTES, "manifest_bytes_exceeded")
+    return Snapshot(manifest, {}, cell_root)
+
+
+def prepare(*, root: Path, campaign: str, cell_id: str, source_sha: str, config_sha: str,
+            _failure_metadata: bool = False) -> Snapshot:
     """Validate retained facts under the dispatch lock; never repair a cell."""
     _require(campaign == ci.CAMPAIGN, "registered_ci_campaign_required")
     _require(_hash(source_sha, 40) and _hash(config_sha), "explicit_source_and_config_required")
@@ -286,15 +302,24 @@ def prepare(*, root: Path, campaign: str, cell_id: str, source_sha: str, config_
         path = root / cell["roles"]["result"]
         if state["result"] is None:
             # Do not adopt a late/unrecorded result or search the native workspace.
-            manifest["missing"] = ["bound_inference_result", "validated_deliverables", "bound_ledger_export"]
-            if completion["receipt"] is None or completion["receipt"]["usage"] is None:
-                manifest["missing"].append("usage")
-            return Snapshot(manifest, files, root / "cells" / cell_id)
+            return _missing_payload(manifest, root / "cells" / cell_id)
         _require(state["result"]["path"] == cell["roles"]["result"], "result_role_mismatch")
         result_bytes = _bytes(path, limit=MAX_RECORD_BYTES, expected=state["result"])
         payload = pilot._json_object(result_bytes)
-        _require(set(payload) <= RESULT_FIELDS, "unsafe_result_fields")
-        _safe_record(payload)
+        _require(len(payload["results"]) == 1, "result_cell_mismatch")
+        row = payload["results"][0]
+        withheld = False
+        try:
+            _safe_record(payload)
+            _require(set(payload) <= RESULT_FIELDS, "unsafe_result_fields")
+            _require(set(row) <= ROW_FIELDS and not row.get("failure_evidence"), "unsafe_result_fields")
+        except OutputPublicationRefused as error:
+            if (str(error) != "unsafe_result_fields" or _failure_metadata is not True
+                    or state["status"] not in {"failed", "stopped"}):
+                raise
+            withheld = True
+        # Withholding is eligible only after ALL remaining checks, including
+        # the original result/artifact/accounting comparison below, have passed.
         if "source" in payload:
             _require(payload["source"] == plan["dataset"]["repo_id"], "result_source_mismatch")
         if "summary" in payload:
@@ -303,9 +328,6 @@ def prepare(*, root: Path, campaign: str, cell_id: str, source_sha: str, config_
             _receipt_fields(payload["summary"].get("problem_solving_cost"))
         if "azure_ai_routes" in payload:
             pilot._same("recorded routes", canonicalize_azure_ai_routes(payload["azure_ai_routes"]), payload["azure_ai_routes"])
-        _require(len(payload["results"]) == 1, "result_cell_mismatch")
-        row = payload["results"][0]
-        _require(set(row) <= ROW_FIELDS and not row.get("failure_evidence"), "unsafe_result_fields")
         _require(row.get("usage") is None, "unsupported_codex_usage_field")
         _receipt_fields(row.get("problem_solving_cost"))
         if payload.get("cost_ledger") is not None:
@@ -356,9 +378,14 @@ def prepare(*, root: Path, campaign: str, cell_id: str, source_sha: str, config_
         # original outcome, including stopped cells and missing/partial usage.
         for key in ("result", "receipt", "accounting", "artifacts"):
             pilot._same("retained output evidence", checked[key], state[key])
+        _require(sum(map(len, files.values())) <= MAX_TOTAL_BYTES, "payload_bytes_exceeded")
+        if withheld:
+            # These are unchanged LOCAL identities, never published-payload
+            # claims. No result, deliverable or ledger bytes leave this path.
+            manifest["withheld"] = {"reason": "unsafe_result_fields", "artifacts": completion["artifacts"]}
+            return _missing_payload(manifest, root / "cells" / cell_id)
         if completion["receipt"] is None or completion["receipt"]["usage"] is None:
             manifest["missing"].append("usage")
-        _require(sum(map(len, files.values())) <= MAX_TOTAL_BYTES, "payload_bytes_exceeded")
         manifest["files"] = [{"role": roles[name], "path": name, **pilot._identity(data)}
                              for name, data in sorted(files.items())]
         _require(len(pilot._canonical_json(manifest).encode()) <= MAX_MANIFEST_BYTES, "manifest_bytes_exceeded")
