@@ -116,7 +116,11 @@ class DiagnosticChildren(CICellChildren):
                     return codex_runner.TurnObservation(result=SimpleNamespace(
                         id=handle.id, final_response=PRIVATE, usage=usage,
                     ))
-                return codex_runner.TurnObservation(failure=PRIVATE, http_status_code=429, usage=usage)
+                return codex_runner.TurnObservation(failure=PRIVATE, usage=usage, turn=SimpleNamespace(
+                    error=SimpleNamespace(codex_error_info=SimpleNamespace(
+                        response_stream_disconnected=SimpleNamespace(http_status_code=429),
+                    )),
+                ))
 
             # Only runtime boundaries are fake; category production is real.
             runner.open_runtime = runtime
