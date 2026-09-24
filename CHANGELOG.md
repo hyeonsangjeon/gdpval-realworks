@@ -11,7 +11,118 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Added
+
+- Add the explicit `pilot/branch-inspect` selector and `inspect` phase on the
+  existing #669 branch, starting at
+  `685454f030a4128b39761402d69712bd8f705def`. Planning remains local, with no
+  credential lookup or HF request. Inspection preserves source and CI admission
+  checks, then permits at most two bodyless, authenticated metadata GETs within
+  one 20-second deadline: first the fixed private repository at recorded
+  bootstrap `bfc7ae01ed14490817ceb7cb406adcb9bb95f557`, then only
+  `pilot-grades-20260923`. The target name must retain SHA256
+  `a13dedada5465377761961d050e021a4db8e44d6284179a9ce40b562e4396a44`.
+  Only verified bootstrap access followed by a branch 404 with the exact
+  `RevisionNotFound` discriminator establishes observed absence. Bare 404s,
+  repository-not-found responses and unavailable access remain unknown and
+  refuse. Identity/privacy or non-bootstrap HEAD drift also refuses; no state
+  is adopted, reset or mutated. The existing one-GET HF guard retains its `main`
+  default, byte limits and no-retry/no-redirect behavior for metadata. Safe CLI
+  output contains only bounded identities/statuses and explicit no-mutation,
+  no-inference and no-judge flags. Inspection never opens setup state or receipts.
+  The existing protected workflow route adds one two-minute inspection step
+  with step-scoped `HF_TOKEN`; renderer/preparation, rubric transfer, OIDC,
+  claim/judge/publication and generic jobs are excluded. No inputs, permissions,
+  fixed-grader controls or other mode semantics changed.
+  One new offline selector,
+  `tests/test_codex_budget_pilot_grading_branch_inspect.py`, returned
+  **29 passed in 4.67s**, exit 0, at
+  `2066971d10bcad322420fdadd89fa71d1511318c`. CLI/compiler/HTTP guards are real;
+  source admission and HTTP responses are synthetic, and workflow checks are
+  static. The reviewed Git helper and its source pin are byte-identical to the
+  starting head. Prior review `5297818844` covers only that head's source-trust
+  and closed-diagnostic corrections, not this addition. Original **28 PASS**,
+  comparison **6 FAIL / 939 PASS**, and targeted **12 PASS** evidence remains
+  separate below. Setup `35920355055` remains **UNRESOLVED/CONSUMED**, with
+  unknown remote effects; this task neither reconstructs its acknowledgment nor
+  proves it mutation-free. Main `02a9682747e371d8675d1d0afb63155f3c3bce82` remains
+  **BLOCKED_PRE_EXECUTION**. New head review/final CI, one separately authorized
+  live read-only observation, the leader's decision/reseal and live gates, and
+  the first paid cell remain. No live HF call, setup replay, CI query or workflow
+  dispatch, inference, grading or reseal occurred.
+
 ### Fixed
+
+- Restore runtime checkout independence from the preparation compiler directory
+  on the existing #669 branch, starting at
+  `2b64888cb422d7a5a9d0df847a063b8a84002b95`. The leader reported comparison CI
+  `35926036972`, job `107401241366`: **6 failed, 939 passed in 1294.77s**.
+  `_git` eagerly validated `TRUSTED_ROOT` even for another repository, so a
+  deliberately unavailable external source prevented the six runtime tests
+  from reaching their intended provider or post-validation HEAD-move boundary.
+  Now every actual command repository still passes `_root`, but the trusted
+  root is compared lexically and receives filesystem validation only when its
+  exact-path allowance is selected. An unrelated existing, missing or aliased
+  root grants no ownership trust and is not inspected. Wildcard/control and
+  selected symlink/traversal refusals, isolated global/system configuration,
+  command hardening and all runtime HEAD/tree/pin/lineage checks remain.
+  The six runtime tests and assertions are unchanged. The directly affected
+  unsafe-path fixture now supplies the unsafe command repository and keeps its
+  no-Git assertion. Only the helper's coupled source pin changed again, from
+  `de40ae571d66635f121d2ca538f30114125c2fbf12e679db854c4ae46d6b9862` to
+  `0dbbab8911e1cba106745087aed471dca0a8b7f904058b4958df1e07864bb885`.
+  One selector containing the six reported runtime nodes and six directly
+  affected trust/path cases returned **12 passed in 17.92s**, exit 0, at
+  `3790e4d370f25700ea7a18d46233575135e4191b`; its exact command is in the latest
+  task result. The initial **28 passed in 29.37s** remains at
+  `13032a864a115c0150f944e18aa277a1e212e541`; that family, the 945-case comparison
+  run and the full suite were not rerun. The same reviewer's bounded pre-edit
+  clarification was APPROVE-WITH-CONDITIONS, not head approval. No workflow,
+  dependency, runtime configuration, model, grader or branch-policy change was
+  made. Main remains the supplied `02a9682747e371d8675d1d0afb63155f3c3bce82`;
+  its seal remains **BLOCKED_PRE_EXECUTION**. Setup `35920355055` still has
+  unknown branch side effects and an **UNRESOLVED/CONSUMED** reservation. No
+  HF read/write, retry, setup replay, reseal, model/grader/Azure operation, CI query or
+  audit loop ran. Review/final CI, separately authorized checked branch
+  reconciliation, explicit reseal/live gates and the first paid cell remain.
+
+- Repair the grading source-entry ownership/trust incompatibility from exact
+  source `02a9682747e371d8675d1d0afb63155f3c3bce82`. Real temporary Git with
+  `GIT_TEST_ASSUME_DIFFERENT_OWNER=1` confirmed that the isolated helper ignores
+  a global exact-path trust entry and refuses with exit 128; command-local trust
+  for the validated, code-defined checkout succeeds. No filesystem ownership
+  was changed. This confirms the local mechanism, **not the historical CI cause**.
+  `_git` now adds exactly that path's `safe.directory` only when it equals the
+  validated repository. Foreign paths receive no allowance; wildcard/control
+  paths are refused. Global/system isolation, hooks/fsmonitor/filter/include and
+  lazy-transport protections, bounded subprocesses, clean-source/object/tree/pin
+  checks remain. Only the checkout helper's coupled source pin changed, to
+  `de40ae571d66635f121d2ca538f30114125c2fbf12e679db854c4ae46d6b9862`.
+  No workflow/fetch-depth, Python/dependency/runtime, fixed-grader/model/rubric or
+  inference-control change was made. Three closed CLI stage/reason pairs now
+  identify source preflight, setup-root/lock entry and final branch-receipt
+  persistence failures without raw diagnostics. `remote_mutation_possible` is
+  false for the first two boundaries, conservatively true at receipt failure,
+  and null for unrelated outer failures; it describes only the current
+  invocation, never prior branch state or retry authority.
+  One offline selector, `batch-runner/tests/test_codex_budget_pilot_grading_source.py`,
+  returned **28 passed in 29.37s**, exit 0, at
+  `13032a864a115c0150f944e18aa277a1e212e541`. It uses real source checks and
+  temporary Git, with in-memory branch operations and no live access. The
+  existing extreme-reasoner's pre-edit APPROVE-WITH-CONDITIONS is a design
+  decision, not approval of this head. The leader's original run `35920355055`,
+  job `107382432896`, remains a separate observation: plan passed at
+  `21:09:59.868579 UTC`; setup emitted `grading_contract_refused`, HTTP null,
+  exit 2 at `21:10:01.622976 UTC`, with judge/publication skipped. Its failing
+  stage and possible branch side effects remain unknown; the reservation is
+  **UNRESOLVED/CONSUMED** and the source seal **BLOCKED_PRE_EXECUTION**. Dataset
+  setup `35881609256` and bootstrap `bfc7ae01ed14490817ceb7cb406adcb9bb95f557`
+  remain valid and consumed. #668 review `5296511923` and ten passing checks
+  apply to `d97d250cfc1a6f2f6ad485d9bb44a8fa58d79227`, not this correction.
+  Remaining: review/final CI, separately authorized checked read-only branch
+  reconciliation, explicit reseal/live gates, actual grading-host readiness
+  and the first paid cell/grade. No setup retry, remote read/write, CI query,
+  payload transfer, model/grader or Azure call ran.
 
 - Repair four coupled #668 CI regressions from head
   `efb5be35ac9750bf03a784f9967f2d4e6341041d`, without changing workflow behavior,

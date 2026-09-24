@@ -785,8 +785,12 @@ def test_workflow_isolates_private_pilot_from_legacy_publication_and_inference()
         assert checkout["with"] == {"ref": "${{ github.sha }}", "persist-credentials": False}
         assert not any("codex-budget-pilot-ci-cell" in step.get("run", "") for step in job["steps"])
     token_steps = [step for step in live["steps"] if "HF_TOKEN" in step.get("env", {})]
-    assert len(token_steps) == 4
-    assert all(any("--phase " + phase in step["run"] for phase in ("setup", "prepare", "claim", "publish")) for step in token_steps)
+    assert len(token_steps) == 5
+    assert all(any("--phase " + phase in step["run"] for phase in ("setup", "inspect", "prepare", "claim", "publish")) for step in token_steps)
+    inspection = next(step for step in token_steps if "--phase inspect" in step["run"])
+    assert inspection["if"] == "inputs.experiment_yaml == 'pilot/branch-inspect'"
+    assert all("inputs.experiment_yaml != 'pilot/branch-inspect'" in step["if"]
+               for step in live["steps"] if step.get("id") == "pilot_input" or "preflight_grading_renderer.py" in step.get("run", ""))
     judge = next(step for step in live["steps"] if step.get("id") == "pilot_judge")
     assert "HF_TOKEN" not in judge.get("env", {}) and "steps.pilot_claim.outcome == 'success'" in judge["if"]
     assert ci.PUBLIC_FIXED["grading_launched"] is False

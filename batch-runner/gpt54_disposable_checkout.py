@@ -65,6 +65,11 @@ def _git(repository: Path, *args: str, ok: tuple[int, ...] = (0,)) -> subprocess
     These command-local protections do not change repository configuration or
     disable hooks on the user's normal development commits.
     """
+    # A prepared runtime checkout must not need its old compiler directory.
+    # Compare lexically before any filesystem validation of that other path.
+    repository, trusted = _root(repository), Path(TRUSTED_ROOT)
+    if any(char == "*" or ord(char) < 32 or ord(char) == 127 for char in os.fspath(trusted)):
+        raise DisposableCheckoutRefused("trusted checkout path contains unsupported characters")
     environment = {
         "PATH": "/usr/bin:/bin", "LC_ALL": "C",
         "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_SYSTEM": "/dev/null",
@@ -81,6 +86,12 @@ def _git(repository: Path, *args: str, ok: tuple[int, ...] = (0,)) -> subprocess
         "maintenance.auto=false", "gc.auto=0",
     ):
         command.extend(("-c", setting))
+    # Container checkouts can have a different owner. Global safe.directory is
+    # intentionally ignored above; only the code-defined, validated checkout
+    # receives this exact command-local allowance, never a caller-selected peer.
+    if repository == trusted:
+        trusted = _root(trusted)
+        command.extend(("-c", "safe.directory=" + os.fspath(trusted)))
     command.extend(("-C", str(repository), *args))
     try:
         result = subprocess.run(
