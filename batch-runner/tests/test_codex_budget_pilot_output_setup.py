@@ -556,7 +556,10 @@ def test_setup_workflow_routing_is_static_and_keeps_model_input_and_publication_
     assert all(name not in setup["run"] for name in ("--execute", "--check-inputs", "--publish", "step8"))
     selected = [step for step in steps if step.get("id") in {"output_target", "intake"}
                 or "inputs.execute" in step.get("if", "") and step is not setup]
-    assert len(selected) == 8 and all("!inputs.output_target_setup" in step["if"] for step in selected)
+    assert len(selected) == 10 and all("!inputs.output_target_setup" in step["if"] for step in selected)
+    assert {"Install the existing native sandbox prerequisite", "Require the existing native sandbox capability"} <= {
+        step["name"] for step in selected
+    }
     token_steps = [step.get("id") for step in steps if "HF_TOKEN" in step.get("env", {})]
     assert token_steps == ["output_target", "output_setup", "intake", "admission", "retention"]
     assert "HF_TOKEN" not in job["env"] and "GITHUB_TOKEN" not in job["env"]

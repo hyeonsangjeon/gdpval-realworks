@@ -568,7 +568,11 @@ python3() {{
         assert "installed check reached" not in result.stdout
     admission = "success() && inputs.execute && !inputs.input_check && !inputs.output_target_check && !inputs.output_target_setup && steps.intake.outputs.verified == 'true'"
     downstream = [step for step in workflow()["jobs"]["cell"]["steps"] if step.get("if") == admission]
-    assert len(downstream) == 2
+    assert len(downstream) == 4
+    assert {step["name"] for step in downstream} == {
+        "Install the existing native sandbox prerequisite", "Require the existing native sandbox prerequisite",
+        "Require the existing native sandbox capability", "Claim only the next canonical cell before inference",
+    }
     assert len([step for step in workflow()["jobs"]["cell"]["steps"]
                 if step.get("if") == admission + " && steps.admission.outputs.admitted == 'true'"]) == 3
     # Static Actions condition check plus real local bash with fake commands;
