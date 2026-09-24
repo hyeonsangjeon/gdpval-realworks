@@ -1,135 +1,108 @@
 # Latest task result
 
-## PROJECT5-READONLY-BRANCH-OBSERVATION-0801
+## PROJECT5-BUBBLEWRAP-BOOTSTRAP-1105
 
-### Result and authority boundary
+### Result and scope
 
-Added an explicit read-only grading-branch inspection on the existing #669
-branch, starting at `685454f030a4128b39761402d69712bd8f705def`. The one new
-offline selector returned **29 passed in 4.67s**, exit 0, at
-`2066971d10bcad322420fdadd89fa71d1511318c`. No actual HF observation, setup
-replay, mutation, payload transfer, judge invocation or source reseal occurred.
+Added the existing Ubuntu 22.04 bubblewrap bootstrap to the single-cell workflow
+on a new clean branch from `c463bc57139a484214264adc2a22c655cd33ca47`.
+One focused offline selector returned **11 passed in 0.99s**, exit 0. This
+validates the workflow shell and failure routing with synthetic processes,
+not an actual runner installation or native sandbox execution.
 
-The leader supplied FINAL-APPROVE `5297818844` for the starting head's
-source-trust and closed-diagnostics scope. It does not cover this new inspection
-behavior. Final CI was still running at the supplied observation; it was not
-queried or awaited. Main remains the supplied
-`02a9682747e371d8675d1d0afb63155f3c3bce82`, with its seal
-**BLOCKED_PRE_EXECUTION**. This branch does not replace that seal.
+Only two workflow steps were added. After successful, verified execute-mode
+intake, the first checks for `bwrap` and, if missing, uses the existing Ubuntu
+`apt` package convention for one update/install sequence. It retains acquisition
+retries and lock/network bounds, with 240/420-second command limits, five-second
+kill grace periods and a 12-minute step ceiling; there is no outer retry loop.
+The original `codex_bubblewrap_unavailable` prerequisite is unchanged. The second
+step then runs the unchanged `scripts/diagnose_codex_sandbox_host.py` under a
+two-minute ceiling before private claim, OIDC and inference. Only the helper's
+successful full sandbox probe establishes readiness on that future runner.
 
-Exact comparisons against the starting head found no changes to
-`batch-runner/gpt54_disposable_checkout.py` or
-`batch-runner/experiments/execution_envelope/gpt54_sandboxv2_codex_comparison.yaml`.
-The helper retains SHA256
-`0dbbab8911e1cba106745087aed471dca0a8b7f904058b4958df1e07864bb885`
-and Git blob `b0a4ec719a48d43ab7463ba885ef75b29ad154e1`; the complete envelope
-file retains blob `1ea111dfc16c4dc08139bbadf6f232c01526caa7`.
+Both added steps require successful prior steps, `execute=true`, all three
+non-execution mode flags false and `steps.intake.outputs.verified == 'true'`.
+Plan, input-only, output-metadata and setup routes skip this bootstrap. Neither
+step receives HF/model credentials. Package, missing-binary and capability
+failures propagate and block admission; no sandbox guard or host policy is
+relaxed. The existing completion projection and token boundaries are unchanged.
+No source binding needed an update, and the old #669 worktree was not changed.
 
-### Inspection contract
+### Confirmed live failure and preserved setup history
 
-The existing grading CLI accepts `--selector pilot/branch-inspect` with either
-the default `plan` phase or explicit `--phase inspect`. Plan performs no source
-execution, token lookup or network request. The inspect selector cannot select
-setup, preparation, claim, judge, publication or reconciliation. Conversely,
-branch setup and canonical cell selectors cannot select inspection. Both branch
-selectors require an empty terminal revision. The existing `--root` argument
-is retained for interface compatibility, but inspection does not open, create
-or alter that directory, its reservation or its receipts.
+The leader supplied the following evidence; no run was queried or repeated here.
+Corrected A1 run `35943806328`, job `107457243061`, attempt 1, used exact source
+`c463bc57139a484214264adc2a22c655cd33ca47`. At
+`2026-09-24T01:40:49.3370131Z`, explicitly selected HF originals were accepted
+with `original_inputs_verified=true`: canonical archive **2519040 bytes**,
+SHA256 `757603585405da5d7f6817a6a0a23bd530d4b5e4e38b2fd4dc6f318053d240e3`.
+Intake succeeded at 01:40:53 UTC. The next prerequisite ran `command -v bwrap`,
+emitted `codex_bubblewrap_unavailable` and exited 1. Private claim, OIDC,
+execution and retention were skipped. This establishes unavailable `bwrap` on
+that runner path, not an auth, provider or quota failure.
 
-Live inspection, if separately authorized later, retains the actual source
-preflight, exact-source/main/first-attempt checks and protected `grading`
-environment policy. It derives only the existing fixed private target with
-repository-name SHA256
-`a13dedada5465377761961d050e021a4db8e44d6284179a9ce40b562e4396a44`.
-It first requests metadata at recorded bootstrap
-`bfc7ae01ed14490817ceb7cb406adcb9bb95f557`, validating exact repository identity,
-strict private status and actual immutable SHA. Only then can it request
-metadata for `pilot-grades-20260923`.
+Earlier run `35941493214` failed before intake because the leader omitted
+`input_bundle_sha256`. That dispatch mistake is not a code defect. Both
+failed/consumed run records remain unchanged; neither admitted a paid cell.
+The successful input gate was not repeated.
 
-Each client scope permits one exact, bodyless, explicitly authenticated GET.
-Both reads share a single 20-second deadline and the existing response-byte
-bound. Redirects, SDK retries, extra requests, other methods, payload paths and
-revision metacharacters are refused. The shared client's existing metadata
-default remains `main`; ordinary publication and setup behavior is unchanged.
-The workflow adds only an exact-selector inspection step with a two-minute
-timeout and step-scoped `HF_TOKEN`. Its short online scope removes ambient
-credentials and restores offline settings afterward. Inspection excludes
-renderer/preparation, rubric transfer, OIDC, claim, judge, grade publication and
-generic jobs, and never writes a judge-readiness output or public artifact.
-There are no new workflow inputs or permissions.
-
-Safe CLI output distinguishes `present`, `absent` and
-`inaccessible_or_unknown`, with the actual validated branch HEAD when available,
-its bootstrap match, received HTTP status, closed stage/reason, observation time
-and explicit no-mutation/no-inference/no-judge flags. A present branch at the
-bootstrap or verified absence is an observation, not setup acknowledgment or
-permission to create, retry or grade. A branch 404 counts as absence only after
-verified bootstrap access and the exact provider discriminator
-`RevisionNotFound`. Bare 404s, `RepoNotFound`, missing discriminators and
-bootstrap/auth/transport failures remain unknown and refuse. Identity/private
-status or non-bootstrap HEAD drift also refuses without adoption or reset.
-No raw locator, header, body, token, URL, private path or exception is printed.
-The two responses are not an atomic snapshot or a historical causal record.
+The leader separately reported grading-branch setup `35939410006`, job
+`107443765950`, as acknowledged/`branch_verified` at 00:43:02.5104178 UTC.
+Original setup `35920355055`, job `107382432896`, remains
+**UNRESOLVED/CONSUMED**, with the original `grading_contract_refused`, null HTTP
+status, exit 2 and unknown side effects. The later acknowledgment does not
+rewrite the original receipt. Neither setup, target or branch was recreated,
+inspected or replayed, and dataset setup `35881609256` remains consumed.
 
 ### Focused offline validation
 
-Tested SHA: `2066971d10bcad322420fdadd89fa71d1511318c`.
-Result: **29 passed in 4.67s**, exit 0. One invocation from `batch-runner/`:
+Tested SHA: `771e79a56e1928d839dc50901b96011a91306fa9`.
+Result: **11 passed in 0.99s**, exit 0. One invocation from `batch-runner/`
+with a private temporary JUnit destination:
 
 ```bash
-timeout --signal=TERM --kill-after=5s 180s env -i PATH=/usr/bin:/bin HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 HF_HUB_DISABLE_IMPLICIT_TOKEN=1 DO_NOT_TRACK=1 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /usr/bin/python3.10 -m pytest -q -o addopts= -o junit_family=legacy -p no:cacheprovider --tb=short --junitxml=<private-test-evidence>/branch-inspection-results.xml tests/test_codex_budget_pilot_grading_branch_inspect.py
+timeout --signal=TERM --kill-after=5s 60s env -i PATH=/usr/bin:/bin HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 HF_HUB_DISABLE_IMPLICIT_TOKEN=1 DO_NOT_TRACK=1 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /usr/bin/python3.10 -m pytest -q -o addopts= -p no:cacheprovider --tb=short --junitxml=<private-test-evidence>/results.xml tests/test_codex_budget_pilot_bootstrap.py
 ```
 
-The private JUnit report has SHA256
-`edc151ae77fa0f0cbf23558a5847eab59d39a351834195e37b4d52c70848cec5`.
-The CLI, cached genuine compiler, selector/CI gates, HfApi parsing, HTTP guard,
-response-byte bound, shared timer, environment restoration and setup-fixture byte
-checks are real. Source admission is an explicit test double; provider metadata
-and transport failures are synthetic. Workflow checks are static, not an Actions
-execution or native-host capability observation.
+The private report has SHA256
+`c990c5797635d842ddc7abc10552248ae937fb2c5bb4a3516349028cfe977dde`.
+The tests execute the actual extracted Bash with fake `sudo`/package and
+capability processes on an isolated PATH. They cover an existing binary,
+successful installation, update/install failures and simulated timeout exits,
+a still-missing binary after nominal installation, and capability refusals.
+Structural checks cover ordering, all mode combinations, verified-input and
+prior-success gates, credential boundaries, and downstream refusal, including
+retention's `always()` guard. No real claim, OIDC, model or retention command runs.
+Only these completion records changed after the tested workflow/test snapshot.
+No previous 64-, 29- or 12-case family, full suite, package installation, native
+connection diagnostic, original-input check or live test was run.
 
-The selector covers present/verified-absent/ambiguous-404 results, bootstrap
-failures, identity/private/HEAD drift, missing auth without discovery, bounded
-stream/transport/timeout failures, redirect/mutation/extra-request refusal,
-selector cross-use, no-network default planning and closed output redaction.
-Forbidden boundary calls are tracked even if production error handling catches
-their exception. The synthetic consumed setup files remain unchanged, and no
-grading-state or workflow-output file is written. The existing workflow contract
-assertion now accounts for the fifth token-scoped step while retaining the four
-existing phase restrictions; its old family was not rerun. No prior 28-, 12- or
-64-case family, comparison run, full suite, native-install check or live test ran.
-Only these two completion records change after the tested source snapshot.
+### Review scope and remaining authorization
 
-### Preserved history and remaining gates
+An existing extreme-reasoner context returned a bounded pre-edit
+**APPROVE-WITH-CONDITIONS** decision for this bootstrap, requiring the single
+bounded package sequence and existing capability gate. It is not approval of
+this new head or authorization for a live operation. Experiment-design guidance
+kept the correction outside the experimental axes; English reporting and
+copyediting kept live, synthetic and unmeasured evidence separate.
 
-The same extreme-reasoner gave a bounded pre-edit **APPROVE-WITH-CONDITIONS**
-decision for this route, including the revision-specific 404 discriminator.
-That is a design decision, not approval of the new head or a live operation.
-English reporting/copyediting guidance preserves the observation, test-double
-and approval boundaries. No new audit loop was started.
+The leader supplied complete review `5297993636` and ten passing checks for
+prior #669 head `d21b5fa508657cd94b326ebaa3c50c15b2b7683c`. Those cover its
+source-trust, closed-diagnostic and branch-inspection scope, not this addition.
+The prior inspection result remains **29 passed in 4.67s** at
+`2066971d10bcad322420fdadd89fa71d1511318c`, with synthetic HF/source boundaries
+and static workflow checks. The historical 28-pass, 6-fail/939-pass comparison
+and targeted 12-pass evidence remains separately recorded below.
 
-The historical evidence remains separate and unchanged below:
-
-- **28 passed in 29.37s** at `13032a864a115c0150f944e18aa277a1e212e541`.
-- Comparison CI `35926036972`, job `107401241366`, on
-  `2b64888cb422d7a5a9d0df847a063b8a84002b95`: **6 failed, 939 passed in 1294.77s**.
-- **12 passed in 17.92s** at `3790e4d370f25700ea7a18d46233575135e4191b`.
-
-Original setup `35920355055`, job `107382432896`, retains its reported generic
-`grading_contract_refused`, null HTTP status and exit 2. Its failing stage and
-remote effects remain unknown. Its reservation is **UNRESOLVED/CONSUMED**; this
-inspection addition neither acknowledges that setup nor proves it mutation-free.
-The original receipt and dataset setup `35881609256` remain untouched. Accepted
-inputs and the consumed private dataset bootstrap remain separate from paid-cell
-outputs or grades.
-
-Remaining: new head review and final exact-head CI; one explicitly authorized
-live read-only branch observation; the leader's decision and explicit source
-reseal/live gates; actual native grading-host capability; the first paid cell,
-its retained output and one fixed grade, then all 30 recorded outcomes. No HF
-credential/API call, setup replay, branch mutation, payload transfer, workflow
-dispatch, permission change, Azure/model/grader operation, CI query or reseal
-occurred. Current remote branch state is **NOT_ESTABLISHED**.
+Remaining are new-head review and CI, explicit leader reseal of one common
+source for all 30 cells, and a newly authorized actual runner bootstrap,
+capability check and first admission/execution with retention and one fixed
+grade. No existing cell clock is reset. GPT-5.4/direct-v1/xhigh, SDK 0.147.0,
+180-minute cumulative/30-minute attempt limits, A4 fresh attempts, B/C retained
+state, C feedback, one inference slot and the fixed grader remain unchanged.
+No live HF/model/grader request, Azure management operation, setup replay,
+workflow dispatch/rerun, source reseal or paid action occurred. CI was not polled
+or awaited.
 
 ## PROJECT5-RUNTIME-SOURCE-INDEPENDENCE-0730
 

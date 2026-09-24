@@ -53,6 +53,36 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Bootstrap the existing Ubuntu 22.04 bubblewrap prerequisite for an executable
+  pilot cell only after verified input intake, before private admission and
+  OIDC. Reuse the existing bounded Ubuntu `apt` convention with one update/install
+  sequence, a 12-minute step ceiling and no outer retry loop. Keep the original
+  `codex_bubblewrap_unavailable` refusal unchanged, then run the existing sandbox
+  capability helper under a two-minute step ceiling. Package or capability
+  failure stops the paid route. Plan, input-only, output-metadata and setup modes
+  skip this bootstrap; neither new step receives HF/model credentials. No source
+  pin, host security policy, permission, model, input, grader or budget changed.
+  The leader reported corrected run `35943806328`, job `107457243061`, attempt 1,
+  on `c463bc57139a484214264adc2a22c655cd33ca47`: originals were verified at
+  `2026-09-24T01:40:49.3370131Z` (canonical archive **2519040 bytes**, SHA256
+  `757603585405da5d7f6817a6a0a23bd530d4b5e4e38b2fd4dc6f318053d240e3`), intake
+  succeeded at 01:40:53 UTC, then `command -v bwrap` failed with
+  `codex_bubblewrap_unavailable`, exit 1. Claim/OIDC/execution/retention were
+  skipped. Earlier run `35941493214` omitted `input_bundle_sha256`, a dispatch
+  mistake before intake. Both failed/consumed records remain; neither admitted
+  a paid cell. One offline selector,
+  `tests/test_codex_budget_pilot_bootstrap.py`, returned **11 passed in 0.99s**,
+  exit 0, at `771e79a56e1928d839dc50901b96011a91306fa9`. Workflow shell execution
+  is real; package/probe processes and timeout exits are synthetic, and routing
+  checks are structural. No actual installation or sandbox execution is proved.
+  Prior #669 head `d21b5fa508657cd94b326ebaa3c50c15b2b7683c`, review
+  `5297993636` and ten passing checks cover its source/inspection corrections,
+  not this bootstrap addition. Acknowledged grading-branch setup `35939410006`
+  remains separate from unresolved/consumed setup `35920355055`; neither was
+  replayed. New review/CI, explicit leader reseal of one source for all 30 cells,
+  and a newly authorized actual runner/admission/execution remain. No live HF,
+  native connection diagnostic, model/grader call or workflow dispatch occurred.
+
 - Restore runtime checkout independence from the preparation compiler directory
   on the existing #669 branch, starting at
   `2b64888cb422d7a5a9d0df847a063b8a84002b95`. The leader reported comparison CI
