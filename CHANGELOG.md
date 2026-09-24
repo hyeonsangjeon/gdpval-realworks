@@ -13,6 +13,52 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Add a future-run, closed failure-category diagnostic to the existing CI CLI
+  from main `e1eef7e8b880e4dbc6066f54c6fba5ab8e1befc6`. The leader supplied
+  #673 review `5303368449` at `70d1651bbf7bd005daca764b2f0dc75097afab73`
+  and all 9 checks passed for the prior ledger-note repair, not this new head.
+  A bounded pre-edit decision permits one short job-log line after finalized
+  completion and confirmed owned cleanup, before private retention. Reuse
+  recorded role/size/hash, result-row and `_finish` validation on a copy;
+  preserve result, receipt, accounting and artifact identities. Only public
+  source/cell binding, failed/stopped status and an exact existing category may
+  appear. Missing/null values become `unavailable`; unknown/nonstring values
+  become `unclassified` without disclosure. A successful row never supplies a
+  cause for a nonzero child exit. Malformed/unbound bytes or uncertain cleanup
+  cannot yield a trusted category, and diagnostic failures do not change the
+  completion or exit result. `_finish` and publisher revalidation stay silent;
+  already-finalized CLI state emits no repeat diagnostic or new child. No
+  workflow, producer, publisher/ledger-note repair, source/runtime pin,
+  completion schema, accounting, model/grader or budget control changed.
+  The sole offline selector, `tests/test_codex_budget_pilot_failure_category.py`,
+  returned **27 passed in 178.61s**, exit 0, at
+  `48868b2af70860285d8611b6a22d0e50c211b0aa`. Codex category production, Step2
+  serialization, receipts, compiler/dispatcher, byte/cleanup checks and CLI
+  projection are real; source/host-version admission, runtime and child
+  boundaries are synthetic, with network/auth/native/HF publication forbidden.
+  This is not native-install or live failure-cause evidence. Earlier same-selector
+  attempts remain separate: **1 setup error in 1.68s** at
+  `e9a1dc355c7e8b40f316e5fceb96074ffbe5e0c8` from an unnecessary SDK import,
+  **1 failed in 8.88s** at `8b92c0e1b01b1aeed17ecd0ae00cb16a60c6245b`, and
+  **1 failed in 9.27s** at `6b215335bc558aa4232b3e54e3eca58c93bc668a` from
+  the fake turn-error shape. Only fixtures changed before the passing run.
+  No dependency was installed, and no old 31/35/25/8-case family or full suite
+  was rerun.
+  Old01 run `35954811341`/job `107490761123`, source
+  `2fe1c6925e6d76c03b85851046d52216bee74a16`, and epoch02 run
+  `35983583688`/job `107580952943`, source
+  `4aac36b6f92d2a14b8cac02d793356d6687ace6d`, remain frozen. Both admitted
+  A1 cells failed with `child_nonzero_exit`, then retention independently
+  refused `unsafe_result_fields` and `unsafe_ledger_note`; each history has
+  29 other cells not run. Their known partial costs, **USD 0.175163** and
+  **USD 0.196821**, remain separate, with null estimates and incomplete invoice
+  accounting. Raw files and actual child causes remain unavailable; the new
+  diagnostic neither diagnoses nor recovers either payload. The earlier
+  ledger-note test evidence remains separately scoped below. New-head review,
+  CI and an explicit leader future-run decision remain. No epoch03, claim
+  settlement/replay, next cell, grading, source reseal, live HF/model/grader or
+  Azure operation, workflow dispatch or CI polling occurred.
+
 - Prepare the closed independent epoch `budget_pilot_ci_20260924_02` from
   `e23d8acc1d032b3e937ec099324e3221334c9b4b`, preserving the historical
   registration and all old claims/worktrees. The leader supplied #671 review
