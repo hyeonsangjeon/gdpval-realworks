@@ -272,7 +272,7 @@ def setup(root: Path, source: str, *, branch: str = BRANCH, _test_api=None) -> d
                     "observation": observed}) as (api, token, deadline):
                 require(output._metadata(api, repo, retained.BOOTSTRAP, token, deadline)["sha"]
                         == retained.BOOTSTRAP, "recorded_bootstrap_required")
-                observed["stage"] = "branch_absence"
+                observed.update(stage="branch_absence", http_status=None)
                 try:
                     output._metadata(api, repo, branch, token, deadline)
                 except output.OutputPublicationRefused as error:
@@ -281,11 +281,11 @@ def setup(root: Path, source: str, *, branch: str = BRANCH, _test_api=None) -> d
                 else:
                     raise output.OutputPublicationRefused("grading_branch_already_exists")
                 _record(root / "branch-reserved.json", reservation)
-                observed["stage"] = "branch_create"
+                observed.update(stage="branch_create", http_status=None)
                 output._remaining(deadline)
                 api.create_branch(repo_id=repo, repo_type="dataset", branch=branch,
                                   revision=retained.BOOTSTRAP, exist_ok=False, token=token)
-                observed["stage"] = "branch_readback"
+                observed.update(stage="branch_readback", http_status=None)
                 head = output._metadata(api, repo, branch, token, deadline)["sha"]
                 result["returned_commit"] = head
                 require(head == retained.BOOTSTRAP, "grading_branch_seed_mismatch")

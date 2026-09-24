@@ -301,6 +301,16 @@ def test_setup_refusals_keep_reservation_and_never_create_other_ref(setup_case, 
     assert code == 2 and record["outcome"] != "acknowledged"
     assert len(s.calls) == requests and bool(s.creates) is mutated
     assert grading.BRANCH not in s.branches
+    if damage in {"create_parent", "create_lost", "readback_unavailable"}:
+        stage = "branch_readback" if damage == "readback_unavailable" else "branch_create"
+        assert record["stage"] == stage and record["http_status"] is None
+        receipt = retained._read(s.root / "branch-receipt.json")
+        assert receipt["stage"] == stage and receipt["http_status"] is None
+        responses = [{"stage": "bootstrap_metadata", "http_status": 200},
+                     {"stage": "branch_absence", "http_status": 404}]
+        if damage == "readback_unavailable":
+            responses.append({"stage": "branch_create", "http_status": 200})
+        assert receipt["responses"] == responses
     before = {path.name: path.read_bytes() for path in s.root.iterdir()}
     assert setup_cli(s, capsys)[0] == 2 and len(s.calls) == requests
     assert before == {path.name: path.read_bytes() for path in s.root.iterdir()}
