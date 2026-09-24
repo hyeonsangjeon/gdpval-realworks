@@ -267,6 +267,26 @@ jobs:
             --resume --check-inputs
           echo "verified=true" >> "$GITHUB_OUTPUT"
 
+      # Reuse the Codex Ubuntu package bootstrap before claiming a paid cell.
+      # One bounded sequence; no input/model credentials or host-policy changes.
+      - name: Install the existing native sandbox prerequisite
+        if: success() && inputs.execute && !inputs.input_check && !inputs.output_target_check && !inputs.output_target_setup && steps.intake.outputs.verified == 'true'
+        timeout-minutes: 12
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v bwrap >/dev/null; then
+            APT_OPTS=(
+              -o Acquire::Retries=3
+              -o Acquire::http::Timeout=30
+              -o Acquire::https::Timeout=30
+              -o DPkg::Lock::Timeout=60
+            )
+            sudo timeout --kill-after=5s 240s apt-get "${APT_OPTS[@]}" update -qq
+            sudo DEBIAN_FRONTEND=noninteractive timeout --kill-after=5s 420s apt-get \
+              "${APT_OPTS[@]}" install -y --no-install-recommends bubblewrap
+          fi
+
       - name: Require the existing native sandbox prerequisite
         if: success() && inputs.execute && !inputs.input_check && !inputs.output_target_check && !inputs.output_target_setup && steps.intake.outputs.verified == 'true'
         run: |
@@ -274,6 +294,15 @@ jobs:
             echo "codex_bubblewrap_unavailable"
             exit 1
           fi
+
+      - name: Require the existing native sandbox capability
+        if: success() && inputs.execute && !inputs.input_check && !inputs.output_target_check && !inputs.output_target_setup && steps.intake.outputs.verified == 'true'
+        timeout-minutes: 2
+        working-directory: batch-runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/diagnose_codex_sandbox_host.py
 
       - name: Claim only the next canonical cell before inference
         id: admission
