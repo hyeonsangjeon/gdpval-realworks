@@ -1,16 +1,18 @@
 # Latest task result
 
-## PROJECT5-DIAGNOSTIC-UNAVAILABLE-2120
+## PROJECT5-BOUNDED-DIAGNOSTIC-2151
 
-### Diagnostic unavailability is explicit, not authoritative
+### Diagnostic exception handling is bounded, not authoritative
 
-Addressed leader REQUEST-CHANGES `5304339793` at
-`f33bcd7dfbdbf579ecd7d995ac0ed493c2233afb` on the same clean #674 branch.
+Addressed leader REQUEST-CHANGES `5304688416` at
+`9aa4b617f241d39df63f3fbf2ef2d2b51cd0a0a6` on the same clean #674 branch.
+This addresses the remaining bounded-handling requirement from review `5304339793` at
+`f33bcd7dfbdbf579ecd7d995ac0ed493c2233afb`; it does not imply new-head approval.
 Main remains `e1eef7e8b880e4dbc6066f54c6fba5ab8e1befc6`. The leader reported
 7 checks passed and 2 running at the initial read, without source approval or
-authorization to merge or run live. This task did not query those checks. The existing
-reviewer approved only the bounded logging correction before edits; new-head
-delta review and CI remain.
+authorization to merge or run live. This task did not query those checks.
+The existing reviewer confirmed only the narrowed exception families before
+edits; new-head delta review and CI remain.
 
 The CI CLI now logs one closed, producer-recorded failure category for a
 selected finalized failed/stopped cell after confirmed owned cleanup and before
@@ -38,22 +40,29 @@ Neither case prints the supplied value. A successful result row cannot explain
 a nonzero child exit, so its category is `unavailable` even if it carries a stale
 allowlisted value. Successful cells emit no failure diagnostic. The CLI emits
 no trusted category when evidence is malformed or unbound, bytes have changed,
-or cleanup is uncertain or belongs to another cell. Diagnostic read, validation
-or logging errors leave completion facts and the CLI exit result unchanged.
+or cleanup is uncertain or belongs to another cell. The supported diagnostic
+failures below leave completion facts and the CLI exit result unchanged.
 
-The previous blanket catch silently discarded evidence and emission failures.
-Expected read/validation exceptions now produce the fixed
-`diagnostic_evidence_unavailable` reason with `authoritative=false` and no
-partially validated binding or category. An unexpected evidence exception is
-contained with the same fixed signal, never its type, text or arguments.
-Message construction stays inside evidence handling; logging is separate.
-If logging raises, the CLI attempts exactly one fixed
-`diagnostic_emission_unavailable` line on stderr. It does not retry the category,
-log recursively or print a traceback. If stderr also fails, that failure is
-contained without changing the original completion or exit. These signals are
-best effort; their delivery is not guaranteed and they grant no terminal,
-admission or publication authority. Success, plan/input-only and
-already-finalized cases retain their existing silence.
+The previous correction supplied unavailable signals but retained three
+`except Exception` catch-alls. They are now limited to concrete families:
+
+- Evidence reads/validation catch `OSError`, `ValueError`, `TypeError`,
+  `KeyError` and `IndexError`, yielding `diagnostic_evidence_unavailable`.
+- The explicitly supported internal `AssertionError` yields the distinct
+  `diagnostic_internal_unavailable`, never an ordinary evidence-failure signal.
+- The separate logger boundary catches only `OSError` and the existing tested
+  `RuntimeError`, then attempts one fixed `diagnostic_emission_unavailable`
+  line directly on stderr. That fallback catches only `OSError`.
+
+All unavailable signals use `authoritative=false` and contain no exception
+type, text, arguments, private values or partially validated bindings. There
+is no category retry or recursive logging. Known I/O failures at both sinks
+leave the finalized completion and original exit unchanged, but delivery is
+best effort and is not guaranteed. Other programming faults are outside these
+handlers; they are not silently normalized into evidence unavailability.
+This is not a promise to contain every arbitrary exception. None of these
+signals grants terminal, admission or publication authority. Success,
+plan/input-only and already-finalized cases retain their existing silence.
 
 A recorded category is not proof of the child's underlying cause. No error
 body, prompt, payload, token, URL, path, note, native log or stack trace enters
@@ -65,18 +74,18 @@ evidence that native execution now succeeds.
 
 ### Focused offline validation
 
-At tested SHA `249d733f96941ce00269e3e19f8f43d613b8636c`, one invocation from
+At tested SHA `14b44aa2e04d018c27d41d9be01c8d6ecf1e9895`, one invocation from
 `batch-runner/` ran only these selectors:
 
 - `tests/test_codex_budget_pilot_failure_category.py::test_diagnostic_rechecks_bytes_and_owned_cleanup_without_rewriting_completion[bytes]`
 - `tests/test_codex_budget_pilot_failure_category.py::test_diagnostic_rechecks_bytes_and_owned_cleanup_without_rewriting_completion[log_io]`
 - `tests/test_codex_budget_pilot_failure_category.py::test_diagnostic_rechecks_bytes_and_owned_cleanup_without_rewriting_completion[unexpected]`
 
-Result: **3 passed in 22.91s**, exit 0. The single added unexpected-error case
+Result: **3 passed in 20.15s**, exit 0. The existing unexpected-error case
 injects `AssertionError` with a private canary into diagnostic projection.
 The logging case retains its private-canary `RuntimeError`. These are fake
 failure boundaries, not observed live errors. Each case checks that no trusted
-category is emitted, the closed unavailable signal matches the failed stage,
+category is emitted, the evidence/internal/emission signals stay distinct,
 no private canary appears in captured logs/stdout/stderr, finalized completion
 bytes are identical and the original exit remains 1. The byte case still
 changes the already-bound result after completion publication to exercise the
@@ -92,6 +101,13 @@ records changed after this tested snapshot. No 27/31/35/25/8-case family, full
 suite or live diagnostic was rerun.
 
 ### Prior diagnostic validation, not rerun
+
+The same three-node selection previously returned **3 passed in 22.91s**,
+exit 0, at `249d733f96941ce00269e3e19f8f43d613b8636c`. That observation covered
+the earlier fixed signals with catch-all handling, not this narrowed revision.
+Only completion records changed between that snapshot and
+`9aa4b617f241d39df63f3fbf2ef2d2b51cd0a0a6`. It remains separate from this
+invocation and the original full-family result below.
 
 The original selector was
 `tests/test_codex_budget_pilot_failure_category.py`. At tested SHA

@@ -25,8 +25,8 @@ entries land under a fresh dated heading the day they merge to `main`.
   appear. Missing/null values become `unavailable`; unknown/nonstring values
   become `unclassified` without disclosure. A successful row never supplies a
   cause for a nonzero child exit. Malformed/unbound bytes or uncertain cleanup
-  cannot yield a trusted category, and diagnostic failures do not change the
-  completion or exit result. `_finish` and publisher revalidation stay silent;
+  cannot yield a trusted category, and supported diagnostic failures do not
+  change the completion or exit result. `_finish` and publisher revalidation stay silent;
   already-finalized CLI state emits no repeat diagnostic or new child. No
   workflow, producer, publisher/ledger-note repair, source/runtime pin,
   completion schema, accounting, model/grader or budget control changed.
@@ -150,26 +150,35 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
-- Make optional failure-diagnostic unavailability explicit after #674
-  REQUEST-CHANGES `5304339793` at `f33bcd7dfbdbf579ecd7d995ac0ed493c2233afb`.
-  The same reviewer approved this bounded logging-only correction before edits,
-  not the resulting head. Expected read/validation failures and contained
-  unexpected evidence errors now emit only fixed, non-authoritative
-  `diagnostic_evidence_unavailable` metadata. Logging runs separately; a sink
-  exception triggers one fixed `diagnostic_emission_unavailable` stderr attempt,
-  without exception details or a category retry. If stderr also fails, the
-  original completion and exit result remain intact; delivery is best effort.
+- Bound optional failure-diagnostic handling after #674 REQUEST-CHANGES
+  `5304339793` at `f33bcd7dfbdbf579ecd7d995ac0ed493c2233afb` and follow-up
+  `5304688416` at `9aa4b617f241d39df63f3fbf2ef2d2b51cd0a0a6`.
+  The same reviewer confirmed only these narrowed boundaries before edits,
+  not the resulting head. Evidence `OSError`, `ValueError`, `TypeError`,
+  `KeyError` and `IndexError` produce fixed, non-authoritative
+  `diagnostic_evidence_unavailable` metadata. The explicitly supported
+  `AssertionError` has a separate `diagnostic_internal_unavailable` reason;
+  neither signal includes exception details or partially validated bindings.
+  Logging runs separately. Only a logger `OSError` or `RuntimeError` triggers one
+  fixed `diagnostic_emission_unavailable` stderr attempt, without exception
+  details or a category retry. Only `OSError` is caught at the fallback sink.
+  These supported failures preserve finalized completion and the original
+  exit result; if both sinks have known I/O failures, delivery remains best
+  effort. No catch-all remains in the diagnostic. Other programming faults
+  are outside these handlers, not normalized into ordinary evidence failure.
   Evidence failures never produce a trusted category. Eligibility, source/hash/
   identity/cleanup/revalidation and duplicate-emission guards are unchanged;
   successful, plan-only and input-only cases remain silent. No workflow, schema,
   artifact, publication fallback, source/runtime pin or model/grader control
-  changed. At `249d733f96941ce00269e3e19f8f43d613b8636c`, one offline invocation
+  changed. At `14b44aa2e04d018c27d41d9be01c8d6ecf1e9895`, one offline invocation
   of `tests/test_codex_budget_pilot_failure_category.py::test_diagnostic_rechecks_bytes_and_owned_cleanup_without_rewriting_completion`
-  selected only `[bytes]`, `[log_io]` and the single added `[unexpected]` case:
-  **3 passed in 22.91s**, exit 0. Assertions distinguish evidence from emission
-  failure, exclude private canaries from logs/stdout/stderr, and preserve exact
-  completion bytes and original exit 1. Only completion records changed after
-  this tested snapshot. The earlier **27 passed in 178.61s** at
+  selected only the existing `[bytes]`, `[log_io]` and `[unexpected]` cases:
+  **3 passed in 20.15s**, exit 0. Assertions distinguish evidence, internal
+  assertion and emission failure, exclude private canaries from
+  logs/stdout/stderr, and preserve exact completion bytes and original exit 1.
+  Only completion records changed after
+  this tested snapshot. The prior **3 passed in 22.91s** at
+  `249d733f96941ce00269e3e19f8f43d613b8636c`, **27 passed in 178.61s** at
   `48868b2af70860285d8611b6a22d0e50c211b0aa` and the separate initial setup
   error/two failed fixture observations above remain unchanged, not rerun or
   combined into a fresh family result. Main remains
