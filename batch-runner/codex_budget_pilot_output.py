@@ -48,6 +48,13 @@ MAX_TOTAL_BYTES = 128 * 1024 * 1024
 MAX_RECORD_BYTES = 8 * 1024 * 1024
 MAX_MANIFEST_BYTES = 128 * 1024
 MAX_LEDGER_ROWS = 10000
+# Exact nonsecret literals from CodexAgentRunner's reservation/abandon paths.
+# They are metadata, not permission for arbitrary error text or free-form notes.
+CODEX_LEDGER_NOTES = frozenset({
+    "one Codex turn; the model requests inside it are not individually reported",
+    "deadline refused before the turn started",
+    "the turn never started",
+})
 REQUEST_SECONDS = 30
 PUBLICATION_SECONDS = 120
 HF_ENDPOINT = "https://huggingface.co"
@@ -201,8 +208,9 @@ def _ledger(data: bytes, cell: dict, *, grading_run_id: str | None = None) -> No
         if kind == "call":
             _require(row["state"] in {"reserved", "settled", "abandoned", "refused"}, "ledger_state_refused")
             _require(row["stage"] in STAGES and row["retry_kind"] in RETRY_KINDS, "ledger_stage_refused")
-            _require(row["note"] is None or (type(row["note"]) is str and
-                     re.fullmatch(r"[a-z][a-z0-9_.:-]{0,127}", row["note"]) is not None), "unsafe_ledger_note")
+            _require(row["note"] is None or (type(row["note"]) is str and (
+                     row["note"] in CODEX_LEDGER_NOTES or
+                     re.fullmatch(r"[a-z][a-z0-9_.:-]{0,127}", row["note"]) is not None)), "unsafe_ledger_note")
             _require(all(row[name] is None or _hash(row[name]) for name in
                          ("price_table_sha256", "request_sha256")), "ledger_hash_refused")
         else:
@@ -220,7 +228,9 @@ def _ledger(data: bytes, cell: dict, *, grading_run_id: str | None = None) -> No
                     _require(amount.is_finite() and amount >= 0, "ledger_amount_refused")
                 except InvalidOperation as error:
                     raise OutputPublicationRefused("ledger_amount_refused") from error
-            elif name != "missing_reasons" and not (name == "run_id" and grading_run_id is not None):
+            elif (name != "missing_reasons" and not (name == "run_id" and grading_run_id is not None)
+                  and not (kind == "call" and name == "note")):
+                # Call notes already passed their dedicated closed check above.
                 _require(value is None or (type(value) is str and
                          re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.:+-]{0,511}", value) is not None),
                          "ledger_identity_refused")
