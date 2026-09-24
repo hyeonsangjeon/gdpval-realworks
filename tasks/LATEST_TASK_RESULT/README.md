@@ -1,106 +1,102 @@
 # Latest task result
 
-## PROJECT5-BOUNDED-DIAGNOSTIC-2151
+## PROJECT5-ONE-CELL-GATE-2252
 
-### Diagnostic exception handling is bounded, not authoritative
+### One independent first-A1 gate, code/offline preparation only
 
-Addressed leader REQUEST-CHANGES `5304688416` at
-`9aa4b617f241d39df63f3fbf2ef2d2b51cd0a0a6` on the same clean #674 branch.
-This addresses the remaining bounded-handling requirement from review `5304339793` at
-`f33bcd7dfbdbf579ecd7d995ac0ed493c2233afb`; it does not imply new-head approval.
-Main remains `e1eef7e8b880e4dbc6066f54c6fba5ab8e1befc6`. The leader reported
-7 checks passed and 2 running at the initial read, without source approval or
-authorization to merge or run live. This task did not query those checks.
-The existing reviewer confirmed only the narrowed exception families before
-edits; new-head delta review and CI remain.
+Prepared the closed identity `budget_pilot_ci_20260924_03` from exact main
+`c739e5596cf874ef3f48d0943404101f10500372` on a new clean owned branch/worktree.
+The leader supplied #674 FINAL-APPROVE `5305021240` at
+`075ab8f065d88207d9b7ad0de5d02df487867793` and all 9 checks passed. That review
+covers the preceding closed diagnostic, not this activation. The ledger-note
+repair and closed-diagnostic implementation bytes are preserved. Neither fix
+diagnoses the unavailable historical child failures or proves native success.
 
-The CI CLI now logs one closed, producer-recorded failure category for a
-selected finalized failed/stopped cell after confirmed owned cleanup and before
-private retention. The original diagnostic was implemented from that main.
-The leader supplied #673 review
-`5303368449` at `70d1651bbf7bd005daca764b2f0dc75097afab73` and all 9 checks
-passed for the preceding ledger-note repair. That review does not approve this
-diagnostic. The approved publisher repair, its tests, producer/runtime code,
-source pins, workflow and grading code remain byte-identical to this base.
+The existing extreme-reasoner approved this bounded activation before edits.
+Added one registration, switched the active campaign/ref/registration constants
+and registration source baseline, and changed five workflow campaign literals.
+One existing active-registration assertion now names epoch03; the historical
+YAMLs remain unchanged. No source pin, workflow input, scheduler, admission
+algorithm, retention/diagnostic logic, fixed grader or generic default changed.
+The registration baseline records preparation provenance, not approval or a
+seal of the eventual execution source.
 
-The bounded pre-edit extreme-reasoner decision permits only this future-run
-diagnostic. The CLI reuses the selected-cell state, owned-cleanup validator,
-recorded result role/size/SHA256, `_finish` on a copy and the existing result-row
-projection. Revalidation must preserve result, receipt, accounting and artifact
-identities. It does not adopt a late result when none was recorded. Logging
-runs only after the existing completion publication; `_finish` stays silent,
-including when the publisher revalidates a copy. A CLI invocation that finds
-the cell already finalized emits no second diagnostic and admits no new child.
+Only `02aa1805-c658-4069-8a6a-02dec146063a_A_r1` is a candidate for later live
+authorization. The compiler still produces the same five-task, 30-cell plan
+and accepts canonical selections; the one-cell limit is the leader's explicit
+dispatch authority, not a new runtime cap. The remaining 29 entries have no
+execution authority. This is an independent acceptance gate after the repairs,
+not a new 30-cell comparison or recovery of either admitted failure. There are
+currently two admitted failed/unretained A1 cells in separate frozen histories.
+Only a later authorized gate admission would make old2 plus new1 **3 admitted
+cells across separate histories**, not 32 or a pooled comparison. Stop after
+that gate regardless of outcome; neither success nor failure authorizes a
+successor, replacement dispatch, workflow rerun or automatic epoch04.
 
-The short structured line contains only the already-public source SHA, cell ID,
-failed/stopped status and an exact allowlisted category from existing Codex,
-deadline and execution-error semantics. Missing/null categories become
-`unavailable`; present unknown or nonstring categories become `unclassified`.
-Neither case prints the supplied value. A successful result row cannot explain
-a nonzero child exit, so its category is `unavailable` even if it carries a stale
-allowlisted value. Successful cells emit no failure diagnostic. The CLI emits
-no trusted category when evidence is malformed or unbound, bytes have changed,
-or cleanup is uncertain or belongs to another cell. The supported diagnostic
-failures below leave completion facts and the CLI exit result unchanged.
-
-The previous correction supplied unavailable signals but retained three
-`except Exception` catch-alls. They are now limited to concrete families:
-
-- Evidence reads/validation catch `OSError`, `ValueError`, `TypeError`,
-  `KeyError` and `IndexError`, yielding `diagnostic_evidence_unavailable`.
-- The explicitly supported internal `AssertionError` yields the distinct
-  `diagnostic_internal_unavailable`, never an ordinary evidence-failure signal.
-- The separate logger boundary catches only `OSError` and the existing tested
-  `RuntimeError`, then attempts one fixed `diagnostic_emission_unavailable`
-  line directly on stderr. That fallback catches only `OSError`.
-
-All unavailable signals use `authoritative=false` and contain no exception
-type, text, arguments, private values or partially validated bindings. There
-is no category retry or recursive logging. Known I/O failures at both sinks
-leave the finalized completion and original exit unchanged, but delivery is
-best effort and is not guaranteed. Other programming faults are outside these
-handlers; they are not silently normalized into evidence unavailability.
-This is not a promise to contain every arbitrary exception. None of these
-signals grants terminal, admission or publication authority. Success,
-plan/input-only and already-finalized cases retain their existing silence.
-
-A recorded category is not proof of the child's underlying cause. No error
-body, prompt, payload, token, URL, path, note, native log or stack trace enters
-the line. There is no new artifact, workflow input, completion-schema version,
-experiment axis or publication authority. Failed status/reason, partial usage,
-cost and immutable result/ledger bytes remain unchanged. Neither historical
-missing payload is diagnosed or recovered, and the ledger-note repair is not
-evidence that native execution now succeeds.
+The existing private target remains fixed by name SHA256
+`a13dedada5465377761961d050e021a4db8e44d6284179a9ce40b562e4396a44` and immutable
+bootstrap `bfc7ae01ed14490817ceb7cb406adcb9bb95f557`. The new fixed refs are
+`pilot-inference-20260924-03` and `pilot-grades-20260924-03`. No live setup or
+inspection was performed. Existing helpers select one ref at a time, require
+exact private bootstrap access and genuine missing-ref evidence, reserve each
+mutation once, and verify its readback within the existing four-request bound.
+Existing refs or ambiguous outcomes cannot be adopted, reset or replayed.
+Claims, outputs, terminal evidence and grading provenance derive the new
+campaign/ref binding through the unchanged validators. Dataset main, the old
+grade ref and both epoch02 refs/paths/claims remain historical and untouched.
 
 ### Focused offline validation
 
-At tested SHA `14b44aa2e04d018c27d41d9be01c8d6ecf1e9895`, one invocation from
-`batch-runner/` ran only these selectors:
+At tested SHA `bda13885f4eee9d489e150bd2be97c1f043bedd8`, one invocation from
+`batch-runner/` ran only `tests/test_codex_budget_pilot_epoch03_gate.py`:
+**13 passed in 23.30s**, exit 0. Only completion records changed after that
+tested snapshot.
 
-- `tests/test_codex_budget_pilot_failure_category.py::test_diagnostic_rechecks_bytes_and_owned_cleanup_without_rewriting_completion[bytes]`
-- `tests/test_codex_budget_pilot_failure_category.py::test_diagnostic_rechecks_bytes_and_owned_cleanup_without_rewriting_completion[log_io]`
-- `tests/test_codex_budget_pilot_failure_category.py::test_diagnostic_rechecks_bytes_and_owned_cleanup_without_rewriting_completion[unexpected]`
+The selector checks the exact registration/source/ref identities, first A1,
+unchanged model/original-input/budget/order controls and distinct historical
+namespaces. It exercises each ref's offline plan, four-request setup, separate
+reservation, read-only inspection and no-replay behavior; generic 404s,
+existing refs and lost create/readback responses refuse. Mixed registration,
+claim, publication and grade bindings refuse. Synthetic prepare/inference
+children run for only the first A1 after the real admission guard. Retention
+preserves successful bytes or explicit failed/ungraded withholding metadata,
+while grading reads the bound terminal and uses only the separate grading ref.
+Old refs/bytes remain frozen
+in the fake transport. No successor is dispatched or judge invoked.
 
-Result: **3 passed in 20.15s**, exit 0. The existing unexpected-error case
-injects `AssertionError` with a private canary into diagnostic projection.
-The logging case retains its private-canary `RuntimeError`. These are fake
-failure boundaries, not observed live errors. Each case checks that no trusted
-category is emitted, the evidence/internal/emission signals stay distinct,
-no private canary appears in captured logs/stdout/stderr, finalized completion
-bytes are identical and the original exit remains 1. The byte case still
-changes the already-bound result after completion publication to exercise the
-real read/hash refusal. Partial accounting remains unchanged.
+Compiler, serialization, deadline, receipt/byte checks, admission, publisher,
+terminal validation, grading binding and CAS helpers are real. Inputs,
+reviewed-source/host-version admission, child execution, HF responses and
+grading preparation identities are synthetic. The installed HF SDK uses a
+fake bounded transport. This is not evidence of actual ref creation, native
+installation/execution, provider connectivity, retained live output or grading
+quality. It grants no authority to use a later source under an existing claim.
 
 The invocation used the existing Python 3.10.12 interpreter, credential-free
 `env -i`, HF/data/transformer offline flags, disabled plugin autoload,
-`-q -o addopts= -p no:cacheprovider --tb=short --maxfail=1`, a private JUnit report
-and a 120-second timeout with a 10-second termination grace. No dependency was
-installed. The existing real producer/serialization/validation and fake
-runtime/transport boundaries described below remain in use. Only completion
-records changed after this tested snapshot. No 27/31/35/25/8-case family, full
-suite or live diagnostic was rerun.
+`-q -o addopts= -p no:cacheprovider --tb=short`, a task-owned local JUnit report
+and a 240-second timeout with a 10-second termination grace. No dependency was
+installed. No previous 35/31/27/25/8-case family, full suite or live diagnostic
+was rerun, and no CI status was queried.
 
 ### Prior diagnostic validation, not rerun
+
+The bounded exception follow-up addressed reviews `5304339793` and
+`5304688416`. Its three existing `bytes`, `log_io` and `unexpected` nodes of
+`tests/test_codex_budget_pilot_failure_category.py::test_diagnostic_rechecks_bytes_and_owned_cleanup_without_rewriting_completion`
+returned **3 passed in 20.15s**, exit 0, at
+`14b44aa2e04d018c27d41d9be01c8d6ecf1e9895`. It distinguishes expected
+evidence I/O/validation failures from the explicitly supported internal
+`AssertionError` and supported logger/sink failures. All unavailable signals
+are fixed and non-authoritative, with no private canary in captured surfaces;
+completion bytes, original exit 1 and partial accounting remain unchanged.
+These are fake failure boundaries, not observed live errors.
+Delivery is best effort, not guaranteed containment of arbitrary programming
+faults. Category allowlisting, cleanup/hash/source/cell revalidation, silence
+on success/plan/already-finalized state and duplicate guards remain unchanged.
+Neither a category nor an unavailable signal grants terminal/publication or
+admission authority. The earlier initial read of 7 passed/2 running was
+superseded by the leader's final #674 observation above, not by a query here.
 
 The same three-node selection previously returned **3 passed in 22.91s**,
 exit 0, at `249d733f96941ce00269e3e19f8f43d613b8636c`. That observation covered
@@ -227,24 +223,37 @@ either existing admission.
 
 ### Remaining authority and unchanged controls
 
-New-head delta review and CI, followed by an explicit leader decision about any
-future run, remain. There is no epoch03, rerun, next-cell, grading or source
-reseal authorization. Neither target/ref was recreated; neither existing claim,
-clock or receipt was adopted, rewritten, replayed or deleted. The code retains
-the five-task/30-cell design and canonical A1/B1/C1/C2/B2/A2 order, GPT-5.4,
-direct-v1/xhigh, SDK 0.147.0, 180-minute cumulative budget including wait/recovery,
+New-head review and CI remain. Any live gate still requires the leader's exact
+source direction, separately reserved setup and actual verification of both
+new refs at bootstrap, final common source binding, and one first-cell
+reservation. None occurred here. The source baseline in the new registration
+does not silently reseal either frozen history. Neither target/ref was
+recreated; neither existing claim, clock or receipt was adopted, rewritten,
+replayed or deleted.
+
+After a separately authorized run, gate acceptance requires confirmed owned
+cleanup, a valid retained terminal/receipt and no raw leak. A successful cell
+needs valid deliverables before separately authorized fixed grading. A failed
+cell stays failed and must retain its available closed category; it does not
+pass quality. A recorded category is not proof of the child's underlying cause.
+An unretained terminal or missing diagnostic blocks expansion.
+After that one gate, stop for the leader's readout regardless of outcome.
+
+The code retains the five-task/30-cell design and canonical A1/B1/C1/C2/B2/A2
+order, GPT-5.4, direct-v1/xhigh, SDK 0.147.0, 180-minute cumulative budget
+including wait/recovery,
 30-minute attempts, A4 fresh attempts, B/C retained continuation, C-only feedback,
 one inference slot and one fixed grade per eligible result. No budget axis,
 automatic monetary cutoff, epoch/storage framework or model/grader change was
 introduced. No live HF/model/grader or Azure-management request, workflow
 dispatch, source reseal or CI polling occurred.
 
-The full skill catalog was checked once. Experiment-report-en preserved partial
-usage/cost units and the distinction between recorded categories, synthetic
-validation and unavailable historical causes; im-not-ai-en copyedited only the
-bounded English records without changing those claims. No new experiment,
-configuration axis, UI work or broader public-repository handoff required
-experiment-design, UI or repo-readiness guidance. Earlier
+The full skill catalog was checked once. Experiment-design kept this staged
+acceptance gate distinct from comparison expansion and preserved the controls
+and stop boundary. Experiment-report-en preserved separate partial accounting,
+historical uncertainty and the limits of synthetic validation; im-not-ai-en
+copyedited the bounded English records without strengthening those claims.
+UI/animation and broader repo-readiness guidance were not applicable. Earlier
 records below remain unchanged historical observations.
 
 ## PROJECT5-REGISTRATION-FIXTURE-1715
