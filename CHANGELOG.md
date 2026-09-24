@@ -13,6 +13,57 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Prepare the closed independent epoch `budget_pilot_ci_20260924_02` from
+  `e23d8acc1d032b3e937ec099324e3221334c9b4b`, preserving the historical
+  registration and all old claims/worktrees. The leader supplied #671 review
+  `5300302955` at `2ff94450d52fb4b5c80cded3ba0505321bac3a2f` and all 9 checks
+  passed for the preceding withholding repair, not this new head. The bounded
+  pre-edit extreme-reasoner decision permits code/offline preparation only.
+  The existing private dataset fingerprint
+  `a13dedada5465377761961d050e021a4db8e44d6284179a9ce40b562e4396a44` and recorded
+  bootstrap `bfc7ae01ed14490817ceb7cb406adcb9bb95f557` are fixed. New inference
+  and grading refs are `pilot-inference-20260924-02` and
+  `pilot-grades-20260924-02`; their actual state was not observed here.
+  Reuse setup/inspection through fixed selectors, one ref per invocation with
+  its own no-clobber reservation/receipt. The real bounded HF transport permits
+  at most four setup requests and accepts absence only after verified private
+  bootstrap access and a genuine `RevisionNotFound`/404. Existing refs, generic
+  404s, redirects, identity/parent drift and ambiguous outcomes refuse without
+  recreation, adoption or automatic second-ref creation. Planning remains
+  offline; inspection remains read-only and cannot rewrite an earlier receipt.
+  Route inference admission, publication and terminal boundaries to the new
+  inference ref, and grading writes to the separate new grading ref. Bind
+  campaign/source/ref identities through the existing validators and provenance.
+  Dataset `main`, `pilot-grades-20260923` and old01 paths are not retained-route
+  write targets. Standalone publication keeps its default; approved payload
+  validation/withholding, private/CAS/cleanup gates, fixed grader/source/runtime
+  pins, workflow permissions and token isolation remain unchanged.
+  One new selector, `tests/test_codex_budget_pilot_epoch02.py`, returned
+  **34 passed, 1 failed in 80.16s**, exit 1, at
+  `63afe729b9edab8c59f888fc86c4b4b642999b71`. The new test used the raw input
+  checksum envelope instead of the validated payload. After a test-only reader
+  correction, only
+  `tests/test_codex_budget_pilot_epoch02.py::test_real_retention_predecessor_and_grading_cas_use_distinct_refs`
+  was rerun at `d514d811374d80bb7e14ad051e10a21e402c5575`: **1 passed in 27.90s**,
+  exit 0. This is split evidence, not a fresh 35-case pass. Compiler, byte,
+  deadline, CAS, terminal and grading-binding checks are real; source/runtime,
+  child/HF boundaries and outputs are synthetic. No judge or native-install
+  proof is claimed. The prior 25-pass family and full suite were not rerun.
+  Old01/source `2fe1c6925e6d76c03b85851046d52216bee74a16` remains frozen with
+  1 admitted failed/unretained A1 and 29 not run. Run `35954811341`, job
+  `107490761123`, and known partial cost **USD 0.175163** remain historical;
+  the estimate is null, `invoice_complete=false`, and the unsafe field/raw
+  files/current remote claim state remain unknown or unavailable. Proposed
+  new30 plus old1 would mean 31 admitted cells across two histories if later
+  authorized, not completion of the original30. The five tasks, ABC/CBA order,
+  GPT-5.4/direct-v1/xhigh, SDK 0.147.0, 180/30-minute limits, A4/B-C continuation,
+  C feedback, one inference slot, one fixed grade per eligible result and no
+  automatic monetary cutoff remain fixed. New-head review/CI, separately
+  authorized actual ref setup/readback and one common final source/cell binding,
+  live admission/publication, grading-host capability and all new30 results
+  remain. No live setup/inspection/execution, old-claim settlement, source reseal,
+  workflow dispatch, HF/model/grader/Azure operation or CI polling occurred.
+
 - Add the explicit `pilot/branch-inspect` selector and `inspect` phase on the
   existing #669 branch, starting at
   `685454f030a4128b39761402d69712bd8f705def`. Planning remains local, with no

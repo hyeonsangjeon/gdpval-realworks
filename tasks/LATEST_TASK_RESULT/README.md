@@ -1,5 +1,126 @@
 # Latest task result
 
+## PROJECT5-EPOCH02-PREP-1511
+
+### Closed replacement epoch, preparation only
+
+Implemented the independent `budget_pilot_ci_20260924_02` on a new worktree from
+`e23d8acc1d032b3e937ec099324e3221334c9b4b`. No epoch02 HF setup, inspection,
+admission, inference or grading was performed. The leader reported #671 review
+`5300302955` at `2ff94450d52fb4b5c80cded3ba0505321bac3a2f` and all 9 checks
+passed for the preceding withholding repair. That review does not cover this
+epoch02 implementation. The existing extreme-reasoner approved its bounded
+CI/HF/cost contract with conditions before edits, for code/offline preparation
+only. This base and the local test SHAs are not an execution-source seal.
+
+Old01 remains frozen at `2fe1c6925e6d76c03b85851046d52216bee74a16`, with
+1 admitted failed/unretained A1 and 29 not run. Its run `35954811341`, job
+`107490761123`, execution exit 1 and retention exit 2 (`unsafe_result_fields`)
+remain historical. Known partial cost is USD 0.175163, with a null estimate and
+`invoice_complete=false`; it is not an invoice total or a request count. The raw
+result/ledger, precise child cause, unsafe field and current remote claim state
+remain unavailable or unknown as recorded below. No claim was settled, adopted,
+deleted, overwritten, replayed or used as an epoch02 comparison result.
+
+The proposed new scope is 30 independent cells, not the old remaining 29.
+If all new cells are later admitted, old1 plus new30 means 31 admitted cells
+across two histories. The same five original tasks, A1/B1/C1/C2/B2/A2 order,
+GPT-5.4/direct-v1/xhigh, SDK/CLI 0.147.0, 180-minute cumulative budget including
+wait/recovery, 30-minute attempts, A4 fresh attempts, B/C retained continuation,
+C-only feedback, one inference slot and one fixed grade per eligible result
+remain unchanged. There is no automatic monetary cutoff or automatic launcher.
+
+### Fixed refs and existing gates
+
+The new closed registration preserves the old registration. It names only the
+existing private dataset fingerprint
+`a13dedada5465377761961d050e021a4db8e44d6284179a9ce40b562e4396a44` and recorded
+bootstrap `bfc7ae01ed14490817ceb7cb406adcb9bb95f557`. The fixed refs are
+`pilot-inference-20260924-02` and `pilot-grades-20260924-02`. Their actual
+existence and current state have not been observed in this task.
+
+The existing grading entry accepts `pilot/inference-branch-setup` and
+`pilot/inference-branch-inspect` for the inference ref. `pilot/branch-setup` and
+`pilot/branch-inspect` now select the new grading ref. Each explicit setup
+invocation handles one ref and its own private no-clobber root, reservation and
+receipt. Four logical requests at most verify exact private bootstrap access,
+establish genuine revision absence, create once with `exist_ok=false`, and
+verify readback at the actual bootstrap. Generic 404s, inaccessible/public or
+foreign targets, existing refs, redirects, changed parents and ambiguous
+responses refuse. No automatic second-ref creation, adoption, deletion or replay
+is available. Inspection remains two bounded reads and cannot acknowledge an
+earlier setup. Default planning does not look up tokens or make network calls.
+
+Admission reads, claim/output/terminal CAS writes and terminal-parent checks use
+only the new inference ref. Claims, output manifests/receipts, terminal records
+and grading provenance bind the campaign, actual source and designated ref.
+A1 requires the recorded bootstrap and an absent prefix; later cells require
+the exact immediately preceding canonical terminal at the same source. Grading
+writes only its new ref. Neither route writes dataset `main`,
+`pilot-grades-20260923` or old01 paths. Standalone publication retains its `main`
+default; it cannot publish a ref-tagged retained snapshot through that default.
+
+The approved result-validation/withholding implementation is byte-identical to
+the base. Failed/stopped withheld outputs still retain only bounded metadata,
+unchanged local artifact identities and partial/missing accounting; missing
+results remain ungraded. Privacy, source, hash, byte, path, cleanup, no-clobber,
+CAS and acknowledgment gates remain. Unacknowledged output cannot authorize a
+terminal or next cell. Workflow inputs, permissions, concurrency, runtime/model
+controls and fixed-grader pins did not change. HF tokens remain in short host
+scopes, outside model/judge children. No coupled source pin required an update.
+
+### Focused offline evidence
+
+From `batch-runner/`, the new selector
+`tests/test_codex_budget_pilot_epoch02.py` returned **34 passed, 1 failed in
+80.16s**, exit 1, at `63afe729b9edab8c59f888fc86c4b4b642999b71`. The failed test
+read the checksummed input envelope as a raw retention record, causing
+`KeyError: files_sha256`. The test now uses the existing validating checkpoint
+reader; production code did not change after that run.
+
+Only the failed node,
+`tests/test_codex_budget_pilot_epoch02.py::test_real_retention_predecessor_and_grading_cas_use_distinct_refs`,
+was rerun at `d514d811374d80bb7e14ad051e10a21e402c5575`: **1 passed in 27.90s**,
+exit 0. This is split evidence, not a fresh 35-case pass. Both invocations used
+the existing Python 3.10.12 interpreter, a credential-free `env -i` environment,
+HF offline defaults and private JUnit/log files. Pytest options were
+`-q -o addopts= -p no:cacheprovider --tb=short`; finite timeout bounds were
+600 seconds for the selector and 180 seconds for the failed node.
+
+The compiler, checksum/byte checks, serialization, deadline, admission,
+publication/CAS, terminal validation and grading binding/ref-CAS helpers are
+real. Inputs/outputs, source/runtime capability, child execution and HF replies
+are synthetic. Setup uses the installed SDK and real bounded HTTP guard with
+fake responses. Grading-CAS tests do not establish native atomic installation,
+judge readiness or a grade. The prior 25-pass withholding family was not rerun;
+its original SHA/result remains below. Only completion records changed after
+the failed-node test snapshot.
+
+### Remaining authority and observations
+
+New immutable-head review and CI remain. The leader must separately authorize
+each live ref setup and bind its actual readback/bootstrap, one common final
+execution SHA for all new 30 cells, and one selected cell before admission.
+Checked live write/admission/publication, the first epoch02 cell, actual grading
+host installation and one fixed grade, and complete new 30-cell results remain.
+This task grants no live permission and does not reseal old01.
+
+Dataset setup `35881609256` stays consumed. Old grading setup `35939410006`
+remains acknowledged/branch_verified; original setup `35920355055` remains
+unresolved/consumed. Earlier failed A1 dispatches `35941493214` and `35943806328`
+remain separate from the admitted failure. Their detailed receipts, hashes and
+partial costs below are unchanged. No live HF/model/grader/Azure operation,
+payload transfer, workflow dispatch or CI polling occurred.
+
+The full skill catalog was checked once. Experiment-design kept this a closed
+replacement with unchanged axes and an explicit old1/new30 denominator.
+Experiment-report-en and im-not-ai-en preserved the split test evidence, partial
+cost and unknown-state limits. UI/animation and repo-readiness guidance did not
+apply to this bounded internal routing/evidence change.
+
+The sections below are historical records at their stated sources, not epoch02
+execution authority.
+
 ## PROJECT5-FAILED-RETENTION-1339
 
 ### Future-code repair and frozen admitted cell
