@@ -20,9 +20,9 @@ import codex_budget_pilot as pilot
 from core.cost_projection import COST_STATUSES, project_cost_receipt
 from core.result_projection import project_result_row
 
-CAMPAIGN = "budget_pilot_ci_20260924_02"
-INFERENCE_BRANCH = "pilot-inference-20260924-02"
-GRADING_BRANCH = "pilot-grades-20260924-02"
+CAMPAIGN = "budget_pilot_ci_20260924_03"
+INFERENCE_BRANCH = "pilot-inference-20260924-03"
+GRADING_BRANCH = "pilot-grades-20260924-03"
 STORAGE = {
     "repository_name_sha256": "a13dedada5465377761961d050e021a4db8e44d6284179a9ce40b562e4396a44",
     "bootstrap": "bfc7ae01ed14490817ceb7cb406adcb9bb95f557",
@@ -30,7 +30,7 @@ STORAGE = {
 }
 REPOSITORY = "hyeonsangjeon/gdpval-realworks"
 WORKFLOW = ".github/workflows/codex-budget-pilot-ci-cell.yml"
-REGISTRATION = pilot.REGISTRATION.with_name("codex_external_budget_ci_pilot_epoch02.yaml")
+REGISTRATION = pilot.REGISTRATION.with_name("codex_external_budget_ci_pilot_epoch03.yaml")
 HOST_POLICY = {
     "runner": "ubuntu-22.04", "python": "3.10.12", "sdk": "0.147.0", "cli": "0.147.0",
     "identity": "existing_repository_oidc", "job_ceiling_minutes": 240,
@@ -123,12 +123,12 @@ def _require_ci_context(reviewed_sha: str) -> dict:
 
 
 def _registration_bytes() -> bytes:
-    """One closed replacement epoch; the historical registration is untouched."""
+    """One closed active epoch; historical registrations remain untouched."""
     registration_bytes = pilot._read_bytes(REGISTRATION)
     registration = yaml.safe_load(registration_bytes)
     expected = {
         "plan_version": "codex-external-budget-ci-cell-v1", "campaign_id": CAMPAIGN,
-        "source_baseline": "e23d8acc1d032b3e937ec099324e3221334c9b4b",
+        "source_baseline": "c739e5596cf874ef3f48d0943404101f10500372",
         "parent_registration": str(pilot.REGISTRATION.relative_to(pilot.ROOT)),
         "host": HOST_POLICY, "default_mode": "plan_only", "selection": "one_explicit_canonical_cell",
         "controls": "inherit_parent_unchanged", "input_transfer": "explicit_approved_handoff_required",

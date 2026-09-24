@@ -1,0 +1,41 @@
+# Independent first-A1 gate preparation, not recovery or live authority.
+plan_version: codex-external-budget-ci-cell-v1
+campaign_id: budget_pilot_ci_20260924_03
+source_baseline: c739e5596cf874ef3f48d0943404101f10500372
+parent_registration: batch-runner/experiments/execution_envelope/codex_external_budget_pilot.yaml
+description: >-
+  Prepare only the first-A1 acceptance gate
+  02aa1805-c658-4069-8a6a-02dec146063a_A_r1 for later leader authorization.
+  Keep the canonical five-task, 30-cell plan and A1/B1/C1/C2/B2/A2 order with
+  unchanged model, inputs, fixed grader and 180/30-minute controls. The other
+  29 cells have no execution authority; the one-cell limit is the leader's
+  dispatch boundary, not a new runtime cap. Epoch01 and epoch02 each retain
+  one admitted failed/unretained A1 and 29 unrun with separate partial costs,
+  frozen sources and claims. Only a later authorized admission makes old2 plus
+  new1 three admitted cells across separate histories, not a pooled comparison.
+  The leader must verify both refs, bind the exact final reviewed source and
+  reserve one cell before live use. Stop after that gate regardless of outcome;
+  neither success nor failure authorizes a successor, replacement or rerun.
+  This registration grants no setup, execution, grading or source-reseal authority.
+host:
+  runner: ubuntu-22.04
+  python: 3.10.12
+  sdk: 0.147.0
+  cli: 0.147.0
+  identity: existing_repository_oidc
+  job_ceiling_minutes: 240
+  same_policy_all_conditions: true
+  cross_runner_restore: false
+  automatic_rerun: refuse_run_attempt_above_one
+default_mode: plan_only
+selection: one_explicit_canonical_cell
+controls: inherit_parent_unchanged
+input_transfer: explicit_approved_handoff_required
+publication: private_cell_outputs_and_nonsecret_completion_envelope
+ordered_30_cell_scheduler: not_implemented
+separate_manual_run_deduplication: fixed_private_claim_cas_canonical_successor_only
+storage:
+  repository_name_sha256: a13dedada5465377761961d050e021a4db8e44d6284179a9ce40b562e4396a44
+  bootstrap: bfc7ae01ed14490817ceb7cb406adcb9bb95f557
+  inference_branch: pilot-inference-20260924-03
+  grading_branch: pilot-grades-20260924-03

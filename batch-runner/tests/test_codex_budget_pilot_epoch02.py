@@ -213,7 +213,8 @@ def test_epoch02_plan_is_closed_independent_and_offline(epoch, monkeypatch, caps
     plan = read_plan(epoch)
     assert boundary(epoch, capsys, monkeypatch)[0] == 0
     assert epoch.api.calls == epoch.transport.calls == []
-    assert plan["run_id"] == ci.CAMPAIGN == "budget_pilot_ci_20260924_02"
+    # This contract follows active CI routing; the epoch02 YAML remains history.
+    assert plan["run_id"] == ci.CAMPAIGN == "budget_pilot_ci_20260924_03"
     assert len(plan["cells"]) == 30 and len({cell["task_id"] for cell in plan["cells"]}) == 5
     assert [(row["condition"], row["repetition"]) for row in plan["cells"][:6]] == list(pilot.ORDER)
     old_plan, _, _ = pilot.compile_pilot(OLD_CAMPAIGN, OLD_SOURCE)
