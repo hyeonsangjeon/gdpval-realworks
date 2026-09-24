@@ -7,7 +7,9 @@ byte checks, cleanup validation and CLI completion/log projection remain real.
 
 import copy
 import json
+import os
 from pathlib import Path
+import socket
 import subprocess
 from types import SimpleNamespace
 
@@ -17,13 +19,14 @@ import codex_budget_pilot as pilot
 import codex_budget_pilot_ci as ci
 import codex_budget_pilot_output as output
 import step2_run_inference as step2
-from core import codex_runner
+import step8_grade
+from core import azure_ai_clients, codex_azure_token, codex_runner
 from core.codex_runtime_config import CodexProviderSettings
 from core.cost_projection import project_cost_receipt
 from core.cost_receipts import BUCKET_PROBLEM_SOLVING, CostReceiptLedger, load_receipt_price_table
 from core.inference_manifest import bind_deliverable_file_records
 from core.result_fingerprint import inference_result_fingerprint
-from .test_codex_budget_pilot import offline, read_plan, read_state, scenario  # noqa: F401
+from .test_codex_budget_pilot import read_plan, read_state, scenario  # noqa: F401
 from .test_codex_budget_pilot_ci import CICellChildren, ci_scenario, invoke  # noqa: F401
 
 PREFIX = "CI cell recorded failure category: "
@@ -32,17 +35,33 @@ UNCHANGED = object()
 
 
 @pytest.fixture(autouse=True)
-def no_runtime_auth_or_publication(monkeypatch, offline):
+def no_runtime_auth_or_publication(monkeypatch):
     from huggingface_hub import HfApi
     from huggingface_hub.utils import _auth, _headers
 
     def forbidden(*args, **kwargs):
         pytest.fail("failure-category regression crossed a live boundary")
 
+    # Same SDK-independent boundary guards as the retained-cell family. The
+    # real runner's constructor/categories need no SDK when runtime/auth are
+    # disabled; forbidding a native launch must not require installing it.
+    for target, names in (
+        (subprocess, ("run", "Popen", "check_call", "check_output")),
+        (socket, ("create_connection",)), (socket.socket, ("connect", "connect_ex")),
+        (os, ("system",)), (pilot.time, ("sleep",)),
+        (codex_azure_token, ("acquire_token", "get_bearer_token_provider")),
+    ):
+        for name in names:
+            monkeypatch.setattr(target, name, forbidden)
+    for constructor in (azure_ai_clients.AzureAIClientFactory, azure_ai_clients.OpenAI,
+                        azure_ai_clients.AzureOpenAI, azure_ai_clients.DefaultAzureCredential,
+                        step8_grade.Grader):
+        monkeypatch.setattr(constructor, "__init__", forbidden)
     for name in ("HF_TOKEN", "HUGGING_FACE_HUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setattr(codex_runner, "require_pinned_runtime", forbidden)
     monkeypatch.setattr(codex_runner.CodexAgentRunner, "open_runtime", forbidden)
+    monkeypatch.setattr(codex_runner.CodexAgentRunner, "preflight_auth_command", forbidden)
     monkeypatch.setattr(codex_runner, "_descendant_pids", lambda _: set())
     monkeypatch.setattr(codex_runner, "sweep_orphans", lambda _: ())
     monkeypatch.setattr(output, "_hf_client", forbidden)
@@ -149,7 +168,12 @@ class DiagnosticChildren(CICellChildren):
 
 
 @pytest.fixture
-def diagnostic_case(ci_scenario):
+def diagnostic_case(ci_scenario, monkeypatch):
+    # Explicit synthetic host-version boundary, as in the retained-cell tests;
+    # this is not native install/capability evidence.
+    real_version = ci.importlib.metadata.version
+    monkeypatch.setattr(ci.importlib.metadata, "version", lambda name:
+                        "0.147.0" if name in {"openai-codex", "openai-codex-cli-bin"} else real_version(name))
     s = ci_scenario
     # The second synthetic task has no reference files and accepts text output.
     s.selected = s.ids[1] + "_A_r1"
