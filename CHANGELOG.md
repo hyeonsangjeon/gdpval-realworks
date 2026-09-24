@@ -53,6 +53,52 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Add a retention-only metadata path for a finalized failed/stopped cell whose
+  identity-bound result is refused with exactly `unsafe_result_fields`. After
+  all existing source/config/input, fingerprint, path/link/size, artifact-byte,
+  accounting and selected-cell cleanup checks, retain only the bounded manifest
+  with `files=[]`, the existing missing-payload list and a closed `withheld`
+  record containing the refusal and unchanged completion artifact identities.
+  Those identities describe local evidence, not published payloads. Raw files,
+  completion, failure status and partial/missing accounting stay unchanged.
+  Standalone and unsafe-success publication still refuse. The coupled terminal
+  validator checks the optional record symmetrically; private-target, parent/CAS,
+  reservation, acknowledged-publication and terminal gates are unchanged.
+  Unacknowledged publication cannot authorize advancement. No workflow, compiler,
+  source/runtime pin, model/budget/order or fixed-grader setting changed.
+  The pre-edit extreme-reasoner decision approves future code only, not recovery
+  of the admitted A1 or use of a new source under its old claim.
+  One offline selector, `tests/test_codex_budget_pilot_failed_retention.py`,
+  returned **25 passed in 288.82s**, exit 0, at
+  `3276b32761579af86392909b6d472c9c7f8f604b`. Serialization, compiler, byte checks,
+  publisher/CAS and terminal validation are real; outputs, child/runtime and HF
+  boundaries are synthetic. No previous family was rerun. The tests do not
+  reconstruct the lost result or establish live retention.
+  Leader-supplied main and ACTIVE source remain
+  `2fe1c6925e6d76c03b85851046d52216bee74a16`; #670 review `5299471328` and all
+  **9 checks passed** cover the preceding correction, not this repair.
+  A1 `35954811341` / `107490761123` passed real inputs, full sandbox and private
+  claim, then execution exited **1 at 04:20:18 UTC** and retention exited **2**
+  with `unsafe_result_fields` at **04:20:21.6482243 UTC**. Verified artifact
+  `10789759614`, envelope SHA256
+  `570b0bc196a21efaa0a23123958a46d0ae2b2a52a16d19fb0661aae6d8b046e6`, reports
+  failed/`child_nonzero_exit`, `timeout=false`, one child, confirmed cleanup,
+  **29 other cells not run** and no deliverables. Partial usage is **55033 input**,
+  **4387 output**, **12544 cached-input** and **3566 reasoning tokens**; known
+  cost is **USD 0.175163**, estimate **null**, `invoice_complete=false`.
+  These are not invoice totals or request counts. Bound result **7460 bytes** /
+  `c9313667c3890a1b4bc876d7bb771b41e430c2f595515c1a4bc0041e9fa1175b` and ledger
+  **1838 bytes** / `116561470c73f4fbeae18a7db81c74947991e1b46f695411842f5bbd6153d93a`
+  are identities only; their raw bytes are unavailable. The refusal preceded
+  terminal reservation/HF publication, so this invocation published no result
+  or terminal. The unsafe field, child failure's precise cause and current remote
+  claim state remain unknown. A1 stays frozen. New-head review/final CI and
+  separate leader approval of a reviewed future source, noncolliding campaign/
+  source epoch and approved bootstrap/parent are required before live use;
+  migration or old-claim settlement is not implemented. Historical failed runs
+  and setup distinctions remain in the task record. No live operation, reseal,
+  next-cell admission or grading occurred in this task.
+
 - Correct only the three coupled pilot-workflow test expectations on #670:
   setup-excluded steps **8 → 10**, output-target shared-admission steps **2 → 4**,
   and HF-originals downstream steps **2 → 4**. Explicit step-name assertions
