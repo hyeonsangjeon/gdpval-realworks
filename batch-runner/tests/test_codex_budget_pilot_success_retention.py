@@ -103,7 +103,8 @@ class WriterChildren(CICellChildren):
                 (workspace.workspace / "answer.txt").write_bytes(DELIVERABLE)
             return SimpleNamespace(close=lambda: None)
 
-        def observed(handle):
+        def observed(handle, *, task_deadline):
+            assert task_deadline.store is runner.task_deadline_store
             self.turns += 1
             usage = SimpleNamespace(total=SimpleNamespace(input_tokens=17, output_tokens=9,
                 cached_input_tokens=5, reasoning_output_tokens=4, cache_write_input_tokens=0))
