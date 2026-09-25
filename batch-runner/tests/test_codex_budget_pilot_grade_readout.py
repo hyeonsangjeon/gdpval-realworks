@@ -26,6 +26,7 @@ import step8_grade as step8
 from core.cost_receipts import BUCKET_GRADING, CallUsage, CostReceiptLedger, ledger_reference, load_receipt_price_table
 from . import test_codex_budget_pilot_grading as base
 from .test_codex_budget_pilot_grading import boundaries  # noqa: F401 — every real external boundary is forbidden
+from .test_cost_receipts_keep_every_call_that_happened import PRICE_TABLE as SYNTHETIC_PRICE_TABLE
 
 OBSERVER = "d" * 40
 PRIVATE = "PRIVATE-canary https://private.invalid/path?token=PRIVATE"
@@ -78,9 +79,19 @@ def _writer(case, capsys, tmp_path, monkeypatch, scenario):
     if mode not in {"missing", "no_ledger"}:
         path = case.root / "source" / ready["entry"]["grade_path"]
         ledger_path = path.with_name(path.stem + ".cost_ledger.jsonl")
+        model = json.loads(case.context.run.grader_config_json)["judge"]["model"]
+        price_table = load_receipt_price_table()
+        if scenario == "partial_cost":
+            # The fixed judge is unpriced in the real table. Reuse synthetic
+            # ledger-fixture rates only here, without changing the judge config.
+            synthetic_prices = copy.deepcopy(SYNTHETIC_PRICE_TABLE)
+            synthetic_prices["providers"] = {
+                f"azure:{model}": synthetic_prices["providers"]["azure:test-model"]}
+            price_path = tmp_path / "synthetic-readout-prices.json"
+            price_path.write_text(json.dumps(synthetic_prices), encoding="utf-8")
+            price_table = load_receipt_price_table(price_path)
         with CostReceiptLedger(tmp_path / "recorded-cost.sqlite3", run_id=ready["entry"]["cost_run_id"],
-                               price_table=load_receipt_price_table()) as ledger:
-            model = json.loads(case.context.run.grader_config_json)["judge"]["model"]
+                               price_table=price_table) as ledger:
             ledger.reserve(call_id="recorded-call", task_id=case.context.cell["task_id"], stage="grading",
                 retry_kind="none", provider="azure", requested_model=model, note="synthetic_recorded_call")
             if scenario == "partial_cost":
@@ -288,8 +299,9 @@ def test_closed_retained_grade_readout(case, tmp_path, monkeypatch, capsys, scen
     if scenario == "partial_cost":
         cost = observed["ledger_derived_cost"]
         assert cost["known_cost_usd"] > 0 and cost["usage"]["input_tokens"] == 111 and cost["usage"]["output_tokens"] == 23
+        assert cost["known_cost_usd"] == observed["recorded_task_cost"]["known_cost_usd"]
         assert cost["usage"]["cached_input_tokens"] == 17 and cost["usage"]["reasoning_tokens"] == 8
-        assert cost["model_calls"] == 2 and cost["http_request_count"] is None
+        assert cost["model_calls"] == 2 and cost["http_request_count"] is None and cost["invoice_complete"] is False
         assert "call_reachability_unknown" in cost["missing_reasons"] and "components" not in cost
     assert observed["partial_progress_retained"] is (scenario == "partial")
     # Even before any authorized revision/path exists, the facade cannot write
