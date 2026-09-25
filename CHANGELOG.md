@@ -252,6 +252,58 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Separate protected pilot grading approval from OIDC execution, from exact
+  main `b4c95f8eaee16ae2226f3bf6e0493051fa91d770`. The leader supplied #677's
+  delivered head `aac3ee35b0693f2a495e711a49799d6b7252774e`, review `5316268600`
+  and all **10** CI checks passed for the preceding gate, not this repair.
+  The existing extreme-reasoner context approved the bounded design with
+  conditions before edits. `pilot-approve-paid` owns the protected `grading`
+  environment, has no credentials/OIDC permission and exports only a same-run
+  request digest. `pilot-live` requires that job's success and matching
+  controller/producer/cell/terminal/controls/ref/run binding before HF, renderer,
+  OIDC, claim or judge steps. It uses the ordinary main-ref execution context;
+  failed/skipped/inherited approval and reruns remain refused. The unchanged
+  freeze checker enforces both paid job names. Generic grading stays unchanged.
+  The optional producer-source argument is closed to the already-retained04
+  cell `0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r1`, producer
+  `b4c95f8eaee16ae2226f3bf6e0493051fa91d770` and terminal
+  `8083504edf4ceb63f3c4929aac57e0f4b6741593`; branch routes reject it. Retained
+  proof and materialized workload identities stay producer-bound; the actual
+  reviewed controller supplies clean source preflight and the staged pinned
+  grader. New provenance carries both source identities through claim,
+  publication and reconciliation without relabeling inference or adopting a
+  missing historical controller field. Source/runtime/input/model/budget pins,
+  fixed grader/config/rubric, privacy gates and one-use claims remain unchanged.
+  The leader's run `36132571260`, job `108062994893`, passed renderer during
+  **12:04:26–12:04:29 UTC** and retained-byte/real native atomic materialization
+  during **12:04:29–12:04:38 UTC**, recording `prepared/judge_ready=true` at
+  **12:04:38.7534969 UTC**. OIDC failed at **12:04:41 UTC** with `AADSTS700213`
+  for `repo:hyeonsangjeon/gdpval-realworks:environment:grading`; grading CAS
+  claim and Step8 were skipped. No grade/regrade is established. The supplied
+  retained deliverable remains **5099 bytes**, SHA256
+  `b7fc35b746bd837277ec5d4ef8e94e234bf8c8ab46777d98712494b8d9955191`.
+  At tested SHA `81a8ae08a1e215799c67d9ed96fe95df47db4a08`, the sole focused
+  selector `tests/test_codex_budget_pilot_grading_oidc.py` returned **28 passed
+  in 10.11s**, exit 0. Its initial invocation at
+  `ec28d6d4f8c1d7c13af6fd4e159292dd46b405ba` returned **6 failed, 22 passed in
+  5.40s** because the synthetic source fixture conflated the historical manifest
+  base and reviewed controller. Only that fixture and the intended refusal
+  boundary assertion changed before the passing run; production did not.
+  Real compiler/materializer/entry/hash/schema/CAS validators used synthetic
+  retained bytes and fake HF/source/native-rename/renderer/judge boundaries.
+  Tests cover approval/request/source/terminal tampering, claim-before-judge,
+  one-use refusal, private grade retention, separate lost-response reconciliation
+  and inference-ref immutability. They do not verify live bytes, native capability,
+  Azure federation/token issuance, a real grade or quality. Only records changed
+  after validation. No dependency installation, old22/24/full-family rerun,
+  live HF/model/grader/Azure operation, workflow dispatch, ref setup, source
+  reseal, claim settlement or CI polling occurred. Existing04 refs and the old
+  nine frozen admissions remain unchanged; no epoch05 is introduced. New-head
+  review/CI and exact leader authorization for this retained result and reviewed
+  controller remain before live grading. Design guidance protected the source
+  boundary; English reporting/copyediting preserved the separate evidence scopes.
+  UI/animation and broad repository-readiness guidance did not apply.
+
 - Correct only `test_aliases_preserve_fixed_config_and_canonical_run` in
   `tests/test_codex_budget_pilot_grading.py` for #677 REQUEST-CHANGES
   `5315917785` at `e6c6da71d67741a953a8e21b4bf5ddea020e783a`. Positive
