@@ -91,6 +91,7 @@ ROW_FIELDS = frozenset({
     "task_id", "status", "content", "deliverable_text", "deliverable_files", "deliverable_file_records",
     "model", "usage", "observability", "latency_ms", "timestamp", "error", "problem_solving_cost",
     "resume_round", "task_deadline", "failure_evidence",
+    "reflection_history", "reflection_attempts",
 })
 FORBIDDEN_KEYS = frozenset({
     "token", "access_token", "refresh_token", "authorization", "api_key", "env", "environment",
@@ -323,6 +324,12 @@ def prepare(*, root: Path, campaign: str, cell_id: str, source_sha: str, config_
             _safe_record(payload)
             _require(set(payload) <= RESULT_FIELDS, "unsafe_result_fields")
             _require(set(row) <= ROW_FIELDS and not row.get("failure_evidence"), "unsafe_result_fields")
+            # Step2's no-QA writer records this inert pair even on success.
+            # Preserve its bytes; this does not admit reflection/feedback data.
+            if "reflection_history" in row or "reflection_attempts" in row:
+                _require(type(row.get("reflection_history")) is list and not row["reflection_history"]
+                         and type(row.get("reflection_attempts")) is int and row["reflection_attempts"] == 0,
+                         "unsafe_result_fields")
         except OutputPublicationRefused as error:
             if (str(error) != "unsafe_result_fields" or _failure_metadata is not True
                     or state["status"] not in {"failed", "stopped"}):
