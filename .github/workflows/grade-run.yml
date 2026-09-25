@@ -13,7 +13,7 @@ on:
         type: string
         default: "default_v2_sol_max.yaml"
       inference_revision:
-        description: "Full HF commit for generic resume; pilot cells require the immutable retained terminal-confirmation SHA (never latest main)"
+        description: "Full HF commit for generic resume or pilot terminal; recorded task2 B1 instead requires its fixed public completion checksum (never latest main)"
         required: false
         type: string
         default: ""
@@ -1833,7 +1833,7 @@ jobs:
     env:
       GRADE_SELECTOR: ${{ inputs.experiment_yaml }}
       GRADE_TERMINAL: ${{ inputs.inference_revision }}
-      PILOT_GRADE_PRODUCER_SOURCE_SHA: ${{ inputs.experiment_yaml == 'pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r1' && 'b4c95f8eaee16ae2226f3bf6e0493051fa91d770' || '' }}
+      PILOT_GRADE_PRODUCER_SOURCE_SHA: ${{ inputs.experiment_yaml == 'pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r1' && 'b4c95f8eaee16ae2226f3bf6e0493051fa91d770' || inputs.experiment_yaml == 'pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_B_r1' && 'e7a28db07ebe10d6508b9256137763cc82f9a1d1' || '' }}
       GRADE_CONFIG: ${{ inputs.grading_config }}
       GRADE_FORCE: ${{ inputs.force }}
       GRADE_TASKS_LIMIT: ${{ inputs.tasks_limit }}
@@ -1924,8 +1924,10 @@ jobs:
           selector = inputs["experiment_yaml"]
           branch = selector in {"pilot/branch-setup", "pilot/branch-inspect",
                                 "pilot/inference-branch-setup", "pilot/inference-branch-inspect"}
-          producer = ("b4c95f8eaee16ae2226f3bf6e0493051fa91d770"
-                      if selector == "pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r1" else source)
+          producer = {
+              "pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r1": "b4c95f8eaee16ae2226f3bf6e0493051fa91d770",
+              "pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_B_r1": "e7a28db07ebe10d6508b9256137763cc82f9a1d1",
+          }.get(selector, source)
           request = {
               "workflow": ".github/workflows/grade-run.yml", "repository": "hyeonsangjeon/gdpval-realworks",
               "ref": "refs/heads/main", "controller_source_sha": source,
@@ -1962,7 +1964,7 @@ jobs:
     env:
       GRADE_SELECTOR: ${{ inputs.experiment_yaml }}
       GRADE_TERMINAL: ${{ inputs.inference_revision }}
-      PILOT_GRADE_PRODUCER_SOURCE_SHA: ${{ inputs.experiment_yaml == 'pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r1' && 'b4c95f8eaee16ae2226f3bf6e0493051fa91d770' || '' }}
+      PILOT_GRADE_PRODUCER_SOURCE_SHA: ${{ inputs.experiment_yaml == 'pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r1' && 'b4c95f8eaee16ae2226f3bf6e0493051fa91d770' || inputs.experiment_yaml == 'pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_B_r1' && 'e7a28db07ebe10d6508b9256137763cc82f9a1d1' || '' }}
       GRADE_CONFIG: ${{ inputs.grading_config }}
       GRADE_FORCE: ${{ inputs.force }}
       GRADE_TASKS_LIMIT: ${{ inputs.tasks_limit }}
