@@ -197,6 +197,63 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Accept only Step2's genuine no-QA pair `reflection_history: []` and
+  `reflection_attempts: 0` in the private pilot result publisher, with both
+  fields absent still supported. If either is present, require both, an exact
+  empty list and an exact integer zero. Nonempty/partial reflection metadata,
+  bool/float/nonzero counts, scores, unknown fields and recursive private/raw
+  fields still refuse. This seven-line publisher-only repair starts from
+  exact main `fb232a074f395766f9f83ddc7195a9997a3428f5`; the delivered #675
+  head `f7844c3444014b6b89b9c35d11831431ebfe9d7e`, review `5305790700` and
+  all 10 passing checks cover the preceding activation, not this delta.
+  The bounded pre-edit extreme-reasoner continuation approved the exact inert
+  pair with unchanged original bytes and existing privacy/publication gates.
+  The real Step2 CLI wrapper/writer reproduces old-allowlist rejection at
+  `results[0].reflection_history` and `results[0].reflection_attempts`; this
+  does not identify the unavailable historical payload's offending field.
+  Result, ledger and deliverable bytes/hashes remain intact through retention.
+  The existing grading materializer alone adds its established provenance and
+  a distinct derived fingerprint. Unsafe succeeded results cannot use
+  failed/stopped withholding. Runtime, source pins, workflow, ledger-note and
+  diagnostic code, cleanup, admission/CAS/one-use/terminal guards, branch policy,
+  model/budget controls and fixed grader remain unchanged.
+  At tested SHA `69709958aaad9ab940c3b01242c053086d98fd1c`, the sole new selector
+  `tests/test_codex_budget_pilot_success_retention.py::test_success_writer_retention_contract`
+  returned **24 passed in 215.31s**, exit 0. It exercises the real producer,
+  ledger export, publisher, terminal validation and grading-input binding with
+  fake runtime/HF boundaries and an explicit atomic-install test double.
+  Privacy, changed-byte/source/receipt/cleanup and ambiguous-publication
+  refusals remain; no inference/publication replay or successor admission is
+  allowed. This is not live retention, native capability or grade evidence.
+  Earlier runs of this same selector remain separate fixture observations:
+  **23 failed/1 passed in 135.58s** at `9c2fd2703c4acbf6308f98920eab34e208075140`
+  (missing synthetic connection flag), **23 failed/1 passed in 174.98s** at
+  `3b7d9ac932b313de1bd0f49f5415746282620c78` (fake deadline callback signature),
+  **1 failed/1 passed in 13.92s** at `7d47d78f257d7e41963bcfc4144f19f4530dfb83`
+  (completion envelope reader), and **1 failed/4 passed in 38.46s** at
+  `526c70ad13c3933e2c2319bc59245dcfb1561c1a` (Python equality failed to write
+  the bool-negative fixture). Only that fixture changed before the passing
+  snapshot; only completion records changed afterward. No prior family/full
+  suite or live diagnostic was rerun and no dependency was installed.
+  Separately, the leader reports epoch03 second-task A1 run `36100954518`,
+  job `107963127255`, executed successfully on source `fb232a074f395766f9f83ddc7195a9997a3428f5`
+  during **2026-09-25 06:03:40–06:04:31 UTC**, exit 0, then retention refused
+  `unsafe_result_fields` at **06:04:35.5824504 UTC**, exit 2. Artifact
+  `10849486947` binds one **5549-byte** deliverable, a **7090-byte** result and
+  **915-byte** ledger; their exact hashes remain in the current task record.
+  Partial usage is **57260 input/2955 output/43136 cached-input/898 reasoning
+  tokens**, with **USD 0.090419** known partial cost, null estimate/HTTP count
+  and incomplete invoice. This is execution-success evidence, not a bill,
+  retained terminal/publication acknowledgment or grade. Raw files and the
+  historical offending key remain unavailable; no reconstruction is attempted.
+  The first epoch03 task's six cells failed with verified terminals; epoch03
+  source/claims are now frozen alongside old01/source2fe and epoch02/source4aac.
+  Their distinct failures and partial costs remain historical, not pooled or
+  reset. New-head review/CI and an explicit leader future-run decision remain;
+  no claim settlement, recovery, rerun, next cell, grade, reseal or epoch04 is
+  authorized. No live HF/model/grader/Azure request, workflow dispatch or CI
+  polling occurred.
+
 - Bound optional failure-diagnostic handling after #674 REQUEST-CHANGES
   `5304339793` at `f33bcd7dfbdbf579ecd7d995ac0ed493c2233afb` and follow-up
   `5304688416` at `9aa4b617f241d39df63f3fbf2ef2d2b51cd0a0a6`.
