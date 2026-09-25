@@ -503,7 +503,7 @@ def test_closed_request_and_authority_refusals(case, capsys, monkeypatch, bad):
 
 def test_aliases_preserve_fixed_config_and_canonical_run(case, compilation):
     parent = compilation[1]
-    for index in (0, 1, 29):
+    for index in (6, 7, 29):
         _, cell, grading = adapter.compile_cell_grading_plan(ci.CAMPAIGN, compilation[0]["order"][index], SOURCE)
         run = grading.runs[0]
         assert run.command[2] == f"pilot/cell-{index:02d}"
@@ -511,6 +511,11 @@ def test_aliases_preserve_fixed_config_and_canonical_run(case, compilation):
         assert run.run_id == cell["run_id"] == run.command[run.command.index("--source-experiment-id") + 1]
         assert run.grader_config_json == parent.runs[0].grader_config_json
         assert json.loads(run.experiment_config_json)["experiment"]["id"] == run.run_id
+    for index in range(6):
+        with pytest.raises(adapter.PilotGradingInputRefused, match="^registered_cell_controls_refused$") as refused:
+            adapter.compile_cell_grading_plan(ci.CAMPAIGN, compilation[0]["order"][index], SOURCE)
+        assert isinstance(refused.value.__cause__, ci.CICellRefused)
+        assert str(refused.value.__cause__) == "ci_prefix_cell_out_of_scope"
     assert all(run.command[2].startswith("execution_envelope/") for run in parent.runs)
 
 
