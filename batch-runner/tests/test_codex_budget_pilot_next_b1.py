@@ -142,7 +142,7 @@ def test_fixed_task2_b1_historical_predecessor(scenario, compiled_contracts, cap
     if change != "other_cell":
         assert s.selected == B1 and cell["index"] == 7
         assert cell["config_sha256"] == "85852f9b8bdbfa66e5c775283ca1fe092e60af21f51eafe82b0021b83109c049"
-        config = pilot._load(s.root / cell["roles"]["config"])
+        config = json.loads(pilot._read_bytes(s.root / cell["roles"]["config"]))
         assert config["execution"]["timeout"] == 1800
         assert config["execution"]["max_retries"] == 3 and config["execution"]["resume_max_rounds"] == 0
         assert config["execution"]["codex"]["task_deadline"] == {"condition": "B", "repetition": 1}
