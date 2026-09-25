@@ -250,6 +250,7 @@ def test_cli_plan_does_not_run_source_preflight_or_setup(source, tmp_path, monke
 
 @pytest.mark.parametrize("cause", ["dirty", "foreign_trust", "arbitrary_exception"])
 def test_cli_source_refusal_has_closed_stage_before_local_or_remote_mutation(source, tmp_path, monkeypatch, capsys, cause):
+    _authority(monkeypatch, source)
     if cause == "dirty":
         (source.repository / "unreviewed.txt").write_text("synthetic")
     elif cause == "foreign_trust":
