@@ -1,6 +1,53 @@
 # Latest task result
 
-## PROJECT5-GRADING-OIDC-2126
+## PROJECT5-SOURCE-FIXTURE-2258
+
+Addressed #678 REQUEST-CHANGES `5318640885` at
+`ce00aa0e8c5d3db57eabc607e15423605a6b15bb` on the same clean owned branch.
+Only `test_cli_source_refusal_has_closed_stage_before_local_or_remote_mutation`
+now calls the existing `_authority(monkeypatch, source)` before injecting its
+source defect. Without that call, the offline `GITHUB_ACTIONS=false` default
+correctly stops at approval before the intended source-preflight boundary.
+Production and the global fixture are unchanged.
+
+Real temporary-Git ownership/dirty checks, exact `source_preflight` and
+`grading_source_preflight_refused` diagnostics, `remote_mutation_possible=false`,
+private-value redaction and no-local/remote-mutation assertions remain intact.
+The test still refuses each source defect; no source success is substituted.
+
+At tested SHA `ebe09790be15f152c8d0b1f3915d8ea72e6c5ee5`, the only test
+invocation returned **3 passed in 5.22s**, exit 0:
+
+```text
+tests/test_codex_budget_pilot_grading_source.py::test_cli_source_refusal_has_closed_stage_before_local_or_remote_mutation
+```
+
+The `dirty`, `foreign_trust` and `arbitrary_exception` cases ran from
+`batch-runner/` with the existing Python 3.10.12 interpreter, credential-free
+`env -i`, offline flags and disabled pytest plugin autoload. Only completion
+records changed after this tested snapshot.
+
+The leader's completed CI run `36139756627`, job `108086409951`, reported
+**3 failed, 13971 passed, 61 skipped, 46 deselected in 2442.93s**. Eight other
+checks passed. Those three failures, the prior **28 passed in 10.11s** at
+`81a8ae08a1e215799c67d9ed96fe95df47db4a08`, and the initial **6 failed,
+22 passed in 5.40s** at `ec28d6d4f8c1d7c13af6fd4e159292dd46b405ba` remain
+separate observations. No prior selector or full suite was rerun here.
+Review `5318280295` remains scoped to unchanged production; it does not
+authorize merging failed CI. New-head delta review and final CI remain.
+
+The retained producer `b4c95f8eaee16ae2226f3bf6e0493051fa91d770` and terminal
+`8083504edf4ceb63f3c4929aac57e0f4b6741593`, source policy, workflow and all
+old claims remain unchanged. This fixture-only result does not establish
+Azure token issuance or a real grade. Exact leader live authority remains;
+no live HF/Azure-management/model/judge call, workflow rerun, inference
+regeneration, epoch05, source reseal, Project edit, merge or CI polling occurred.
+
+The full skill catalog was checked once. Experiment-report-en then im-not-ai-en
+preserved test/CI provenance and prior evidence limits. No new design or UI
+work was involved, so those skills did not apply.
+
+## Prior PROJECT5-GRADING-OIDC-2126
 
 ### Grading approval and two explicit source identities
 

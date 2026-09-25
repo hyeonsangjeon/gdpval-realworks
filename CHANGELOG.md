@@ -252,6 +252,33 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Correct only the source-refusal fixture in
+  `tests/test_codex_budget_pilot_grading_source.py` for #678 REQUEST-CHANGES
+  `5318640885` at `ce00aa0e8c5d3db57eabc607e15423605a6b15bb`. Its three
+  `dirty` / `foreign_trust` / `arbitrary_exception` cases now call the existing
+  `_authority(monkeypatch, source)` before injecting the source defect, as the
+  adjacent tests already do. The offline default remains `GITHUB_ACTIONS=false`;
+  production authority is unchanged. Real temporary-Git ownership/dirty checks,
+  exact `source_preflight` / `grading_source_preflight_refused` /
+  `remote_mutation_possible=false`, private-value redaction and no-mutation
+  assertions remain intact. At tested SHA
+  `ebe09790be15f152c8d0b1f3915d8ea72e6c5ee5`, the sole invocation of
+  `tests/test_codex_budget_pilot_grading_source.py::test_cli_source_refusal_has_closed_stage_before_local_or_remote_mutation`
+  returned **3 passed in 5.22s**, exit 0, in the existing credential-free,
+  offline Python 3.10.12 environment. The leader's CI run `36139756627`, job
+  `108086409951`, separately reported **3 failed, 13971 passed, 61 skipped,
+  46 deselected in 2442.93s**; eight other checks passed. Prior **28 passed in
+  10.11s** at `81a8ae08a1e215799c67d9ed96fe95df47db4a08` and initial **6 failed,
+  22 passed in 5.40s** at `ec28d6d4f8c1d7c13af6fd4e159292dd46b405ba` remain
+  separate, not combined or rerun. Review `5318280295` remains scoped to
+  unchanged production, not approval to merge failed CI. Only this function
+  and the two completion records changed; workflow, global fixtures, source
+  policy and retained b4 producer/808 terminal bindings are unchanged. New-head
+  delta review/final CI and exact leader live authority remain. No CI polling,
+  workflow rerun, live operation, inference regeneration, epoch05, source
+  reseal or old-claim change occurred. English reporting/copyediting kept these
+  evidence scopes separate; design and UI guidance did not apply.
+
 - Separate protected pilot grading approval from OIDC execution, from exact
   main `b4c95f8eaee16ae2226f3bf6e0493051fa91d770`. The leader supplied #677's
   delivered head `aac3ee35b0693f2a495e711a49799d6b7252774e`, review `5316268600`
