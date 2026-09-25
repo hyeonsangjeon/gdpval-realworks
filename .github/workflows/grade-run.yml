@@ -1896,7 +1896,31 @@ jobs:
                   and os.environ["GITHUB_REF"] == "refs/heads/main" and os.environ["GITHUB_RUN_ATTEMPT"] == "1"
                   and re.fullmatch(r"[1-9][0-9]{0,19}", os.environ["GITHUB_RUN_ID"])):
               raise SystemExit("pilot_grade_approval_context_refused")
-          inputs = json.loads(os.environ["PILOT_GRADE_INPUTS_JSON"])
+          # Dispatch numbers may be strings; only absent optional empty strings
+          # receive defaults. Normalize representation, never policy values.
+          try:
+              inputs = json.loads(os.environ["PILOT_GRADE_INPUTS_JSON"])
+              numbers = {"tasks_limit", "resume_chunk", "shard_count", "shard_index", "run_ordinal"}
+              booleans = {"force", "dry_run", "paid_approval", "resume"}
+              strings = {"experiment_yaml", "grading_config", "inference_revision", "tasks"}
+              optional = {"inference_revision", "tasks"}
+              allowed = numbers | booleans | strings
+              if type(inputs) is not dict or not (allowed - optional) <= inputs.keys() <= allowed:
+                  raise ValueError
+              for key in optional:
+                  inputs.setdefault(key, "")
+              if (any(type(inputs[key]) is not str for key in strings)
+                      or any(type(inputs[key]) is not bool for key in booleans)):
+                  raise ValueError
+              for key in numbers:
+                  value = inputs[key]
+                  if type(value) is str and re.fullmatch(r"0|[1-9][0-9]*", value):
+                      value = int(value)
+                  if type(value) is not int or value < 0:
+                      raise ValueError
+                  inputs[key] = value
+          except (ValueError, TypeError):
+              raise SystemExit("pilot_grade_approval_inputs_refused") from None
           selector = inputs["experiment_yaml"]
           branch = selector in {"pilot/branch-setup", "pilot/branch-inspect",
                                 "pilot/inference-branch-setup", "pilot/inference-branch-inspect"}
