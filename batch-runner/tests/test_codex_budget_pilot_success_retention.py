@@ -194,7 +194,7 @@ class WriterChildren(CICellChildren):
             payload["reference_files"] = [PRIVATE]
         elif self.damage == "source":
             payload["source"] = "synthetic-foreign/dataset"
-        if payload != json.loads(self.writer_bytes):
+        if pilot._canonical_json(payload) != pilot._canonical_json(json.loads(self.writer_bytes)):
             payload["result_fingerprint"] = inference_result_fingerprint(payload)
             result.write_bytes(json.dumps(payload, ensure_ascii=False, allow_nan=False).encode())
         self.result_bytes, self.ledger_bytes = result.read_bytes(), (workspace / Path(pilot.LEDGER).name).read_bytes()
