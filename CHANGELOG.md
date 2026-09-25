@@ -315,6 +315,60 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Prepare only the recorded campaign04 task2 B1 grading route from main
+  `e7a28db07ebe10d6508b9256137763cc82f9a1d1`. Prior PR681 review `5322745358`
+  at `37efcec2dc7e109ec8a30ad8808fa9bc72494927` and **9** passing checks cover
+  the preceding inference adapter, not this change. B1's inference producer
+  stays e7; the future grading controller keeps its truthful main/workflow
+  identity. Only the fixed B1 route verifies prior A1 grade
+  `a0ded8b7146c028516d007a9afaa0993797fa1ca` under writer
+  `6ed0139195c4ebf27bfb63d14b2c8d8c92f8f379` / run `36161541597`, inference
+  producer `b4c95f8eaee16ae2226f3bf6e0493051fa91d770` and terminal
+  `8083504edf4ceb63f3c4929aac57e0f4b6741593`, with the existing readout's
+  independent config/source expectations and original claim/file validators.
+  B1's existing `inference_revision` input takes the fixed completion checksum
+  `6a23d38158e81cd5ed184a05a7871545d140bb1d92dc1131326d96df29c236f8`.
+  One inference-branch snapshot and exact control-file lookup resolve its
+  immutable terminal writing commit, then verify B1/e7/run `36192851762`,
+  completion, predecessor, claim, manifest and bytes. The checksum is the
+  public envelope's payload digest, not a Git revision or wrapper-file hash.
+  Approval binds the original request; a separate no-clobber local record binds
+  the resolved revision for later phases without re-resolution. A bounded
+  pre-edit extreme-reasoner decision approved the offline proposal with
+  conditions: this proves matching immutable completion content, not an
+  independently known original outer-terminal identity or absence of an
+  authorized outer-only rewrite. That counterexample remains tested. Historical
+  claim verification is not state adoption or replay authority.
+  At immutable tested SHA `3545f585fd200fd08ae670227dce522b423e6f19`, the sole
+  invocation of
+  `tests/test_codex_budget_pilot_b1_grading.py::test_fixed_b1_grading_intake_and_previous_source`
+  returned **23 passed in 74.52s**, exit **0**. It reuses real compilation,
+  serialization, validation and the independent workflow digest with fake
+  external boundaries; it covers advanced snapshots, tampered identities/bytes,
+  historical grade/source separation, approval/rerun refusals, saved-resolution
+  changes, lost acknowledgments and offline planning. No live calls or prior
+  test families ran. Source pins, privacy, receipt/CAS/one-use controls, fixed
+  refs, model/runtime/inputs/budgets and `default_v2_sol_max.yaml` remain unchanged.
+  Separately, the leader supplied B1 run `36192851762` / job `108261828916`:
+  execution succeeded **21:43:54–21:46:07 UTC**, terminal verified
+  **21:46:13.2920082 UTC**, artifact `10889356436`, one child, confirmed cleanup
+  and exit **0**. One deliverable has **5436 bytes**, SHA256
+  `7624528ee65a7d877adf74127b3adff9b16460cd6f66d2f9cf6ff3eb3e327c18`.
+  Its partial known cost is **USD 0.243915**, with **87241 input**, **8748 output**,
+  **46848 cached-input** and **6693 reasoning tokens**, invoice completeness false
+  and HTTP count null. No B1 grade or quality is established, and its private
+  terminal SHA remains unknown here. A1's separately supplied **62.4 / 65 =
+  96.0%**, full-denominator **94.55%** readout below remains one-task evidence;
+  its null monetary totals and the older frozen histories are unchanged.
+  Leader-dispatched C1 run `36195731407` on e7 was not checked or disturbed.
+  The exact future grading request and proof limits are in the current task
+  record. New-head review/CI, actual immutable B1 resolution and explicit leader
+  source/attempt authorization remain. No live dispatch/read/grade, old-claim
+  edit, source reseal, Project edit, merge or CI polling occurred. The full
+  catalog was read once; experiment-design fixed the source/evidence boundary,
+  then experiment-report-en and im-not-ai-en kept observations and limits
+  separate. No new experiment axis, UI or public-handoff work was requested.
+
 - Bind only campaign04 task2 B1, original ordinal **7**, to its actual immediate
   historical A1 predecessor. Prepared from main
   `66e7ad05975ddf704b9e2aab2b1efce5cd533cef` in a new clean owned worktree.

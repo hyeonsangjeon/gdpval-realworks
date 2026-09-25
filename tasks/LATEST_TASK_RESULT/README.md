@@ -1,159 +1,185 @@
 # Latest task result
 
-## PROJECT5-NEXT-B1-READOUT
+## PROJECT5-B1-GRADING-PREP
 
-Prepared only task2 B1, original ordinal **7**, cell
+Prepared the closed grading path for task2 B1, original ordinal **7**, cell
 `0112fc9b-c3b2-4084-8993-5a4abb1f54f1_B_r1`, in
-`budget_pilot_ci_20260925_04`. Work started in a new clean owned worktree from
-main `66e7ad05975ddf704b9e2aab2b1efce5cd533cef`; the preserved checkout was not
-edited. The leader supplied PR680 review `5321933248` at
-`ec6ef19084c37d812efc6e6a278b8003f9ec2437` and **9** passing checks for the
-preceding readout, not this adapter. No live B1 admission or other live
-operation occurred.
+`budget_pilot_ci_20260925_04`. The sole focused offline selector passed
+**23 cases in 74.52s** at `3545f585fd200fd08ae670227dce522b423e6f19`.
+No live read, grading, inference or workflow dispatch occurred in this task.
+Work used a new clean owned worktree from main
+`e7a28db07ebe10d6508b9256137763cc82f9a1d1`; the preserved checkout was untouched.
+The leader supplied PR681 review `5322745358` at
+`37efcec2dc7e109ec8a30ad8808fa9bc72494927` and **9** passing checks for the
+preceding inference-predecessor adapter, not this grading change.
 
-### Source-continuity refusal and bounded repair
+### Fixed producer, controller and predecessor bindings
 
-A credential-free offline probe at that baseline used the genuine compiler,
-`_binding` and `_claim`, with synthetic host/input coordinates. It reproduced
-`claim_host_policy_mismatch`: `_predecessor` verified the historical A1 claim
-against B1's current-source plan, so the old claim's workflow SHA could not
-equal the current reviewed source. This reproduces the code boundary, not the
-contents of a fetched historical claim.
+The offline fixture reproduces the reported source boundary: the original
+`_branch_tip` pairing cannot validate the historical A1 grade under B1's
+producer and a new controller. Only the recorded B1 route now verifies A1
+separately at grade revision `a0ded8b7146c028516d007a9afaa0993797fa1ca`, under
+writer `6ed0139195c4ebf27bfb63d14b2c8d8c92f8f379` / run `36161541597`, inference
+producer `b4c95f8eaee16ae2226f3bf6e0493051fa91d770` and inference terminal
+`8083504edf4ceb63f3c4929aac57e0f4b6741593`. The existing grade-readout constants
+supply independent historical config/source expectations. Original claim,
+binding and immutable file validators still apply; no A1 payload is downloaded
+for this predecessor check. An unexpected grading tip, including bootstrap,
+refuses before a B1 claim. Other routes retain their existing checks.
 
-The only production change is in retention's `_predecessor`. For this exact
-campaign, ordinal7 B1, immediate task2 A1 and inference-branch HEAD
-`8083504edf4ceb63f3c4929aac57e0f4b6741593`, it compiles a separate verification
-plan for producer `b4c95f8eaee16ae2226f3bf6e0493051fa91d770`. The original
-`_terminal` / `_claim` / `_binding` validators still require the historical
-source, host policy, plan/config/input identities, cleanup, acknowledged
-publication, immutable object identities and immediate predecessor. No asserted
-remote hash is adopted. Compiler drift refuses. Other cells and revisions
-retain the ordinary same-source check.
+B1 keeps its actual inference producer
+`e7a28db07ebe10d6508b9256137763cc82f9a1d1`. Its future grading controller uses
+truthful `GITHUB_SHA` and workflow identity; it does not pretend to be e7 or
+the historical A1 writer. The workflow's existing producer mapping and
+independently executed protected-approval digest include only this fixed B1
+exception. No free-form producer override or new workflow input was added.
+Same-run successful protected approval, main/exact-source/attempt checks,
+fixed-parent CAS, absent-cell and one-use guards remain required before a
+judge. Lost claim or publication acknowledgment cannot authorize a retry.
 
-B1's execution plan, real `GITHUB_SHA`/workflow binding, checkout, claim,
-publication and terminal stay on its own reviewed source. Its absent-cell
-check, fixed-parent CAS, one-use reservation and acknowledged admission remain
-required before any child. A race or lost acknowledgment does not refresh the
-parent, retry a write or authorize execution. The adapter reads historical
-evidence; it does not adopt A1's claim, local receipt, native state or clock.
-The fixed refs remain `pilot-inference-20260925-04` and
-`pilot-grades-20260925-04`; no setup, epoch or workflow input was added.
+### Resolve fixed completion content without inventing a terminal SHA
 
-Before production edits, a bounded extreme-reasoner decision returned
-APPROVE-WITH-CONDITIONS for that exact exception and its refusal coverage.
-It is not immutable-head approval or live authorization. Workflow, source
-pins, approved ledger-note/privacy/diagnostic repairs, model, runtime, original
-inputs and fixed grader are unchanged. The compiler retains all **30** IDs
-and their order, with the original prefix **0–5** out of scope. B1 keeps
-GPT-5.4 / Foundry `direct-v1` / `xhigh`, SDK/CLI **0.147.0**, **180 minutes**
-cumulative including waits/recovery, **30-minute** attempts, one inference
-slot and no automatic monetary cutoff. B mechanical continuation applies
-within B1's own retained native thread and deadline, not A1's session.
+The existing `inference_revision` input accepts B1's exact public completion
+checksum only for this fixed cell/producer/run. It is not treated as a Git
+revision. Preparation snapshots `pilot-inference-20260925-04`, looks up only
+B1's terminal control path, resolves its immutable writing commit, then
+verifies the original claim, terminal, manifest and payload identities.
+Checks bind inference run `36192851762` / `cell` / attempt **1**, e7 source,
+the fixed completion and immediate A1 predecessor. The recorded numeric job
+ID is not the claim's `GITHUB_JOB` value. Advancing the inference ref does not
+select another cell or adopt the latest HEAD as the terminal.
 
-### Focused offline evidence
+The checksum means the public envelope's `sha256 == pilot._digest(payload)`;
+it is not a wrapper-file or newline-terminated-record hash. Other framing
+refuses. The approval digest retains this original checksum request.
+Preparation writes a separate no-clobber local resolution record. Claim,
+judge and publication revalidate its request/evidence binding and restore
+the same resolved revision, without resolving the branch again.
 
-At immutable tested SHA `9d5a14949dda2b6f28f507a01c36055f840810fa`, the
-restricted invocation returned **18 passed, 1 deselected in 243.17s**, exit
-**0**, from `batch-runner/`:
+The bounded extreme-reasoner decision was APPROVE-WITH-CONDITIONS before
+production/workflow edits, with an explicit fixed-content interpretation.
+This verifies a matching immutable publication; it does not establish an
+independently known original outer-terminal revision or prove that an
+authorized writer never changed only outer metadata. The focused test keeps
+that counterexample explicit. If proof of the original outer-terminal identity
+is required, the leader needs an independent anchor before dispatch. Reading
+the original claim as evidence is not adopting inference state or replay
+authority. The decision is not exact-head approval or live authorization.
+
+### Focused offline evidence and unchanged controls
+
+From `batch-runner/`, the single invocation at immutable tested SHA
+`3545f585fd200fd08ae670227dce522b423e6f19` returned **23 passed in 74.52s**,
+exit **0**:
 
 ```text
-tests/test_codex_budget_pilot_next_b1.py::test_fixed_task2_b1_historical_predecessor
--k 'not other_cell'
+tests/test_codex_budget_pilot_b1_grading.py::test_fixed_b1_grading_intake_and_previous_source
 ```
 
 Python **3.10.12** ran with credential-free `env -i`, offline HF flags and pytest
-plugin autoload disabled. The fixture reuses the real compiler, dispatcher,
-serialization, deadlines, publisher and claim/terminal/byte/CAS validators.
-Input provenance, reviewed host/runtime, children and HF are synthetic; socket,
-process, auth and model/grader constructors are blocked. The fake A1 payload
-was newly serialized, not reconstructed from the live terminal's identity.
-The accepted path admits, executes and retains only synthetic B1, verifies its
-current-source terminal and leaves old synthetic A1 bytes unchanged. Refusal
-cases cover source/revision/cell/plan/config/input/object/manifest/cleanup/
-publication tampering, compiler drift, lost output, CAS races, lost claim and
-terminal acknowledgments, source spoofing and reruns. Native continuation and
-the actual remote predecessor have not been exercised by this task.
+plugin autoload disabled. Genuine compiler, serializer, receipt, claim,
+terminal, byte and grading validators are reused with fake HF/model/runtime/
+renderer/native-materialization boundaries. Synthetic historical records are
+newly serialized, not reconstructed from live identities. Coverage includes
+accepted B1 grading, advanced inference snapshots, wrong run/source/hash/bytes/
+ref, snapshot mismatch, prior grade/writer/source/hash/claim refusal, changed
+saved resolution, missing/skipped approval, reruns, changed approval requests,
+producer overrides, lost claim/publication acknowledgment and offline planning.
+The workflow digest script executes independently against runtime-shaped input
+JSON. No unapproved judge or write occurs at the fake boundaries.
 
-Keep the initial observation separate: at
-`182ce105f7bd4300979a4012d0687c21abba52cd`, the same selector without `-k`
-returned **18 failed, 1 passed in 210.38s**, exit **1**. All 18 failures were
-in the new test's config read: it used a checkpoint-envelope reader on raw
-config JSON and stopped before B1 admission. Only that fixture line changed
-before the restricted invocation. The `other_cell` immediate-predecessor
-refusal passed initially and was not rerun. This is not a new combined
-19-case pass. No prior family or full suite was run. Only completion records
-changed after the passing tested commit.
+The fixed refs remain `pilot-inference-20260925-04` and
+`pilot-grades-20260925-04`. Source pins, ledger-note/privacy/diagnostic repairs,
+model/runtime/original-input controls and `default_v2_sol_max.yaml` are unchanged.
+The compiler retains **30** canonical IDs/order with prefix **0–5** out of scope.
+B1's config hash remains
+`85852f9b8bdbfa66e5c775283ca1fe092e60af21f51eafe82b0021b83109c049`, with
+GPT-5.4 / Foundry `direct-v1` / `xhigh`, SDK/CLI **0.147.0**, **180 minutes**
+cumulative including waits/recovery, **30-minute** attempts, B mechanical
+continuation within its own retained native thread/deadline, one inference
+slot and no automatic monetary cutoff. No model, rubric, budget, epoch or
+storage framework changed. No prior selector or full suite was rerun.
+Only completion records changed after the tested code commit.
 
-### Closed request and remaining authority
+The preceding inference-adapter observations stay separate:
+`182ce105f7bd4300979a4012d0687c21abba52cd` had **18 failed, 1 passed in
+210.38s** before admission because its fixture used a checkpoint reader on raw
+config JSON; `9d5a14949dda2b6f28f507a01c36055f840810fa` then had **18 passed,
+1 deselected in 243.17s** after that fixture-only correction. The already-passed
+`other_cell` case was not repeated. These are not a fresh combined result.
 
-The exact baseline request below was derived offline from the existing
-workflow/compiler contract. It was not dispatched and is blocked on baseline
-`66e7ad05975ddf704b9e2aab2b1efce5cd533cef`, which lacks this adapter:
+### Supplied live evidence remains separate
+
+The leader reports B1 run `36192851762`, job `108261828916`, succeeded on e7:
+execution **21:43:54–21:46:07 UTC**, `terminal_verified` at
+**21:46:13.2920082 UTC**. Public artifact `10889356436` has completion checksum
+`6a23d38158e81cd5ed184a05a7871545d140bb1d92dc1131326d96df29c236f8`, one child,
+confirmed cleanup and exit **0**. Its one deliverable is **5436 bytes**, SHA256
+`7624528ee65a7d877adf74127b3adff9b16460cd6f66d2f9cf6ff3eb3e327c18`.
+Partial accounting reports **USD 0.243915** known cost, **87241 input**,
+**8748 output**, **46848 cached-input** and **6693 reasoning tokens**; invoice
+completeness is false and HTTP request count is null. These are not invoice
+totals or B1 quality evidence. No B1 grade exists in the supplied evidence.
+Its actual private terminal SHA remains unknown here; no live lookup or raw
+payload recovery occurred.
+
+A1's supplied readout remains one-task/condition evidence: run `36183957201`,
+job `108232749275`, observer `66e7ad05975ddf704b9e2aab2b1efce5cd533cef`, at
+**20:11:07 UTC** returned `verified_retained_grade`, `grade_state=graded` and
+the immutable A1 grade revision above. A1 earned **62.4 / 65 = 96.0%**, with
+one excluded item of maximum **1**, full-denominator **94.55%** and exclusion
+lift **1.45 percentage points**. **49** of **54** included items passed out of
+**55** judge items. Its ledger records **110 model calls**, not HTTP requests,
+and **339526 input**, **17687 output**, **229914 cached-input**, **11558 reasoning
+tokens**. `price_missing`, null monetary totals and invoice completeness false
+remain explicit. No regrade, cohort conclusion, A/B/C superiority or B1 quality
+is inferred. This task did not fetch raw data or independently calibrate the judge.
+
+Earlier grade runs `36132571260` and `36151684790` remain distinct failures.
+The nine older admissions, partial costs, missing raw files, unknown causes and
+claims remain frozen and separate from epoch04. The leader separately dispatched
+C1 run `36195731407` on unchanged e7 with the same **180/30-minute** limits.
+This task neither checked its status nor interfered with it.
+
+### Closed future request and remaining authority
+
+The following request uses the existing workflow inputs. It was not dispatched;
+execution requires the leader's exact reviewed main/controller source and
+attempt authorization after review and CI. The feature head and e7 are not
+substituted for that future workflow authority:
 
 ```json
 {
-  "workflow": ".github/workflows/codex-budget-pilot-ci-cell.yml",
+  "workflow": ".github/workflows/grade-run.yml",
   "ref": "main",
   "inputs": {
-    "reviewed_source_sha": "66e7ad05975ddf704b9e2aab2b1efce5cd533cef",
-    "cell_id": "0112fc9b-c3b2-4084-8993-5a4abb1f54f1_B_r1",
-    "execute": true,
-    "input_check": false,
-    "output_target_check": false,
-    "output_target_setup": false,
-    "input_transport": "hf_originals",
-    "input_release_id": "",
-    "input_asset_id": "",
-    "input_bundle_sha256": "757603585405da5d7f6817a6a0a23bd530d4b5e4e38b2fd4dc6f318053d240e3"
+    "experiment_yaml": "pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_B_r1",
+    "inference_revision": "6a23d38158e81cd5ed184a05a7871545d140bb1d92dc1131326d96df29c236f8",
+    "grading_config": "default_v2_sol_max.yaml",
+    "force": false,
+    "tasks_limit": 0,
+    "tasks": "",
+    "dry_run": false,
+    "paid_approval": true,
+    "resume": false,
+    "resume_chunk": 0,
+    "shard_count": 1,
+    "shard_index": 0,
+    "run_ordinal": 1
   }
 }
 ```
 
-The compiled B1 config SHA256 is
-`85852f9b8bdbfa66e5c775283ca1fe092e60af21f51eafe82b0021b83109c049`.
-Its actual immediate predecessor must remain task2 A1 at terminal
-`8083504edf4ceb63f3c4929aac57e0f4b6741593`, with producer
-`b4c95f8eaee16ae2226f3bf6e0493051fa91d770`. The plan/claim hash also binds the
-actual future host; it cannot be borrowed from an offline synthetic host.
-For any later attempt, the leader must explicitly bind `reviewed_source_sha`
-to the exact reviewed main/workflow source containing this repair, matching
-the real GitHub execution identities. Neither the old baseline nor a feature
-branch head is silently substituted for that authority. All other request
-fields above remain fixed. New-head review, CI and the leader's exact B1
-source/attempt authorization remain; no successor is launched automatically.
-
-### Separate supplied A1 readout
-
-The leader reports read-only run `36183957201`, job `108232749275`, succeeded
-at **20:11:07 UTC** using observer
-`66e7ad05975ddf704b9e2aab2b1efce5cd533cef`. It returned
-`verified_retained_grade`, `grade_state=graded`, revision
-`a0ded8b7146c028516d007a9afaa0993797fa1ca`. Writer
-`6ed0139195c4ebf27bfb63d14b2c8d8c92f8f379` / run `36161541597`, the b4
-inference producer and terminal808 above remain unchanged. No regrade or
-inference occurred in that readout or in this coding task.
-
-Task2 A1 earned **62.4 / 65 = 96.0%**. One excluded item has maximum **1**;
-the full-denominator score is **94.55%**, an exclusion lift of **1.45 percentage
-points**. **49** items passed out of **54** included, with **55** judge items
-in total. The ledger is present and records **110 model calls**, not HTTP
-requests, with **339526 input**, **17687 output**, **229914 cached-input** and
-**11558 reasoning tokens**. `price_missing` remains explicit: all monetary
-totals are null and invoice completeness is false. These are grading-ledger
-observations for one task/condition, not cohort evidence or A/B/C superiority.
-This task did not fetch raw grade or inference data or independently calibrate
-the judge.
-
-Earlier grade runs `36132571260` and `36151684790` remain distinct failures.
-The nine older admissions and their partial costs, missing raw files and
-unknown causes remain separate from the retained epoch04 A1; none is reset,
-replayed, recovered or reinterpreted. No live HF/readout/model/judge request,
-workflow dispatch, setup, Azure management, source reseal, claim change,
-permission change, Project edit, merge or CI polling occurred here. The full
-catalog was read once. Experiment-design constrained the source/admin boundary;
-experiment-report-en then im-not-ai-en preserved the separate observations,
-denominators, null costs and remaining authority. UI/animation and
-repo-readiness guidance did not apply to this code-only continuation repair.
+Default plan remains credential-free and offline. Actual B1 terminal resolution,
+source-bound preparation, protected approval, grading claim, judge and publication
+remain unperformed here. New-head review, final CI and explicit leader authority
+are still required. No live HF/readout/model/judge request, workflow dispatch,
+setup, Azure management, source reseal, old-claim change, permission change,
+Project edit, merge or CI polling occurred. The full catalog was read once.
+Experiment-design constrained this unchanged experimental source/evidence boundary;
+experiment-report-en then im-not-ai-en preserved measurement scopes, denominators,
+partial/null costs and remaining authority. UI/animation and repo-readiness did
+not apply: no UI or new public handoff was requested.
 
 ## Prior PROJECT5-READOUT-COST-0404
 
