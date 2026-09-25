@@ -733,11 +733,11 @@ def test_workflow_carries_the_ordinal_through_to_the_grader(monkeypatch):
 
     assert re.search(r"^      run_ordinal:$", raw, re.MULTILINE)
     binding = "${{ inputs.run_ordinal }}"
-    assert raw.count("GRADE_RUN_ORDINAL: " + binding) == 6
+    assert raw.count("GRADE_RUN_ORDINAL: " + binding) == 7
     assert {
         key for key, body in jobs.items()
         if body.get("env", {}).get("GRADE_RUN_ORDINAL") == binding
-    } == {"validate-request", "grade-dry-run", "grade", "pilot-plan", "pilot-live"}
+    } == {"validate-request", "grade-dry-run", "grade", "pilot-plan", "pilot-live", "pilot-readout"}
     assert [
         (key, step.get("name"))
         for key, body in jobs.items()
@@ -756,7 +756,7 @@ def test_workflow_carries_the_ordinal_through_to_the_grader(monkeypatch):
 
     inputs = parsed.get("on", parsed.get(True))["workflow_dispatch"]["inputs"]
     monkeypatch.setenv("GITHUB_ACTIONS", "true")
-    for key in ("pilot-plan", "pilot-live"):
+    for key in ("pilot-plan", "pilot-live", "pilot-readout"):
         runs = "\n".join(step.get("run", "") for step in jobs[key]["steps"])
         assert "python batch-runner/codex_budget_pilot_grading.py" in runs
         for name, value in jobs[key]["env"].items():

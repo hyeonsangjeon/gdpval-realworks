@@ -716,13 +716,7 @@ def _grade_terminal(api, repo: str, revision: str, context: Context, entry: dict
             and (child["exit_code"] is None or type(child["exit_code"]) is int), "grade_cleanup_unconfirmed")
     records, roles, total = terminal["files"], [], 0
     require(type(records) is list and len(records) <= 3, "grade_artifact_roles_refused")
-    prefix = terminal_path.rsplit("/", 1)[0] + "/"
-    from core.task_checkpoint import checkpoint_path
-    path = _grade_path(context, entry["config_hash"], entry["grader_source_hash"],
-                       terminal["binding"]["retained"]["output_commit"])
-    allowed = {"grade_result": prefix + str(path),
-               "grade_cost_ledger": prefix + str(path.with_name(path.stem + ".cost_ledger.jsonl")),
-               "grade_task_progress": prefix + str(checkpoint_path(path, context.cell["task_id"]))}
+    allowed = _grade_artifact_paths(context, entry, terminal["binding"]["retained"]["output_commit"])
     for record in records:
         require(set(record) == {"role", "path", "size", "sha256", "git_blob_sha1"}
                 and record["role"] in {"grade_result", "grade_cost_ledger", "grade_task_progress"}
@@ -743,6 +737,16 @@ def _grade_terminal(api, repo: str, revision: str, context: Context, entry: dict
     retained._objects(api, repo, revision, [retained._object(claim_path, claim_data)],
                       token, deadline, written_at=terminal["claim_commit"])
     return {"terminal": terminal, "identity": pilot._identity(data), "revision": revision}
+
+
+def _grade_artifact_paths(context: Context, entry: dict, inference_revision: str) -> dict:
+    from core.task_checkpoint import checkpoint_path
+
+    prefix = _paths(context.cell)[1].rsplit("/", 1)[0] + "/"
+    path = _grade_path(context, entry["config_hash"], entry["grader_source_hash"], inference_revision)
+    return {"grade_result": prefix + str(path),
+            "grade_cost_ledger": prefix + str(path.with_name(path.stem + ".cost_ledger.jsonl")),
+            "grade_task_progress": prefix + str(checkpoint_path(path, context.cell["task_id"]))}
 
 
 def _branch_tip(api, repo: str, context: Context, prepared: dict, cache: Path, token: str, deadline: float) -> tuple[str, dict | None]:
@@ -900,23 +904,22 @@ def _no_raw_grade(value, depth=0) -> None:
             _no_raw_grade(item, depth + 1)
 
 
-def _validate_grade(payload: dict, context: Context, prepared: dict, checkout: Path) -> None:
+def _validate_grade_identity(payload: dict, context: Context, entry: dict, inference_revision: str) -> None:
+    """Shared retained identity/schema checks; no rubric fetch or judge entry."""
     import step8_grade as step8
 
     config = json.loads(context.run.grader_config_json)
-    entry = prepared["entry"]
     _no_raw_grade(payload)
-    with _cwd(checkout / "batch-runner"):
-        try:
-            step8._validate_schema(payload)
-        except (step8.SchemaError, step8.ValidationError) as error:
-            raise output.OutputPublicationRefused("fixed_grade_schema_refused") from error
-        step8._validate_grade_resume_identity(payload, experiment_id=context.run.command[2],
-            rubric_commit_sha=config["rubric"]["revision"], prompt_version=config["prompt"]["version"],
-            config_hash=entry["config_hash"], source_inference_repo_id=retained._target(),
-            source_inference_revision=prepared["evidence"]["terminal"]["output_commit"],
-            grader_source_hash=entry["grader_source_hash"], renderer_fingerprint=entry["renderer_fingerprint"],
-            anchor_projection=config.get("anchor_projection"))
+    try:
+        step8._validate_schema(payload)
+    except (step8.SchemaError, step8.ValidationError) as error:
+        raise output.OutputPublicationRefused("fixed_grade_schema_refused") from error
+    step8._validate_grade_resume_identity(payload, experiment_id=context.run.command[2],
+        rubric_commit_sha=config["rubric"]["revision"], prompt_version=config["prompt"]["version"],
+        config_hash=entry["config_hash"], source_inference_repo_id=retained._target(),
+        source_inference_revision=inference_revision,
+        grader_source_hash=entry["grader_source_hash"], renderer_fingerprint=entry["renderer_fingerprint"],
+        anchor_projection=config.get("anchor_projection"))
     require(payload["experiment_yaml_name"] == context.run.command[2]
             and payload["source_inference_experiment_id"] == context.cell["run_id"]
             and payload["expected_task_count"] == 1
@@ -925,10 +928,6 @@ def _validate_grade(payload: dict, context: Context, prepared: dict, checkout: P
     ids = [row["task_id"] for row in payload["tasks"]]
     require(ids == [context.cell["task_id"]] or (ids == [] and payload["run_status"] == "partial"),
             "grade_task_set_mismatch")
-    for task in payload["tasks"]:
-        if not task.get("error"):
-            require([item["rubric_item_id"] for item in task["items"]] == prepared["rubric"]["rubric_item_ids"],
-                    "grade_rubric_coverage_mismatch")
     expected_judge = {key: config["judge"][key] for key in ("provider", "api", "model", "deployment", "api_version")}
     expected_judge.update(reasoning_effort=config["judge"]["reasoning"]["effort"],
         temperature=config["judge"]["generation"]["temperature"], seed=config["judge"]["generation"]["seed"],
@@ -937,26 +936,49 @@ def _validate_grade(payload: dict, context: Context, prepared: dict, checkout: P
             "fixed_judge_identity_mismatch")
 
 
-def _grade_files(context: Context, root: Path, prepared: dict, child: dict) -> tuple[dict[str, bytes], dict[str, str], str]:
+def _validate_grade(payload: dict, context: Context, prepared: dict, checkout: Path) -> None:
+    with _cwd(checkout / "batch-runner"):
+        _validate_grade_identity(payload, context, prepared["entry"], prepared["evidence"]["terminal"]["output_commit"])
+    # Publication still requires the independently loaded original rubric.
+    # A readout never supplies payload-derived IDs to this publisher gate.
+    for task in payload["tasks"]:
+        if not task.get("error"):
+            require([item["rubric_item_id"] for item in task["items"]] == prepared["rubric"]["rubric_item_ids"],
+                    "grade_rubric_coverage_mismatch")
+
+
+def _grade_outcome(payload: dict | None, child: dict, *, progress: bool) -> str:
+    """The publisher's existing outcome rules, also checked by the reader."""
     import step8_grade as step8
+
+    outcome = "ungraded"
+    if payload is not None:
+        runtime_error = any(step8._track2_task_runtime_error(row) is not None or row.get("error") for row in payload["tasks"])
+        outcome = ("graded" if child["exit_code"] == 0 and not child["timed_out"] and not runtime_error
+                   and payload["run_status"] == "diagnostic" and payload["tasks"] else "partial")
+        if runtime_error:
+            outcome = "failed"
+    if progress:
+        require(outcome != "graded", "completed_grade_has_partial_checkpoint")
+        outcome = "partial" if outcome == "ungraded" else outcome
+    if child["exit_code"] not in (None, 0) and outcome == "ungraded":
+        outcome = "failed"
+    return outcome
+
+
+def _grade_files(context: Context, root: Path, prepared: dict, child: dict) -> tuple[dict[str, bytes], dict[str, str], str]:
     from core.task_checkpoint import checkpoint_path, load_checkpoint
 
     checkout = root / "source"
     path = checkout / prepared["entry"]["grade_path"]
     files, roles = {}, {}
     payload = None
-    outcome = "ungraded"
     if os.path.lexists(path):
         data = output._bytes(path, limit=output.MAX_RECORD_BYTES)
         payload = pilot._json_object(data)
         _validate_grade(payload, context, prepared, checkout)
         relative = str(path.relative_to(checkout))
         files[relative], roles[relative] = data, "grade_result"
-        runtime_error = any(step8._track2_task_runtime_error(row) is not None or row.get("error") for row in payload["tasks"])
-        outcome = ("graded" if child["exit_code"] == 0 and not child["timed_out"] and not runtime_error
-                   and payload["run_status"] == "diagnostic" and payload["tasks"] else "partial")
-        if runtime_error:
-            outcome = "failed"
     ledger_path = path.with_name(path.stem + ".cost_ledger.jsonl")
     if os.path.lexists(ledger_path):
         data = output._bytes(ledger_path, limit=output.MAX_RECORD_BYTES)
@@ -980,12 +1002,8 @@ def _grade_files(context: Context, root: Path, prepared: dict, child: dict) -> t
         _no_raw_grade(raw)
         relative = str(progress_path.relative_to(checkout))
         files[relative], roles[relative] = data, "grade_task_progress"
-        require(outcome != "graded", "completed_grade_has_partial_checkpoint")
-        outcome = "partial" if outcome == "ungraded" else outcome
-    if child["exit_code"] not in (None, 0) and outcome == "ungraded":
-        outcome = "failed"
     require(sum(map(len, files.values())) <= output.MAX_TOTAL_BYTES, "grade_payload_bytes_exceeded")
-    return files, roles, outcome
+    return files, roles, _grade_outcome(payload, child, progress="grade_task_progress" in roles.values())
 
 
 def publish(context: Context, root: Path, *, _test_api=None) -> dict:
@@ -1082,10 +1100,14 @@ def main(argv=None, *, _test_api=None, _test_transport=None) -> int:
     parser.add_argument("--producer-source-sha", default="")
     parser.add_argument("--terminal-revision", default="")
     parser.add_argument("--root", required=True, type=Path)
-    parser.add_argument("--phase", choices=("plan", "inspect", "setup", "prepare", "claim", "judge", "publish", "reconcile"), default="plan")
+    parser.add_argument("--phase", choices=("plan", "readout", "inspect", "setup", "prepare", "claim", "judge", "publish", "reconcile"), default="plan")
     args = None
     try:
         args = parser.parse_args(argv)
+        from codex_budget_pilot_grade_readout import SELECTOR as READOUT_SELECTOR, main as readout_main
+        if args.selector == READOUT_SELECTOR:
+            return readout_main(args, _test_api=_test_api, _test_transport=_test_transport)
+        require(args.phase != "readout", "pilot_grade_mode_conflict")
         _workflow_inputs()
         context = compile_request(args.selector, args.reviewed_source_sha, args.terminal_revision,
                                   producer_source_sha=args.producer_source_sha)

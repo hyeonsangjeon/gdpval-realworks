@@ -3477,6 +3477,7 @@ def test_grade_workflow_rc7_requires_valid_committed_partial():
         "pilot-plan",
         "pilot-approve-paid",
         "pilot-live",
+        "pilot-readout",
         "verify-published",
     ]
     assert parsed["permissions"] == {"contents": "read"}
@@ -3579,10 +3580,12 @@ def test_grade_workflow_rc7_requires_valid_committed_partial():
     pilot_approval = parsed["jobs"]["pilot-approve-paid"]
     pilot_live = parsed["jobs"]["pilot-live"]
     assert _gh_expr(pilot_plan["if"]) == (
-        "startsWith(inputs.experiment_yaml, 'pilot/') && inputs.dry_run == true"
+        "startsWith(inputs.experiment_yaml, 'pilot/') && "
+        "inputs.experiment_yaml != 'pilot/grade-readout' && inputs.dry_run == true"
     )
     assert _gh_expr(pilot_live["if"]) == (
         "startsWith(inputs.experiment_yaml, 'pilot/') && "
+        "inputs.experiment_yaml != 'pilot/grade-readout' && "
         "inputs.dry_run == false && inputs.paid_approval == true && "
         "needs.pilot-approve-paid.result == 'success'"
     )
@@ -3598,6 +3601,15 @@ def test_grade_workflow_rc7_requires_valid_committed_partial():
     assert "approval_inherited" not in yaml.safe_dump(pilot_approval)
     assert "github.run_attempt == '1'" in pilot_approval["if"]
     assert "github.sha == github.workflow_sha" in pilot_approval["if"]
+    assert "inputs.experiment_yaml != 'pilot/grade-readout'" in pilot_approval["if"]
+    readout = parsed["jobs"]["pilot-readout"]
+    assert "inputs.experiment_yaml == 'pilot/grade-readout'" in readout["if"]
+    assert "inputs.paid_approval == false" in readout["if"]
+    assert readout["permissions"] == {"contents": "read"}
+    assert readout["environment"] == {"name": "grading"} and "needs" not in readout
+    assert "--phase readout" in yaml.safe_dump(readout)
+    for forbidden in ("--phase judge", "--phase claim", "--phase publish", "--phase setup", "azure/login", "id-token"):
+        assert forbidden not in yaml.safe_dump(readout)
     for pilot_job in (pilot_plan, pilot_live):
         assert "outputs" not in pilot_job
         assert pilot_job["env"]["HF_HUB_OFFLINE"] == "1"
