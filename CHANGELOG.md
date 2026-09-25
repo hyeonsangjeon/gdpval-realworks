@@ -13,6 +13,46 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Add a closed, model-free retained-grade readout for `pilot/grade-readout`,
+  prepared from main `6ed0139195c4ebf27bfb63d14b2c8d8c92f8f379`. The leader
+  supplied PR679 review `5319870032` and all **9** checks passed for the
+  preceding approval-input repair, not this reader. A bounded extreme-reasoner
+  decision approved this offline implementation with conditions before edits.
+  The route is fixed to campaign04 cell
+  `0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r1`, producer
+  `b4c95f8eaee16ae2226f3bf6e0493051fa91d770`, inference terminal
+  `8083504edf4ceb63f3c4929aac57e0f4b6741593`, writer/controller
+  `6ed0139195c4ebf27bfb63d14b2c8d8c92f8f379`, writer run `36161541597`,
+  attempt **1**, and `pilot-grades-20260925-04`. A separate truthful observer
+  source resolves the immutable grade revision and verifies original claim,
+  terminal and file identities. The new HF interface exposes only fixed-target
+  metadata and staged file reads. Its protected workflow job has `contents: read`,
+  no OIDC, step-scoped HF credentials and no preparation, claim, judge or write
+  route. Default planning is credential-free. Existing scoring, accounting,
+  publisher rubric checks and all historical bytes/bindings remain unchanged.
+  The summary projects closed outcomes, score denominators, missing-ledger
+  state and recorded costs without raw text, provider labels or invoice claims.
+  At tested SHA `2210aededc285dc324fcbe3ca2a00d4cbb6c079d`, the sole invocation of
+  `tests/test_codex_budget_pilot_grade_readout.py::test_closed_retained_grade_readout`
+  returned **19 failed, 6 passed in 29.37s**, exit **1**. All 19 failures stopped
+  at synthetic fixture publication before their readout assertions. The saved
+  fixture had `summary.cost.unpriced_models=[]`, contrary to the existing
+  schema contract. Fixture-only commit `71d3b4ce0d79afaa72e41a42fc3203b372efd5e1`
+  restores the genuine writer's fixed model list; it was not rerun under the
+  one-invocation limit. Validation remains blocked. The six passing cases cover
+  ungraded and graded-without-ledger readouts, offline planning, phase isolation,
+  rerun refusal and observer-source spoof refusal; they are not a full pass.
+  Separately, the leader reports real run `36161541597`, job `108159174144`,
+  succeeded with one Step8 invocation, confirmed owned cleanup and acknowledged
+  grade publication. Its actual grade outcome, score and costs remain unobserved.
+  Runs `36132571260` and `36151684790` remain distinct earlier failures; no new
+  inference occurred. No live HF read, regrade, workflow dispatch, source reseal,
+  old-claim edit or CI polling occurred here. New-head review/CI, validation of
+  the corrected fixture and explicit leader authorization for a live readout
+  remain. Experiment-design, experiment-report-en and im-not-ai-en preserved
+  source, evidence and accounting boundaries; UI and public-handoff skills did
+  not apply.
+
 - Prepare the closed corrective task2 A1 gate `budget_pilot_ci_20260925_04`
   from exact main `0bb141f3bf93510ccb399800a4aa0901ceb36638`. The leader supplied
   #676 head `88b13f974b8be508cb5c5596db401447469e032c`, review `5314792016`
