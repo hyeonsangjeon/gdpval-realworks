@@ -252,6 +252,47 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Canonicalize supported dispatch inputs in the protected pilot approval job
+  from exact main `bb39bb0c8c62856af054a69ddbc9c2984652a390`. The leader supplied
+  #678's delivered head `0f209893f0f090bca69f9d87782568d6c73c95a2`, review
+  `5318915405` and **9** passing checks for the preceding repair, not this delta.
+  The bounded extreme-reasoner decision approved workflow-only normalization
+  with conditions before edits. Five numeric controls accept exact nonnegative
+  integers or canonical ASCII decimal strings; only absent `tasks` and
+  `inference_revision` default to `""`. Explicit nulls, unknown fields, missing
+  required controls, numeric booleans/floats and malformed or unconvertible
+  numeric strings refuse before digest output. Changed values remain in the
+  digest rather than being replaced with expected constants. The connector,
+  same-run successful approval dependency, main-ref execution, source/terminal
+  bindings, one-use claims, privacy and fixed grader remain unchanged.
+  At tested SHA `912a5f738db29d11628a859dec8f8855e94622f1`, the only invocation of
+  `tests/test_codex_budget_pilot_approval_inputs.py::test_dispatch_inputs_bind_actual_approval_to_connector`
+  returned **37 passed in 5.35s**, exit 0, with the existing credential-free,
+  offline Python 3.10.12 environment. It independently executed the actual
+  workflow script and checked the real connector CLI against synthetic fixtures.
+  Captured dispatch-shaped JSON, supported alternatives, strict input refusals,
+  control/controller/run/terminal tampering and skipped approval were covered;
+  HF/runtime/auth boundaries were forbidden. No old28 family or full suite ran.
+  In the separate leader-supplied run `36151684790`, attempt **1**, controller
+  `bb39bb0c8c62856af054a69ddbc9c2984652a390`, approval job `108126248176` succeeded,
+  but `pilot-live` job `108126543409` refused at Validate exact route at
+  **15:07:20.4670919 UTC** with `pilot_grading_approval_request_mismatch`.
+  Actual inputs carried numeric strings and omitted `tasks`; the connector
+  expected integers and `tasks:""`. Renderer/input/OIDC/CAS/judge/publication
+  were skipped. No new grade or inference occurred. Earlier run `36132571260`
+  remains separate: real retained-byte/native preparation passed before the
+  **12:04:41 UTC** `AADSTS700213` OIDC failure; claim and judge were skipped.
+  The retained producer `b4c95f8eaee16ae2226f3bf6e0493051fa91d770`, terminal
+  `8083504edf4ceb63f3c4929aac57e0f4b6741593`, existing epoch04 refs and historical
+  claims are unchanged. These tests do not establish live dispatch behavior,
+  Azure token issuance, retained-byte revalidation or a real grade. Only records
+  changed after validation. New-head review/CI and the leader's exact future
+  attempt authorization remain; no workflow dispatch, live HF/model/judge/Azure
+  operation, inference regeneration, epoch05, source reseal, claim edit or CI
+  polling occurred here. Design guidance constrained the representation repair;
+  English reporting/copyediting kept supplied live and synthetic evidence
+  separate. No new experiment axis, UI or public repository handoff was involved.
+
 - Correct only the source-refusal fixture in
   `tests/test_codex_budget_pilot_grading_source.py` for #678 REQUEST-CHANGES
   `5318640885` at `ce00aa0e8c5d3db57eabc607e15423605a6b15bb`. Its three

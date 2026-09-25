@@ -1,6 +1,101 @@
 # Latest task result
 
-## PROJECT5-SOURCE-FIXTURE-2258
+## PROJECT5-APPROVAL-INPUTS-2359
+
+Prepared a workflow-only approval-input repair in a new clean owned worktree
+from exact main `bb39bb0c8c62856af054a69ddbc9c2984652a390`. The leader supplied
+#678's delivered head `0f209893f0f090bca69f9d87782568d6c73c95a2`, review
+`5318915405` and **9** passing checks. That review covers the preceding repair,
+not this delta. A bounded extreme-reasoner decision returned
+APPROVE-WITH-CONDITIONS before workflow edits, permitting normalization in
+protected approval while leaving the connector unchanged. It grants no live
+authority.
+
+The approval script validates the exact closed input object before producing
+its digest. The five numeric controls accept nonnegative integers excluding
+booleans, or canonical ASCII decimal strings. Only absent `tasks` and
+`inference_revision` receive empty-string defaults. Explicit nulls, unknown
+fields, missing required controls, numeric floats/booleans and malformed or
+unconvertible numeric strings refuse with `pilot_grade_approval_inputs_refused`.
+Changed supported values remain hashed and must still match the connector's
+expected request. No policy value is silently replaced with a constant.
+
+The approval job still has no checkout, credentials or OIDC permission.
+Same-run successful approval, truthful main-ref execution, exact bindings for
+the controller, producer, cell and terminal, one-use claims, retained-byte/privacy/
+source guards and fixed grading controls are unchanged. No connector, registration,
+model/runtime/input/budget code, source pin or generic grading behavior changed.
+
+### One focused offline validation
+
+At tested SHA `912a5f738db29d11628a859dec8f8855e94622f1`, the only test
+invocation returned **37 passed in 5.35s**, exit 0:
+
+```text
+tests/test_codex_budget_pilot_approval_inputs.py::test_dispatch_inputs_bind_actual_approval_to_connector
+```
+
+It ran from `batch-runner/` with the existing Python 3.10.12 interpreter,
+credential-free `env -i`, offline flags and disabled pytest plugin autoload.
+The selector independently executes the actual inline workflow digest script,
+then checks the real connector CLI with synthetic retained/source fixtures.
+It covers the captured dispatch representation, supported integer/string
+alternatives, absent optional empty fields, invalid documents/types/numbers,
+the real integer-conversion limit, unknown/missing fields, changed controls,
+controller/run/terminal mismatches and skipped approval. Matching requests
+produce only a plan; every case leaves fake HF and runtime calls empty and
+creates no private grading root. External auth/HF/runtime boundaries remain
+forbidden. No prior28 family or full suite was rerun, and no dependency was
+installed. Only completion records changed after this tested snapshot.
+
+### Separate supplied live observations
+
+The leader reports run `36151684790`, attempt **1**, controller
+`bb39bb0c8c62856af054a69ddbc9c2984652a390`. Protected approval job
+`108126248176` succeeded. `pilot-live` job `108126543409` refused at
+Validate exact route at **15:07:20.4670919 UTC** with
+`pilot_grading_approval_request_mismatch`. Renderer, input, OIDC, CAS, judge
+and publication were all skipped. No new grade or inference occurred.
+The captured `toJSON(inputs)` represented `tasks_limit`, `resume_chunk`,
+`shard_count`, `shard_index` and `run_ordinal` as strings `"0"`, `"0"`, `"1"`,
+`"0"` and `"1"`, retained boolean controls and omitted `tasks`. The connector
+expected integer controls and `tasks:""`; the new offline fixture reproduces
+that representation without replaying the live request.
+
+Earlier run `36132571260`, job `108062994893`, remains a separate observation.
+Renderer and retained-byte/real native atomic input preparation passed,
+recording `prepared/judge_ready=true` at **12:04:38.7534969 UTC**. OIDC then
+failed at **12:04:41 UTC** with `AADSTS700213` for the grading-environment
+subject. The grading CAS claim and Step8 invocation were skipped. Preparation
+was not a grade; the present test result does not establish Azure token issuance.
+The earlier validation results and CI/fixture failures remain below as separate
+evidence, not combined with the new selector.
+
+The retained producer remains `b4c95f8eaee16ae2226f3bf6e0493051fa91d770`, cell
+`0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r1`, terminal
+`8083504edf4ceb63f3c4929aac57e0f4b6741593`. Its supplied deliverable identity
+remains **5099 bytes**, SHA256
+`b7fc35b746bd837277ec5d4ef8e94e234bf8c8ab46777d98712494b8d9955191`.
+The existing epoch04 refs and all old claims remain unchanged. No payload was fetched
+or regenerated here; synthetic fixtures do not revalidate those live bytes.
+The nine older admissions, their partial costs and missing-data limits remain
+frozen in the historical records.
+
+New-head review and CI remain, followed by the leader's authorization of one
+exact future attempt for the unchanged retained result. Runtime dispatch
+serialization, OIDC token issuance, grading claim, judge and publication have
+not been exercised by this repair. No workflow dispatch/rerun, live HF/model/
+judge/Azure-management request, inference regeneration, epoch05, source reseal,
+claim settlement/edit, permission change, Project edit, merge or CI polling
+occurred here.
+
+The full skill catalog was checked once. Experiment-design constrained this
+input-contract repair without introducing an experiment axis. Experiment-report-en
+then im-not-ai-en preserved the separate live/offline evidence and runtime limits.
+UI/animation and repository-readiness guidance did not apply because this task
+contains no UI work or new public repository handoff.
+
+## Prior PROJECT5-SOURCE-FIXTURE-2258
 
 Addressed #678 REQUEST-CHANGES `5318640885` at
 `ce00aa0e8c5d3db57eabc607e15423605a6b15bb` on the same clean owned branch.
