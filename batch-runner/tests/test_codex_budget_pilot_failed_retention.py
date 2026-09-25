@@ -62,14 +62,14 @@ def _producer(s, monkeypatch, *, fields="row", stopped=False, success=False, par
 
 
 def _snapshot(s, *, withheld=False):
-    cell = read_plan(s)["cells"][0]
+    cell = read_plan(s)["cells"][ci.FIRST_CELL_ORDINAL]
     return output.prepare(root=s.root, campaign=ci.CAMPAIGN, cell_id=s.selected,
                           source_sha=SOURCE, config_sha=cell["config_sha256"],
                           _failure_metadata=withheld)
 
 
 def _local_bytes(s):
-    cell = read_plan(s)["cells"][0]
+    cell = read_plan(s)["cells"][ci.FIRST_CELL_ORDINAL]
     state = read_state(s, s.selected)
     paths = [s.root / cell["roles"][role] for role in ("result", "ledger", "checkpoint")]
     paths += [s.envelope, cell_root(s) / retention.ADMISSION_RECEIPT]
@@ -115,7 +115,7 @@ def test_failed_retention_withholds_only_payload_and_preserves_recorded_facts(ca
     assert s.api.calls == calls
 
     assert boundary(s, capsys, monkeypatch, "--retain")[0] == 0
-    cell = read_plan(s)["cells"][0]
+    cell = read_plan(s)["cells"][ci.FIRST_CELL_ORDINAL]
     claim_path, terminal_path, prefix = retention._paths(cell)
     terminal = json.loads(s.api.trees[s.api.head][terminal_path])
     receipt = retention._read(cell_root(s) / output.RECEIPT)
@@ -144,7 +144,7 @@ def test_failed_retention_safe_success_is_byte_identical(case, capsys, monkeypat
     assert strict.manifest == opted_in.manifest and strict.files == opted_in.files
     assert "withheld" not in strict.manifest and strict.manifest["status"] == "succeeded"
     assert boundary(s, capsys, monkeypatch, "--retain")[0] == 0
-    cell = read_plan(s)["cells"][0]
+    cell = read_plan(s)["cells"][ci.FIRST_CELL_ORDINAL]
     terminal = retention._read(cell_root(s) / retention.TERMINAL_RECEIPT)
     prefix = retention._paths(cell)[2]
     assert all(s.api.trees[terminal["output_commit"]][prefix + "/" + name] == data
@@ -173,7 +173,7 @@ def test_failed_retention_privacy_refusal_cannot_hide_invalid_evidence(case, cap
     s = case
     _producer(s, monkeypatch)
     finalized(s, capsys, monkeypatch, expected=1)
-    cell, state = read_plan(s)["cells"][0], read_state(s, s.selected)
+    cell, state = read_plan(s)["cells"][ci.FIRST_CELL_ORDINAL], read_state(s, s.selected)
     path = s.root / cell["roles"]["result"]
     if change in {"identity", "source", "path", "structure"}:
         payload = json.loads(path.read_bytes())
@@ -229,7 +229,7 @@ def test_failed_retention_withheld_manifest_is_closed_and_identity_bound(case, c
     _producer(s, monkeypatch)
     finalized(s, capsys, monkeypatch, expected=1)
     manifest = _snapshot(s, withheld=True).manifest
-    completed, cell = pilot._load(s.envelope), read_plan(s)["cells"][0]
+    completed, cell = pilot._load(s.envelope), read_plan(s)["cells"][ci.FIRST_CELL_ORDINAL]
     retention._manifest(manifest, completed, cell)
     for change in ("reason", "extra", "identity", "result_missing", "success", "cleanup", "files",
                    "missing", "too_many", "size", "total_size"):

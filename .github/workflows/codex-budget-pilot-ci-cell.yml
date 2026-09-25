@@ -191,7 +191,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          args=(--campaign-id budget_pilot_ci_20260924_03
+          args=(--campaign-id budget_pilot_ci_20260925_04
                 --cell "$SELECTED_CELL" --reviewed-source-sha "$REVIEWED_SOURCE_SHA"
                 --output "$RUNNER_TEMP/budget-pilot-ci-private"
                 --completion-out "$RUNNER_TEMP/budget-pilot-ci-completion.json")
@@ -210,7 +210,7 @@ jobs:
           # Only safe CLI metadata enters the log; no new artifact or publication.
           timeout --signal=TERM --kill-after=5s 30s \
             python3 batch-runner/codex_budget_pilot_ci.py \
-              --campaign-id budget_pilot_ci_20260924_03 \
+              --campaign-id budget_pilot_ci_20260925_04 \
               --cell "$SELECTED_CELL" --reviewed-source-sha "$REVIEWED_SOURCE_SHA" \
               --output-target-check
 
@@ -228,7 +228,7 @@ jobs:
           # No marker/payload upload. Private reservation/receipt are not artifacts.
           timeout --signal=TERM --kill-after=5s 130s \
             python3 batch-runner/codex_budget_pilot_ci.py \
-              --campaign-id budget_pilot_ci_20260924_03 \
+              --campaign-id budget_pilot_ci_20260925_04 \
               --cell "$SELECTED_CELL" --reviewed-source-sha "$REVIEWED_SOURCE_SHA" \
               --output-target-setup --create-output-target \
               --setup-state "$RUNNER_TEMP/budget-pilot-output-setup-private"
@@ -257,7 +257,7 @@ jobs:
           # importer and this unchanged gate stay offline, without input tokens.
           unset GITHUB_TOKEN HF_TOKEN HUGGING_FACE_HUB_TOKEN
           python3 batch-runner/codex_budget_pilot_ci.py \
-            --campaign-id budget_pilot_ci_20260924_03 \
+            --campaign-id budget_pilot_ci_20260925_04 \
             --cell "$SELECTED_CELL" --reviewed-source-sha "$REVIEWED_SOURCE_SHA" \
             --output "$RUNNER_TEMP/budget-pilot-ci-private" \
             --completion-out "$RUNNER_TEMP/budget-pilot-ci-completion.json" \
@@ -350,7 +350,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 batch-runner/codex_budget_pilot_ci.py \
-            --campaign-id budget_pilot_ci_20260924_03 \
+            --campaign-id budget_pilot_ci_20260925_04 \
             --cell "$SELECTED_CELL" --reviewed-source-sha "$REVIEWED_SOURCE_SHA" \
             --output "$RUNNER_TEMP/budget-pilot-ci-private" \
             --completion-out "$RUNNER_TEMP/budget-pilot-ci-completion.json" \

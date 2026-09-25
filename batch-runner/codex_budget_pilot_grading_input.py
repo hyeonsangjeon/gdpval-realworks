@@ -46,6 +46,7 @@ def compile_cell_grading_plan(
         cells = [cell for cell in plan["cells"] if cell["cell_id"] == cell_id]
         if len(cells) != 1 or plan["order"].count(cell_id) != 1:
             raise PilotGradingInputRefused("canonical_selected_cell_required")
+        ci._eligible_ordinal(plan, cell_id)
         registration_bytes = ci._registration_bytes()
         # Bind the real pilot's inputs, order, source and controls, plus the
         # recorded common host policy. No live-runner identity is invented.

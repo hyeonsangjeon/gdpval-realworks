@@ -118,7 +118,7 @@ def case(tmp_path, monkeypatch, caplog, compilation):
     repo = retained._target()
     state = SimpleNamespace(root=root, history=history, repo=repo, transport=SourceOnly(),
         requests=[], sdk_calls=[], replies={}, logs=caplog, forbidden=forbidden,
-        cell=compilation[0]["order"][0])
+        cell=compilation[0]["order"][ci.FIRST_CELL_ORDINAL])
     for revision in (retained.BOOTSTRAP, connector.BRANCH):
         state.replies[revision] = {"status": 200, "error_code": None, "failure": None,
             "metadata": {"id": repo, "private": True, "sha": retained.BOOTSTRAP,

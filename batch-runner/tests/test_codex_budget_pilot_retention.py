@@ -216,7 +216,7 @@ def case(scenario, monkeypatch):
     monkeypatch.setattr(output, "_hf_client", lambda *a, **k: pytest.fail("live HF client reached"))
     s.api = MemoryHF()
     s.transport = RetainedChildren(s.sources, s.ids, s.api)
-    s.selected = s.ids[0] + "_A_r1"
+    s.selected = s.ids[1] + "_A_r1"
     s.envelope = s.host / "completion.json"
     s.argv[0:2] = ["--campaign-id", ci.CAMPAIGN]
     s.argv += ["--cell", s.selected, "--completion-out", str(s.envelope)]
@@ -264,7 +264,7 @@ def cell_root(s):
     return s.root / "cells" / s.selected
 
 
-def select_fresh(s, monkeypatch, ordinal=1, *, same_cell=False):
+def select_fresh(s, monkeypatch, ordinal=7, *, same_cell=False):
     old = read_plan(s)
     key = s.selected if same_cell else old["order"][ordinal]
     s.root = s.host / ("new-host-" + str(ordinal) + ("-replay" if same_cell else ""))
@@ -339,7 +339,7 @@ def test_retention_preserves_failed_stopped_partial_and_missing(case, capsys, mo
     finalized(s, capsys, monkeypatch, expected)
     before = read_state(s, s.selected)
     assert boundary(s, capsys, monkeypatch, "--retain")[0] == 0
-    selected = read_plan(s)["cells"][0]
+    selected = read_plan(s)["cells"][ci.FIRST_CELL_ORDINAL]
     terminal = json.loads(s.api.trees[s.api.head][retention._paths(selected)[1]])
     projected = terminal["completion"]
     manifest = json.loads(s.api.trees[terminal["output_commit"]][retention._paths(selected)[2] + "/" + output.MANIFEST])
@@ -360,7 +360,7 @@ def test_retention_preserves_failed_stopped_partial_and_missing(case, capsys, mo
 def test_retention_admission_refusals_precede_inference(case, capsys, monkeypatch, change):
     s = case
     if change == "skip":
-        s.selected = s.ids[0] + "_C_r1"
+        s.selected = s.ids[1] + "_C_r1"
         s.argv[s.argv.index("--cell") + 1] = s.selected
     prepare(s)
     cell = next(row for row in read_plan(s)["cells"] if row["cell_id"] == s.selected)
@@ -412,7 +412,7 @@ def test_retention_child_boundary_strips_input_tokens_even_for_other_local_calle
     # Check the actual child constructor separately from the stricter CI gate.
     s = case
     prepare(s)
-    cell = read_plan(s)["cells"][0]
+    cell = read_plan(s)["cells"][ci.FIRST_CELL_ORDINAL]
     for key in TOKEN_KEYS:
         monkeypatch.setenv(key, "synthetic-forbidden")
     seen = []
@@ -473,7 +473,7 @@ def test_retention_lost_terminal_response_valid_server_state_admits_only_success
     assert boundary(s, capsys, monkeypatch, "--admit")[0] == 0
     claim = retention._read(cell_root(s) / retention.ADMISSION_RECEIPT)
     assert claim["claim"]["expected_parent"] == preceding_tip
-    assert claim["claim"]["binding"]["ordinal"] == 1
+    assert claim["claim"]["binding"]["ordinal"] == 7
     observed = retention._read(cell_root(s) / retention.SERVER_OBSERVATION)
     assert observed["observation"] == "verified_server_terminal_state"
     assert observed["writer_response_delivery"] == "not_asserted" and prior.read_bytes() == original
@@ -485,7 +485,7 @@ def test_retention_lost_terminal_response_valid_server_state_admits_only_success
 def test_retention_invalid_predecessor_or_same_cell_never_advances(case, capsys, monkeypatch, change):
     s = case
     finalized(s, capsys, monkeypatch)
-    cell = read_plan(s)["cells"][0]
+    cell = read_plan(s)["cells"][ci.FIRST_CELL_ORDINAL]
     if change == "ambiguous_output":
         s.api.lost = "output"
     assert boundary(s, capsys, monkeypatch, "--retain")[0] == (2 if change == "ambiguous_output" else 0)
@@ -508,7 +508,7 @@ def test_retention_invalid_predecessor_or_same_cell_never_advances(case, capsys,
                 field = {"source": "source_sha", "config": "config_sha256", "inputs": "verified_inputs_sha256",
                          "order": "order_sha256", "foreign": "cell_id", "cleanup": "cleanup_confirmed"}[change]
                 terminal["completion"][field] = False if change == "cleanup" else (
-                    s.ids[1] + "_A_r1" if change == "foreign" else "f" * (40 if change == "source" else 64))
+                    s.ids[2] + "_A_r1" if change == "foreign" else "f" * (40 if change == "source" else 64))
             elif change == "manifest_hash":
                 terminal["manifest_identity"]["sha256"] = "f" * 64
             else:
@@ -577,7 +577,7 @@ def test_retention_target_fingerprint_refuses_before_credential_or_network(case,
 def test_retention_current_byte_mismatch_refuses_before_publication(case, capsys, monkeypatch, change):
     s = case
     finalized(s, capsys, monkeypatch)
-    cell = read_plan(s)["cells"][0]
+    cell = read_plan(s)["cells"][ci.FIRST_CELL_ORDINAL]
     if change == "deliverable":
         path = s.root / cell["roles"]["checkout"] / "batch-runner/workspace/upload" / f"deliverable_files/{cell['task_id']}/synthetic-result.txt"
     else:

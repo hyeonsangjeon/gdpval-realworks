@@ -74,6 +74,7 @@ def _binding(plan: dict, cell: dict, inputs: dict, *, host: dict | None = None,
              run: dict | None = None) -> dict:
     require(plan["run_id"] == ci.CAMPAIGN and cell["run_id"] == ci.CAMPAIGN + "__" + cell["cell_id"],
             "retained_epoch_mismatch")
+    ordinal = ci._eligible_ordinal(plan, cell["cell_id"])
     host = plan["ci"]["host"] if host is None else host
     run = {"id": os.environ.get("GITHUB_RUN_ID"), "job": os.environ.get("GITHUB_JOB"),
            "attempt": 1} if run is None else run
@@ -92,7 +93,7 @@ def _binding(plan: dict, cell: dict, inputs: dict, *, host: dict | None = None,
     writer_plan = {**plan, "ci": {**plan["ci"], "host": host, "selected_cell_id": cell["cell_id"]}}
     return {"repository_name_sha256": TARGET_SHA256, "campaign_id": ci.CAMPAIGN, "inference_branch": BRANCH,
             "cell_id": cell["cell_id"], "run_id": cell["run_id"], "task_id": cell["task_id"],
-            "ordinal": plan["order"].index(cell["cell_id"]), "source_sha": plan["reviewed_source_sha"],
+            "ordinal": ordinal, "source_sha": plan["reviewed_source_sha"],
             "config_sha256": cell["config_sha256"], "plan_sha256": pilot._digest(writer_plan),
             "order_sha256": pilot._digest(plan["order"]),
             "registration_sha256": plan["ci"]["registration_sha256"],
@@ -236,7 +237,7 @@ def _claim(value: dict, plan: dict, cell: dict, inputs: dict) -> dict:
             "claim_identity_mismatch")
     ordinal = binding["ordinal"]
     predecessor = value["predecessor"]
-    if ordinal == 0:
+    if ordinal == ci.FIRST_CELL_ORDINAL:
         require(value["expected_parent"] == BOOTSTRAP and predecessor is None, "first_cell_bootstrap_required")
     else:
         require(type(predecessor) is dict and set(predecessor) == {
@@ -317,8 +318,8 @@ def _manifest(value: dict, completed: dict, cell: dict) -> None:
 
 def _predecessor(api, repo: str, head: str, plan: dict, selected: dict, inputs: dict,
                  cache: Path, token: str, deadline: float) -> dict | None:
-    ordinal = plan["order"].index(selected["cell_id"])
-    if ordinal == 0:
+    ordinal = ci._eligible_ordinal(plan, selected["cell_id"])
+    if ordinal == ci.FIRST_CELL_ORDINAL:
         require(head == BOOTSTRAP, "first_cell_bootstrap_required")
         return None
     cell = next(row for row in plan["cells"] if row["cell_id"] == plan["order"][ordinal - 1])

@@ -32,7 +32,7 @@ import codex_ci_input_intake as intake
 
 SOURCE = "1" * 40
 HEAD = "9" * 40  # Synthetic HF HEAD, never the declared execution-source SHA.
-CELL = "02aa1805-c658-4069-8a6a-02dec146063a_A_r1"
+CELL = "0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r1"
 TOKEN = "hf_SYNTHETIC_SETUP_ONLY"
 RAW = "Bearer synthetic-secret https://signed.invalid/?secret=value /private/auth/cache.json"
 FIELDS = {"role", "repository_name_sha256", "private", "head", "http_status", "outcome", "stage",

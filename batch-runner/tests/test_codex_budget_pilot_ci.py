@@ -99,7 +99,7 @@ def ci_scenario(scenario, monkeypatch):
         monkeypatch.setenv(name, value)
     scenario.transport = CICellChildren(scenario.sources, scenario.ids)
     scenario.argv[0:2] = ["--campaign-id", ci.CAMPAIGN]
-    scenario.selected = scenario.ids[0] + "_B_r1"  # The reference-bearing synthetic task.
+    scenario.selected = scenario.ids[1] + "_B_r1"  # Current eligible task2 suffix.
     scenario.envelope = scenario.host / "completion.json"
     scenario.argv += ["--cell", scenario.selected, "--completion-out", str(scenario.envelope)]
     return scenario
@@ -139,7 +139,7 @@ def test_ci_registered_cell_plan_default_preserves_matrix(ci_scenario):
 @pytest.mark.parametrize("arm,repeat", [("A", 1), ("B", 1), ("C", 2)])
 def test_ci_registered_cell_only_selected_and_known_usage(ci_scenario, monkeypatch, arm, repeat):
     s = ci_scenario
-    s.selected = f"{s.ids[0]}_{arm}_r{repeat}"
+    s.selected = f"{s.ids[1]}_{arm}_r{repeat}"
     s.argv[s.argv.index("--cell") + 1] = s.selected
     if arm == "C":
         s.transport.receipt_cell = s.selected
@@ -150,7 +150,7 @@ def test_ci_registered_cell_only_selected_and_known_usage(ci_scenario, monkeypat
     assert s.transport.peak == 1
     assert s.transport.forwarded[0][2] == 300 and s.transport.forwarded[1][2] == 10860
     state = read_state(s, s.selected)
-    deadline = pilot._load(s.root / "cells" / s.selected / "deadline/deadlines.json")["cells"][s.ids[0]]
+    deadline = pilot._load(s.root / "cells" / s.selected / "deadline/deadlines.json")["cells"][s.ids[1]]
     assert deadline["expires_unix"] - deadline["started_unix"] == 10800
     assert len(deadline["attempts"]) == 1
     config = json.loads((s.root / "cells" / s.selected / "config.json").read_text())
@@ -174,7 +174,7 @@ def test_ci_registered_cell_only_selected_and_known_usage(ci_scenario, monkeypat
     monkeypatch.setenv("GITHUB_RUN_ATTEMPT", "2")
     assert invoke(s, "--execute", "--resume") == 2
     assert s.transport.calls == before
-    assert pilot._load(s.root / "cells" / s.selected / "deadline/deadlines.json")["cells"][s.ids[0]] == deadline
+    assert pilot._load(s.root / "cells" / s.selected / "deadline/deadlines.json")["cells"][s.ids[1]] == deadline
     assert_other_cells_unrun(s)
 
 
@@ -185,14 +185,14 @@ def test_ci_registered_cell_same_host_restore_keeps_clock_and_partials(ci_scenar
     assert invoke(s, "--execute") == 130
     assert pilot._load(s.envelope)["status"] == "unresolved"
     deadline_path = s.root / "cells" / s.selected / "deadline/deadlines.json"
-    before = pilot._load(deadline_path)["cells"][s.ids[0]]
+    before = pilot._load(deadline_path)["cells"][s.ids[1]]
     partial = s.root / "cells" / s.selected / "native-workspaces/attempt-0/partial.txt"
     assert partial.read_bytes() == b"synthetic partial; never a model result"
     replacement = CICellChildren(s.sources, s.ids)
     replacement.clock.now = s.transport.clock.now + (10801 if expired else 15)
     s.transport = replacement  # New client/process facade; the durable host state is real.
     assert invoke(s, "--execute", "--resume") == (1 if expired else 0)
-    after = pilot._load(deadline_path)["cells"][s.ids[0]]
+    after = pilot._load(deadline_path)["cells"][s.ids[1]]
     assert (after["started_unix"], after["expires_unix"]) == (before["started_unix"], before["expires_unix"])
     assert len(after["attempts"]) == (1 if expired else 2)
     assert len(replacement.model_admissions) == (0 if expired else 1)

@@ -111,7 +111,7 @@ def cell(tmp_path):
     # Real canonical compiler. Only finalized execution/input/instance evidence
     # is synthetic; this fixture does not run even a fake pipeline child.
     plan, _, specs = pilot.compile_pilot(ci.CAMPAIGN, SOURCE)
-    selected = plan["cells"][1]
+    selected = plan["cells"][7]
     plan["ci"] = {
         "registration_sha256": pilot._identity(pilot._read_bytes(ci.REGISTRATION))["sha256"],
         "selected_cell_id": selected["cell_id"],

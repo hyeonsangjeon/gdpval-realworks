@@ -1,0 +1,48 @@
+# Independent corrective task2 A1 gate preparation; no live authority.
+plan_version: codex-external-budget-ci-cell-v1
+campaign_id: budget_pilot_ci_20260925_04
+source_baseline: 0bb141f3bf93510ccb399800a4aa0901ceb36638
+parent_registration: batch-runner/experiments/execution_envelope/codex_external_budget_pilot.yaml
+description: >-
+  Prepare only original ordinal6, 0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r1,
+  for a separately authorized corrective observation. Keep the canonical five
+  tasks, 30 IDs and A1/B1/C1/C2/B2/A2 relative order. Ordinals0..5 are out of
+  scope, not completed in this epoch. Only ordinal6 may start at its own verified
+  bootstrap; any later eligible cell needs its immediate actual04 predecessor.
+  The other23 suffix cells have no execution authority or automatic launcher.
+  Preserve GPT-5.4/direct-v1/xhigh, SDK0.147.0, original inputs, fixed grader,
+  A4fresh and 180/30-minute controls including wait/recovery without monetary
+  cutoff. Old01+02 retain two frozen admissions and epoch03 retains seven:
+  task1 six failed/terminal-verified cells and task2 A1 execution-success but
+  unretained/ungraded. Those nine remain separate. A later corrective admission
+  would make ten total, not a restart, pooled comparison, recovered payload or
+  replacement of the old task2 A1. Both new refs must be actually verified and
+  the leader must bind the exact reviewed source and one-use cell reservation
+  before any live call. Stop after the one gate for the leader's retention/grade
+  decision; no successor, replay, new epoch or source reseal is authorized here.
+host:
+  runner: ubuntu-22.04
+  python: 3.10.12
+  sdk: 0.147.0
+  cli: 0.147.0
+  identity: existing_repository_oidc
+  job_ceiling_minutes: 240
+  same_policy_all_conditions: true
+  cross_runner_restore: false
+  automatic_rerun: refuse_run_attempt_above_one
+default_mode: plan_only
+selection: one_explicit_canonical_cell
+controls: inherit_parent_unchanged
+input_transfer: explicit_approved_handoff_required
+publication: private_cell_outputs_and_nonsecret_completion_envelope
+ordered_30_cell_scheduler: not_implemented
+separate_manual_run_deduplication: fixed_private_claim_cas_canonical_successor_only
+entrypoint:
+  first_ordinal: 6
+  first_cell_id: 0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r1
+  earlier_cells: out_of_scope
+storage:
+  repository_name_sha256: a13dedada5465377761961d050e021a4db8e44d6284179a9ce40b562e4396a44
+  bootstrap: bfc7ae01ed14490817ceb7cb406adcb9bb95f557
+  inference_branch: pilot-inference-20260925-04
+  grading_branch: pilot-grades-20260925-04

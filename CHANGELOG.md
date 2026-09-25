@@ -13,6 +13,61 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Prepare the closed corrective task2 A1 gate `budget_pilot_ci_20260925_04`
+  from exact main `0bb141f3bf93510ccb399800a4aa0901ceb36638`. The leader supplied
+  #676 head `88b13f974b8be508cb5c5596db401447469e032c`, review `5314792016`
+  and all **9** checks passed for the preceding empty-reflection-pair repair,
+  not this activation. The existing extreme-reasoner context approved the
+  bounded ordinal6 policy with conditions before production edits. The fixed
+  first cell is original ordinal **6**,
+  `0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r1`. Preserve all five tasks, 30 IDs
+  and relative A1/B1/C1/C2/B2/A2 order; prefix **0–5** is out of scope and
+  refuses selection rather than being manufactured completed. Only fixed6
+  may use its own verified bootstrap without a predecessor. Next7 and later
+  eligible cells still require their immediate actual04 predecessor's valid
+  terminal and acknowledged output. The other **23** suffix cells have no
+  execution authority, and there is no automatic launcher or start-offset input.
+  Reuse the private target name SHA256
+  `a13dedada5465377761961d050e021a4db8e44d6284179a9ce40b562e4396a44` and immutable
+  bootstrap `bfc7ae01ed14490817ceb7cb406adcb9bb95f557` with new fixed refs
+  `pilot-inference-20260925-04` and `pilot-grades-20260925-04`. Existing
+  four-request one-ref setup, genuine absence, independent reservations,
+  readback and CAS remain. The first eligible grading claim retains alias
+  `pilot/cell-06` on its separate branch with no invented earlier grades;
+  prefix grading tips refuse and grading never advances inference.
+  At tested SHA `6c90e03a2683bdbccaae557c3a654a9d946e7f00`, one offline invocation
+  of `tests/test_codex_budget_pilot_epoch04_gate.py` returned **22 passed in
+  166.07s**, exit 0. Real compiler, Step2 writer, deadline, byte/receipt/publisher/
+  terminal/materializer and claim/CAS checks used fake source/native/model/HF
+  boundaries and explicit native-install/grader-entry test doubles. Coverage
+  includes fixed6 plan/admit/retention/grading binding, prefix refusal, next7
+  requiring actual6, old-ref isolation, cross-epoch/source/ref refusal, setup
+  ambiguity/no replay, lost output blocking and separately verified server
+  terminal state after a lost terminal response without editing the original
+  local receipt. No judge ran. Only completion records changed after validation;
+  no old 24/13/35-case family or full suite was rerun and no dependency installed.
+  Publisher reflection/ledger-note repairs, closed diagnostics, privacy gates,
+  source/runtime pins, model/input/budget controls, fixed grader and generic
+  defaults remain unchanged. Only the closed registration/entrypoint checks,
+  two inference bootstrap checks, grading's eligible control paths, five workflow
+  campaign literals and directly coupled fixtures/assertions changed.
+  Old01+02 retain **2** frozen admissions and epoch03 retains **7**: six failed
+  task1 cells with verified terminals and one task2 A1 execution-successful but
+  unretained/ungraded. Those **9** remain separate; one later authorized gate
+  would make **10** total admissions, not a 30-cell restart, pooled comparison
+  or replacement/recovery of the old 5549-byte task2 deliverable identity.
+  The separate known partial costs **USD 0.175163**, **USD 0.196821** and
+  **USD 0.090419** are not invoice totals or complete campaign costs. Historical
+  raw-file/child-cause limits and prior split test observations remain below.
+  This supersedes the prior noepoch04 preparation restriction only; no actual
+  HF setup/inspection/write, model/grader call, workflow dispatch, source reseal,
+  claim settlement or CI polling occurred. New-head review/CI, actual fixed-ref
+  verification, exact source and one-cell reservation remain leader-owned.
+  After that one gate, stop for the leader's retention/grade decision; there is
+  no automatic expansion or replacement epoch. The design, English reporting
+  and copyediting skills protected those boundaries; UI and broad repository
+  handoff guidance did not apply.
+
 - Prepare the closed first-A1 acceptance gate `budget_pilot_ci_20260924_03`
   from exact main `c739e5596cf874ef3f48d0943404101f10500372`. The leader supplied
   #674 FINAL-APPROVE `5305021240` at `075ab8f065d88207d9b7ad0de5d02df487867793`
@@ -196,6 +251,33 @@ entries land under a fresh dated heading the day they merge to `main`.
   dispatch, inference, grading or reseal occurred.
 
 ### Fixed
+
+- Correct only `test_aliases_preserve_fixed_config_and_canonical_run` in
+  `tests/test_codex_budget_pilot_grading.py` for #677 REQUEST-CHANGES
+  `5315917785` at `e6c6da71d67741a953a8e21b4bf5ddea020e783a`. Positive
+  original ordinals are now **6, 7, 29**. Every prefix ordinal **0–5** must
+  raise `PilotGradingInputRefused` with `registered_cell_controls_refused`,
+  caused by `CICellRefused` with `ci_prefix_cell_out_of_scope`. Keep the exact
+  `pilot/cell-NN` alias, slug, canonical run/source-experiment ID, fixed grader
+  config, experiment config and standalone `execution_envelope/` assertions.
+  Leader-supplied CI run `36113064105`, job `108000707569`, reported **1 failed,
+  13945 passed, 61 skipped, 46 deselected in 2150.36s**; this was the sole
+  failing node. Nine other applicable checks passed and deploy was skipped.
+  At tested SHA `c58196526672e5e5375b0b1830cd6aa97b8d33ac`, one offline
+  invocation of
+  `tests/test_codex_budget_pilot_grading.py::test_aliases_preserve_fixed_config_and_canonical_run`
+  returned **1 passed in 2.29s**, exit 0. Only completion records changed after
+  that snapshot. The original **22 passed in 166.07s** at
+  `6c90e03a2683bdbccaae557c3a654a9d946e7f00` remains separate evidence; neither
+  that family, the full file nor the full suite was rerun. Source review
+  `5315662337` remains scoped to unchanged production, not permission to merge
+  failed CI. No production/workflow/registration/source-pin/runtime/model/
+  budget/grader behavior changed. New-head delta review and final CI remain,
+  followed by the existing leader-owned ref/source/one-cell live gates. All
+  nine historical admissions remain frozen. No live HF/model/grader/ref call,
+  source reseal, claim settlement, new epoch or CI polling occurred. English
+  reporting and copyediting guidance preserved these separate observations;
+  experiment-design and UI guidance did not apply to this fixture correction.
 
 - Accept only Step2's genuine no-QA pair `reflection_history: []` and
   `reflection_attempts: 0` in the private pilot result publisher, with both

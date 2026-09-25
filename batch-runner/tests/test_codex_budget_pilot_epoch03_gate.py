@@ -34,8 +34,9 @@ from .test_codex_budget_pilot_retention import (
     offline, read_plan, scenario,
 )  # noqa: F401 -- live process/auth/network/model/grader boundaries stay forbidden.
 
-BASELINE = "c739e5596cf874ef3f48d0943404101f10500372"
-FIRST = "02aa1805-c658-4069-8a6a-02dec146063a_A_r1"
+BASELINE = "0bb141f3bf93510ccb399800a4aa0901ceb36638"
+FIRST = "0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r1"
+HISTORICAL_FIRST = "02aa1805-c658-4069-8a6a-02dec146063a_A_r1"
 EPOCH02 = "budget_pilot_ci_20260924_02"
 SOURCE02 = "4aac36b6f92d2a14b8cac02d793356d6687ace6d"
 INFERENCE02 = "pilot-inference-20260924-02"
@@ -49,7 +50,7 @@ class GateHF(EpochHF):
         super().__init__()
         for ref, revision in ((INFERENCE02, "8" * 40), (GRADING02, "9" * 40)):
             self.branches[ref] = revision
-            self.trees[revision] = {f"cell-claims/{EPOCH02}/{FIRST}/frozen": b"epoch02 unresolved"}
+            self.trees[revision] = {f"cell-claims/{EPOCH02}/{HISTORICAL_FIRST}/frozen": b"epoch02 unresolved"}
             self.writers[revision] = {path: revision for path in self.trees[revision]}
             self.frozen[ref] = (revision, copy.deepcopy(self.trees[revision]))
 
@@ -81,21 +82,22 @@ def test_gate_plan_keeps_thirty_cell_shape_without_launch_authority(gate, monkey
     assert cli(gate) == 0 and boundary(gate, capsys, monkeypatch)[0] == 0
     plan = read_plan(gate)
     assert gate.api.calls == gate.transport.calls == []
-    assert plan["run_id"] == ci.CAMPAIGN == "budget_pilot_ci_20260924_03"
+    # Active routing moves; the original epoch03 registration stays historical.
+    assert plan["run_id"] == ci.CAMPAIGN == "budget_pilot_ci_20260925_04"
     assert plan["reviewed_source_sha"] == SOURCE  # Synthetic reviewed-host boundary, not a source seal.
-    assert gate.selected == plan["order"][0] == FIRST
+    assert gate.selected == plan["order"][6] == FIRST
     assert len(plan["cells"]) == 30 and len(gate.ids) == 5
     assert pilot.ORDER == (("A", 1), ("B", 1), ("C", 1), ("C", 2), ("B", 2), ("A", 2))
     assert plan["order"] == [f"{task}_{arm}_r{repeat}" for task in gate.ids for arm, repeat in pilot.ORDER]
     assert plan["launch_authorized_by_plan"] is plan["grading_launched"] is False
     assert ci.PUBLIC_FIXED["denominator"] == 30 and ci.PUBLIC_FIXED["other_cells_not_run"] == 29
     registration = yaml.safe_load(ci._registration_bytes())
-    assert ci.REGISTRATION.name == "codex_external_budget_ci_pilot_epoch03.yaml"
+    assert ci.REGISTRATION.name == "codex_external_budget_ci_pilot_epoch04.yaml"
     assert registration["source_baseline"] == BASELINE and registration["selection"] == "one_explicit_canonical_cell"
     assert registration["storage"] == ci.STORAGE == {
         "repository_name_sha256": "a13dedada5465377761961d050e021a4db8e44d6284179a9ce40b562e4396a44",
         "bootstrap": "bfc7ae01ed14490817ceb7cb406adcb9bb95f557",
-        "inference_branch": "pilot-inference-20260924-03", "grading_branch": "pilot-grades-20260924-03",
+        "inference_branch": "pilot-inference-20260925-04", "grading_branch": "pilot-grades-20260925-04",
     }
     assert plan["ci"]["registration_sha256"] == hashlib.sha256(ci._registration_bytes()).hexdigest()
     assert {key: plan["model"][key] for key in ("deployment", "route_profile", "reasoning_effort")} == {
@@ -149,8 +151,8 @@ def test_mixed_registration_refuses_before_source_or_hf(setup_case, monkeypatch,
     assert not setup_case.root.exists()
 
 
-@pytest.mark.parametrize("selector,branch", [("pilot/inference-branch-setup", "pilot-inference-20260924-03"),
-                                             ("pilot/branch-setup", "pilot-grades-20260924-03")])
+@pytest.mark.parametrize("selector,branch", [("pilot/inference-branch-setup", "pilot-inference-20260925-04"),
+                                             ("pilot/branch-setup", "pilot-grades-20260925-04")])
 def test_each_fixed_ref_has_offline_plan_four_request_setup_and_read_only_inspect(setup_case, capsys, monkeypatch, selector, branch):
     s = setup_case
     frozen = {"main": "e" * 40, "pilot-grades-20260923": "f" * 40,
@@ -200,16 +202,16 @@ def test_setup_never_adopts_replays_or_creates_the_other_ref(setup_case, capsys,
 
 
 @pytest.mark.parametrize("failed", [False, True], ids=["retained_success", "withheld_failure"])
-def test_first_claim_output_and_grade_binding_stay_on_fixed03_refs(gate, capsys, monkeypatch, tmp_path, failed):
+def test_first_claim_output_and_grade_binding_stay_on_active_refs(gate, capsys, monkeypatch, tmp_path, failed):
     s = gate
     if failed:
         _producer(s, monkeypatch, fields="row")
     finalized(s, capsys, monkeypatch, expected=1 if failed else 0)
     before = _local_bytes(s)
-    plan, cell = read_plan(s), read_plan(s)["cells"][0]
+    plan, cell = read_plan(s), read_plan(s)["cells"][ci.FIRST_CELL_ORDINAL]
     claim = retained._read(cell_root(s) / retained.ADMISSION_RECEIPT)["claim"]
     assert claim["expected_parent"] == retained.BOOTSTRAP and claim["predecessor"] is None
-    assert claim["binding"]["ordinal"] == 0 and cell["cell_id"] == FIRST
+    assert claim["binding"]["ordinal"] == 6 and cell["cell_id"] == FIRST
     assert claim["binding"]["campaign_id"] == ci.CAMPAIGN and claim["binding"]["inference_branch"] == retained.BRANCH
     inputs = output._checkpoint(s.root / "ci-inputs.json")
     for field, old in (("campaign_id", EPOCH02), ("source_sha", SOURCE02), ("inference_branch", INFERENCE02)):

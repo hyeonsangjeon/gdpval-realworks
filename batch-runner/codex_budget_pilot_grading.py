@@ -569,6 +569,7 @@ def _ready(context: Context, root: Path) -> dict:
 
 def _binding(context: Context, prepared: dict, run: dict) -> dict:
     require(context.plan["run_id"] == ci.CAMPAIGN, "retained_epoch_mismatch")
+    ci._eligible_ordinal(context.plan, context.cell["cell_id"])
     evidence = prepared["evidence"]
     return {
         "repository_name_sha256": retained.TARGET_SHA256, "branch": BRANCH, "inference_branch": retained.BRANCH,
@@ -641,7 +642,8 @@ def _grade_terminal(api, repo: str, revision: str, context: Context, entry: dict
         require(previous is None, "grade_bootstrap_claim_mismatch")
     else:
         require(type(previous) is dict and set(previous) == {"cell_id", "revision", "size", "sha256"}
-                and previous["cell_id"] in context.plan["order"] and previous["cell_id"] != context.cell["cell_id"]
+                and previous["cell_id"] in context.plan["order"][ci.FIRST_CELL_ORDINAL:]
+                and previous["cell_id"] != context.cell["cell_id"]
                 and previous["revision"] == claim["expected_parent"] and output._hash(previous["sha256"])
                 and type(previous["size"]) is int and 0 < previous["size"] <= output.MAX_MANIFEST_BYTES,
                 "grade_predecessor_binding_mismatch")
@@ -687,11 +689,11 @@ def _branch_tip(api, repo: str, context: Context, prepared: dict, cache: Path, t
     head = output._metadata(api, repo, BRANCH, token, deadline)["sha"]
     if head == retained.BOOTSTRAP:
         return head, None
-    # Exactly thirty canonical control paths, not an inventory or payload read.
-    paths = {_paths(cell)[1]: cell for cell in context.plan["cells"]}
+    # Only the fixed eligible suffix's control paths, not a payload inventory.
+    paths = {_paths(cell)[1]: cell for cell in context.plan["cells"][ci.FIRST_CELL_ORDINAL:]}
     found = api.get_paths_info(repo_id=repo, repo_type="dataset", revision=head,
                                paths=sorted(paths), expand=True, token=token)
-    require(type(found) is list and len(found) <= 30, "unknown_grading_branch_tip")
+    require(type(found) is list and len(found) <= len(paths), "unknown_grading_branch_tip")
     candidates = [item for item in found if isinstance(item, RepoFile)
                   and item.path in paths and getattr(item.last_commit, "oid", None) == head]
     require(len(candidates) == 1, "unknown_or_unfinished_grading_branch_tip")
