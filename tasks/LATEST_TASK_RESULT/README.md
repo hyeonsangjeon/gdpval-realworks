@@ -1,8 +1,54 @@
 # Latest task result
 
-## PROJECT5-FIXED-TASK2-GATE-1650
+## PROJECT5-ALIAS-FIXTURE-1822
 
-### Closed ordinal6 gate, code/offline preparation only
+### Fixture-only correction and focused result
+
+Addressed REQUEST-CHANGES `5315917785` at
+`e6c6da71d67741a953a8e21b4bf5ddea020e783a` on the same #677 branch. Only
+`tests/test_codex_budget_pilot_grading.py::test_aliases_preserve_fixed_config_and_canonical_run`
+and these two completion records changed. Positive original ordinals are now
+**6, 7, 29**. Every prefix ordinal **0–5** must raise
+`PilotGradingInputRefused` with the exact `registered_cell_controls_refused`
+reason, caused by `CICellRefused` with `ci_prefix_cell_out_of_scope`.
+All existing exact `pilot/cell-NN` alias, slug, canonical run/source-experiment
+ID, fixed grader config, experiment config and standalone `execution_envelope/`
+path assertions remain. No production, workflow, registration, source/runtime
+pin, model, budget or grader behavior changed.
+
+At tested SHA `c58196526672e5e5375b0b1830cd6aa97b8d33ac`, one invocation from
+`batch-runner/` ran only:
+
+```text
+tests/test_codex_budget_pilot_grading.py::test_aliases_preserve_fixed_config_and_canonical_run
+```
+
+Result: **1 passed in 2.29s**, exit 0. Only completion records changed after
+that snapshot. The invocation used the existing Python 3.10.12 interpreter,
+credential-free `env -i`, offline flags, disabled plugin autoload and the
+fixture's forbidden auth/HF/runtime boundaries. No dependency was installed.
+The original **22 passed in 166.07s** at
+`6c90e03a2683bdbccaae557c3a654a9d946e7f00` remains the separate prior gate
+validation below, not a combined 23-case result. Neither that family, the
+full file nor the full suite was rerun.
+
+The leader reported CI run `36113064105`, job `108000707569`, with **1 failed,
+13945 passed, 61 skipped, 46 deselected in 2150.36s**. The sole failure was
+this node's stale positive index0 selection; nine other applicable checks
+passed and deploy was skipped. These are supplied CI observations, not a new
+local or live run. Source review `5315662337` at the reviewed head above
+remains scoped to inspected, unchanged production. It is not permission to
+merge failed CI. New-head delta review and final CI remain, followed by the
+existing leader-owned ref/source/one-cell authorization gates. No CI polling,
+live HF/model/grader/ref call, source reseal, old-claim settlement or new epoch
+occurred. All nine historical admissions remain separate and frozen.
+
+The full skill catalog was checked once for this correction. Experiment-report-en
+kept the supplied CI failure, original gate validation and new one-node result
+separate; im-not-ai-en copyedited the records without changing their limits.
+Experiment-design and UI guidance did not apply to this fixture-only change.
+
+### Prior fixed task2 gate preparation, unchanged
 
 Prepared the fixed corrective identity `budget_pilot_ci_20260925_04` from exact
 main `0bb141f3bf93510ccb399800a4aa0901ceb36638` in a new clean owned worktree.
@@ -49,7 +95,7 @@ comparison. It would not recover, replace or grade the old task2 A1 or its
 5549-byte deliverable identity. No claim, source binding, clock or partial cost
 was reset or adopted.
 
-### Focused offline validation
+### Prior gate validation, not rerun
 
 At tested SHA `6c90e03a2683bdbccaae557c3a654a9d946e7f00`, one invocation from
 `batch-runner/` ran only:
@@ -58,8 +104,10 @@ At tested SHA `6c90e03a2683bdbccaae557c3a654a9d946e7f00`, one invocation from
 tests/test_codex_budget_pilot_epoch04_gate.py
 ```
 
-Result: **22 passed in 166.07s**, exit 0. Only completion records changed after
-that snapshot. The invocation used the existing Python 3.10.12 interpreter,
+Result: **22 passed in 166.07s**, exit 0. Only completion records changed between
+that snapshot and the previously delivered head
+`e6c6da71d67741a953a8e21b4bf5ddea020e783a`. The invocation used the existing
+Python 3.10.12 interpreter,
 credential-free `env -i`, HF/data/transformer offline flags, disabled plugin
 autoload, `-q -o addopts= -p no:cacheprovider --tb=short --maxfail=1`, a local
 JUnit report and a 480-second timeout with a 10-second termination grace.
@@ -389,8 +437,9 @@ automatic monetary cutoff, epoch/storage framework or model/grader change was
 introduced. No live HF/model/grader or Azure-management request, workflow
 dispatch, source reseal or CI polling occurred.
 
-The full skill catalog was checked once. Experiment-design applied first to
-the closed administrative/source-epoch boundary and the one-gate stop rule;
+For the prior gate preparation, the full skill catalog was checked once.
+Experiment-design applied first to the closed administrative/source-epoch
+boundary and the one-gate stop rule;
 no model comparison or budget axis changed. Experiment-report-en separated
 historical partial observations, nine frozen admissions and synthetic04
 evidence, then im-not-ai-en copyedited the records while protecting their

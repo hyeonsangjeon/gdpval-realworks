@@ -252,6 +252,33 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Correct only `test_aliases_preserve_fixed_config_and_canonical_run` in
+  `tests/test_codex_budget_pilot_grading.py` for #677 REQUEST-CHANGES
+  `5315917785` at `e6c6da71d67741a953a8e21b4bf5ddea020e783a`. Positive
+  original ordinals are now **6, 7, 29**. Every prefix ordinal **0–5** must
+  raise `PilotGradingInputRefused` with `registered_cell_controls_refused`,
+  caused by `CICellRefused` with `ci_prefix_cell_out_of_scope`. Keep the exact
+  `pilot/cell-NN` alias, slug, canonical run/source-experiment ID, fixed grader
+  config, experiment config and standalone `execution_envelope/` assertions.
+  Leader-supplied CI run `36113064105`, job `108000707569`, reported **1 failed,
+  13945 passed, 61 skipped, 46 deselected in 2150.36s**; this was the sole
+  failing node. Nine other applicable checks passed and deploy was skipped.
+  At tested SHA `c58196526672e5e5375b0b1830cd6aa97b8d33ac`, one offline
+  invocation of
+  `tests/test_codex_budget_pilot_grading.py::test_aliases_preserve_fixed_config_and_canonical_run`
+  returned **1 passed in 2.29s**, exit 0. Only completion records changed after
+  that snapshot. The original **22 passed in 166.07s** at
+  `6c90e03a2683bdbccaae557c3a654a9d946e7f00` remains separate evidence; neither
+  that family, the full file nor the full suite was rerun. Source review
+  `5315662337` remains scoped to unchanged production, not permission to merge
+  failed CI. No production/workflow/registration/source-pin/runtime/model/
+  budget/grader behavior changed. New-head delta review and final CI remain,
+  followed by the existing leader-owned ref/source/one-cell live gates. All
+  nine historical admissions remain frozen. No live HF/model/grader/ref call,
+  source reseal, claim settlement, new epoch or CI polling occurred. English
+  reporting and copyediting guidance preserved these separate observations;
+  experiment-design and UI guidance did not apply to this fixture correction.
+
 - Accept only Step2's genuine no-QA pair `reflection_history: []` and
   `reflection_attempts: 0` in the private pilot result publisher, with both
   fields absent still supported. If either is present, require both, an exact
