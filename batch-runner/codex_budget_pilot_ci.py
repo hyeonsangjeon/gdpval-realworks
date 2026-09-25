@@ -20,9 +20,13 @@ import codex_budget_pilot as pilot
 from core.cost_projection import COST_STATUSES, project_cost_receipt
 from core.result_projection import project_result_row
 
-CAMPAIGN = "budget_pilot_ci_20260924_03"
-INFERENCE_BRANCH = "pilot-inference-20260924-03"
-GRADING_BRANCH = "pilot-grades-20260924-03"
+CAMPAIGN = "budget_pilot_ci_20260925_04"
+INFERENCE_BRANCH = "pilot-inference-20260925-04"
+GRADING_BRANCH = "pilot-grades-20260925-04"
+FIRST_CELL_ORDINAL = 6
+FIRST_CELL_ID = "0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r1"
+ENTRYPOINT = {"first_ordinal": FIRST_CELL_ORDINAL, "first_cell_id": FIRST_CELL_ID,
+              "earlier_cells": "out_of_scope"}
 STORAGE = {
     "repository_name_sha256": "a13dedada5465377761961d050e021a4db8e44d6284179a9ce40b562e4396a44",
     "bootstrap": "bfc7ae01ed14490817ceb7cb406adcb9bb95f557",
@@ -30,7 +34,7 @@ STORAGE = {
 }
 REPOSITORY = "hyeonsangjeon/gdpval-realworks"
 WORKFLOW = ".github/workflows/codex-budget-pilot-ci-cell.yml"
-REGISTRATION = pilot.REGISTRATION.with_name("codex_external_budget_ci_pilot_epoch03.yaml")
+REGISTRATION = pilot.REGISTRATION.with_name("codex_external_budget_ci_pilot_epoch04.yaml")
 HOST_POLICY = {
     "runner": "ubuntu-22.04", "python": "3.10.12", "sdk": "0.147.0", "cli": "0.147.0",
     "identity": "existing_repository_oidc", "job_ceiling_minutes": 240,
@@ -128,16 +132,30 @@ def _registration_bytes() -> bytes:
     registration = yaml.safe_load(registration_bytes)
     expected = {
         "plan_version": "codex-external-budget-ci-cell-v1", "campaign_id": CAMPAIGN,
-        "source_baseline": "c739e5596cf874ef3f48d0943404101f10500372",
+        "source_baseline": "0bb141f3bf93510ccb399800a4aa0901ceb36638",
         "parent_registration": str(pilot.REGISTRATION.relative_to(pilot.ROOT)),
         "host": HOST_POLICY, "default_mode": "plan_only", "selection": "one_explicit_canonical_cell",
         "controls": "inherit_parent_unchanged", "input_transfer": "explicit_approved_handoff_required",
         "publication": "private_cell_outputs_and_nonsecret_completion_envelope", "ordered_30_cell_scheduler": "not_implemented",
         "separate_manual_run_deduplication": "fixed_private_claim_cas_canonical_successor_only",
-        "storage": STORAGE,
+        "storage": STORAGE, "entrypoint": ENTRYPOINT,
     }
     pilot._same("CI registration", {key: value for key, value in registration.items() if key != "description"}, expected)
     return registration_bytes
+
+
+def _eligible_ordinal(plan: dict, cell_id: str) -> int:
+    """Closed task2 entrypoint, never a caller-selected start or renumbering."""
+    if plan["run_id"] != CAMPAIGN:
+        raise CICellRefused("registered_ci_campaign_required")
+    if len(plan["order"]) != 30 or plan["order"][FIRST_CELL_ORDINAL] != FIRST_CELL_ID:
+        raise CICellRefused("registered_ci_entrypoint_required")
+    if plan["order"].count(cell_id) != 1:
+        raise CICellRefused("canonical_selected_cell_required")
+    ordinal = plan["order"].index(cell_id)
+    if ordinal < FIRST_CELL_ORDINAL:
+        raise CICellRefused("ci_prefix_cell_out_of_scope")
+    return ordinal
 
 
 def compile_ci_cell(campaign: str, cell_id: str, reviewed_sha: str) -> tuple[dict, Any, dict, dict]:
@@ -149,6 +167,7 @@ def compile_ci_cell(campaign: str, cell_id: str, reviewed_sha: str) -> tuple[dic
     matches = [cell for cell in plan["cells"] if cell["cell_id"] == cell_id]
     if len(matches) != 1 or plan["order"].count(cell_id) != 1:
         raise CICellRefused("canonical_selected_cell_required")
+    _eligible_ordinal(plan, cell_id)
     plan["ci"] = {"registration_sha256": hashlib.sha256(registration_bytes).hexdigest(),
                   "selected_cell_id": cell_id, "host": _require_ci_context(reviewed_sha)}
     return plan, parent, specs, matches[0]

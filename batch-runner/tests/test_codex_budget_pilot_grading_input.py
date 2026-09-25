@@ -154,7 +154,7 @@ CASES = [
 @pytest.mark.parametrize("case", CASES)
 def test_pilot_cell_grading_input(case, compiled, tmp_path, monkeypatch, capsys):
     pilot_plan, parent, _ = compiled
-    index = {"valid_b1": 1, "valid_c1": 2, "valid_c2": 3, "valid_b2": 4, "valid_last_a2": 29}.get(case, 0)
+    index = {"valid_b1": 7, "valid_c1": 8, "valid_c2": 9, "valid_b2": 10, "valid_last_a2": 29}.get(case, 6)
     cell = pilot_plan["cells"][index]
     _, _, plan = adapter.compile_cell_grading_plan(ci.CAMPAIGN, cell["cell_id"], SOURCE)
     run = plan.runs[0]

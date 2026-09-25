@@ -214,7 +214,7 @@ def test_epoch02_plan_is_closed_independent_and_offline(epoch, monkeypatch, caps
     assert boundary(epoch, capsys, monkeypatch)[0] == 0
     assert epoch.api.calls == epoch.transport.calls == []
     # This contract follows active CI routing; the epoch02 YAML remains history.
-    assert plan["run_id"] == ci.CAMPAIGN == "budget_pilot_ci_20260924_03"
+    assert plan["run_id"] == ci.CAMPAIGN == "budget_pilot_ci_20260925_04"
     assert len(plan["cells"]) == 30 and len({cell["task_id"] for cell in plan["cells"]}) == 5
     assert [(row["condition"], row["repetition"]) for row in plan["cells"][:6]] == list(pilot.ORDER)
     old_plan, _, _ = pilot.compile_pilot(OLD_CAMPAIGN, OLD_SOURCE)
@@ -343,7 +343,7 @@ def test_real_retention_predecessor_and_grading_cas_use_distinct_refs(epoch, cap
     before = _local_bytes(s)
     assert boundary(s, capsys, monkeypatch, "--retain")[0] == 0
     assert _local_bytes(s) == before
-    plan, cell = read_plan(s), read_plan(s)["cells"][0]
+    plan, cell = read_plan(s), read_plan(s)["cells"][ci.FIRST_CELL_ORDINAL]
     revision = s.api.branches[retained.BRANCH]
     claim = retained._read(cell_root(s) / retained.ADMISSION_RECEIPT)["claim"]
     terminal = json.loads(s.api.trees[revision][retained._paths(cell)[1]])
@@ -381,11 +381,11 @@ def test_real_retention_predecessor_and_grading_cas_use_distinct_refs(epoch, cap
             {grading._paths(cell)[0]: retained._encoded(record)}, token, deadline, {})
     monkeypatch.delenv("HF_TOKEN")
     assert committed == s.api.branches[grading.BRANCH] and s.api.branches[retained.BRANCH] == revision
-    select_fresh(s, monkeypatch, ordinal=1)
+    select_fresh(s, monkeypatch, ordinal=7)
     assert boundary(s, capsys, monkeypatch, "--admit")[0] == 0
     admitted = retained._read(cell_root(s) / retained.ADMISSION_RECEIPT)["claim"]
     assert admitted["predecessor"]["terminal_commit"] == admitted["expected_parent"] == revision
-    assert admitted["predecessor"]["cell_id"] == plan["order"][0]
+    assert admitted["predecessor"]["cell_id"] == plan["order"][6]
     assert s.transport.calls == []  # Admission never invokes a paid child.
     select_fresh(s, monkeypatch, same_cell=True)
     assert boundary(s, capsys, monkeypatch, "--admit")[0] == 2 and s.transport.calls == []
@@ -395,7 +395,7 @@ def test_real_retention_predecessor_and_grading_cas_use_distinct_refs(epoch, cap
 def test_epoch02_admission_refuses_before_child(epoch, monkeypatch, capsys, damage):
     s = epoch
     if damage == "skip":
-        s.selected = s.ids[0] + "_B_r1"
+        s.selected = s.ids[1] + "_B_r1"
         s.argv[s.argv.index("--cell") + 1] = s.selected
     prepare(s)
     if damage == "private":
@@ -404,7 +404,7 @@ def test_epoch02_admission_refuses_before_child(epoch, monkeypatch, capsys, dama
         s.api.branches[retained.BRANCH] = "d" * 40
         s.api.trees["d" * 40], s.api.writers["d" * 40] = {}, {}
     elif damage == "old_claim":
-        path = retained._paths(read_plan(s)["cells"][0])[0]
+        path = retained._paths(read_plan(s)["cells"][ci.FIRST_CELL_ORDINAL])[0]
         s.api.trees[retained.BOOTSTRAP][path] = retained._encoded({"campaign_id": OLD_CAMPAIGN})
         s.api.writers[retained.BOOTSTRAP][path] = retained.BOOTSTRAP
     elif damage == "mixed_source":
@@ -437,7 +437,7 @@ def test_epoch02_withholding_stays_failed_ungraded_and_ambiguity_blocks_next(epo
         assert receipt["outcome"] == "unresolved" and "terminal" not in s.api.commits
         receipt_path = cell_root(s) / output.RECEIPT
         frozen = receipt_path.read_bytes()
-        select_fresh(s, monkeypatch, ordinal=1)
+        select_fresh(s, monkeypatch, ordinal=7)
         assert boundary(s, capsys, monkeypatch, "--admit")[0] == 2 and not s.transport.calls
         assert receipt_path.read_bytes() == frozen
     else:

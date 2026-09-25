@@ -262,6 +262,7 @@ def _grade_inputs(s, terminal, monkeypatch, damage):
     assert original.read_bytes() == s.transport.result_bytes
     assert (root / "inputs" / Path(prepared["materialized_result"]["path"]).parent / Path(pilot.LEDGER).name).read_bytes() == s.transport.ledger_bytes
     assert next((root / "inputs").rglob("answer.txt")).read_bytes() == DELIVERABLE
+    return context, evidence, prepared, pilot._identity(identity_bytes)["sha256"]
 
 
 @pytest.mark.parametrize("damage", [

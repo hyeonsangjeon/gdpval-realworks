@@ -193,7 +193,7 @@ def case(tmp_path, monkeypatch, compilation, compiled_cache):
     monkeypatch.setattr(pilot, "compile_pilot", lambda campaign, source: copy.deepcopy(compilation)
                         if (campaign, source) == (ci.CAMPAIGN, SOURCE) else original_compile(campaign, source))
     monkeypatch.setattr(adapter, "compile_cell_grading_plan", lambda *args: copy.deepcopy(compiled_cache(*args)))
-    context = connector.compile_request("pilot/" + compilation[0]["order"][0], SOURCE, TERMINAL)
+    context = connector.compile_request("pilot/" + compilation[0]["order"][ci.FIRST_CELL_ORDINAL], SOURCE, TERMINAL)
     api = GradeHF()
     root = tmp_path / "private-grade"
     state = SimpleNamespace(root=root, context=context, api=api, files={}, status="success")
@@ -720,7 +720,7 @@ def test_lost_grade_ack_valid_server_tip_can_admit_only_an_absent_other_cell(cas
         assert head == api.branches[connector.BRANCH] and observation["cell_id"] == case.context.cell["cell_id"]
         # There is no added grading order: this is canonical membership plus
         # absent per-cell identity, not a scheduler or permission to skip inference.
-        connector._absent(api, api.repo, head, case.context.plan["cells"][5], token, deadline)
+        connector._absent(api, api.repo, head, case.context.plan["cells"][11], token, deadline)
         with pytest.raises(output.OutputPublicationRefused, match="cell_already_claimed"):
             connector._absent(api, api.repo, head, case.context.cell, token, deadline)
     assert (case.root / "publication-receipt.json").read_bytes() == lost_receipt
