@@ -106,6 +106,9 @@ def case(tmp_path, monkeypatch, caplog, compilation):
         "GITHUB_RUN_ATTEMPT": "1", "GITHUB_RUN_ID": "12345", "GITHUB_JOB": "pilot-live",
         "GITHUB_WORKFLOW_REF": ci.REPOSITORY + "/" + connector.WORKFLOW + "@refs/heads/main",
         "PILOT_GRADE_PAID_APPROVAL": "true", "PILOT_GRADE_DRY_RUN": "false",
+        "PILOT_GRADE_APPROVAL_RESULT": "success",
+        "PILOT_GRADE_APPROVAL_REQUEST_SHA256": connector._approval_request_sha256(
+            SOURCE, SELECTOR, "", {"id": "12345", "attempt": 1}),
         "GRADE_CONFIG": "default_v2_sol_max.yaml", "GRADE_FORCE": "false", "GRADE_TASKS_LIMIT": "0",
         "GRADE_TASKS": "", "GRADE_RESUME": "false", "GRADE_RESUME_CHUNK": "0",
         "GRADE_SHARD_COUNT": "1", "GRADE_SHARD_INDEX": "0", "GRADE_RUN_ORDINAL": "1",
@@ -390,7 +393,10 @@ def test_workflow_inspection_is_isolated_without_new_inputs_or_paid_routes():
         assert "!startsWith(inputs.experiment_yaml, 'pilot/')" in jobs[name]["if"]
     plan, live = jobs["pilot-plan"], jobs["pilot-live"]
     assert "inputs.dry_run == true" in plan["if"] and plan["permissions"] == {"contents": "read"}
-    assert "inputs.paid_approval == true" in live["if"] and live["environment"]["name"] == "grading"
+    approval = jobs["pilot-approve-paid"]
+    assert "inputs.paid_approval == true" in live["if"] and approval["environment"]["name"] == "grading"
+    assert "environment" not in live and live["needs"] == ["pilot-approve-paid"]
+    assert "needs.pilot-approve-paid.result == 'success'" in live["if"]
     assert live["permissions"] == {"contents": "read", "id-token": "write"} and live["timeout-minutes"] == 300
     assert "HF_TOKEN" not in live["env"] and "HF_TOKEN" not in plan["env"]
     token_steps = [step for step in live["steps"] if "HF_TOKEN" in step.get("env", {})]

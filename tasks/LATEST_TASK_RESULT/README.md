@@ -1,52 +1,198 @@
 # Latest task result
 
-## PROJECT5-ALIAS-FIXTURE-1822
+## PROJECT5-SOURCE-FIXTURE-2258
 
-### Fixture-only correction and focused result
+Addressed #678 REQUEST-CHANGES `5318640885` at
+`ce00aa0e8c5d3db57eabc607e15423605a6b15bb` on the same clean owned branch.
+Only `test_cli_source_refusal_has_closed_stage_before_local_or_remote_mutation`
+now calls the existing `_authority(monkeypatch, source)` before injecting its
+source defect. Without that call, the offline `GITHUB_ACTIONS=false` default
+correctly stops at approval before the intended source-preflight boundary.
+Production and the global fixture are unchanged.
 
-Addressed REQUEST-CHANGES `5315917785` at
-`e6c6da71d67741a953a8e21b4bf5ddea020e783a` on the same #677 branch. Only
-`tests/test_codex_budget_pilot_grading.py::test_aliases_preserve_fixed_config_and_canonical_run`
-and these two completion records changed. Positive original ordinals are now
-**6, 7, 29**. Every prefix ordinal **0–5** must raise
-`PilotGradingInputRefused` with the exact `registered_cell_controls_refused`
-reason, caused by `CICellRefused` with `ci_prefix_cell_out_of_scope`.
-All existing exact `pilot/cell-NN` alias, slug, canonical run/source-experiment
-ID, fixed grader config, experiment config and standalone `execution_envelope/`
-path assertions remain. No production, workflow, registration, source/runtime
-pin, model, budget or grader behavior changed.
+Real temporary-Git ownership/dirty checks, exact `source_preflight` and
+`grading_source_preflight_refused` diagnostics, `remote_mutation_possible=false`,
+private-value redaction and no-local/remote-mutation assertions remain intact.
+The test still refuses each source defect; no source success is substituted.
 
-At tested SHA `c58196526672e5e5375b0b1830cd6aa97b8d33ac`, one invocation from
-`batch-runner/` ran only:
+At tested SHA `ebe09790be15f152c8d0b1f3915d8ea72e6c5ee5`, the only test
+invocation returned **3 passed in 5.22s**, exit 0:
 
 ```text
-tests/test_codex_budget_pilot_grading.py::test_aliases_preserve_fixed_config_and_canonical_run
+tests/test_codex_budget_pilot_grading_source.py::test_cli_source_refusal_has_closed_stage_before_local_or_remote_mutation
 ```
 
-Result: **1 passed in 2.29s**, exit 0. Only completion records changed after
-that snapshot. The invocation used the existing Python 3.10.12 interpreter,
-credential-free `env -i`, offline flags, disabled plugin autoload and the
-fixture's forbidden auth/HF/runtime boundaries. No dependency was installed.
-The original **22 passed in 166.07s** at
-`6c90e03a2683bdbccaae557c3a654a9d946e7f00` remains the separate prior gate
-validation below, not a combined 23-case result. Neither that family, the
-full file nor the full suite was rerun.
+The `dirty`, `foreign_trust` and `arbitrary_exception` cases ran from
+`batch-runner/` with the existing Python 3.10.12 interpreter, credential-free
+`env -i`, offline flags and disabled pytest plugin autoload. Only completion
+records changed after this tested snapshot.
 
-The leader reported CI run `36113064105`, job `108000707569`, with **1 failed,
-13945 passed, 61 skipped, 46 deselected in 2150.36s**. The sole failure was
-this node's stale positive index0 selection; nine other applicable checks
-passed and deploy was skipped. These are supplied CI observations, not a new
-local or live run. Source review `5315662337` at the reviewed head above
-remains scoped to inspected, unchanged production. It is not permission to
-merge failed CI. New-head delta review and final CI remain, followed by the
-existing leader-owned ref/source/one-cell authorization gates. No CI polling,
-live HF/model/grader/ref call, source reseal, old-claim settlement or new epoch
-occurred. All nine historical admissions remain separate and frozen.
+The leader's completed CI run `36139756627`, job `108086409951`, reported
+**3 failed, 13971 passed, 61 skipped, 46 deselected in 2442.93s**. Eight other
+checks passed. Those three failures, the prior **28 passed in 10.11s** at
+`81a8ae08a1e215799c67d9ed96fe95df47db4a08`, and the initial **6 failed,
+22 passed in 5.40s** at `ec28d6d4f8c1d7c13af6fd4e159292dd46b405ba` remain
+separate observations. No prior selector or full suite was rerun here.
+Review `5318280295` remains scoped to unchanged production; it does not
+authorize merging failed CI. New-head delta review and final CI remain.
 
-The full skill catalog was checked once for this correction. Experiment-report-en
-kept the supplied CI failure, original gate validation and new one-node result
-separate; im-not-ai-en copyedited the records without changing their limits.
-Experiment-design and UI guidance did not apply to this fixture-only change.
+The retained producer `b4c95f8eaee16ae2226f3bf6e0493051fa91d770` and terminal
+`8083504edf4ceb63f3c4929aac57e0f4b6741593`, source policy, workflow and all
+old claims remain unchanged. This fixture-only result does not establish
+Azure token issuance or a real grade. Exact leader live authority remains;
+no live HF/Azure-management/model/judge call, workflow rerun, inference
+regeneration, epoch05, source reseal, Project edit, merge or CI polling occurred.
+
+The full skill catalog was checked once. Experiment-report-en then im-not-ai-en
+preserved test/CI provenance and prior evidence limits. No new design or UI
+work was involved, so those skills did not apply.
+
+## Prior PROJECT5-GRADING-OIDC-2126
+
+### Grading approval and two explicit source identities
+
+Prepared this grading-only repair in a new clean owned worktree from exact
+main `b4c95f8eaee16ae2226f3bf6e0493051fa91d770`. The leader supplied #677's
+delivered head `aac3ee35b0693f2a495e711a49799d6b7252774e`, review `5316268600`
+and all **10** CI checks passed. That review covers the preceding fixed task2
+gate, not this repair. The existing extreme-reasoner context returned
+APPROVE-WITH-CONDITIONS before edits for the protected approval dependency,
+same-run request binding, closed producer/controller split and unchanged
+grader source closure. No additional owner policy choice was needed.
+
+`grade-run.yml` now places the pilot's protected `grading` environment on
+`pilot-approve-paid`. This job has no credentials or OIDC permission and
+exports only a canonical request digest. `pilot-live` requires that exact
+job's successful result and checks the digest before HF, renderer, OIDC,
+claim or judge steps. The digest binds the controller and producer sources,
+selector/cell, retained terminal, fixed grading controls, campaign/refs/target
+and run ID/attempt. Failed, skipped, cancelled, inherited or foreign-request
+approval cannot open the route. Main, exact workflow/checkout SHA, attempt1
+and explicit paid flags remain required.
+
+The execution job no longer carries an environment, preserving the ordinary
+main-ref OIDC context while approval remains mandatory. This is an offline
+routing result, not evidence that Azure will issue a token. No federated
+credential configuration was inspected or changed. The existing OIDC identity,
+route, session and model-connection checks remain before the grading claim.
+The real freeze checker already covers the unchanged `pilot-live` name and
+the new `Approve paid pilot grading` display name; its enforcement was tested,
+not replaced by a new whitelist.
+
+`--reviewed-source-sha` remains the actual reviewed controller/workflow SHA.
+The optional `--producer-source-sha` accepts a distinct source only for the
+recorded04 task2 A1 producer/cell/terminal below, with the existing fixed refs.
+Branch setup/inspection rejects a producer binding. Workload plans, configs,
+retained terminal/manifest/claim/input proofs and materialized inputs keep the
+producer identity. Source preflight and the staged pinned grader use the
+controller checkout. New prepared, claim, terminal-binding and public records
+carry `controller_source_sha` separately; existing `source_sha` still names
+the producer. Both sources and the approval digest are revalidated through
+readiness, admission, publication and reconciliation. A missing historical
+controller field is not adopted as new evidence.
+
+### Supplied preparation pass, OIDC failure and skipped grading
+
+The leader reports grading run `36132571260`, job `108062994893`:
+
+- Renderer passed during **12:04:26–12:04:29 UTC**.
+- Retained-byte checks and real native atomic input materialization passed
+  during **12:04:29–12:04:38 UTC**; `prepared/judge_ready=true` was recorded at
+  **12:04:38.7534969 UTC**.
+- OIDC login failed at **12:04:41 UTC**, with `AADSTS700213` for subject
+  `repo:hyeonsangjeon/gdpval-realworks:environment:grading`.
+- The grading CAS claim and Step8 invocation were skipped. No grade or
+  regrade is established.
+
+The already-retained workload remains source
+`b4c95f8eaee16ae2226f3bf6e0493051fa91d770`, cell
+`0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r1`, terminal
+`8083504edf4ceb63f3c4929aac57e0f4b6741593`. Its supplied deliverable identity
+is **5099 bytes**, SHA256
+`b7fc35b746bd837277ec5d4ef8e94e234bf8c8ab46777d98712494b8d9955191`.
+The real terminal/source/byte/native preparation pass belongs to that run.
+No payload was fetched here, and the offline fixtures do not recover or
+revalidate those live bytes. Preparation is not a grade, score or invoice.
+
+Campaign `budget_pilot_ci_20260925_04` and refs
+`pilot-inference-20260925-04` / `pilot-grades-20260925-04` remain fixed in the
+existing private target with name SHA256
+`a13dedada5465377761961d050e021a4db8e44d6284179a9ce40b562e4396a44`, rooted at
+recorded bootstrap `bfc7ae01ed14490817ceb7cb406adcb9bb95f557`. This repair
+does not regenerate or relabel the retained inference, settle a claim or
+create an epoch05. The old nine admissions and their separate partial costs,
+missing raw-file limits and unknown child causes remain frozen below.
+
+### Focused offline validation
+
+At tested SHA `81a8ae08a1e215799c67d9ed96fe95df47db4a08`, this selector
+returned **28 passed in 10.11s**, exit 0:
+
+```text
+tests/test_codex_budget_pilot_grading_oidc.py
+```
+
+It ran from `batch-runner/` with the existing Python 3.10.12 interpreter,
+credential-free `env -i`, offline flags and disabled pytest plugin autoload.
+The earlier invocation of the same selector at
+`ec28d6d4f8c1d7c13af6fd4e159292dd46b405ba` returned **6 failed, 22 passed in
+5.40s**, exit 1. Its synthetic source fixture incorrectly equated the
+historical manifest base with the reviewed controller. Only that fixture
+assertion and a check that retained-proof refusals reach their intended
+boundary changed before the passing run; production stayed byte-identical.
+These are separate observations, not a combined result.
+
+The family executes the actual workflow approval digest and real compiler,
+materializer, entry/schema/hash validators, claim/CAS, publication and
+reconciliation helpers. HF, original payloads, renderer, source host, native
+rename and judge process are explicit test doubles. Coverage includes
+no-network plan, failed/skipped approval and rerun refusal, main-ref routing,
+old producer plus new controller, request/source/terminal/receipt/cleanup/byte
+tampering, claim before judge, one-use replay refusal, token isolation and
+unchanged inference refs/bytes across private grading actions. Lost publication
+acknowledgment can be reconciled from valid server evidence without rewriting
+the local unresolved receipt or rerunning the judge. No real native capability,
+Azure token, HF mutation, grade or quality measurement is claimed by these tests.
+
+Only the pilot workflow/connector, directly coupled fixtures/assertions, this
+focused family and completion records changed. The Step2 producer, approved
+retention repairs and diagnostics, original-input/model/budget behavior,
+registration/refs, runtime/source pins, fixed grader/config/rubric and generic
+grading jobs remain unchanged. No dependency was installed; no old22/24 family
+or full suite was rerun. Only completion records changed after the passing
+tested snapshot.
+
+New-head review and CI remain. The leader must authorize an exact reviewed
+controller and this unchanged producer/cell/terminal before any later live
+OIDC, grading claim or single fixed-judge invocation. No inference rerun,
+source reseal, claim settlement, workflow dispatch, live HF/model/grader call,
+Azure management/permission change, Project edit or CI polling occurred here.
+
+The full skill catalog was checked once. Experiment-design protected the
+honest source boundary without adding a model axis. Experiment-report-en then
+im-not-ai-en kept supplied live observations, synthetic test results and
+remaining authority distinct. UI/animation and broad repository-readiness
+guidance did not apply.
+
+## Prior gate work and observations
+
+### Prior #677 validation, not rerun
+
+The alias-only correction addressed REQUEST-CHANGES `5315917785` at
+`e6c6da71d67741a953a8e21b4bf5ddea020e783a`; source review `5315662337` was
+scoped to unchanged production. Positive ordinals **6, 7, 29**, typed prefix
+**0–5** refusals and the alias/run/config/standalone assertions remain intact.
+The exact node
+`tests/test_codex_budget_pilot_grading.py::test_aliases_preserve_fixed_config_and_canonical_run`
+returned **1 passed in 2.29s**, exit 0, at
+`c58196526672e5e5375b0b1830cd6aa97b8d33ac` in its credential-free Python
+3.10.12 invocation. The leader's earlier CI run `36113064105`, job
+`108000707569`, reported **1 failed, 13945 passed, 61 skipped, 46 deselected
+in 2150.36s**; the stale positive index0 was its sole failure. Nine other
+applicable checks passed and deploy was skipped. The later delivered #677
+review/check scope is recorded above. The original **22 passed in 166.07s**
+at `6c90e03a2683bdbccaae557c3a654a9d946e7f00` remains the separate prior gate
+validation below. None of these earlier selectors or full CI was rerun here.
 
 ### Prior fixed task2 gate preparation, unchanged
 
@@ -403,7 +549,7 @@ both histories. No current remote claim state was inspected or settled here.
 The new code cannot recover lost files or authorize a different source under
 either existing admission.
 
-### Remaining authority and unchanged controls
+### Prior gate preparation authority and unchanged controls
 
 New-head review and final CI remain, followed by leader-authorized verification
 of both new refs at their own bootstrap, binding of the exact final reviewed

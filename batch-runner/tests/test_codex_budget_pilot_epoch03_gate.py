@@ -154,6 +154,7 @@ def test_mixed_registration_refuses_before_source_or_hf(setup_case, monkeypatch,
 @pytest.mark.parametrize("selector,branch", [("pilot/inference-branch-setup", "pilot-inference-20260925-04"),
                                              ("pilot/branch-setup", "pilot-grades-20260925-04")])
 def test_each_fixed_ref_has_offline_plan_four_request_setup_and_read_only_inspect(setup_case, capsys, monkeypatch, selector, branch):
+    grading_environment(monkeypatch, selector)
     s = setup_case
     frozen = {"main": "e" * 40, "pilot-grades-20260923": "f" * 40,
               INFERENCE02: "8" * 40, GRADING02: "9" * 40}
@@ -177,6 +178,7 @@ def test_each_fixed_ref_has_offline_plan_four_request_setup_and_read_only_inspec
     assert receipt["stage"] == "branch_verified"
     before = {path.name: path.read_bytes() for path in s.root.iterdir()}
     assert setup_cli(s, capsys, selector)[0] == 2 and len(s.calls) == 4
+    grading_environment(monkeypatch, selector.replace("-setup", "-inspect"))
     code, record = setup_cli(s, capsys, selector.replace("-setup", "-inspect"), "inspect")
     assert code == 0 and record["branch_state"] == "present" and record["head"] == retained.BOOTSTRAP
     assert record["remote_mutation_possible"] is record["judge_entry_requested"] is False
@@ -246,7 +248,7 @@ def test_first_claim_output_and_grade_binding_stay_on_active_refs(gate, capsys, 
         assert manifest["status"] == "failed" and manifest["files"] == []
         assert manifest["withheld"]["artifacts"] == pilot._load(s.envelope)["artifacts"]
         assert manifest["receipt"]["known_cost_usd"] == 0.01 and manifest["receipt"]["estimated_cost_usd"] is None
-        grading_environment(monkeypatch)
+        grading_environment(monkeypatch, "pilot/" + FIRST, revision)
         monkeypatch.setenv("HF_TOKEN", TOKEN)
         prepared = grading.prepare(context, tmp_path / "ungraded", _test_api=s.api, _test_transport=SourceOnly())
         monkeypatch.delenv("HF_TOKEN")

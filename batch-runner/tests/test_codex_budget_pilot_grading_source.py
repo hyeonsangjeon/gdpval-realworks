@@ -209,6 +209,9 @@ def _authority(monkeypatch, source):
         "GITHUB_WORKFLOW_REF": ci.REPOSITORY + "/" + connector.WORKFLOW + "@refs/heads/main",
         "GITHUB_RUN_ID": "123456", "GITHUB_JOB": "pilot-live",
         "PILOT_GRADE_PAID_APPROVAL": "true", "PILOT_GRADE_DRY_RUN": "false",
+        "PILOT_GRADE_APPROVAL_RESULT": "success",
+        "PILOT_GRADE_APPROVAL_REQUEST_SHA256": connector._approval_request_sha256(
+            source.sha, "pilot/branch-setup", "", {"id": "123456", "attempt": 1}),
         "GRADE_CONFIG": "default_v2_sol_max.yaml", "GRADE_FORCE": "false", "GRADE_TASKS_LIMIT": "0",
         "GRADE_TASKS": "", "GRADE_RESUME": "false", "GRADE_RESUME_CHUNK": "0",
         "GRADE_SHARD_COUNT": "1", "GRADE_SHARD_INDEX": "0", "GRADE_RUN_ORDINAL": "1",
@@ -247,6 +250,7 @@ def test_cli_plan_does_not_run_source_preflight_or_setup(source, tmp_path, monke
 
 @pytest.mark.parametrize("cause", ["dirty", "foreign_trust", "arbitrary_exception"])
 def test_cli_source_refusal_has_closed_stage_before_local_or_remote_mutation(source, tmp_path, monkeypatch, capsys, cause):
+    _authority(monkeypatch, source)
     if cause == "dirty":
         (source.repository / "unreviewed.txt").write_text("synthetic")
     elif cause == "foreign_trust":
