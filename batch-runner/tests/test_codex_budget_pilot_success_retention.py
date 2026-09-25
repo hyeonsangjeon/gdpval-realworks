@@ -141,6 +141,8 @@ class WriterChildren(CICellChildren):
 
         with self.monkeypatch.context() as scoped, patch.dict(os.environ, options["env"], clear=True), \
                 contextlib.redirect_stdout(self.child_log), contextlib.redirect_stderr(self.child_log):
+            # This is the fake child boundary, not a provider observation.
+            scoped.setenv("CODEX_FOUNDRY_CONNECTION_CONFIRMED", "1")
             scoped.setenv("AZURE_AI_ROUTE_PROFILE", "direct-v1")
             scoped.setenv("AZURE_OPENAI_V1_ENDPOINT", "https://synthetic.services.ai.azure.com/openai/v1/")
             scoped.setattr(step2, "WORKSPACE_DIR", workspace)
