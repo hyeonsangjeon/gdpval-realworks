@@ -13,6 +13,67 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Add a closed, model-free retained-grade readout for `pilot/grade-readout`,
+  prepared from main `6ed0139195c4ebf27bfb63d14b2c8d8c92f8f379`. The leader
+  supplied PR679 review `5319870032` and all **9** checks passed for the
+  preceding approval-input repair, not this reader. A bounded extreme-reasoner
+  decision approved this offline implementation with conditions before edits.
+  The route is fixed to campaign04 cell
+  `0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r1`, producer
+  `b4c95f8eaee16ae2226f3bf6e0493051fa91d770`, inference terminal
+  `8083504edf4ceb63f3c4929aac57e0f4b6741593`, writer/controller
+  `6ed0139195c4ebf27bfb63d14b2c8d8c92f8f379`, writer run `36161541597`,
+  attempt **1**, and `pilot-grades-20260925-04`. A separate truthful observer
+  source resolves the immutable grade revision and verifies original claim,
+  terminal and file identities. The new HF interface exposes only fixed-target
+  metadata and staged file reads. Its protected workflow job has `contents: read`,
+  no OIDC, step-scoped HF credentials and no preparation, claim, judge or write
+  route. Default planning is credential-free. Existing scoring, accounting,
+  publisher rubric checks and all historical bytes/bindings remain unchanged.
+  The summary projects closed outcomes, score denominators, missing-ledger
+  state and recorded costs without raw text, provider labels or invoice claims.
+  At tested SHA `2210aededc285dc324fcbe3ca2a00d4cbb6c079d`, the initial invocation of
+  `tests/test_codex_budget_pilot_grade_readout.py::test_closed_retained_grade_readout`
+  returned **19 failed, 6 passed in 29.37s**, exit **1**. All 19 failures stopped
+  at synthetic fixture publication before their readout assertions. The saved
+  fixture had `summary.cost.unpriced_models=[]`, contrary to the existing
+  schema contract. Fixture-only commit `71d3b4ce0d79afaa72e41a42fc3203b372efd5e1`
+  restores the genuine writer's fixed model list. The six passing cases cover
+  ungraded and graded-without-ledger readouts, offline planning, phase isolation,
+  rerun refusal and observer-source spoof refusal; they are not a full pass.
+  Review `5320991348` authorized a restricted follow-up at
+  `e8cbc74f8bde6e4f34216ed6b20a9364dfaa9c88`: **19 selected, 6 deselected**,
+  then **1 failed, 18 passed, 6 deselected in 41.65s**, exit **1**. It had
+  started before the superseding cost-fixture request and was not repeated.
+  Separately, the leader supplied completed CI run `36168203527`, job
+  `108181029135`: **1 failed, 14035 passed, 61 skipped, 46 deselected in
+  2267.66s**; eight other checks passed. That readout file had **24 passed,
+  1 failed**, with only `partial_cost` failing. Review `5321675005` at the
+  same head requested the bounded correction. The real receipt price table
+  has no price for the fixed judge; usage alone cannot establish a positive
+  known subtotal. Only `partial_cost` now reuses an existing synthetic price
+  fixture, with genuine ledger/receipt serialization and unchanged production
+  prices, model/grader config and projection. At immutable tested SHA
+  `161c9e306e2a483059e273bae2cd59bed8d1a5d7`, the sole corrected-node invocation
+  `tests/test_codex_budget_pilot_grade_readout.py::test_closed_retained_grade_readout[partial_cost]`
+  returned **1 passed in 5.55s**, exit **0**. The positive synthetic subtotal
+  survives in both recorded and ledger-derived receipts, with **111** input,
+  **23** output, **17** cached-input and **8** reasoning tokens, **2** ledger
+  model calls, `call_reachability_unknown`, a null estimate, invoice completeness
+  false and HTTP request count null. These observations remain separate;
+  no combined 25-case pass or live price is claimed. Only the test fixture,
+  its directly coupled assertions and the two completion records changed.
+  Separately, the leader reports real run `36161541597`, job `108159174144`,
+  succeeded with one Step8 invocation, confirmed owned cleanup and acknowledged
+  grade publication. Its actual grade outcome, score and costs remain unobserved.
+  Runs `36132571260` and `36151684790` remain distinct earlier failures; no new
+  inference occurred. No live HF read, regrade, workflow dispatch, source reseal,
+  old-claim edit or CI polling occurred here. New-head delta review/final CI
+  and explicit leader authorization for a live readout remain. The existing
+  catalog/design/reviewer context was retained without a new design review;
+  experiment-report-en then im-not-ai-en preserved separate observations and
+  accounting limits. UI and public-handoff skills did not apply.
+
 - Prepare the closed corrective task2 A1 gate `budget_pilot_ci_20260925_04`
   from exact main `0bb141f3bf93510ccb399800a4aa0901ceb36638`. The leader supplied
   #676 head `88b13f974b8be508cb5c5596db401447469e032c`, review `5314792016`

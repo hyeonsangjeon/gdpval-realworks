@@ -1825,7 +1825,7 @@ jobs:
   # Reserved pilot selectors never enter the generic paid/resume/publication
   # jobs above. These jobs leave inference completion-v1 and HF main unchanged.
   pilot-plan:
-    if: ${{ startsWith(inputs.experiment_yaml, 'pilot/') && inputs.dry_run == true }}
+    if: ${{ startsWith(inputs.experiment_yaml, 'pilot/') && inputs.experiment_yaml != 'pilot/grade-readout' && inputs.dry_run == true }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
@@ -1868,7 +1868,7 @@ jobs:
   pilot-approve-paid:
     name: Approve paid pilot grading
     if: >-
-      ${{ startsWith(inputs.experiment_yaml, 'pilot/') && inputs.dry_run == false && inputs.paid_approval == true &&
+      ${{ startsWith(inputs.experiment_yaml, 'pilot/') && inputs.experiment_yaml != 'pilot/grade-readout' && inputs.dry_run == false && inputs.paid_approval == true &&
           github.repository == 'hyeonsangjeon/gdpval-realworks' && github.event_name == 'workflow_dispatch' &&
           github.ref == 'refs/heads/main' && github.sha == github.workflow_sha && github.run_attempt == '1' }}
     runs-on: ubuntu-24.04
@@ -1942,7 +1942,7 @@ jobs:
 
   pilot-live:
     needs: [pilot-approve-paid]
-    if: ${{ startsWith(inputs.experiment_yaml, 'pilot/') && inputs.dry_run == false && inputs.paid_approval == true && needs.pilot-approve-paid.result == 'success' }}
+    if: ${{ startsWith(inputs.experiment_yaml, 'pilot/') && inputs.experiment_yaml != 'pilot/grade-readout' && inputs.dry_run == false && inputs.paid_approval == true && needs.pilot-approve-paid.result == 'success' }}
     runs-on: ubuntu-24.04
     # Approval is a mandatory same-run dependency above. This execution job
     # retains the main-ref OIDC subject, not the grading-environment subject.
@@ -2128,6 +2128,65 @@ jobs:
             --terminal-revision "$GRADE_TERMINAL" --root "$RUNNER_TEMP/pilot-fixed-grade"
       # No Actions artifact or generic completion-envelope step: all grade,
       # source-identity, ledger, payload and child-log files stay private.
+
+  pilot-readout:
+    # One historical grade, no paid authority. Both dry planning and explicit
+    # reads use this job; only the final read step receives the HF credential.
+    if: >-
+      ${{ inputs.experiment_yaml == 'pilot/grade-readout' && inputs.paid_approval == false &&
+          github.repository == 'hyeonsangjeon/gdpval-realworks' && github.event_name == 'workflow_dispatch' &&
+          github.ref == 'refs/heads/main' && github.sha == github.workflow_sha && github.run_attempt == '1' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    environment:
+      name: grading
+    permissions:
+      contents: read
+    env:
+      GRADE_SELECTOR: ${{ inputs.experiment_yaml }}
+      GRADE_TERMINAL: ${{ inputs.inference_revision }}
+      GRADE_CONFIG: ${{ inputs.grading_config }}
+      GRADE_FORCE: ${{ inputs.force }}
+      GRADE_TASKS_LIMIT: ${{ inputs.tasks_limit }}
+      GRADE_TASKS: ${{ inputs.tasks }}
+      GRADE_RESUME: ${{ inputs.resume }}
+      GRADE_RESUME_CHUNK: ${{ inputs.resume_chunk }}
+      GRADE_SHARD_COUNT: ${{ inputs.shard_count }}
+      GRADE_SHARD_INDEX: ${{ inputs.shard_index }}
+      GRADE_RUN_ORDINAL: ${{ inputs.run_ordinal }}
+      PILOT_WORKFLOW_SHA: ${{ github.workflow_sha }}
+      PILOT_GRADE_PAID_APPROVAL: ${{ inputs.paid_approval }}
+      PILOT_GRADE_DRY_RUN: ${{ inputs.dry_run }}
+      HF_HUB_OFFLINE: '1'
+      HF_DATASETS_OFFLINE: '1'
+      HF_HUB_DISABLE_IMPLICIT_TOKEN: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.11'
+      - name: Install declared dependencies
+        timeout-minutes: 15
+        run: python -m pip install -r batch-runner/requirements.txt
+      - name: Validate the closed readout request without HF access
+        run: |
+          python batch-runner/codex_budget_pilot_grading.py \
+            --selector "$GRADE_SELECTOR" --reviewed-source-sha "$GITHUB_SHA" \
+            --terminal-revision "$GRADE_TERMINAL" --root "$RUNNER_TEMP/pilot-grade-readout"
+      - name: Read and verify the recorded grade without mutation or judge entry
+        if: inputs.dry_run == false && success()
+        timeout-minutes: 5
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          umask 077
+          python batch-runner/codex_budget_pilot_grading.py --phase readout \
+            --selector "$GRADE_SELECTOR" --reviewed-source-sha "$GITHUB_SHA" \
+            --terminal-revision "$GRADE_TERMINAL" --root "$RUNNER_TEMP/pilot-grade-readout"
 
   # The job that closes the gap this whole workflow had.
   #
