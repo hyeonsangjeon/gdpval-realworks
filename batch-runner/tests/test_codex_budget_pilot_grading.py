@@ -330,7 +330,8 @@ class Child(pilot.LocalTransport):
         self.case, self.calls, self.mode = case, 0, "grade"
 
     def require_source(self, plan, parent):
-        assert plan["reviewed_source_sha"] == parent.dispatch.source_base_sha == self.case.context.controller_source_sha
+        assert plan["reviewed_source_sha"] == self.case.context.controller_source_sha
+        assert parent.dispatch.source_base_sha == pilot.load_plan()["base_sha"]
         return {"synthetic_reviewed_source": True}
 
     def checkout(self, destination, sha):

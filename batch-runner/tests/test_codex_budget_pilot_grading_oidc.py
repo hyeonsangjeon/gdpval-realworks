@@ -276,7 +276,9 @@ def test_retained_producer_proofs_still_refuse_tampering(case, capsys, damage):
         case.api.trees[base.OUTPUT][prefix + "/step2_inference_results.json"] += b" "
     case.api.trees[TERMINAL][terminal_path] = retained._encoded(case.terminal)
     case.api.main_snapshot = copy.deepcopy(case.api.trees[TERMINAL])
-    assert base.invoke(case, capsys, "prepare")[0] == 2
+    code, observed = base.invoke(case, capsys, "prepare")
+    assert code == 2 and observed["reason"] != "grading_source_preflight_refused"
+    assert case.api.calls  # Refusal must reach the retained proof, not an earlier fixture boundary.
     assert case.transport.calls == 0 and case.api.events == []
     assert not (case.root / "claim-reserved.json").exists()
 
