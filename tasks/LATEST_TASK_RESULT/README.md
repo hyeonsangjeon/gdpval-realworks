@@ -1,6 +1,161 @@
 # Latest task result
 
-## PROJECT5-READOUT-COST-0404
+## PROJECT5-NEXT-B1-READOUT
+
+Prepared only task2 B1, original ordinal **7**, cell
+`0112fc9b-c3b2-4084-8993-5a4abb1f54f1_B_r1`, in
+`budget_pilot_ci_20260925_04`. Work started in a new clean owned worktree from
+main `66e7ad05975ddf704b9e2aab2b1efce5cd533cef`; the preserved checkout was not
+edited. The leader supplied PR680 review `5321933248` at
+`ec6ef19084c37d812efc6e6a278b8003f9ec2437` and **9** passing checks for the
+preceding readout, not this adapter. No live B1 admission or other live
+operation occurred.
+
+### Source-continuity refusal and bounded repair
+
+A credential-free offline probe at that baseline used the genuine compiler,
+`_binding` and `_claim`, with synthetic host/input coordinates. It reproduced
+`claim_host_policy_mismatch`: `_predecessor` verified the historical A1 claim
+against B1's current-source plan, so the old claim's workflow SHA could not
+equal the current reviewed source. This reproduces the code boundary, not the
+contents of a fetched historical claim.
+
+The only production change is in retention's `_predecessor`. For this exact
+campaign, ordinal7 B1, immediate task2 A1 and inference-branch HEAD
+`8083504edf4ceb63f3c4929aac57e0f4b6741593`, it compiles a separate verification
+plan for producer `b4c95f8eaee16ae2226f3bf6e0493051fa91d770`. The original
+`_terminal` / `_claim` / `_binding` validators still require the historical
+source, host policy, plan/config/input identities, cleanup, acknowledged
+publication, immutable object identities and immediate predecessor. No asserted
+remote hash is adopted. Compiler drift refuses. Other cells and revisions
+retain the ordinary same-source check.
+
+B1's execution plan, real `GITHUB_SHA`/workflow binding, checkout, claim,
+publication and terminal stay on its own reviewed source. Its absent-cell
+check, fixed-parent CAS, one-use reservation and acknowledged admission remain
+required before any child. A race or lost acknowledgment does not refresh the
+parent, retry a write or authorize execution. The adapter reads historical
+evidence; it does not adopt A1's claim, local receipt, native state or clock.
+The fixed refs remain `pilot-inference-20260925-04` and
+`pilot-grades-20260925-04`; no setup, epoch or workflow input was added.
+
+Before production edits, a bounded extreme-reasoner decision returned
+APPROVE-WITH-CONDITIONS for that exact exception and its refusal coverage.
+It is not immutable-head approval or live authorization. Workflow, source
+pins, approved ledger-note/privacy/diagnostic repairs, model, runtime, original
+inputs and fixed grader are unchanged. The compiler retains all **30** IDs
+and their order, with the original prefix **0–5** out of scope. B1 keeps
+GPT-5.4 / Foundry `direct-v1` / `xhigh`, SDK/CLI **0.147.0**, **180 minutes**
+cumulative including waits/recovery, **30-minute** attempts, one inference
+slot and no automatic monetary cutoff. B mechanical continuation applies
+within B1's own retained native thread and deadline, not A1's session.
+
+### Focused offline evidence
+
+At immutable tested SHA `9d5a14949dda2b6f28f507a01c36055f840810fa`, the
+restricted invocation returned **18 passed, 1 deselected in 243.17s**, exit
+**0**, from `batch-runner/`:
+
+```text
+tests/test_codex_budget_pilot_next_b1.py::test_fixed_task2_b1_historical_predecessor
+-k 'not other_cell'
+```
+
+Python **3.10.12** ran with credential-free `env -i`, offline HF flags and pytest
+plugin autoload disabled. The fixture reuses the real compiler, dispatcher,
+serialization, deadlines, publisher and claim/terminal/byte/CAS validators.
+Input provenance, reviewed host/runtime, children and HF are synthetic; socket,
+process, auth and model/grader constructors are blocked. The fake A1 payload
+was newly serialized, not reconstructed from the live terminal's identity.
+The accepted path admits, executes and retains only synthetic B1, verifies its
+current-source terminal and leaves old synthetic A1 bytes unchanged. Refusal
+cases cover source/revision/cell/plan/config/input/object/manifest/cleanup/
+publication tampering, compiler drift, lost output, CAS races, lost claim and
+terminal acknowledgments, source spoofing and reruns. Native continuation and
+the actual remote predecessor have not been exercised by this task.
+
+Keep the initial observation separate: at
+`182ce105f7bd4300979a4012d0687c21abba52cd`, the same selector without `-k`
+returned **18 failed, 1 passed in 210.38s**, exit **1**. All 18 failures were
+in the new test's config read: it used a checkpoint-envelope reader on raw
+config JSON and stopped before B1 admission. Only that fixture line changed
+before the restricted invocation. The `other_cell` immediate-predecessor
+refusal passed initially and was not rerun. This is not a new combined
+19-case pass. No prior family or full suite was run. Only completion records
+changed after the passing tested commit.
+
+### Closed request and remaining authority
+
+The exact baseline request below was derived offline from the existing
+workflow/compiler contract. It was not dispatched and is blocked on baseline
+`66e7ad05975ddf704b9e2aab2b1efce5cd533cef`, which lacks this adapter:
+
+```json
+{
+  "workflow": ".github/workflows/codex-budget-pilot-ci-cell.yml",
+  "ref": "main",
+  "inputs": {
+    "reviewed_source_sha": "66e7ad05975ddf704b9e2aab2b1efce5cd533cef",
+    "cell_id": "0112fc9b-c3b2-4084-8993-5a4abb1f54f1_B_r1",
+    "execute": true,
+    "input_check": false,
+    "output_target_check": false,
+    "output_target_setup": false,
+    "input_transport": "hf_originals",
+    "input_release_id": "",
+    "input_asset_id": "",
+    "input_bundle_sha256": "757603585405da5d7f6817a6a0a23bd530d4b5e4e38b2fd4dc6f318053d240e3"
+  }
+}
+```
+
+The compiled B1 config SHA256 is
+`85852f9b8bdbfa66e5c775283ca1fe092e60af21f51eafe82b0021b83109c049`.
+Its actual immediate predecessor must remain task2 A1 at terminal
+`8083504edf4ceb63f3c4929aac57e0f4b6741593`, with producer
+`b4c95f8eaee16ae2226f3bf6e0493051fa91d770`. The plan/claim hash also binds the
+actual future host; it cannot be borrowed from an offline synthetic host.
+For any later attempt, the leader must explicitly bind `reviewed_source_sha`
+to the exact reviewed main/workflow source containing this repair, matching
+the real GitHub execution identities. Neither the old baseline nor a feature
+branch head is silently substituted for that authority. All other request
+fields above remain fixed. New-head review, CI and the leader's exact B1
+source/attempt authorization remain; no successor is launched automatically.
+
+### Separate supplied A1 readout
+
+The leader reports read-only run `36183957201`, job `108232749275`, succeeded
+at **20:11:07 UTC** using observer
+`66e7ad05975ddf704b9e2aab2b1efce5cd533cef`. It returned
+`verified_retained_grade`, `grade_state=graded`, revision
+`a0ded8b7146c028516d007a9afaa0993797fa1ca`. Writer
+`6ed0139195c4ebf27bfb63d14b2c8d8c92f8f379` / run `36161541597`, the b4
+inference producer and terminal808 above remain unchanged. No regrade or
+inference occurred in that readout or in this coding task.
+
+Task2 A1 earned **62.4 / 65 = 96.0%**. One excluded item has maximum **1**;
+the full-denominator score is **94.55%**, an exclusion lift of **1.45 percentage
+points**. **49** items passed out of **54** included, with **55** judge items
+in total. The ledger is present and records **110 model calls**, not HTTP
+requests, with **339526 input**, **17687 output**, **229914 cached-input** and
+**11558 reasoning tokens**. `price_missing` remains explicit: all monetary
+totals are null and invoice completeness is false. These are grading-ledger
+observations for one task/condition, not cohort evidence or A/B/C superiority.
+This task did not fetch raw grade or inference data or independently calibrate
+the judge.
+
+Earlier grade runs `36132571260` and `36151684790` remain distinct failures.
+The nine older admissions and their partial costs, missing raw files and
+unknown causes remain separate from the retained epoch04 A1; none is reset,
+replayed, recovered or reinterpreted. No live HF/readout/model/judge request,
+workflow dispatch, setup, Azure management, source reseal, claim change,
+permission change, Project edit, merge or CI polling occurred here. The full
+catalog was read once. Experiment-design constrained the source/admin boundary;
+experiment-report-en then im-not-ai-en preserved the separate observations,
+denominators, null costs and remaining authority. UI/animation and
+repo-readiness guidance did not apply to this code-only continuation repair.
+
+## Prior PROJECT5-READOUT-COST-0404
 
 Addressed PR680 REQUEST-CHANGES `5321675005` at
 `e8cbc74f8bde6e4f34216ed6b20a9364dfaa9c88` on the same owned branch/worktree.
@@ -9,7 +164,8 @@ It now uses an existing synthetic price table for its positive-known-cost case;
 real ledger export, receipt serialization and readout retain that subtotal.
 Production prices, workflow, core, rubric, sources, model/grader config and
 scoring remain unchanged. The corrected node passed once; separate evidence
-and its limits are recorded below. The actual retained grade remains unread.
+and its limits are recorded below. The actual retained grade remained unread
+at that task's completion; the subsequent supplied readout is recorded above.
 
 The underlying closed, model-free reader was prepared from main
 `6ed0139195c4ebf27bfb63d14b2c8d8c92f8f379` for PROJECT5-GRADE-READOUT-0201.
@@ -157,7 +313,8 @@ was acknowledged at **16:36:53.7538589 UTC**. One Step8 invocation ran
 **16:44:11.7879489 UTC** and grade publication acknowledged at
 **16:44:16.8008223 UTC**. No new inference occurred. These receipts do not
 establish the actual retained grade outcome, score, usage or cost; publication
-can acknowledge partial, failed or ungraded output. Those values remain unobserved.
+can acknowledge partial, failed or ungraded output. Those values remained
+unobserved at that task's completion, before the readout recorded above.
 
 Earlier run `36132571260`, job `108062994893`, passed renderer and real native
 retained-input preparation, recording `prepared/judge_ready=true` at
@@ -175,8 +332,9 @@ original grade/claims and nine older admissions remain frozen and separate.
 Synthetic fixtures do not establish the contents of any live grade or recover
 missing historical files.
 
-New-head delta review/final CI and explicit leader authorization for one live
-readout remain. No live HF/Azure/model/judge request, workflow dispatch/rerun,
+At that task's completion, new-head delta review/final CI and explicit leader
+authorization for one live readout remained. No live HF/Azure/model/judge
+request, workflow dispatch/rerun,
 paid action, inference regeneration, new epoch, source
 reseal, claim settlement, credential/permission change, Project edit, merge or
 CI polling occurred. The task's full-catalog, experiment-design and bounded

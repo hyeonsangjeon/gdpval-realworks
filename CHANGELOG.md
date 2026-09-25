@@ -65,11 +65,13 @@ entries land under a fresh dated heading the day they merge to `main`.
   its directly coupled assertions and the two completion records changed.
   Separately, the leader reports real run `36161541597`, job `108159174144`,
   succeeded with one Step8 invocation, confirmed owned cleanup and acknowledged
-  grade publication. Its actual grade outcome, score and costs remain unobserved.
+  grade publication. That task did not observe the actual grade outcome, score
+  or costs; the subsequent supplied readout is recorded with the B1 repair below.
   Runs `36132571260` and `36151684790` remain distinct earlier failures; no new
   inference occurred. No live HF read, regrade, workflow dispatch, source reseal,
-  old-claim edit or CI polling occurred here. New-head delta review/final CI
-  and explicit leader authorization for a live readout remain. The existing
+  old-claim edit or CI polling occurred here. At that task's completion,
+  new-head delta review/final CI and explicit leader authorization for a live
+  readout remained. The existing
   catalog/design/reviewer context was retained without a new design review;
   experiment-report-en then im-not-ai-en preserved separate observations and
   accounting limits. UI and public-handoff skills did not apply.
@@ -312,6 +314,68 @@ entries land under a fresh dated heading the day they merge to `main`.
   dispatch, inference, grading or reseal occurred.
 
 ### Fixed
+
+- Bind only campaign04 task2 B1, original ordinal **7**, to its actual immediate
+  historical A1 predecessor. Prepared from main
+  `66e7ad05975ddf704b9e2aab2b1efce5cd533cef` in a new clean owned worktree.
+  The leader supplied prior PR680 review `5321933248` at
+  `ec6ef19084c37d812efc6e6a278b8003f9ec2437` and **9** passing checks; that
+  review does not cover this adapter. A credential-free real-compiler/binding
+  probe with synthetic host/input coordinates reproduced
+  `claim_host_policy_mismatch`: current-source B1 cannot validate the b4 A1
+  claim as though both had the same workflow source. A bounded extreme-reasoner
+  decision approved the exact verification-only exception with conditions
+  before production edits. Retention recompiles producer
+  `b4c95f8eaee16ae2226f3bf6e0493051fa91d770` only for B1 cell
+  `0112fc9b-c3b2-4084-8993-5a4abb1f54f1_B_r1`, its immediate task2 A1 and fixed
+  `pilot-inference-20260925-04` HEAD
+  `8083504edf4ceb63f3c4929aac57e0f4b6741593`. Existing claim/terminal/plan/
+  config/input/object/cleanup/publication validators remain mandatory; compiler
+  drift refuses, and other tuples retain same-source verification. B1 keeps its
+  own truthful reviewed source, host, checkout, claim and retained terminal.
+  Absence, fixed-parent CAS, one-use reservation, acknowledged admission,
+  no-replay, privacy and deadline guards are unchanged. No historical claim,
+  receipt, byte identity, native session or clock is adopted or rewritten.
+  Workflow, source pins, approved producer/privacy/diagnostic fixes, model,
+  original inputs, runtime, fixed grader, refs and **30**-cell order are unchanged.
+  B1 retains GPT-5.4 / `direct-v1` / `xhigh`, SDK **0.147.0**, **180-minute**
+  cumulative and **30-minute** attempt limits, mechanical native continuation
+  within its own cell, one inference slot and no automatic monetary cutoff.
+  At tested SHA `182ce105f7bd4300979a4012d0687c21abba52cd`, the focused selector
+  `tests/test_codex_budget_pilot_next_b1.py::test_fixed_task2_b1_historical_predecessor`
+  returned **18 failed, 1 passed in 210.38s**, exit **1**. All 18 failures were
+  the new test using the checkpoint reader on raw config JSON before B1
+  admission; the other-cell refusal passed. Only that fixture line changed.
+  At immutable tested SHA `9d5a14949dda2b6f28f507a01c36055f840810fa`, the same
+  node with `-k 'not other_cell'` returned **18 passed, 1 deselected in 243.17s**,
+  exit **0**. These remain separate observations, not a combined 19-case pass.
+  The real compiler/CLI/serialization/deadline/publisher/CAS validators used
+  fake input/source/runtime/child/HF boundaries. Synthetic B1 admission through
+  terminal verification, source/hash/input/cleanup/publication tampering,
+  compiler drift, lost writes, CAS races and reruns were covered without live
+  calls or repeating passing cases. Only completion records changed after
+  validation. No prior family/full suite was rerun.
+  Separately, the leader reports successful read-only run `36183957201`, job
+  `108232749275`, at **20:11:07 UTC**: `verified_retained_grade`, state `graded`,
+  revision `a0ded8b7146c028516d007a9afaa0993797fa1ca`. Original writer
+  `6ed0139195c4ebf27bfb63d14b2c8d8c92f8f379` / run `36161541597`, producerb4
+  and terminal808 remain unchanged. Task2 A1 scored **62.4 / 65 = 96.0%**;
+  one excluded item, maximum **1**, gives a full-denominator score of **94.55%**
+  and exclusion lift of **1.45 percentage points**. **49 / 54** included items
+  passed, with **55** judge items. Its ledger records **110 model calls**, not
+  HTTP requests, and **339526 input / 17687 output / 229914 cached-input /
+  11558 reasoning tokens**. `price_missing`, null monetary totals and invoice
+  completeness false remain explicit. This is one task/condition, not cohort
+  or A/B/C superiority evidence. Earlier failed grading runs and nine older
+  admissions/partial costs remain separate; no regrade or payload recovery
+  occurred. The exact baseline B1 request and its fixed config/predecessor
+  binding are in LATEST_TASK_RESULT. It is not dispatched or authorized on
+  the old baseline. New-head review/CI and the leader's explicit exact-main
+  source and B1 attempt authorization remain. No new epoch, branch setup,
+  live HF/model/judge/readout, dispatch, source reseal, claim change, merge or
+  CI polling occurred. Experiment-design, experiment-report-en and im-not-ai-en
+  protected the source boundary and evidence limits; UI/animation and public
+  repository handoff guidance did not apply.
 
 - Canonicalize supported dispatch inputs in the protected pilot approval job
   from exact main `bb39bb0c8c62856af054a69ddbc9c2984652a390`. The leader supplied
