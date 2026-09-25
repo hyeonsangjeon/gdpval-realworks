@@ -205,6 +205,8 @@ def case(tmp_path, monkeypatch, compilation, compiled_cache):
         "PILOT_GRADE_DRY_RUN": "false", "GRADE_CONFIG": "default_v2_sol_max.yaml", "GRADE_FORCE": "false",
         "GRADE_TASKS_LIMIT": "0", "GRADE_TASKS": "", "GRADE_RESUME": "false", "GRADE_RESUME_CHUNK": "0",
         "GRADE_SHARD_COUNT": "1", "GRADE_SHARD_INDEX": "0", "GRADE_RUN_ORDINAL": "1",
+        "PILOT_GRADE_APPROVAL_RESULT": "success",
+        "PILOT_GRADE_APPROVAL_REQUEST_SHA256": connector._context_approval(context, {"id": "12345", "attempt": 1}),
     }
     for key, value in env.items():
         monkeypatch.setenv(key, value)
@@ -327,11 +329,12 @@ class Child(pilot.LocalTransport):
     def __init__(self, case):
         self.case, self.calls, self.mode = case, 0, "grade"
 
-    def require_source(self, *args):
+    def require_source(self, plan, parent):
+        assert plan["reviewed_source_sha"] == parent.dispatch.source_base_sha == self.case.context.controller_source_sha
         return {"synthetic_reviewed_source": True}
 
     def checkout(self, destination, sha):
-        assert sha == SOURCE
+        assert sha == self.case.context.controller_source_sha
         destination.mkdir(mode=0o700)
         # Actual fixed source closure/configs, not original data or a workspace.
         for directory in ("core", "schemas", "prompts"):
@@ -411,8 +414,10 @@ def _judge_output(case, mode):
 
 def invoke(case, capsys, phase="plan", **changes):
     args = ["--selector", changes.get("selector", "pilot/" + case.context.cell["cell_id"]),
-            "--reviewed-source-sha", changes.get("source", SOURCE),
-            "--terminal-revision", changes.get("terminal", TERMINAL),
+            "--reviewed-source-sha", changes.get("source", case.context.controller_source_sha),
+            "--producer-source-sha", changes.get("producer", case.context.plan["reviewed_source_sha"]
+                if case.context.plan["reviewed_source_sha"] != case.context.controller_source_sha else ""),
+            "--terminal-revision", changes.get("terminal", case.context.terminal_revision),
             "--root", str(changes.get("root", case.root)), "--phase", phase]
     diagnostic = []
     original_context = output._error_context
@@ -466,6 +471,7 @@ def judged(case, capsys, mode="grade"):
 
 
 def test_plan_never_looks_up_credentials_or_network(case, capsys, monkeypatch):
+    monkeypatch.delenv("PILOT_GRADE_DRY_RUN")  # Ordinary plan, not the live job's approval check.
     class NoTokens(dict):
         def get(self, key, *args):
             assert key not in {"HF_TOKEN", "HUGGING_FACE_HUB_TOKEN"}
@@ -760,7 +766,9 @@ def test_unverified_grade_server_state_stays_blocked(case, capsys, damage):
 
 
 @pytest.mark.parametrize("mode", ["absent", "existing", "public", "lost_create"])
-def test_only_explicit_fixed_branch_setup_from_bootstrap(case, capsys, mode):
+def test_only_explicit_fixed_branch_setup_from_bootstrap(case, capsys, monkeypatch, mode):
+    monkeypatch.setenv("PILOT_GRADE_APPROVAL_REQUEST_SHA256", connector._approval_request_sha256(
+        SOURCE, "pilot/branch-setup", "", {"id": "12345", "attempt": 1}))
     if mode != "existing":
         case.api.branches.clear()
     if mode == "public":
@@ -783,7 +791,10 @@ def test_workflow_isolates_private_pilot_from_legacy_publication_and_inference()
         assert "!startsWith(inputs.experiment_yaml, 'pilot/')" in jobs[name]["if"]
     plan, live = jobs["pilot-plan"], jobs["pilot-live"]
     assert "inputs.dry_run == true" in plan["if"] and plan["permissions"] == {"contents": "read"}
-    assert "inputs.paid_approval == true" in live["if"] and live["environment"]["name"] == "grading"
+    approval = jobs["pilot-approve-paid"]
+    assert "inputs.paid_approval == true" in live["if"] and approval["environment"]["name"] == "grading"
+    assert "environment" not in live and live["needs"] == ["pilot-approve-paid"]
+    assert "needs.pilot-approve-paid.result == 'success'" in live["if"]
     assert live["permissions"] == {"contents": "read", "id-token": "write"}
     assert live["container"] == jobs["grade"]["container"]
     for job in (plan, live):

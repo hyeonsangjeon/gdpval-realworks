@@ -1833,6 +1833,7 @@ jobs:
     env:
       GRADE_SELECTOR: ${{ inputs.experiment_yaml }}
       GRADE_TERMINAL: ${{ inputs.inference_revision }}
+      PILOT_GRADE_PRODUCER_SOURCE_SHA: ${{ inputs.experiment_yaml == 'pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r1' && 'b4c95f8eaee16ae2226f3bf6e0493051fa91d770' || '' }}
       GRADE_CONFIG: ${{ inputs.grading_config }}
       GRADE_FORCE: ${{ inputs.force }}
       GRADE_TASKS_LIMIT: ${{ inputs.tasks_limit }}
@@ -1861,13 +1862,66 @@ jobs:
         run: |
           python batch-runner/codex_budget_pilot_grading.py \
             --selector "$GRADE_SELECTOR" --reviewed-source-sha "$GITHUB_SHA" \
+            --producer-source-sha "$PILOT_GRADE_PRODUCER_SOURCE_SHA" \
             --terminal-revision "$GRADE_TERMINAL" --root "$RUNNER_TEMP/pilot-fixed-grade"
 
-  pilot-live:
-    if: ${{ startsWith(inputs.experiment_yaml, 'pilot/') && inputs.dry_run == false && inputs.paid_approval == true }}
+  pilot-approve-paid:
+    name: Approve paid pilot grading
+    if: >-
+      ${{ startsWith(inputs.experiment_yaml, 'pilot/') && inputs.dry_run == false && inputs.paid_approval == true &&
+          github.repository == 'hyeonsangjeon/gdpval-realworks' && github.event_name == 'workflow_dispatch' &&
+          github.ref == 'refs/heads/main' && github.sha == github.workflow_sha && github.run_attempt == '1' }}
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
     environment:
       name: grading
+    outputs:
+      request_sha256: ${{ steps.request.outputs.request_sha256 }}
+    steps:
+      # No checkout, credentials or OIDC permission. Only the same-run request
+      # digest crosses this protected boundary; approval is never inherited.
+      - name: Bind the exact protected pilot request
+        id: request
+        env:
+          PILOT_GRADE_INPUTS_JSON: ${{ toJSON(inputs) }}
+          PILOT_WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, re
+          source = os.environ["GITHUB_SHA"]
+          if not (re.fullmatch(r"[0-9a-f]{40}", source) and source == os.environ["PILOT_WORKFLOW_SHA"]
+                  and os.environ["GITHUB_REPOSITORY"] == "hyeonsangjeon/gdpval-realworks"
+                  and os.environ["GITHUB_EVENT_NAME"] == "workflow_dispatch"
+                  and os.environ["GITHUB_REF"] == "refs/heads/main" and os.environ["GITHUB_RUN_ATTEMPT"] == "1"
+                  and re.fullmatch(r"[1-9][0-9]{0,19}", os.environ["GITHUB_RUN_ID"])):
+              raise SystemExit("pilot_grade_approval_context_refused")
+          inputs = json.loads(os.environ["PILOT_GRADE_INPUTS_JSON"])
+          selector = inputs["experiment_yaml"]
+          branch = selector in {"pilot/branch-setup", "pilot/branch-inspect",
+                                "pilot/inference-branch-setup", "pilot/inference-branch-inspect"}
+          producer = ("b4c95f8eaee16ae2226f3bf6e0493051fa91d770"
+                      if selector == "pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r1" else source)
+          request = {
+              "workflow": ".github/workflows/grade-run.yml", "repository": "hyeonsangjeon/gdpval-realworks",
+              "ref": "refs/heads/main", "controller_source_sha": source,
+              "producer_source_sha": None if branch else producer, "cell_id": None if branch else selector[6:],
+              "campaign_id": "budget_pilot_ci_20260925_04",
+              "repository_name_sha256": "a13dedada5465377761961d050e021a4db8e44d6284179a9ce40b562e4396a44",
+              "inference_branch": "pilot-inference-20260925-04", "grading_branch": "pilot-grades-20260925-04",
+              "github_run_id": os.environ["GITHUB_RUN_ID"], "github_run_attempt": 1, "inputs": inputs,
+          }
+          encoded = json.dumps(request, sort_keys=True, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode()
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as stream:
+              stream.write("request_sha256=" + hashlib.sha256(encoded).hexdigest() + "\n")
+          PY
+
+  pilot-live:
+    needs: [pilot-approve-paid]
+    if: ${{ startsWith(inputs.experiment_yaml, 'pilot/') && inputs.dry_run == false && inputs.paid_approval == true && needs.pilot-approve-paid.result == 'success' }}
+    runs-on: ubuntu-24.04
+    # Approval is a mandatory same-run dependency above. This execution job
+    # retains the main-ref OIDC subject, not the grading-environment subject.
     # Step8 retains its 240-minute default budget. Its owned host ceiling is
     # 242 minutes; this separate job reserves setup and private-save headroom.
     timeout-minutes: 300
@@ -1884,6 +1938,7 @@ jobs:
     env:
       GRADE_SELECTOR: ${{ inputs.experiment_yaml }}
       GRADE_TERMINAL: ${{ inputs.inference_revision }}
+      PILOT_GRADE_PRODUCER_SOURCE_SHA: ${{ inputs.experiment_yaml == 'pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r1' && 'b4c95f8eaee16ae2226f3bf6e0493051fa91d770' || '' }}
       GRADE_CONFIG: ${{ inputs.grading_config }}
       GRADE_FORCE: ${{ inputs.force }}
       GRADE_TASKS_LIMIT: ${{ inputs.tasks_limit }}
@@ -1896,6 +1951,8 @@ jobs:
       PILOT_WORKFLOW_SHA: ${{ github.workflow_sha }}
       PILOT_GRADE_PAID_APPROVAL: ${{ inputs.paid_approval }}
       PILOT_GRADE_DRY_RUN: ${{ inputs.dry_run }}
+      PILOT_GRADE_APPROVAL_RESULT: ${{ needs.pilot-approve-paid.result }}
+      PILOT_GRADE_APPROVAL_REQUEST_SHA256: ${{ needs.pilot-approve-paid.outputs.request_sha256 }}
       HF_HUB_OFFLINE: '1'
       HF_DATASETS_OFFLINE: '1'
       HF_HUB_DISABLE_IMPLICIT_TOKEN: '1'
@@ -1922,6 +1979,7 @@ jobs:
           test "$GITHUB_RUN_ATTEMPT" = 1
           python batch-runner/codex_budget_pilot_grading.py \
             --selector "$GRADE_SELECTOR" --reviewed-source-sha "$GITHUB_SHA" \
+            --producer-source-sha "$PILOT_GRADE_PRODUCER_SOURCE_SHA" \
             --terminal-revision "$GRADE_TERMINAL" --root "$RUNNER_TEMP/pilot-fixed-grade"
       - name: Explicit one-use setup of the selected epoch02 ref
         if: inputs.experiment_yaml == 'pilot/branch-setup' || inputs.experiment_yaml == 'pilot/inference-branch-setup'
@@ -1962,6 +2020,7 @@ jobs:
           umask 077
           python batch-runner/codex_budget_pilot_grading.py --phase prepare \
             --selector "$GRADE_SELECTOR" --reviewed-source-sha "$GITHUB_SHA" \
+            --producer-source-sha "$PILOT_GRADE_PRODUCER_SOURCE_SHA" \
             --terminal-revision "$GRADE_TERMINAL" --root "$RUNNER_TEMP/pilot-fixed-grade"
       - name: Validate grading OIDC identity
         if: steps.pilot_input.outputs.judge_ready == 'true'
@@ -2015,6 +2074,7 @@ jobs:
           umask 077
           python batch-runner/codex_budget_pilot_grading.py --phase claim \
             --selector "$GRADE_SELECTOR" --reviewed-source-sha "$GITHUB_SHA" \
+            --producer-source-sha "$PILOT_GRADE_PRODUCER_SOURCE_SHA" \
             --terminal-revision "$GRADE_TERMINAL" --root "$RUNNER_TEMP/pilot-fixed-grade"
       - name: Invoke exactly the compiled fixed Step8 command once
         id: pilot_judge
@@ -2029,6 +2089,7 @@ jobs:
           umask 077
           python batch-runner/codex_budget_pilot_grading.py --phase judge \
             --selector "$GRADE_SELECTOR" --reviewed-source-sha "$GITHUB_SHA" \
+            --producer-source-sha "$PILOT_GRADE_PRODUCER_SOURCE_SHA" \
             --terminal-revision "$GRADE_TERMINAL" --root "$RUNNER_TEMP/pilot-fixed-grade"
       - name: Retain validated private grade and accounting on the grading branch
         if: ${{ always() && !cancelled() && steps.pilot_judge.outcome != 'skipped' && steps.pilot_claim.outcome == 'success' }}
@@ -2039,6 +2100,7 @@ jobs:
           umask 077
           python batch-runner/codex_budget_pilot_grading.py --phase publish \
             --selector "$GRADE_SELECTOR" --reviewed-source-sha "$GITHUB_SHA" \
+            --producer-source-sha "$PILOT_GRADE_PRODUCER_SOURCE_SHA" \
             --terminal-revision "$GRADE_TERMINAL" --root "$RUNNER_TEMP/pilot-fixed-grade"
       # No Actions artifact or generic completion-envelope step: all grade,
       # source-identity, ledger, payload and child-log files stay private.

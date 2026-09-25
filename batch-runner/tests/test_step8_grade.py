@@ -3475,6 +3475,7 @@ def test_grade_workflow_rc7_requires_valid_committed_partial():
         "grade-dry-run",
         "grade",
         "pilot-plan",
+        "pilot-approve-paid",
         "pilot-live",
         "verify-published",
     ]
@@ -3575,21 +3576,29 @@ def test_grade_workflow_rc7_requires_valid_committed_partial():
     # nothing joins a workflow that spends money without being described here.
     # Adding a name to it weakens that unless the newcomer is pinned too.
     pilot_plan = parsed["jobs"]["pilot-plan"]
+    pilot_approval = parsed["jobs"]["pilot-approve-paid"]
     pilot_live = parsed["jobs"]["pilot-live"]
     assert _gh_expr(pilot_plan["if"]) == (
         "startsWith(inputs.experiment_yaml, 'pilot/') && inputs.dry_run == true"
     )
     assert _gh_expr(pilot_live["if"]) == (
         "startsWith(inputs.experiment_yaml, 'pilot/') && "
-        "inputs.dry_run == false && inputs.paid_approval == true"
+        "inputs.dry_run == false && inputs.paid_approval == true && "
+        "needs.pilot-approve-paid.result == 'success'"
     )
     assert pilot_plan["permissions"] == {"contents": "read"}
     assert "environment" not in pilot_plan
     assert "secrets." not in yaml.safe_dump(pilot_plan)
     assert pilot_live["permissions"] == {"contents": "read", "id-token": "write"}
-    assert pilot_live["environment"] == {"name": "grading"}
+    assert "environment" not in pilot_live
+    assert pilot_live["needs"] == ["pilot-approve-paid"] and "needs" not in pilot_plan
+    assert pilot_approval["environment"] == {"name": "grading"}
+    assert pilot_approval["permissions"] == {} and "secrets." not in yaml.safe_dump(pilot_approval)
+    assert pilot_approval["name"].startswith("Approve paid ")
+    assert "approval_inherited" not in yaml.safe_dump(pilot_approval)
+    assert "github.run_attempt == '1'" in pilot_approval["if"]
+    assert "github.sha == github.workflow_sha" in pilot_approval["if"]
     for pilot_job in (pilot_plan, pilot_live):
-        assert "needs" not in pilot_job
         assert "outputs" not in pilot_job
         assert pilot_job["env"]["HF_HUB_OFFLINE"] == "1"
         pilot_dump = yaml.safe_dump(pilot_job)

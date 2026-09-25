@@ -136,6 +136,7 @@ def test_closed04_plan_preserves_original_order_and_controls(gate, monkeypatch, 
     assert context.run.command[2] == "pilot/cell-06" and context.cell["index"] == 6
     with monkeypatch.context() as grade_host:
         grading_environment(grade_host)
+        grade_host.delenv("PILOT_GRADE_DRY_RUN")  # Ordinary offline branch plans.
         for selector in grading.BRANCH_ROUTES:
             assert grading.main(["--selector", selector, "--reviewed-source-sha", SOURCE,
                                  "--root", str(gate.host / "no-plan-state")]) == 0
@@ -216,6 +217,7 @@ def test_each_fixed_ref_setup_is_independent_one_use(setup_case, monkeypatch, ca
         return
     first_root = s.root
     s.root, s.damage = first_root.with_name("separate-grade-ref-reservation"), None
+    grading_environment(monkeypatch, "pilot/branch-setup")
     code, grade = setup_cli(s, capsys, "pilot/branch-setup")
     assert code == 0 and grade["stage"] == "branch_verified"
     assert s.calls[len(expected_calls):] == [("GET", retained.BOOTSTRAP), ("GET", grading.BRANCH),
@@ -274,7 +276,7 @@ def test_first6_retains_original_bytes_then_binds_first_grade_and_next7(gate, mo
     prepared = {"evidence": evidence, "identity_sha256": identity_sha, "materialization": materialized,
         "entry": {"grader_source_hash": "4" * 64, "config_hash": "5" * 64, "renderer_fingerprint": {}}}
     with monkeypatch.context() as grade_host:
-        grading_environment(grade_host)
+        grading_environment(grade_host, "pilot/" + FIRST, terminal)
         grade_host.setenv("HF_TOKEN", TOKEN)
         grade_root = grading._root(s.host / "grade-claim", new=True)
         grade_host.setattr(grading, "_ready", lambda *_: prepared)

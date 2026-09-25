@@ -209,6 +209,9 @@ def _authority(monkeypatch, source):
         "GITHUB_WORKFLOW_REF": ci.REPOSITORY + "/" + connector.WORKFLOW + "@refs/heads/main",
         "GITHUB_RUN_ID": "123456", "GITHUB_JOB": "pilot-live",
         "PILOT_GRADE_PAID_APPROVAL": "true", "PILOT_GRADE_DRY_RUN": "false",
+        "PILOT_GRADE_APPROVAL_RESULT": "success",
+        "PILOT_GRADE_APPROVAL_REQUEST_SHA256": connector._approval_request_sha256(
+            source.sha, "pilot/branch-setup", "", {"id": "123456", "attempt": 1}),
         "GRADE_CONFIG": "default_v2_sol_max.yaml", "GRADE_FORCE": "false", "GRADE_TASKS_LIMIT": "0",
         "GRADE_TASKS": "", "GRADE_RESUME": "false", "GRADE_RESUME_CHUNK": "0",
         "GRADE_SHARD_COUNT": "1", "GRADE_SHARD_INDEX": "0", "GRADE_RUN_ORDINAL": "1",

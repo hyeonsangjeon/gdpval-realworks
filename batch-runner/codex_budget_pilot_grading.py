@@ -40,6 +40,11 @@ BRANCH_ROUTES = {
     "pilot/inference-branch-inspect": ("inspect", retained.BRANCH),
 }
 WORKFLOW = ".github/workflows/grade-run.yml"
+# One recorded workload may be graded by a separately reviewed controller.
+# This is not an arbitrary producer override or authority to replay inference.
+RETAINED_PRODUCER_SOURCE = "b4c95f8eaee16ae2226f3bf6e0493051fa91d770"
+RETAINED_CELL = "0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r1"
+RETAINED_TERMINAL = "8083504edf4ceb63f3c4929aac57e0f4b6741593"
 CLAIM_FORMAT = "codex-pilot-grade-claim-v1"
 RESULT_FORMAT = "codex-pilot-grade-terminal-v1"
 PROOF = "verified_publication_derived_not_independent_provider_authentication"
@@ -57,6 +62,8 @@ _INSPECTION_REASONS = output.TARGET_CHECK_REASONS | frozenset({
     "grading_branch_identity_mismatch", "grading_branch_privacy_unavailable",
     "private_grading_branch_required", "grading_branch_head_unavailable",
     "recorded_bootstrap_required", "grading_branch_seed_mismatch",
+    "same_run_pilot_grading_approval_required", "pilot_grading_approval_request_mismatch",
+    "branch_route_has_no_producer_source",
 })
 _INSPECTION_DRIFT = frozenset({
     "grading_branch_identity_mismatch", "private_grading_branch_required",
@@ -92,35 +99,66 @@ class Context:
     cell: dict
     grading: object
     terminal_revision: str
+    controller_source_sha: str
 
     @property
     def run(self):
         return self.grading.runs[0]
 
 
-def compile_request(selector: str, source: str, terminal: str = "") -> Context | None:
+def compile_request(selector: str, source: str, terminal: str = "", *, producer_source_sha: str = "") -> Context | None:
     retained._target()  # Fixed tracked namespace/fingerprint, never an endpoint input.
     ci._registration_bytes()
     require(output._hash(source, 40), "reviewed_grading_source_required")
     if selector in BRANCH_ROUTES:
+        require(producer_source_sha == "", "branch_route_has_no_producer_source")
         require(terminal == "", "branch_setup_has_no_inference_revision" if BRANCH_ROUTES[selector][0] == "setup"
                 else "branch_inspection_has_no_inference_revision")
         return None
     require(selector.startswith("pilot/"), "canonical_pilot_selector_required")
-    plan, cell, grading = adapter.compile_cell_grading_plan(ci.CAMPAIGN, selector[6:], source)
+    producer = producer_source_sha or source
+    require(output._hash(producer, 40), "retained_producer_source_required")
+    require(producer == source or (
+        ci.CAMPAIGN == "budget_pilot_ci_20260925_04" and selector == "pilot/" + RETAINED_CELL
+        and producer == RETAINED_PRODUCER_SOURCE and terminal == RETAINED_TERMINAL
+        and retained.BRANCH == "pilot-inference-20260925-04" and BRANCH == "pilot-grades-20260925-04"
+    ), "closed_retained_producer_binding_required")
+    plan, cell, grading = adapter.compile_cell_grading_plan(ci.CAMPAIGN, selector[6:], producer)
     require(terminal == "" or output._hash(terminal, 40), "immutable_terminal_revision_required")
-    require(terminal not in {source, retained.BOOTSTRAP, plan["dataset"]["revision"]},
+    require(terminal not in {source, producer, retained.BOOTSTRAP, plan["dataset"]["revision"]},
             "inference_terminal_revision_required")
-    return Context(plan, cell, grading, terminal)
+    return Context(plan, cell, grading, terminal, source)
 
 
-def _ci_authority(source: str) -> dict:
+def _approval_request_sha256(source: str, selector: str, terminal: str, run: dict,
+                             *, producer_source_sha: str = "") -> str:
+    """Same-run approval consistency, not independent provider authentication."""
+    branch = selector in BRANCH_ROUTES
+    request = {
+        "workflow": WORKFLOW, "repository": ci.REPOSITORY, "ref": "refs/heads/main",
+        "controller_source_sha": source,
+        "producer_source_sha": None if branch else producer_source_sha or source,
+        "cell_id": None if branch else selector[6:],
+        "campaign_id": ci.CAMPAIGN, "repository_name_sha256": retained.TARGET_SHA256,
+        "inference_branch": retained.BRANCH, "grading_branch": BRANCH,
+        "github_run_id": run["id"], "github_run_attempt": run["attempt"],
+        "inputs": {"experiment_yaml": selector, "inference_revision": terminal,
+            "grading_config": "default_v2_sol_max.yaml", "force": False, "tasks_limit": 0, "tasks": "",
+            "dry_run": False, "paid_approval": True, "resume": False, "resume_chunk": 0,
+            "shard_count": 1, "shard_index": 0, "run_ordinal": 1},
+    }
+    return pilot._digest(request)
+
+
+def _ci_authority(source: str, selector: str, terminal: str = "", *, producer_source_sha: str = "") -> dict:
+    _workflow_inputs()
     expected = {
         "GITHUB_ACTIONS": "true", "GITHUB_REPOSITORY": ci.REPOSITORY,
         "GITHUB_EVENT_NAME": "workflow_dispatch", "GITHUB_REF": "refs/heads/main",
         "GITHUB_SHA": source, "PILOT_WORKFLOW_SHA": source, "GITHUB_RUN_ATTEMPT": "1",
         "GITHUB_WORKFLOW_REF": ci.REPOSITORY + "/" + WORKFLOW + "@refs/heads/main",
         "PILOT_GRADE_PAID_APPROVAL": "true", "PILOT_GRADE_DRY_RUN": "false",
+        "GITHUB_JOB": "pilot-live",
     }
     require(all(os.environ.get(name) == value for name, value in expected.items()),
             "explicit_first_attempt_reviewed_grading_context_required")
@@ -128,7 +166,22 @@ def _ci_authority(source: str) -> dict:
     require(type(run["id"]) is str and re.fullmatch(r"[1-9][0-9]{0,19}", run["id"]) is not None
             and type(run["job"]) is str and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_-]{0,99}", run["job"]) is not None,
             "grading_run_identity_required")
+    require(os.environ.get("PILOT_GRADE_APPROVAL_RESULT") == "success",
+            "same_run_pilot_grading_approval_required")
+    require(os.environ.get("PILOT_GRADE_APPROVAL_REQUEST_SHA256") == _approval_request_sha256(
+        source, selector, terminal, run, producer_source_sha=producer_source_sha),
+        "pilot_grading_approval_request_mismatch")
     return run
+
+
+def _context_authority(context: Context) -> dict:
+    return _ci_authority(context.controller_source_sha, "pilot/" + context.cell["cell_id"],
+                         context.terminal_revision, producer_source_sha=context.plan["reviewed_source_sha"])
+
+
+def _context_approval(context: Context, run: dict) -> str:
+    return _approval_request_sha256(context.controller_source_sha, "pilot/" + context.cell["cell_id"],
+        context.terminal_revision, run, producer_source_sha=context.plan["reviewed_source_sha"])
 
 
 def _root(path: Path, *, new: bool = False) -> Path:
@@ -210,7 +263,8 @@ def inspect_branch(source: str, *, branch: str = BRANCH) -> dict:
     observed["source_sha"] = source if output._hash(source, 40) else None
     observed.update(outcome="refused", stage="inspection_preflight")
     try:
-        _ci_authority(source)
+        selector = next(name for name, route in BRANCH_ROUTES.items() if route == ("inspect", branch))
+        _ci_authority(source, selector)
         repo = retained._target()
         token = os.environ.get("HF_TOKEN", "")
         require(bool(token) and len(token) <= 4096 and all(33 <= ord(char) <= 126 for char in token),
@@ -254,7 +308,8 @@ def inspect_branch(source: str, *, branch: str = BRANCH) -> dict:
 def setup(root: Path, source: str, *, branch: str = BRANCH, _test_api=None) -> dict:
     """Explicit branch creation only, never implicit in preparation/grading."""
     require(branch in {BRANCH, retained.BRANCH}, "fixed_epoch_branch_required")
-    github_run = _ci_authority(source)
+    selector = next(name for name, route in BRANCH_ROUTES.items() if route == ("setup", branch))
+    github_run = _ci_authority(source, selector)
     result = _observation(stage="branch_setup")
     with ExitStack() as stack:
         with _entry_boundary("branch_root"):
@@ -482,10 +537,11 @@ def _entry_contract(context: Context, checkout: Path, revision: str) -> dict:
 
 
 def prepare(context: Context, root: Path, *, _test_api=None, _test_transport=None) -> dict:
-    _ci_authority(context.plan["reviewed_source_sha"])
+    github_run = _context_authority(context)
     root = _root(root, new=True)
     transport = _test_transport or pilot.LocalTransport()
-    transport.require_source(context.plan, pilot.compile_pilot(ci.CAMPAIGN, context.plan["reviewed_source_sha"])[1])
+    controller_plan, controller_parent, _ = pilot.compile_pilot(ci.CAMPAIGN, context.controller_source_sha)
+    transport.require_source(controller_plan, controller_parent)
     with _lock(root):
         cache = _cache(root, "fetch")
         with retained._session(_test_api, response_bytes_limit=output.MAX_FILE_BYTES) as (api, token, deadline):
@@ -493,6 +549,8 @@ def prepare(context: Context, root: Path, *, _test_api=None, _test_transport=Non
             evidence = _retained_input(context, api, repo, cache, token, deadline)
             manifest = evidence["manifest"]
             prepared = {"cell_id": context.cell["cell_id"], "source_sha": context.plan["reviewed_source_sha"],
+                "controller_source_sha": context.controller_source_sha,
+                "approval_request_sha256": _context_approval(context, github_run),
                 "campaign_id": ci.CAMPAIGN, "inference_branch": retained.BRANCH, "grading_branch": BRANCH,
                 "terminal_revision": context.terminal_revision, "evidence": evidence,
                 "proof_boundary": PROOF, "grading_state": "UNRUN", "judge_ready": False}
@@ -528,7 +586,7 @@ def prepare(context: Context, root: Path, *, _test_api=None, _test_transport=Non
                     _record(root / "prepared.json", prepared)
                     return prepared  # Existing failed evidence, no invented verdict or paid claim.
                 checkout = root / "source"
-                transport.checkout(checkout, context.plan["reviewed_source_sha"])
+                transport.checkout(checkout, context.controller_source_sha)
                 configs._sources(checkout, pilot.load_plan())
                 immutable = {}
                 for name, data in configs._files(context.grading, context.run.run_id).items():
@@ -555,6 +613,8 @@ def _ready(context: Context, root: Path) -> dict:
             and prepared["campaign_id"] == ci.CAMPAIGN
             and prepared["inference_branch"] == retained.BRANCH and prepared["grading_branch"] == BRANCH
             and prepared["source_sha"] == context.plan["reviewed_source_sha"]
+            and prepared["controller_source_sha"] == context.controller_source_sha
+            and prepared["approval_request_sha256"] == _context_approval(context, _context_authority(context))
             and prepared["terminal_revision"] == context.terminal_revision
             and prepared["proof_boundary"] == PROOF and prepared["grading_state"] == "UNRUN"
             and prepared["judge_ready"] is True, "bound_native_materialization_required")
@@ -575,6 +635,8 @@ def _binding(context: Context, prepared: dict, run: dict) -> dict:
         "repository_name_sha256": retained.TARGET_SHA256, "branch": BRANCH, "inference_branch": retained.BRANCH,
         "campaign_id": ci.CAMPAIGN, "cell_id": context.cell["cell_id"], "run_id": context.cell["run_id"],
         "task_id": context.cell["task_id"], "source_sha": context.plan["reviewed_source_sha"],
+        "controller_source_sha": context.controller_source_sha,
+        "approval_request_sha256": _context_approval(context, run),
         "config_sha256": context.cell["config_sha256"], "order_sha256": pilot._digest(context.plan["order"]),
         "grading_plan_sha256": hashlib.sha256(context.grading.canonical_bytes()).hexdigest(),
         "grader_config_sha256": hashlib.sha256(context.run.grader_config_json.encode()).hexdigest(),
@@ -604,7 +666,7 @@ def _validate_binding(value: dict, context: Context, entry: dict) -> None:
                     for key in ("terminal_commit", "terminal_sha256", "output_commit", "manifest_sha256"))
             and observed["terminal_commit"] == context.terminal_revision
             and observed["output_commit"] not in {context.terminal_revision, retained.BOOTSTRAP,
-                 context.plan["reviewed_source_sha"], context.plan["dataset"]["revision"]},
+                 context.plan["reviewed_source_sha"], context.controller_source_sha, context.plan["dataset"]["revision"]},
             "grade_claim_retained_identity_mismatch")
     materialized = value["materialized_result"]
     require(set(materialized) == {"path", "size", "sha256", "result_fingerprint"}
@@ -700,8 +762,8 @@ def _branch_tip(api, repo: str, context: Context, prepared: dict, cache: Path, t
     cell = paths[candidates[0].path]
     preliminary = _cache(cache, "tip_binding")
     value, _ = retained._control(api, repo, head, candidates[0].path, preliminary, token, deadline, written_at=head)
-    other = compile_request("pilot/" + cell["cell_id"], context.plan["reviewed_source_sha"],
-                            value["binding"]["retained"]["terminal_commit"])
+    other = compile_request("pilot/" + cell["cell_id"], context.controller_source_sha,
+        value["binding"]["retained"]["terminal_commit"], producer_source_sha=context.plan["reviewed_source_sha"])
     verified = _grade_terminal(api, repo, head, other, prepared["entry"], _cache(cache, "tip_verified"), token, deadline)
     return head, {"cell_id": cell["cell_id"], "revision": head, **verified["identity"]}
 
@@ -738,7 +800,7 @@ def _commit(api, repo: str, parent: str, files: dict[str, bytes], token: str, de
 
 
 def claim(context: Context, root: Path, *, _test_api=None) -> dict:
-    github_run = _ci_authority(context.plan["reviewed_source_sha"])
+    github_run = _context_authority(context)
     root = _root(root)
     with _lock(root):
         prepared = _ready(context, root)
@@ -766,7 +828,7 @@ def claim(context: Context, root: Path, *, _test_api=None) -> dict:
 def _admission(context: Context, root: Path, prepared: dict) -> dict:
     value = retained._read(root / "claim-receipt.json")
     require(value["outcome"] == "acknowledged" and output._hash(value["returned_commit"], 40)
-            and value["claim"]["binding"] == _binding(context, prepared, _ci_authority(context.plan["reviewed_source_sha"]))
+            and value["claim"]["binding"] == _binding(context, prepared, _context_authority(context))
             and value["claim_identity"] == pilot._identity(retained._encoded(value["claim"]))
             and retained._read(root / "claim-reserved.json") == value["claim"]["binding"],
             "acknowledged_grade_admission_required")
@@ -973,7 +1035,7 @@ def publish(context: Context, root: Path, *, _test_api=None) -> dict:
 
 def reconcile(context: Context, root: Path, *, _test_api=None) -> dict:
     """Fresh server observation only; never repair a writer receipt or regrade."""
-    _ci_authority(context.plan["reviewed_source_sha"])
+    _context_authority(context)
     root = _root(root)
     with _lock(root):
         prepared = _ready(context, root)
@@ -1017,6 +1079,7 @@ def main(argv=None, *, _test_api=None, _test_transport=None) -> int:
     parser = output._Parser(description=__doc__)
     parser.add_argument("--selector", required=True)
     parser.add_argument("--reviewed-source-sha", required=True)
+    parser.add_argument("--producer-source-sha", default="")
     parser.add_argument("--terminal-revision", default="")
     parser.add_argument("--root", required=True, type=Path)
     parser.add_argument("--phase", choices=("plan", "inspect", "setup", "prepare", "claim", "judge", "publish", "reconcile"), default="plan")
@@ -1024,10 +1087,18 @@ def main(argv=None, *, _test_api=None, _test_transport=None) -> int:
     try:
         args = parser.parse_args(argv)
         _workflow_inputs()
-        context = compile_request(args.selector, args.reviewed_source_sha, args.terminal_revision)
+        context = compile_request(args.selector, args.reviewed_source_sha, args.terminal_revision,
+                                  producer_source_sha=args.producer_source_sha)
         reserved = BRANCH_ROUTES.get(args.selector)
         require(args.phase in {"plan", reserved[0]} if reserved is not None
                 else args.phase not in {"setup", "inspect"}, "pilot_grade_mode_conflict")
+        # The live job first uses the offline plan surface to compare its
+        # protected same-run approval, before even renderer/HF/OIDC steps.
+        # Ordinary local/dry plans still require neither credentials nor CI.
+        if args.phase != "plan" or (os.environ.get("GITHUB_ACTIONS") == "true"
+                                   and os.environ.get("PILOT_GRADE_DRY_RUN") == "false"):
+            _ci_authority(args.reviewed_source_sha, args.selector, args.terminal_revision,
+                          producer_source_sha=args.producer_source_sha)
         if args.phase != "plan":
             with _entry_boundary("source_preflight"):
                 source_plan, source_parent, _ = pilot.compile_pilot(ci.CAMPAIGN, args.reviewed_source_sha)
@@ -1052,7 +1123,9 @@ def main(argv=None, *, _test_api=None, _test_transport=None) -> int:
         elif args.phase in {"claim", "publish", "reconcile"}:
             observed = {"claim": claim, "publish": publish, "reconcile": reconcile}[args.phase](context, args.root, _test_api=_test_api)
         public = {"role": "fixed_private_pilot_grading", "repository_name_sha256": retained.TARGET_SHA256,
-            "campaign_id": ci.CAMPAIGN, "source_sha": args.reviewed_source_sha,
+            "campaign_id": ci.CAMPAIGN,
+            "source_sha": args.reviewed_source_sha if context is None else context.plan["reviewed_source_sha"],
+            "controller_source_sha": args.reviewed_source_sha,
             "branch": BRANCH if reserved is None else reserved[1], "inference_branch": retained.BRANCH,
             "cell_id": None if context is None else context.cell["cell_id"], "judge_ready": ready,
             **{key: observed[key] for key in ("outcome", "stage", "reason", "http_status")},

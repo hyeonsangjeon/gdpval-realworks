@@ -63,13 +63,16 @@ def epoch_offline(monkeypatch, compiled, offline):
         monkeypatch.delenv(key, raising=False)
 
 
-def grading_environment(monkeypatch):
+def grading_environment(monkeypatch, selector="pilot/inference-branch-setup", terminal=""):
     for name, value in {
         "GITHUB_ACTIONS": "true", "GITHUB_REPOSITORY": ci.REPOSITORY,
         "GITHUB_EVENT_NAME": "workflow_dispatch", "GITHUB_REF": "refs/heads/main",
         "GITHUB_SHA": SOURCE, "PILOT_WORKFLOW_SHA": SOURCE, "GITHUB_RUN_ATTEMPT": "1",
         "GITHUB_WORKFLOW_REF": ci.REPOSITORY + "/" + grading.WORKFLOW + "@refs/heads/main",
         "PILOT_GRADE_PAID_APPROVAL": "true", "PILOT_GRADE_DRY_RUN": "false",
+        "PILOT_GRADE_APPROVAL_RESULT": "success",
+        "PILOT_GRADE_APPROVAL_REQUEST_SHA256": grading._approval_request_sha256(
+            SOURCE, selector, terminal, {"id": "90001", "attempt": 1}),
         "GITHUB_RUN_ID": "90001", "GITHUB_JOB": "pilot-live",
         "GRADE_CONFIG": "default_v2_sol_max.yaml", "GRADE_FORCE": "false", "GRADE_TASKS_LIMIT": "0",
         "GRADE_TASKS": "", "GRADE_RESUME": "false", "GRADE_RESUME_CHUNK": "0",
@@ -235,6 +238,7 @@ def test_epoch02_plan_is_closed_independent_and_offline(epoch, monkeypatch, caps
 @pytest.mark.parametrize("selector", tuple(grading.BRANCH_ROUTES))
 def test_branch_plans_do_not_lookup_tokens_and_cross_use_is_closed(setup_case, monkeypatch, capsys, selector):
     s = setup_case
+    monkeypatch.delenv("PILOT_GRADE_DRY_RUN")  # Offline plan has no paid approval dependency.
     class NoCredentials(dict):
         def get(self, key, *args):
             assert key not in {"HF_TOKEN", "HUGGING_FACE_HUB_TOKEN", "GITHUB_TOKEN"}
@@ -269,7 +273,8 @@ def test_registration_mixture_refuses_before_source_token_or_mutation(setup_case
 
 @pytest.mark.parametrize("selector,branch", [("pilot/inference-branch-setup", retained.BRANCH),
                                              ("pilot/branch-setup", grading.BRANCH)])
-def test_one_exact_ref_setup_uses_real_sdk_transport_and_own_receipt(setup_case, capsys, selector, branch):
+def test_one_exact_ref_setup_uses_real_sdk_transport_and_own_receipt(setup_case, monkeypatch, capsys, selector, branch):
+    grading_environment(monkeypatch, selector)
     s = setup_case
     code, record = setup_cli(s, capsys, selector)
     assert code == 0 and record["outcome"] == "acknowledged" and record["branch"] == branch
@@ -324,7 +329,8 @@ def test_setup_refusals_keep_reservation_and_never_create_other_ref(setup_case, 
 
 
 @pytest.mark.parametrize("present", [False, True])
-def test_inference_inspection_is_two_reads_not_setup_or_acknowledgment(setup_case, capsys, present):
+def test_inference_inspection_is_two_reads_not_setup_or_acknowledgment(setup_case, monkeypatch, capsys, present):
+    grading_environment(monkeypatch, "pilot/inference-branch-inspect")
     s = setup_case
     if present:
         s.branches[retained.BRANCH] = retained.BOOTSTRAP
@@ -443,7 +449,7 @@ def test_epoch02_withholding_stays_failed_ungraded_and_ambiguity_blocks_next(epo
     else:
         revision = s.api.branches[retained.BRANCH]
         context = grading.compile_request("pilot/" + s.selected, SOURCE, revision)
-        grading_environment(monkeypatch)
+        grading_environment(monkeypatch, "pilot/" + s.selected, revision)
         monkeypatch.setenv("HF_TOKEN", TOKEN)
         prepared = grading.prepare(context, tmp_path / "ungraded", _test_api=s.api, _test_transport=SourceOnly())
         monkeypatch.delenv("HF_TOKEN")
@@ -456,7 +462,9 @@ def test_epoch02_withholding_stays_failed_ungraded_and_ambiguity_blocks_next(epo
 def test_workflows_route_only_closed_epoch_modes_without_new_authority():
     workflow = yaml.safe_load((pilot.ROOT / grading.WORKFLOW).read_text())
     live = workflow["jobs"]["pilot-live"]
-    assert live["environment"]["name"] == "grading" and live["timeout-minutes"] == 300
+    assert workflow["jobs"]["pilot-approve-paid"]["environment"]["name"] == "grading"
+    assert "environment" not in live and live["timeout-minutes"] == 300
+    assert live["needs"] == ["pilot-approve-paid"] and "needs.pilot-approve-paid.result == 'success'" in live["if"]
     assert "HF_TOKEN" not in live["env"]
     steps = live["steps"]
     setup_step = next(step for step in steps if "--phase setup" in step.get("run", ""))
