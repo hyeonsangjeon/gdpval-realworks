@@ -286,7 +286,7 @@ def test_success_writer_retention_contract(success_case, monkeypatch, capsys, da
     plan = read_plan(s)
     cell = next(cell for cell in plan["cells"] if cell["cell_id"] == s.selected)
     completion_bytes = s.envelope.read_bytes()
-    completion = json.loads(completion_bytes)
+    completion = pilot._load(s.envelope)
     status = "failed" if damage == "failed_withheld" else "succeeded"
     assert completion["status"] == status and completion["exit_code"] == (1 if status == "failed" else 0)
     assert completion["reason"] == ("child_nonzero_exit" if status == "failed" else None)
@@ -336,7 +336,7 @@ def test_success_writer_retention_contract(success_case, monkeypatch, capsys, da
     accepted = {"supported", "absent", "failed_withheld", "grade_bytes", "grade_identity"}
     if damage in accepted:
         assert code == 0 and record["outcome"] == "acknowledged"
-        receipt = pilot._load(cell_root(s) / retained.TERMINAL_RECEIPT)
+        receipt = retained._read(cell_root(s) / retained.TERMINAL_RECEIPT)
         assert receipt["terminal_commit"] == s.api.branches[retained.BRANCH]
         tree = s.api.trees[receipt["output_commit"]]
         _, _, prefix = retained._paths(cell)
@@ -356,7 +356,7 @@ def test_success_writer_retention_contract(success_case, monkeypatch, capsys, da
         assert code == 2
         if damage == "publication_lost":
             assert record["outcome"] == "unresolved" and s.api.commits == ["admission", "output"]
-            receipt = pilot._load(cell_root(s) / retained.TERMINAL_RECEIPT)
+            receipt = retained._read(cell_root(s) / retained.TERMINAL_RECEIPT)
             assert receipt["output_commit"] is receipt["terminal_commit"] is None
             assert boundary(s, capsys, monkeypatch, "--retain")[0] == 2
             assert s.api.commits == ["admission", "output"]  # No publication retry.
