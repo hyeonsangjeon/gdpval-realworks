@@ -1,11 +1,18 @@
 # Latest task result
 
-## PROJECT5-GRADE-READOUT-0201
+## PROJECT5-READOUT-COST-0404
 
-Implemented a closed, model-free readout of one retained grade in a new clean
-owned worktree from main `6ed0139195c4ebf27bfb63d14b2c8d8c92f8f379`. The draft
-is validation-blocked: the only offline invocation returned **19 failed,
-6 passed**, and the subsequent fixture correction has not been rerun.
+Addressed PR680 REQUEST-CHANGES `5321675005` at
+`e8cbc74f8bde6e4f34216ed6b20a9364dfaa9c88` on the same owned branch/worktree.
+Only the `partial_cost` test fixture and its directly coupled assertions changed.
+It now uses an existing synthetic price table for its positive-known-cost case;
+real ledger export, receipt serialization and readout retain that subtotal.
+Production prices, workflow, core, rubric, sources, model/grader config and
+scoring remain unchanged. The corrected node passed once; separate evidence
+and its limits are recorded below. The actual retained grade remains unread.
+
+The underlying closed, model-free reader was prepared from main
+`6ed0139195c4ebf27bfb63d14b2c8d8c92f8f379` for PROJECT5-GRADE-READOUT-0201.
 The leader supplied PR679's exact-head review `5319870032` and all **9** checks
 passed for the preceding approval-input repair. That review does not cover
 this reader. A bounded extreme-reasoner decision returned
@@ -58,33 +65,82 @@ judge output, paths, notes or credentials are projected. Invoice completeness
 stays false and HTTP request count stays null. Fixed grader/model/runtime/input/
 budget controls, source pins, historical bytes and one-use guards are unchanged.
 
-### One offline invocation, then an unrerun fixture correction
+### Fixture correction and separate validation evidence
 
-At tested SHA `2210aededc285dc324fcbe3ca2a00d4cbb6c079d`, the sole invocation
+The committed receipt price table has no `azure:gpt-5.6-sol` entry. Settling
+usage against that table does not establish a positive known cost, so the old
+fixture's positive-subtotal assertion was unsupported. No positive recorded
+amount was lost by the projection. Only `partial_cost` now copies the existing
+`PRICE_TABLE` from `test_cost_receipts_keep_every_call_that_happened` into a
+temporary, explicitly synthetic table for the unchanged fixed judge identity.
+No production rate was added, historical row repriced or unknown amount filled
+with zero. Other scenarios keep the real table. The real CostReceiptLedger,
+Step8 writer, publisher and readout validators remain in the path.
+
+At immutable tested SHA `161c9e306e2a483059e273bae2cd59bed8d1a5d7`, the only
+invocation after that correction selected **1** node and returned **1 passed
+in 5.55s**, exit **0**:
+
+```text
+tests/test_codex_budget_pilot_grade_readout.py::test_closed_retained_grade_readout[partial_cost]
+```
+
+The positive known subtotal matches the recorded task receipt and ledger-derived
+receipt. Assertions retain **111** input, **23** output, **17** cached-input and
+**8** reasoning tokens, **2** model calls in the ledger, partial status,
+`call_reachability_unknown`, a null estimate, invoice completeness false and
+HTTP request count null. The unsettled call remains explicit missingness;
+the synthetic subtotal is neither a live price nor an invoice. Only completion
+records changed after this tested commit.
+
+The following earlier observations remain separate. At tested SHA
+`2210aededc285dc324fcbe3ca2a00d4cbb6c079d`, the initial invocation
 returned **19 failed, 6 passed in 29.37s**, exit **1**:
 
 ```text
 tests/test_codex_budget_pilot_grade_readout.py::test_closed_retained_grade_readout
 ```
 
-It ran from `batch-runner/` with existing Python **3.10.12**, credential-free
-`env -i`, offline flags and disabled pytest plugin autoload. Fixtures use the
+Local selections ran from `batch-runner/` with existing Python **3.10.12**,
+credential-free `env -i`, offline flags and disabled pytest plugin autoload. Fixtures use the
 real compiler, Step8 serialization, CostReceiptLedger export and publisher
 with fake source/native/renderer/runtime/HF boundaries. Every readout mutation,
 preparation and judge seam is forbidden after synthetic fixture publication.
 The six passing cases are `ungraded`, `missing_ledger`, `plan`, `cross_phase`,
 `rerun` and `observer_spoof`. All **19** failures stopped at the fixture's
-publication assertion before their readout assertions, so their intended
-source/hash/privacy/accounting coverage is not a passing result.
+publication assertion before their readout assertions, so that invocation
+did not establish passing source/hash/privacy/accounting coverage.
 
 Read-only inspection of the saved synthetic grade found
 `summary.cost.unpriced_models=[]`. The fixture's summary rebuild omitted the
 fixed model list supplied by the genuine Step8 writer, violating the existing
 schema contract. Fixture-only commit `71d3b4ce0d79afaa72e41a42fc3203b372efd5e1`
-restores that argument. It was not rerun under the one-invocation limit.
-Production is byte-identical to the tested code commit; that does not establish
-a full pass. No prior selector, full suite or live diagnostic was run, and no
-dependency was installed. The earlier approval-input result remains separate:
+restores that argument without changing production.
+
+Review `5320991348` then authorized a restricted selection at
+`e8cbc74f8bde6e4f34216ed6b20a9364dfaa9c88`. That invocation started before
+PROJECT5-READOUT-COST-0404 arrived. It collected **25** cases, selected **19**
+and deselected **6**, returning **1 failed, 18 passed, 6 deselected in 41.65s**,
+exit **1**, using:
+
+```text
+tests/test_codex_budget_pilot_grade_readout.py::test_closed_retained_grade_readout
+-k 'not (ungraded or missing_ledger or plan or cross_phase or rerun or observer_spoof)'
+```
+
+Only `partial_cost` failed: `known_cost_usd` was null and the positive-cost
+comparison raised `TypeError`. The restricted selection was not repeated.
+
+Separately, the leader supplied completed CI run `36168203527`, job
+`108181029135`, at the same head: **1 failed, 14035 passed, 61 skipped,
+46 deselected in 2267.66s**. Eight other checks passed. The readout file had
+**24 passed, 1 failed**, again only `partial_cost`; this is supplied CI evidence,
+not a local full-file pass. Review `5321675005` superseded the previous request
+with this one-node cost-fixture correction. The earlier **6 passed / 3 running**
+CI observation was not final gate approval. After the superseding request,
+no passing case was repeated. These observations are not combined into a
+25-case passing result. No full suite, live diagnostic or dependency
+installation occurred here. The earlier approval-input result remains separate:
 **37 passed in 5.35s** at `912a5f738db29d11628a859dec8f8855e94622f1` for
 `tests/test_codex_budget_pilot_approval_inputs.py::test_dispatch_inputs_bind_actual_approval_to_connector`.
 Earlier split test/CI observations and frozen partial-cost histories remain in
@@ -119,15 +175,16 @@ original grade/claims and nine older admissions remain frozen and separate.
 Synthetic fixtures do not establish the contents of any live grade or recover
 missing historical files.
 
-Validation of the corrected fixture, new-head review/CI and explicit leader
-authorization for one live readout remain. No live HF/Azure/model/judge request,
-workflow dispatch/rerun, paid action, inference regeneration, new epoch, source
+New-head delta review/final CI and explicit leader authorization for one live
+readout remain. No live HF/Azure/model/judge request, workflow dispatch/rerun,
+paid action, inference regeneration, new epoch, source
 reseal, claim settlement, credential/permission change, Project edit, merge or
-CI polling occurred. The full skill catalog was checked once. Experiment-design
-kept the source/evidence boundary fixed without adding an experiment axis;
-experiment-report-en then im-not-ai-en preserved separate observations and
-non-claims. UI/animation and repo-readiness guidance did not apply because
-there is no UI work or new public repository handoff.
+CI polling occurred. The task's full-catalog, experiment-design and bounded
+reviewer context was retained; no new design review was needed for this
+fixture-only correction. Experiment-report-en then im-not-ai-en preserved
+separate observations, synthetic-price limits and non-claims. UI/animation and
+repo-readiness guidance did not apply because there is no UI work or new public
+repository handoff.
 
 ## Prior PROJECT5-SOURCE-FIXTURE-2258
 

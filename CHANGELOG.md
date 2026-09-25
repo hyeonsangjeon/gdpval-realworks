@@ -32,26 +32,47 @@ entries land under a fresh dated heading the day they merge to `main`.
   publisher rubric checks and all historical bytes/bindings remain unchanged.
   The summary projects closed outcomes, score denominators, missing-ledger
   state and recorded costs without raw text, provider labels or invoice claims.
-  At tested SHA `2210aededc285dc324fcbe3ca2a00d4cbb6c079d`, the sole invocation of
+  At tested SHA `2210aededc285dc324fcbe3ca2a00d4cbb6c079d`, the initial invocation of
   `tests/test_codex_budget_pilot_grade_readout.py::test_closed_retained_grade_readout`
   returned **19 failed, 6 passed in 29.37s**, exit **1**. All 19 failures stopped
   at synthetic fixture publication before their readout assertions. The saved
   fixture had `summary.cost.unpriced_models=[]`, contrary to the existing
   schema contract. Fixture-only commit `71d3b4ce0d79afaa72e41a42fc3203b372efd5e1`
-  restores the genuine writer's fixed model list; it was not rerun under the
-  one-invocation limit. Validation remains blocked. The six passing cases cover
+  restores the genuine writer's fixed model list. The six passing cases cover
   ungraded and graded-without-ledger readouts, offline planning, phase isolation,
   rerun refusal and observer-source spoof refusal; they are not a full pass.
+  Review `5320991348` authorized a restricted follow-up at
+  `e8cbc74f8bde6e4f34216ed6b20a9364dfaa9c88`: **19 selected, 6 deselected**,
+  then **1 failed, 18 passed, 6 deselected in 41.65s**, exit **1**. It had
+  started before the superseding cost-fixture request and was not repeated.
+  Separately, the leader supplied completed CI run `36168203527`, job
+  `108181029135`: **1 failed, 14035 passed, 61 skipped, 46 deselected in
+  2267.66s**; eight other checks passed. That readout file had **24 passed,
+  1 failed**, with only `partial_cost` failing. Review `5321675005` at the
+  same head requested the bounded correction. The real receipt price table
+  has no price for the fixed judge; usage alone cannot establish a positive
+  known subtotal. Only `partial_cost` now reuses an existing synthetic price
+  fixture, with genuine ledger/receipt serialization and unchanged production
+  prices, model/grader config and projection. At immutable tested SHA
+  `161c9e306e2a483059e273bae2cd59bed8d1a5d7`, the sole corrected-node invocation
+  `tests/test_codex_budget_pilot_grade_readout.py::test_closed_retained_grade_readout[partial_cost]`
+  returned **1 passed in 5.55s**, exit **0**. The positive synthetic subtotal
+  survives in both recorded and ledger-derived receipts, with **111** input,
+  **23** output, **17** cached-input and **8** reasoning tokens, **2** ledger
+  model calls, `call_reachability_unknown`, a null estimate, invoice completeness
+  false and HTTP request count null. These observations remain separate;
+  no combined 25-case pass or live price is claimed. Only the test fixture,
+  its directly coupled assertions and the two completion records changed.
   Separately, the leader reports real run `36161541597`, job `108159174144`,
   succeeded with one Step8 invocation, confirmed owned cleanup and acknowledged
   grade publication. Its actual grade outcome, score and costs remain unobserved.
   Runs `36132571260` and `36151684790` remain distinct earlier failures; no new
   inference occurred. No live HF read, regrade, workflow dispatch, source reseal,
-  old-claim edit or CI polling occurred here. New-head review/CI, validation of
-  the corrected fixture and explicit leader authorization for a live readout
-  remain. Experiment-design, experiment-report-en and im-not-ai-en preserved
-  source, evidence and accounting boundaries; UI and public-handoff skills did
-  not apply.
+  old-claim edit or CI polling occurred here. New-head delta review/final CI
+  and explicit leader authorization for a live readout remain. The existing
+  catalog/design/reviewer context was retained without a new design review;
+  experiment-report-en then im-not-ai-en preserved separate observations and
+  accounting limits. UI and public-handoff skills did not apply.
 
 - Prepare the closed corrective task2 A1 gate `budget_pilot_ci_20260925_04`
   from exact main `0bb141f3bf93510ccb399800a4aa0901ceb36638`. The leader supplied
