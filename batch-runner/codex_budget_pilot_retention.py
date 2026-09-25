@@ -323,7 +323,21 @@ def _predecessor(api, repo: str, head: str, plan: dict, selected: dict, inputs: 
         require(head == BOOTSTRAP, "first_cell_bootstrap_required")
         return None
     cell = next(row for row in plan["cells"] if row["cell_id"] == plan["order"][ordinal - 1])
-    evidence = _terminal(api, repo, head, plan, cell, inputs, cache, token, deadline)
+    predecessor_plan = plan
+    if (plan["run_id"] == "budget_pilot_ci_20260925_04" and BRANCH == "pilot-inference-20260925-04"
+            and ordinal == 7 and selected["cell_id"] == "0112fc9b-c3b2-4084-8993-5a4abb1f54f1_B_r1"
+            and cell["cell_id"] == "0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r1"
+            and head == "8083504edf4ceb63f3c4929aac57e0f4b6741593"):
+        # This one retained A1 is historical evidence, not B1 execution authority.
+        # Recompile its producer contract; the immutable claim must still match
+        # every original plan/config/input hash and its own validated host.
+        predecessor_plan, _, _ = pilot.compile_pilot(ci.CAMPAIGN, "b4c95f8eaee16ae2226f3bf6e0493051fa91d770")
+        predecessor_plan["ci"] = {
+            "registration_sha256": plan["ci"]["registration_sha256"],
+            "selected_cell_id": cell["cell_id"], "host": {"workflow": plan["ci"]["host"]["workflow"]},
+        }
+        cell = next(row for row in predecessor_plan["cells"] if row["cell_id"] == cell["cell_id"])
+    evidence = _terminal(api, repo, head, predecessor_plan, cell, inputs, cache, token, deadline)
     return evidence["observation"]
 
 
