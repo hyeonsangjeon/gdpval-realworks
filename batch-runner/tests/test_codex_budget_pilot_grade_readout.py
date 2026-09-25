@@ -93,7 +93,8 @@ def _writer(case, capsys, tmp_path, monkeypatch, scenario):
         payload = pilot._json_object(path.read_bytes())
         for task in payload["tasks"]:
             task["grading_cost"] = receipt
-        payload["summary"] = step8._compute_summary(payload["tasks"])
+        payload["summary"] = step8._compute_summary(payload["tasks"],
+            unpriced_models=step8._unpriced_models(json.loads(case.context.run.grader_config_json)))
         payload["cost_ledger"] = ledger_reference(str(ledger_path.relative_to(case.root / "source")), digest)
         path.write_bytes(base._json(payload))
     assert base.invoke(case, capsys, "publish")[0] == 0
