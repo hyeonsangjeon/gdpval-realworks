@@ -1,6 +1,161 @@
 # Latest task result
 
-## PROJECT5-FIX-EXACT-HF-PHASE-CONTRACTS
+## PROJECT5-TASK5-FAILED-B1-PREP
+
+Prepared only the recorded failed task5 B1 under the leader's explicit
+`task5-b1-model-free-ungraded` policy. The new focused offline selector returned
+**66 passed in 116.09s**, exit **0**, at immutable SHA
+`d0c4577a51124b55970dec67ad2cdf7804e3c658`. This is local validation of a
+scoreless recorder and its refusal paths, not a live record, judge result or
+quality score. No push or republication is authorized for this delta.
+
+Work continued in the same clean owned PR686 worktree from
+`72f1b999583baa95f5e5bbf8d364928f9c326c27`. The leader supplied review
+`5326493571` and all nine passing CI checks for that published head. Those
+checks and that review do not cover this new local delta; they were not polled
+or rerun. No new branch, worktree or PR was created.
+
+### Supplied failure, not a new execution or cause diagnosis
+
+The following observations were supplied by the leader, not obtained through
+live queries in this task. Only this fourth fixed failure is newly eligible;
+the policy is not restricted to the A arm and does not admit arbitrary failures.
+
+| Identity or observation | Supplied value |
+|---|---|
+| Campaign | `budget_pilot_ci_20260925_04` |
+| Cell / ordinal | `0818571f-5ff7-4d39-9d2c-ced5ae44299e_B_r1` / 25 |
+| Original inference producer | `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e` |
+| Inference run / job / workflow attempt | `36248894311` / `108423096630` / 1 |
+| Claim acknowledgment | `2026-09-26T14:36:12.1089962Z` |
+| Execution, UTC on 2026-09-26 | `14:36:19` to `17:09:42`; outer step **153m23s** |
+| Failed-terminal acknowledgment | `2026-09-26T17:09:49.6033581Z` |
+| Run failure | `2026-09-26T17:09:58Z` |
+| Artifact | `10911580861` |
+| Independently recomputed completion payload checksum | `dd05f2ed43235b69d9eecfefadfb0a5ebd68d83b31daf38355a4acf6f0a21c5b` |
+| Execution outcome | `failed`, exit 1, `child_nonzero_exit`, one child, cleanup confirmed, cell timeout false, zero deliverables, no grade |
+| Result identity | 7491 bytes; SHA256 `09b4e053fb77891211fb436d1f9fd7346adfbd00a7972b1cc01fd72839ed5b06` |
+| Ledger identity | 30095 bytes; SHA256 `e85daeb7e849b8a7a0eaa0f9eebc7feb1cb6da0ddf6173d5ef6f62b851e9cf7a` |
+| Inference config | `db68ac51fb78fcce2497ee874aad33de5c81da3343736c8b75a4da17b88304d8` |
+| Partial known inference receipt | USD **0.347961**; 283806 input, 12530 output, 244224 cached and 10162 reasoning tokens |
+| Missing accounting | Estimated cost null; `invoice_complete=false`; HTTP request count null |
+
+The underlying child cause and internal attempt count remain unknown.
+The outer step is not evidence of 180-minute exhaustion. The failure was not
+rerun or reclassified. No private inference terminal, future record revision
+or record run was supplied or invented. The completion checksum identifies
+fixed content, not the missing private terminal revision. Raw payloads were
+not recovered, and no names or formats were inferred from their sizes.
+
+### Exact model-free predecessor boundary
+
+The new record must follow actual task5 A1 UNGRADED evidence for inference run
+`36247236594`, completion
+`b23da4f1f5e81999039c473d27f3a70cc0d0681672ad08be0f9674b618915c97`, under
+the same explicitly declared future grading controller. That controller remains
+distinct from producer780 and is not taken from remote metadata. The only new
+link is ordinal **25 → 24 → 23 → 22**: task5 B1, task5 A1 UNGRADED, task4 A2
+UNGRADED, then the actual ordinary task4 B2 grade.
+
+The existing A1 verifier still verifies task4 A2 and A2's ordinary B2 backing
+grade. A B1-only helper additionally reads the original claims through fixed
+control paths and bound identities. It checks all six predecessor claim/terminal
+revisions before the first CAS, then all eight including B1's own claim and
+terminal on readback. Revisions must be pairwise distinct, including nonadjacent
+ones; exact decreasing cells, parent identities, canonical typed claim bindings,
+full retained-inference equality and original object/history proofs remain
+required. There is no tag-driven dispatch or arbitrary recursive history walk.
+
+The three earlier policy tags, task4 predecessor/consumer rules and task3 A1's
+historical task2 A2 handoff remain unchanged. Ordinary judged terminals still
+require a real Step8 invocation and verified cleanup. B1's separate terminal
+has `outcome=ungraded` and `model_invoked=false`, with no numeric quality score,
+rubric verdict, Step8/LLM/OIDC invocation or fabricated judge child/cleanup.
+Its original failed completion, denominator, partial receipt and missingness
+remain bound. Recorder accounting is separately unmeasured/null, not a zero
+invoice or a claim of no cost.
+
+Only B1 was added to the three workflow producer mappings and the grouped
+four-failure recorder selection. The six HF-token phases, recorder's HF_TOKEN-only
+step env and five-minute ceiling are unchanged. Source/ref/attempt pins,
+protected approval and its digest, ordinary OIDC/judge/publication gates,
+private no-clobber resolution, two one-use fixed-parent CAS writes, canonical
+server readback, privacy and no replay remain required. Lost responses remain
+unresolved and consume the attempt; durable bytes do not retroactively prove
+that the writer received acknowledgment. The remaining unregistered task5
+fixed-content cells remain closed. Original inputs, inference/runtime budgets and the fixed
+`default_v2_sol_max.yaml` / GPT-5.6 Sol/max judge remain unchanged. No readout
+registry or arbitrary source override was added.
+
+### Exact offline evidence, separate from prior observations
+
+The single runner invocation at
+`d0c4577a51124b55970dec67ad2cdf7804e3c658` selected only
+`tests/test_codex_budget_pilot_task5_failed_b1.py::test_fixed_task5_b1_after_ungraded_a1`:
+**66 collected, 66 passed in 116.09s**, exit **0**. The selector reused one
+genuine synthetic writer history with isolated mutations. Native turns and
+external boundaries were fake or blocked; no prior test function was invoked.
+Synthetic record runs/revisions and completion bytes are explicitly not live
+bindings. The protected approval digest was executed from the actual workflow,
+not reproduced solely through the connector's helper.
+
+Cases covered the exact scoreless B1 chain and ordinary B2 backing grade,
+four-cell eligibility and unregistered successors, wrong policy/type/cell/order,
+nonadjacent revision aliases including B1 terminal versus B2 claim, source and
+content changes, typed claims, approval/ref/privacy, CAS/readback/admission
+tampering, lost responses and replay. The selector also checked that old records
+and inference state were unchanged and no judge child ran on the B1 path.
+Directly coupled older selector/recorder assertions were updated for the fourth
+fixed failure without running their prior passing families.
+
+Python 3.10.12 / pytest 9.1.1 ran credential-free under `env -i`,
+`GITHUB_ACTIONS=false`, offline HF/Transformers flags, disabled plugin autoload,
+`PYTHONDONTWRITEBYTECODE=1` and
+`-m 'not integration' -p no:cacheprovider --maxfail=1 -q`.
+The log is `/tmp/project5-task5-failed-b1.wXuUQd/focused-d0c4577a5.log`.
+Only the two completion records changed after this tested SHA.
+
+The earlier task5 A1 **52 passed in 57.59s** at
+`4d32c2f141c865fc7bb4859e129eb4b57b150bbf`, the HF-phase correction's
+**2 passed in 1.94s** at `7021308b0df63497dbcd38d6d27fce3247a25a09`, and
+published7abad CI's **2 failed, 1177 passed in 1568.33s** remain separate.
+None was combined with this result or rerun. The earlier task4/task3 results
+and their failure/correction boundaries remain in the historical records below.
+
+### Remaining authority and source hold
+
+All new commits remain local and unpublished. Leader review `5326493571` and
+the nine passing checks apply only to published72f1, not this delta. Publication,
+fresh direct review and any later new-head CI remain future gates; no CI was
+polled and no manual rerun occurred.
+
+Main/inference source `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e` remains
+held. Before any live B1 record, the leader must separately bind the reviewed
+shared controller and exact hosted request, verify the actual task5 A1 UNGRADED
+record through task4 A2 UNGRADED to ordinary task4 B2, and authorize that one
+operation through protected approval. Their actual record runs/revisions remain
+unknown here. This offline task does not release the source hold or authorize
+merge, publication or live use.
+
+The leader supplied only the start of task5 C1 run `36259780431`, job
+`108453272952`, at `2026-09-26T17:39:06Z` on held780. Its outcome/checksum
+remain unknown here. It was not queried, affected or registered.
+
+The full catalog was reviewed once. Experiment-design and the consolidated
+grading spec kept this explicit fourth failure policy separate from the
+unchanged comparison and judged-score contract. The required bounded pre-edit
+decision was APPROVE-WITH-CONDITIONS before workflow/HF-boundary changes.
+Experiment-report-en then im-not-ai-en preserved the separate observations,
+unknown cause, accounting missingness and live-authority limits in these records.
+Fixed-content/publication-derived proof still does not independently authenticate
+that every original outer envelope was never rewritten.
+
+No push, republication, merge, main/source change, live HF/Azure/model/grade/
+readout/dispatch call, Project/credential mutation, source reseal or old-record
+rewrite occurred. The following endpoint records are historical, not current
+publication or live authority.
+
+## Prior PROJECT5-FIX-EXACT-HF-PHASE-CONTRACTS
 
 Corrected only the two existing workflow-contract tests that omitted the
 `record-ungraded` HF-token step. One invocation selecting those two nodes

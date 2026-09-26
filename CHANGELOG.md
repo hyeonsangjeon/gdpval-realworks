@@ -13,7 +13,8 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
-- Correct only the two pilot workflow-contract tests that still expected five
+- Earlier HF-phase endpoint: correct only the two pilot workflow-contract tests
+  that still expected five
   HF-token steps. They now require exactly one step for each of `setup`,
   `inspect`, `prepare`, `claim`, `publish` and `record-ungraded`, with no extra
   or duplicate phase. The recorder's full command, HF_TOKEN-only step env,
@@ -31,7 +32,8 @@ entries land under a fresh dated heading the day they merge to `main`.
   `7021308b0df63497dbcd38d6d27fce3247a25a09`. This remains separate from
   that failed CI and the earlier **52 passed in 57.59s** at
   `4d32c2f141c865fc7bb4859e129eb4b57b150bbf`; none is combined or rerun.
-  Only completion records changed after the new tested SHA. The unchanged
+  At that endpoint, only completion records changed after the new tested SHA.
+  The unchanged
   task5 A1 delta and this correction are prepared for one authorized push to
   the same PR686. Review `5326230185` covers old7abad only; new-head direct
   review and CI, held780, the declared controller, actual predecessor records
@@ -40,7 +42,50 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
-- Prepare only the recorded failed task5 A1, ordinal 24, under the explicit
+- Prepare only the recorded failed task5 B1, ordinal 25, under the explicit
+  `task5-b1-model-free-ungraded` policy: inference run `36248894311`, completion
+  `dd05f2ed43235b69d9eecfefadfb0a5ebd68d83b31daf38355a4acf6f0a21c5b`, producer
+  `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e`. This fourth fixed failure is
+  not an A-arm-only rule or a general skip. It adds only the exact
+  25-to-24-to-23-to-22 chain through task5 A1 UNGRADED, task4 A2 UNGRADED and
+  ordinary task4 B2 under the explicitly declared shared future controller.
+  The existing verifiers remain required; a B1-only fixed two-hop helper checks
+  the six predecessor claim/terminal revisions before CAS and all eight with
+  B1's own pair on readback. Nonadjacent revision reuse, wrong cell/order,
+  changed source/content, typed claim bindings and predecessor identities
+  refuse. Earlier policy tags, historical handoffs and ordinary Step8/cleanup
+  requirements are unchanged. B1's separate record remains scoreless and
+  invokes no OIDC/Step8/LLM or fabricated judge child. Original failure,
+  denominator, partial receipt and missingness stay bound; recorder accounting
+  is separately unmeasured/null. The leader-supplied outer step was 153m23s,
+  exit 1, `child_nonzero_exit`, one child, cleanup true, cell timeout false,
+  zero deliverables and no grade; the cause and internal attempt count remain
+  unknown, and this is not evidence of 180-minute exhaustion. Its partial
+  known inference receipt is USD 0.347961, with 283806 input, 12530 output,
+  244224 cached and 10162 reasoning tokens; estimated cost/HTTP count are null
+  and `invoice_complete=false`, not a total invoice. Only B1 is added to the
+  three producer mappings and grouped four-failure recorder condition. All six
+  HF-token phases, protected approval, source pins, private no-clobber resolution,
+  two one-use fixed-parent CAS writes, canonical readbacks, privacy and unresolved
+  lost-response/no-replay guards remain. The remaining unregistered task5
+  fixed-content cells stay closed. Inference budgets and the fixed Sol/max judge remain unchanged;
+  no readout registry or arbitrary source override was added.
+  The bounded pre-edit decision was APPROVE-WITH-CONDITIONS. One new focused
+  offline invocation returned **66 passed in 116.09s**, exit **0**, at
+  `d0c4577a51124b55970dec67ad2cdf7804e3c658`, with shared genuine synthetic
+  history and isolated mutations, all external/model boundaries fake or blocked.
+  This remains separate from the earlier **52 passed in 57.59s**,
+  **2 passed in 1.94s**, and published7abad CI's
+  **2 failed, 1177 passed in 1568.33s**; no earlier family or suite was rerun.
+  Only the two completion records changed after the tested SHA. Work remains
+  local and unpublished; leader review `5326493571` and nine passing checks
+  cover published `72f1b999583baa95f5e5bbf8d364928f9c326c27` only. Held780,
+  a reviewed declared controller, actual predecessor records and separate
+  exact live approval remain gates. No push, CI polling, live call, merge,
+  main/source/Project/credential change or old-record rewrite occurred.
+
+- Earlier task5 A1 endpoint: prepare only the recorded failed task5 A1,
+  ordinal 24, under the explicit
   `task5-a1-model-free-ungraded` policy. Its original inference run is
   `36247236594`, completion
   `b23da4f1f5e81999039c473d27f3a70cc0d0681672ad08be0f9674b618915c97`,
