@@ -11,7 +11,6 @@ from functools import lru_cache
 import hashlib
 import json
 from types import SimpleNamespace
-import time
 
 import pytest
 
@@ -342,9 +341,10 @@ def test_fixed_task3_a1_grading_handoff(case, tmp_path, monkeypatch, capsys, cha
         terminal["claim_identity"] = pilot._identity(claim_data)
         api.trees[revision][terminal_path] = retained._encoded(terminal)
         context.terminal_revision = TERMINAL
-        with pytest.raises(output.OutputPublicationRefused, match="recorded_task3_grade_predecessor_required"):
-            grading._grade_terminal(api, api.repo, revision, context, ready["entry"],
-                grading._cache(tmp_path, "terminal-proof"), base.TOKEN, time.monotonic() + 60)
+        with retained._session(api) as (session_api, token, deadline):
+            with pytest.raises(output.OutputPublicationRefused, match="recorded_task3_grade_predecessor_required"):
+                grading._grade_terminal(session_api, api.repo, revision, context, ready["entry"],
+                    grading._cache(tmp_path, "terminal-proof"), token, deadline)
     events = list(api.events)
     assert _invoke(case, capsys, "publish")[0] == 2 and api.events == events
     assert _invoke(case, capsys, "claim")[0] == 2 and api.events == events
