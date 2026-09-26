@@ -13,6 +13,33 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Bind only task2 B2's `TASK2_GRADE_RUNS` entry to the leader-supplied first
+  grading run `36212846089`, following PR684 REQUEST-CHANGES review `5324274069`
+  at `54c963915a900a41444287c0a4f2fa45b397c7a9`. The issued run is attempt **1**,
+  `workflow_dispatch`, created **2026-09-26T02:48:36Z**, protected approval
+  `6673811087`, historical writer `a5e5d2589caff21309f0a1c21bb7d9d333ad47c6`.
+  This is not evidence of B2 grade success, revision, score or cost. Its original
+  inference run `36200320037`, e7 producer and fixed completion checksum remain
+  unchanged; A2 has not been dispatched and stays null/fail-closed. The existing
+  synthetic writers now publish C1 and C2 before B2. One focused invocation of
+  `tests/test_codex_budget_pilot_task2_final_readout.py::test_task2_final_grade_readout`
+  with `-k B_r2` returned **5 passed, 36 deselected in 45.01s**, exit **0**, at
+  `1d49ba5a46d90ae4355daf8a7c875adc657e49fa`, covering positive readout and
+  selected-run, predecessor-run/hash and skipped-predecessor refusals. The
+  original **38 passed in 256.25s** at
+  `6d5be52861598bff3fe20c6b1cebc06b252dc334` remains separate; none of those
+  passing cases or prior suites was rerun. Only completion records changed
+  after the tested commit. Separately supplied C2 evidence for run `36211281528`
+  / job `108318247919` records preparation **02:21:39.9200661 UTC**, claim
+  acknowledgment **02:21:48.7272430 UTC**, one Step8 invocation with cleanup
+  **02:28:34.7147869 UTC**, and publication acknowledgment **02:28:38.4848492 UTC**.
+  Its stored outcome and score remain unread here. Original C1/B1 evidence,
+  provenance/privacy/hash guards, fixed-content proof limits and grading policy
+  are unchanged. The actual A2 ID, changed-row validation, new-head review and
+  CI remain. Main/active controller stay at A5; final merge remains held until
+  all four grade requests are bound/finished and the leader approves. No live
+  reads, writes, paid calls, dispatch, merge or CI polling occurred.
+
 - Extend the existing model-free task2 grade readout from common main
   `a5e5d2589caff21309f0a1c21bb7d9d333ad47c6`. C1/C2 use fixed historical A5
   writer runs `36209654516`/`36211281528`; B2/A2 have explicit null run IDs and
