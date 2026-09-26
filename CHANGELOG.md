@@ -42,7 +42,44 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
-- Prepare only the recorded failed task5 B1, ordinal 25, under the explicit
+- Prepare ordinary first grading only for retained task5 C1, ordinal 26,
+  inference run `36259780431`, completion
+  `ed11b060948692463105b5981245f4cedfaa3e597418313a7c55dc9c580a41bf`, producer
+  `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e`. C1 consumes the actual future
+  B1 UNGRADED record through the existing fixed 25-to-24-to-23-to-22 verifier,
+  including eight distinct predecessor claim/terminal revisions, under the
+  caller-declared shared controller. Its ordinary entry hashes must match B1's
+  predecessor-hash projection; source/content/observation equality and all
+  approval, canonical admission, private CAS/readback, privacy, cleanup and
+  no-replay guards remain. C1 is not a fifth failure exception: the four
+  recorder selectors and ordinary Step8-invoked publication requirements stay
+  unchanged. Only C1 is added to the three workflow producer mappings;
+  C2/B2/A2 remain unregistered. Inference, rubric, budgets and the fixed Sol/max
+  judge are unchanged. The leader reported C1 execution success with four
+  deliverable identities and no grade. Its outer 73m49s is not an internal
+  attempt count or causal proof. Partial known inference USD 0.480251 and
+  358519 input/17806 output/303616 cached/10955 reasoning tokens are not a
+  total invoice; estimated cost and HTTP count remain null, invoice false.
+  No private terminal, future grade record or quality score was invented.
+  The bounded pre-edit decision was APPROVE-WITH-CONDITIONS. The new C1-only
+  selector returned **68 passed, 1 failed in 154.31s**, exit **1**, at
+  `6c0124229a377e5f7fd95ead80f50a4be0291743`. Only its cleanup-loss assertion
+  needed correction: the existing judge guard returned unresolved instead of
+  success. The corrected `[cleanup]` node alone returned **1 passed in 50.17s**,
+  exit **0**, at `ddce821a0a6315e2d18044b9eb9fc1c886cd640f`; production was
+  unchanged by that correction. These results and earlier B1's **66 passed in
+  116.09s** at `d0c4577a51124b55970dec67ad2cdf7804e3c658` remain separate,
+  not a combined pass count. Shared genuine synthetic writers and isolated
+  mutations kept external/model boundaries fake or blocked; no passing family
+  or suite was rerun. Only the two completion records changed after the final
+  tested SHA. All work remains local and unpublished. Published72f1 review
+  `5326493571` and nine passing checks do not cover the B1/C1 deltas. Held780,
+  future publication/review/new-head CI, the reviewed declared controller,
+  actual predecessor records and individual protected live approval remain
+  gates. No push, live call, CI polling, merge or main/source change occurred.
+
+- Earlier task5 B1 endpoint: prepare only the recorded failed task5 B1,
+  ordinal 25, under the explicit
   `task5-b1-model-free-ungraded` policy: inference run `36248894311`, completion
   `dd05f2ed43235b69d9eecfefadfb0a5ebd68d83b31daf38355a4acf6f0a21c5b`, producer
   `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e`. This fourth fixed failure is
