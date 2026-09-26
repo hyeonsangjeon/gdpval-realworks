@@ -13,10 +13,41 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Extend the local task4 grading registration only to retained C1/C2/B2,
+  ordinals 20/21/22, with the leader-supplied original runs and completion
+  checksums. Reuse the declared-controller chain and immutable resolution;
+  each successor requires its actual immediate ordinary judged predecessor
+  and complete retained-inference equality. The distinct failed-A1-only
+  model-free UNGRADED recorder, B1's verifier and task3 boundaries are
+  unchanged. No new skip policy, reader registry, source override or
+  inference/grader/budget change was added. The bounded pre-edit reviewer
+  approved the closed-table extension with conditions. One new focused
+  selector returned **40 passed in 78.13s**, exit **0**, at
+  `e0e0c8ca2ea5ef4b4d83a4448216e716361a2ee3`, using one genuine synthetic
+  history and isolated mutations behind fake or blocked external boundaries.
+  It covered the three bindings, advanced-ref resolution, ordinary child
+  requirements, source/content/predecessor/approval/privacy refusals, CAS,
+  lost responses, replay and unchanged old records. No prior passing family
+  or full suite was rerun. The earlier **1 failed, 40 passed in 75.30s** at
+  `e42c8c68f7e0f16366c1ec5a12fbc4e663c10ee1` and **10 passed, 40 deselected
+  in 36.58s** at `c4b539d210bb138ed2dd3afd68e6509d079dd8ec` remain separate
+  below; they are not a combined 50-case pass. Only completion records changed
+  after the new tested SHA. Task4 A2 run `36245490377` has no supplied outcome
+  or completion checksum and remains unregistered, as do task5 requests.
+  Main/inference source `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e` remains
+  held. Published PR686 head `e6c357374ea5b3b19e72f574e77dcaa5e3619a84`,
+  review `5325618521` and 9 passing checks do not cover this unpublished
+  delta. Fresh leader review and later authorized CI/publication, a declared
+  shared controller, actual predecessor grades and separate one-result
+  approval remain required. No push, republication, merge, live call,
+  source/old-record/Project change or CI polling occurred; no quality was
+  inferred from retention metadata.
+
 - Add a distinct, local-only model-free UNGRADED claim/terminal path for the
   leader-authorized recorded task4 A1 failure, plus B1 verification of that
-  exact ungraded predecessor. Only these two task4 run/completion bindings are
-  newly registered. The A1 recorder preserves failed status, original completion,
+  exact ungraded predecessor. That earlier endpoint registered only these two
+  task4 run/completion bindings. The A1 recorder preserves failed status,
+  original completion,
   denominator, partial receipt and missingness without invoking Step8 or OIDC
   or adding a judge child, numeric quality score or rubric verdict. Recorder
   costs remain separately unmeasured, not zero. Ordinary judged-terminal requirements stay
@@ -42,9 +73,9 @@ entries land under a fresh dated heading the day they merge to `main`.
   9 passing checks do not cover this delta. Actual task3 A2 grading, a reviewed
   common controller, fresh review/authorized CI and individual live request
   approval remain gates. No push, republication, live call, source/old-record
-  change, merge, Project mutation or CI polling occurred. Other task4/task5
-  fixed-content requests remain closed; inference, model, rubric and budget
-  policy are unchanged.
+  change, merge, Project mutation or CI polling occurred. At that endpoint,
+  other task4/task5 fixed-content requests remained closed; inference, model,
+  rubric and budget policy are unchanged.
 
 - Reproduce the task4 failed-A1/successful-B1 grading boundary offline without
   activating either fixed-content request. Real native-error/Step2 serialization,
