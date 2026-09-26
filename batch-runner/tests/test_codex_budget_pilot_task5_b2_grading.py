@@ -1,14 +1,13 @@
-"""Ordinary task5 C1 after the fixed B1 UNGRADED chain, entirely offline.
+"""Ordinary task5 B2 after the fixed C2 UNGRADED proof, entirely offline.
 
-One genuine synthetic history is shared; each mutation gets an isolated copy.
-Synthetic files, completion digests and grade runs are not reconstructed live
-payloads, formats, terminal revisions or quality observations.
+The existing writers build one shared synthetic history; mutations are isolated
+copies. Fixture payloads, terminal revisions, grade runs and numeric scores are
+not reconstructions of live files, future records or quality observations.
 """
 
 from contextlib import redirect_stderr, redirect_stdout
 import copy
 import hashlib
-import json
 import shutil
 from types import SimpleNamespace
 
@@ -27,39 +26,43 @@ from . import test_codex_budget_pilot_task3_grading_chain as chain
 from . import test_codex_budget_pilot_task4_failed_grading as failed
 from . import test_codex_budget_pilot_task4_successor_grading as successors
 from . import test_codex_budget_pilot_task5_failed_b1 as b1
+from . import test_codex_budget_pilot_task5_failed_c2 as c2
 from . import test_codex_budget_pilot_ungraded as policy
 from .test_codex_budget_pilot_grading import boundaries  # noqa: F401 — block live boundaries
 
-CELL = "0818571f-5ff7-4d39-9d2c-ced5ae44299e_C_r1"
-RECORDED = ("36259780431", "ed11b060948692463105b5981245f4cedfaa3e597418313a7c55dc9c580a41bf")
-FOREIGN = "e" * 40
+CELL = "0818571f-5ff7-4d39-9d2c-ced5ae44299e_B_r2"
+RECORDED = ("36266871064", "5b942d71fe284b5d2831c01cf17ac17e92857c26ef2dad820b9367d3c8cf0245")
+CONFIG = "a6db185d3e6f5885ddf631d3c5e73c4062c6f2803be9ccf086605ed3394f6738"
 
 
 def _select(history, api, directory, patch, *, controller=failed.FUTURE_CONTROLLER):
     context = grading.compile_request("pilot/" + CELL, controller, grading.TASK5_RETAINED[CELL][1],
                                       producer_source_sha=failed.PRODUCER)
     current = SimpleNamespace(api=api, context=context, workflow=history.workflow,
-        root=directory / "private-grade", request=context.requested_terminal, inference=history.c1_inference)
+        root=directory / "private-grade", request=context.requested_terminal, inference=history.b2_inference)
     current.transport = policy._SourceOnlyChild(current)
     patch.setattr(base, "OUTPUT", current.inference.output)
     patch.setenv("HF_TOKEN", base.TOKEN)
     base._synthetic_rubric(current, patch)
-    approval._authorize(current, directory, patch, "991026")  # Synthetic, not an issued grade run.
+    approval._authorize(current, directory, patch, "991028")  # Synthetic, not an issued grade run.
     return current
 
 
 @pytest.fixture(scope="module")
-def c1_history(tmp_path_factory):
-    assert grading.TASK5_C1_CELL == CELL and grading.TASK5_RETAINED[CELL] == RECORDED
-    histories = b1.task5_b1_history.__wrapped__(tmp_path_factory)
-    history = next(histories)  # Reuse writers only, never the prior test selector.
+def b2_history(tmp_path_factory):
+    assert grading.TASK5_B2_CELL == CELL and grading.TASK5_RETAINED[CELL] == RECORDED
+    prototype = grading.compile_request("pilot/" + CELL, failed.FUTURE_CONTROLLER, RECORDED[1],
+                                        producer_source_sha=failed.PRODUCER)
+    assert prototype.cell["config_sha256"] == CONFIG and prototype.plan["order"][28] == CELL
+    histories = c2.c2_history.__wrapped__(tmp_path_factory)
+    history = next(histories)  # Existing genuine writers, never previous test functions.
     try:
         with pytest.MonkeyPatch.context() as patch:
-            directory = tmp_path_factory.mktemp("task5-c1-history")
-            capture, api = chain._Capture(), copy.deepcopy(history.after_b1)
-            previous = history.b1_inference
+            directory = tmp_path_factory.mktemp("task5-b2-history")
+            capture, api = chain._Capture(), copy.deepcopy(history.c2_after)
+            previous = history.c2_inference
             claim_revision, output_revision, terminal_revision, snapshot = (
-                f"{100_260 + i:040x}" for i in (1, 2, 3, 4))
+                f"{100_280 + i:040x}" for i in (1, 2, 3, 4))
             assert not {claim_revision, output_revision, terminal_revision, snapshot}.intersection(api.trees)
             context = grading.compile_request("pilot/" + CELL, failed.PRODUCER, terminal_revision)
             seeded = SimpleNamespace(context=context, api=api)
@@ -82,15 +85,14 @@ def c1_history(tmp_path_factory):
                 evidence = grading._retained_input(context, client, api.repo,
                     grading._cache(directory, "inference"), token, deadline)
             digest = pilot._digest(evidence["terminal"]["completion"])
-            assert digest != RECORDED[1]  # Fixture bytes are explicitly not the supplied live completion.
+            assert digest != RECORDED[1]  # Synthetic bytes, not the supplied live completion.
             patch.setitem(grading.TASK5_RETAINED, CELL, (RECORDED[0], digest))
-            history.c1_inference = SimpleNamespace(context=context, claim=claim_revision, output=output_revision,
+            history.b2_inference = SimpleNamespace(context=context, claim=claim_revision, output=output_revision,
                 terminal=terminal_revision, claim_path=claim_path, terminal_path=terminal_path, evidence=evidence)
-            # Advance only the synthetic snapshot: no C2 binding or result is created.
-            api.seed(snapshot, terminal_revision, {})
+            api.seed(snapshot, terminal_revision, {})  # No A2 result or binding is created.
             api.branches[retained.BRANCH] = snapshot
             api.head, api.main_snapshot = retained.BOOTSTRAP, copy.deepcopy(api.trees[retained.BOOTSTRAP])
-            history.c1_before = copy.deepcopy(api)
+            history.b2_before = copy.deepcopy(api)
             current = _select(history, api, directory, patch)
             api.calls.clear()
             api.events.clear()
@@ -101,44 +103,53 @@ def c1_history(tmp_path_factory):
                 prepared = retained._read(current.root / "prepared.json")
                 assert not prepared.get("model_free_record_ready") and "predecessor_entry" not in prepared
                 assert {key: prepared["entry"][key] for key in (
-                    "config_hash", "grader_source_hash", "renderer_fingerprint")} == history.b1_prepared["predecessor_entry"]
-                history.c1_prepared_root = directory / "prepared-c1"
-                shutil.copytree(current.root, history.c1_prepared_root)
-                visits, verify = [], ungraded.verify_terminal
+                    "config_hash", "grader_source_hash", "renderer_fingerprint")} == history.c2.prepared["predecessor_entry"]
+                history.b2_prepared_root = directory / "prepared-b2"
+                shutil.copytree(current.root, history.b2_prepared_root)
+                visits, ordinary_visits = [], []
+                verify, ordinary = ungraded.verify_terminal, grading._grade_terminal
 
                 def fixed_chain(*args, **kwargs):
                     visits.append(args[3].cell["cell_id"])
                     return verify(*args, **kwargs)
 
+                def judged_backing(*args, **kwargs):
+                    ordinary_visits.append(args[3].cell["cell_id"])
+                    return ordinary(*args, **kwargs)
+
                 with patch.context() as proving:
                     proving.setattr(ungraded, "verify_terminal", fixed_chain)
+                    proving.setattr(grading, "_grade_terminal", judged_backing)
                     code, observed = successors._invoke(current, capture, "claim")
                     assert code == 0 and observed["outcome"] == "acknowledged", (observed, current.diagnostic)
-                assert visits == [grading.TASK5_B1_CELL, grading.TASK5_A1_CELL, grading.TASK4_A2_CELL]
+                assert visits == [grading.TASK5_C2_CELL, grading.TASK5_B1_CELL,
+                                  grading.TASK5_A1_CELL, grading.TASK4_A2_CELL]
+                assert ordinary_visits == [grading.TASK5_C1_CELL, context.plan["order"][22]]
                 for phase in ("judge", "publish"):
                     code, observed = successors._invoke(current, capture, phase)
                     assert code == 0, (phase, observed, current.diagnostic)
             assert api.events == ["grade_claim", "judge", "grade_output"] and current.transport.calls == 1
             successors._unchanged(api, frozen)
             revision, path = api.branches[grading.BRANCH], grading._paths(context.cell)[1]
-            history.c1 = SimpleNamespace(revision=revision, path=path, root=current.root, prepared=prepared,
+            history.b2 = SimpleNamespace(revision=revision, path=path, root=current.root, prepared=prepared,
                 terminal=pilot._json_object(api.trees[revision][path]),
                 admission=retained._read(current.root / "claim-receipt.json"))
-            history.c1_after = copy.deepcopy(api)
+            history.b2_after = copy.deepcopy(api)
             yield history
     finally:
         histories.close()
 
 
-PREPARE_CASES = ["inference_run", "inference_source", "completion", "inference_bytes", "inference_ack",
-    "snapshot_hash", "wrong_ref", "private_ref", "approval_missing", "approval_skipped", "approval_failed",
-    "approval_request", "rerun", "source_spoof", "producer_override", "wrong_completion"]
+PREPARE_CASES = ["inference_run", "inference_source", "inference_attempt_type", "completion", "inference_bytes",
+    "inference_ack", "snapshot_hash", "wrong_ref", "private_ref", "approval_missing", "approval_skipped",
+    "approval_failed", "approval_request", "rerun", "source_spoof", "producer_override", "wrong_completion"]
 PREDECESSOR_CASES = ["previous_type", "previous_policy", "previous_score", "previous_claim_type",
     "previous_controller", "previous_source", "previous_config", "previous_grader", "previous_renderer",
     "previous_observation", "previous_receipt", "previous_order", "previous_cycle", "previous_hash",
-    "previous_history", "previous_missing", "previous_skipped", "previous_unfinished", "backing_child",
-    "backing_cleanup", "backing_hash", "backing_source", "nonadjacent_alias", "controller_drift",
-    "inference_predecessor"]
+    "previous_history", "previous_missing", "previous_skipped", "previous_unfinished", "previous_private",
+    "c1_child", "c1_cleanup", "c1_type", "c1_source", "c1_hash", "b1_policy", "b1_type", "backing_child",
+    "backing_cleanup", "backing_hash", "nonadjacent_alias", "controller_drift", "inference_predecessor",
+    "c1_inference_predecessor"]
 CLAIM_CASES = ["resolution", "cas", "claim_lost", "claim_readback", "unapproved_claim"]
 ADMISSION_CASES = ["admission_cache", "admission_parent", "admission_type", "unapproved_judge"]
 PUBLISH_CASES = ["publication_cas", "publication_parent", "publication_lost", "publication_readback",
@@ -150,84 +161,91 @@ CASES = ["chain", "plan_workflow", "record_ungraded", "replay", "remote_replay"]
 
 
 @pytest.mark.parametrize("change", CASES)
-def test_successful_task5_c1_after_ungraded_b1(c1_history, tmp_path, monkeypatch, capsys, change):
-    history, row = c1_history, c1_history.c1
+def test_successful_task5_b2_after_ungraded_c2(b2_history, tmp_path, monkeypatch, capsys, change):
+    history, row = b2_history, b2_history.b2
     terminal_case = change in TERMINAL_CASES
-    api = copy.deepcopy(history.c1_after if terminal_case or change in {"chain", "replay", "remote_replay"}
-                        else history.c1_before)
+    api = copy.deepcopy(history.b2_after if terminal_case or change in {"chain", "replay", "remote_replay"}
+                        else history.b2_before)
     current = _select(history, api, tmp_path, monkeypatch,
-                      controller=FOREIGN if change == "controller_drift" else failed.FUTURE_CONTROLLER)
+        controller=chain.FOREIGN if change == "controller_drift" else failed.FUTURE_CONTROLLER)
     context, inference = current.context, current.inference
     api.calls.clear()
     api.events.clear()
     api.reads.clear()
     assert not grading._model_free_context(context) and grading._shared_controller_successor(context)
-    assert context.cell["cell_id"] == context.plan["order"][26] == CELL
+    assert context.cell["cell_id"] == context.plan["order"][28] == CELL
 
     if change == "chain":
         prepared, claim, terminal = row.prepared, row.admission["claim"], row.terminal
-        assert claim["expected_parent"] == history.b1_revision
-        assert claim["predecessor"] == {"cell_id": grading.TASK5_B1_CELL, "revision": history.b1_revision,
-                                      **pilot._identity(retained._encoded(history.b1_terminal))}
+        assert claim["expected_parent"] == history.c2.revision
+        assert claim["predecessor"] == {"cell_id": grading.TASK5_C2_CELL, "revision": history.c2.revision,
+                                       **pilot._identity(retained._encoded(history.c2.terminal))}
         assert prepared["evidence"] == inference.evidence
-        assert prepared["evidence"]["claim"]["predecessor"] == history.b1_terminal["binding"]["retained"]
+        assert prepared["evidence"]["claim"]["predecessor"] == history.c2.terminal["binding"]["retained"]
+        assert prepared["evidence"]["claim"]["binding"]["github_run"] == {"id": RECORDED[0], "job": "cell", "attempt": 1}
         assert prepared["terminal_revision"] == inference.terminal != api.branches[retained.BRANCH]
         assert prepared["judge_ready"] is True and "predecessor_entry" not in prepared and "rubric" in prepared
-        assert {key: prepared["entry"][key] for key in history.b1_prepared["predecessor_entry"]} == (
-            history.b1_prepared["predecessor_entry"])
+        assert {key: prepared["entry"][key] for key in history.c2.prepared["predecessor_entry"]} == (
+            history.c2.prepared["predecessor_entry"])
         binding = terminal["binding"]
         assert binding["source_sha"] == failed.PRODUCER and binding["controller_source_sha"] == failed.FUTURE_CONTROLLER
-        assert binding["github_run"] == {"id": "991026", "job": "pilot-live", "attempt": 1}
+        assert binding["github_run"] == {"id": "991028", "job": "pilot-live", "attempt": 1}
         assert binding["retained"] == inference.evidence["observation"]
         assert terminal["format"] == grading.RESULT_FORMAT and terminal["outcome"] == "graded"  # Synthetic only.
         assert terminal["child"]["entry_invoked"] is True and terminal["child"]["cleanup_confirmed"] is True
         assert terminal["invoice_complete"] is False and terminal["http_request_count"] is None
-        assert history.b1_terminal["format"] == ungraded.TERMINAL_FORMAT
-        assert history.b1_terminal["outcome"] == "ungraded" and history.b1_terminal["model_invoked"] is False
-        assert history.b1_terminal["binding"]["policy"] == ungraded.TASK5_B1_POLICY
-        assert history.b1_terminal["inference_completion"]["status"] == "failed"
-        assert not {"child", "score", "verdict", "files"}.intersection(history.b1_terminal)
-        revisions = [value for cell, revision in b1._records(history, context) for value in (
+        assert history.c2.terminal["format"] == ungraded.TERMINAL_FORMAT
+        assert history.c2.terminal["outcome"] == "ungraded" and history.c2.terminal["model_invoked"] is False
+        assert history.c2.terminal["binding"]["policy"] == ungraded.TASK5_C2_POLICY
+        assert history.c2.terminal["inference_completion"]["status"] == "failed"
+        assert not {"child", "score", "verdict", "files"}.intersection(history.c2.terminal)
+        assert history.c2.admission["claim"]["expected_parent"] == history.c1.revision
+        assert history.c1.terminal["child"]["entry_invoked"] is True
+        assert history.c1.admission["claim"]["expected_parent"] == history.b1_revision
+        pairs = b1._records(history, context) + [(context.plan["cells"][26], history.c1.revision),
+            (context.plan["cells"][27], history.c2.revision), (context.cell, row.revision)]
+        revisions = [value for cell, revision in pairs for value in (
             revision, pilot._json_object(api.trees[revision][grading._paths(cell)[1]])["claim_commit"])]
-        assert len(revisions) == len(set(revisions)) == 8
+        assert len(revisions) == len(set(revisions)) == 14
         context.terminal_revision = inference.terminal
         with retained._session(api) as (client, token, deadline):
             verified = grading._grade_terminal(client, api.repo, row.revision, context, prepared["entry"],
-                                               grading._cache(tmp_path, "verified"), token, deadline)
-        assert verified["terminal"] == terminal
-        assert api.events == [] and current.transport.calls == 0
+                grading._cache(tmp_path, "verified"), token, deadline)
+        assert verified["terminal"] == terminal and api.events == [] and current.transport.calls == 0
+        successors._unchanged(api, (history.b2_before.trees, history.b2_before.writers,
+            history.b2_before.parents, history.b2_before.branches[retained.BRANCH]))
         return
 
     if change == "plan_workflow":
         assert context.plan["order"][24:29] == list(grading.TASK5_RETAINED) == [
-            grading.TASK5_A1_CELL, grading.TASK5_B1_CELL, CELL, grading.TASK5_C2_CELL, grading.TASK5_B2_CELL]
-        assert len(context.plan["order"]) == 30 and context.plan["run_id"] == "budget_pilot_ci_20260925_04"
-        assert context.cell["config_sha256"] == "7af6ec22e99b336e6d8bc488d7e2834cc2610c7418dcea671c716197e2c87b02"
-        assert context.controller_source_sha != context.plan["reviewed_source_sha"] == failed.PRODUCER
-        assert context.terminal_revision == "" and context.requested_terminal == grading.TASK5_RETAINED[CELL][1]
+            grading.TASK5_A1_CELL, grading.TASK5_B1_CELL, grading.TASK5_C1_CELL, grading.TASK5_C2_CELL, CELL]
+        assert context.plan["order"][29:] == ["0818571f-5ff7-4d39-9d2c-ced5ae44299e_A_r2"]
+        assert context.cell["config_sha256"] == CONFIG and len(context.plan["order"]) == 30
+        for key in ("model", "dataset", "source_pins", "grading", "order"):
+            assert context.plan[key] == pilot.compile_pilot(ci.CAMPAIGN, failed.PRODUCER)[0][key]
         assert (pilot.TOTAL_SECONDS, pilot.ATTEMPT_SECONDS) == (10800, 1800)
         assert ci.HOST_POLICY["sdk"] == ci.HOST_POLICY["cli"] == "0.147.0"
-        assert context.plan["model"]["deployment"] == "gpt-5.4"
-        assert context.plan["model"]["route_profile"] == "direct-v1"
         assert hashlib.sha256(context.run.grader_config_json.encode()).hexdigest() == readout.CONFIG_SHA256
+        assert context.terminal_revision == "" and context.requested_terminal == grading.TASK5_RETAINED[CELL][1]
         for cell_id in context.plan["order"][29:]:
             assert cell_id not in grading.TASK5_RETAINED
             with pytest.raises(output.OutputPublicationRefused, match="closed_retained_producer_binding_required"):
                 grading.compile_request("pilot/" + cell_id, failed.FUTURE_CONTROLLER, current.request,
                                         producer_source_sha=failed.PRODUCER)
         jobs = history.workflow["jobs"]
-        live, approve = jobs["pilot-live"], jobs["pilot-approve-paid"]
+        live, approve, plan = jobs["pilot-live"], jobs["pilot-approve-paid"], jobs["pilot-plan"]
         expression = live["env"]["PILOT_GRADE_PRODUCER_SOURCE_SHA"]
-        assert expression == jobs["pilot-plan"]["env"]["PILOT_GRADE_PRODUCER_SOURCE_SHA"]
-        assert all(expression.count('"pilot/' + cell_id + '"') == 1 for cell_id in grading.TASK5_RETAINED)
+        assert expression == plan["env"]["PILOT_GRADE_PRODUCER_SOURCE_SHA"]
+        assert all(expression.count('"pilot/' + cell_id + '"') == 1
+                   for cell_id in [*grading.TASK4_RETAINED, *grading.TASK5_RETAINED])
         assert all('"pilot/' + cell_id + '"' not in expression for cell_id in context.plan["order"][29:])
         assert live["needs"] == ["pilot-approve-paid"] and "environment" not in live
         assert "needs.pilot-approve-paid.result == 'success'" in live["if"]
-        assert live["permissions"] == {"contents": "read", "id-token": "write"}
         assert live["env"]["PILOT_WORKFLOW_SHA"] == "${{ github.workflow_sha }}"
+        assert live["permissions"] == {"contents": "read", "id-token": "write"} and live["timeout-minutes"] == 300
         assert approve["permissions"] == {} and len(approve["steps"]) == 1
         assert approve["environment"] == {"name": "grading"}
-        assert "HF_TOKEN" not in live["env"] and "HF_TOKEN" not in jobs["pilot-plan"]["env"]
+        assert "HF_TOKEN" not in live["env"] and "HF_TOKEN" not in plan["env"]
         token_steps = [step for step in live["steps"] if "HF_TOKEN" in step.get("env", {})]
         phases = {}
         for step in token_steps:
@@ -237,27 +255,38 @@ def test_successful_task5_c1_after_ungraded_b1(c1_history, tmp_path, monkeypatch
             assert phase not in phases
             phases[phase] = step
         assert len(token_steps) == 6 and set(phases) == {"setup", "inspect", "prepare", "claim", "publish", "record-ungraded"}
-        eligible = [grading.TASK4_A1_CELL, grading.TASK4_A2_CELL, grading.TASK5_A1_CELL, grading.TASK5_B1_CELL,
-                    grading.TASK5_C2_CELL]
-        assert [cell["cell_id"] for cell in context.plan["cells"] if grading._model_free_context(
-            SimpleNamespace(cell=cell, terminal_request=current.request))] == eligible
+        eligible = [grading.TASK4_A1_CELL, grading.TASK4_A2_CELL, grading.TASK5_A1_CELL,
+                    grading.TASK5_B1_CELL, grading.TASK5_C2_CELL]
+        assert [cell_id for cell_id in context.plan["order"] if grading._model_free_context(
+            SimpleNamespace(cell={"cell_id": cell_id}, terminal_request=current.request))] == eligible
         recorder = phases["record-ungraded"]
         assert " ".join(recorder["if"].split()) == "(" + " || ".join(
             "inputs.experiment_yaml == 'pilot/" + cell_id + "'" for cell_id in eligible) + (
             ") && steps.pilot_input.outputs.model_free_record_ready == 'true' && "
             "steps.pilot_input.outputs.judge_ready == 'false'")
-        assert CELL not in recorder["if"] and recorder["timeout-minutes"] == 5
-        assert recorder["env"] == {"HF_TOKEN": "${{ secrets.HF_TOKEN }}"}
-        steps = {step["name"]: step for step in live["steps"] if "name" in step}
-        for name in ("Validate grading OIDC identity", "Validate fixed grader Azure route", "Grading Azure login (OIDC)",
-                     "Verify grading OIDC session", "Verify fixed grader model connection",
-                     "Claim one private grading admission with parent CAS", "Invoke exactly the compiled fixed Step8 command once"):
-            assert "steps.pilot_input.outputs.judge_ready == 'true'" in steps[name]["if"]
-        publication = steps["Retain validated private grade and accounting on the grading branch"]["if"]
-        assert "steps.pilot_judge.outcome != 'skipped'" in publication and "steps.pilot_claim.outcome == 'success'" in publication
-        assert not any("upload-artifact" in step.get("uses", "") for step in live["steps"])
+        assert all(cell_id not in recorder["if"] for cell_id in [grading.TASK5_C1_CELL, CELL, *context.plan["order"][29:]])
+        assert recorder["timeout-minutes"] == 5 and recorder["env"] == {"HF_TOKEN": "${{ secrets.HF_TOKEN }}"}
+        assert recorder["run"] == (
+            "umask 077\npython batch-runner/codex_budget_pilot_grading.py --phase record-ungraded \\\n"
+            '  --selector "$GRADE_SELECTOR" --reviewed-source-sha "$GITHUB_SHA" \\\n'
+            '  --producer-source-sha "$PILOT_GRADE_PRODUCER_SOURCE_SHA" \\\n'
+            '  --terminal-revision "$GRADE_TERMINAL" --root "$RUNNER_TEMP/pilot-fixed-grade"\n')
+        assert phases["inspect"]["if"] == ("inputs.experiment_yaml == 'pilot/branch-inspect' || "
+                                          "inputs.experiment_yaml == 'pilot/inference-branch-inspect'")
+        assert phases["inspect"]["timeout-minutes"] == 2
+        for step in live["steps"]:
+            if ("azure" in step.get("run", "").lower() or "azure/login" in step.get("uses", "")
+                    or step.get("id") in {"pilot_claim", "pilot_judge"}):
+                assert "steps.pilot_input.outputs.judge_ready == 'true'" in step["if"]
+        assert "steps.pilot_claim.outcome == 'success'" in phases["publish"]["if"]
+        assert "steps.pilot_judge.outcome != 'skipped'" in phases["publish"]["if"]
+        assert not any("upload-artifact" in step.get("uses", "") for job in (plan, live) for step in job["steps"])
         assert "HF_TOKEN" not in next(step for step in live["steps"] if step.get("id") == "pilot_judge").get("env", {})
-        assert grading._context_authority(context)["id"] == "991026"  # Actual workflow approval digest executed.
+        validate = next(step for step in live["steps"] if step.get("name") == "Validate the exact selected pilot route")
+        assert all(fragment in validate["run"] for fragment in (
+            'test "$GITHUB_SHA" = "$PILOT_WORKFLOW_SHA"', 'test "$GITHUB_REF" = refs/heads/main',
+            'test "$GITHUB_RUN_ATTEMPT" = 1'))
+        assert grading._context_authority(context)["id"] == "991028"  # Actual approval digest, synthetic run.
         monkeypatch.setenv("GITHUB_ACTIONS", "false")
         monkeypatch.delenv("HF_TOKEN")
         assert successors._invoke(current, capsys)[0] == 0
@@ -292,7 +321,7 @@ def test_successful_task5_c1_after_ungraded_b1(c1_history, tmp_path, monkeypatch
         elif change == "terminal_exit_type":
             terminal["child"]["exit_code"] = False
         else:
-            api.trees[terminal["claim_commit"]][history.b1_path] += b" "
+            api.trees[terminal["claim_commit"]][history.c2.path] += b" "
         claim_data = retained._encoded(claim)
         claim_path = grading._paths(context.cell)[0]
         api.trees[terminal["claim_commit"]][claim_path] = api.trees[row.revision][claim_path] = claim_data
@@ -308,21 +337,33 @@ def test_successful_task5_c1_after_ungraded_b1(c1_history, tmp_path, monkeypatch
         return
 
     overrides = {}
-    if change in {"inference_run", "inference_source", "inference_predecessor"}:
-        claim = pilot._json_object(api.trees[inference.claim][inference.claim_path])
+    if change in {"inference_run", "inference_source", "inference_attempt_type", "inference_predecessor",
+                  "c1_inference_predecessor"}:
+        target = history.c1_inference if change == "c1_inference_predecessor" else inference
+        claim = pilot._json_object(api.trees[target.claim][target.claim_path])
         if change == "inference_run":
             claim["binding"]["github_run"]["id"] = str(int(RECORDED[0]) + 1)
         elif change == "inference_source":
             claim["binding"]["source_sha"] = failed.FUTURE_CONTROLLER
+        elif change == "inference_attempt_type":
+            claim["binding"]["github_run"]["attempt"] = True
         else:
             claim["predecessor"]["manifest_sha256"] = "9" * 64
-        terminal = pilot._json_object(api.trees[inference.terminal][inference.terminal_path])
+        terminal = pilot._json_object(api.trees[target.terminal][target.terminal_path])
         terminal["claim_identity"] = pilot._identity(retained._encoded(claim))
         for tree in api.trees.values():
-            if inference.claim_path in tree:
-                tree[inference.claim_path] = retained._encoded(claim)
-            if inference.terminal_path in tree:
-                tree[inference.terminal_path] = retained._encoded(terminal)
+            if target.claim_path in tree:
+                tree[target.claim_path] = retained._encoded(claim)
+            if target.terminal_path in tree:
+                tree[target.terminal_path] = retained._encoded(terminal)
+        if change == "c1_inference_predecessor":
+            # Propagate valid hashes so the original inference-predecessor
+            # equality, not an unrelated stale C1/C2 link, refuses this history.
+            prior = copy.deepcopy(history.c1.terminal)
+            prior["binding"]["retained"]["terminal_sha256"] = pilot._identity(retained._encoded(terminal))["sha256"]
+            prior_claim = copy.deepcopy(history.c1.admission["claim"])
+            prior_claim["binding"] = prior["binding"]
+            c2._rewrite(api, history, context, 26, prior, prior_claim)
     elif change in {"completion", "inference_ack"}:
         terminal = pilot._json_object(api.trees[inference.terminal][inference.terminal_path])
         if change == "completion":
@@ -349,41 +390,49 @@ def test_successful_task5_c1_after_ungraded_b1(c1_history, tmp_path, monkeypatch
     elif change == "source_spoof":
         monkeypatch.setenv("GITHUB_SHA", failed.PRODUCER)
     elif change == "producer_override":
-        overrides["producer"] = FOREIGN
+        overrides["producer"] = chain.FOREIGN
     elif change == "wrong_completion":
         overrides["terminal"] = "9" * 64
     elif change in {"previous_missing", "previous_skipped", "previous_unfinished"}:
-        if change == "previous_missing":
-            api.branches[grading.BRANCH] = retained.BOOTSTRAP
-        else:
-            api.branches[grading.BRANCH] = (history.task5_revision if change == "previous_skipped"
-                                            else history.b1_terminal["claim_commit"])
+        api.branches[grading.BRANCH] = {"previous_missing": retained.BOOTSTRAP,
+            "previous_skipped": history.c1.revision, "previous_unfinished": history.c2.terminal["claim_commit"]}[change]
+    elif change == "nonadjacent_alias":
+        alias = history.grades["B_r2"].terminal["claim_commit"]
+        api.trees[alias] = copy.deepcopy(api.trees[history.c2.revision])
+        api.writers[alias] = {path: alias if writer == history.c2.revision else writer
+                              for path, writer in api.writers[history.c2.revision].items()}
+        api.branches[grading.BRANCH] = alias
     elif change in PREDECESSOR_CASES and change != "controller_drift":
-        ordinal = 22 if change.startswith("backing_") else 25
-        cell, revision = b1._records(history, context)[ordinal - 22]
+        ordinal = 22 if change.startswith("backing_") else 25 if change.startswith("b1_") else (
+            26 if change.startswith("c1_") else 27)
+        pairs = b1._records(history, context) + [(context.plan["cells"][26], history.c1.revision),
+                                                (context.plan["cells"][27], history.c2.revision)]
+        cell, revision = pairs[ordinal - 22]
         path, claim_path = grading._paths(cell)[1], grading._paths(cell)[0]
         terminal = pilot._json_object(api.trees[revision][path])
         claim = pilot._json_object(api.trees[terminal["claim_commit"]][claim_path])
         binding = terminal["binding"]
-        if change == "previous_type":
-            terminal["format"] = grading.RESULT_FORMAT
-        elif change == "previous_policy":
+        if change in {"previous_type", "b1_type", "c1_type"}:
+            terminal["format"] = ungraded.TERMINAL_FORMAT if ordinal == 26 else grading.RESULT_FORMAT
+        elif change in {"previous_policy", "b1_policy"}:
             binding["policy"] = ungraded.TASK5_POLICY
         elif change == "previous_score":
             terminal["score"] = 0
+        elif change == "previous_private":
+            terminal["debug"] = chain.PRIVATE
         elif change == "previous_claim_type":
             claim["binding"]["github_run"]["attempt"] = True
         elif change == "previous_controller":
-            binding["controller_source_sha"] = FOREIGN
-            binding["approval_request_sha256"] = grading._approval_request_sha256(FOREIGN, "pilot/" + cell["cell_id"],
+            binding["controller_source_sha"] = chain.FOREIGN
+            binding["approval_request_sha256"] = grading._approval_request_sha256(chain.FOREIGN, "pilot/" + cell["cell_id"],
                 grading.TASK5_RETAINED[cell["cell_id"]][1], binding["github_run"], producer_source_sha=failed.PRODUCER)
-        elif change in {"previous_source", "backing_source"}:
-            binding["source_sha"] = FOREIGN
+        elif change in {"previous_source", "c1_source"}:
+            binding["source_sha"] = chain.FOREIGN
         elif change == "previous_config":
             binding["predecessor_entry"]["config_hash"] = "9" * 64
         elif change == "previous_grader":
             binding["predecessor_entry"]["grader_source_hash"] = "9" * 64
-        elif change == "backing_hash":
+        elif change in {"c1_hash", "backing_hash"}:
             binding["grader_source_hash"] = "9" * 64
         elif change == "previous_renderer":
             assert binding["predecessor_entry"]["renderer_fingerprint"] is not None
@@ -393,24 +442,20 @@ def test_successful_task5_c1_after_ungraded_b1(c1_history, tmp_path, monkeypatch
         elif change == "previous_receipt":
             binding["publication_receipt_sha256"] = "9" * 64
         elif change == "previous_order":
-            claim["predecessor"]["cell_id"] = grading.TASK4_A2_CELL
+            claim["predecessor"]["cell_id"] = grading.TASK5_B1_CELL
         elif change == "previous_cycle":
             claim["expected_parent"] = claim["predecessor"]["revision"] = revision
         elif change == "previous_hash":
             claim["predecessor"]["sha256"] = "9" * 64
         elif change == "previous_history":
-            api.trees[terminal["claim_commit"]][history.task5_path] += b" "
-        elif change == "backing_child":
+            api.trees[terminal["claim_commit"]][history.c1.path] += b" "
+        elif change in {"c1_child", "backing_child"}:
             terminal["child"]["entry_invoked"] = False
-        elif change == "backing_cleanup":
+        elif change in {"c1_cleanup", "backing_cleanup"}:
             terminal["child"]["cleanup_confirmed"] = False
-        elif change == "nonadjacent_alias":
-            terminal["claim_commit"] = history.grades["B_r2"].terminal["claim_commit"]
-            api.trees[terminal["claim_commit"]][claim_path] = retained._encoded(claim)
-            api.writers[terminal["claim_commit"]][claim_path] = terminal["claim_commit"]
         if change != "previous_claim_type":
             claim["binding"] = binding
-        b1._rewrite_linked(api, history, context, ordinal, terminal, claim)
+        c2._rewrite(api, history, context, ordinal, terminal, claim)
 
     frozen = copy.deepcopy((api.trees, api.writers, api.parents, api.branches[retained.BRANCH]))
     if change in PREPARE_CASES:
@@ -424,11 +469,11 @@ def test_successful_task5_c1_after_ungraded_b1(c1_history, tmp_path, monkeypatch
         code, observed = successors._invoke(current, capsys, "prepare")
         assert code == 0 and observed["judge_ready"] is True, (observed, current.diagnostic)
     else:
-        shutil.copytree(history.c1_prepared_root, current.root)
+        shutil.copytree(history.b2_prepared_root, current.root)
     if change == "resolution":
         path = current.root / "retained-resolution.json"
         value = retained._read(path)
-        value["terminal_revision"] = history.b1_inference.terminal
+        value["terminal_revision"] = history.c2_inference.terminal
         path.write_bytes(retained._encoded(value))
     elif change == "cas":
         api.move_before_commit = True
@@ -450,6 +495,8 @@ def test_successful_task5_c1_after_ungraded_b1(c1_history, tmp_path, monkeypatch
         assert code == 2 and observed["outcome"] in {"refused", "unresolved"}, (observed, current.diagnostic)
         if change == "inference_predecessor":
             assert observed["reason"] == "recorded_task2_inference_predecessor_mismatch"
+        if change == "nonadjacent_alias":
+            assert observed["reason"] == "model_free_task5_c2_chain_revision_changed"
         if change in {"claim_lost", "claim_readback"}:
             assert observed["outcome"] == "unresolved"
         events = list(api.events)
@@ -462,7 +509,7 @@ def test_successful_task5_c1_after_ungraded_b1(c1_history, tmp_path, monkeypatch
     assert code == 0 and observed["outcome"] == "acknowledged", (observed, current.diagnostic)
     receipt_path = current.root / "claim-receipt.json"
     receipt = retained._read(receipt_path)
-    assert receipt["claim"]["expected_parent"] == history.b1_revision
+    assert receipt["claim"]["expected_parent"] == history.c2.revision
     if change in ADMISSION_CASES:
         if change == "admission_cache":
             cached = current.root / "claim-verified" / (receipt["returned_commit"] + ".json")
@@ -471,7 +518,7 @@ def test_successful_task5_c1_after_ungraded_b1(c1_history, tmp_path, monkeypatch
             monkeypatch.delenv("PILOT_GRADE_APPROVAL_RESULT")
         else:
             if change == "admission_parent":
-                receipt["claim"]["expected_parent"] = receipt["claim"]["predecessor"]["revision"] = history.task5_revision
+                receipt["claim"]["expected_parent"] = receipt["claim"]["predecessor"]["revision"] = history.c1.revision
             else:
                 receipt["claim"]["binding"]["github_run"]["attempt"] = True
             receipt["claim_identity"] = pilot._identity(retained._encoded(receipt["claim"]))
@@ -495,7 +542,7 @@ def test_successful_task5_c1_after_ungraded_b1(c1_history, tmp_path, monkeypatch
     if change == "publication_cas":
         api.move_before_commit = True
     elif change == "publication_parent":
-        api.branches[grading.BRANCH] = history.b1_revision
+        api.branches[grading.BRANCH] = history.c2.revision
     elif change == "publication_lost":
         api.lost = "grade_output"
     elif change == "publication_readback":

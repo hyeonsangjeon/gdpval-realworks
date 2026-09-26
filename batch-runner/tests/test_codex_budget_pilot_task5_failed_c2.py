@@ -237,8 +237,8 @@ def test_fixed_task5_c2_after_ordinary_c1(c2_history, tmp_path, monkeypatch, cap
         return
 
     if change == "plan_workflow":
-        assert context.plan["order"][24:28] == list(grading.TASK5_RETAINED) == [
-            grading.TASK5_A1_CELL, grading.TASK5_B1_CELL, grading.TASK5_C1_CELL, CELL]
+        assert context.plan["order"][24:29] == list(grading.TASK5_RETAINED) == [
+            grading.TASK5_A1_CELL, grading.TASK5_B1_CELL, grading.TASK5_C1_CELL, CELL, grading.TASK5_B2_CELL]
         assert context.plan["order"].index(CELL) == 27 and len(context.plan["order"]) == 30
         assert context.cell["config_sha256"] == "3200e72fa661cd5c54ddd5f777f35fdbdf5c866011d073647df3ac2e0f997a71"
         assert context.controller_source_sha != context.plan["reviewed_source_sha"] == failed.PRODUCER
@@ -250,7 +250,7 @@ def test_fixed_task5_c2_after_ordinary_c1(c2_history, tmp_path, monkeypatch, cap
             SimpleNamespace(cell=cell, terminal_request=current.request))]
         assert eligible == [grading.TASK4_A1_CELL, grading.TASK4_A2_CELL, grading.TASK5_A1_CELL,
                             grading.TASK5_B1_CELL, CELL]
-        for cell_id in context.plan["order"][28:]:
+        for cell_id in context.plan["order"][29:]:
             assert cell_id not in grading.TASK5_RETAINED
             with pytest.raises(output.OutputPublicationRefused, match="closed_retained_producer_binding_required"):
                 grading.compile_request("pilot/" + cell_id, failed.FUTURE_CONTROLLER, current.request,
@@ -260,7 +260,7 @@ def test_fixed_task5_c2_after_ordinary_c1(c2_history, tmp_path, monkeypatch, cap
         expression = live["env"]["PILOT_GRADE_PRODUCER_SOURCE_SHA"]
         assert expression == plan["env"]["PILOT_GRADE_PRODUCER_SOURCE_SHA"]
         assert all(expression.count('"pilot/' + cell_id + '"') == 1 for cell_id in grading.TASK5_RETAINED)
-        assert all('"pilot/' + cell_id + '"' not in expression for cell_id in context.plan["order"][28:])
+        assert all('"pilot/' + cell_id + '"' not in expression for cell_id in context.plan["order"][29:])
         assert live["needs"] == ["pilot-approve-paid"] and "environment" not in live
         assert "needs.pilot-approve-paid.result == 'success'" in live["if"]
         assert live["env"]["PILOT_WORKFLOW_SHA"] == "${{ github.workflow_sha }}"

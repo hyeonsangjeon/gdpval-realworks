@@ -224,10 +224,11 @@ def _check_recorded_task3_grading_chain(history, tmp_path, monkeypatch, capsys, 
         assert jobs["pilot-plan"]["env"]["PILOT_GRADE_PRODUCER_SOURCE_SHA"] == expression
         for suffix in RECORDED:
             assert expression.count('"pilot/' + PREFIX + suffix + '"') == 1
-        assert all('"pilot/' + cell_id + '"' not in expression for cell_id in context.plan["order"][28:])
+        assert all('"pilot/' + cell_id + '"' not in expression for cell_id in context.plan["order"][29:])
         assert all(expression.count('"pilot/' + cell_id + '"') == 1 for cell_id in grading.TASK4_RETAINED)
-        assert list(grading.TASK5_RETAINED) == context.plan["order"][24:28] == [
+        assert list(grading.TASK5_RETAINED) == context.plan["order"][24:29] == [
             grading.TASK5_A1_CELL, grading.TASK5_B1_CELL, grading.TASK5_C1_CELL, grading.TASK5_C2_CELL,
+            grading.TASK5_B2_CELL,
         ]
         assert all(expression.count('"pilot/' + cell_id + '"') == 1 for cell_id in grading.TASK5_RETAINED)
         assert jobs["pilot-approve-paid"]["environment"] == {"name": "grading"}
