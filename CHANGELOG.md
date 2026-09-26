@@ -11,6 +11,33 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Fixed
+
+- Correct only the two pilot workflow-contract tests that still expected five
+  HF-token steps. They now require exactly one step for each of `setup`,
+  `inspect`, `prepare`, `claim`, `publish` and `record-ungraded`, with no extra
+  or duplicate phase. The recorder's full command, HF_TOKEN-only step env,
+  5-minute timeout and exact grouped task4 A1/task4 A2/task5 A1 condition are
+  pinned, including `model_free_record_ready=true` AND `judge_ready=false`.
+  Existing approval, source/ref/attempt, branch-inspection, credential isolation,
+  OIDC/readiness, ordinary publication and no-public-upload assertions remain.
+  No production or workflow file changed in this correction. The leader-supplied
+  published-head CI result at `7abad5176d68f8172e83522c88adad7432dcc4d3` was
+  **2 failed, 1177 passed in 1568.33s** in Backend Tests run `36248489379`,
+  pilot-contracts job `108421996858`, completed `2026-09-26T15:02:15Z`.
+  This was assertion failure, not timeout; eight other checks succeeded.
+  One local invocation selecting only those two failed nodes returned
+  **2 passed in 1.94s**, exit **0**, at
+  `7021308b0df63497dbcd38d6d27fce3247a25a09`. This remains separate from
+  that failed CI and the earlier **52 passed in 57.59s** at
+  `4d32c2f141c865fc7bb4859e129eb4b57b150bbf`; none is combined or rerun.
+  Only completion records changed after the new tested SHA. The unchanged
+  task5 A1 delta and this correction are prepared for one authorized push to
+  the same PR686. Review `5326230185` covers old7abad only; new-head direct
+  review and CI, held780, the declared controller, actual predecessor records
+  and individual live approval remain gates. No main/source change, live call,
+  merge, manual workflow rerun or CI polling occurred.
+
 ### Added
 
 - Prepare only the recorded failed task5 A1, ordinal 24, under the explicit
@@ -37,15 +64,18 @@ entries land under a fresh dated heading the day they merge to `main`.
   One new focused selector returned **52 passed in 57.59s**, exit **0**, at
   `4d32c2f141c865fc7bb4859e129eb4b57b150bbf`, using a shared genuine synthetic
   history and isolated mutations with external/model boundaries fake or blocked.
-  No prior selector or full suite was rerun. Only the two completion records
-  changed after this tested SHA; all previous results below remain separate.
+  No prior selector or full suite was rerun. At that task5 endpoint, only the two
+  completion records changed after this tested SHA; all previous results below
+  remain separate.
   Published PR686 head `7abad5176d68f8172e83522c88adad7432dcc4d3` and review
   `5326230185` do not cover this local delta. The supplied initial CI observation
   was 7 passed, with pilot-contracts and native-host running, not a final gate
-  result. This extension remains local and unpublished. Held780 is unchanged;
+  result. At that endpoint this extension was local and unpublished; the completed
+  CI and newly authorized accumulated push are recorded above. Held780 is unchanged;
   the actual A2 record, its ordinary B2 backing grade, a reviewed shared controller
-  and separate exact live request approval remain gates. No push, CI polling,
-  live call, merge, Project/credential change or old-record rewrite occurred.
+  and separate exact live request approval remain gates. At that endpoint no push,
+  CI polling, live call, merge, Project/credential change or old-record rewrite
+  occurred.
 
 ### Previously recorded endpoints, before task5 A1 preparation
 

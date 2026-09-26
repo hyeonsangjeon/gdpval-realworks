@@ -1,18 +1,84 @@
 # Latest task result
 
-## PROJECT5-TASK5-FAILED-A1-PREP
+## PROJECT5-FIX-EXACT-HF-PHASE-CONTRACTS
 
-Prepared only the recorded failed task5 A1 under the leader's explicit
+Corrected only the two existing workflow-contract tests that omitted the
+`record-ungraded` HF-token step. One invocation selecting those two nodes
+returned **2 passed in 1.94s**, exit **0**, at immutable SHA
+`7021308b0df63497dbcd38d6d27fce3247a25a09`. This correction changed no
+production or workflow file. The already-tested task5 A1 implementation below
+is carried unchanged, without rerunning or extending it.
+
+Work continued in the same clean owned PR686 worktree from local
+`8546b76d3891bb923a709266e41e25fedacc138d`. The leader authorizes one
+accumulated push of the task5 delta, this two-test repair and the completion
+records to that same PR. No new branch, worktree or PR is needed. Merge and
+live execution remain unauthorized.
+
+### Published-head CI failure, separate from local evidence
+
+The leader supplied the completed Backend Tests result for published head
+`7abad5176d68f8172e83522c88adad7432dcc4d3`: run `36248489379`,
+pilot-contracts job `108421996858`, completed `2026-09-26T15:02:15Z`, with
+**2 failed, 1177 passed in 1568.33s**. This was an assertion failure, not a
+timeout. Eight other checks succeeded. This CI evaluated the published head,
+without the local task5 delta, and was not queried or rerun here.
+
+The only failures were:
+
+- `tests/test_codex_budget_pilot_grading.py::test_workflow_isolates_private_pilot_from_legacy_publication_and_inference`
+- `tests/test_codex_budget_pilot_grading_branch_inspect.py::test_workflow_inspection_is_isolated_without_new_inputs_or_paid_routes`
+
+Both expected five HF-token steps; the existing no-judge recorder was the sixth.
+The first also had a five-phase allowlist, and the second built its phase map
+from those same five. This repair gives the recorder an exact test contract.
+
+### Exact six-phase contract and two-node validation
+
+Each test now requires one token step for each of `setup`, `inspect`, `prepare`,
+`claim`, `publish` and `record-ungraded`. Every step must contain exactly one
+`--phase` argument from that set; missing, extra or duplicate phases fail.
+The recorder's complete `--phase record-ungraded` command and source/selector/
+terminal/root arguments are pinned. Its step env is exactly the HF_TOKEN secret
+mapping, its timeout is 5 minutes, and its complete condition groups only
+task4 A1, task4 A2 and task5 A1 before requiring both
+`model_free_record_ready=true` AND `judge_ready=false`. Successful cells and
+arbitrary future selectors cannot satisfy that asserted condition.
+
+All existing guard assertions remain: no HF_TOKEN on the judge or job envs,
+protected approval isolation, exact checkout/source/ref/attempt pins,
+branch-inspection exclusions, no public artifact upload, OIDC/judge readiness
+and ordinary publication conditions. The approval job's empty permissions and
+single step are also asserted. No runtime policy, permission, timeout or workflow
+condition was changed to make these tests pass.
+
+At `7021308b0df63497dbcd38d6d27fce3247a25a09`, one runner invocation selected
+only the two nodes listed above: **2 collected, 2 passed in 1.94s**, exit **0**.
+Python 3.10.12 / pytest 9.1.1 ran under `env -i`, `GITHUB_ACTIONS=false`, offline
+HF/Transformers flags, disabled plugin autoload, `PYTHONDONTWRITEBYTECODE=1` and
+`-m 'not integration' -p no:cacheprovider --maxfail=1 -q`.
+The actual log is `/tmp/project5-exact-hf-phases.N9U4Uy/focused-7021308b0.log`.
+Only these two completion records changed after that tested SHA. No other node
+ran. The 1177 passing CI tests, the task5 52-case selector and all earlier
+families/suites were not rerun. This result is not combined with the failed CI
+or any earlier result.
+
+### Carried task5 A1 preparation, unchanged
+
+The prior task prepared only the recorded failed task5 A1 under the leader's
+explicit
 `task5-a1-model-free-ungraded` policy. Its distinct scoreless record must verify
 the actual task4 A2 UNGRADED record, including A2's ordinary task4 B2 backing
-grade. The new focused selector returned **52 passed in 57.59s**, exit **0**,
+grade. Its separate focused selector returned **52 passed in 57.59s**, exit **0**,
 at immutable SHA `4d32c2f141c865fc7bb4859e129eb4b57b150bbf`.
-No live record was written. All changes remain local and unpublished.
+Local `8546b76d3891bb923a709266e41e25fedacc138d` added only records after
+that test. No live record was written, and this production work was not changed
+or retested for the HF-phase correction.
 
-Work continued from the clean owned PR686 worktree at published head
-`7abad5176d68f8172e83522c88adad7432dcc4d3`. The required bounded pre-edit
-decision was APPROVE-WITH-CONDITIONS before production/workflow edits. It
-permitted only the exact new failure binding and the fixed task5 A1 → task4 A2
+That work started from published `7abad5176d68f8172e83522c88adad7432dcc4d3`.
+Its required bounded pre-edit decision was APPROVE-WITH-CONDITIONS before
+production/workflow edits. It permitted only the exact new failure binding and
+the fixed task5 A1 → task4 A2
 → ordinary task4 B2 verification, with original-claim and distinct-revision
 proofs. It did not authorize arbitrary history traversal or live execution.
 
@@ -103,7 +169,7 @@ remain unresolved and consume the attempt; later durable verification cannot
 retroactively establish writer acknowledgment or restore replay authority.
 No old claim, receipt, terminal or score is rewritten.
 
-### Exact focused offline evidence
+### Separate task5 A1 offline evidence, not rerun
 
 At immutable SHA `4d32c2f141c865fc7bb4859e129eb4b57b150bbf`, only
 `tests/test_codex_budget_pilot_task5_failed_a1.py::test_fixed_task5_a1_after_ungraded_a2`
@@ -128,8 +194,10 @@ Python 3.10.12 / pytest 9.1.1 ran credential-free under `env -i`,
 `-m 'not integration' -p no:cacheprovider --maxfail=1 -q`.
 The actual log is
 `/tmp/project5-task5-failed-a1.EvMVJb/focused-4d32c2f14.log`.
-Only these two completion records changed after the tested SHA. No previous
-passing selector, full suite or CI run was repeated.
+At that earlier task5 endpoint, only these two completion records changed after
+the tested SHA. No previous passing selector, full suite or CI run was repeated.
+The later two-test correction above is a separate invocation and does not change
+this evidence.
 
 Earlier results remain separate observations, not a combined total:
 
@@ -147,12 +215,14 @@ historical endpoint sections below.
 
 ### Remaining authority and source hold
 
-Published PR686 remains at `7abad5176d68f8172e83522c88adad7432dcc4d3`.
-Direct leader review `5326230185` covers that head only, conditional on CI and
-the source hold. The supplied initial CI observation was 7 passed, with
-pilot-contracts and native-host still running; it is not a final gate result.
-No CI status was queried. This local task5 delta has not received leader review
-or CI validation, and no push or republication is authorized now.
+Before the newly authorized accumulated push, PR686's published head is
+`7abad5176d68f8172e83522c88adad7432dcc4d3`. Direct leader review `5326230185`
+covers that head only, conditional on CI and the source hold. The earlier
+7-pass observation, with pilot-contracts and native-host running, is superseded
+by the completed assertion failure above, not a passing gate. No CI status was
+queried. The carried task5 delta and this correction still require direct leader
+review and new-head CI. The single authorized push does not permit manual CI
+reruns, polling, merge or live use.
 
 Main/inference source `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e` remains
 held. Before any eventual task5 A1 record, the leader must bind a reviewed shared
@@ -168,10 +238,11 @@ It was not queried, affected or registered, and no outcome is inferred.
 Fixed-content/publication-derived proof is not independent authentication that
 every original outer envelope was never rewritten. Inference/runtime/input/
 budget controls and `default_v2_sol_max.yaml` / GPT-5.6 Sol/max remain unchanged.
-The full catalog was reviewed once. Experiment-design and the consolidated
-grading spec kept the explicit new failure policy separate from the unchanged
-comparison and judged-score contract. Experiment-report-en then im-not-ai-en
-preserved exact evidence, missingness and the authority limits in these records.
+The full catalog was reviewed once for this correction. No new experiment
+design or policy review was performed; the earlier task5 design/spec decision
+and comparison contract remain unchanged. Experiment-report-en then im-not-ai-en
+preserved the separate CI/local observations, missingness and authority limits
+in these records.
 
 No live HF/Azure/model/grade/readout/dispatch call, Project or credential change,
 merge, source reseal or old-record rewrite occurred. The following sections
