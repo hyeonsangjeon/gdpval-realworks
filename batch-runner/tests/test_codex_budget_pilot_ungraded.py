@@ -175,7 +175,7 @@ def test_fixed_failed_a1_no_judge_policy(recorded_pair, tmp_path, monkeypatch, c
         assert ci.HOST_POLICY["sdk"] == ci.HOST_POLICY["cli"] == "0.147.0"
         assert context.plan["model"]["deployment"] == "gpt-5.4" and context.plan["model"]["route_profile"] == "direct-v1"
         assert hashlib.sha256(context.run.grader_config_json.encode()).hexdigest() == readout.CONFIG_SHA256
-        for cell_id in context.plan["order"][24:]:
+        for cell_id in context.plan["order"][25:]:
             with pytest.raises(output.OutputPublicationRefused):
                 grading.compile_request("pilot/" + cell_id, failed.FUTURE_CONTROLLER, current.request,
                                         producer_source_sha=failed.PRODUCER)
@@ -187,7 +187,7 @@ def test_fixed_failed_a1_no_judge_policy(recorded_pair, tmp_path, monkeypatch, c
     if change == "workflow":
         jobs = history.workflow["jobs"]
         steps = {step["name"]: step for step in jobs["pilot-live"]["steps"] if "name" in step}
-        record_step = steps["Record only the verified failed task4 A1 or A2 without a judge"]
+        record_step = steps["Record only the fixed failed task4 A1/A2 or task5 A1 without a judge"]
         assert "'pilot/" + grading.TASK4_A1_CELL + "'" in record_step["if"]
         assert "model_free_record_ready == 'true'" in record_step["if"]
         assert "judge_ready == 'false'" in record_step["if"]
@@ -200,7 +200,7 @@ def test_fixed_failed_a1_no_judge_policy(recorded_pair, tmp_path, monkeypatch, c
         expression = jobs["pilot-live"]["env"]["PILOT_GRADE_PRODUCER_SOURCE_SHA"]
         assert jobs["pilot-plan"]["env"]["PILOT_GRADE_PRODUCER_SOURCE_SHA"] == expression
         assert all(expression.count('"pilot/' + cell_id + '"') == 1 for cell_id in grading.TASK4_RETAINED)
-        assert all('"pilot/' + cell_id + '"' not in expression for cell_id in context.plan["order"][24:])
+        assert all('"pilot/' + cell_id + '"' not in expression for cell_id in context.plan["order"][25:])
         assert jobs["pilot-live"]["needs"] == ["pilot-approve-paid"] and "environment" not in jobs["pilot-live"]
         assert jobs["pilot-live"]["permissions"] == {"contents": "read", "id-token": "write"}
         assert jobs["pilot-approve-paid"]["permissions"] == {} and len(jobs["pilot-approve-paid"]["steps"]) == 1

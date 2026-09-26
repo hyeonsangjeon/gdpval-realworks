@@ -1,4 +1,4 @@
-"""Recorded failed task4 A1/A2: durable UNGRADED evidence, never a judge.
+"""Recorded failed task4 A1/A2 and task5 A1: UNGRADED evidence, never a judge.
 
 This is not the ordinary judged-terminal format or a failed-input fallback.
 The two CAS writes use the existing grading namespace and one-use guards.
@@ -23,15 +23,18 @@ CLAIM_FORMAT = "codex-pilot-model-free-ungraded-claim-v1"
 TERMINAL_FORMAT = "codex-pilot-model-free-ungraded-terminal-v1"
 POLICY = "recorded_task4_failed_a1_no_judge"
 A2_POLICY = "recorded_task4_failed_a2_no_judge"
+TASK5_POLICY = "task5-a1-model-free-ungraded"
 require = output._require
 
 
 def _scope(context):
+    recorded = (grading.TASK4_RETAINED.get(context.cell["cell_id"])
+                or grading.TASK5_RETAINED.get(context.cell["cell_id"]))
     require(grading._model_free_context(context)
             and ci.CAMPAIGN == "budget_pilot_ci_20260925_04"
             and context.plan["reviewed_source_sha"] == grading.TASK3_A1_PRODUCER_SOURCE
             and context.controller_source_sha != grading.TASK3_A1_PRODUCER_SOURCE
-            and context.requested_terminal == grading.TASK4_RETAINED[context.cell["cell_id"]][1]
+            and recorded is not None and context.requested_terminal == recorded[1]
             and context.plan["order"][18:20] == [grading.TASK4_A1_CELL, grading.TASK4_B1_CELL]
             and retained.BRANCH == "pilot-inference-20260925-04"
             and grading.BRANCH == "pilot-grades-20260925-04", "fixed_model_free_a1_required")
@@ -39,6 +42,10 @@ def _scope(context):
         require(context.plan["order"][22:24] == [
             "3baa0009-5a60-4ae8-ae99-4955cb328ff3_B_r2", grading.TASK4_A2_CELL],
             "fixed_model_free_a2_predecessor_required")
+    if context.cell["cell_id"] == grading.TASK5_A1_CELL:
+        require(context.plan["order"][23:25] == [grading.TASK4_A2_CELL, grading.TASK5_A1_CELL]
+                and context.plan["order"].index(context.cell["cell_id"]) == 24,
+                "fixed_model_free_task5_predecessor_required")
 
 
 def fixed_failure(context, evidence):
@@ -162,7 +169,9 @@ def _binding(context, evidence, identity_sha, entry, run):
             and type(run["id"]) is str and re.fullmatch(r"[1-9][0-9]{0,19}", run["id"]) is not None
             and run["job"] == "pilot-live" and type(run["attempt"]) is int and run["attempt"] == 1,
             "model_free_run_required")
-    return {"policy": POLICY if context.cell["cell_id"] == grading.TASK4_A1_CELL else A2_POLICY,
+    policy = TASK5_POLICY if context.cell["cell_id"] == grading.TASK5_A1_CELL else (
+        POLICY if context.cell["cell_id"] == grading.TASK4_A1_CELL else A2_POLICY)
+    return {"policy": policy,
         "repository_name_sha256": retained.TARGET_SHA256,
         "campaign_id": ci.CAMPAIGN, "branch": grading.BRANCH, "inference_branch": retained.BRANCH,
         "cell_id": context.cell["cell_id"], "task_id": context.cell["task_id"], "run_id": context.cell["run_id"],
@@ -215,7 +224,8 @@ def verify_terminal(api, repo, revision, context, entry, cache, token, deadline)
     grading._task3_grade_predecessor(context, claim)
     require(len({claim["expected_parent"], terminal["claim_commit"], revision}) == 3,
             "model_free_terminal_parent_changed")
-    previous_cell = context.plan["order"][17 if context.cell["cell_id"] == grading.TASK4_A1_CELL else 22]
+    task5 = context.cell["cell_id"] == grading.TASK5_A1_CELL
+    previous_cell = context.plan["order"][23 if task5 else 17 if context.cell["cell_id"] == grading.TASK4_A1_CELL else 22]
     recorded = grading._task3_recorded(previous_cell) or grading.TASK4_RETAINED.get(previous_cell)
     previous = grading.compile_request("pilot/" + previous_cell, context.controller_source_sha,
         recorded[1], producer_source_sha=grading.TASK3_A1_PRODUCER_SOURCE)
@@ -225,8 +235,24 @@ def verify_terminal(api, repo, revision, context, entry, cache, token, deadline)
         expected={key: claim["predecessor"][key] for key in ("size", "sha256")}, written_at=claim["expected_parent"])
     grading._grade_retained_input(previous, previous_value["binding"], api, repo,
                                  grading._cache(cache, "previous-input"), token, deadline)
-    verified = grading._grade_terminal(api, repo, claim["expected_parent"], previous, entry,
-                                       grading._cache(cache, "previous-grade"), token, deadline)
+    if task5:
+        # One explicit 24 -> 23 -> ordinary 22 boundary, never tag-driven or
+        # data-driven recursion. A2 retains its original ordinary B2 verifier.
+        require(previous.cell["cell_id"] == grading.TASK4_A2_CELL
+                and previous.plan["order"][22:24] == [
+                    "3baa0009-5a60-4ae8-ae99-4955cb328ff3_B_r2", grading.TASK4_A2_CELL],
+                "fixed_model_free_task5_predecessor_required")
+        previous_claim, _ = retained._control(api, repo, previous_value["claim_commit"],
+            grading._paths(previous.cell)[0], grading._cache(cache, "previous-claim"), token, deadline,
+            expected=previous_value["claim_identity"], written_at=previous_value["claim_commit"])
+        require(len({revision, terminal["claim_commit"], claim["expected_parent"],
+                     previous_value["claim_commit"], previous_claim["expected_parent"]}) == 5,
+                "model_free_task5_chain_revision_changed")
+        verified = verify_terminal(api, repo, claim["expected_parent"], previous, entry,
+                                   grading._cache(cache, "previous-grade"), token, deadline)
+    else:
+        verified = grading._grade_terminal(api, repo, claim["expected_parent"], previous, entry,
+                                           grading._cache(cache, "previous-grade"), token, deadline)
     require(evidence["claim"]["predecessor"] == verified["terminal"]["binding"]["retained"],
             "model_free_inference_predecessor_changed")
     retained._objects(api, repo, terminal["claim_commit"], [retained._object(previous_path, previous_data)],

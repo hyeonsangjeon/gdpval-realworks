@@ -106,6 +106,13 @@ TASK4_RETAINED = {
     TASK4_A2_CELL: (
         "36245490377", "8f2f6edd7bb2fda964d8a24b4532b8af725bcefbb1513d9a60df86e983446fe9"),
 }
+# Only this recorded task5 failure may follow task4 A2's verified UNGRADED
+# record. No successor or arbitrary failed input is admitted by this binding.
+TASK5_A1_CELL = "0818571f-5ff7-4d39-9d2c-ced5ae44299e_A_r1"
+TASK5_RETAINED = {
+    TASK5_A1_CELL: (
+        "36247236594", "b23da4f1f5e81999039c473d27f3a70cc0d0681672ad08be0f9674b618915c97"),
+}
 CLAIM_FORMAT = "codex-pilot-grade-claim-v1"
 RESULT_FORMAT = "codex-pilot-grade-terminal-v1"
 PROOF = "verified_publication_derived_not_independent_provider_authentication"
@@ -178,12 +185,13 @@ def _task3_recorded(cell_id: str) -> tuple[str, str] | None:
 
 
 def _model_free_context(context: Context) -> bool:
-    return context.terminal_request is not None and context.cell["cell_id"] in {TASK4_A1_CELL, TASK4_A2_CELL}
+    return context.terminal_request is not None and context.cell["cell_id"] in {
+        TASK4_A1_CELL, TASK4_A2_CELL, TASK5_A1_CELL}
 
 
 def _shared_controller_successor(context: Context) -> bool:
     return context.terminal_request is not None and context.cell["cell_id"] in {
-        *TASK3_SUCCESSORS, *TASK4_RETAINED}
+        *TASK3_SUCCESSORS, *TASK4_RETAINED, *TASK5_RETAINED}
 
 
 def compile_request(selector: str, source: str, terminal: str = "", *, producer_source_sha: str = "") -> Context | None:
@@ -211,7 +219,11 @@ def compile_request(selector: str, source: str, terminal: str = "", *, producer_
     recorded_task4 = (fixed_refs and task4 is not None
                       and producer == TASK3_A1_PRODUCER_SOURCE and source != producer
                       and terminal == task4[1])
-    recorded_content = recorded_task2 or recorded_task3 or recorded_task4
+    task5 = TASK5_RETAINED.get(selector[6:])
+    recorded_task5 = (fixed_refs and task5 is not None
+                      and producer == TASK3_A1_PRODUCER_SOURCE and source != producer
+                      and terminal == task5[1])
+    recorded_content = recorded_task2 or recorded_task3 or recorded_task4 or recorded_task5
     require(producer == source or (
         fixed_refs and selector == "pilot/" + RETAINED_CELL
         and producer == RETAINED_PRODUCER_SOURCE and terminal == RETAINED_TERMINAL
@@ -460,21 +472,26 @@ def _task2_resolution(context: Context, evidence: dict, revision: str) -> None:
     cell_id = context.cell["cell_id"]
     task3 = _task3_recorded(cell_id)
     task4 = TASK4_RETAINED.get(cell_id)
-    recorded = task4 or task3 or TASK2_RETAINED.get(cell_id)
+    task5 = TASK5_RETAINED.get(cell_id)
+    recorded = task5 or task4 or task3 or TASK2_RETAINED.get(cell_id)
     require(recorded is not None and context.terminal_request == recorded[1]
             and context.plan["run_id"] == "budget_pilot_ci_20260925_04"
-            and context.plan["reviewed_source_sha"] == (TASK3_A1_PRODUCER_SOURCE if task3 or task4 else B1_PRODUCER_SOURCE)
+            and context.plan["reviewed_source_sha"] == (TASK3_A1_PRODUCER_SOURCE if task3 or task4 or task5 else B1_PRODUCER_SOURCE)
             and context.plan["order"][7:12] == list(TASK2_RETAINED)
             and retained.BRANCH == "pilot-inference-20260925-04" and BRANCH == "pilot-grades-20260925-04"
             and output._hash(revision, 40), "recorded_task2_request_required")
     terminal, claim, manifest = (evidence[key] for key in ("terminal", "claim", "manifest"))
-    if task3 or task4:
+    if task3 or task4 or task5:
         require(context.plan["order"][12:18] == [TASK3_A1_CELL, *TASK3_SUCCESSORS]
                 and context.controller_source_sha != TASK3_A1_PRODUCER_SOURCE
                 and (cell_id != TASK3_A1_CELL or claim["expected_parent"] == TASK3_A1_PREVIOUS_TERMINAL),
                 "recorded_task3_previous_inference_required")
-    if task4:
+    if task4 or task5:
         require(context.plan["order"][18:24] == list(TASK4_RETAINED), "recorded_task4_order_required")
+    if task5:
+        require(context.plan["order"][24:25] == list(TASK5_RETAINED)
+                and context.plan["order"][23:25] == [TASK4_A2_CELL, TASK5_A1_CELL],
+                "recorded_task5_order_required")
     completed = ci.validate_completion(terminal["completion"])
     require(pilot._digest(completed) == recorded[1], "recorded_task2_completion_mismatch")
     binding = claim["binding"]
@@ -891,7 +908,8 @@ def _validate_binding(value: dict, context: Context, entry: dict) -> None:
 
 def _task3_grade_predecessor(context: Context, claim: dict) -> None:
     if context.terminal_request is not None and (
-            _task3_recorded(context.cell["cell_id"]) is not None or context.cell["cell_id"] in TASK4_RETAINED):
+            _task3_recorded(context.cell["cell_id"]) is not None
+            or context.cell["cell_id"] in {*TASK4_RETAINED, *TASK5_RETAINED}):
         ordinal = context.plan["order"].index(context.cell["cell_id"])
         previous = claim.get("predecessor")
         require(output._hash(claim.get("expected_parent"), 40) and claim["expected_parent"] != retained.BOOTSTRAP
@@ -1043,8 +1061,10 @@ def _branch_tip(api, repo: str, context: Context, prepared: dict, cache: Path, t
         other = compile_request("pilot/" + cell["cell_id"], context.controller_source_sha,
             value["binding"]["retained"]["terminal_commit"], producer_source_sha=context.plan["reviewed_source_sha"])
         entry = prepared["entry"]
-    if recorded_task2 and context.cell["cell_id"] == TASK4_B1_CELL:
+    if recorded_task2 and context.cell["cell_id"] in {TASK4_B1_CELL, TASK5_A1_CELL}:
         from codex_budget_pilot_ungraded import verify_terminal
+        if context.cell["cell_id"] == TASK5_A1_CELL:
+            require(other.cell["cell_id"] == TASK4_A2_CELL, "fixed_model_free_task5_predecessor_required")
         verified = verify_terminal(api, repo, head, other, entry, _cache(cache, "tip_verified"), token, deadline)
     else:
         verified = _grade_terminal(api, repo, head, other, entry, _cache(cache, "tip_verified"), token, deadline)
