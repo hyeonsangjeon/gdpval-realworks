@@ -1,22 +1,30 @@
 # Latest task result
 
-## PROJECT5-TASK4-RECORDED-SUCCESSORS
+## PROJECT5-TASK4-FINAL-FAILED-A2
 
-Prepared the exact retained task4 C1/C2/B2 grading bindings locally, extending
-the existing chain after B1. The new focused selector returned **40 passed in
-78.13s** at `e0e0c8ca2ea5ef4b4d83a4448216e716361a2ee3`. The failed-A1-only
-model-free UNGRADED policy, B1 behavior and task3 boundaries are unchanged.
-Nothing was published or executed live; no task4 quality result is claimed.
+Added the final recorded task4 A2 as an exact model-free UNGRADED binding,
+under the leader's explicit second-failure policy. The A2-only offline selector
+returned **46 passed in 52.10s** at
+`32767a5a6c8861b58d14bbc79a39fea396533847`. A1's policy and special predecessor,
+B1's use of the A1 record, and ordinary judged-terminal requirements remain
+unchanged. No live record or grade was written.
 
-Work continued from local `35804154ef35bc70e35717c24f6b512cdc8fc145`.
+The leader-supplied task4 cohort now has six retained inference terminals:
+A1/A2 failed and B1/C1/C2/B2 succeeded; none is graded. This is one canonical
+task with two repetitions per condition, not causal recovery evidence or a
+model quality score. Failed A results were neither rerun nor reclassified.
+
+Work continued from local `ecf61a13a90111a8dd7e59a71ec77ec1d1bf0238`.
 The required bounded extreme-reasoner decision was APPROVE-WITH-CONDITIONS
-before edits: add only the three recorded rows, extend the exact order slice
-and existing workflow producer mappings, and preserve ordinary judged-terminal
-requirements. There is no new framework, source override or reader registry.
+before production/workflow edits: add only the fixed failed A2, preserve A1's
+binding, verify A2 against its actual ordinary B2 grade under the declared
+controller, and group the exact A1/A2 workflow condition before both readiness
+checks. There is no new framework, source override, reader registry or general
+skip policy.
 
-### Closed scope and unchanged failure policy
+### Closed scope and preserved predecessors
 
-The five registered task4 cells remain in `budget_pilot_ci_20260925_04`, with
+The six registered task4 cells remain in `budget_pilot_ci_20260925_04`, with
 inference producer
 `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e` and the original order. These
 original failed-A1/successful-B1 fixed-content bindings are unchanged:
@@ -26,8 +34,8 @@ original failed-A1/successful-B1 fixed-content bindings are unchanged:
 | `3baa0009-5a60-4ae8-ae99-4955cb328ff3_A_r1` | 18 | `36234320019` | `a913f0236e801e31ab7c0f58c8545ad6375d7092c06fa77f839225d03efe52d8` |
 | `3baa0009-5a60-4ae8-ae99-4955cb328ff3_B_r1` | 19 | `36235926112` | `f3546942ebac25c3c3cd1788dfb792a80e3e10f465999bebf7730fb651cb2bde` |
 
-Only the following successful retained successors were added. Their cell IDs
-use prefix `3baa0009-5a60-4ae8-ae99-4955cb328ff3_`:
+The previously registered successful retained successors are unchanged. Their
+cell IDs use prefix `3baa0009-5a60-4ae8-ae99-4955cb328ff3_`:
 
 | Suffix | Ordinal | Original inference run | Completion request SHA-256 | Terminal ACK, 2026-09-26 UTC | Deliverable identities |
 |---|---|---|---|---|---|
@@ -41,13 +49,56 @@ job `cell`, exit 0, one child, confirmed cleanup and no cell timeout. No grade
 is recorded in this evidence, and no private terminal SHA or future grading
 run was supplied. Deliverable identities do not establish quality, and no raw
 files were supplied or recovered.
+
 C1 requires the actual B1 grade; C2 requires C1; B2 requires C2, all under the
 same explicitly declared future controller. The resolver verifies the original
 780 producer, run, completion, configuration, inputs and object identities,
 as well as the full retained inference observation, including the actual
-predecessor. Controller authority
-is never taken from remote metadata. Only B1 uses the distinct A1 verifier;
-the three new successors require ordinary Step8-invoked judged terminals.
+predecessor. Controller authority is never taken from remote metadata. Only B1
+uses the distinct A1 verifier; the three successful successors require ordinary
+Step8-invoked judged terminals.
+
+### Final failed A2 evidence and policy binding
+
+The new cell is `3baa0009-5a60-4ae8-ae99-4955cb328ff3_A_r2`, ordinal 23,
+with the same original780 inference producer. Its inference run is
+`36245490377`, job `108413795328`, workflow attempt 1, job `cell`.
+The leader independently recomputed artifact `10907203220`'s completion
+payload checksum:
+`8f2f6edd7bb2fda964d8a24b4532b8af725bcefbb1513d9a60df86e983446fe9`.
+This is a fixed-content request, not a supplied private terminal revision.
+
+On 2026-09-26 UTC, claim acknowledgment was `13:35:04.3662826Z`, execution
+ran `13:35:16` to `13:45:03` with exit 1, failed-terminal acknowledgment was
+`13:45:09.9570599Z`, and the run ended in failure at `13:45:18Z`. The recorded
+status is `failed`, reason `child_nonzero_exit`, with one child, confirmed
+cleanup, no timeout, zero deliverables and no grade. The underlying child
+cause and internal attempt count remain unknown; no rate-limit, deadline or
+attempt-cap explanation is inferred.
+
+| Retained identity | Bytes | SHA-256 |
+|---|---|---|
+| Result | 8952 | `681b4f18c4bd27fe4dc62b5ace51ee30e4e7e41c7d4bb9303775d4af849a8c78` |
+| Ledger | 3425 | `c5d6984316b084417ec0a31e11658fe82ecc2bbe293bb5084ca017cc2ae0aa26` |
+
+The supplied configuration SHA-256 is
+`09f2c61e09149fca9949b2fd209dc43514b4fdad7b555d53369646de0319532f`;
+the original input and order pins are unchanged. The inference receipt reports
+partial known USD 0.084485, 23696 input / 1683 output / 0 cached / 994 reasoning
+tokens, estimated cost null, HTTP request count null and `invoice_complete=false`.
+These are partial inference receipt values, not total costs or reconciled
+invoices. No raw payload, private terminal SHA or future grading run was supplied
+or recovered.
+
+The explicit second binding uses `recorded_task4_failed_a2_no_judge`; A1 keeps
+`recorded_task4_failed_a1_no_judge`. A2 must verify the actual ordinary B2 grade
+under the same explicitly declared future controller, including the complete
+retained B2 inference observation, original run/content/source proof and
+Step8 invocation/cleanup. B2's fixed run and checksum remain in the table above.
+No future B2 grade run or revision is invented. A2 cannot enter the ordinary
+judged path, and task5 fixed-content requests remain closed.
+
+### Model-free policy and unchanged judged requirements
 
 The earlier leader-approved no-judge policy was implemented from
 `79c313a94be1a22093cf6cd00245a5564b0111d8`. Its bounded pre-edit review approved
@@ -55,17 +106,19 @@ only that fixed policy with conditions; a later inspection required complete
 canonical-byte equality, including numeric-to-boolean refusal. That guard
 and its separate evidence below are unchanged.
 
-The A1 record denotes absence of a grade, not a zero score, pass, rubric
-verdict or successful model result.
-The dedicated `record-ungraded` phase accepts only A1's fixed failed inference:
+The A1 and A2 records denote absence of a grade, not a zero score, pass, rubric
+verdict or successful model result. The dedicated `record-ungraded` phase
+accepts only these two fixed failed inferences:
 exit 1, `child_nonzero_exit`, one inference child, confirmed cleanup, no timeout
 and zero deliverables. It revalidates the genuine failed materialization,
 original result/ledger bytes, fixed completion, producer/run/input/object proof,
 request approval and controller source. Its source/config-only staging verifies
 the expected predecessor closure without a judge entry or rubric staging.
 The separate readiness flag is `model_free_record_ready=true` with
-`judge_ready=false`. The workflow's exact-A1 step cannot enter OIDC, Step8 or
-model execution; ordinary judged readiness/publication conditions remain intact.
+`judge_ready=false`. The workflow groups `(exact A1 OR exact A2)` before both
+readiness checks. These requests do not execute the OIDC, Step8 or model steps;
+the containing job's existing permissions are unchanged. Ordinary judged
+readiness/publication conditions remain intact.
 
 The distinct claim and terminal formats are
 `codex-pilot-model-free-ungraded-claim-v1` and
@@ -98,7 +151,33 @@ inference-observation equality, never as a successful judged grade. The
 ordinary judged-terminal verifier still requires a real Step8 child. Task3
 A1's historical task2 A2 transition is unchanged.
 
-### New focused offline evidence
+### Final A2-focused offline evidence
+
+At immutable SHA `32767a5a6c8861b58d14bbc79a39fea396533847`, only
+`tests/test_codex_budget_pilot_task4_failed_a2.py::test_fixed_failed_task4_a2_no_judge`
+was selected: **46 collected, 46 passed in 52.10s**, exit **0**, in one invocation.
+The shared genuine synthetic history records failed A1, then ordinary B1/C1/C2/B2,
+then failed A2 with the existing native-error, receipt, materialization and
+model-free writers. Isolated mutations cover exact scope/source/run/content,
+failure/deliverable/receipt/privacy checks, declared controller and protected
+approval, actual B2 predecessor and child proof, canonical terminal evidence,
+fixed-parent CAS, verified readback, cached admission, lost responses and
+local/remote replay refusal. A1's historical predecessor and B1's consumption
+remain asserted in that shared history.
+
+No Step8/model/OIDC call is permitted for the synthetic A2 path. All external
+boundaries are fake or blocked. The fixture's optional receipt parameter defaults
+to the previous null behavior; A2 uses the genuine synthetic error receipt, and
+receipt tampering changes a non-null value. Synthetic bytes, usage, grade runs
+and revisions are not reconstructions of the supplied live evidence.
+Python 3.10.12 / pytest 9.1.1 ran under `env -i`, offline HF/Transformers flags,
+disabled plugin autoload and
+`-m 'not integration' -p no:cacheprovider --maxfail=1 -q`.
+The log is `/tmp/project5-task4-final-a2.wAmsLo/focused-32767a5a6.log`.
+Only these two completion records changed after this tested SHA. No previous
+passing selector, full suite or CI run was repeated.
+
+### Separate recorded-successor evidence, not rerun
 
 At immutable SHA `e0e0c8ca2ea5ef4b4d83a4448216e716361a2ee3`, only
 `tests/test_codex_budget_pilot_task4_successor_grading.py::test_recorded_task4_successor_grading`
@@ -109,12 +188,12 @@ isolated copies. It does not rerun prior test nodes or reconstruct live payloads
 Synthetic successful outputs use the existing two-deliverable fixture, not
 the supplied live counts of 3/4/3 or invented live formats.
 
-The selector checks the exact new bindings and closed A2/task5 remainder,
-advanced inference-ref resolution, complete source/content/predecessor equality,
+At that endpoint, the selector checked the exact new bindings and closed
+A2/task5 remainder, advanced inference-ref resolution, complete source/content/predecessor equality,
 ordinary invoked-child requirements, protected approval and request/rerun
 refusals, no-clobber resolution, cached admission and parent integrity, CAS,
 lost responses, cleanup/privacy, replay refusal and unchanged old state.
-Direct model-free recording of each new success refuses. All external,
+The model-free recorder refuses each of those successful cells. All external,
 credential and model boundaries are fake or blocked; synthetic grades are
 not observed task4 scores. No prior 50-case policy, 39/20-case task3 family,
 full suite or CI run was repeated. The log is
@@ -122,7 +201,10 @@ full suite or CI run was repeated. The log is
 Python 3.10.12 / pytest 9.1.1 ran under `env -i`, offline HF/Transformers flags,
 disabled plugin autoload and
 `-m 'not integration' -p no:cacheprovider --maxfail=1 -q`.
-Only these two completion records changed after this tested SHA.
+At that endpoint, only these two completion records changed after its tested SHA.
+This successor work continued from `35804154ef35bc70e35717c24f6b512cdc8fc145`;
+its bounded pre-edit reviewer approved only the three supplied successful rows.
+Its evidence is separate from the final failed-A2 result above.
 
 ### Separate earlier policy evidence, not rerun
 
@@ -167,25 +249,28 @@ workflow fixture alone, **1 passed in 34.50s** at
 `3e692fed1e1734f4e8c82b6d8c4d41b8e48e63f2`. Earlier task3 observations remain
 unchanged below. In that earlier turn, only these two completion records
 changed after its final tested SHA. None of these observations is combined
-with the new successor result.
+with the new A2 result.
 
 ### Remaining authority and limits
 
-Main/inference source780 remains held. Published PR686 head
+Main/inference source780 remains held. The previously published PR686 head
 `e6c357374ea5b3b19e72f574e77dcaa5e3619a84`, direct review `5325618521` and
-all 9 passing checks cover only that old head, not this unpublished delta.
-Fresh leader review, later authorized CI/publication, the actual preceding
-task3 A2 grade, a shared explicit reviewed controller and same-run protected
+all 9 passing checks cover only that old head, not the accumulated task4 delta.
+This task authorizes one accumulated publication to the same PR686; direct
+leader review of the new head and new-head CI remain outstanding. The actual
+preceding task3 A2 grade, a shared explicit reviewed controller and same-run protected
 one-result request approval remain gates before any live operation. B1 needs
 its own separately authorized grading request after a verified A1 record;
 C1/C2/B2 each need their own request after the actual immediate grade predecessor.
+A2 needs its separately approved model-free request after the actual ordinary
+B2 grade.
 
 Task4 A2 was issued as run `36245490377`, job `108413795328`, at
-`2026-09-26T13:32:05Z` on held780. Its outcome and completion checksum remain
-unknown and its fixed-content request is unregistered. No A2 terminal identity
-or future grade run is inferred, and the failed-A1 exception does not extend
-to A2. Task5 fixed-content requests remain closed. Later leader-supplied A2
-evidence is needed before the cohort can be completed and published once.
+`2026-09-26T13:32:05Z` on held780; its subsequently supplied failure and completion
+checksum are now bound above. Its private terminal revision still requires the
+existing immutable resolution. Task5 remains unregistered. The leader's issued
+task5 A1 run `36247236594`, job `108418579115`, at `2026-09-26T14:04:00Z` on780
+is context only; it was not queried or affected. No inference-source hold was released.
 
 The completion checksums remain fixed-content requests, not invented private
 terminal revisions or independent proof that original outer metadata was never
@@ -193,16 +278,17 @@ rewritten. Existing no-clobber resolution and producer/controller separation
 remain. Inference/runtime/input/budgets and `default_v2_sol_max.yaml` /
 GPT-5.6 Sol/max are unchanged; there is no general skip flag or task3 readout
 registry. The 180-minute cumulative / 30-minute attempt inference controls
-are unchanged. C1/C2/B2 were registered only from the supplied evidence; no
+are unchanged. All task4 bindings use only the supplied evidence; no
 live inference, grading or readout status was queried or polled.
 
-Nothing was pushed, republished, merged, dispatched or executed live. No live
-HF/Azure/model/grade/readout call, Project or credential change, old-claim/grade
+The accumulated task4 changes are prepared for the single authorized PR686 update.
+Nothing was merged, dispatched or executed live. No live HF/Azure/model/grade/readout
+call, Project or credential change, old-claim/grade
 rewrite or held-source change occurred. The full skill catalog was reviewed
-once. Experiment-design and the consolidated grading spec kept the finite
-recorded-successor extension separate from the unchanged comparison, scoring
-and failed-A1-only policy. Experiment-report-en then
-im-not-ai-en preserved the split evidence and authority limits. The following
+once. Experiment-design and the consolidated grading spec kept this explicit
+second-failure policy separate from the unchanged comparison and scoring
+contract. Experiment-report-en then im-not-ai-en preserved the split evidence
+and authority limits. The following
 prior endpoint is a historical snapshot; its policy gap is superseded only by
 the local implementation above.
 
