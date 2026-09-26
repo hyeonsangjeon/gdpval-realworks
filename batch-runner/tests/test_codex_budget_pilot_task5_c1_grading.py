@@ -484,7 +484,13 @@ def test_successful_task5_c1_after_ungraded_b1(c1_history, tmp_path, monkeypatch
     assert change in PUBLISH_CASES
     if change == "cleanup":
         current.transport.mode = "cleanup_lost"
-    assert successors._invoke(current, capsys, "judge")[0] == 0
+    code, observed = successors._invoke(current, capsys, "judge")
+    if change == "cleanup":
+        assert code == 2 and observed["outcome"] == "unresolved" and observed["stage"] == "judge"
+        child = retained._read(current.root / "judge-receipt.json")
+        assert child["entry_invoked"] is True and child["cleanup_confirmed"] is False
+    else:
+        assert code == 0
     if change == "publication_cas":
         api.move_before_commit = True
     elif change == "publication_parent":
@@ -509,6 +515,8 @@ def test_successful_task5_c1_after_ungraded_b1(c1_history, tmp_path, monkeypatch
         monkeypatch.delenv("PILOT_GRADE_APPROVAL_RESULT")
     code, observed = successors._invoke(current, capsys, "publish")
     assert code == 2 and observed["outcome"] in {"refused", "unresolved"}, (observed, current.diagnostic)
+    if change == "cleanup":
+        assert observed["reason"] == "grade_cleanup_unconfirmed"
     if change in {"publication_lost", "publication_readback"}:
         assert observed["outcome"] == "unresolved"
     events = list(api.events)
