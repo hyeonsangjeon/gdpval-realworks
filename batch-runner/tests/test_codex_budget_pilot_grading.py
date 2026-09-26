@@ -228,7 +228,8 @@ def case(tmp_path, monkeypatch, compilation, compiled_cache):
     return state
 
 
-def _seed_outputs(case, tmp_path, *, failed=False, missing=False, ledger=True, extra_deliverable=False):
+def _seed_outputs(case, tmp_path, *, failed=False, missing=False, ledger=True, extra_deliverable=False,
+                  producer_row=None, producer_ledger=None, reason=None):
     context, api = case.context, case.api
     cell = context.cell
     config = json.loads(context.grading.dispatch.runs[0].config_json)
@@ -241,14 +242,14 @@ def _seed_outputs(case, tmp_path, *, failed=False, missing=False, ledger=True, e
         (upload / name).write_bytes(b"synthetic generated answer\r\n\x00unchanged\n")
         if extra_deliverable:
             (upload / names[1]).write_bytes(b"synthetic supplement; not a historical deliverable\n")
-    rows = bind_deliverable_file_records([{
+    rows = bind_deliverable_file_records([producer_row] if producer_row is not None else [{
         "task_id": cell["task_id"], "status": "error" if failed else "success", "model": "gpt-5.4",
         "deliverable_files": [] if failed else names, "content": None if failed else "synthetic answer",
         "deliverable_text": None if failed else "synthetic answer", "usage": None, "problem_solving_cost": None,
         "observability": {"preprocessors": []}, "latency_ms": 1.0,
         "timestamp": "2026-09-23T00:00:00Z", "error": "synthetic_failure" if failed else None,
     }], upload)
-    ledger_data = _ledger(cell["run_id"], cell["task_id"])
+    ledger_data = _ledger(cell["run_id"], cell["task_id"]) if producer_ledger is None else producer_ledger
     payload = {
         "experiment_id": cell["run_id"], "experiment_name": config["experiment"]["name"],
         "source": config["data"]["source"], "condition": config["condition_a"]["name"], "condition_identity": "condition_a",
@@ -277,7 +278,7 @@ def _seed_outputs(case, tmp_path, *, failed=False, missing=False, ledger=True, e
     binding = retained._binding(plan, cell, inputs, run={"id": "999", "job": "cell", "attempt": 1})
     claim = {"format": retained.CLAIM_FORMAT, "binding": binding, "expected_parent": retained.BOOTSTRAP,
              "predecessor": None, "model_result": False, "grade": False}
-    state = {"receipt": None, "status": "failed" if failed or missing else "succeeded", "reason": None,
+    state = {"receipt": None, "status": "failed" if failed or missing else "succeeded", "reason": reason,
         "child_invocations": 1, "exit_code": 1 if failed or missing else 0,
         "result": None if missing else pilot._identity(files["step2_inference_results.json"]),
         "artifacts": {"ledger": pilot._identity(ledger_data) if ledger and not missing else None,
