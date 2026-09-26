@@ -75,7 +75,11 @@ def case(tmp_path, monkeypatch, capsys, compilations, compiled_cells):
     previous, previous_cell = b1.B1_TERMINAL, state.context.cell
     for ordinal, suffix in enumerate(tuple(RECORDED)[1:], 8):
         cell_id = PREFIX + suffix
-        claim_revision, output_revision, terminal_revision = (f"{ordinal * 10 + offset:040x}" for offset in (1, 2, 3))
+        # Keep fixture-only inference addresses clear of GradeHF's small
+        # sequential grade commits, including the original A1 claim.
+        claim_revision, output_revision, terminal_revision = (
+            f"{10_000 + ordinal * 10 + offset:040x}" for offset in (1, 2, 3))
+        assert all(revision not in api.trees for revision in (claim_revision, output_revision, terminal_revision))
         seed_context = grading.compile_request("pilot/" + cell_id, grading.B1_PRODUCER_SOURCE, terminal_revision)
         seeded = SimpleNamespace(context=seed_context, api=api)
         with monkeypatch.context() as patch:
