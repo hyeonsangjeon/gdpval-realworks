@@ -1,6 +1,162 @@
 # Latest task result
 
-## PROJECT5-BIND-A2-READOUT
+## PROJECT5-TASK3-A1-PREP
+
+Prepared only the cross-source handoff from retained task2 A2 to canonical
+task3 A1, ordinal **12**, in `budget_pilot_ci_20260925_04`. The focused offline
+selector returned **23 passed in 172.29s**, exit **0**, at
+`7ed2f4c38e8c80f29e869c3cb96656ecb0e69a83`. No live inference, HF read, readout,
+grading or workflow dispatch occurred. This is control-path evidence, not a
+new task result or a quality measurement.
+
+Work started in a new clean worktree from supplied main
+`278cc1e135be3b8076ae9a8d4636e669deba7e29`. The leader reports PR684 delivered
+after review `5324446218` at `af978382f3013e5d32d79b17c8e0a61cc1552f81` and
+all **9** checks passed. That approval covers the baseline, not this new
+adapter. The preserved checkout, old worktrees and historical claims remain
+untouched.
+
+### Exact handoff and unchanged controls
+
+The only production change adds **25 lines** to the existing retention helper.
+It applies only to selected cell
+`2ea2e5b5-257f-42e6-a7dc-93763f28b19d_A_r1` and its immediate predecessor
+`0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r2`, on inference ref
+`pilot-inference-20260925-04`. The predecessor must satisfy its fixed producer
+`e7a28db07ebe10d6508b9256137763cc82f9a1d1`, run `36202190875`, job `cell`,
+attempt **1**, and completion payload digest
+`d6d1309c2c81ef17ce18158bc9014ce962ce7dcd267f95f328b279050d4fd15e`.
+
+The existing compiler reconstructs only A2's historical contract. Existing
+terminal/control/object validators check its claim, manifest, completion,
+byte identities and history at the captured branch head, using the new job's
+freshly verified shared-input hashes. Only bounded control JSON is downloaded;
+result, deliverable and ledger objects receive immutable metadata checks.
+The adapter then checks the fixed run and completion digest. It does not
+borrow input hashes from the old claim,
+search for another terminal, refresh the CAS parent or adopt old state. Task3's
+execution, host, source, claim and clock retain their own current bindings.
+The previous B1 exception and other predecessor paths are unchanged.
+
+The bounded pre-edit extreme-reasoner decision was **APPROVE-WITH-CONDITIONS**
+for this exact boundary. No workflow, registration, source-pin, schema, model,
+runtime, input, budget, grading, ledger-note, diagnostic or privacy code changed.
+The original five-task/**30-cell** IDs and order remain. The real compiler
+produces task3 A1 config SHA256
+`35a23a8842d378a8326ec8483553145ee5c63c9c63a383be3eb903bda77136a3` and order
+SHA256 `f16a2a408160efe106e3e009144d4acc451d1f9051c8c23195d10cb24ce75030`.
+
+Controls remain GPT-5.4 / Foundry `direct-v1` / `xhigh`, SDK **0.147.0**, original
+`hf_originals` bundle/input pins, **180 minutes** cumulative including wait and
+recovery, **30-minute** attempts, A maximum **4** fresh attempts, B/C with the
+same budget and native-capability gates, one inference slot and no automatic
+monetary cutoff. The fixed grader and all six retained task2 results are
+unchanged. No new epoch, workflow input, arbitrary source override or scheduler
+was added.
+
+### Focused offline evidence
+
+Only
+`tests/test_codex_budget_pilot_task3_a1.py::test_fixed_task3_a1_historical_predecessor`
+was selected. The separate observations are:
+
+| Tested SHA | Result | Scope |
+|---|---|---|
+| `8529844bca48f4aea8fb87b0eecb972c76d4c596` | **23 failed in 275.33s**, exit **1** | The fixture prepared a synthetic host twice; the existing no-clobber gate refused before the new handoff. An interrupt did not stop this invocation. |
+| `60328cef7928a33c0f0d0a3083ac73e88b40f90a` | **1 failed in 57.94s**, exit **1** | After the fixture correction, task3 admission succeeded; the positive case had a clock expectation off by one second. Stop-on-first-failure left the other **22** cases unexecuted in this invocation. |
+| `7ed2f4c38e8c80f29e869c3cb96656ecb0e69a83` | **23 passed in 172.29s**, exit **0** | Corrected fixture and clock assertion; no previously passing case was repeated. |
+
+Both correction commits changed only the new test fixture/assertion, not
+production. Only the two completion records change after the passing test SHA.
+The existing Python **3.10.12** / pytest **9.1.1** environment ran with
+credential-free `env -i`, offline HF flags, disabled plugin autoload and no
+pytest cache. No pre-existing selector, full suite or CI run was repeated.
+
+The existing fake children and HF server generate one synthetic six-cell task2
+history through genuine compilation, admission, serialization, deadlines and
+retention. The tests preserve that local state, clone the fake server per case
+and substitute only the expected synthetic completion digest after asserting
+the production pins. They do not reconstruct historical bytes. The selector
+checks the old same-source refusal, the new handoff, source/run/content/config/
+input/byte/history mismatches, wrong cell/ref/private target, cleanup and
+publication refusals, CAS races and lost claim/output/terminal responses.
+Refusals cannot start the current child; reservations cannot be replayed.
+Old local and remote state stays unchanged, and the other cells remain unrun.
+All model, HF, authentication, grader and process boundaries are fake or blocked.
+
+### Supplied live evidence and proof limits
+
+The leader reports A2 inference run `36202190875` completed on
+**2026-09-25 at 23:49:54 UTC**, with `terminal_verified` at
+**23:49:59.8771882 UTC** and artifact `10892208424`. The producer, run and
+completion digest above remain fixed. Its private terminal SHA has not been
+independently supplied and was not looked up or invented here.
+
+The completion digest authenticates fixed content. It does not independently
+establish that the original outer metadata was never rewritten. A stale
+terminal carried into an advanced branch head refuses, as do mismatched
+source/run/content proofs. Without an independently pinned original terminal
+SHA, this cannot categorically exclude a newly written, self-consistent outer
+envelope retaining the fixed completion. The handoff validates the recorded
+publication-receipt hash's format, not the original receipt or an independent
+provider acknowledgment.
+
+All four task2 C1/C2/B2/A2 grading operations finished on historical writer
+`a5e5d2589caff21309f0a1c21bb7d9d333ad47c6`, according to the leader. Last A2
+run `36214413190`, job `108327473087`, acknowledged publication at
+**2026-09-26T03:29:05.7159336Z** after one Step8 invocation and owned cleanup.
+The stored C1/C2/B2/A2 scores have not been read here; publication acknowledgment
+is not a quality result. The leader-dispatched model-free C1 readout
+`36217589922` was not polled or otherwise accessed. Earlier A1/B1 readouts,
+partial costs, missing accounting and frozen failed histories remain separate
+in the historical evidence below; no values were pooled or repriced.
+
+### Closed future request and remaining authority
+
+The route below is a future request specification, not a dispatch or live
+authorization. Its one unresolved value is the leader's exact reviewed main
+source. The placeholder deliberately fails the existing SHA gate; neither
+the historical producer nor this feature/test SHA substitutes for that future
+authority. No predecessor revision input is needed or added.
+
+```json
+{
+  "workflow": ".github/workflows/codex-budget-pilot-ci-cell.yml",
+  "ref": "main",
+  "inputs": {
+    "reviewed_source_sha": "LEADER_BOUND_REVIEWED_MAIN_SHA",
+    "cell_id": "2ea2e5b5-257f-42e6-a7dc-93763f28b19d_A_r1",
+    "execute": true,
+    "input_check": false,
+    "output_target_check": false,
+    "output_target_setup": false,
+    "input_transport": "hf_originals",
+    "input_release_id": "",
+    "input_asset_id": "",
+    "input_bundle_sha256": "757603585405da5d7f6817a6a0a23bd530d4b5e4e38b2fd4dc6f318053d240e3"
+  }
+}
+```
+
+After review, CI and the actual remaining readouts, the leader should bind one
+new common inference source for the remaining **18** original cells, ordinals
+**12–29**, to avoid per-cell source changes. This is a control intention, not
+permission to run **18** cells or a prediction of a future merge SHA. This task
+prepares only task3 A1; the other **17** cells are untouched. A later attempt
+still requires exact source/host validation, verified originals, predecessor
+proof, absence checks and one-use fixed-parent CAS admission. No old claim,
+clock or result is adopted or settled.
+
+New-head review, final CI and the leader's explicit source/attempt decision
+remain. No live HF/readout/inference/judge call, workflow dispatch, Azure
+management, Project edit, main change, merge, source reseal or CI polling
+occurred. The full skill catalog was reviewed once. Experiment-design kept
+the source boundary and controls explicit; experiment-report-en followed by
+im-not-ai-en preserved separate observations and evidence limits. No UI or new
+experiment axis was involved. The sections below are historical snapshots,
+not current instructions or new authority.
+
+## Prior PROJECT5-BIND-A2-READOUT
 
 Bound the final task2 A2 readout row to the issued grading run `36214413190`
 on the existing PR684 branch. The new A2-only selection returned **5 passed,

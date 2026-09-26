@@ -11,6 +11,45 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Fixed
+
+- Prepare only canonical task3 A1, ordinal **12**, in
+  `budget_pilot_ci_20260925_04` to verify its retained task2 A2 predecessor
+  under historical producer `e7a28db07ebe10d6508b9256137763cc82f9a1d1`, run
+  `36202190875` and completion payload digest
+  `d6d1309c2c81ef17ce18158bc9014ce962ce7dcd267f95f328b279050d4fd15e`.
+  The **25-line** production change reuses the existing compiler and
+  terminal/control/object validators at the captured inference-ref head, with
+  freshly verified current input hashes and unchanged fixed-parent CAS,
+  one-use, cleanup, privacy and no-replay gates. Current execution/source/claim/
+  clock bindings stay separate from historical proof. No workflow, registration,
+  source-pin, model, runtime, input, budget or grading code changed. The bounded
+  pre-edit reviewer approved this exact exception with conditions. The one
+  focused selector returned **23 passed in 172.29s**, exit **0**, at
+  `7ed2f4c38e8c80f29e869c3cb96656ecb0e69a83`. Earlier fixture observations remain
+  separate: **23 failed in 275.33s** at
+  `8529844bca48f4aea8fb87b0eecb972c76d4c596` from duplicate host preparation,
+  then **1 failed in 57.94s** at `60328cef7928a33c0f0d0a3083ac73e88b40f90a`
+  from an off-by-one synthetic clock expectation, with **22** cases unexecuted
+  in that stop-on-first-failure invocation. Only the fixture/assertion changed
+  between those runs; no passing case or prior family was rerun. Only completion
+  records changed after the passing test SHA. Supplied baseline main
+  `278cc1e135be3b8076ae9a8d4636e669deba7e29` contains delivered PR684, reviewed
+  at `af978382f3013e5d32d79b17c8e0a61cc1552f81` / `5324446218` with all **9**
+  checks passed; that approval does not cover this adapter. The leader reports
+  all four task2 C1/C2/B2/A2 grades finished on historical A5, with last A2 run
+  `36214413190` / job `108327473087` acknowledging publication at
+  **2026-09-26T03:29:05.7159336Z** after one Step8 invocation and cleanup.
+  Their stored scores remain unread here, and active C1 readout `36217589922`
+  was not queried. No independent private inference terminal SHA was supplied
+  for A2; fixed completion content does not prove original outer metadata
+  was never rewritten. Historical claims/results/accounting stay unchanged.
+  One future common source for the remaining **18** original cells is a control
+  intention, not execution authority; this task prepares only A1 and leaves
+  the other **17** untouched. New-head review, CI, remaining readouts and the
+  leader's exact source/attempt authorization remain. No live HF/model/grading,
+  workflow dispatch, main change, source reseal, merge or CI polling occurred.
+
 ### Added
 
 - Bind only task2 A2's `TASK2_GRADE_RUNS` entry to issued first grading run
