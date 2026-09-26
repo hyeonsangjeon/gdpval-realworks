@@ -13,7 +13,7 @@ on:
         type: string
         default: "default_v2_sol_max.yaml"
       inference_revision:
-        description: "Full HF commit for generic resume or A1 terminal; recorded task2 B1/C1/C2/B2/A2 require their fixed completion checksum (also selects B1 readout; never latest main)"
+        description: "Full HF commit for generic resume or A1 terminal; recorded task2 B1/C1/C2/B2/A2 require their fixed completion checksum (also selects configured readouts; never latest main)"
         required: false
         type: string
         default: ""
@@ -2134,7 +2134,7 @@ jobs:
       # source-identity, ledger, payload and child-log files stay private.
 
   pilot-readout:
-    # One selected historical A1/B1 grade, no paid authority. Dry planning and
+    # One selected configured historical task2 grade, no paid authority. Dry planning and
     # reads use this job; only the final read step receives the HF credential.
     if: >-
       ${{ inputs.experiment_yaml == 'pilot/grade-readout' && inputs.paid_approval == false &&

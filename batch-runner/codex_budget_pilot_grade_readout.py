@@ -1,4 +1,4 @@
-"""Closed readout of recorded A1 or B1, not admission, publication or regrading."""
+"""Closed task2 grade readout, not admission, publication or regrading."""
 
 from __future__ import annotations
 
@@ -28,7 +28,30 @@ GRADER_SOURCE_HASH = "0a66e518dbe9dfe403e68aee69ec13d7f15ee7d86c6c2de7ccedfe9902
 B1_WRITER_SOURCE = "ecbe297e7dc2d798a834091f14da3ae486172a43"
 B1_WRITER_RUN = {"id": "36202409134", "job": "pilot-live", "attempt": 1}
 B1_GRADER_SOURCE_HASH = "0a66e518dbe9dfe403e68aee69ec13d7f15ee7d86c6c2de7ccedfe990242e7df"
+# The A5 compiler/config and grader closure retain the independently derived
+# hashes above. Neither the observer's source nor remote claims supply them.
+TASK2_WRITER_SOURCE = "a5e5d2589caff21309f0a1c21bb7d9d333ad47c6"
+TASK2_GRADER_SOURCE_HASH = "0a66e518dbe9dfe403e68aee69ec13d7f15ee7d86c6c2de7ccedfe990242e7df"
+TASK2_GRADE_RUNS = {
+    "0112fc9b-c3b2-4084-8993-5a4abb1f54f1_C_r1": "36209654516",
+    "0112fc9b-c3b2-4084-8993-5a4abb1f54f1_C_r2": "36211281528",
+    "0112fc9b-c3b2-4084-8993-5a4abb1f54f1_B_r2": None,
+    "0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r2": None,
+}
+# These additional observed pins apply only to C1's predecessor proof. The
+# already-delivered B1 reader and production grading helpers keep their route.
+B1_PREDECESSOR_GRADE = "887c2373d456efc1eabf29a8bf3d3d7de12e43fe"
+B1_PREDECESSOR_INFERENCE = "0a9a8b3263f41d86d723f84a723c9b467f04dea5"
 require = output._require
+
+
+def _task2_cell(request):
+    return next((cell for cell in TASK2_GRADE_RUNS if grading.TASK2_RETAINED[cell][1] == request), None)
+
+
+def _task2_run(cell):
+    run = TASK2_GRADE_RUNS[cell]
+    return None if run is None else {"id": run, "job": "pilot-live", "attempt": 1}
 
 
 def _writer_context(request):
@@ -38,9 +61,14 @@ def _writer_context(request):
     if request == grading.RETAINED_TERMINAL:
         context = grading.compile_request("pilot/" + grading.RETAINED_CELL, WRITER_SOURCE,
             request, producer_source_sha=grading.RETAINED_PRODUCER_SOURCE)
-    else:
-        require(request == grading.TASK2_RETAINED[grading.B1_CELL][1], "grade_readout_route_refused")
+    elif request == grading.TASK2_RETAINED[grading.B1_CELL][1]:
         context = grading.compile_request("pilot/" + grading.B1_CELL, B1_WRITER_SOURCE,
+            request, producer_source_sha=grading.B1_PRODUCER_SOURCE)
+    else:
+        cell = _task2_cell(request)
+        require(cell is not None, "grade_readout_route_refused")
+        require(_task2_run(cell) is not None, "grade_readout_writer_unconfigured")
+        context = grading.compile_request("pilot/" + cell, TASK2_WRITER_SOURCE,
             request, producer_source_sha=grading.B1_PRODUCER_SOURCE)
     require(hashlib.sha256(context.run.grader_config_json.encode()).hexdigest() == CONFIG_SHA256,
             "grade_readout_config_refused")
@@ -48,6 +76,8 @@ def _writer_context(request):
 
 
 def _writer_run(context):
+    if context.cell["cell_id"] in TASK2_GRADE_RUNS:
+        return _task2_run(context.cell["cell_id"])
     return B1_WRITER_RUN if context.cell["cell_id"] == grading.B1_CELL else WRITER_RUN
 
 
@@ -56,8 +86,9 @@ def _writer_entry(context, renderer):
         "libreoffice_binary", "libreoffice_version", "pymupdf_version"}
         and all(type(value) is str and 0 < len(value) <= 1024 for value in renderer.values()),
         "grade_readout_renderer_identity_refused")
-    return {"config_hash": CONFIG_SHA256[:16], "renderer_fingerprint": renderer,
-            "grader_source_hash": B1_GRADER_SOURCE_HASH if context.cell["cell_id"] == grading.B1_CELL else GRADER_SOURCE_HASH}
+    source_hash = (TASK2_GRADER_SOURCE_HASH if context.cell["cell_id"] in TASK2_GRADE_RUNS else
+                   B1_GRADER_SOURCE_HASH if context.cell["cell_id"] == grading.B1_CELL else GRADER_SOURCE_HASH)
+    return {"config_hash": CONFIG_SHA256[:16], "renderer_fingerprint": renderer, "grader_source_hash": source_hash}
 
 
 def _context(args):
@@ -157,8 +188,8 @@ class _ReadOnlyGrade:
             context, entry, terminal["binding"]["retained"]["output_commit"]).values()})
 
     def bind_retained(self, binding, context, cache, deadline):
-        """Only B1's three inference controls may be downloaded, never payloads."""
-        require(context.cell["cell_id"] == grading.B1_CELL and context.terminal_request is not None,
+        """Only the registered cell's inference controls, never payloads."""
+        require(context.cell["cell_id"] in grading.TASK2_RETAINED and context.terminal_request is not None,
                 "grade_readout_retained_route_refused")
         revision = binding["retained"]["terminal_commit"]
         require(output._hash(revision, 40) and revision != self.revision, "grade_readout_retained_revision_refused")
@@ -188,10 +219,62 @@ class _ReadOnlyGrade:
         self._downloads.update({(claim_revision, claim), (output_revision, manifest)})
         grading._grade_retained_input(context, binding, self, self._repo,
             grading._cache(cache, "verified"), self._token, deadline)
+        if context.cell["cell_id"] in TASK2_GRADE_RUNS:
+            original, _ = retained._control(self, self._repo, claim_revision, claim,
+                grading._cache(cache, "predecessor"), self._token, deadline,
+                expected=terminal["claim_identity"], written_at=claim_revision)
+            return original["predecessor"]
 
     def allow_verified_files(self, records):
         # Called only after _grade_terminal checked the role/path/hash/history.
         self._downloads.update((self.revision, record["path"]) for record in records)
+
+
+def _verified_grade(api, context, cache, deadline):
+    terminal, _ = retained._control(api, api._repo, api.revision, grading._paths(context.cell)[1],
+        grading._cache(cache, "terminal"), api._token, deadline, written_at=api.revision)
+    entry = _writer_entry(context, terminal["binding"]["renderer_fingerprint"])
+    previous = None
+    if context.terminal_request is not None:
+        previous = api.bind_retained(terminal["binding"], context, grading._cache(cache, "inference-proof"), deadline)
+    api.bind(terminal, context, entry)
+    verified = grading._grade_terminal(api, api._repo, api.revision, context, entry,
+        grading._cache(cache, "verified"), api._token, deadline)
+    require(verified["terminal"] == terminal, "grade_readout_terminal_changed")
+    return verified, entry, previous
+
+
+def _verify_predecessor(api, context, verified, inference_previous, cache, deadline):
+    """Verify one logical predecessor, not recursive history or Git topology."""
+    terminal = verified["terminal"]
+    claim, _ = retained._control(api, api._repo, terminal["claim_commit"], grading._paths(context.cell)[0],
+        grading._cache(cache, "claim"), api._token, deadline,
+        expected=terminal["claim_identity"], written_at=terminal["claim_commit"])
+    ordinal = context.plan["order"].index(context.cell["cell_id"])
+    cell = context.plan["order"][ordinal - 1]
+    other = _writer_context(grading.TASK2_RETAINED[cell][1])
+    revision = claim["expected_parent"]
+    require(len({revision, api.revision, terminal["claim_commit"]}) == 3,
+            "grade_readout_predecessor_revision_refused")
+    if cell == grading.B1_CELL:
+        require(revision == B1_PREDECESSOR_GRADE, "grade_readout_original_b1_required")
+    prior = _ReadOnlyGrade(api._api, api._repo, api._token, other)
+    prior._metadata_open = False  # No second branch snapshot or moving-tip lookup.
+    prior.revision = revision
+    path = grading._paths(other.cell)[1]
+    prior._metadata_paths[revision] = {path}
+    prior._downloads.add((revision, path))
+    previous, _, _ = _verified_grade(prior, other, grading._cache(cache, "previous"), deadline)
+    require(claim["predecessor"] == {"cell_id": cell, "revision": revision, **previous["identity"]},
+            "grade_readout_predecessor_identity_refused")
+    observed = previous["terminal"]["binding"]["retained"]
+    require(inference_previous == observed, "grade_readout_inference_predecessor_refused")
+    if cell == grading.B1_CELL:
+        require(observed["terminal_commit"] == B1_PREDECESSOR_INFERENCE, "grade_readout_original_b1_required")
+    api._metadata_paths[terminal["claim_commit"]].add(path)
+    retained._objects(api, api._repo, terminal["claim_commit"],
+        [retained._object(path, retained._encoded(previous["terminal"]))], api._token, deadline, written_at=revision)
+    # Predecessor grade files have metadata proofs only. Never open their downloads.
 
 
 def _receipt(value):
@@ -278,6 +361,11 @@ def main(args, *, _test_api=None, _test_transport=None):
         "remote_mutation_possible": False, "inference_requested": False, "judge_entry_requested": False,
         "automatic_retry": False, "invoice_complete": False, "http_request_count": None}
     try:
+        cell = _task2_cell(args.terminal_revision)
+        if cell is not None:
+            public.update(cell_id=cell, grade_writer_source_sha=TASK2_WRITER_SOURCE,
+                grade_writer_run=_task2_run(cell), inference_producer_source_sha=grading.B1_PRODUCER_SOURCE,
+                inference_terminal=None, inference_request_checksum=args.terminal_revision)
         context = _context(args)
         if context.terminal_request is not None:
             public.update(cell_id=context.cell["cell_id"], grade_writer_source_sha=context.controller_source_sha,
@@ -301,16 +389,11 @@ def main(args, *, _test_api=None, _test_transport=None):
             public["stage"] = "grade_snapshot"
             head = api.locate(deadline)
             public["stage"] = "grade_terminal"
-            terminal, _ = retained._control(api, repo, api.revision, grading._paths(context.cell)[1],
-                grading._cache(root, "terminal"), token, deadline, written_at=api.revision)
-            renderer = terminal["binding"]["renderer_fingerprint"]
-            entry = _writer_entry(context, renderer)
-            if context.terminal_request is not None:
-                api.bind_retained(terminal["binding"], context, grading._cache(root, "inference-proof"), deadline)
-            api.bind(terminal, context, entry)
-            verified = grading._grade_terminal(api, repo, api.revision, context, entry,
-                grading._cache(root, "verified"), token, deadline)
-            require(verified["terminal"] == terminal, "grade_readout_terminal_changed")
+            verified, entry, previous = _verified_grade(api, context, root, deadline)
+            terminal = verified["terminal"]
+            renderer = entry["renderer_fingerprint"]
+            if context.cell["cell_id"] in TASK2_GRADE_RUNS:
+                _verify_predecessor(api, context, verified, previous, grading._cache(root, "predecessor"), deadline)
             api.allow_verified_files(terminal["files"])
             public["stage"] = "grade_payload"
             cache = grading._cache(root, "payload")
@@ -330,8 +413,9 @@ def main(args, *, _test_api=None, _test_transport=None):
         return 0  # Readout succeeded; grade_state may still be partial/failed/ungraded.
     except (OSError, ValueError, TypeError, KeyError, AttributeError, RecursionError,
             subprocess.SubprocessError, ImportError, KeyboardInterrupt) as error:
-        _, status = output._error_context(error)
-        public.update(outcome="refused", reason="grade_readout_contract_refused",
+        reason, status = output._error_context(error)
+        public.update(outcome="refused", reason=(reason if reason == "grade_readout_writer_unconfigured"
+                                                else "grade_readout_contract_refused"),
                       http_status=status if type(status) is int and 100 <= status <= 599 else None)
         print(pilot._canonical_json(public), file=sys.stderr)
         return 2
