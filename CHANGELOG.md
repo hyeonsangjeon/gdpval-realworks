@@ -13,7 +13,7 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
-- Record the leader's authorization for one ordinary push of the already
+- Earlier known-bundle publication endpoint: record the leader's authorization for one ordinary push of the already
   completed task5 B1-failure/C1-ordinary/C2-failure bundle to the same draft
   PR686, from clean local `3202db6959e923e5f10ed5c43300ceed446f8fb6` after
   confirming published `72f1b999583baa95f5e5bbf8d364928f9c326c27`. This
@@ -81,7 +81,41 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
-- Prepare only ordinary task5 B2 grading, ordinal 28, producer
+- Prepare only final failed task5 A2, ordinal 29, under the explicit
+  `task5-a2-model-free-ungraded` policy, with producer
+  `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e`, inference run `36277325255` and
+  completion `40a4785b0720dfc271ffe1d148c77c6da9ed5c65a4101b6dc61e69e30ec0dab7`.
+  This sixth fixed failure requires its actual ordinary B2 grade and existing
+  C2/backing proof under the caller-declared shared controller. The fixed
+  28→27→26→25→24→23→22 chain requires 14 distinct backing claim/terminal
+  revisions before CAS and 16 including A2 on readback. The scoreless record
+  preserves original failure, denominator and partial receipt, with separately
+  unmeasured recorder accounting and no Step8/LLM/OIDC or fabricated child.
+  Source/content/predecessor/approval/private-CAS/canonical-readback/privacy/
+  cleanup/no-replay checks remain. C1/B2 stay ordinary; the five earlier failure
+  policies and all workflow permissions/timeouts remain unchanged. Coupled
+  registry assertions now require exactly six task5 cells at indices 24–29 of
+  the original 30-cell plan, once-only selectors and nonempty unknown-selector
+  refusals. One A2-only offline invocation returned **84 collected, 84 passed in
+  173.06s**, exit **0**, at `ef5ea3e9122b96b0d9bf98364cd16ff3bd36a168`, using
+  shared synthetic B2 history built by the existing writers and isolated
+  mutations with external/model boundaries fake or blocked. B2's **78 passed in 147.79s** at
+  `6e4a90954723c7da95b68ed627302d4afdb29541` and every earlier invocation remain
+  separate and were not rerun. Only the two completion records changed after
+  the new tested SHA. The leader supplied A2 failure/retention, not a grade;
+  partial inference USD 0.406518 is not an invoice, estimated cost/HTTP count
+  remain null, invoice false, and cause/internal attempts/deadline exhaustion
+  remain unknown. All 18 producer780 cells are terminal-verified, 12 succeeded
+  and 6 failed; epoch04's 24 cells are terminal-verified, not a quality/causal
+  finding. The active-inference hold condition is satisfied, but main remains
+  unchanged pending final new-head leader review/CI. Old published
+  `01735b3f3684c9cd1fd150e19015a25bdc1cbac0`, review `5327562287` and nine passing
+  checks do not cover B2/A2. One ordinary accumulated push to the same PR686 is
+  authorized; the leader-bound shared controller, actual predecessor records
+  and individual protected live approval still gate execution. No merge,
+  main/source change, live call, CI polling or manual rerun is authorized here.
+
+- Earlier B2 preparation endpoint: prepare only ordinary task5 B2 grading, ordinal 28, producer
   `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e`, inference run `36266871064`,
   completion `5b942d71fe284b5d2831c01cf17ac17e92857c26ef2dad820b9367d3c8cf0245`.
   B2 admission requires the unchanged fixed verifier to validate the actual
