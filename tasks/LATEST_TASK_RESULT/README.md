@@ -1,186 +1,179 @@
 # Latest task result
 
-## PROJECT5-TASK3-FINAL-A2-BINDING
+## PROJECT5-TASK4-FAILED-A1-AND-B1-PREP
 
-Completed offline grading preparation for exactly the six recorded task3 cells
-**A1/B1/C1/C2/B2/A2**, original ordinals **12–17**, in
-`budget_pilot_ci_20260925_04`. This follow-up adds only the final A2 binding and
-coupled assertions to the prepared chain; A1's historical task2 A2 handoff is
-preserved. The A2-only selector returned **20 passed in 37.62s**, exit **0**,
-at `342bc6d47a5ca2c2dd582519a5730111fc4190c9`. Only these two completion
-records changed after that tested SHA. Earlier validation and its setup error
-remain separate observations below. No live operation was performed.
+Task4 A1/B1 grading preparation stops at a confirmed policy gap. A retained
+execution failure can become a local ungraded preparation, but the existing
+connector cannot publish that preparation as a no-judge grade terminal. The
+requested recorded-content B1 continuation needs A1's actual preceding grade;
+local preparation cannot substitute for it. No task4 registration, workflow,
+production code or grading policy changed. The local delta contains one new
+focused test, a directly coupled synthetic-input fixture extension and these
+two completion records. Nothing was pushed or republished.
 
-Work continued in the owned PR686 worktree from local unpushed head
-`60cf0fbe0d3ed0df8b437e636ac176354bcb44b3`. The accumulated chain and final A2
-binding form one publication delta for the same PR686. The leader's direct
-review `5325122042` and all **9** passing CI checks apply only to the prior
-published head `e4a9c331ff0380aa42693ad9c23dd011b282eeb7`, not this delta.
-Main/inference source `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e` remains held.
-No prior test selectors, CI runs, completed source investigations or task2 score
-analysis were repeated.
+Work began in the clean owned PR686 worktree at
+`e6c357374ea5b3b19e72f574e77dcaa5e3619a84`. The leader supplied direct review
+`5325618521` and all **9** passing CI checks for that head only. They do not
+approve these local changes. Main/inference source
+`78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e` remains held and unchanged.
 
-### Closed successor and predecessor bindings
+### What the existing contract permits
 
-All rows use cell prefix `2ea2e5b5-257f-42e6-a7dc-93763f28b19d_` and original
-inference producer `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e`. The checksum
-is the completion payload request, not a private terminal revision.
+The bounded pre-edit reviewer returned **APPROVE-WITH-CONDITIONS** for a
+focused offline reproduction and the two completion records only. The review
+confirmed the distinction below and did not authorize a no-judge terminal writer
+or a production registration change.
 
-| Suffix | Original ordinal | Inference run | Completion request SHA-256 |
-|---|---|---|---|
-| `B_r1` | 13 | `36226798976` | `d2fa808126be82fd9ae6af0b154c9730825acef665151869a47c13e4574147ec` |
-| `C_r1` | 14 | `36228331579` | `9574cb08f562e1fc38bc1c9412793140586f5a335a4b0781af98b2c3ca3f9940` |
-| `C_r2` | 15 | `36229800066` | `1ae30db0cdb3f51e6a37dccaa04bfd7c376497556501802ddc505899f4a78f04` |
-| `B_r2` | 16 | `36231296576` | `a0e78310c78314b456c472e6f88c4d8542caf88b4c82c6b245c9fca8814f51be` |
-| `A_r2` | 17 | `36232859421` | `f4de6c1d36c8f3a2c077be9e4be370545eeb5a11d9513752caa4d40bd08e1bd8` |
+In `codex_budget_pilot_grading.py`, `prepare` preserves the failed inference and
+materialized task status `error`, records
+`retained_result_unsuccessful_ungraded`, and returns `grading_state=UNRUN` with
+`judge_ready=false`. It returns before grader checkout, rubric staging or an
+entry contract. `_ready` then refuses `claim`, `judge` and `publish` with
+`bound_native_materialization_required`. No grading reservation, judge call or
+HF write occurs on those paths.
 
-The leader reports verified execution and terminal retention for A1 and these
-five successors: workflow attempt **1**, job `cell`, exit **0**, one child,
-confirmed cleanup, no timeout and two retained deliverable identities each.
-All six task3 inferences are retained and not graded at this handoff. These are
-execution/retention observations, not raw payload recovery, format
-identification or quality results.
+Published terminal outcome `ungraded` means something different: `publish` and
+`_grade_terminal` still require an actual judge entry and confirmed owned
+cleanup. The workflow skips OIDC, claim and judge when preparation is not
+ready; publication also requires a successful claim and a judge step that was
+not skipped. The consolidated grading spec fixes the judge, scoring and rubric
+contract; it supplies no authority to invent a no-judge terminal here.
 
-For A2, the leader verified run `36232859421`, job `108379178450`, attempt **1**,
-and independently recomputed artifact `10903605921`'s completion payload
-checksum shown above. On **2026-09-26 UTC**, claim verification was recorded at
-**09:31:11.5667610**, execution ran **09:31:19–09:35:26**, terminal verification
-was recorded at **09:35:33.8065153**, and the run completed successfully at
-**09:35:42**. The supplied deliverable identities are:
+The immediate-predecessor requirement belongs to the **recorded-content**
+route. The generic same-source route can accept bootstrap and scan eligible
+grades, so its behavior is not proof of that stricter continuation policy.
+Both actual task4 selectors, their supplied completion checksums and a distinct
+synthetic future controller still refuse with
+`closed_retained_producer_binding_required`. This is a registration refusal,
+not an observed downstream missing-predecessor refusal.
 
-| Bytes | SHA-256 |
-|---|---|
-| 401581 | `f7fcd949e5bcffd97250815ae375db5e06f865926eca466d2df20ded84c58e32` |
-| 21223 | `84e35dfcd75255b61f046228fc5bfcc90380843c54d2dd755db464e93505a95f` |
+### Supplied retained pair, not recovered payloads
 
-The supplied config hash is
-`ba745863d14bd5668b2dbdbe83bf7af0e3e4ab6ce4e266a0eae8addffc189e61`, input hash
-`40d815317e1c0b00deccc30426dde9eb75a8e83a5c40acd449d8616e21566c38`, and order hash
-`f16a2a408160efe106e3e009144d4acc451d1f9051c8c23195d10cb24ce75030`.
-Partial known inference cost is **USD 0.478969**, with **460630 input**,
-**21150 output**, **439936 cached** and **10634 reasoning** tokens. Estimated
-cost and HTTP request count are null; `invoice_complete=false`. This is a
-partial usage-derived receipt, not total experiment cost or a reconciled invoice.
-No names, formats, raw payloads, private A2 terminal revision or grade run were
-supplied. None was reconstructed or guessed.
+Both cells belong to `budget_pilot_ci_20260925_04`, use prefix
+`3baa0009-5a60-4ae8-ae99-4955cb328ff3_`, and retain inference producer
+`78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e`. The leader supplied workflow
+attempt **1**, job `cell`, one child, confirmed cleanup and no timeout for each.
+These are two cells of one original task, not new tasks or grading results.
 
-A1 remains bound to inference run `36225255532` and completion checksum
-`1fb1bc33acab5b2bdefd70744a899c808d984e9c231deded4217ad92d4dc7e3d`.
-Its preceding task2 A2 grade remains
-`3a8e135cd232ab900e003fc6d9c459957a0b990e`, writer
-`a5e5d2589caff21309f0a1c21bb7d9d333ad47c6`, grade run `36214413190`, with
-original e7 inference terminal `e22f0c3de79bbfce084aedde64fa56c40959fde0`.
-The adapter does not change that special historical transition.
+| Cell | Ordinal | Inference run / job | Completion payload SHA-256 | Retained execution |
+|---|---|---|---|---|
+| `A_r1` | 18 | `36234320019` / `108383230113` | `a913f0236e801e31ab7c0f58c8545ad6375d7092c06fa77f839225d03efe52d8` | Failed, exit 1, `child_nonzero_exit`, zero deliverables, no grade |
+| `B_r1` | 19 | `36235926112` / `108387549004` | `f3546942ebac25c3c3cd1788dfb792a80e3e10f465999bebf7730fb651cb2bde` | Succeeded, exit 0, three deliverable identities, no grade |
 
-Each successor requires its actual immediately preceding task3 grade under
-one caller-declared future controller shared with A1. The controller and
-grader hash are not adopted from remote metadata. Existing helpers verify the
-original producer780, exact inference run/completion, source/config/input and
-object proofs, complete retained observation and publication receipt. The
-selected inference predecessor must equal the preceding grade's verified
-retained observation. Initial resolution and restored preparation recheck
-the closed bindings and original order positions **12–17**.
+On **2026-09-26 UTC**, A1's claim acknowledgment was recorded at
+**10:00:17.3580246**, failed-terminal acknowledgment at **10:10:54.2467285**,
+and run failure at **10:11:01**. The leader independently verified artifact
+`10904001033`'s digest. Its result identity is **8965 bytes** /
+`c1db49629a80a65a6b216101edf9c3d1ea71159b4bc2bde7df6639beaba5e60c`;
+the ledger identity is **3429 bytes** /
+`2fdde79a2820d80cbe8b1ddd9196cdc6ac61ab0072a3b41de9d8914d23380a73`.
+The underlying child cause and internal attempt count are unknown. This is not
+evidence of a rate limit, deadline expiry or attempt-cap exhaustion.
 
-Successor admission also compares the complete claim with canonical
-server-readback bytes preserved under its returned commit in the existing
-private `claim-verified` cache. A changed or missing copy blocks judge entry;
-the judge phase makes no online verification call. Terminal validation checks
-the exact immediate cell and bounded predecessor identity, distinct parent/
-claim/terminal revisions, and unchanged predecessor bytes and original last
-writer at the claim commit. This is a one-hop object/history proof, not
-independently verified Git-parent topology. Fixed-content/publication-derived
-proof does not independently authenticate that original outer metadata was
-never rewritten.
+B1 executed **10:32:25–11:19:33 UTC**. That outer step lasted **47m08s**;
+it does not establish an internal attempt count. Its claim acknowledgment was
+recorded at **10:32:18.6021416**, terminal acknowledgment at
+**11:19:39.4555176**, and run success at **11:19:46**. The leader verified
+artifact `10904499820`'s digest. The three supplied deliverable sizes are
+**1036**, **90703** and **2502 bytes**; names, formats and hashes were not
+supplied. Execution success does not establish quality.
 
-The prior bounded pre-edit extreme-reasoner decision was
-**APPROVE-WITH-CONDITIONS** for the original four-successor B1/C1/C2/B2
-extension and its admission and predecessor safeguards. Only three existing
-workflow producer mappings change.
-That decision governs unchanged logic; the leader has now supplied the final A2
-binding. This follow-up adds no controller or HF-authority policy beyond the
-closed row and requires no new design review.
-Protected same-run approval/digest, truthful ref-main execution, renderer and
-atomic input preparation, no-clobber immutable resolution, one-use fixed-parent
-CAS, cleanup, publication privacy and no replay are preserved. Private
-`pilot-inference-20260925-04` / `pilot-grades-20260925-04`, source pins,
-inference/runtime/input/budget code and fixed
-`default_v2_sol_max.yaml` / GPT-5.6 Sol/max remain unchanged. There is no new
-workflow input, readout registration, scheduler, source override or experiment
-axis. Each eventual first grade still needs its own leader-authorized request;
-there is no score-driven regrading.
+| Cell | Partial known inference USD | Input tokens | Output tokens | Cached input tokens | Reasoning tokens |
+|---|---|---|---|---|---|
+| A1 | 0.060359 | 23696 | 1457 | 9216 | 796 |
+| B1 | 0.262451 | 237830 | 8156 | 201984 | 5397 |
 
-### Focused offline evidence
+These are separate partial usage-derived receipts, not total experiment costs
+or reconciled invoices. Estimated costs and HTTP request counts are null;
+`invoice_complete=false`. No task4 grade, score, raw payload or private terminal
+SHA was supplied or recovered. The completion checksums identify fixed content,
+not independently known terminal revisions or proof that every original outer
+metadata envelope was never rewritten.
 
-This follow-up selected only
-`tests/test_codex_budget_pilot_task3_grading_chain.py::test_final_task3_a2_grading_binding`.
-It collected and passed **20** A2 cases; the prior **39** passing cases were
-not selected. The existing Python **3.10.12** / pytest **9.1.1**
-environment, credential-free `env -i`, offline HF flags, disabled plugin
-autoload, `-m "not integration"`, no pytest cache and stop-on-first-failure
-were retained. Results below are separate invocations, not a combined pass count.
+A1's actual inference predecessor remains task3 A2,
+`2ea2e5b5-257f-42e6-a7dc-93763f28b19d_A_r2`, producer780, run `36232859421`,
+completion `f4de6c1d36c8f3a2c077be9e4be370545eeb5a11d9513752caa4d40bd08e1bd8`.
+Its future grade ID is unknown. The required grade must be an actual preceding
+grade under the same explicitly declared future controller, not one adopted
+from remote metadata. Task3 A1's special historical task2 A2 transition remains
+unchanged: writer `a5e5d2589caff21309f0a1c21bb7d9d333ad47c6`, grade run
+`36214413190`, revision `3a8e135cd232ab900e003fc6d9c459957a0b990e`.
+
+### Exact offline evidence
+
+The new selector was
+`tests/test_codex_budget_pilot_task4_failed_grading.py::test_failed_task4_a1_grading_policy_gap`.
+It uses the real compiler, native-result/error projection, Step2 row serializer,
+ledger export, fingerprints, retained controls and grading materializer. The
+native turn, source/host, original inputs, install syscall and remote transport
+are synthetic. Existing genuine synthetic history is shared, with isolated
+copies for mutations. No successful A1 is produced and then relabeled failed;
+no A1/B1 grade terminal is fabricated. Synthetic usage, hashes and revisions
+are not the supplied live identities.
+
+The diagnostic uses producer780 as both source and controller with a synthetic
+immutable inference revision. It does not prove that a future controller is
+eligible. B1's generic diagnostic stops at successful input preparation, with
+no claim or judge; it does not prove the recorded continuation rule. The cases
+also check source/byte/cleanup/publication-acknowledgment refusals, approval
+refusals, unchanged prior bytes, no-clobber preparation, zero grading writes
+and no judge entry. All external, credential and model boundaries are fake or
+blocked. No native-host capability, live grading or quality claim follows.
 
 | Invocation | Immutable tested SHA | Actual result |
 |---|---|---|
-| Earlier chain selector | `0b6e62d722cc7394c7eedb23d7265cad816599bd` | **1 setup error in 22.37s**, exit **1**; **39** collected, none passed and **38** unexecuted |
-| Earlier fixture correction and still-unexecuted cases | `200bb89ce83bcab1f7c04c4d770f98e0a23a380b` | **39 passed in 55.71s**, exit **0**; not rerun here |
-| Final A2-only selector | `342bc6d47a5ca2c2dd582519a5730111fc4190c9` | **20 passed in 37.62s**, exit **0** |
+| New task4 selector | `0d22d32733b8c3238344fdd9dd19815b2ba8cb8f` | **1 failed, 15 passed in 29.96s**, exit **1**; **16** collected |
+| Corrected `[workflow_guards]` only | `3e692fed1e1734f4e8c82b6d8c4d41b8e48e63f2` | **1 passed in 34.50s**, exit **0**; **1** collected |
 
-The initial shared fixture reused a historical task2 writer directory name.
-That correction only prefixed the new task3 fixture directories. No production
-bytes changed in that correction, and no previously passing test case was rerun.
-The earlier `test_recorded_task3_grading_chain` selector built genuine synthetic
-inference, materialization, Step8 and ledger writer history once, then isolated
-mutations. It checked the four then-recorded successors,
-moving-ref resolution, source/run/hash/ref and controller refusals, complete
-predecessor/receipt equality, skipped or unfinished grades, restored evidence,
-approval/rerun refusals, self-consistent admission/terminal parent tampering,
-changed predecessor bytes/last-writer evidence, CAS and lost acknowledgments,
-cleanup/privacy, no replay and unchanged prior state. The actual protected
-workflow digest is executed independently of the connector's digest helper.
-The new A2 selector extends that same shared writer history through synthetic
-B2 and A2 grades, without rerunning prior test nodes. Its **20** cases
-cover the exact A2 row/config/order, complete chain and B2 predecessor,
-refusal of unregistered task4/task5 cells on this fixed-content route,
-wrong inference run/source/completion/bytes/ref,
-full predecessor observation/receipt/controller equality, skipped or unfinished
-grades, restored resolution/run tampering, local admission/server-readback and
-terminal-parent tampering, changed predecessor bytes, fixed-parent CAS and lost
-claim acknowledgment. The checks assert no unapproved judge call, no replay and
-unchanged prior state. All external, credential and model boundaries are fake
-or blocked. This is control-flow evidence, not new native capability, provider
-authentication, grading quality or paid-cost evidence.
+The sole initial failure was the new fixture's lookup of an unnamed workflow
+step (`KeyError: 'name'`). The correction indexes named steps; every required
+readiness/publication assertion remains. Only that failing parameter was
+selected again. These are separate invocations, not a manufactured 16-case
+pass. Only completion records changed after the corrected tested SHA.
 
-The previous A1 observations remain separate: **1 failed, 26 passed in 307.84s**
-at `9a48596e6dbfd19dd90add057a29ca1e5e649ae3`, then **5 passed in 72.19s**
-at `aa1ec63ca98a35d289be5ee146a41f1ae69f6256`. They were not rerun or combined
-with this selector. Their original evidence and limits are preserved below.
+Both invocations used Python **3.10.12**, pytest **9.1.1**, credential-free
+`env -i`, offline HF flags, disabled plugin autoload,
+`-m 'not integration' -p no:cacheprovider --maxfail=1 -q`. No prior selector,
+full suite or CI run was repeated. Earlier observations remain separate:
 
-### Completed binding and remaining authority
+| Earlier validation, not rerun | Immutable tested SHA | Recorded result |
+|---|---|---|
+| Task3 A1 initial | `9a48596e6dbfd19dd90add057a29ca1e5e649ae3` | **1 failed, 26 passed in 307.84s** |
+| Task3 A1 follow-up | `aa1ec63ca98a35d289be5ee146a41f1ae69f6256` | **5 passed in 72.19s** |
+| Task3 chain setup | `0b6e62d722cc7394c7eedb23d7265cad816599bd` | **1 setup error in 22.37s**, exit **1**; **39** collected, none passed, **38** unexecuted |
+| Corrected task3 chain | `200bb89ce83bcab1f7c04c4d770f98e0a23a380b` | **39 passed in 55.71s**, exit **0** |
+| Task3 A2-only | `342bc6d47a5ca2c2dd582519a5730111fc4190c9` | **20 passed in 37.62s**, exit **0** |
 
-The supplied A2 completion/retention evidence closes the prior gap after its
-issue at **09:28:04 UTC**. Its actual immediate predecessor is the recorded
-task3 B2 row above. Existing no-clobber fixed-content resolution must still
-resolve A2's private terminal; its completion checksum is not that revision.
-Future grade run IDs and the explicitly declared shared grading controller
-remain unknown until the leader binds each authorized request. No readout
-registry, arbitrary source override, task4 grading path or new experiment axis
-was added.
+### Remaining policy and authority
 
-The leader has separately issued original task4 A1 run `36234320019`, job
-`108383230113`, at **09:57:27 UTC** on held source780. That supplied context is
-not a result or authority for this task; it was not queried or added to the
-closed grading table. This publication does not lift the main/source hold or
-authorize a merge or live operation. Fresh exact-head review and all new CI
-checks, the active source hold, a truthful shared future grading controller and
-separate explicit one-result paid approvals remain gates before any live grade.
-No HF/readout/model/judge/inference call, workflow dispatch, Azure management,
-credential change, Project mutation, source reseal, old claim/grade change or CI
-polling occurred.
+The leader must decide whether to authorize a durable, model-free ungraded
+predecessor record for a retained inference failure, or keep this recorded
+grading chain blocked. Such a decision would need its own reviewed contract;
+this task adds no terminal writer, skip rule, invented zero/pass score or
+unnecessary judge invocation. Task3 A2's actual grade and a single explicitly
+declared future controller also remain prerequisites. Neither is inferred from
+the synthetic fixture. No task4 or task5 fixed-content registration was added.
 
-The full skill catalog was reviewed once. Experiment-design kept this work
-within the unchanged comparison/source contract; experiment-report-en followed
-by im-not-ai-en preserved the separate test observations and evidence limits.
-The following sections remain historical snapshots, not new execution authority.
+At the leader's observation, task4 C1 run `36239016015`, job `108395938306`,
+was executing from **2026-09-26T11:33:10Z**, without a terminal or artifact.
+Its result remains unknown here; it was not queried, polled or registered.
+The source780 hold remains active. The existing private inference/grading refs,
+no-clobber resolution, source/input/byte/privacy proofs, approval, server
+readback, one-use fixed-parent CAS, cleanup and no-replay controls are unchanged,
+as are inference/runtime/budgets and
+`default_v2_sol_max.yaml` / GPT-5.6 Sol/max. No task3 readout path was added.
+
+The local changes require fresh leader review and any later authorized new-head
+CI before publication or execution. Nothing was pushed, republished, merged or
+dispatched. No live HF/Azure/model/grade/readout call, Project mutation,
+credential change, old claim/grade change or source reseal occurred.
+
+The full skill catalog was reviewed once. Experiment-design and the grading
+spec kept the failed-inference/local-preparation/published-grade distinction
+explicit. Experiment-report-en followed by im-not-ai-en preserved the split
+validation and supplied-evidence limits. Prior detailed task3 records remain
+in the reviewed baseline and unchanged changelog entry; the following sections
+are historical snapshots, not new authority.
 
 ## Prior PROJECT5-TASK3-A1-GRADING-PREP
 

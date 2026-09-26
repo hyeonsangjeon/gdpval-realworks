@@ -11,6 +11,45 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Added
+
+- Reproduce the task4 failed-A1/successful-B1 grading boundary offline without
+  activating either fixed-content request. Real native-error/Step2 serialization,
+  ledger and materialization helpers retain A1 as failed and locally ungraded;
+  claim, judge and publication refuse with
+  `bound_native_materialization_required`. Published `ungraded` terminals still
+  require an actual judge entry and owned cleanup, so local preparation cannot
+  become the actual immediate grade predecessor required by the recorded B1
+  route. The generic same-source diagnostic does not prove that stricter rule.
+  Both supplied task4 requests remain closed with
+  `closed_retained_producer_binding_required`; no production, workflow,
+  registration, source/input/runtime/budget or fixed grader policy changed.
+  The bounded reviewer approved only this test-and-records endpoint, not a
+  no-judge terminal or skipped-predecessor policy. The new selector returned
+  **1 failed, 15 passed in 29.96s**, exit **1**, at
+  `0d22d32733b8c3238344fdd9dd19815b2ba8cb8f`. Its sole failure was a new fixture
+  lookup of an unnamed workflow step. The one-line correction preserves every
+  required guard assertion; only `[workflow_guards]` was rerun, returning
+  **1 passed in 34.50s**, exit **0**, at
+  `3e692fed1e1734f4e8c82b6d8c4d41b8e48e63f2`. These results are separate,
+  not a combined 16-case pass. Only completion records changed afterward.
+  Earlier task3 **39 passed in 55.71s**, **20 passed in 37.62s**, the original
+  setup error and earlier A1 outcomes remain separate below and were not rerun.
+  Supplied task4 A1 run `36234320019` remains a retained execution failure with
+  zero deliverables and no grade; B1 run `36235926112` remains a retained
+  execution success with no grade or quality claim. Partial known inference
+  costs **USD 0.060359** / **USD 0.262451** are not totals or invoices;
+  estimated costs and HTTP counts are null, invoice completeness false. The
+  underlying A1 child cause and internal attempt count remain unknown. The
+  leader must decide the missing durable no-judge evidence policy; task3 A2's
+  actual preceding grade and a declared common controller remain unbound.
+  Review `5325618521` and all **9** passing CI checks cover only prior PR686
+  head `e6c357374ea5b3b19e72f574e77dcaa5e3619a84`, not these local changes.
+  Main/inference source `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e` remains
+  held. The separately running task4 C1 was not queried or registered. No push,
+  republication, merge, dispatch, live call, Project mutation or CI polling
+  occurred. Fresh review and any later authorized CI remain required.
+
 ### Fixed
 
 - Complete offline task3 grading preparation for A1/B1/C1/C2/B2/A2 by adding
