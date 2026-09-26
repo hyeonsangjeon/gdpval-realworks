@@ -836,7 +836,8 @@ def test_workflow_isolates_private_pilot_from_legacy_publication_and_inference()
     assert " ".join(recorder["if"].split()) == (
         "(inputs.experiment_yaml == 'pilot/3baa0009-5a60-4ae8-ae99-4955cb328ff3_A_r1' || "
         "inputs.experiment_yaml == 'pilot/3baa0009-5a60-4ae8-ae99-4955cb328ff3_A_r2' || "
-        "inputs.experiment_yaml == 'pilot/0818571f-5ff7-4d39-9d2c-ced5ae44299e_A_r1') && "
+        "inputs.experiment_yaml == 'pilot/0818571f-5ff7-4d39-9d2c-ced5ae44299e_A_r1' || "
+        "inputs.experiment_yaml == 'pilot/0818571f-5ff7-4d39-9d2c-ced5ae44299e_B_r1') && "
         "steps.pilot_input.outputs.model_free_record_ready == 'true' && "
         "steps.pilot_input.outputs.judge_ready == 'false'"
     )

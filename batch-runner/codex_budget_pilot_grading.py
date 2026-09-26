@@ -106,12 +106,15 @@ TASK4_RETAINED = {
     TASK4_A2_CELL: (
         "36245490377", "8f2f6edd7bb2fda964d8a24b4532b8af725bcefbb1513d9a60df86e983446fe9"),
 }
-# Only this recorded task5 failure may follow task4 A2's verified UNGRADED
-# record. No successor or arbitrary failed input is admitted by this binding.
+# Only these recorded task5 failures may follow the fixed UNGRADED chain.
+# No other successor or arbitrary failed input is admitted by these bindings.
 TASK5_A1_CELL = "0818571f-5ff7-4d39-9d2c-ced5ae44299e_A_r1"
+TASK5_B1_CELL = "0818571f-5ff7-4d39-9d2c-ced5ae44299e_B_r1"
 TASK5_RETAINED = {
     TASK5_A1_CELL: (
         "36247236594", "b23da4f1f5e81999039c473d27f3a70cc0d0681672ad08be0f9674b618915c97"),
+    TASK5_B1_CELL: (
+        "36248894311", "dd05f2ed43235b69d9eecfefadfb0a5ebd68d83b31daf38355a4acf6f0a21c5b"),
 }
 CLAIM_FORMAT = "codex-pilot-grade-claim-v1"
 RESULT_FORMAT = "codex-pilot-grade-terminal-v1"
@@ -186,7 +189,7 @@ def _task3_recorded(cell_id: str) -> tuple[str, str] | None:
 
 def _model_free_context(context: Context) -> bool:
     return context.terminal_request is not None and context.cell["cell_id"] in {
-        TASK4_A1_CELL, TASK4_A2_CELL, TASK5_A1_CELL}
+        TASK4_A1_CELL, TASK4_A2_CELL, TASK5_A1_CELL, TASK5_B1_CELL}
 
 
 def _shared_controller_successor(context: Context) -> bool:
@@ -489,7 +492,7 @@ def _task2_resolution(context: Context, evidence: dict, revision: str) -> None:
     if task4 or task5:
         require(context.plan["order"][18:24] == list(TASK4_RETAINED), "recorded_task4_order_required")
     if task5:
-        require(context.plan["order"][24:25] == list(TASK5_RETAINED)
+        require(context.plan["order"][24:26] == list(TASK5_RETAINED)
                 and context.plan["order"][23:25] == [TASK4_A2_CELL, TASK5_A1_CELL],
                 "recorded_task5_order_required")
     completed = ci.validate_completion(terminal["completion"])
@@ -1047,7 +1050,8 @@ def _branch_tip(api, repo: str, context: Context, prepared: dict, cache: Path, t
         else:
             # Recorded successors must all use the controller declared for
             # this request. Never derive that authority from the prior record.
-            task3_previous = _task3_recorded(cell["cell_id"]) or TASK4_RETAINED.get(cell["cell_id"])
+            task3_previous = (_task3_recorded(cell["cell_id"]) or TASK4_RETAINED.get(cell["cell_id"])
+                              or TASK5_RETAINED.get(cell["cell_id"]))
             other = compile_request("pilot/" + cell["cell_id"], context.controller_source_sha,
                 (task3_previous or TASK2_RETAINED.get(cell["cell_id"]))[1],
                 producer_source_sha=TASK3_A1_PRODUCER_SOURCE if task3_previous else B1_PRODUCER_SOURCE)
@@ -1061,11 +1065,18 @@ def _branch_tip(api, repo: str, context: Context, prepared: dict, cache: Path, t
         other = compile_request("pilot/" + cell["cell_id"], context.controller_source_sha,
             value["binding"]["retained"]["terminal_commit"], producer_source_sha=context.plan["reviewed_source_sha"])
         entry = prepared["entry"]
-    if recorded_task2 and context.cell["cell_id"] in {TASK4_B1_CELL, TASK5_A1_CELL}:
+    if recorded_task2 and context.cell["cell_id"] in {TASK4_B1_CELL, TASK5_A1_CELL, TASK5_B1_CELL}:
         from codex_budget_pilot_ungraded import verify_terminal
         if context.cell["cell_id"] == TASK5_A1_CELL:
             require(other.cell["cell_id"] == TASK4_A2_CELL, "fixed_model_free_task5_predecessor_required")
+        if context.cell["cell_id"] == TASK5_B1_CELL:
+            require(other.cell["cell_id"] == TASK5_A1_CELL, "fixed_model_free_task5_b1_predecessor_required")
         verified = verify_terminal(api, repo, head, other, entry, _cache(cache, "tip_verified"), token, deadline)
+        if context.cell["cell_id"] == TASK5_B1_CELL:
+            from codex_budget_pilot_ungraded import _task5_b1_revisions
+
+            _task5_b1_revisions(api, repo, head, verified["terminal"], _cache(cache, "b1-predecessor-revisions"),
+                               token, deadline)
     else:
         verified = _grade_terminal(api, repo, head, other, entry, _cache(cache, "tip_verified"), token, deadline)
     if recorded_task2:
