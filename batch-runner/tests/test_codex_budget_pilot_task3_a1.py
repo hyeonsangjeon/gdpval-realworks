@@ -236,7 +236,8 @@ def test_fixed_task3_a1_historical_predecessor(scenario, retained_history, capsy
             deadline = store.for_task(cell["task_id"]).as_record()
             assert deadline["condition"] == "A" and deadline["repetition"] == 1
             assert deadline["total_seconds"] == 10800 and deadline["attempt_seconds"] == 1800
-            assert deadline["started_unix"] == 1_001_000 and deadline["expires_unix"] == 1_011_800
+            # The existing fake preparation advances this job's clock once.
+            assert deadline["started_unix"] == 1_001_001 and deadline["expires_unix"] == 1_011_801
             assert deadline["session_policy"] == "fresh_session" and deadline["attempts_admitted"] == 1
         finally:
             store.close()
