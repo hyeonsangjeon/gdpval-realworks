@@ -217,9 +217,10 @@ def test_successful_task5_b2_after_ungraded_c2(b2_history, tmp_path, monkeypatch
         return
 
     if change == "plan_workflow":
-        assert context.plan["order"][24:29] == list(grading.TASK5_RETAINED) == [
-            grading.TASK5_A1_CELL, grading.TASK5_B1_CELL, grading.TASK5_C1_CELL, grading.TASK5_C2_CELL, CELL]
-        assert context.plan["order"][29:] == ["0818571f-5ff7-4d39-9d2c-ced5ae44299e_A_r2"]
+        assert context.plan["order"][24:30] == list(grading.TASK5_RETAINED) == [
+            grading.TASK5_A1_CELL, grading.TASK5_B1_CELL, grading.TASK5_C1_CELL, grading.TASK5_C2_CELL,
+            CELL, grading.TASK5_A2_CELL]
+        assert context.plan["order"][30:] == []
         assert context.cell["config_sha256"] == CONFIG and len(context.plan["order"]) == 30
         for key in ("model", "dataset", "source_pins", "grading", "order"):
             assert context.plan[key] == pilot.compile_pilot(ci.CAMPAIGN, failed.PRODUCER)[0][key]
@@ -227,7 +228,7 @@ def test_successful_task5_b2_after_ungraded_c2(b2_history, tmp_path, monkeypatch
         assert ci.HOST_POLICY["sdk"] == ci.HOST_POLICY["cli"] == "0.147.0"
         assert hashlib.sha256(context.run.grader_config_json.encode()).hexdigest() == readout.CONFIG_SHA256
         assert context.terminal_revision == "" and context.requested_terminal == grading.TASK5_RETAINED[CELL][1]
-        for cell_id in context.plan["order"][29:]:
+        for cell_id in [*context.plan["order"][30:], "0818571f-5ff7-4d39-9d2c-ced5ae44299e_A_r3"]:
             assert cell_id not in grading.TASK5_RETAINED
             with pytest.raises(output.OutputPublicationRefused, match="closed_retained_producer_binding_required"):
                 grading.compile_request("pilot/" + cell_id, failed.FUTURE_CONTROLLER, current.request,
@@ -238,7 +239,7 @@ def test_successful_task5_b2_after_ungraded_c2(b2_history, tmp_path, monkeypatch
         assert expression == plan["env"]["PILOT_GRADE_PRODUCER_SOURCE_SHA"]
         assert all(expression.count('"pilot/' + cell_id + '"') == 1
                    for cell_id in [*grading.TASK4_RETAINED, *grading.TASK5_RETAINED])
-        assert all('"pilot/' + cell_id + '"' not in expression for cell_id in context.plan["order"][29:])
+        assert all('"pilot/' + cell_id + '"' not in expression for cell_id in [*context.plan["order"][30:], "0818571f-5ff7-4d39-9d2c-ced5ae44299e_A_r3"])
         assert live["needs"] == ["pilot-approve-paid"] and "environment" not in live
         assert "needs.pilot-approve-paid.result == 'success'" in live["if"]
         assert live["env"]["PILOT_WORKFLOW_SHA"] == "${{ github.workflow_sha }}"
@@ -256,7 +257,7 @@ def test_successful_task5_b2_after_ungraded_c2(b2_history, tmp_path, monkeypatch
             phases[phase] = step
         assert len(token_steps) == 6 and set(phases) == {"setup", "inspect", "prepare", "claim", "publish", "record-ungraded"}
         eligible = [grading.TASK4_A1_CELL, grading.TASK4_A2_CELL, grading.TASK5_A1_CELL,
-                    grading.TASK5_B1_CELL, grading.TASK5_C2_CELL]
+                    grading.TASK5_B1_CELL, grading.TASK5_C2_CELL, grading.TASK5_A2_CELL]
         assert [cell_id for cell_id in context.plan["order"] if grading._model_free_context(
             SimpleNamespace(cell={"cell_id": cell_id}, terminal_request=current.request))] == eligible
         recorder = phases["record-ungraded"]
@@ -264,7 +265,7 @@ def test_successful_task5_b2_after_ungraded_c2(b2_history, tmp_path, monkeypatch
             "inputs.experiment_yaml == 'pilot/" + cell_id + "'" for cell_id in eligible) + (
             ") && steps.pilot_input.outputs.model_free_record_ready == 'true' && "
             "steps.pilot_input.outputs.judge_ready == 'false'")
-        assert all(cell_id not in recorder["if"] for cell_id in [grading.TASK5_C1_CELL, CELL, *context.plan["order"][29:]])
+        assert all(cell_id not in recorder["if"] for cell_id in [grading.TASK5_C1_CELL, CELL, *context.plan["order"][30:]])
         assert recorder["timeout-minutes"] == 5 and recorder["env"] == {"HF_TOKEN": "${{ secrets.HF_TOKEN }}"}
         assert recorder["run"] == (
             "umask 077\npython batch-runner/codex_budget_pilot_grading.py --phase record-ungraded \\\n"
