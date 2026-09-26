@@ -123,7 +123,7 @@ def history(tmp_path_factory):
             api.branches[retained.BRANCH] = previous  # Every earlier selected terminal is behind this snapshot.
             api.head, api.main_snapshot = retained.BOOTSTRAP, copy.deepcopy(api.trees[retained.BOOTSTRAP])
             for suffix in ("A_r1", *RECORDED):
-                local = directory / (suffix + "-writer")
+                local = directory / ("task3-" + suffix + "-writer")
                 local.mkdir()
                 current = _select(shared, suffix, api, local, patch)
                 api.calls.clear()
