@@ -220,7 +220,12 @@ def test_fixed_failed_a1_no_judge_policy(recorded_pair, tmp_path, monkeypatch, c
         elif change == "terminal_child":
             terminal["child"] = {"entry_invoked": True, "exit_code": 0, "cleanup_confirmed": True}
         elif change == "terminal_receipt":
-            terminal["inference_completion"]["receipt"] = None
+            # The shared completion has no aggregate receipt. Substitute a
+            # schema-valid unavailable receipt, not the same None value.
+            assert terminal["inference_completion"]["receipt"] is None
+            terminal["inference_completion"]["receipt"] = {"sha256": "0" * 64,
+                "status": "unavailable", "usage": None, "estimated_cost_usd": None, "known_cost_usd": None}
+            ci.validate_completion(terminal["inference_completion"])
         elif change == "terminal_controller":
             terminal["binding"]["controller_source_sha"] = "e" * 40
         elif change == "terminal_boolean":
