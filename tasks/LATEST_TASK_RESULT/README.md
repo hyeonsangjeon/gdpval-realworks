@@ -1,6 +1,145 @@
 # Latest task result
 
-## PROJECT5-TASK4-FAILED-A1-AND-B1-PREP
+## PROJECT5-FAILED-A1-NO-JUDGE-POLICY
+
+Implemented a local, unpublished model-free UNGRADED terminal for the exact
+recorded task4 A1 failure, and verification of that terminal as recorded B1's
+immediate predecessor. This records the absence of a grade, not a zero score,
+pass, rubric verdict or successful model result. No live record was written.
+
+Work continued from `79c313a94be1a22093cf6cd00245a5564b0111d8`. The leader's
+explicit policy decision resolves the earlier durable-evidence gap only for
+this fixed pair. The required bounded extreme-reasoner review returned
+APPROVE-WITH-CONDITIONS before production/workflow edits. A later bounded
+inspection requested canonical-byte equality for the complete terminal;
+that guard and its numeric-to-boolean mutation were included before testing.
+No further policy change was identified by that review.
+
+### Closed policy and source boundary
+
+Both cells remain in `budget_pilot_ci_20260925_04`, with inference producer
+`78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e` and the original order. Only these
+two task4 fixed-content requests are registered:
+
+| Cell | Ordinal | Original inference run | Completion request SHA-256 |
+|---|---|---|---|
+| `3baa0009-5a60-4ae8-ae99-4955cb328ff3_A_r1` | 18 | `36234320019` | `a913f0236e801e31ab7c0f58c8545ad6375d7092c06fa77f839225d03efe52d8` |
+| `3baa0009-5a60-4ae8-ae99-4955cb328ff3_B_r1` | 19 | `36235926112` | `f3546942ebac25c3c3cd1788dfb792a80e3e10f465999bebf7730fb651cb2bde` |
+
+The dedicated `record-ungraded` phase accepts only A1's fixed failed inference:
+exit 1, `child_nonzero_exit`, one inference child, confirmed cleanup, no timeout
+and zero deliverables. It revalidates the genuine failed materialization,
+original result/ledger bytes, fixed completion, producer/run/input/object proof,
+request approval and controller source. Its source/config-only staging verifies
+the expected predecessor closure without a judge entry or rubric staging.
+The separate readiness flag is `model_free_record_ready=true` with
+`judge_ready=false`. The workflow's exact-A1 step cannot enter OIDC, Step8 or
+model execution; ordinary judged readiness/publication conditions remain intact.
+
+The distinct claim and terminal formats are
+`codex-pilot-model-free-ungraded-claim-v1` and
+`codex-pilot-model-free-ungraded-terminal-v1`. They preserve the verified
+inference completion, original campaign denominator of 30 cells, receipt and
+missingness. No judge child, numeric quality score or rubric verdict is added.
+Recorder accounting is separately `not_measured`, with null monetary amounts
+and HTTP request count, and `invoice_complete=false`; it is not a zero-cost
+claim. The supplied partial known inference receipts remain USD 0.060359 for
+A1 and USD 0.262451 for B1, not total costs or invoices. A1's underlying child
+cause and internal attempt count remain unknown. The earlier supplied usage
+and payload identities remain separately recorded below; none were recovered.
+
+Two one-use reservations guard fixed-parent CAS claim and terminal writes on
+the existing private grading ref. Canonical claim bytes are read back from the
+server and cached independently before publication. The verifier checks the
+original claim, immutable history, parent/object identity and the complete
+canonical terminal bytes. A lost or ambiguous response remains unresolved
+locally and consumes the attempt. A later separately authorized B1 may verify
+durable server state without asserting that A1 received its lost response;
+there is no acknowledgment-of-ack record, replay or old-receipt rewrite.
+
+A1 still requires the actual immediate task3 A2 grade under the same explicitly
+declared future controller. Its retained inference is
+`2ea2e5b5-257f-42e6-a7dc-93763f28b19d_A_r2`, run `36232859421`, completion
+`f4de6c1d36c8f3a2c077be9e4be370545eeb5a11d9513752caa4d40bd08e1bd8`.
+No actual task3 A2 grade run/revision or future controller is supplied here.
+B1 accepts A1 only through the distinct UNGRADED verifier and full retained
+inference-observation equality, never as a successful judged grade. The
+ordinary judged-terminal verifier still requires a real Step8 child. Task3
+A1's historical task2 A2 transition is unchanged.
+
+### Exact offline evidence
+
+Only `tests/test_codex_budget_pilot_ungraded.py::test_fixed_failed_a1_no_judge_policy`
+was selected. It reuses genuine compiler, native-error/Step2 serialization,
+ledger, materialization and retained-history helpers behind fake or blocked
+external boundaries. One shared synthetic history feeds isolated mutations.
+The positive history records A1 without invoking a judge child and then uses
+that verified UNGRADED predecessor for B1's ordinary fake-child grading path.
+These synthetic run IDs, bytes, revisions and calls are not live evidence.
+
+| Invocation | Immutable tested SHA | Actual result |
+|---|---|---|
+| New selector | `e42c8c68f7e0f16366c1ec5a12fbc4e663c10ee1` | **1 failed, 40 passed in 75.30s**, exit **1**; **50** collected, **9** unexecuted |
+| Corrected failure plus unexecuted cases only | `c4b539d210bb138ed2dd3afd68e6509d079dd8ec` | **10 passed, 40 deselected in 36.58s**, exit **0** |
+
+The initial `[terminal_receipt]` mutation assigned null to an already-null
+synthetic completion receipt. The fixture-only correction substitutes a
+different schema-valid unavailable receipt and still requires refusal. No
+production guard changed. The follow-up selected only `terminal_receipt`,
+`terminal_controller`, `terminal_boolean`, `terminal_parent`,
+`terminal_previous_hash`, `terminal_history`, `b1_missing`, `b1_observation`,
+`replay` and `ordinary_refused`. The 40 earlier passes were not rerun; these
+observations are not a single 50-case passing invocation.
+
+Cases cover the exact pair/closed remainder, failure and deliverable checks,
+source/run/completion/original-byte/privacy/approval/ref refusals, actual prior
+grade and retained-observation equality, materialized bytes, source closure,
+CAS, lost responses, server readback, cached admission, terminal types/scores/
+children/receipts, predecessor tampering, replay and unchanged old state.
+Python 3.10.12 / pytest 9.1.1 ran credential-free under `env -i`, offline HF
+flags, disabled plugin autoload and
+`-m 'not integration' -p no:cacheprovider --maxfail=1 -q`. No old passing family,
+full suite or CI run was repeated. Logs are in
+`/tmp/project5-no-judge-policy.3vuzHp/e42c8c68f-focused.log` and
+`/tmp/project5-no-judge-policy.3vuzHp/c4b539d21-remaining.log`.
+
+The prior gap reproduction remains separate: **1 failed, 15 passed in 29.96s**
+at `0d22d32733b8c3238344fdd9dd19815b2ba8cb8f`, followed by the corrected
+workflow fixture alone, **1 passed in 34.50s** at
+`3e692fed1e1734f4e8c82b6d8c4d41b8e48e63f2`. Earlier task3 observations remain
+unchanged below. Only these two completion records changed after the final
+tested SHA.
+
+### Remaining authority and limits
+
+Main/inference source780 remains held. Published PR686 head
+`e6c357374ea5b3b19e72f574e77dcaa5e3619a84`, direct review `5325618521` and
+all 9 passing checks cover only that old head, not this unpublished delta.
+Fresh leader review, later authorized CI/publication, the actual preceding
+task3 A2 grade, a shared explicit reviewed controller and same-run protected
+one-result request approval remain gates before any live operation. B1 needs
+its own separately authorized grading request after a verified A1 record.
+
+The completion checksums remain fixed-content requests, not invented private
+terminal revisions or independent proof that original outer metadata was never
+rewritten. Existing no-clobber resolution and producer/controller separation
+remain. Inference/runtime/input/budgets and `default_v2_sol_max.yaml` /
+GPT-5.6 Sol/max are unchanged; there is no general skip flag or task3 readout
+registry. Other task4/task5 fixed-content requests remain closed. The leader's
+context-only C1 retention update and C2 run `36242339639` were not queried,
+polled or registered.
+
+Nothing was pushed, republished, merged, dispatched or executed live. No live
+HF/Azure/model/grade/readout call, Project or credential change, old-claim/grade
+rewrite or held-source change occurred. The full skill catalog was reviewed
+once. Experiment-design and the consolidated grading spec kept this
+failure-evidence policy separate
+from the unchanged comparison and scoring contract. Experiment-report-en then
+im-not-ai-en preserved the split evidence and authority limits. The following
+prior endpoint is a historical snapshot; its policy gap is superseded only by
+the local implementation above.
+
+## Prior PROJECT5-TASK4-FAILED-A1-AND-B1-PREP
 
 Task4 A1/B1 grading preparation stops at a confirmed policy gap. A retained
 execution failure can become a local ungraded preparation, but the existing

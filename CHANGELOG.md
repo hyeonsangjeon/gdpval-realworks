@@ -13,6 +13,39 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Add a distinct, local-only model-free UNGRADED claim/terminal path for the
+  leader-authorized recorded task4 A1 failure, plus B1 verification of that
+  exact ungraded predecessor. Only these two task4 run/completion bindings are
+  newly registered. The A1 recorder preserves failed status, original completion,
+  denominator, partial receipt and missingness without invoking Step8 or OIDC
+  or adding a judge child, numeric quality score or rubric verdict. Recorder
+  costs remain separately unmeasured, not zero. Ordinary judged-terminal requirements stay
+  strict. Actual task3 A2 predecessor proof, the declared shared controller,
+  source/input/byte/privacy checks, protected approval, no-clobber resolution,
+  separate one-use claim/publication reservations, fixed-parent CAS and verified
+  server readback remain required. Lost responses stay unresolved and cannot
+  be replayed; later independent B1 verification does not rewrite A1's receipt.
+  The bounded pre-edit reviewer approved this local contract with conditions;
+  complete canonical-byte equality also rejects numeric/boolean substitution.
+  The new selector returned **1 failed, 40 passed in 75.30s**, exit **1**, at
+  `e42c8c68f7e0f16366c1ec5a12fbc4e663c10ee1`; **9** cases were unexecuted.
+  The failed receipt mutation was a fixture no-op on an already-null value.
+  Only that fixture was corrected; the failing case plus unexecuted cases
+  returned **10 passed, 40 deselected in 36.58s**, exit **0**, at
+  `c4b539d210bb138ed2dd3afd68e6509d079dd8ec`. The 40 passes were not repeated;
+  there is no combined 50-case passing result. Prior **1 failed, 15 passed in
+  29.96s** at `0d22d32733b8c3238344fdd9dd19815b2ba8cb8f` and **1 passed in
+  34.50s** at `3e692fed1e1734f4e8c82b6d8c4d41b8e48e63f2` remain separate,
+  as do all task3 observations. Only completion records changed afterward.
+  Source `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e` remains held. PR686
+  head `e6c357374ea5b3b19e72f574e77dcaa5e3619a84`, review `5325618521` and
+  9 passing checks do not cover this delta. Actual task3 A2 grading, a reviewed
+  common controller, fresh review/authorized CI and individual live request
+  approval remain gates. No push, republication, live call, source/old-record
+  change, merge, Project mutation or CI polling occurred. Other task4/task5
+  fixed-content requests remain closed; inference, model, rubric and budget
+  policy are unchanged.
+
 - Reproduce the task4 failed-A1/successful-B1 grading boundary offline without
   activating either fixed-content request. Real native-error/Step2 serialization,
   ledger and materialization helpers retain A1 as failed and locally ungraded;
