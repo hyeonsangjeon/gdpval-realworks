@@ -35,6 +35,12 @@ ADMISSION_RECEIPT = "admission-receipt.json"
 SERVER_OBSERVATION = "predecessor-server-observation.json"
 TERMINAL_RESERVED = "terminal-reserved.json"
 TERMINAL_RECEIPT = "terminal-receipt.json"
+TASK3_A1_PREDECESSOR = {
+    "cell_id": "0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r2",
+    "source_sha": "e7a28db07ebe10d6508b9256137763cc82f9a1d1",
+    "github_run": {"id": "36202190875", "job": "cell", "attempt": 1},
+    "completion_sha256": "d6d1309c2c81ef17ce18158bc9014ce962ce7dcd267f95f328b279050d4fd15e",
+}
 require = output._require
 
 
@@ -324,6 +330,9 @@ def _predecessor(api, repo: str, head: str, plan: dict, selected: dict, inputs: 
         return None
     cell = next(row for row in plan["cells"] if row["cell_id"] == plan["order"][ordinal - 1])
     predecessor_plan = plan
+    task3_handoff = (plan["run_id"] == "budget_pilot_ci_20260925_04" and BRANCH == "pilot-inference-20260925-04"
+        and ordinal == 12 and selected["cell_id"] == "2ea2e5b5-257f-42e6-a7dc-93763f28b19d_A_r1"
+        and cell["cell_id"] == TASK3_A1_PREDECESSOR["cell_id"])
     if (plan["run_id"] == "budget_pilot_ci_20260925_04" and BRANCH == "pilot-inference-20260925-04"
             and ordinal == 7 and selected["cell_id"] == "0112fc9b-c3b2-4084-8993-5a4abb1f54f1_B_r1"
             and cell["cell_id"] == "0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r1"
@@ -337,7 +346,23 @@ def _predecessor(api, repo: str, head: str, plan: dict, selected: dict, inputs: 
             "selected_cell_id": cell["cell_id"], "host": {"workflow": plan["ci"]["host"]["workflow"]},
         }
         cell = next(row for row in predecessor_plan["cells"] if row["cell_id"] == cell["cell_id"])
+    elif task3_handoff:
+        # A2's completion is fixed content, not an independently known terminal
+        # SHA. _terminal must verify it at the captured CAS parent, using the
+        # new job's verified inputs and A2's own producer contract, not its state.
+        predecessor_plan, _, _ = pilot.compile_pilot(ci.CAMPAIGN, TASK3_A1_PREDECESSOR["source_sha"])
+        predecessor_plan["ci"] = {
+            "registration_sha256": plan["ci"]["registration_sha256"],
+            "selected_cell_id": cell["cell_id"], "host": {"workflow": plan["ci"]["host"]["workflow"]},
+        }
+        cell = next(row for row in predecessor_plan["cells"] if row["cell_id"] == cell["cell_id"])
     evidence = _terminal(api, repo, head, predecessor_plan, cell, inputs, cache, token, deadline)
+    if task3_handoff:
+        require(evidence["claim"]["binding"]["github_run"] == TASK3_A1_PREDECESSOR["github_run"]
+                and evidence["claim"]["binding"]["host"]["workflow"] == ci.WORKFLOW,
+                "recorded_task3_predecessor_run_mismatch")
+        require(pilot._digest(evidence["terminal"]["completion"]) == TASK3_A1_PREDECESSOR["completion_sha256"],
+                "recorded_task3_predecessor_completion_mismatch")
     return evidence["observation"]
 
 
