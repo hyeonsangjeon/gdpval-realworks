@@ -87,7 +87,7 @@ TASK3_SUCCESSORS = {
     "2ea2e5b5-257f-42e6-a7dc-93763f28b19d_A_r2": (
         "36232859421", "f4de6c1d36c8f3a2c077be9e4be370545eeb5a11d9513752caa4d40bd08e1bd8"),
 }
-# Only this recorded pair continues the shared-controller chain. A1 has a
+# Only recorded task4 completions continue the shared-controller chain. A1 has a
 # distinct model-free UNGRADED policy; it must never enter the judged path.
 TASK4_A1_CELL = "3baa0009-5a60-4ae8-ae99-4955cb328ff3_A_r1"
 TASK4_B1_CELL = "3baa0009-5a60-4ae8-ae99-4955cb328ff3_B_r1"
@@ -96,6 +96,12 @@ TASK4_RETAINED = {
         "36234320019", "a913f0236e801e31ab7c0f58c8545ad6375d7092c06fa77f839225d03efe52d8"),
     TASK4_B1_CELL: (
         "36235926112", "f3546942ebac25c3c3cd1788dfb792a80e3e10f465999bebf7730fb651cb2bde"),
+    "3baa0009-5a60-4ae8-ae99-4955cb328ff3_C_r1": (
+        "36239016015", "76c1904cfbed0588f5fcb6c15f48f66cd065933a8c829cbd18fcfb323f8ab710"),
+    "3baa0009-5a60-4ae8-ae99-4955cb328ff3_C_r2": (
+        "36242339639", "817d2515c4719b7f12b40c5c58e446661e2e41fd5d8023a78045208548e4dcbd"),
+    "3baa0009-5a60-4ae8-ae99-4955cb328ff3_B_r2": (
+        "36243795189", "ec4221834b04014e58775a4a4d94fc139e49ad2b7b45321e7fd2ccd58d75ef41"),
 }
 CLAIM_FORMAT = "codex-pilot-grade-claim-v1"
 RESULT_FORMAT = "codex-pilot-grade-terminal-v1"
@@ -465,7 +471,7 @@ def _task2_resolution(context: Context, evidence: dict, revision: str) -> None:
                 and (cell_id != TASK3_A1_CELL or claim["expected_parent"] == TASK3_A1_PREVIOUS_TERMINAL),
                 "recorded_task3_previous_inference_required")
     if task4:
-        require(context.plan["order"][18:20] == list(TASK4_RETAINED), "recorded_task4_order_required")
+        require(context.plan["order"][18:23] == list(TASK4_RETAINED), "recorded_task4_order_required")
     completed = ci.validate_completion(terminal["completion"])
     require(pilot._digest(completed) == recorded[1], "recorded_task2_completion_mismatch")
     binding = claim["binding"]

@@ -55,7 +55,8 @@ def _invoke(current, capture, phase="plan", **changes):
 
 @pytest.fixture(scope="module")
 def recorded_pair(tmp_path_factory):
-    assert grading.TASK4_RETAINED == {failed.PREFIX + suffix: row for suffix, row in failed.RECORDED.items()}
+    assert list(grading.TASK4_RETAINED)[:2] == [failed.PREFIX + suffix for suffix in failed.RECORDED]
+    assert all(grading.TASK4_RETAINED[failed.PREFIX + suffix] == row for suffix, row in failed.RECORDED.items())
     history_generator = failed.failed_pair.__wrapped__(tmp_path_factory)
     history = next(history_generator)
     try:
@@ -167,14 +168,14 @@ def test_fixed_failed_a1_no_judge_policy(recorded_pair, tmp_path, monkeypatch, c
         assert history.after_b1.branches[retained.BRANCH] == history.before_a1.branches[retained.BRANCH]
         return
     if change == "plan":
-        assert context.plan["order"][18:20] == list(grading.TASK4_RETAINED)
+        assert context.plan["order"][18:23] == list(grading.TASK4_RETAINED)
         assert len(context.plan["order"]) == 30
         assert context.controller_source_sha != context.plan["reviewed_source_sha"] == failed.PRODUCER
         assert (pilot.TOTAL_SECONDS, pilot.ATTEMPT_SECONDS) == (10800, 1800)
         assert ci.HOST_POLICY["sdk"] == ci.HOST_POLICY["cli"] == "0.147.0"
         assert context.plan["model"]["deployment"] == "gpt-5.4" and context.plan["model"]["route_profile"] == "direct-v1"
         assert hashlib.sha256(context.run.grader_config_json.encode()).hexdigest() == readout.CONFIG_SHA256
-        for cell_id in context.plan["order"][20:]:
+        for cell_id in context.plan["order"][23:]:
             with pytest.raises(output.OutputPublicationRefused):
                 grading.compile_request("pilot/" + cell_id, failed.FUTURE_CONTROLLER, current.request,
                                         producer_source_sha=failed.PRODUCER)
@@ -199,7 +200,7 @@ def test_fixed_failed_a1_no_judge_policy(recorded_pair, tmp_path, monkeypatch, c
         expression = jobs["pilot-live"]["env"]["PILOT_GRADE_PRODUCER_SOURCE_SHA"]
         assert jobs["pilot-plan"]["env"]["PILOT_GRADE_PRODUCER_SOURCE_SHA"] == expression
         assert all(expression.count('"pilot/' + cell_id + '"') == 1 for cell_id in grading.TASK4_RETAINED)
-        assert all('"pilot/' + cell_id + '"' not in expression for cell_id in context.plan["order"][20:])
+        assert all('"pilot/' + cell_id + '"' not in expression for cell_id in context.plan["order"][23:])
         assert jobs["pilot-live"]["needs"] == ["pilot-approve-paid"] and "environment" not in jobs["pilot-live"]
         assert jobs["pilot-live"]["permissions"] == {"contents": "read", "id-token": "write"}
         assert jobs["pilot-approve-paid"]["permissions"] == {} and len(jobs["pilot-approve-paid"]["steps"]) == 1
