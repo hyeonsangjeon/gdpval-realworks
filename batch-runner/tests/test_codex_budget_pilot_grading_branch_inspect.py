@@ -398,11 +398,35 @@ def test_workflow_inspection_is_isolated_without_new_inputs_or_paid_routes():
     assert "environment" not in live and live["needs"] == ["pilot-approve-paid"]
     assert "needs.pilot-approve-paid.result == 'success'" in live["if"]
     assert live["permissions"] == {"contents": "read", "id-token": "write"} and live["timeout-minutes"] == 300
+    assert approval["permissions"] == {} and len(approval["steps"]) == 1
     assert "HF_TOKEN" not in live["env"] and "HF_TOKEN" not in plan["env"]
     token_steps = [step for step in live["steps"] if "HF_TOKEN" in step.get("env", {})]
-    phases = {phase: next(step for step in token_steps if "--phase " + phase in step["run"])
-              for phase in ("setup", "inspect", "prepare", "claim", "publish")}
-    assert len(token_steps) == len(phases) == 5
+    expected_phases = {"setup", "inspect", "prepare", "claim", "publish", "record-ungraded"}
+    phases = {}
+    for step in token_steps:
+        arguments = step["run"].split()
+        assert arguments.count("--phase") == 1
+        phase = arguments[arguments.index("--phase") + 1]
+        assert phase in expected_phases and phase not in phases
+        phases[phase] = step
+    assert len(token_steps) == len(phases) == 6 and set(phases) == expected_phases
+    recorder = phases["record-ungraded"]
+    assert recorder["timeout-minutes"] == 5
+    assert recorder["env"] == {"HF_TOKEN": "${{ secrets.HF_TOKEN }}"}
+    assert recorder["run"] == (
+        "umask 077\n"
+        "python batch-runner/codex_budget_pilot_grading.py --phase record-ungraded \\\n"
+        '  --selector "$GRADE_SELECTOR" --reviewed-source-sha "$GITHUB_SHA" \\\n'
+        '  --producer-source-sha "$PILOT_GRADE_PRODUCER_SOURCE_SHA" \\\n'
+        '  --terminal-revision "$GRADE_TERMINAL" --root "$RUNNER_TEMP/pilot-fixed-grade"\n'
+    )
+    assert " ".join(recorder["if"].split()) == (
+        "(inputs.experiment_yaml == 'pilot/3baa0009-5a60-4ae8-ae99-4955cb328ff3_A_r1' || "
+        "inputs.experiment_yaml == 'pilot/3baa0009-5a60-4ae8-ae99-4955cb328ff3_A_r2' || "
+        "inputs.experiment_yaml == 'pilot/0818571f-5ff7-4d39-9d2c-ced5ae44299e_A_r1') && "
+        "steps.pilot_input.outputs.model_free_record_ready == 'true' && "
+        "steps.pilot_input.outputs.judge_ready == 'false'"
+    )
     assert phases["setup"]["if"] == ("inputs.experiment_yaml == 'pilot/branch-setup' || "
                                      "inputs.experiment_yaml == 'pilot/inference-branch-setup'")
     assert phases["inspect"]["if"] == ("inputs.experiment_yaml == 'pilot/branch-inspect' || "

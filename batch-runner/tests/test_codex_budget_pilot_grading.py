@@ -806,15 +806,41 @@ def test_workflow_isolates_private_pilot_from_legacy_publication_and_inference()
     assert "needs.pilot-approve-paid.result == 'success'" in live["if"]
     assert live["permissions"] == {"contents": "read", "id-token": "write"}
     assert live["container"] == jobs["grade"]["container"]
+    assert approval["permissions"] == {} and len(approval["steps"]) == 1
+    assert "HF_TOKEN" not in live["env"] and "HF_TOKEN" not in plan["env"]
     for job in (plan, live):
         assert not any("upload-artifact" in step.get("uses", "") for step in job["steps"])
         checkout = next(step for step in job["steps"] if "actions/checkout" in step.get("uses", ""))
         assert checkout["with"] == {"ref": "${{ github.sha }}", "persist-credentials": False}
         assert not any("codex-budget-pilot-ci-cell" in step.get("run", "") for step in job["steps"])
     token_steps = [step for step in live["steps"] if "HF_TOKEN" in step.get("env", {})]
-    assert len(token_steps) == 5
-    assert all(any("--phase " + phase in step["run"] for phase in ("setup", "inspect", "prepare", "claim", "publish")) for step in token_steps)
-    inspection = next(step for step in token_steps if "--phase inspect" in step["run"])
+    expected_phases = {"setup", "inspect", "prepare", "claim", "publish", "record-ungraded"}
+    phases = {}
+    for step in token_steps:
+        arguments = step["run"].split()
+        assert arguments.count("--phase") == 1
+        phase = arguments[arguments.index("--phase") + 1]
+        assert phase in expected_phases and phase not in phases
+        phases[phase] = step
+    assert len(token_steps) == len(phases) == 6 and set(phases) == expected_phases
+    recorder = phases["record-ungraded"]
+    assert recorder["timeout-minutes"] == 5
+    assert recorder["env"] == {"HF_TOKEN": "${{ secrets.HF_TOKEN }}"}
+    assert recorder["run"] == (
+        "umask 077\n"
+        "python batch-runner/codex_budget_pilot_grading.py --phase record-ungraded \\\n"
+        '  --selector "$GRADE_SELECTOR" --reviewed-source-sha "$GITHUB_SHA" \\\n'
+        '  --producer-source-sha "$PILOT_GRADE_PRODUCER_SOURCE_SHA" \\\n'
+        '  --terminal-revision "$GRADE_TERMINAL" --root "$RUNNER_TEMP/pilot-fixed-grade"\n'
+    )
+    assert " ".join(recorder["if"].split()) == (
+        "(inputs.experiment_yaml == 'pilot/3baa0009-5a60-4ae8-ae99-4955cb328ff3_A_r1' || "
+        "inputs.experiment_yaml == 'pilot/3baa0009-5a60-4ae8-ae99-4955cb328ff3_A_r2' || "
+        "inputs.experiment_yaml == 'pilot/0818571f-5ff7-4d39-9d2c-ced5ae44299e_A_r1') && "
+        "steps.pilot_input.outputs.model_free_record_ready == 'true' && "
+        "steps.pilot_input.outputs.judge_ready == 'false'"
+    )
+    inspection = phases["inspect"]
     assert inspection["if"] == ("inputs.experiment_yaml == 'pilot/branch-inspect' || "
                                 "inputs.experiment_yaml == 'pilot/inference-branch-inspect'")
     assert all("inputs.experiment_yaml != 'pilot/branch-inspect'" in step["if"]
