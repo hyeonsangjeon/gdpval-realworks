@@ -193,7 +193,7 @@ def test_failed_task4_a1_grading_policy_gap(failed_pair, tmp_path, monkeypatch, 
         assert api.calls == [] and not current.root.exists() and current.transport.calls == 0
         return
     if change == "workflow_guards":
-        steps = {step["name"]: step for step in failed_pair.workflow["jobs"]["pilot-live"]["steps"]}
+        steps = {step["name"]: step for step in failed_pair.workflow["jobs"]["pilot-live"]["steps"] if "name" in step}
         for name in ("Validate grading OIDC identity", "Validate fixed grader Azure route",
                      "Grading Azure login (OIDC)", "Verify grading OIDC session", "Verify fixed grader model connection",
                      "Claim one private grading admission with parent CAS", "Invoke exactly the compiled fixed Step8 command once"):
