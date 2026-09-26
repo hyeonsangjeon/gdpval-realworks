@@ -1,6 +1,51 @@
 # Latest task result
 
-## PROJECT5-PUBLISH-KNOWN-B1-C1-C2-BUNDLE
+## PROJECT5-FIX-EXACT-REGISTERED-TAIL
+
+The two requested test nodes passed after a test-only repair to their shared
+helper in `batch-runner/tests/test_codex_budget_pilot_task3_grading_chain.py`.
+`TASK5_RETAINED` must match original plan indices 24–27 in the exact
+A1/B1/C1/C2 order, and each selector must appear exactly once in the matching
+producer expressions. The negative check still excludes indices 28 onward,
+B2/A2. All other assertions remain intact, including model/dataset/source/config
+pins, ordinals, approval, permissions, judge/HF isolation and no replay.
+No production, workflow, fixture or registration changed.
+
+At immutable test SHA `1f216e8c6ee7a6773c4423c9236eb8aad7b50ad8`, one runner
+selected only these two quoted nodes:
+
+- `tests/test_codex_budget_pilot_task3_grading_chain.py::test_recorded_task3_grading_chain[chain]`
+- `tests/test_codex_budget_pilot_task3_grading_chain.py::test_final_task3_a2_grading_binding[chain]`
+
+The result was **2 collected, 2 passed in 28.90s**, exit **0**. Python 3.10.12 /
+pytest 9.1.1 ran under credential-free `env -i`, offline HF/Transformers flags,
+disabled plugin autoload, `GITHUB_ACTIONS=false`, `PYTHONDONTWRITEBYTECODE=1`
+and `-m 'not integration' -p no:cacheprovider --maxfail=1 -q --tb=short`.
+The existing synthetic history and fake/blocked external boundaries were reused.
+The log is `/tmp/project5-exact-registered-tail.gXAgvz/focused-1f216e8c6.log`.
+
+The leader supplied the separate CI result at
+`063aa9df97e65d1c2c5dbdfaf1103c1043fbba83`: Backend Tests run `36269127396`,
+pilot-contracts job `108479588699`, **2 failed, 1442 passed in 1632.16s**,
+summary emitted `2026-09-26T20:56:02Z`. Both failures reached the stale
+indices-25-onward absence check. This was assertion failure, not timeout;
+eight other checks passed. No passing CI tests or prior families were rerun.
+This CI result, the new two-node result and every earlier observation remain
+separate; no combined pass count or completed new-head CI is claimed.
+
+Only the two completion records changed after the tested SHA. The full skill
+catalog was reviewed once; experiment-report-en then im-not-ai-en preserved
+the exact evidence and authority boundaries in these records.
+Review `5327367279` covers old063aa9 only and is conditional on CI and the
+source hold; it does not approve this repair. Fresh leader review and CI remain
+required. Main/inference `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e` remains held.
+B2/A2 remain unregistered, and no B2 outcome is inferred. The explicitly bound
+shared grading controller, actual verified predecessors and individual protected
+live approvals remain gates. The authorized action is one ordinary push to the
+same PR686, not a merge, source change or live execution. No CI polling, manual
+workflow rerun or live inference/grading/readout occurred.
+
+## Prior PROJECT5-PUBLISH-KNOWN-B1-C1-C2-BUNDLE
 
 The leader authorized one ordinary push of the already completed task5
 B1-failure/C1-ordinary/C2-failure bundle to the same draft PR686. This handoff

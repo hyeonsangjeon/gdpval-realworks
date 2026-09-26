@@ -31,6 +31,27 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Align only the shared task3 grading-chain test helper with the existing
+  task5 registry. Require exact A1/B1/C1/C2 membership and order at original
+  indices 24–27 and one occurrence of each selector, while retaining absence
+  checks for the unregistered B2/A2 tail at indices 28 onward. Every other
+  guard remains intact; production, workflow, fixtures and registrations are
+  unchanged. The leader-supplied CI at
+  `063aa9df97e65d1c2c5dbdfaf1103c1043fbba83` reported **2 failed, 1442 passed
+  in 1632.16s** in run `36269127396`, pilot-contracts job `108479588699`,
+  summary emitted `2026-09-26T20:56:02Z`. This was assertion failure, not
+  timeout; eight other checks passed. One offline runner selecting only the
+  two failed `[chain]` nodes returned **2 collected, 2 passed in 28.90s**,
+  exit **0**, at `1f216e8c6ee7a6773c4423c9236eb8aad7b50ad8`. These observations
+  and all older results remain separate; no passing family or suite was rerun.
+  Only the two completion records changed after that tested SHA. Review
+  `5327367279` covers old063aa9, not this repair. New-head leader review/CI,
+  held `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e`, the declared shared
+  controller, actual predecessor proofs and individual protected live approvals
+  remain gates. B2/A2 stay unregistered. One ordinary push to the same PR686 is
+  authorized; no merge, main/source change, live execution, CI polling or manual
+  workflow rerun is authorized by this repair.
+
 - Earlier HF-phase endpoint: correct only the two pilot workflow-contract tests
   that still expected five
   HF-token steps. They now require exactly one step for each of `setup`,
