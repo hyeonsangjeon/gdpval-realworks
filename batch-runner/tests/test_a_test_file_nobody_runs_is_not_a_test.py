@@ -22,11 +22,13 @@ by the very defect it exists to catch.
 from __future__ import annotations
 
 import ast
+import hashlib
 import os
 import shlex
 import subprocess
 import sys
 from configparser import ConfigParser
+from fnmatch import fnmatch
 from pathlib import Path
 
 import pytest
@@ -60,12 +62,12 @@ def _pytest_target_arguments(args: list[str]) -> list[str]:
         if token == "--":
             targets.extend(tokens)
             break
-        if token in {"-k", "-m", "-r", "--tb", "--ignore"}:
+        if token in {"-k", "-m", "-r", "--tb", "--ignore", "--ignore-glob"}:
             value = next(tokens, None)
             assert value is not None and not value.startswith("-"), "missing pytest option value"
         elif token in {"-q", "-v"}:
             continue
-        elif token.startswith(("-k", "-m", "-r", "--tb=", "--ignore=")):
+        elif token.startswith(("-k", "-m", "-r", "--tb=", "--ignore=", "--ignore-glob=")):
             # Short attached values (-rs/-kexpr) and long --option=value forms.
             continue
         else:
@@ -276,9 +278,13 @@ def test_the_orphaned_directory_that_prompted_this_is_actually_wired():
 
 
 def test_backend_jobs_partition_the_comparison_contracts():
-    """Eight jobs cover every node once, including wire and preflight splits."""
+    """Eight jobs cover every node once, including budget-pilot and shared files."""
+    from .test_ghcp_vm_gate_contract import WORKFLOW_SHA256
+
     text = WORKFLOW.read_text(encoding="utf-8")
+    assert hashlib.sha256(WORKFLOW.read_bytes()).hexdigest() == WORKFLOW_SHA256
     workflow = yaml.safe_load(text)
+    assert set(workflow) == {"name", True, "permissions", "concurrency", "jobs"}
     jobs = workflow["jobs"]
     assert set(jobs) == {
         "pytest", "comparison-contracts", "pilot-contracts", "pilot-preflight-contracts",
@@ -321,7 +327,9 @@ def test_backend_jobs_partition_the_comparison_contracts():
     assert [step["name"] for step in comparison] == setup_names + [
         "Run comparison contracts"
     ]
-    assert [step["name"] for step in pilot] == setup_names + ["Run pilot contracts"]
+    assert [step["name"] for step in pilot] == setup_names + [
+        "Run pilot contracts", "Run budget pilot contracts",
+    ]
     assert [step["name"] for step in pilot_preflight] == setup_names + ["Run pilot preflight contracts"]
     assert [step["name"] for step in pilot_external] == setup_names + ["Run pilot external receipt contracts"]
     assert [step["name"] for step in pilot_publication] == setup_names + ["Run pilot external publication contracts"]
@@ -377,7 +385,7 @@ def test_backend_jobs_partition_the_comparison_contracts():
     for step, command_count in (
         (core[6], 1), (comparison[6], 1), (pilot[6], 1),
         (pilot_preflight[6], 1), (pilot_external[6], 1), (pilot_publication[6], 1),
-        (wire[6], 1), (native_host[6], 1)
+        (wire[6], 1), (native_host[6], 1), (pilot[7], 1)
     ):
         assert set(step) == {"name", "run"}
         lines = step["run"].splitlines()
@@ -387,7 +395,8 @@ def test_backend_jobs_partition_the_comparison_contracts():
         "python", "-m", "pytest", "-m", "not integration", "--tb=short", "-q", "-rs"
     ]
     assert all(command[:len(prefix)] == prefix for command in argv)
-    excluded = [arg.removeprefix("--ignore=") for arg in argv[0][len(prefix):]]
+    excluded = [arg.removeprefix("--ignore=") for arg in argv[0][len(prefix):]
+                if arg.startswith("--ignore=")]
     selected = argv[1][len(prefix):]
     pilot_selected = argv[2][len(prefix):]
     pilot_preflight_selected = argv[3][len(prefix):]
@@ -395,9 +404,28 @@ def test_backend_jobs_partition_the_comparison_contracts():
     pilot_publication_selected = argv[5][len(prefix):]
     wire_selected = argv[6][len(prefix):]
     native_selected = argv[7][len(prefix):]
+    budget_selected = argv[8][len(prefix):]
+    budget_glob = "tests/test_codex_budget_pilot*.py"
+    # shlex removes quotes: verify the actual shell expands only the target,
+    # while pytest receives the core ignore glob literally.
+    assert core[6]["run"].endswith(f" --ignore-glob='{budget_glob}'\n")
+    assert pilot[7]["run"] == (
+        "cd batch-runner\n"
+        f'python -m pytest -m "not integration" --tb=short -q -rs {budget_glob}\n'
+    )
+    assert _pytest_target_arguments(argv[0][len(prefix):]) == []
+    assert _pytest_target_arguments(budget_selected) == [budget_glob]
+    assert _pytest_target_arguments(["--ignore-glob", budget_glob]) == []
+    with pytest.raises(AssertionError, match="missing pytest option value"):
+        _pytest_target_arguments(["--ignore-glob"])
+    assert {REPO_ROOT / "batch-runner", REPO_ROOT / "scripts/__tests__"} <= _pytest_targets()
 
     runner = REPO_ROOT / "batch-runner"
     tests = runner / "tests"
+    budget_files = sorted(path.relative_to(runner).as_posix()
+                          for path in runner.glob(budget_glob))
+    assert budget_files and all((runner / path).is_file() for path in budget_files)
+    assert budget_selected == [budget_glob]
     comparison_files = sorted(
         path.relative_to(runner).as_posix()
         for path in tests.glob("test_gpt54_*.py")
@@ -421,7 +449,9 @@ def test_backend_jobs_partition_the_comparison_contracts():
     general_pilot_files = [path for path in pilot_files if path not in {wire_file, pilot_preflight_file}]
     assert len(general_pilot_files) == 7
     actual = sorted(comparison_files + pilot_files)
-    assert argv[0][len(prefix):] == [f"--ignore={path}" for path in actual]
+    assert argv[0][len(prefix):] == [
+        *[f"--ignore={path}" for path in actual], f"--ignore-glob={budget_glob}",
+    ]
     assert excluded == actual
     assert selected == comparison_files
     assert pilot_selected == general_pilot_files
@@ -456,10 +486,11 @@ def test_backend_jobs_partition_the_comparison_contracts():
     assert not node_selections[0] & node_selections[1]
     assert node_selections[0] | node_selections[1] == set(wire_nodes)
 
-    def collect_preflight_nodes(arguments: list[str]) -> set[str]:
+    def collect_partition_nodes(arguments: list[str]) -> set[str]:
         # Collection runs imports/hooks but not fixtures or test bodies. Keep
-        # it scoped to this one file, with the workflow's non-integration filter.
-        assert arguments[0] == pilot_preflight_file
+        # it scoped to preflight or the exact moved files, with the same marker.
+        targets = _pytest_target_arguments(arguments)
+        assert targets == [pilot_preflight_file] or targets == budget_files
         result = subprocess.run(
             [sys.executable, *prefix[1:], "--collect-only", "-p", "no:cacheprovider",
              "-o", "addopts=", "--color=no", *arguments],
@@ -472,15 +503,16 @@ def test_backend_jobs_partition_the_comparison_contracts():
         )
         assert result.returncode == 0, result.stdout + result.stderr
         nodes = [line for line in result.stdout.splitlines()
-                 if line.startswith(pilot_preflight_file + "::")]
+                 if line.startswith("tests/") and "::" in line]
         assert nodes, result.stdout
-        assert len(nodes) == len(set(nodes)), "duplicate collected preflight node IDs"
+        assert all(node.split("::", 1)[0] in targets for node in nodes)
+        assert len(nodes) == len(set(nodes)), "duplicate collected partition node IDs"
         return set(nodes)
 
     # Ask pytest itself about full parameterized node IDs and -k semantics.
     # No AST/regex approximation can establish this three-way partition.
-    all_preflight_nodes = collect_preflight_nodes([pilot_preflight_file])
-    preflight_node_sets = [collect_preflight_nodes(arguments) for arguments in (
+    all_preflight_nodes = collect_partition_nodes([pilot_preflight_file])
+    preflight_node_sets = [collect_partition_nodes(arguments) for arguments in (
         pilot_preflight_selected, pilot_external_selected, pilot_publication_selected,
     )]
     assert all(preflight_node_sets)
@@ -493,6 +525,8 @@ def test_backend_jobs_partition_the_comparison_contracts():
     }
     assert {node.split("::")[-1].split("[", 1)[0] for node in publication_nodes} == set(publication_functions)
     assert preflight_node_sets[2] == publication_nodes
+    budget_nodes = collect_partition_nodes(budget_files)
+    assert budget_nodes
 
     discovery = ConfigParser()
     discovery.read(runner / "pytest.ini")
@@ -501,9 +535,18 @@ def test_backend_jobs_partition_the_comparison_contracts():
     all_tests = {
         path.relative_to(runner).as_posix() for path in tests.rglob("test_*.py")
     }
-    core_tests = all_tests - set(excluded)
+    # pytest's fnmatch can cross path separators; shell globbing cannot. Refuse
+    # any nested file that core would ignore but the new step would not select.
+    budget_tests = {path for path in all_tests if fnmatch(path, budget_glob)}
+    assert budget_tests == set(budget_files)
+    assert not budget_tests & set(excluded)
+    previous_core_tests = all_tests - set(excluded)
+    core_tests = previous_core_tests - budget_tests
+    assert not core_tests & budget_tests
+    assert core_tests | budget_tests == previous_core_tests
     comparison_tests = set(selected)
-    pilot_tests = set(pilot_selected)
+    assert not set(pilot_selected) & budget_tests
+    pilot_tests = set(pilot_selected) | budget_tests
     pilot_preflight_tests = {pilot_preflight_file}
     shared_wire_tests = {wire_file}
     assert not core_tests & comparison_tests
