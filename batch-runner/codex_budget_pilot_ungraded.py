@@ -1,4 +1,4 @@
-"""Recorded failed task4 A1/A2 and task5 A1/B1: UNGRADED evidence, never a judge.
+"""Recorded failed task4 A1/A2 and task5 A1/B1/C2: UNGRADED, never a judge.
 
 This is not the ordinary judged-terminal format or a failed-input fallback.
 The two CAS writes use the existing grading namespace and one-use guards.
@@ -25,6 +25,7 @@ POLICY = "recorded_task4_failed_a1_no_judge"
 A2_POLICY = "recorded_task4_failed_a2_no_judge"
 TASK5_POLICY = "task5-a1-model-free-ungraded"
 TASK5_B1_POLICY = "task5-b1-model-free-ungraded"
+TASK5_C2_POLICY = "task5-c2-model-free-ungraded"
 require = output._require
 
 
@@ -53,6 +54,12 @@ def _scope(context):
             grading.TASK5_A1_CELL, grading.TASK5_B1_CELL]
             and context.plan["order"].index(context.cell["cell_id"]) == 25,
             "fixed_model_free_task5_b1_predecessor_required")
+    if context.cell["cell_id"] == grading.TASK5_C2_CELL:
+        require(context.plan["order"][22:28] == [
+            "3baa0009-5a60-4ae8-ae99-4955cb328ff3_B_r2", grading.TASK4_A2_CELL,
+            grading.TASK5_A1_CELL, grading.TASK5_B1_CELL, grading.TASK5_C1_CELL, grading.TASK5_C2_CELL]
+            and context.plan["order"].index(context.cell["cell_id"]) == 27,
+            "fixed_model_free_task5_c2_predecessor_required")
 
 
 def fixed_failure(context, evidence):
@@ -176,9 +183,10 @@ def _binding(context, evidence, identity_sha, entry, run):
             and type(run["id"]) is str and re.fullmatch(r"[1-9][0-9]{0,19}", run["id"]) is not None
             and run["job"] == "pilot-live" and type(run["attempt"]) is int and run["attempt"] == 1,
             "model_free_run_required")
-    policy = TASK5_B1_POLICY if context.cell["cell_id"] == grading.TASK5_B1_CELL else (
-        TASK5_POLICY if context.cell["cell_id"] == grading.TASK5_A1_CELL else (
-            POLICY if context.cell["cell_id"] == grading.TASK4_A1_CELL else A2_POLICY))
+    policy = TASK5_C2_POLICY if context.cell["cell_id"] == grading.TASK5_C2_CELL else (
+        TASK5_B1_POLICY if context.cell["cell_id"] == grading.TASK5_B1_CELL else (
+            TASK5_POLICY if context.cell["cell_id"] == grading.TASK5_A1_CELL else (
+                POLICY if context.cell["cell_id"] == grading.TASK4_A1_CELL else A2_POLICY)))
     return {"policy": policy,
         "repository_name_sha256": retained.TARGET_SHA256,
         "campaign_id": ci.CAMPAIGN, "branch": grading.BRANCH, "inference_branch": retained.BRANCH,
@@ -248,6 +256,66 @@ def _task5_b1_revisions(api, repo, parent, previous, cache, token, deadline, *, 
             "model_free_task5_b1_chain_revision_changed")
 
 
+def _task5_c2_predecessor(api, repo, revision, context, entry, cache, token, deadline, *, record_revisions=()):
+    """Only C2: ordinary 26 backed by fixed UNGRADED 25 -> 24 -> 23 -> ordinary 22."""
+    _scope(context)
+    require(context.cell["cell_id"] == grading.TASK5_C2_CELL,
+            "fixed_model_free_task5_c2_predecessor_required")
+    require(type(record_revisions) is tuple and len(record_revisions) in {0, 2},
+            "model_free_task5_c2_chain_revision_changed")
+    previous = grading.compile_request("pilot/" + grading.TASK5_C1_CELL, context.controller_source_sha,
+        grading.TASK5_RETAINED[grading.TASK5_C1_CELL][1], producer_source_sha=grading.TASK3_A1_PRODUCER_SOURCE)
+    claim_path, terminal_path = grading._paths(previous.cell)
+    value, original_bytes = retained._control(api, repo, revision, terminal_path,
+        grading._cache(cache, "c1-terminal"), token, deadline, written_at=revision)
+    evidence = grading._retained_input(previous, api, repo, grading._cache(cache, "c1-input"), token, deadline,
+        candidate_revision=value["binding"]["retained"]["terminal_commit"])
+    require(value["binding"]["retained"] == evidence["observation"]
+            and value["binding"]["publication_receipt_sha256"] == evidence["terminal"]["publication_receipt_sha256"],
+            "recorded_grade_input_binding_mismatch")
+    verified = grading._grade_terminal(api, repo, revision, previous, entry,
+        grading._cache(cache, "ordinary-c1"), token, deadline)
+    require(verified["identity"] == pilot._identity(original_bytes), "model_free_task5_c2_backing_changed")
+    claim, _ = retained._control(api, repo, value["claim_commit"], claim_path,
+        grading._cache(cache, "c1-claim"), token, deadline, expected=value["claim_identity"],
+        written_at=value["claim_commit"])
+    b1 = grading.compile_request("pilot/" + grading.TASK5_B1_CELL, context.controller_source_sha,
+        grading.TASK5_RETAINED[grading.TASK5_B1_CELL][1], producer_source_sha=grading.TASK3_A1_PRODUCER_SOURCE)
+    backing = verify_terminal(api, repo, claim["expected_parent"], b1, entry,
+        grading._cache(cache, "fixed-b1"), token, deadline)
+    require(claim["predecessor"] == {"cell_id": grading.TASK5_B1_CELL,
+                "revision": backing["revision"], **backing["identity"]}
+            and evidence["claim"]["predecessor"] == backing["terminal"]["binding"]["retained"],
+            "model_free_task5_c2_backing_changed")
+    # Collect only these five immutable pairs. Neither depth nor format is
+    # selected by remote tags; B1's existing verifier remains unchanged.
+    cells = (grading.TASK5_C1_CELL, grading.TASK5_B1_CELL, grading.TASK5_A1_CELL,
+             grading.TASK4_A2_CELL, "3baa0009-5a60-4ae8-ae99-4955cb328ff3_B_r2")
+    revisions, expected = list(record_revisions), verified["identity"]
+    for index, cell_id in enumerate(cells):
+        claim_path, terminal_path = grading._paths({"cell_id": cell_id, "run_id": ci.CAMPAIGN + "__" + cell_id})
+        terminal, _ = retained._control(api, repo, revision, terminal_path,
+            grading._cache(cache, cell_id + "-terminal"), token, deadline, expected=expected, written_at=revision)
+        revisions.extend((revision, terminal["claim_commit"]))
+        require(all(output._hash(item, 40) for item in revisions) and len(set(revisions)) == len(revisions),
+                "model_free_task5_c2_chain_revision_changed")
+        linked, data = retained._control(api, repo, terminal["claim_commit"], claim_path,
+            grading._cache(cache, cell_id + "-claim"), token, deadline,
+            expected=terminal["claim_identity"], written_at=terminal["claim_commit"])
+        claim_format = grading.CLAIM_FORMAT if index in {0, 4} else CLAIM_FORMAT
+        require(data == retained._encoded({**linked, "format": claim_format, "binding": terminal["binding"]}),
+                "model_free_claim_changed")
+        if index < 4:
+            link = linked["predecessor"]
+            require(type(link) is dict and set(link) == {"cell_id", "revision", "size", "sha256"}
+                    and link["cell_id"] == cells[index + 1] and link["revision"] == linked["expected_parent"]
+                    and type(link["size"]) is int and 0 < link["size"] <= output.MAX_MANIFEST_BYTES
+                    and output._hash(link["sha256"]), "fixed_model_free_task5_c2_predecessor_required")
+            revision, expected = linked["expected_parent"], {key: link[key] for key in ("size", "sha256")}
+    require(len(revisions) == 10 + len(record_revisions), "model_free_task5_c2_chain_revision_changed")
+    return verified
+
+
 def verify_terminal(api, repo, revision, context, entry, cache, token, deadline):
     _scope(context)
     require(output._hash(revision, 40), "model_free_terminal_revision_required")
@@ -277,7 +345,8 @@ def verify_terminal(api, repo, revision, context, entry, cache, token, deadline)
             "model_free_terminal_parent_changed")
     task5 = context.cell["cell_id"] == grading.TASK5_A1_CELL
     task5_b1 = context.cell["cell_id"] == grading.TASK5_B1_CELL
-    previous_cell = context.plan["order"][24 if task5_b1 else 23 if task5 else
+    task5_c2 = context.cell["cell_id"] == grading.TASK5_C2_CELL
+    previous_cell = context.plan["order"][26 if task5_c2 else 24 if task5_b1 else 23 if task5 else
                                            17 if context.cell["cell_id"] == grading.TASK4_A1_CELL else 22]
     recorded = (grading._task3_recorded(previous_cell) or grading.TASK4_RETAINED.get(previous_cell)
                 or grading.TASK5_RETAINED.get(previous_cell))
@@ -289,7 +358,12 @@ def verify_terminal(api, repo, revision, context, entry, cache, token, deadline)
         expected={key: claim["predecessor"][key] for key in ("size", "sha256")}, written_at=claim["expected_parent"])
     grading._grade_retained_input(previous, previous_value["binding"], api, repo,
                                  grading._cache(cache, "previous-input"), token, deadline)
-    if task5_b1:
+    if task5_c2:
+        require(claim_bytes == retained._encoded({**claim, "binding": expected_binding}), "model_free_claim_changed")
+        verified = _task5_c2_predecessor(api, repo, claim["expected_parent"], context, entry,
+            grading._cache(cache, "c2-predecessor"), token, deadline,
+            record_revisions=(revision, terminal["claim_commit"]))
+    elif task5_b1:
         require(previous.cell["cell_id"] == grading.TASK5_A1_CELL,
                 "fixed_model_free_task5_b1_predecessor_required")
         require(claim_bytes == retained._encoded({**claim, "binding": expected_binding}), "model_free_claim_changed")
@@ -377,6 +451,11 @@ def record(context, root: Path, *, _test_api=None, _test_transport=None):
                     and output._bytes(root / "model-free-claim-verified.json", limit=output.MAX_MANIFEST_BYTES,
                         expected=admission["claim_identity"]) == retained._encoded(admission["claim"]),
                     "model_free_admission_changed")
+            if context.cell["cell_id"] == grading.TASK5_C2_CELL:
+                require(output._bytes(root / "model-free-claim-reserved.json", limit=output.MAX_MANIFEST_BYTES)
+                            == retained._encoded(binding)
+                        and output._bytes(root / "model-free-claim-receipt.json", limit=output.MAX_MANIFEST_BYTES)
+                            == retained._encoded(admission), "model_free_admission_changed")
             with retained._session(_test_api) as (api, token, deadline):
                 repo = retained._target()
                 require(output._metadata(api, repo, grading.BRANCH, token, deadline)["sha"] == admission["returned_commit"],

@@ -199,8 +199,8 @@ def test_successful_task5_c1_after_ungraded_b1(c1_history, tmp_path, monkeypatch
         return
 
     if change == "plan_workflow":
-        assert context.plan["order"][24:27] == list(grading.TASK5_RETAINED) == [
-            grading.TASK5_A1_CELL, grading.TASK5_B1_CELL, CELL]
+        assert context.plan["order"][24:28] == list(grading.TASK5_RETAINED) == [
+            grading.TASK5_A1_CELL, grading.TASK5_B1_CELL, CELL, grading.TASK5_C2_CELL]
         assert len(context.plan["order"]) == 30 and context.plan["run_id"] == "budget_pilot_ci_20260925_04"
         assert context.cell["config_sha256"] == "7af6ec22e99b336e6d8bc488d7e2834cc2610c7418dcea671c716197e2c87b02"
         assert context.controller_source_sha != context.plan["reviewed_source_sha"] == failed.PRODUCER
@@ -210,7 +210,7 @@ def test_successful_task5_c1_after_ungraded_b1(c1_history, tmp_path, monkeypatch
         assert context.plan["model"]["deployment"] == "gpt-5.4"
         assert context.plan["model"]["route_profile"] == "direct-v1"
         assert hashlib.sha256(context.run.grader_config_json.encode()).hexdigest() == readout.CONFIG_SHA256
-        for cell_id in context.plan["order"][27:]:
+        for cell_id in context.plan["order"][28:]:
             assert cell_id not in grading.TASK5_RETAINED
             with pytest.raises(output.OutputPublicationRefused, match="closed_retained_producer_binding_required"):
                 grading.compile_request("pilot/" + cell_id, failed.FUTURE_CONTROLLER, current.request,
@@ -220,7 +220,7 @@ def test_successful_task5_c1_after_ungraded_b1(c1_history, tmp_path, monkeypatch
         expression = live["env"]["PILOT_GRADE_PRODUCER_SOURCE_SHA"]
         assert expression == jobs["pilot-plan"]["env"]["PILOT_GRADE_PRODUCER_SOURCE_SHA"]
         assert all(expression.count('"pilot/' + cell_id + '"') == 1 for cell_id in grading.TASK5_RETAINED)
-        assert all('"pilot/' + cell_id + '"' not in expression for cell_id in context.plan["order"][27:])
+        assert all('"pilot/' + cell_id + '"' not in expression for cell_id in context.plan["order"][28:])
         assert live["needs"] == ["pilot-approve-paid"] and "environment" not in live
         assert "needs.pilot-approve-paid.result == 'success'" in live["if"]
         assert live["permissions"] == {"contents": "read", "id-token": "write"}
@@ -237,7 +237,8 @@ def test_successful_task5_c1_after_ungraded_b1(c1_history, tmp_path, monkeypatch
             assert phase not in phases
             phases[phase] = step
         assert len(token_steps) == 6 and set(phases) == {"setup", "inspect", "prepare", "claim", "publish", "record-ungraded"}
-        eligible = [grading.TASK4_A1_CELL, grading.TASK4_A2_CELL, grading.TASK5_A1_CELL, grading.TASK5_B1_CELL]
+        eligible = [grading.TASK4_A1_CELL, grading.TASK4_A2_CELL, grading.TASK5_A1_CELL, grading.TASK5_B1_CELL,
+                    grading.TASK5_C2_CELL]
         assert [cell["cell_id"] for cell in context.plan["cells"] if grading._model_free_context(
             SimpleNamespace(cell=cell, terminal_request=current.request))] == eligible
         recorder = phases["record-ungraded"]

@@ -226,8 +226,8 @@ def test_fixed_task5_b1_after_ungraded_a1(task5_b1_history, tmp_path, monkeypatc
         return
 
     if change == "plan_workflow":
-        assert context.plan["order"][24:27] == list(grading.TASK5_RETAINED) == [
-            grading.TASK5_A1_CELL, CELL, grading.TASK5_C1_CELL]
+        assert context.plan["order"][24:28] == list(grading.TASK5_RETAINED) == [
+            grading.TASK5_A1_CELL, CELL, grading.TASK5_C1_CELL, grading.TASK5_C2_CELL]
         assert context.plan["order"].index(CELL) == 25 and len(context.plan["order"]) == 30
         assert context.plan["order"][18:24] == list(grading.TASK4_RETAINED)
         assert context.cell["config_sha256"] == "db68ac51fb78fcce2497ee874aad33de5c81da3343736c8b75a4da17b88304d8"
@@ -238,8 +238,9 @@ def test_fixed_task5_b1_after_ungraded_a1(task5_b1_history, tmp_path, monkeypatc
         assert hashlib.sha256(context.run.grader_config_json.encode()).hexdigest() == readout.CONFIG_SHA256
         eligible = [cell["cell_id"] for cell in context.plan["cells"] if grading._model_free_context(
             SimpleNamespace(cell=cell, terminal_request=current.request))]
-        assert eligible == [grading.TASK4_A1_CELL, grading.TASK4_A2_CELL, grading.TASK5_A1_CELL, CELL]
-        for cell_id in context.plan["order"][27:]:
+        assert eligible == [grading.TASK4_A1_CELL, grading.TASK4_A2_CELL, grading.TASK5_A1_CELL, CELL,
+                            grading.TASK5_C2_CELL]
+        for cell_id in context.plan["order"][28:]:
             with pytest.raises(output.OutputPublicationRefused, match="closed_retained_producer_binding_required"):
                 grading.compile_request("pilot/" + cell_id, failed.FUTURE_CONTROLLER, current.request,
                                         producer_source_sha=failed.PRODUCER)
@@ -248,7 +249,7 @@ def test_fixed_task5_b1_after_ungraded_a1(task5_b1_history, tmp_path, monkeypatc
         expression = live["env"]["PILOT_GRADE_PRODUCER_SOURCE_SHA"]
         assert expression == jobs["pilot-plan"]["env"]["PILOT_GRADE_PRODUCER_SOURCE_SHA"]
         assert expression.count('"pilot/' + CELL + '"') == 1
-        assert all('"pilot/' + cell_id + '"' not in expression for cell_id in context.plan["order"][27:])
+        assert all('"pilot/' + cell_id + '"' not in expression for cell_id in context.plan["order"][28:])
         assert live["needs"] == ["pilot-approve-paid"] and "environment" not in live
         assert "needs.pilot-approve-paid.result == 'success'" in live["if"]
         assert live["env"]["PILOT_WORKFLOW_SHA"] == "${{ github.workflow_sha }}"

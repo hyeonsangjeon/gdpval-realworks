@@ -106,11 +106,12 @@ TASK4_RETAINED = {
     TASK4_A2_CELL: (
         "36245490377", "8f2f6edd7bb2fda964d8a24b4532b8af725bcefbb1513d9a60df86e983446fe9"),
 }
-# Only recorded task5 inputs may follow this fixed chain. Failed A1/B1 have
+# Only recorded task5 inputs may follow this fixed chain. Failed A1/B1/C2 have
 # distinct UNGRADED records; successful C1 retains the ordinary judged path.
 TASK5_A1_CELL = "0818571f-5ff7-4d39-9d2c-ced5ae44299e_A_r1"
 TASK5_B1_CELL = "0818571f-5ff7-4d39-9d2c-ced5ae44299e_B_r1"
 TASK5_C1_CELL = "0818571f-5ff7-4d39-9d2c-ced5ae44299e_C_r1"
+TASK5_C2_CELL = "0818571f-5ff7-4d39-9d2c-ced5ae44299e_C_r2"
 TASK5_RETAINED = {
     TASK5_A1_CELL: (
         "36247236594", "b23da4f1f5e81999039c473d27f3a70cc0d0681672ad08be0f9674b618915c97"),
@@ -118,6 +119,8 @@ TASK5_RETAINED = {
         "36248894311", "dd05f2ed43235b69d9eecfefadfb0a5ebd68d83b31daf38355a4acf6f0a21c5b"),
     TASK5_C1_CELL: (
         "36259780431", "ed11b060948692463105b5981245f4cedfaa3e597418313a7c55dc9c580a41bf"),
+    TASK5_C2_CELL: (
+        "36265102718", "db5c3fa1a927e88684b99b8eca93b6e442e97e05f500f36755c50000f3d42294"),
 }
 CLAIM_FORMAT = "codex-pilot-grade-claim-v1"
 RESULT_FORMAT = "codex-pilot-grade-terminal-v1"
@@ -192,7 +195,7 @@ def _task3_recorded(cell_id: str) -> tuple[str, str] | None:
 
 def _model_free_context(context: Context) -> bool:
     return context.terminal_request is not None and context.cell["cell_id"] in {
-        TASK4_A1_CELL, TASK4_A2_CELL, TASK5_A1_CELL, TASK5_B1_CELL}
+        TASK4_A1_CELL, TASK4_A2_CELL, TASK5_A1_CELL, TASK5_B1_CELL, TASK5_C2_CELL}
 
 
 def _shared_controller_successor(context: Context) -> bool:
@@ -495,7 +498,7 @@ def _task2_resolution(context: Context, evidence: dict, revision: str) -> None:
     if task4 or task5:
         require(context.plan["order"][18:24] == list(TASK4_RETAINED), "recorded_task4_order_required")
     if task5:
-        require(context.plan["order"][24:27] == list(TASK5_RETAINED)
+        require(context.plan["order"][24:28] == list(TASK5_RETAINED)
                 and context.plan["order"][23:25] == [TASK4_A2_CELL, TASK5_A1_CELL],
                 "recorded_task5_order_required")
     completed = ci.validate_completion(terminal["completion"])
@@ -1068,7 +1071,12 @@ def _branch_tip(api, repo: str, context: Context, prepared: dict, cache: Path, t
         other = compile_request("pilot/" + cell["cell_id"], context.controller_source_sha,
             value["binding"]["retained"]["terminal_commit"], producer_source_sha=context.plan["reviewed_source_sha"])
         entry = prepared["entry"]
-    if recorded_task2 and context.cell["cell_id"] in {TASK4_B1_CELL, TASK5_A1_CELL, TASK5_B1_CELL, TASK5_C1_CELL}:
+    if recorded_task2 and context.cell["cell_id"] == TASK5_C2_CELL:
+        from codex_budget_pilot_ungraded import _task5_c2_predecessor
+
+        verified = _task5_c2_predecessor(api, repo, head, context, entry,
+            _cache(cache, "c2-predecessor"), token, deadline)
+    elif recorded_task2 and context.cell["cell_id"] in {TASK4_B1_CELL, TASK5_A1_CELL, TASK5_B1_CELL, TASK5_C1_CELL}:
         from codex_budget_pilot_ungraded import verify_terminal
         if context.cell["cell_id"] == TASK5_A1_CELL:
             require(other.cell["cell_id"] == TASK4_A2_CELL, "fixed_model_free_task5_predecessor_required")
