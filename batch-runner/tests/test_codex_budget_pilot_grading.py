@@ -228,19 +228,22 @@ def case(tmp_path, monkeypatch, compilation, compiled_cache):
     return state
 
 
-def _seed_outputs(case, tmp_path, *, failed=False, missing=False, ledger=True):
+def _seed_outputs(case, tmp_path, *, failed=False, missing=False, ledger=True, extra_deliverable=False):
     context, api = case.context, case.api
     cell = context.cell
     config = json.loads(context.grading.dispatch.runs[0].config_json)
     upload = tmp_path / ("synthetic-error-deliverables" if failed else "synthetic-deliverables")
     upload.mkdir(exist_ok=True)
     name = f"deliverable_files/{cell['task_id']}/answer.txt"
+    names = [name] + ([f"deliverable_files/{cell['task_id']}/supplement.txt"] if extra_deliverable else [])
     if not failed:
         (upload / name).parent.mkdir(parents=True, exist_ok=True)
         (upload / name).write_bytes(b"synthetic generated answer\r\n\x00unchanged\n")
+        if extra_deliverable:
+            (upload / names[1]).write_bytes(b"synthetic supplement; not a historical deliverable\n")
     rows = bind_deliverable_file_records([{
         "task_id": cell["task_id"], "status": "error" if failed else "success", "model": "gpt-5.4",
-        "deliverable_files": [] if failed else [name], "content": None if failed else "synthetic answer",
+        "deliverable_files": [] if failed else names, "content": None if failed else "synthetic answer",
         "deliverable_text": None if failed else "synthetic answer", "usage": None, "problem_solving_cost": None,
         "observability": {"preprocessors": []}, "latency_ms": 1.0,
         "timestamp": "2026-09-23T00:00:00Z", "error": "synthetic_failure" if failed else None,
@@ -260,8 +263,9 @@ def _seed_outputs(case, tmp_path, *, failed=False, missing=False, ledger=True):
     files = {} if missing else {"step2_inference_results.json": _json(payload)}
     roles = {"step2_inference_results.json": "inference_result"}
     if not missing and not failed:
-        files[name] = (upload / name).read_bytes()
-        roles[name] = "generated_deliverable"
+        for name in names:
+            files[name] = (upload / name).read_bytes()
+            roles[name] = "generated_deliverable"
     if not missing and ledger:
         files[Path(pilot.LEDGER).name] = ledger_data
         roles[Path(pilot.LEDGER).name] = "cost_ledger_export"
@@ -277,7 +281,8 @@ def _seed_outputs(case, tmp_path, *, failed=False, missing=False, ledger=True):
         "child_invocations": 1, "exit_code": 1 if failed or missing else 0,
         "result": None if missing else pilot._identity(files["step2_inference_results.json"]),
         "artifacts": {"ledger": pilot._identity(ledger_data) if ledger and not missing else None,
-                      "deliverable_files": [pilot._identity(files[name])] if not failed and not missing else []}}
+                      "deliverable_files": [pilot._identity(files[name]) for name in names]
+                          if not failed and not missing else []}}
     completed = ci.completion(plan, cell, execute=True, state=state, inputs=inputs, cleanup=True)
     fields = ("campaign_id", "cell_id", "source_sha", "config_sha256", "plan_sha256", "order_sha256",
               "verified_inputs_sha256", "host_policy_sha256", "status", "exit_code", "reason", "timeout", "cleanup_confirmed", "receipt")
