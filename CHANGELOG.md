@@ -13,6 +13,45 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Prepare only the first grading of retained task3 A1, ordinal **12**, in
+  `budget_pilot_ci_20260925_04`. Its fixed producer
+  `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e`, inference run `36225255532`
+  and completion checksum
+  `1fb1bc33acab5b2bdefd70744a899c808d984e9c231deded4217ad92d4dc7e3d`
+  remain separate from a future leader-bound grading controller. Existing
+  immutable-content resolution and no-clobber records bind the still-unsupplied
+  private terminal. The route requires predecessor task2 A2 grade
+  `3a8e135cd232ab900e003fc6d9c459957a0b990e`, its original A5 writer/run/config
+  and retained inference terminal `e22f0c3de79bbfce084aedde64fa56c40959fde0`.
+  Fixed predecessor checks also apply at local admission before judge and at
+  terminal verification. Only three coupled workflow producer mappings change;
+  approval, private refs, fixed-parent CAS, byte/privacy/cleanup/no-replay gates,
+  grader `default_v2_sol_max.yaml` / GPT-5.6 Sol/max and inference controls stay
+  unchanged. The bounded pre-edit reviewer approved this scope with conditions.
+  Initial focused validation at `9a48596e6dbfd19dd90add057a29ca1e5e649ae3`
+  returned **1 failed, 26 passed in 307.84s**, exit **1**, with **4** cases
+  unexecuted. The failure was the `terminal_parent` fixture's direct call outside
+  the existing credential-isolated session. After that fixture-only correction,
+  the failed case and four unexecuted cases returned **5 passed in 72.19s**,
+  exit **0**, at `aa1ec63ca98a35d289be5ee146a41f1ae69f6256`. Production was
+  unchanged; no passing case, prior family or suite was rerun. These are separate
+  observations, not one **31-pass** run. Only completion records changed after
+  the latter tested SHA. The leader-supplied A1 execution/retention success and
+  two deliverable identities are not a grade, recovered payload or quality
+  result. Partial known inference cost **USD 0.987634** is not a total or invoice;
+  estimated cost and HTTP request count remain null, invoice completeness false.
+  Fixed-content/publication-derived proof does not independently authenticate
+  unchanged original outer metadata. Supplied baseline review `5324900898` at
+  `c614e2b0215de6279f96279933fe73e7934ce7e1`, all **9** checks passed, covers
+  the tree-identical main780 baseline, not this delta; its core **27m14s** and
+  pilot **29m28s** inside unchanged **45-minute** caps were not re-tested.
+  Fresh exact-head review, CI and the leader's distinct controller/request
+  decision remain. Main/inference source780 is held while the original series
+  continues; this draft does not authorize landing or a live operation. No
+  HF/readout/model/judge/dispatch, old-state change, main change or CI polling
+  occurred. Full evidence and the closed future request are in the current task
+  result; prior observations below remain historical.
+
 - Move exactly `tests/test_codex_budget_pilot*.py` from core `pytest` into a
   separate `Run budget pilot contracts` step in the existing `pilot-contracts`
   job. The core excludes that quoted glob; the destination expands it without

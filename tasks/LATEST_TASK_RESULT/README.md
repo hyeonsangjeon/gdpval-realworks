@@ -1,6 +1,175 @@
 # Latest task result
 
-## PROJECT5-CI-BUDGET-PILOT-PARTITION
+## PROJECT5-TASK3-A1-GRADING-PREP
+
+Prepared only the first grading of retained cell
+`2ea2e5b5-257f-42e6-a7dc-93763f28b19d_A_r1`, ordinal **12**, in
+`budget_pilot_ci_20260925_04`. The route preserves its actual inference
+producer and the historical task2 A2 grade while binding a distinct future
+grading controller. It adds no sibling registration or general source override.
+This is offline preparation, not a live grade or a quality result.
+
+The final narrow follow-up returned **5 passed in 72.19s**, exit **0**, at
+`aa1ec63ca98a35d289be5ee146a41f1ae69f6256`. The initial **1 failed, 26 passed
+in 307.84s** result and **4** unexecuted cases remain separate below. Only the
+two completion records changed after the follow-up SHA.
+
+Work started in a new clean owned worktree/branch from supplied main/inference
+source `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e`. The leader reports it is
+tree-identical to reviewed `c614e2b0215de6279f96279933fe73e7934ce7e1`, review
+`5324900898`, with all **9** checks passed. The completed CI partition had
+core **27m14s** and pilot **29m28s** within unchanged **45-minute** caps.
+Those are supplied predecessor facts, not new measurements or approval of this
+grading delta. Neither that work nor any old test family was repeated. The
+preserved checkout, earlier PR branches and accepted task2 note are untouched.
+
+### Closed source and predecessor boundary
+
+A credential-free offline compile at baseline780 with this exact retained
+tuple and a synthetic distinct controller refused with
+`closed_retained_producer_binding_required` before any session or mutation.
+That bounded reproduction is separate from the pytest observations.
+
+The adapter reuses fixed-completion intake, immutable control/object readers
+and the existing no-clobber resolution record. Both initial intake and restored
+preparation require the fixed cell, ordinal, producer, inference run, completion
+checksum and task2 A2 inference parent. The grade branch must still end at the
+fixed A2 grade. Existing historical-writer helpers verify its original writer,
+run, config and grader source closure, complete retained observation and
+publication receipt. The selected inference predecessor must agree with that
+verified A2 input. The fixed grade predecessor is checked again at local
+admission before judge and during terminal validation.
+
+| Binding | Required identity |
+|---|---|
+| Selected inference producer | `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e` |
+| Selected inference run | `36225255532`, attempt **1** |
+| Selected completion request | `1fb1bc33acab5b2bdefd70744a899c808d984e9c231deded4217ad92d4dc7e3d` (checksum, not a terminal revision) |
+| Previous task2 A2 grade | `3a8e135cd232ab900e003fc6d9c459957a0b990e` |
+| Previous grade writer/run | `a5e5d2589caff21309f0a1c21bb7d9d333ad47c6` / `36214413190`, verified by readout `36220575848` |
+| Previous inference producer/run | `e7a28db07ebe10d6508b9256137763cc82f9a1d1` / `36202190875` |
+| Previous inference terminal | `e22f0c3de79bbfce084aedde64fa56c40959fde0` |
+| New grading controller | Distinct, truthful, leader-bound reviewed source; not yet authorized |
+
+The required bounded extreme-reasoner decision was **APPROVE-WITH-CONDITIONS**
+before production/workflow edits. Its scope includes the singleton binding,
+historical A2 proof, local admission guard and exactly three coupled producer
+mappings in `grade-run.yml`. Protected approval/digest, ref-main execution,
+renderer and atomic input installation, private
+`pilot-inference-20260925-04` / `pilot-grades-20260925-04`, fixed-parent CAS,
+one-use admission, cleanup, publication and redaction remain unchanged.
+`default_v2_sol_max.yaml` / GPT-5.6 Sol/max and the fixed rubric/source
+expectations remain unchanged, with one eventual grading invocation and no
+low-score regrade. Inference model/runtime/input/budget code, source pins,
+readout registrations and the completed backend CI partition are unchanged.
+
+### Focused offline evidence
+
+The only selector was
+`tests/test_codex_budget_pilot_task3_a1_grading.py::test_fixed_task3_a1_grading_handoff`,
+using the existing Python **3.10.12** / pytest **9.1.1** environment,
+credential-free `env -i`, offline HF flags, disabled plugin autoload,
+`-m "not integration"`, no pytest cache and stop-on-first-failure.
+
+| Invocation | Immutable tested SHA | Actual result |
+|---|---|---|
+| Initial selector | `9a48596e6dbfd19dd90add057a29ca1e5e649ae3` | **1 failed, 26 passed in 307.84s**, exit **1**; **4** cases unexecuted |
+| Failed case plus previously unexecuted cases | `aa1ec63ca98a35d289be5ee146a41f1ae69f6256` | **5 passed in 72.19s**, exit **0** |
+
+The initial `terminal_parent` fixture called the verifier outside the existing
+isolated session. The fake transport therefore rejected a synthetic token
+environment variable before reaching the intended predecessor refusal. The
+correction uses that same session helper and removes the unused clock import;
+production bytes did not change. The follow-up selected only `terminal_parent`,
+`cas`, `claim_lost`, `publication_lost` and `cleanup` by their exact node IDs.
+No previously passing case was rerun, and these results are not one
+**31-pass** invocation.
+
+Existing genuine compiler, serialization, materialization, Step8 and ledger
+writers construct a synthetic complete task2 predecessor chain and a selected
+task3 result with two deliverables. The cases exercise advanced inference refs,
+immutable resolution, source/run/hash/parent/receipt/cleanup/ref refusals,
+workflow producer mappings and the actual inline approval digest, denied or
+missing approval, reruns, local admission/terminal tampering, CAS, lost claim
+and publication responses, no replay and unchanged old state. External/model
+boundaries are fake or blocked. Native atomic installation uses the existing
+explicit fixture double; this is not a new native-host capability, renderer,
+authentication, live retention or judge measurement. Synthetic filenames,
+bytes, run IDs and commit labels do not reconstruct historical payloads.
+
+### Supplied retained A1 evidence and limits
+
+The leader reports task3 A1 run `36225255532`, job `108357919770`, attempt
+**1**, succeeded and was retained on **2026-09-26 UTC**. Claim verification was
+at **06:59:21.2032352**, execution **06:59:34–07:08:51**, terminal verification
+**07:08:57.0861555**, and run completion **07:09:05**. Artifact `10900452617`
+has the independently recomputed completion payload checksum listed above.
+The completion reports exit **0**, one child, confirmed owned cleanup and no
+timeout. There is no grade; native state was not archived.
+
+| Supplied identity only | Bytes | SHA-256 |
+|---|---:|---|
+| Deliverable 1 | 63889 | `4c8ba5cca837168faa60c7eb3d9ebcc35fbff1feafb22baaaa2bfd828c56b85c` |
+| Deliverable 2 | 23176 | `3f0dc5ad09842503bdb585a1a9299cfc246b04208a68820f3969b40133e9ba30` |
+| Result | 10052 | `337c66d7e078e96b4431cd2355aa3e8e267cbc576d77e4dda300fbcf94ef3af5` |
+| Ledger | 1850 | `377bcd215aae8673dc81c27a6cce46a424829143be99d20367d43e1b5ef6df90` |
+
+Names, formats and raw payloads were not supplied or recovered. Partial known
+inference cost is **USD 0.987634**, with **922953 input / 43268 output /
+875008 cached / 18706 reasoning tokens**. Estimated cost and HTTP request count
+are null; invoice completeness is false. These receipts are not total experiment
+or grading cost, a reconciled invoice, a request count or quality evidence.
+No independent judge-validation evidence is newly supplied.
+
+The new A1 private terminal SHA remains unsupplied. The request checksum is
+resolved through existing immutable-history verification; it is never relabeled
+as a revision. Fixed-content/publication-derived proof does not independently
+authenticate that original outer metadata was never rewritten. Original and
+derived result bytes, fingerprints and provenance remain distinct. No old
+claim, grade, input, output, clock or source binding was rewritten.
+
+### Exact future request and remaining authority
+
+The following inputs describe one future request to `.github/workflows/grade-run.yml`
+on `main`, only after the leader binds a distinct reviewed controller and lifts
+the current source hold. They are not a dispatch instruction for held source780,
+and no future merge SHA or private terminal is guessed.
+
+```json
+{
+  "experiment_yaml": "pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_A_r1",
+  "inference_revision": "1fb1bc33acab5b2bdefd70744a899c808d984e9c231deded4217ad92d4dc7e3d",
+  "grading_config": "default_v2_sol_max.yaml",
+  "force": false,
+  "tasks_limit": 0,
+  "tasks": "",
+  "dry_run": false,
+  "paid_approval": true,
+  "resume": false,
+  "resume_chunk": 0,
+  "shard_count": 1,
+  "shard_index": 0,
+  "run_ordinal": 1
+}
+```
+
+The leader issued task3 B1 run `36226798976`, job `108362291447`, at
+**07:26:49 UTC** on the same780 source and holds it for the remaining original
+inference series. No B1 outcome was supplied or queried. This draft is not
+permission to land during that hold. Fresh exact-head review, CI, truthful
+future controller binding and one explicit leader-authorized first-grade
+request remain. No live HF/readout/inference/judge call, workflow dispatch,
+Azure management, credential change, Project mutation, main change, merge,
+source reseal or CI polling occurred.
+
+The full skill catalog was reviewed once. Experiment-design kept the source
+boundary separate from the unchanged comparison contract; experiment-report-en
+then im-not-ai-en preserved the split test results, partial accounting and proof
+limits. No new experiment axis or score analysis was introduced. The sections
+below preserve prior observations as historical snapshots, not current live
+authority or new test evidence.
+
+## Prior PROJECT5-CI-BUDGET-PILOT-PARTITION
 
 Moved only the existing budget-pilot test family out of core `pytest` and into
 a separate step in the existing `pilot-contracts` job. The focused offline
