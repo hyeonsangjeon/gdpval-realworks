@@ -67,7 +67,7 @@ def _store_record(api, cell, revision, terminal, claim):
 @pytest.fixture(scope="module")
 def task5_history(tmp_path_factory):
     assert grading.TASK5_A1_CELL == CELL and grading.TASK5_RETAINED[CELL] == RECORDED
-    assert list(grading.TASK5_RETAINED) == [CELL, grading.TASK5_B1_CELL]
+    assert list(grading.TASK5_RETAINED) == [CELL, grading.TASK5_B1_CELL, grading.TASK5_C1_CELL]
     prototype = grading.compile_request("pilot/" + CELL, failed.PRODUCER, "8" * 40)
     error_row, ledger = failed._failed_row(prototype)
     histories = a2.failed_a2_history.__wrapped__(tmp_path_factory)
@@ -209,8 +209,8 @@ def test_fixed_task5_a1_after_ungraded_a2(task5_history, tmp_path, monkeypatch, 
         return
 
     if change == "plan_workflow":
-        assert list(grading.TASK5_RETAINED) == [CELL, grading.TASK5_B1_CELL]
-        assert context.plan["order"][24:26] == [CELL, grading.TASK5_B1_CELL]
+        assert list(grading.TASK5_RETAINED) == [CELL, grading.TASK5_B1_CELL, grading.TASK5_C1_CELL]
+        assert context.plan["order"][24:27] == [CELL, grading.TASK5_B1_CELL, grading.TASK5_C1_CELL]
         assert context.plan["order"][23:25] == [grading.TASK4_A2_CELL, CELL] and len(context.plan["order"]) == 30
         assert context.plan["order"][18:24] == list(grading.TASK4_RETAINED)
         assert context.controller_source_sha != context.plan["reviewed_source_sha"] == failed.PRODUCER
@@ -219,7 +219,7 @@ def test_fixed_task5_a1_after_ungraded_a2(task5_history, tmp_path, monkeypatch, 
         assert ci.HOST_POLICY["sdk"] == ci.HOST_POLICY["cli"] == "0.147.0"
         assert context.plan["model"]["deployment"] == "gpt-5.4" and context.plan["model"]["route_profile"] == "direct-v1"
         assert hashlib.sha256(context.run.grader_config_json.encode()).hexdigest() == readout.CONFIG_SHA256
-        for cell_id in context.plan["order"][26:]:
+        for cell_id in context.plan["order"][27:]:
             assert cell_id not in grading.TASK5_RETAINED
             with pytest.raises(output.OutputPublicationRefused, match="closed_retained_producer_binding_required"):
                 grading.compile_request("pilot/" + cell_id, failed.FUTURE_CONTROLLER, current.request,
@@ -228,7 +228,7 @@ def test_fixed_task5_a1_after_ungraded_a2(task5_history, tmp_path, monkeypatch, 
         expression = jobs["pilot-live"]["env"]["PILOT_GRADE_PRODUCER_SOURCE_SHA"]
         assert jobs["pilot-plan"]["env"]["PILOT_GRADE_PRODUCER_SOURCE_SHA"] == expression
         assert expression.count('"pilot/' + CELL + '"') == 1
-        assert all('"pilot/' + cell_id + '"' not in expression for cell_id in context.plan["order"][26:])
+        assert all('"pilot/' + cell_id + '"' not in expression for cell_id in context.plan["order"][27:])
         assert jobs["pilot-live"]["needs"] == ["pilot-approve-paid"] and "environment" not in jobs["pilot-live"]
         assert "needs.pilot-approve-paid.result == 'success'" in jobs["pilot-live"]["if"]
         assert jobs["pilot-live"]["env"]["PILOT_WORKFLOW_SHA"] == "${{ github.workflow_sha }}"
