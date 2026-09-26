@@ -74,7 +74,7 @@ TASK3_A1_COMPLETION_SHA256 = "1fb1bc33acab5b2bdefd70744a899c808d984e9c231deded42
 TASK3_A1_INFERENCE_RUN = {"id": "36225255532", "job": "cell", "attempt": 1}
 TASK3_A1_PREVIOUS_GRADE = "3a8e135cd232ab900e003fc6d9c459957a0b990e"
 TASK3_A1_PREVIOUS_TERMINAL = "e22f0c3de79bbfce084aedde64fa56c40959fde0"
-# A2 is deliberately absent: an issued run is not retained completion evidence.
+# Only recorded task3 completions may use this closed successor chain.
 TASK3_SUCCESSORS = {
     "2ea2e5b5-257f-42e6-a7dc-93763f28b19d_B_r1": (
         "36226798976", "d2fa808126be82fd9ae6af0b154c9730825acef665151869a47c13e4574147ec"),
@@ -84,6 +84,8 @@ TASK3_SUCCESSORS = {
         "36229800066", "1ae30db0cdb3f51e6a37dccaa04bfd7c376497556501802ddc505899f4a78f04"),
     "2ea2e5b5-257f-42e6-a7dc-93763f28b19d_B_r2": (
         "36231296576", "a0e78310c78314b456c472e6f88c4d8542caf88b4c82c6b245c9fca8814f51be"),
+    "2ea2e5b5-257f-42e6-a7dc-93763f28b19d_A_r2": (
+        "36232859421", "f4de6c1d36c8f3a2c077be9e4be370545eeb5a11d9513752caa4d40bd08e1bd8"),
 }
 CLAIM_FORMAT = "codex-pilot-grade-claim-v1"
 RESULT_FORMAT = "codex-pilot-grade-terminal-v1"
@@ -434,7 +436,7 @@ def _task2_resolution(context: Context, evidence: dict, revision: str) -> None:
             and output._hash(revision, 40), "recorded_task2_request_required")
     terminal, claim, manifest = (evidence[key] for key in ("terminal", "claim", "manifest"))
     if task3:
-        require(context.plan["order"][12:17] == [TASK3_A1_CELL, *TASK3_SUCCESSORS]
+        require(context.plan["order"][12:18] == [TASK3_A1_CELL, *TASK3_SUCCESSORS]
                 and context.controller_source_sha != TASK3_A1_PRODUCER_SOURCE
                 and (cell_id != TASK3_A1_CELL or claim["expected_parent"] == TASK3_A1_PREVIOUS_TERMINAL),
                 "recorded_task3_previous_inference_required")

@@ -1833,7 +1833,7 @@ jobs:
     env:
       GRADE_SELECTOR: ${{ inputs.experiment_yaml }}
       GRADE_TERMINAL: ${{ inputs.inference_revision }}
-      PILOT_GRADE_PRODUCER_SOURCE_SHA: ${{ inputs.experiment_yaml == 'pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r1' && 'b4c95f8eaee16ae2226f3bf6e0493051fa91d770' || inputs.experiment_yaml == 'pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_A_r1' && '78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e' || contains(fromJSON('["pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_B_r1","pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_C_r1","pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_C_r2","pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_B_r2"]'), inputs.experiment_yaml) && '78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e' || contains(fromJSON('["pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_B_r1","pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_C_r1","pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_C_r2","pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_B_r2","pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r2"]'), inputs.experiment_yaml) && 'e7a28db07ebe10d6508b9256137763cc82f9a1d1' || '' }}
+      PILOT_GRADE_PRODUCER_SOURCE_SHA: ${{ inputs.experiment_yaml == 'pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r1' && 'b4c95f8eaee16ae2226f3bf6e0493051fa91d770' || inputs.experiment_yaml == 'pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_A_r1' && '78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e' || contains(fromJSON('["pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_B_r1","pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_C_r1","pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_C_r2","pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_B_r2","pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_A_r2"]'), inputs.experiment_yaml) && '78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e' || contains(fromJSON('["pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_B_r1","pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_C_r1","pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_C_r2","pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_B_r2","pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r2"]'), inputs.experiment_yaml) && 'e7a28db07ebe10d6508b9256137763cc82f9a1d1' || '' }}
       GRADE_CONFIG: ${{ inputs.grading_config }}
       GRADE_FORCE: ${{ inputs.force }}
       GRADE_TASKS_LIMIT: ${{ inputs.tasks_limit }}
@@ -1929,7 +1929,7 @@ jobs:
               "pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_A_r1": "78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e",
               **{"pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_" + suffix:
                  "78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e"
-                 for suffix in ("B_r1", "C_r1", "C_r2", "B_r2")},
+                 for suffix in ("B_r1", "C_r1", "C_r2", "B_r2", "A_r2")},
               **{"pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_" + suffix:
                  "e7a28db07ebe10d6508b9256137763cc82f9a1d1"
                  for suffix in ("B_r1", "C_r1", "C_r2", "B_r2", "A_r2")},
@@ -1970,7 +1970,7 @@ jobs:
     env:
       GRADE_SELECTOR: ${{ inputs.experiment_yaml }}
       GRADE_TERMINAL: ${{ inputs.inference_revision }}
-      PILOT_GRADE_PRODUCER_SOURCE_SHA: ${{ inputs.experiment_yaml == 'pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r1' && 'b4c95f8eaee16ae2226f3bf6e0493051fa91d770' || inputs.experiment_yaml == 'pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_A_r1' && '78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e' || contains(fromJSON('["pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_B_r1","pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_C_r1","pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_C_r2","pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_B_r2"]'), inputs.experiment_yaml) && '78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e' || contains(fromJSON('["pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_B_r1","pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_C_r1","pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_C_r2","pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_B_r2","pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r2"]'), inputs.experiment_yaml) && 'e7a28db07ebe10d6508b9256137763cc82f9a1d1' || '' }}
+      PILOT_GRADE_PRODUCER_SOURCE_SHA: ${{ inputs.experiment_yaml == 'pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r1' && 'b4c95f8eaee16ae2226f3bf6e0493051fa91d770' || inputs.experiment_yaml == 'pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_A_r1' && '78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e' || contains(fromJSON('["pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_B_r1","pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_C_r1","pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_C_r2","pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_B_r2","pilot/2ea2e5b5-257f-42e6-a7dc-93763f28b19d_A_r2"]'), inputs.experiment_yaml) && '78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e' || contains(fromJSON('["pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_B_r1","pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_C_r1","pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_C_r2","pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_B_r2","pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r2"]'), inputs.experiment_yaml) && 'e7a28db07ebe10d6508b9256137763cc82f9a1d1' || '' }}
       GRADE_CONFIG: ${{ inputs.grading_config }}
       GRADE_FORCE: ${{ inputs.force }}
       GRADE_TASKS_LIMIT: ${{ inputs.tasks_limit }}

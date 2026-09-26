@@ -1,6 +1,6 @@
 """One offline successor chain with a shared genuine synthetic history.
 
-Build the historical task2 grades and task3 A1/B1/C1/C2/B2 once. Mutations get
+Build the historical task2 grades and task3 A1/B1/C1/C2/B2/A2 once. Mutations get
 isolated copies, not a repeated full-history writer fixture. Synthetic completion
 digests, commit addresses and grade run IDs are never claimed as live evidence.
 All external, credential and model boundaries remain fake or blocked.
@@ -34,6 +34,7 @@ RECORDED = {
     "C_r1": ("36228331579", "9574cb08f562e1fc38bc1c9412793140586f5a335a4b0781af98b2c3ca3f9940"),
     "C_r2": ("36229800066", "1ae30db0cdb3f51e6a37dccaa04bfd7c376497556501802ddc505899f4a78f04"),
     "B_r2": ("36231296576", "a0e78310c78314b456c472e6f88c4d8542caf88b4c82c6b245c9fca8814f51be"),
+    "A_r2": ("36232859421", "f4de6c1d36c8f3a2c077be9e4be370545eeb5a11d9513752caa4d40bd08e1bd8"),
 }
 FOREIGN = "e" * 40
 PRIVATE = "PRIVATE https://private.invalid/path?token=PRIVATE"
@@ -152,19 +153,41 @@ def history(tmp_path_factory):
     "predecessor_writer", "cas", "claim_lost", "publication_lost", "cleanup", "raw_output",
 ])
 def test_recorded_task3_grading_chain(history, tmp_path, monkeypatch, capsys, change):
-    row = history.rows["C_r1"]
+    _check_recorded_task3_grading_chain(history, tmp_path, monkeypatch, capsys, change, "C_r1")
+
+
+@pytest.mark.parametrize("change", [
+    "chain", "plan", "inference_run", "inference_source", "completion", "inference_bytes", "wrong_ref",
+    "previous_observation", "previous_receipt", "previous_controller", "skipped", "unfinished", "resolution",
+    "restored_run", "admission_parent", "admission_cache_bytes", "terminal_parent", "predecessor_bytes",
+    "cas", "claim_lost",
+])
+def test_final_task3_a2_grading_binding(history, tmp_path, monkeypatch, capsys, change):
+    _check_recorded_task3_grading_chain(history, tmp_path, monkeypatch, capsys, change, "A_r2")
+
+
+def _check_recorded_task3_grading_chain(history, tmp_path, monkeypatch, capsys, change, selected_suffix):
+    sequence = ("A_r1", *RECORDED)
+    index = sequence.index(selected_suffix)
+    previous_suffix, earlier_suffix = sequence[index - 1], sequence[index - 2]
+    row = history.rows[selected_suffix]
     terminal_check = change.startswith("terminal_") or change.startswith("predecessor_")
     api = copy.deepcopy(history.api if terminal_check or change == "chain" else row.before)
     api.calls.clear()
     api.events.clear()
     api.reads.clear()
-    current = _select(history, "C_r1", api, tmp_path, monkeypatch,
+    current = _select(history, selected_suffix, api, tmp_path, monkeypatch,
                       source=FOREIGN if change == "controller_drift" else a1.CONTROLLER)
     context, inference = current.context, current.inference
-    assert context.plan["order"][12:17] == [grading.TASK3_A1_CELL, *grading.TASK3_SUCCESSORS]
-    assert PREFIX + "A_r2" not in grading.TASK3_SUCCESSORS
+    assert context.plan["order"][12:18] == [grading.TASK3_A1_CELL, *grading.TASK3_SUCCESSORS]
+    assert context.plan["order"][12 + index] == PREFIX + selected_suffix
+    assert all(grading._task3_recorded(cell_id) is None for cell_id in context.plan["order"][18:])
 
     if change == "chain":
+        if selected_suffix == "A_r2":
+            assert 12 + index == 17 and previous_suffix == "B_r2"
+            assert context.cell["config_sha256"] == "ba745863d14bd5668b2dbdbe83bf7af0e3e4ab6ce4e266a0eae8addffc189e61"
+            assert pilot._digest(context.plan["order"]) == "f16a2a408160efe106e3e009144d4acc451d1f9051c8c23195d10cb24ce75030"
         previous_revision = grading.TASK3_A1_PREVIOUS_GRADE
         for suffix in ("A_r1", *RECORDED):
             item = history.rows[suffix]
@@ -201,7 +224,7 @@ def test_recorded_task3_grading_chain(history, tmp_path, monkeypatch, capsys, ch
         assert jobs["pilot-plan"]["env"]["PILOT_GRADE_PRODUCER_SOURCE_SHA"] == expression
         for suffix in RECORDED:
             assert expression.count('"pilot/' + PREFIX + suffix + '"') == 1
-        assert '"pilot/' + PREFIX + 'A_r2"' not in expression
+        assert all('"pilot/' + cell_id + '"' not in expression for cell_id in context.plan["order"][18:])
         assert jobs["pilot-approve-paid"]["environment"] == {"name": "grading"}
         assert jobs["pilot-approve-paid"]["permissions"] == {} and len(jobs["pilot-approve-paid"]["steps"]) == 1
         assert jobs["pilot-live"]["needs"] == ["pilot-approve-paid"] and "environment" not in jobs["pilot-live"]
@@ -218,8 +241,11 @@ def test_recorded_task3_grading_chain(history, tmp_path, monkeypatch, capsys, ch
         return
 
     if change == "plan":
+        for cell_id in context.plan["order"][18:]:
+            with pytest.raises(output.OutputPublicationRefused):
+                grading.compile_request("pilot/" + cell_id, a1.CONTROLLER, current.request,
+                                        producer_source_sha=grading.TASK3_A1_PRODUCER_SOURCE)
         for selector, source, producer, request in (
-            ("pilot/" + PREFIX + "A_r2", a1.CONTROLLER, grading.TASK3_A1_PRODUCER_SOURCE, current.request),
             ("pilot/" + context.cell["cell_id"], a1.CONTROLLER, grading.B1_PRODUCER_SOURCE, current.request),
             ("pilot/" + context.cell["cell_id"], grading.TASK3_A1_PRODUCER_SOURCE, grading.TASK3_A1_PRODUCER_SOURCE, current.request),
             ("pilot/" + context.cell["cell_id"], a1.CONTROLLER, grading.TASK3_A1_PRODUCER_SOURCE, "9" * 64),
@@ -237,9 +263,9 @@ def test_recorded_task3_grading_chain(history, tmp_path, monkeypatch, capsys, ch
         claim_revision = terminal["claim_commit"]
         claim_path = grading._paths(context.cell)[0]
         claim = pilot._json_object(api.trees[claim_revision][claim_path])
-        previous_path = history.rows["B_r1"].path
+        previous_path = history.rows[previous_suffix].path
         if change in {"terminal_parent", "terminal_distinct"}:
-            claim["expected_parent"] = (history.rows["A_r1"].revision if change == "terminal_parent" else claim_revision)
+            claim["expected_parent"] = (history.rows[earlier_suffix].revision if change == "terminal_parent" else claim_revision)
             claim["predecessor"]["revision"] = claim["expected_parent"]
         elif change == "terminal_hash":
             claim["predecessor"]["sha256"] = "9" * 64
@@ -265,7 +291,7 @@ def test_recorded_task3_grading_chain(history, tmp_path, monkeypatch, capsys, ch
     if change in {"inference_run", "inference_source"}:
         claim = pilot._json_object(api.trees[inference.claim][inference.claim_path])
         if change == "inference_run":
-            claim["binding"]["github_run"]["id"] = "36228331580"
+            claim["binding"]["github_run"]["id"] = str(int(RECORDED[selected_suffix][0]) + 1)
         else:
             claim["binding"]["source_sha"] = a1.CONTROLLER
         terminal = pilot._json_object(api.trees[inference.terminal][inference.terminal_path])
@@ -288,7 +314,7 @@ def test_recorded_task3_grading_chain(history, tmp_path, monkeypatch, capsys, ch
     elif change == "snapshot_hash":
         api.trees[api.branches[retained.BRANCH]][inference.terminal_path] += b" "
     elif change.startswith("previous_"):
-        item = history.rows["B_r1"]
+        item = history.rows[previous_suffix]
         terminal = copy.deepcopy(item.terminal)
         binding = terminal["binding"]
         if change == "previous_observation":
@@ -297,12 +323,12 @@ def test_recorded_task3_grading_chain(history, tmp_path, monkeypatch, capsys, ch
             binding["publication_receipt_sha256"] = "9" * 64
         elif change == "previous_controller":
             binding["controller_source_sha"] = FOREIGN
-            binding["approval_request_sha256"] = grading._approval_request_sha256(FOREIGN, "pilot/" + PREFIX + "B_r1",
-                grading.TASK3_SUCCESSORS[PREFIX + "B_r1"][1], binding["github_run"],
+            binding["approval_request_sha256"] = grading._approval_request_sha256(FOREIGN, "pilot/" + PREFIX + previous_suffix,
+                grading.TASK3_SUCCESSORS[PREFIX + previous_suffix][1], binding["github_run"],
                 producer_source_sha=grading.TASK3_A1_PRODUCER_SOURCE)
         else:
             binding["grader_source_hash"] = "9" * 64
-        name = grading._paths(context.plan["cells"][13])[0]
+        name = grading._paths(context.plan["cells"][12 + index - 1])[0]
         claim = pilot._json_object(api.trees[terminal["claim_commit"]][name])
         claim["binding"] = binding
         data = retained._encoded(claim)
@@ -310,8 +336,8 @@ def test_recorded_task3_grading_chain(history, tmp_path, monkeypatch, capsys, ch
         terminal["claim_identity"] = pilot._identity(data)
         api.trees[item.revision][item.path] = retained._encoded(terminal)
     elif change in {"unfinished", "skipped"}:
-        api.branches[grading.BRANCH] = (history.rows["B_r1"].terminal["claim_commit"]
-            if change == "unfinished" else history.rows["A_r1"].revision)
+        api.branches[grading.BRANCH] = (history.rows[previous_suffix].terminal["claim_commit"]
+            if change == "unfinished" else history.rows[earlier_suffix].revision)
     elif change == "missing_approval":
         monkeypatch.delenv("PILOT_GRADE_APPROVAL_RESULT")
     elif change == "skipped_approval":
@@ -338,7 +364,7 @@ def test_recorded_task3_grading_chain(history, tmp_path, monkeypatch, capsys, ch
         else:
             prepared_path = current.root / "prepared.json"
             prepared = retained._read(prepared_path)
-            prepared["evidence"]["claim"]["binding"]["github_run"]["id"] = "36228331580"
+            prepared["evidence"]["claim"]["binding"]["github_run"]["id"] = str(int(RECORDED[selected_suffix][0]) + 1)
             resolution["evidence_sha256"] = pilot._digest(prepared["evidence"])
             prepared_path.write_bytes(retained._encoded(prepared))
         path.write_bytes(retained._encoded(resolution))
@@ -359,12 +385,12 @@ def test_recorded_task3_grading_chain(history, tmp_path, monkeypatch, capsys, ch
     assert code == 0 and observed["outcome"] == "acknowledged", (observed, current.diagnostic)
     receipt_path = current.root / "claim-receipt.json"
     receipt = retained._read(receipt_path)
-    assert receipt["claim"]["expected_parent"] == history.rows["B_r1"].revision
+    assert receipt["claim"]["expected_parent"] == history.rows[previous_suffix].revision
     if change.startswith("admission_"):
         claim = receipt["claim"]
         cache = current.root / "claim-verified" / (receipt["returned_commit"] + ".json")
         if change == "admission_parent":
-            claim["expected_parent"] = claim["predecessor"]["revision"] = history.rows["A_r1"].revision
+            claim["expected_parent"] = claim["predecessor"]["revision"] = history.rows[earlier_suffix].revision
         elif change == "admission_hash":
             claim["predecessor"]["sha256"] = "9" * 64
         elif change == "admission_cell":
@@ -374,7 +400,7 @@ def test_recorded_task3_grading_chain(history, tmp_path, monkeypatch, capsys, ch
         elif change == "admission_cache_bytes":
             cache.write_bytes(retained._encoded(claim) + b"PRIVATE")
         else:
-            receipt["returned_commit"] = history.rows["B_r1"].revision
+            receipt["returned_commit"] = history.rows[previous_suffix].revision
         receipt["claim_identity"] = pilot._identity(retained._encoded(claim))
         receipt_path.write_bytes(retained._encoded(receipt))
         reads = list(api.reads)
