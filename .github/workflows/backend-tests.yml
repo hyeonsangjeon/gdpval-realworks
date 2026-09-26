@@ -194,10 +194,10 @@ jobs:
       # even if the addopts guard above is ever relaxed. Integration tests reach
       # paid APIs; CI must never pay.
       #
-      # Only the explicit GPT-5.4/GPT-5.6 contract files move to their family jobs;
-      # no additional tests are deselected across the eight jobs. The static
-      # partition test compares all commands with the actual file set, so a
-      # new or removed contract file requires updating its selection and ignore.
+      # GPT-5.4/GPT-5.6 and budget-pilot contracts run in their family jobs;
+      # no additional tests are deselected across the eight jobs. The partition
+      # test checks the explicit selections and budget-pilot glob against the
+      # actual file set, including nonempty, exactly-once node coverage.
       # The sandbox launcher test used to be deselected because it probed exec
       # denial through os.system(): the blocked fork and exec reach Python as
       # an OSError on the dev box's 3.10
@@ -215,7 +215,7 @@ jobs:
       - name: Run tests
         run: |
           cd batch-runner
-          python -m pytest -m "not integration" --tb=short -q -rs --ignore=tests/test_gpt54_codex_grading_input.py --ignore=tests/test_gpt54_codex_input_capture.py --ignore=tests/test_gpt54_comparison_preflight.py --ignore=tests/test_gpt54_disposable_checkout.py --ignore=tests/test_gpt54_prepared_input_attestation.py --ignore=tests/test_gpt54_run_config_bundle.py --ignore=tests/test_gpt54_run_input_bundle.py --ignore=tests/test_gpt54_runtime_checkout.py --ignore=tests/test_gpt54_v2_grading_input.py --ignore=tests/test_gpt54_v2_input_capture.py --ignore=tests/test_gpt54_workflow_gate.py --ignore=tests/test_gpt56_evidence_preflight_gate.py --ignore=tests/test_gpt56_foundry_evidence_intake.py --ignore=tests/test_gpt56_pilot_config_bundle.py --ignore=tests/test_gpt56_pilot_deployment_binding.py --ignore=tests/test_gpt56_pilot_identity_plan.py --ignore=tests/test_gpt56_pilot_input_bundle.py --ignore=tests/test_gpt56_pilot_input_capture.py --ignore=tests/test_gpt56_pilot_wire_receipt.py --ignore=tests/test_gpt56_sol_codex_pilot_preflight.py
+          python -m pytest -m "not integration" --tb=short -q -rs --ignore=tests/test_gpt54_codex_grading_input.py --ignore=tests/test_gpt54_codex_input_capture.py --ignore=tests/test_gpt54_comparison_preflight.py --ignore=tests/test_gpt54_disposable_checkout.py --ignore=tests/test_gpt54_prepared_input_attestation.py --ignore=tests/test_gpt54_run_config_bundle.py --ignore=tests/test_gpt54_run_input_bundle.py --ignore=tests/test_gpt54_runtime_checkout.py --ignore=tests/test_gpt54_v2_grading_input.py --ignore=tests/test_gpt54_v2_input_capture.py --ignore=tests/test_gpt54_workflow_gate.py --ignore=tests/test_gpt56_evidence_preflight_gate.py --ignore=tests/test_gpt56_foundry_evidence_intake.py --ignore=tests/test_gpt56_pilot_config_bundle.py --ignore=tests/test_gpt56_pilot_deployment_binding.py --ignore=tests/test_gpt56_pilot_identity_plan.py --ignore=tests/test_gpt56_pilot_input_bundle.py --ignore=tests/test_gpt56_pilot_input_capture.py --ignore=tests/test_gpt56_pilot_wire_receipt.py --ignore=tests/test_gpt56_sol_codex_pilot_preflight.py --ignore-glob='tests/test_codex_budget_pilot*.py'
 
       # `scripts/__tests__/` holds Python tests for the repo-root `scripts/`
       # tooling, and until now nothing ran them: the step above changes into
@@ -358,6 +358,12 @@ jobs:
         run: |
           cd batch-runner
           python -m pytest -m "not integration" --tb=short -q -rs tests/test_gpt56_evidence_preflight_gate.py tests/test_gpt56_foundry_evidence_intake.py tests/test_gpt56_pilot_config_bundle.py tests/test_gpt56_pilot_deployment_binding.py tests/test_gpt56_pilot_identity_plan.py tests/test_gpt56_pilot_input_bundle.py tests/test_gpt56_pilot_input_capture.py
+
+      # Keep the core marker filter without any preflight keyword selection.
+      - name: Run budget pilot contracts
+        run: |
+          cd batch-runner
+          python -m pytest -m "not integration" --tb=short -q -rs tests/test_codex_budget_pilot*.py
 
   # The isolated full preflight file still hit the ceiling in run 35593387331.
   # Three disjoint selections retain every node; hosted CI must prove headroom.
