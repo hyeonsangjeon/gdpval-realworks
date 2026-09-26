@@ -11,6 +11,24 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Changed
+
+- Record the leader's authorization for one ordinary push of the already
+  completed task5 B1-failure/C1-ordinary/C2-failure bundle to the same draft
+  PR686, from clean local `3202db6959e923e5f10ed5c43300ceed446f8fb6` after
+  confirming published `72f1b999583baa95f5e5bbf8d364928f9c326c27`. This
+  publication update changes only the two completion records. All exact
+  tested SHAs, separate failed invocations and fixture-only corrections below
+  remain unchanged; no production, workflow or test file changed, and no test
+  was rerun. Task5 A1/B1/C2 stay fixed scoreless no-judge paths; C1 retains its
+  ordinary Step8/cleanup requirement. B2/A2 remain unregistered, with no B2
+  outcome inferred and A2 not dispatched at the leader's handoff. Old72f1 review
+  `5326493571` and nine passing checks do not cover this bundle. New-head leader
+  review/CI, held `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e`, the reviewed
+  declared controller, actual predecessor proofs and individual protected live
+  approval remain gates. No source change, merge, live record, quality claim,
+  CI polling or manual workflow rerun is authorized by this publication.
+
 ### Fixed
 
 - Earlier HF-phase endpoint: correct only the two pilot workflow-contract tests

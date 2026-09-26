@@ -1,6 +1,56 @@
 # Latest task result
 
-## PROJECT5-TASK5-FAILED-C2-PREP
+## PROJECT5-PUBLISH-KNOWN-B1-C1-C2-BUNDLE
+
+The leader authorized one ordinary push of the already completed task5
+B1-failure/C1-ordinary/C2-failure bundle to the same draft PR686. This handoff
+started from clean local `3202db6959e923e5f10ed5c43300ceed446f8fb6` and
+confirmed PR686's published head was still
+`72f1b999583baa95f5e5bbf8d364928f9c326c27`. Only this publication authority
+supersedes the earlier no-push restrictions. This records-only update changes
+neither production, workflow nor test files and authorizes no live execution.
+
+The existing offline observations remain separate; no tests were run for this
+publication task:
+
+| Existing validation | Exact tested SHA | Recorded result |
+|---|---|---|
+| B1 failure policy | `d0c4577a51124b55970dec67ad2cdf7804e3c658` | 66 passed in 116.09s |
+| Initial ordinary C1 selector | `6c0124229a377e5f7fd95ead80f50a4be0291743` | 68 passed, 1 failed in 154.31s |
+| C1 cleanup assertion only | `ddce821a0a6315e2d18044b9eb9fc1c886cd640f` | 1 passed in 50.17s |
+| Initial C2 failure-policy selector | `af060fa58e71485268789d6a0ef53e036fe48e2c` | 77 passed, 1 failed in 103.16s |
+| C2 alias file-history fixture only | `9e1518f883ef9c551271c755f635b5e5181465a0` | 1 passed in 56.15s |
+
+Neither fixture correction changed production. There was no combined 69-pass
+or 78-pass invocation. Earlier A1, two-node HF-phase and CI observations, exact
+SHAs, failure explanations and limitations remain in their original blocks
+below. Experiment-report-en followed by im-not-ai-en preserved these evidence
+boundaries in this publication note.
+
+Task5 A1/B1/C2 remain exact, scoreless no-judge paths with their existing
+verified backing chains; C1 remains ordinary and requires a real Step8 child
+and cleanup before C1's grade-record publication. No failed input gains a numeric score or
+fabricated child. Source/byte/predecessor equality, the declared shared
+controller, protected approval, private CAS, canonical readback, privacy,
+cleanup and no-replay guards are unchanged. B2/A2 remain unregistered.
+
+At the leader's observation, task5 B2 run `36266871064`, job `108473122900`,
+was executing from `2026-09-26T19:43:40Z`, with retention pending and zero
+artifacts. It was not queried or affected here; no outcome is inferred.
+The last A2 had not been dispatched at this handoff.
+
+Main/inference `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e` remains held.
+Review `5326493571` and the supplied nine CI passes cover old72f1 only, not
+this bundle. Fresh leader review of the new immutable head and fresh CI remain
+pending, without polling or manual reruns. The source hold, explicitly bound
+reviewed shared grading controller, actual verified predecessor records and
+individual protected live approval still gate merge and execution. No future
+controller, private terminal, grade run, quality result or merge state is
+invented. The earlier unpublished-status statements below describe their
+historical endpoints; this authorization covers only the known bundle's one
+push, not B2/A2, a source change or any live record.
+
+## Prior PROJECT5-TASK5-FAILED-C2-PREP
 
 Prepared only failed task5 C2 under the leader's explicit
 `task5-c2-model-free-ungraded` policy. Its distinct UNGRADED record is scoreless
