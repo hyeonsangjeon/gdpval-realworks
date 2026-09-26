@@ -458,8 +458,11 @@ def test_fixed_task5_c2_after_ordinary_c1(c2_history, tmp_path, monkeypatch, cap
             "previous_skipped": history.b1_revision, "previous_unfinished": history.c1.terminal["claim_commit"]}[change]
     elif change == "alias_c1_terminal_b1_claim":
         alias = history.b1_terminal["claim_commit"]
-        api.trees[alias], api.writers[alias] = copy.deepcopy(api.trees[history.c1.revision]), copy.deepcopy(api.writers[history.c1.revision])
-        api.writers[alias][history.c1.path] = alias
+        api.trees[alias] = copy.deepcopy(api.trees[history.c1.revision])
+        # Keep C1's own file-history proof coherent at the aliased revision so
+        # the distinct-pair guard, not stale object metadata, rejects the cycle.
+        api.writers[alias] = {path: alias if writer == history.c1.revision else writer
+                              for path, writer in api.writers[history.c1.revision].items()}
         api.branches[grading.BRANCH] = alias
     elif change in PREDECESSOR_CASES and change != "controller":
         ordinal = 22 if change.startswith("backing_") else 25 if change.startswith("b1_") else 26
