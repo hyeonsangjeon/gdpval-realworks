@@ -1,7 +1,7 @@
-"""Reproduce the failed-input policy gap, without enabling task4 grading.
+"""Preserve the generic failed-input diagnostic and wrong-content refusals.
 
-The recorded future-controller requests remain unregistered. Separately, the
-existing same-source/immutable-revision route diagnoses failed materialization.
+The distinct fixed A1 recorder has its own focused tests. Separately, the
+existing same-source/immutable-revision route still diagnoses failed materialization.
 It is not an executable future-controller request or proof that generic B1
 admission enforces the recorded route's immediate-grade-predecessor rule.
 All bytes/revisions below are synthetic; no live payload is reconstructed.
@@ -186,7 +186,8 @@ def test_failed_task4_a1_grading_policy_gap(failed_pair, tmp_path, monkeypatch, 
     if change.startswith("closed_") or change == "unregistered_others":
         cells = [PREFIX + selected] if change.startswith("closed_") else context.plan["order"][20:]
         for cell in cells:
-            request = RECORDED[selected][1] if change.startswith("closed_") else "0" * 64
+            # The exact pair is now registered; any other completion stays closed.
+            request = "0" * 64
             code, public = base.invoke(current, capsys, "prepare", selector="pilot/" + cell,
                 source=FUTURE_CONTROLLER, producer=PRODUCER, terminal=request)
             assert code == 2 and public["reason"] == "closed_retained_producer_binding_required"
