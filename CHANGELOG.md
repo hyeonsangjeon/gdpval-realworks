@@ -13,6 +13,42 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Prepare only the recorded failed task5 A1, ordinal 24, under the explicit
+  `task5-a1-model-free-ungraded` policy. Its original inference run is
+  `36247236594`, completion
+  `b23da4f1f5e81999039c473d27f3a70cc0d0681672ad08be0f9674b618915c97`,
+  with producer `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e`. The new
+  scoreless record must verify the actual task4 A2 UNGRADED record and that
+  record's ordinary B2 backing grade under the same explicitly declared
+  controller. Only this fixed 24-to-23-to-22 chain is added; five distinct
+  record revisions, original claim identities, complete retained-inference
+  equality and canonical typed bytes remain required. Existing task4 policy
+  tags, predecessor rules and ordinary Step8-invoked requirements are unchanged.
+  The new record invokes no OIDC/Step8/LLM and adds no numeric quality score,
+  rubric verdict or fabricated child receipt. Original failure, denominator,
+  partial receipt and missingness stay bound; recorder accounting is separately
+  unmeasured/null, not a zero-cost invoice. The three workflow producer mappings
+  and grouped recorder condition add only task5 A1. Protected approval,
+  no-clobber resolution, two one-use fixed-parent CAS writes, server readback,
+  privacy, unresolved lost responses and no replay remain mandatory. All other
+  task5 fixed-content requests remain closed; no inference/grader/budget change,
+  general skip policy, source override or readout registry was added.
+  The bounded pre-edit review approved only this extension with conditions.
+  One new focused selector returned **52 passed in 57.59s**, exit **0**, at
+  `4d32c2f141c865fc7bb4859e129eb4b57b150bbf`, using a shared genuine synthetic
+  history and isolated mutations with external/model boundaries fake or blocked.
+  No prior selector or full suite was rerun. Only the two completion records
+  changed after this tested SHA; all previous results below remain separate.
+  Published PR686 head `7abad5176d68f8172e83522c88adad7432dcc4d3` and review
+  `5326230185` do not cover this local delta. The supplied initial CI observation
+  was 7 passed, with pilot-contracts and native-host running, not a final gate
+  result. This extension remains local and unpublished. Held780 is unchanged;
+  the actual A2 record, its ordinary B2 backing grade, a reviewed shared controller
+  and separate exact live request approval remain gates. No push, CI polling,
+  live call, merge, Project/credential change or old-record rewrite occurred.
+
+### Previously recorded endpoints, before task5 A1 preparation
+
 - Complete the fixed task4 intake with the leader-authorized second model-free
   UNGRADED binding for failed A2, ordinal 23, inference run `36245490377`,
   completion `8f2f6edd7bb2fda964d8a24b4532b8af725bcefbb1513d9a60df86e983446fe9`.
