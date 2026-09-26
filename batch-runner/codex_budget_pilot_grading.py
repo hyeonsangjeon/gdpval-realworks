@@ -66,14 +66,25 @@ TASK2_RETAINED = {
     "0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r2": (
         "36202190875", "d6d1309c2c81ef17ce18158bc9014ce962ce7dcd267f95f328b279050d4fd15e"),
 }
-# One task3 handoff, not a registration for its remaining cells. The future
-# grading controller must retain the actual inference producer and A2 writer.
+# The task3 handoff retains the actual inference producer and historical A2
+# writer. Its four recorded successors require that same declared controller.
 TASK3_A1_CELL = "2ea2e5b5-257f-42e6-a7dc-93763f28b19d_A_r1"
 TASK3_A1_PRODUCER_SOURCE = "78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e"
 TASK3_A1_COMPLETION_SHA256 = "1fb1bc33acab5b2bdefd70744a899c808d984e9c231deded4217ad92d4dc7e3d"
 TASK3_A1_INFERENCE_RUN = {"id": "36225255532", "job": "cell", "attempt": 1}
 TASK3_A1_PREVIOUS_GRADE = "3a8e135cd232ab900e003fc6d9c459957a0b990e"
 TASK3_A1_PREVIOUS_TERMINAL = "e22f0c3de79bbfce084aedde64fa56c40959fde0"
+# A2 is deliberately absent: an issued run is not retained completion evidence.
+TASK3_SUCCESSORS = {
+    "2ea2e5b5-257f-42e6-a7dc-93763f28b19d_B_r1": (
+        "36226798976", "d2fa808126be82fd9ae6af0b154c9730825acef665151869a47c13e4574147ec"),
+    "2ea2e5b5-257f-42e6-a7dc-93763f28b19d_C_r1": (
+        "36228331579", "9574cb08f562e1fc38bc1c9412793140586f5a335a4b0781af98b2c3ca3f9940"),
+    "2ea2e5b5-257f-42e6-a7dc-93763f28b19d_C_r2": (
+        "36229800066", "1ae30db0cdb3f51e6a37dccaa04bfd7c376497556501802ddc505899f4a78f04"),
+    "2ea2e5b5-257f-42e6-a7dc-93763f28b19d_B_r2": (
+        "36231296576", "a0e78310c78314b456c472e6f88c4d8542caf88b4c82c6b245c9fca8814f51be"),
+}
 CLAIM_FORMAT = "codex-pilot-grade-claim-v1"
 RESULT_FORMAT = "codex-pilot-grade-terminal-v1"
 PROOF = "verified_publication_derived_not_independent_provider_authentication"
@@ -140,6 +151,11 @@ class Context:
         return self.terminal_revision if self.terminal_request is None else self.terminal_request
 
 
+def _task3_recorded(cell_id: str) -> tuple[str, str] | None:
+    return ((TASK3_A1_INFERENCE_RUN["id"], TASK3_A1_COMPLETION_SHA256)
+            if cell_id == TASK3_A1_CELL else TASK3_SUCCESSORS.get(cell_id))
+
+
 def compile_request(selector: str, source: str, terminal: str = "", *, producer_source_sha: str = "") -> Context | None:
     retained._target()  # Fixed tracked namespace/fingerprint, never an endpoint input.
     ci._registration_bytes()
@@ -157,9 +173,10 @@ def compile_request(selector: str, source: str, terminal: str = "", *, producer_
     recorded = TASK2_RETAINED.get(selector[6:])
     recorded_task2 = (fixed_refs and recorded is not None
                       and producer == B1_PRODUCER_SOURCE and terminal == recorded[1])
-    recorded_task3 = (fixed_refs and selector == "pilot/" + TASK3_A1_CELL
+    task3 = _task3_recorded(selector[6:])
+    recorded_task3 = (fixed_refs and task3 is not None
                       and producer == TASK3_A1_PRODUCER_SOURCE and source != producer
-                      and terminal == TASK3_A1_COMPLETION_SHA256)
+                      and terminal == task3[1])
     recorded_content = recorded_task2 or recorded_task3
     require(producer == source or (
         fixed_refs and selector == "pilot/" + RETAINED_CELL
@@ -407,9 +424,8 @@ def _task2_resolution(context: Context, evidence: dict, revision: str) -> None:
     the moving inference ref again or promote a new candidate after a failure.
     """
     cell_id = context.cell["cell_id"]
-    task3 = cell_id == TASK3_A1_CELL
-    recorded = ((TASK3_A1_INFERENCE_RUN["id"], TASK3_A1_COMPLETION_SHA256)
-                if task3 else TASK2_RETAINED.get(cell_id))
+    task3 = _task3_recorded(cell_id)
+    recorded = task3 or TASK2_RETAINED.get(cell_id)
     require(recorded is not None and context.terminal_request == recorded[1]
             and context.plan["run_id"] == "budget_pilot_ci_20260925_04"
             and context.plan["reviewed_source_sha"] == (TASK3_A1_PRODUCER_SOURCE if task3 else B1_PRODUCER_SOURCE)
@@ -418,9 +434,9 @@ def _task2_resolution(context: Context, evidence: dict, revision: str) -> None:
             and output._hash(revision, 40), "recorded_task2_request_required")
     terminal, claim, manifest = (evidence[key] for key in ("terminal", "claim", "manifest"))
     if task3:
-        require(context.plan["order"][12] == TASK3_A1_CELL
+        require(context.plan["order"][12:17] == [TASK3_A1_CELL, *TASK3_SUCCESSORS]
                 and context.controller_source_sha != TASK3_A1_PRODUCER_SOURCE
-                and claim["expected_parent"] == TASK3_A1_PREVIOUS_TERMINAL,
+                and (cell_id != TASK3_A1_CELL or claim["expected_parent"] == TASK3_A1_PREVIOUS_TERMINAL),
                 "recorded_task3_previous_inference_required")
     completed = ci.validate_completion(terminal["completion"])
     require(pilot._digest(completed) == recorded[1], "recorded_task2_completion_mismatch")
@@ -830,12 +846,14 @@ def _validate_binding(value: dict, context: Context, entry: dict) -> None:
 
 
 def _task3_grade_predecessor(context: Context, claim: dict) -> None:
-    if context.terminal_request is not None and context.cell["cell_id"] == TASK3_A1_CELL:
+    if context.terminal_request is not None and _task3_recorded(context.cell["cell_id"]) is not None:
+        ordinal = context.plan["order"].index(context.cell["cell_id"])
         previous = claim.get("predecessor")
-        require(claim.get("expected_parent") == TASK3_A1_PREVIOUS_GRADE
+        require(output._hash(claim.get("expected_parent"), 40) and claim["expected_parent"] != retained.BOOTSTRAP
+                and (context.cell["cell_id"] != TASK3_A1_CELL or claim["expected_parent"] == TASK3_A1_PREVIOUS_GRADE)
                 and type(previous) is dict and set(previous) == {"cell_id", "revision", "size", "sha256"}
-                and previous["cell_id"] == context.plan["order"][11]
-                and previous["revision"] == TASK3_A1_PREVIOUS_GRADE
+                and previous["cell_id"] == context.plan["order"][ordinal - 1]
+                and previous["revision"] == claim["expected_parent"]
                 and output._hash(previous["sha256"]) and type(previous["size"]) is int
                 and 0 < previous["size"] <= output.MAX_MANIFEST_BYTES,
                 "recorded_task3_grade_predecessor_required")
@@ -875,6 +893,18 @@ def _grade_terminal(api, repo: str, revision: str, context: Context, entry: dict
                 and previous["revision"] == claim["expected_parent"] and output._hash(previous["sha256"])
                 and type(previous["size"]) is int and 0 < previous["size"] <= output.MAX_MANIFEST_BYTES,
                 "grade_predecessor_binding_mismatch")
+    if context.terminal_request is not None and context.cell["cell_id"] in TASK3_SUCCESSORS:
+        # One-hop object/history proof, not a claim to independently verify Git
+        # topology. The actual prior terminal must survive the original claim.
+        require(len({claim["expected_parent"], terminal["claim_commit"], revision}) == 3,
+                "recorded_task3_grade_parent_mismatch")
+        ordinal = context.plan["order"].index(context.cell["cell_id"])
+        previous_path = _paths(context.plan["cells"][ordinal - 1])[1]
+        _, previous_data = retained._control(api, repo, claim["expected_parent"], previous_path,
+            _cache(cache, "predecessor"), token, deadline,
+            expected={key: previous[key] for key in ("size", "sha256")}, written_at=claim["expected_parent"])
+        retained._objects(api, repo, terminal["claim_commit"], [retained._object(previous_path, previous_data)],
+                          token, deadline, written_at=claim["expected_parent"])
     child = terminal["child"]
     require(set(child) == {"entry_invoked", "exit_code", "timed_out", "cleanup_confirmed"}
             and child["entry_invoked"] is True and child["cleanup_confirmed"] is True
@@ -951,10 +981,12 @@ def _branch_tip(api, repo: str, context: Context, prepared: dict, cache: Path, t
             require(value["binding"]["github_run"] == _writer_run(other), "recorded_task2_previous_writer_mismatch")
             entry = _writer_entry(other, value["binding"]["renderer_fingerprint"])
         else:
-            # Future C1/C2/B2 grades must all use the controller declared for
+            # Recorded successors must all use the controller declared for
             # this request. Never derive that authority from the prior record.
+            task3_previous = _task3_recorded(cell["cell_id"])
             other = compile_request("pilot/" + cell["cell_id"], context.controller_source_sha,
-                TASK2_RETAINED[cell["cell_id"]][1], producer_source_sha=B1_PRODUCER_SOURCE)
+                (task3_previous or TASK2_RETAINED.get(cell["cell_id"]))[1],
+                producer_source_sha=TASK3_A1_PRODUCER_SOURCE if task3_previous else B1_PRODUCER_SOURCE)
             entry = prepared["entry"]
         if other.terminal_request is not None:
             if task3:
@@ -1019,9 +1051,13 @@ def claim(context: Context, root: Path, *, _test_api=None) -> dict:
                 value = {"format": CLAIM_FORMAT, "binding": binding, "expected_parent": head, "predecessor": previous}
                 name = _paths(context.cell)[0]
                 revision = _commit(api, repo, head, {name: retained._encoded(value)}, token, deadline, result)
-                confirmed, _ = retained._control(api, repo, revision, name, _cache(root, "claim-verified"), token, deadline,
+                confirmed, confirmed_data = retained._control(api, repo, revision, name, _cache(root, "claim-verified"), token, deadline,
                                                  expected=pilot._identity(retained._encoded(value)), written_at=revision)
                 require(confirmed == value, "grade_claim_verification_failed")
+                if context.terminal_request is not None and context.cell["cell_id"] in TASK3_SUCCESSORS:
+                    # Keep canonical server-readback bytes in the existing
+                    # verified cache, independent of HF's internal cache layout.
+                    _put(root / "claim-verified" / (revision + ".json"), confirmed_data)
                 result.update(outcome="acknowledged", claim=value, claim_identity=pilot._identity(retained._encoded(value)))
         except (Exception, KeyboardInterrupt) as error:
             _failed(result, error)
@@ -1037,6 +1073,10 @@ def _admission(context: Context, root: Path, prepared: dict) -> dict:
             and retained._read(root / "claim-reserved.json") == value["claim"]["binding"],
             "acknowledged_grade_admission_required")
     _task3_grade_predecessor(context, value["claim"])
+    if context.terminal_request is not None and context.cell["cell_id"] in TASK3_SUCCESSORS:
+        confirmed = output._bytes(root / "claim-verified" / (value["returned_commit"] + ".json"),
+                                  limit=output.MAX_MANIFEST_BYTES, expected=value["claim_identity"])
+        require(confirmed == retained._encoded(value["claim"]), "recorded_task3_grade_admission_mismatch")
     return value
 
 
