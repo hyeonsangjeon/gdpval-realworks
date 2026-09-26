@@ -13,7 +13,7 @@ on:
         type: string
         default: "default_v2_sol_max.yaml"
       inference_revision:
-        description: "Full HF commit for generic resume or pilot terminal; recorded task2 B1 instead requires its fixed public completion checksum (never latest main)"
+        description: "Full HF commit for generic resume or A1 terminal; recorded task2 B1/C1/C2/B2/A2 require their fixed completion checksum (also selects B1 readout; never latest main)"
         required: false
         type: string
         default: ""
@@ -1833,7 +1833,7 @@ jobs:
     env:
       GRADE_SELECTOR: ${{ inputs.experiment_yaml }}
       GRADE_TERMINAL: ${{ inputs.inference_revision }}
-      PILOT_GRADE_PRODUCER_SOURCE_SHA: ${{ inputs.experiment_yaml == 'pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r1' && 'b4c95f8eaee16ae2226f3bf6e0493051fa91d770' || inputs.experiment_yaml == 'pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_B_r1' && 'e7a28db07ebe10d6508b9256137763cc82f9a1d1' || '' }}
+      PILOT_GRADE_PRODUCER_SOURCE_SHA: ${{ inputs.experiment_yaml == 'pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r1' && 'b4c95f8eaee16ae2226f3bf6e0493051fa91d770' || contains(fromJSON('["pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_B_r1","pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_C_r1","pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_C_r2","pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_B_r2","pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r2"]'), inputs.experiment_yaml) && 'e7a28db07ebe10d6508b9256137763cc82f9a1d1' || '' }}
       GRADE_CONFIG: ${{ inputs.grading_config }}
       GRADE_FORCE: ${{ inputs.force }}
       GRADE_TASKS_LIMIT: ${{ inputs.tasks_limit }}
@@ -1926,7 +1926,9 @@ jobs:
                                 "pilot/inference-branch-setup", "pilot/inference-branch-inspect"}
           producer = {
               "pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r1": "b4c95f8eaee16ae2226f3bf6e0493051fa91d770",
-              "pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_B_r1": "e7a28db07ebe10d6508b9256137763cc82f9a1d1",
+              **{"pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_" + suffix:
+                 "e7a28db07ebe10d6508b9256137763cc82f9a1d1"
+                 for suffix in ("B_r1", "C_r1", "C_r2", "B_r2", "A_r2")},
           }.get(selector, source)
           request = {
               "workflow": ".github/workflows/grade-run.yml", "repository": "hyeonsangjeon/gdpval-realworks",
@@ -1964,7 +1966,7 @@ jobs:
     env:
       GRADE_SELECTOR: ${{ inputs.experiment_yaml }}
       GRADE_TERMINAL: ${{ inputs.inference_revision }}
-      PILOT_GRADE_PRODUCER_SOURCE_SHA: ${{ inputs.experiment_yaml == 'pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r1' && 'b4c95f8eaee16ae2226f3bf6e0493051fa91d770' || inputs.experiment_yaml == 'pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_B_r1' && 'e7a28db07ebe10d6508b9256137763cc82f9a1d1' || '' }}
+      PILOT_GRADE_PRODUCER_SOURCE_SHA: ${{ inputs.experiment_yaml == 'pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r1' && 'b4c95f8eaee16ae2226f3bf6e0493051fa91d770' || contains(fromJSON('["pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_B_r1","pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_C_r1","pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_C_r2","pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_B_r2","pilot/0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r2"]'), inputs.experiment_yaml) && 'e7a28db07ebe10d6508b9256137763cc82f9a1d1' || '' }}
       GRADE_CONFIG: ${{ inputs.grading_config }}
       GRADE_FORCE: ${{ inputs.force }}
       GRADE_TASKS_LIMIT: ${{ inputs.tasks_limit }}
@@ -2132,7 +2134,7 @@ jobs:
       # source-identity, ledger, payload and child-log files stay private.
 
   pilot-readout:
-    # One historical grade, no paid authority. Both dry planning and explicit
+    # One selected historical A1/B1 grade, no paid authority. Dry planning and
     # reads use this job; only the final read step receives the HF credential.
     if: >-
       ${{ inputs.experiment_yaml == 'pilot/grade-readout' && inputs.paid_approval == false &&

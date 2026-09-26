@@ -1,4 +1,4 @@
-"""Closed readout of one retained grade, not admission, publication or regrading."""
+"""Closed readout of recorded A1 or B1, not admission, publication or regrading."""
 
 from __future__ import annotations
 
@@ -23,22 +23,49 @@ WRITER_RUN = {"id": "36161541597", "job": "pilot-live", "attempt": 1}
 # Never use a remote terminal's self-reported hash as the expected source hash.
 CONFIG_SHA256 = "62a6d99d9e74d187e517d60d9a5afb112e38926917710ac6e6606eb28404dfa0"
 GRADER_SOURCE_HASH = "0a66e518dbe9dfe403e68aee69ec13d7f15ee7d86c6c2de7ccedfe990242e7df"
+# The ecbe writer's actual grader closure and compiled config are unchanged
+# from the independently derived A1 closure above, not read from HF metadata.
+B1_WRITER_SOURCE = "ecbe297e7dc2d798a834091f14da3ae486172a43"
+B1_WRITER_RUN = {"id": "36202409134", "job": "pilot-live", "attempt": 1}
+B1_GRADER_SOURCE_HASH = "0a66e518dbe9dfe403e68aee69ec13d7f15ee7d86c6c2de7ccedfe990242e7df"
 require = output._require
 
 
-def _context(args):
-    require(args.phase in {"plan", "readout"} and args.producer_source_sha == ""
-            and args.terminal_revision == grading.RETAINED_TERMINAL, "grade_readout_route_refused")
-    require(output._hash(args.reviewed_source_sha, 40)
-            and args.reviewed_source_sha not in {WRITER_SOURCE, grading.RETAINED_PRODUCER_SOURCE},
-            "distinct_reviewed_observer_required")
+def _writer_context(request):
     require(ci.CAMPAIGN == "budget_pilot_ci_20260925_04"
             and grading.BRANCH == "pilot-grades-20260925-04"
             and retained.BRANCH == "pilot-inference-20260925-04", "grade_readout_epoch_refused")
-    context = grading.compile_request("pilot/" + grading.RETAINED_CELL, WRITER_SOURCE,
-        grading.RETAINED_TERMINAL, producer_source_sha=grading.RETAINED_PRODUCER_SOURCE)
+    if request == grading.RETAINED_TERMINAL:
+        context = grading.compile_request("pilot/" + grading.RETAINED_CELL, WRITER_SOURCE,
+            request, producer_source_sha=grading.RETAINED_PRODUCER_SOURCE)
+    else:
+        require(request == grading.TASK2_RETAINED[grading.B1_CELL][1], "grade_readout_route_refused")
+        context = grading.compile_request("pilot/" + grading.B1_CELL, B1_WRITER_SOURCE,
+            request, producer_source_sha=grading.B1_PRODUCER_SOURCE)
     require(hashlib.sha256(context.run.grader_config_json.encode()).hexdigest() == CONFIG_SHA256,
             "grade_readout_config_refused")
+    return context
+
+
+def _writer_run(context):
+    return B1_WRITER_RUN if context.cell["cell_id"] == grading.B1_CELL else WRITER_RUN
+
+
+def _writer_entry(context, renderer):
+    require(type(renderer) is dict and set(renderer) == {
+        "libreoffice_binary", "libreoffice_version", "pymupdf_version"}
+        and all(type(value) is str and 0 < len(value) <= 1024 for value in renderer.values()),
+        "grade_readout_renderer_identity_refused")
+    return {"config_hash": CONFIG_SHA256[:16], "renderer_fingerprint": renderer,
+            "grader_source_hash": B1_GRADER_SOURCE_HASH if context.cell["cell_id"] == grading.B1_CELL else GRADER_SOURCE_HASH}
+
+
+def _context(args):
+    require(args.phase in {"plan", "readout"} and args.producer_source_sha == "", "grade_readout_route_refused")
+    context = _writer_context(args.terminal_revision)
+    require(output._hash(args.reviewed_source_sha, 40)
+            and args.reviewed_source_sha not in {context.controller_source_sha, context.plan["reviewed_source_sha"]},
+            "distinct_reviewed_observer_required")
     return context
 
 
@@ -69,6 +96,7 @@ class _ReadOnlyGrade:
         self._claim, self._terminal = grading._paths(context.cell)
         self._metadata_open = True
         self._metadata_paths, self._downloads = {}, set()
+        self._inference_metadata, self._inference_revisions = set(), set()
         self.revision = None
 
     def _target(self, repo_id, repo_type, token):
@@ -77,13 +105,17 @@ class _ReadOnlyGrade:
 
     def repo_info(self, *, repo_id, repo_type, revision, token, timeout):
         self._target(repo_id, repo_type, token)
-        require(self._metadata_open and revision == grading.BRANCH, "grade_readout_metadata_refused")
-        self._metadata_open = False
+        if revision in self._inference_metadata:
+            self._inference_metadata.remove(revision)
+        else:
+            require(self._metadata_open and revision == grading.BRANCH, "grade_readout_metadata_refused")
+            self._metadata_open = False
         return self._api.repo_info(repo_id=repo_id, repo_type=repo_type, revision=revision, token=token, timeout=timeout)
 
     def get_paths_info(self, *, repo_id, repo_type, revision, paths, expand, token):
         self._target(repo_id, repo_type, token)
-        require(expand is True and type(paths) is list and 0 < len(paths) <= 3
+        limit = output.MAX_FILES + 3 if revision in self._inference_revisions else 3
+        require(expand is True and type(paths) is list and 0 < len(paths) <= limit
                 and len(paths) == len(set(paths))
                 and set(paths) <= self._metadata_paths.get(revision, set()), "grade_readout_paths_refused")
         return self._api.get_paths_info(repo_id=repo_id, repo_type=repo_type, revision=revision,
@@ -116,13 +148,46 @@ class _ReadOnlyGrade:
 
     def bind(self, terminal, context, entry):
         grading._validate_binding(terminal["binding"], context, entry)
-        require(terminal["binding"]["github_run"] == WRITER_RUN, "grade_readout_writer_run_refused")
+        require(terminal["binding"]["github_run"] == _writer_run(context), "grade_readout_writer_run_refused")
         revision = terminal["claim_commit"]
         require(output._hash(revision, 40) and revision != self.revision, "grade_readout_claim_refused")
         self._metadata_paths[revision] = {self._claim}
         self._downloads.add((revision, self._claim))
         self._metadata_paths[self.revision].update({self._claim, *grading._grade_artifact_paths(
             context, entry, terminal["binding"]["retained"]["output_commit"]).values()})
+
+    def bind_retained(self, binding, context, cache, deadline):
+        """Only B1's three inference controls may be downloaded, never payloads."""
+        require(context.cell["cell_id"] == grading.B1_CELL and context.terminal_request is not None,
+                "grade_readout_retained_route_refused")
+        revision = binding["retained"]["terminal_commit"]
+        require(output._hash(revision, 40) and revision != self.revision, "grade_readout_retained_revision_refused")
+        claim, terminal_path, prefix = retained._paths(context.cell)
+        self._metadata_paths[revision] = {terminal_path}
+        self._downloads.add((revision, terminal_path))
+        terminal, _ = retained._control(self, self._repo, revision, terminal_path,
+            grading._cache(cache, "candidate"), self._token, deadline, written_at=revision)
+        claim_revision, output_revision = terminal["claim_commit"], terminal["output_commit"]
+        require(all(output._hash(value, 40) for value in (claim_revision, output_revision))
+                and len({revision, claim_revision, output_revision, self.revision}) == 4,
+                "grade_readout_retained_revision_refused")
+        objects = terminal["output_objects"]
+        require(type(objects) is list and 0 < len(objects) <= output.MAX_FILES + 3,
+                "grade_readout_retained_paths_refused")
+        paths = {record["path"] for record in objects}
+        require(len(paths) == len(objects) and all(type(path) is str and path.startswith(prefix + "/")
+                and ".." not in path.split("/") and "\\" not in path for path in paths),
+                "grade_readout_retained_paths_refused")
+        manifest = prefix + "/" + output.MANIFEST
+        require(manifest in paths, "grade_readout_retained_paths_refused")
+        self._inference_revisions.update({revision, claim_revision, output_revision})
+        self._inference_metadata.add(revision)
+        self._metadata_paths[revision].update({claim, *paths})
+        self._metadata_paths[claim_revision] = {claim}
+        self._metadata_paths[output_revision] = paths
+        self._downloads.update({(claim_revision, claim), (output_revision, manifest)})
+        grading._grade_retained_input(context, binding, self, self._repo,
+            grading._cache(cache, "verified"), self._token, deadline)
 
     def allow_verified_files(self, records):
         # Called only after _grade_terminal checked the role/path/hash/history.
@@ -176,7 +241,7 @@ def _projection(context, terminal, files, entry):
         raw = pilot._json_object(files["grade_task_progress"])
         grading._no_raw_grade(raw)
         require(raw.get("format") == CHECKPOINT_FORMAT and raw.get("task_id") == context.cell["task_id"]
-                and raw.get("grader_source_hash") == GRADER_SOURCE_HASH, "grade_readout_progress_refused")
+                and raw.get("grader_source_hash") == entry["grader_source_hash"], "grade_readout_progress_refused")
         # The original writer validated rubric order. Do not invent an original
         # rubric from this checkpoint or expose its content as a completed score.
     require(grading._grade_outcome(payload, terminal["child"], progress="grade_task_progress" in files)
@@ -214,6 +279,10 @@ def main(args, *, _test_api=None, _test_transport=None):
         "automatic_retry": False, "invoice_complete": False, "http_request_count": None}
     try:
         context = _context(args)
+        if context.terminal_request is not None:
+            public.update(cell_id=context.cell["cell_id"], grade_writer_source_sha=context.controller_source_sha,
+                grade_writer_run=_writer_run(context), inference_producer_source_sha=context.plan["reviewed_source_sha"],
+                inference_terminal=None, inference_request_checksum=context.terminal_request)
         public["stage"] = "observer_authority"
         _authority(args.reviewed_source_sha, live=args.phase == "readout")
         if args.phase == "plan":
@@ -235,12 +304,9 @@ def main(args, *, _test_api=None, _test_transport=None):
             terminal, _ = retained._control(api, repo, api.revision, grading._paths(context.cell)[1],
                 grading._cache(root, "terminal"), token, deadline, written_at=api.revision)
             renderer = terminal["binding"]["renderer_fingerprint"]
-            require(type(renderer) is dict and set(renderer) == {
-                "libreoffice_binary", "libreoffice_version", "pymupdf_version"}
-                and all(type(value) is str and 0 < len(value) <= 1024 for value in renderer.values()),
-                "grade_readout_renderer_identity_refused")
-            entry = {"config_hash": CONFIG_SHA256[:16], "grader_source_hash": GRADER_SOURCE_HASH,
-                     "renderer_fingerprint": renderer}
+            entry = _writer_entry(context, renderer)
+            if context.terminal_request is not None:
+                api.bind_retained(terminal["binding"], context, grading._cache(root, "inference-proof"), deadline)
             api.bind(terminal, context, entry)
             verified = grading._grade_terminal(api, repo, api.revision, context, entry,
                 grading._cache(root, "verified"), token, deadline)
@@ -256,7 +322,8 @@ def main(args, *, _test_api=None, _test_transport=None):
             claim_revision=terminal["claim_commit"], claim_identity=terminal["claim_identity"],
             file_identities=[{key: record[key] for key in ("role", "size", "sha256")} for record in terminal["files"]],
             inference_output_commit=terminal["binding"]["retained"]["output_commit"],
-            grader_source_hash=GRADER_SOURCE_HASH, grader_config_sha256=CONFIG_SHA256,
+            inference_terminal=context.terminal_revision,
+            grader_source_hash=entry["grader_source_hash"], grader_config_sha256=CONFIG_SHA256,
             rubric_revision=json.loads(context.run.grader_config_json)["rubric"]["revision"],
             renderer_fingerprint_sha256=pilot._digest(renderer), proof_boundary=grading.PROOF)
         print(pilot._canonical_json(public))

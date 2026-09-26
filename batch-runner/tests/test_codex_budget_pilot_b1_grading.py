@@ -112,6 +112,7 @@ def case(tmp_path, monkeypatch, capsys, compilations, compiled_cells):
     api.head, api.main_snapshot = retained.BOOTSTRAP, copy.deepcopy(api.trees[retained.BOOTSTRAP])
     state.request = pilot._digest(terminal["completion"])
     monkeypatch.setattr(grading, "B1_COMPLETION_SHA256", state.request)
+    monkeypatch.setitem(grading.TASK2_RETAINED, grading.B1_CELL, (grading.B1_INFERENCE_RUN["id"], state.request))
     state.context = grading.compile_request(SELECTOR, CONTROLLER, state.request,
                                             producer_source_sha=grading.B1_PRODUCER_SOURCE)
     monkeypatch.setattr(base, "OUTPUT", B1_OUTPUT)  # Existing fake Step8 writer's input revision.
