@@ -1,6 +1,168 @@
 # Latest task result
 
-## PROJECT5-B1-GRADING-PREP
+## PROJECT5-TASK2-GRADE-COMPLETION
+
+Prepared a read-only route for the already-published task2 B1 grade and closed
+grading routes for individual future C1, C2, B2 and A2 requests. The focused
+offline selector passed **29 cases in 132.48s** at
+`dfc1fc93f46e2bd6e84cfed824ca75069b7fcd35`, after a fixture-only correction
+described below. No live readout, grading, inference or workflow dispatch
+occurred. B1's stored outcome, score, costs and resolved revisions remain unread.
+
+Work used a new clean owned worktree from main
+`ecbe297e7dc2d798a834091f14da3ae486172a43`; the preserved checkout was untouched.
+The leader supplied delivered PR682 review `5323495504` at
+`0d934c19347d04de81c9be9c3445e293c06ddd3d` and **9** passing checks. That review
+covers the preceding B1 intake implementation, not this patch.
+
+### B1 readout and the finite grading chain
+
+The existing `pilot/grade-readout` selector now also accepts B1's fixed public
+completion checksum. A1 readout is unchanged. B1 is bound to historical grading
+writer `ecbe297e7dc2d798a834091f14da3ae486172a43`, run `36202409134` /
+`pilot-live` / attempt **1**, and inference producer
+`e7a28db07ebe10d6508b9256137763cc82f9a1d1`. Its expected grader/config hashes
+come from the unchanged local ecbe grader closure and genuine compiled config,
+not from the remote record. The observer retains its own truthful reviewed
+source; it does not impersonate either historical source.
+
+The grade's reported inference revision is only a candidate. Existing immutable
+readers verify its original claim, manifest and completion against B1's fixed
+run/source/checksum, then compare the whole retained observation and publication
+receipt binding. The grade claim, terminal, file hashes and payload identities
+are also validated. The read-only wrapper downloads only the selected inference
+control records and verified grade files, never inference payloads. It has no
+OIDC, Azure, model/judge, claim, branch or HF-write interface. Existing score
+denominators, partial/failed/ungraded outcomes, missing-ledger state, recorded
+costs, nulls and privacy exclusions remain unchanged.
+
+One closed registration table extends the existing fixed-content intake from
+B1 to the four remaining task2 results. All use producer e7 above, campaign
+`budget_pilot_ci_20260925_04`, inference ref `pilot-inference-20260925-04`
+and grading ref `pilot-grades-20260925-04`. The full cell prefix is
+`0112fc9b-c3b2-4084-8993-5a4abb1f54f1_`:
+
+| Cell suffix | Recorded inference run | Required completion checksum | Immediate grade predecessor |
+|---|---|---|---|
+| `C_r1` | `36195731407` | `f3d1d3420b4dc23c018aa8b55ac1f4653a64e92b85eac50268e80aea55f2fbef` | B1 |
+| `C_r2` | `36198090626` | `1823893b4b4dfbce02b5b07d48f164cdd6228c3c38afd9608bb934c3e9bf417c` | C1 |
+| `B_r2` | `36200320037` | `b85346c5ee226bf1bfe2a34386394d4abea4617c408bedf2c3afe7016f9f904c` | C2 |
+| `A_r2` | `36202190875` | `d6d1309c2c81ef17ce18158bc9014ce962ce7dcd267f95f328b279050d4fd15e` | B2 |
+
+Preparation resolves each cell's exact terminal-writing commit from immutable
+history, even after the inference ref advances. The approval request retains
+the original completion checksum, distinct from the resolved revision. A
+no-clobber local resolution record binds both through later phases; those
+phases do not resolve a new candidate or adopt the latest HEAD.
+
+C1 requires the actual B1 grade under its pinned ecbe writer/run and grader
+expectations. C2, B2 and A2 require their immediately preceding grade under the
+same exact controller source declared for their own request, with locally
+computed grader/config expectations. That common future controller must be
+bound before dispatch. Bootstrap, skipped or unfinished predecessors, changed
+controllers and a predecessor from another inference observation refuse.
+B1's existing predecessor remains A1 grade
+`a0ded8b7146c028516d007a9afaa0993797fa1ca`, writer
+`6ed0139195c4ebf27bfb63d14b2c8d8c92f8f379` / run `36161541597`, producer
+`b4c95f8eaee16ae2226f3bf6e0493051fa91d770`, inference terminal
+`8083504edf4ceb63f3c4929aac57e0f4b6741593`. No historical claim, grade or receipt
+is rewritten or adopted as new authority.
+
+The required bounded extreme-reasoner decision was APPROVE-WITH-CONDITIONS
+before production/workflow edits. Fixed-content verification establishes a
+matching immutable publication; it does not prove that original outer metadata
+was never rewritten. That accepted limit is unchanged. The decision grants no
+live authority and is not exact-head source approval.
+
+### Focused offline evidence
+
+Both invocations used only
+`tests/test_codex_budget_pilot_task2_grade_completion.py::test_task2_grade_completion`
+from `batch-runner/`, with Python **3.10.12**, credential-free `env -i`, offline
+HF flags and pytest plugin autoload disabled:
+
+| Immutable tested SHA | Separate result | Interpretation |
+|---|---|---|
+| `c4ec9e321f31571b32be53b28355998f961471fb` | **29 failed in 134.97s**, exit **1** | New synthetic inference commit labels collided with the fixture's A1 grading claim. Every case refused at that missing claim before its intended assertion. |
+| `dfc1fc93f46e2bd6e84cfed824ca75069b7fcd35` | **29 passed in 132.48s**, exit **0** | Only the shared fixture labels changed, with an explicit collision assertion. `--lf --lfnf=none` selected the 29 failed cases; no passing case was repeated. |
+
+Genuine compiler, inference/Step8 serialization, cost-ledger export, native
+materializer contract and claim/terminal/file validators run with fake external
+boundaries. The selector covers B1 graded/partial/failed/ungraded and missing
+ledger readouts, advanced refs, writer/run/completion/receipt/hash/byte/privacy/
+cleanup refusals, the four separate grading operations, immediate predecessor
+and controller checks, altered saved resolution, missing approval, and lost
+claim/publication acknowledgments. It independently executes the workflow's
+approval digest. No unapproved judge or write occurs at the fake boundaries.
+These results do not establish live HF behavior, native installation or quality.
+Only completion records changed after the successful tested commit.
+
+The prior B1 selector remains **23 passed in 74.52s** at
+`3545f585fd200fd08ae670227dce522b423e6f19`, not rerun or combined with these
+results. All earlier split observations remain in the historical sections below.
+No old selector or full suite was rerun.
+
+### Supplied live observations, not reread here
+
+The leader reports B1 grade run `36202409134`, job `108291769004`, succeeded
+under ecbe. Preparation passed at **2026-09-25T23:51:20.6609991Z**, the claim was
+acknowledged at **23:51:32.0451876Z**, one Step8 invocation completed with owned
+cleanup at **23:57:43.4635191Z**, and publication was acknowledged at
+**23:57:48.6085301Z**. Its inference run remains `36192851762` with completion
+checksum `6a23d38158e81cd5ed184a05a7871545d140bb1d92dc1131326d96df29c236f8`.
+Workflow success and publication acknowledgment do not establish a graded
+outcome, score or complete costs. The actual B1 inference and grade revisions
+remain unknown here; no hashes or payloads were reconstructed.
+
+The leader also reports A2 inference run `36202190875`, job `108291038435`,
+succeeded on event-pinned e7 before main changed. Execution ran
+**23:47:54–23:49:54 UTC** on **2026-09-25**; the terminal was verified at
+**23:49:59.8771882 UTC**. Artifact `10892208424` has the verified A2 completion
+checksum in the table above, one child, confirmed cleanup and one **5386-byte**
+deliverable. Partial accounting reports **USD 0.245066** known cost,
+**123697 input**, **8336 output**, **84096 cached-input** and **5929 reasoning
+tokens**. Estimate and HTTP request count are null; invoice completeness is
+false. These are partial recorded quantities, not invoice totals or quality.
+
+All **six** epoch04 task2 inferences A1/B1/C1/C2/B2/A2 are now retained according
+to the leader. Only A1 quality has been read: **62.4 / 65 = 96.0%**, with
+full-denominator **94.55%**, under the detailed exclusions and accounting limits
+preserved below. It remains one-task/condition evidence, not cohort or A/B/C
+superiority. The nine older admissions, partial costs, unknown causes, missing
+raw files and claims remain separate and frozen. No task3 or new inference is
+authorized by this task.
+
+### Individual future requests and remaining authority
+
+Use only existing `.github/workflows/grade-run.yml` inputs on truthful reviewed
+`main`. For a B1 readout, select `experiment_yaml=pilot/grade-readout`,
+`inference_revision=6a23d38158e81cd5ed184a05a7871545d140bb1d92dc1131326d96df29c236f8`,
+`dry_run=false`, `paid_approval=false`. For each separate future grade, use
+`experiment_yaml=pilot/<full cell ID>` and its table checksum as
+`inference_revision`, with `dry_run=false`, `paid_approval=true`. Common controls
+remain `grading_config=default_v2_sol_max.yaml`, `force=false`, `tasks_limit=0`,
+empty/absent optional `tasks`, `resume=false`, `resume_chunk=0`, `shard_count=1`,
+`shard_index=0`, `run_ordinal=1`, and workflow attempt **1**. These are request
+specifications, not dispatches. Default planning remains offline and token-free.
+
+Each grade still needs its own successful same-run protected approval,
+exact-source checks, original retained-byte validation and one-use CAS claim.
+There is no scheduler, automatic successor, task3 extension, new input or
+free-form source override. Fixed `default_v2_sol_max` judging, inference/model/
+runtime/original-input/budget code, the canonical **30**-cell plan and all old
+privacy/retention repairs are unchanged. Lost acknowledgment remains fail-closed.
+
+New-head review, final CI and the leader's exact source binding and individual
+readout/grading authorization remain. No live HF read/write, model/judge call,
+workflow dispatch, Azure management, source reseal, old-claim change, setup,
+Project edit, merge or CI polling occurred. The full catalog was read once.
+Experiment-design bounded this finite source/evidence policy; experiment-report-en
+then im-not-ai-en kept observations, denominators, missingness and authority
+separate. UI/animation and repo-readiness do not apply: no UI or new public
+handoff was requested. Earlier sections retain the evidence available when
+those tasks closed; they are not current permission to repeat an operation.
+
+## Prior PROJECT5-B1-GRADING-PREP
 
 Prepared the closed grading path for task2 B1, original ordinal **7**, cell
 `0112fc9b-c3b2-4084-8993-5a4abb1f54f1_B_r1`, in

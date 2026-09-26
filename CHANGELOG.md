@@ -13,6 +13,52 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Extend the existing closed task2 grading handoff from exact main
+  `ecbe297e7dc2d798a834091f14da3ae486172a43`. The leader supplied PR682 review
+  `5323495504` at `0d934c19347d04de81c9be9c3445e293c06ddd3d` and **9** passing
+  checks for the preceding B1 intake, not this patch. The bounded extreme-reasoner
+  decision approved the finite scope with conditions before workflow edits.
+  `pilot/grade-readout` now also selects B1 through its fixed completion checksum,
+  preserving A1 readout. B1's writer is ecbe/run `36202409134`, its inference
+  producer is `e7a28db07ebe10d6508b9256137763cc82f9a1d1`/run `36192851762`, and
+  the observer keeps its own truthful source. Its reported inference revision
+  remains a candidate until the fixed checksum/run/source, original claim,
+  manifest and complete retained-observation/receipt binding pass verification.
+  Grade claim/file/hash checks, safe score denominators and accounting remain;
+  the reader has no OIDC, judge, claim, branch or HF-write interface and never
+  downloads inference payloads. A small closed table reuses fixed-content intake
+  for C1/C2/B2/A2 and their recorded e7 runs/checksums. Each is a separate
+  leader-dispatched grade on `pilot-grades-20260925-04`, with its actual immediate
+  grade predecessor; C1 verifies historical B1, and C2/B2/A2 require the same
+  controller declared before dispatch. Unknown or unfinished tips, source drift,
+  tampering and lost acknowledgments refuse. No scheduler, task3 route, new
+  workflow input, free-form source override, model/rubric/budget change or old-claim rewrite
+  was added. Fixed-content proof still does not establish that original outer
+  metadata was never rewritten.
+  The sole focused selector
+  `tests/test_codex_budget_pilot_task2_grade_completion.py::test_task2_grade_completion`
+  first returned **29 failed in 134.97s**, exit **1**, at
+  `c4ec9e321f31571b32be53b28355998f961471fb`: synthetic inference commit labels
+  collided with the fixture's A1 grade claim, so every case refused before its
+  intended assertion. Fixture-only correction
+  `dfc1fc93f46e2bd6e84cfed824ca75069b7fcd35` then returned **29 passed in 132.48s**,
+  exit **0**, selecting only those failed cases with `--lf --lfnf=none`.
+  Genuine writers/compiler/ledger/materializer/validators use fake external
+  boundaries. The prior **23 passed in 74.52s** at
+  `3545f585fd200fd08ae670227dce522b423e6f19` remains separate; no passing case,
+  previous selector or full suite was repeated. Only records changed after the
+  successful tested commit. Separately, the leader reports B1 grade publication
+  success in run `36202409134`/job `108291769004`, but its stored outcome, score,
+  costs and resolved revisions remain unread here. A2 inference run
+  `36202190875`/job `108291038435` also succeeded on event-pinned e7, with a
+  **5386-byte** deliverable and partial **USD 0.245066** known cost, not an invoice
+  or quality result. All six task2 inferences are retained; only A1 quality has
+  been read. The old histories and earlier grading failures remain separate.
+  No live readout/grading/inference/dispatch or CI polling occurred. New-head
+  review/final CI and explicit leader source binding and individual requests
+  remain. Experiment-design and experiment-report-en then im-not-ai-en preserved
+  the finite scope and evidence limits; UI/public-handoff guidance did not apply.
+
 - Add a closed, model-free retained-grade readout for `pilot/grade-readout`,
   prepared from main `6ed0139195c4ebf27bfb63d14b2c8d8c92f8f379`. The leader
   supplied PR679 review `5319870032` and all **9** checks passed for the
