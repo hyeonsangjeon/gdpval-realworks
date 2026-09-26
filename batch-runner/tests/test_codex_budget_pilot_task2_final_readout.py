@@ -73,12 +73,13 @@ def _selected(case, suffix, tmp_path, monkeypatch):
     ("C_r1", "ref"), ("C_r2", "observer"), ("C_r1", "absent"), ("C_r1", "plan"),
     ("B_r2", "graded"), ("B_r2", "run"), ("B_r2", "previous_run"),
     ("B_r2", "previous_hash"), ("B_r2", "skipped_predecessor"),
-    ("A_r2", "unconfigured_plan"), ("A_r2", "unconfigured_readout"),
+    ("A_r2", "graded"), ("A_r2", "run"), ("A_r2", "previous_run"),
+    ("A_r2", "previous_hash"), ("A_r2", "skipped_predecessor"),
 ])
 def test_task2_final_grade_readout(request, tmp_path, monkeypatch, capsys, suffix, scenario):
     assert readout.TASK2_WRITER_SOURCE == "a5e5d2589caff21309f0a1c21bb7d9d333ad47c6"
     assert readout.TASK2_GRADE_RUNS == {PREFIX + cell: run for cell, run in {
-        "C_r1": "36209654516", "C_r2": "36211281528", "B_r2": "36212846089", "A_r2": None}.items()}
+        "C_r1": "36209654516", "C_r2": "36211281528", "B_r2": "36212846089", "A_r2": "36214413190"}.items()}
     assert readout.B1_PREDECESSOR_GRADE == "887c2373d456efc1eabf29a8bf3d3d7de12e43fe"
     assert readout.B1_PREDECESSOR_INFERENCE == "0a9a8b3263f41d86d723f84a723c9b467f04dea5"
     assert grading.TASK2_RETAINED == {PREFIX + cell: values for cell, values in chain.RECORDED.items()}
@@ -111,7 +112,7 @@ def test_task2_final_grade_readout(request, tmp_path, monkeypatch, capsys, suffi
     # Only synthetic identities are substituted; no historical bytes are recreated.
     monkeypatch.setattr(readout, "B1_PREDECESSOR_GRADE", previous_revision)
     monkeypatch.setattr(readout, "B1_PREDECESSOR_INFERENCE", b1.B1_TERMINAL)
-    for previous_suffix in ("C_r1", "C_r2"):
+    for previous_suffix in ("C_r1", "C_r2", "B_r2"):
         if previous_suffix == suffix:
             break
         preceding = _selected(state, previous_suffix, tmp_path, monkeypatch)
@@ -196,7 +197,8 @@ def test_task2_final_grade_readout(request, tmp_path, monkeypatch, capsys, suffi
     elif scenario == "previous_carried":
         api.writers[terminal["claim_commit"]][previous_path] = terminal["claim_commit"]
     elif scenario == "skipped_predecessor":
-        claim["predecessor"]["cell_id"] = PREFIX + "C_r1" if suffix == "B_r2" else grading.B1_CELL
+        claim["predecessor"]["cell_id"] = (PREFIX + "C_r2" if suffix == "A_r2"
+            else PREFIX + "C_r1" if suffix == "B_r2" else grading.B1_CELL)
     elif scenario == "ref":
         monkeypatch.setattr(grading, "BRANCH", "pilot-grades-20260924-03")
     if scenario in {"completion", "inference_run", "previous_inference_link", "previous_hash", "skipped_predecessor"}:

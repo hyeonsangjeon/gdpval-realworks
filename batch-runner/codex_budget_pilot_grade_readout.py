@@ -36,7 +36,7 @@ TASK2_GRADE_RUNS = {
     "0112fc9b-c3b2-4084-8993-5a4abb1f54f1_C_r1": "36209654516",
     "0112fc9b-c3b2-4084-8993-5a4abb1f54f1_C_r2": "36211281528",
     "0112fc9b-c3b2-4084-8993-5a4abb1f54f1_B_r2": "36212846089",
-    "0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r2": None,
+    "0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r2": "36214413190",
 }
 # These additional observed pins apply only to C1's predecessor proof. The
 # already-delivered B1 reader and production grading helpers keep their route.
