@@ -66,6 +66,62 @@ TASK2_RETAINED = {
     "0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r2": (
         "36202190875", "d6d1309c2c81ef17ce18158bc9014ce962ce7dcd267f95f328b279050d4fd15e"),
 }
+# The task3 handoff retains the actual inference producer and historical A2
+# writer. Its four recorded successors require that same declared controller.
+TASK3_A1_CELL = "2ea2e5b5-257f-42e6-a7dc-93763f28b19d_A_r1"
+TASK3_A1_PRODUCER_SOURCE = "78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e"
+TASK3_A1_COMPLETION_SHA256 = "1fb1bc33acab5b2bdefd70744a899c808d984e9c231deded4217ad92d4dc7e3d"
+TASK3_A1_INFERENCE_RUN = {"id": "36225255532", "job": "cell", "attempt": 1}
+TASK3_A1_PREVIOUS_GRADE = "3a8e135cd232ab900e003fc6d9c459957a0b990e"
+TASK3_A1_PREVIOUS_TERMINAL = "e22f0c3de79bbfce084aedde64fa56c40959fde0"
+# Only recorded task3 completions may use this closed successor chain.
+TASK3_SUCCESSORS = {
+    "2ea2e5b5-257f-42e6-a7dc-93763f28b19d_B_r1": (
+        "36226798976", "d2fa808126be82fd9ae6af0b154c9730825acef665151869a47c13e4574147ec"),
+    "2ea2e5b5-257f-42e6-a7dc-93763f28b19d_C_r1": (
+        "36228331579", "9574cb08f562e1fc38bc1c9412793140586f5a335a4b0781af98b2c3ca3f9940"),
+    "2ea2e5b5-257f-42e6-a7dc-93763f28b19d_C_r2": (
+        "36229800066", "1ae30db0cdb3f51e6a37dccaa04bfd7c376497556501802ddc505899f4a78f04"),
+    "2ea2e5b5-257f-42e6-a7dc-93763f28b19d_B_r2": (
+        "36231296576", "a0e78310c78314b456c472e6f88c4d8542caf88b4c82c6b245c9fca8814f51be"),
+    "2ea2e5b5-257f-42e6-a7dc-93763f28b19d_A_r2": (
+        "36232859421", "f4de6c1d36c8f3a2c077be9e4be370545eeb5a11d9513752caa4d40bd08e1bd8"),
+}
+# Only recorded task4 completions continue the shared-controller chain. Failed
+# A1/A2 have distinct model-free UNGRADED bindings, never a judged fallback.
+TASK4_A1_CELL = "3baa0009-5a60-4ae8-ae99-4955cb328ff3_A_r1"
+TASK4_B1_CELL = "3baa0009-5a60-4ae8-ae99-4955cb328ff3_B_r1"
+TASK4_A2_CELL = "3baa0009-5a60-4ae8-ae99-4955cb328ff3_A_r2"
+TASK4_RETAINED = {
+    TASK4_A1_CELL: (
+        "36234320019", "a913f0236e801e31ab7c0f58c8545ad6375d7092c06fa77f839225d03efe52d8"),
+    TASK4_B1_CELL: (
+        "36235926112", "f3546942ebac25c3c3cd1788dfb792a80e3e10f465999bebf7730fb651cb2bde"),
+    "3baa0009-5a60-4ae8-ae99-4955cb328ff3_C_r1": (
+        "36239016015", "76c1904cfbed0588f5fcb6c15f48f66cd065933a8c829cbd18fcfb323f8ab710"),
+    "3baa0009-5a60-4ae8-ae99-4955cb328ff3_C_r2": (
+        "36242339639", "817d2515c4719b7f12b40c5c58e446661e2e41fd5d8023a78045208548e4dcbd"),
+    "3baa0009-5a60-4ae8-ae99-4955cb328ff3_B_r2": (
+        "36243795189", "ec4221834b04014e58775a4a4d94fc139e49ad2b7b45321e7fd2ccd58d75ef41"),
+    TASK4_A2_CELL: (
+        "36245490377", "8f2f6edd7bb2fda964d8a24b4532b8af725bcefbb1513d9a60df86e983446fe9"),
+}
+# Only recorded task5 inputs may follow this fixed chain. Failed A1/B1/C2 have
+# distinct UNGRADED records; successful C1 retains the ordinary judged path.
+TASK5_A1_CELL = "0818571f-5ff7-4d39-9d2c-ced5ae44299e_A_r1"
+TASK5_B1_CELL = "0818571f-5ff7-4d39-9d2c-ced5ae44299e_B_r1"
+TASK5_C1_CELL = "0818571f-5ff7-4d39-9d2c-ced5ae44299e_C_r1"
+TASK5_C2_CELL = "0818571f-5ff7-4d39-9d2c-ced5ae44299e_C_r2"
+TASK5_RETAINED = {
+    TASK5_A1_CELL: (
+        "36247236594", "b23da4f1f5e81999039c473d27f3a70cc0d0681672ad08be0f9674b618915c97"),
+    TASK5_B1_CELL: (
+        "36248894311", "dd05f2ed43235b69d9eecfefadfb0a5ebd68d83b31daf38355a4acf6f0a21c5b"),
+    TASK5_C1_CELL: (
+        "36259780431", "ed11b060948692463105b5981245f4cedfaa3e597418313a7c55dc9c580a41bf"),
+    TASK5_C2_CELL: (
+        "36265102718", "db5c3fa1a927e88684b99b8eca93b6e442e97e05f500f36755c50000f3d42294"),
+}
 CLAIM_FORMAT = "codex-pilot-grade-claim-v1"
 RESULT_FORMAT = "codex-pilot-grade-terminal-v1"
 PROOF = "verified_publication_derived_not_independent_provider_authentication"
@@ -132,6 +188,21 @@ class Context:
         return self.terminal_revision if self.terminal_request is None else self.terminal_request
 
 
+def _task3_recorded(cell_id: str) -> tuple[str, str] | None:
+    return ((TASK3_A1_INFERENCE_RUN["id"], TASK3_A1_COMPLETION_SHA256)
+            if cell_id == TASK3_A1_CELL else TASK3_SUCCESSORS.get(cell_id))
+
+
+def _model_free_context(context: Context) -> bool:
+    return context.terminal_request is not None and context.cell["cell_id"] in {
+        TASK4_A1_CELL, TASK4_A2_CELL, TASK5_A1_CELL, TASK5_B1_CELL, TASK5_C2_CELL}
+
+
+def _shared_controller_successor(context: Context) -> bool:
+    return context.terminal_request is not None and context.cell["cell_id"] in {
+        *TASK3_SUCCESSORS, *TASK4_RETAINED, *TASK5_RETAINED}
+
+
 def compile_request(selector: str, source: str, terminal: str = "", *, producer_source_sha: str = "") -> Context | None:
     retained._target()  # Fixed tracked namespace/fingerprint, never an endpoint input.
     ci._registration_bytes()
@@ -149,16 +220,29 @@ def compile_request(selector: str, source: str, terminal: str = "", *, producer_
     recorded = TASK2_RETAINED.get(selector[6:])
     recorded_task2 = (fixed_refs and recorded is not None
                       and producer == B1_PRODUCER_SOURCE and terminal == recorded[1])
+    task3 = _task3_recorded(selector[6:])
+    recorded_task3 = (fixed_refs and task3 is not None
+                      and producer == TASK3_A1_PRODUCER_SOURCE and source != producer
+                      and terminal == task3[1])
+    task4 = TASK4_RETAINED.get(selector[6:])
+    recorded_task4 = (fixed_refs and task4 is not None
+                      and producer == TASK3_A1_PRODUCER_SOURCE and source != producer
+                      and terminal == task4[1])
+    task5 = TASK5_RETAINED.get(selector[6:])
+    recorded_task5 = (fixed_refs and task5 is not None
+                      and producer == TASK3_A1_PRODUCER_SOURCE and source != producer
+                      and terminal == task5[1])
+    recorded_content = recorded_task2 or recorded_task3 or recorded_task4 or recorded_task5
     require(producer == source or (
         fixed_refs and selector == "pilot/" + RETAINED_CELL
         and producer == RETAINED_PRODUCER_SOURCE and terminal == RETAINED_TERMINAL
-    ) or recorded_task2, "closed_retained_producer_binding_required")
+    ) or recorded_content, "closed_retained_producer_binding_required")
     plan, cell, grading = adapter.compile_cell_grading_plan(ci.CAMPAIGN, selector[6:], producer)
-    require(recorded_task2 or terminal == "" or output._hash(terminal, 40), "immutable_terminal_revision_required")
+    require(recorded_content or terminal == "" or output._hash(terminal, 40), "immutable_terminal_revision_required")
     require(terminal not in {source, producer, retained.BOOTSTRAP, plan["dataset"]["revision"]},
             "inference_terminal_revision_required")
-    return Context(plan, cell, grading, "" if recorded_task2 else terminal, source,
-                   terminal if recorded_task2 else None)
+    return Context(plan, cell, grading, "" if recorded_content else terminal, source,
+                   terminal if recorded_content else None)
 
 
 def _approval_request_sha256(source: str, selector: str, terminal: str, run: dict,
@@ -395,14 +479,28 @@ def _task2_resolution(context: Context, evidence: dict, revision: str) -> None:
     the moving inference ref again or promote a new candidate after a failure.
     """
     cell_id = context.cell["cell_id"]
-    recorded = TASK2_RETAINED.get(cell_id)
+    task3 = _task3_recorded(cell_id)
+    task4 = TASK4_RETAINED.get(cell_id)
+    task5 = TASK5_RETAINED.get(cell_id)
+    recorded = task5 or task4 or task3 or TASK2_RETAINED.get(cell_id)
     require(recorded is not None and context.terminal_request == recorded[1]
             and context.plan["run_id"] == "budget_pilot_ci_20260925_04"
-            and context.plan["reviewed_source_sha"] == B1_PRODUCER_SOURCE
+            and context.plan["reviewed_source_sha"] == (TASK3_A1_PRODUCER_SOURCE if task3 or task4 or task5 else B1_PRODUCER_SOURCE)
             and context.plan["order"][7:12] == list(TASK2_RETAINED)
             and retained.BRANCH == "pilot-inference-20260925-04" and BRANCH == "pilot-grades-20260925-04"
             and output._hash(revision, 40), "recorded_task2_request_required")
     terminal, claim, manifest = (evidence[key] for key in ("terminal", "claim", "manifest"))
+    if task3 or task4 or task5:
+        require(context.plan["order"][12:18] == [TASK3_A1_CELL, *TASK3_SUCCESSORS]
+                and context.controller_source_sha != TASK3_A1_PRODUCER_SOURCE
+                and (cell_id != TASK3_A1_CELL or claim["expected_parent"] == TASK3_A1_PREVIOUS_TERMINAL),
+                "recorded_task3_previous_inference_required")
+    if task4 or task5:
+        require(context.plan["order"][18:24] == list(TASK4_RETAINED), "recorded_task4_order_required")
+    if task5:
+        require(context.plan["order"][24:28] == list(TASK5_RETAINED)
+                and context.plan["order"][23:25] == [TASK4_A2_CELL, TASK5_A1_CELL],
+                "recorded_task5_order_required")
     completed = ci.validate_completion(terminal["completion"])
     require(pilot._digest(completed) == recorded[1], "recorded_task2_completion_mismatch")
     binding = claim["binding"]
@@ -660,6 +758,9 @@ def prepare(context: Context, root: Path, *, _test_api=None, _test_transport=Non
         with retained._session(_test_api, response_bytes_limit=output.MAX_FILE_BYTES) as (api, token, deadline):
             repo = retained._target()
             evidence = _retained_input(context, api, repo, cache, token, deadline)
+            if _model_free_context(context):
+                from codex_budget_pilot_ungraded import fixed_failure
+                fixed_failure(context, evidence)
             manifest = evidence["manifest"]
             prepared = {"cell_id": context.cell["cell_id"], "source_sha": context.plan["reviewed_source_sha"],
                 "controller_source_sha": context.controller_source_sha,
@@ -703,6 +804,9 @@ def prepare(context: Context, root: Path, *, _test_api=None, _test_transport=Non
                 if materialized["task_status"] != "success":
                     prepared.update(materialization=materialized, identity_sha256=identity_sha,
                                     reason="retained_result_unsuccessful_ungraded")
+                    if _model_free_context(context):
+                        from codex_budget_pilot_ungraded import prepare_record
+                        prepare_record(context, root, prepared, transport)
                     _record(root / "prepared.json", prepared)
                     return prepared  # Existing failed evidence, no invented verdict or paid claim.
                 checkout = root / "source"
@@ -728,6 +832,7 @@ def prepare(context: Context, root: Path, *, _test_api=None, _test_transport=Non
 
 
 def _ready(context: Context, root: Path) -> dict:
+    require(not _model_free_context(context), "model_free_terminal_not_judged")
     prepared = retained._read(root / "prepared.json")
     require(prepared["cell_id"] == context.cell["cell_id"]
             and prepared["campaign_id"] == ci.CAMPAIGN
@@ -810,8 +915,25 @@ def _validate_binding(value: dict, context: Context, entry: dict) -> None:
     require(value == _binding(context, reconstructed, run), "grade_claim_contract_mismatch")
 
 
+def _task3_grade_predecessor(context: Context, claim: dict) -> None:
+    if context.terminal_request is not None and (
+            _task3_recorded(context.cell["cell_id"]) is not None
+            or context.cell["cell_id"] in {*TASK4_RETAINED, *TASK5_RETAINED}):
+        ordinal = context.plan["order"].index(context.cell["cell_id"])
+        previous = claim.get("predecessor")
+        require(output._hash(claim.get("expected_parent"), 40) and claim["expected_parent"] != retained.BOOTSTRAP
+                and (context.cell["cell_id"] != TASK3_A1_CELL or claim["expected_parent"] == TASK3_A1_PREVIOUS_GRADE)
+                and type(previous) is dict and set(previous) == {"cell_id", "revision", "size", "sha256"}
+                and previous["cell_id"] == context.plan["order"][ordinal - 1]
+                and previous["revision"] == claim["expected_parent"]
+                and output._hash(previous["sha256"]) and type(previous["size"]) is int
+                and 0 < previous["size"] <= output.MAX_MANIFEST_BYTES,
+                "recorded_task3_grade_predecessor_required")
+
+
 def _grade_terminal(api, repo: str, revision: str, context: Context, entry: dict,
                     cache: Path, token: str, deadline: float) -> dict:
+    require(not _model_free_context(context), "model_free_terminal_not_judged")
     claim_path, terminal_path = _paths(context.cell)
     terminal, data = retained._control(api, repo, revision, terminal_path, cache, token, deadline,
                                        written_at=revision)
@@ -827,6 +949,7 @@ def _grade_terminal(api, repo: str, revision: str, context: Context, entry: dict
     require(set(claim) == {"format", "binding", "expected_parent", "predecessor"}
             and claim["format"] == CLAIM_FORMAT and claim["binding"] == terminal["binding"]
             and output._hash(claim["expected_parent"], 40), "grade_terminal_claim_mismatch")
+    _task3_grade_predecessor(context, claim)
     previous = claim["predecessor"]
     if context.terminal_request is not None:
         ordinal = context.plan["order"].index(context.cell["cell_id"])
@@ -843,6 +966,18 @@ def _grade_terminal(api, repo: str, revision: str, context: Context, entry: dict
                 and previous["revision"] == claim["expected_parent"] and output._hash(previous["sha256"])
                 and type(previous["size"]) is int and 0 < previous["size"] <= output.MAX_MANIFEST_BYTES,
                 "grade_predecessor_binding_mismatch")
+    if _shared_controller_successor(context):
+        # One-hop object/history proof, not a claim to independently verify Git
+        # topology. The actual prior terminal must survive the original claim.
+        require(len({claim["expected_parent"], terminal["claim_commit"], revision}) == 3,
+                "recorded_task3_grade_parent_mismatch")
+        ordinal = context.plan["order"].index(context.cell["cell_id"])
+        previous_path = _paths(context.plan["cells"][ordinal - 1])[1]
+        _, previous_data = retained._control(api, repo, claim["expected_parent"], previous_path,
+            _cache(cache, "predecessor"), token, deadline,
+            expected={key: previous[key] for key in ("size", "sha256")}, written_at=claim["expected_parent"])
+        retained._objects(api, repo, terminal["claim_commit"], [retained._object(previous_path, previous_data)],
+                          token, deadline, written_at=claim["expected_parent"])
     child = terminal["child"]
     require(set(child) == {"entry_invoked", "exit_code", "timed_out", "cleanup_confirmed"}
             and child["entry_invoked"] is True and child["cleanup_confirmed"] is True
@@ -888,6 +1023,9 @@ def _branch_tip(api, repo: str, context: Context, prepared: dict, cache: Path, t
 
     head = output._metadata(api, repo, BRANCH, token, deadline)["sha"]
     recorded_task2 = context.terminal_request is not None
+    task3 = recorded_task2 and context.cell["cell_id"] == TASK3_A1_CELL
+    if task3:
+        require(head == TASK3_A1_PREVIOUS_GRADE, "recorded_task3_previous_grade_required")
     if recorded_task2 and context.cell["cell_id"] == B1_CELL:
         require(head == B1_PREVIOUS_GRADE, "recorded_b1_previous_grade_required")
     if recorded_task2:
@@ -908,26 +1046,52 @@ def _branch_tip(api, repo: str, context: Context, prepared: dict, cache: Path, t
     preliminary = _cache(cache, "tip_binding")
     value, _ = retained._control(api, repo, head, candidates[0].path, preliminary, token, deadline, written_at=head)
     if recorded_task2:
-        if cell["cell_id"] in {RETAINED_CELL, B1_CELL}:
+        if task3 or cell["cell_id"] in {RETAINED_CELL, B1_CELL}:
             from codex_budget_pilot_grade_readout import _writer_context, _writer_entry, _writer_run
 
-            request = RETAINED_TERMINAL if cell["cell_id"] == RETAINED_CELL else TASK2_RETAINED[B1_CELL][1]
+            request = RETAINED_TERMINAL if cell["cell_id"] == RETAINED_CELL else TASK2_RETAINED[cell["cell_id"]][1]
             other = _writer_context(request)
             require(value["binding"]["github_run"] == _writer_run(other), "recorded_task2_previous_writer_mismatch")
             entry = _writer_entry(other, value["binding"]["renderer_fingerprint"])
         else:
-            # Future C1/C2/B2 grades must all use the controller declared for
+            # Recorded successors must all use the controller declared for
             # this request. Never derive that authority from the prior record.
+            task3_previous = (_task3_recorded(cell["cell_id"]) or TASK4_RETAINED.get(cell["cell_id"])
+                              or TASK5_RETAINED.get(cell["cell_id"]))
             other = compile_request("pilot/" + cell["cell_id"], context.controller_source_sha,
-                TASK2_RETAINED[cell["cell_id"]][1], producer_source_sha=B1_PRODUCER_SOURCE)
-            entry = prepared["entry"]
+                (task3_previous or TASK2_RETAINED.get(cell["cell_id"]))[1],
+                producer_source_sha=TASK3_A1_PRODUCER_SOURCE if task3_previous else B1_PRODUCER_SOURCE)
+            entry = prepared["predecessor_entry"] if _model_free_context(context) else prepared["entry"]
         if other.terminal_request is not None:
+            if task3:
+                require(value["binding"]["retained"]["terminal_commit"] == TASK3_A1_PREVIOUS_TERMINAL,
+                        "recorded_task3_previous_inference_required")
             _grade_retained_input(other, value["binding"], api, repo, _cache(cache, "tip_inference"), token, deadline)
     else:
         other = compile_request("pilot/" + cell["cell_id"], context.controller_source_sha,
             value["binding"]["retained"]["terminal_commit"], producer_source_sha=context.plan["reviewed_source_sha"])
         entry = prepared["entry"]
-    verified = _grade_terminal(api, repo, head, other, entry, _cache(cache, "tip_verified"), token, deadline)
+    if recorded_task2 and context.cell["cell_id"] == TASK5_C2_CELL:
+        from codex_budget_pilot_ungraded import _task5_c2_predecessor
+
+        verified = _task5_c2_predecessor(api, repo, head, context, entry,
+            _cache(cache, "c2-predecessor"), token, deadline)
+    elif recorded_task2 and context.cell["cell_id"] in {TASK4_B1_CELL, TASK5_A1_CELL, TASK5_B1_CELL, TASK5_C1_CELL}:
+        from codex_budget_pilot_ungraded import verify_terminal
+        if context.cell["cell_id"] == TASK5_A1_CELL:
+            require(other.cell["cell_id"] == TASK4_A2_CELL, "fixed_model_free_task5_predecessor_required")
+        if context.cell["cell_id"] == TASK5_B1_CELL:
+            require(other.cell["cell_id"] == TASK5_A1_CELL, "fixed_model_free_task5_b1_predecessor_required")
+        if context.cell["cell_id"] == TASK5_C1_CELL:
+            require(other.cell["cell_id"] == TASK5_B1_CELL, "recorded_task5_c1_predecessor_required")
+        verified = verify_terminal(api, repo, head, other, entry, _cache(cache, "tip_verified"), token, deadline)
+        if context.cell["cell_id"] == TASK5_B1_CELL:
+            from codex_budget_pilot_ungraded import _task5_b1_revisions
+
+            _task5_b1_revisions(api, repo, head, verified["terminal"], _cache(cache, "b1-predecessor-revisions"),
+                               token, deadline)
+    else:
+        verified = _grade_terminal(api, repo, head, other, entry, _cache(cache, "tip_verified"), token, deadline)
     if recorded_task2:
         require(prepared["evidence"]["claim"]["predecessor"] == verified["terminal"]["binding"]["retained"],
                 "recorded_task2_inference_predecessor_mismatch")
@@ -981,9 +1145,13 @@ def claim(context: Context, root: Path, *, _test_api=None) -> dict:
                 value = {"format": CLAIM_FORMAT, "binding": binding, "expected_parent": head, "predecessor": previous}
                 name = _paths(context.cell)[0]
                 revision = _commit(api, repo, head, {name: retained._encoded(value)}, token, deadline, result)
-                confirmed, _ = retained._control(api, repo, revision, name, _cache(root, "claim-verified"), token, deadline,
+                confirmed, confirmed_data = retained._control(api, repo, revision, name, _cache(root, "claim-verified"), token, deadline,
                                                  expected=pilot._identity(retained._encoded(value)), written_at=revision)
                 require(confirmed == value, "grade_claim_verification_failed")
+                if _shared_controller_successor(context):
+                    # Keep canonical server-readback bytes in the existing
+                    # verified cache, independent of HF's internal cache layout.
+                    _put(root / "claim-verified" / (revision + ".json"), confirmed_data)
                 result.update(outcome="acknowledged", claim=value, claim_identity=pilot._identity(retained._encoded(value)))
         except (Exception, KeyboardInterrupt) as error:
             _failed(result, error)
@@ -998,6 +1166,11 @@ def _admission(context: Context, root: Path, prepared: dict) -> dict:
             and value["claim_identity"] == pilot._identity(retained._encoded(value["claim"]))
             and retained._read(root / "claim-reserved.json") == value["claim"]["binding"],
             "acknowledged_grade_admission_required")
+    _task3_grade_predecessor(context, value["claim"])
+    if _shared_controller_successor(context):
+        confirmed = output._bytes(root / "claim-verified" / (value["returned_commit"] + ".json"),
+                                  limit=output.MAX_MANIFEST_BYTES, expected=value["claim_identity"])
+        require(confirmed == retained._encoded(value["claim"]), "recorded_task3_grade_admission_mismatch")
     return value
 
 
@@ -1262,7 +1435,7 @@ def main(argv=None, *, _test_api=None, _test_transport=None) -> int:
     parser.add_argument("--producer-source-sha", default="")
     parser.add_argument("--terminal-revision", default="")
     parser.add_argument("--root", required=True, type=Path)
-    parser.add_argument("--phase", choices=("plan", "readout", "inspect", "setup", "prepare", "claim", "judge", "publish", "reconcile"), default="plan")
+    parser.add_argument("--phase", choices=("plan", "readout", "inspect", "setup", "prepare", "claim", "judge", "publish", "reconcile", "record-ungraded"), default="plan")
     args = None
     try:
         args = parser.parse_args(argv)
@@ -1295,17 +1468,22 @@ def main(argv=None, *, _test_api=None, _test_transport=None) -> int:
             return 0 if observed["outcome"] in {"plan_only", "observed"} else 2
         observed = _observation("plan_only", stage="plan")
         ready = False
+        record_ready = False
         if args.phase == "setup":
             observed = setup(args.root, args.reviewed_source_sha, branch=reserved[1], _test_api=_test_api)
         elif args.phase == "prepare":
             prepared = prepare(context, args.root, _test_api=_test_api, _test_transport=_test_transport)
             ready = prepared["judge_ready"]
+            record_ready = prepared.get("model_free_record_ready", False)
             observed.update(outcome="prepared" if ready else "ungraded", stage="preparation", reason=prepared.get("reason"))
         elif args.phase == "judge":
             child = judge(context, args.root, _test_transport=_test_transport)
             observed.update(outcome="owned_cleanup_confirmed" if child["cleanup_confirmed"] else "unresolved", stage="judge")
         elif args.phase in {"claim", "publish", "reconcile"}:
             observed = {"claim": claim, "publish": publish, "reconcile": reconcile}[args.phase](context, args.root, _test_api=_test_api)
+        elif args.phase == "record-ungraded":
+            from codex_budget_pilot_ungraded import record
+            observed = record(context, args.root, _test_api=_test_api, _test_transport=_test_transport)
         public = {"role": "fixed_private_pilot_grading", "repository_name_sha256": retained.TARGET_SHA256,
             "campaign_id": ci.CAMPAIGN,
             "source_sha": args.reviewed_source_sha if context is None else context.plan["reviewed_source_sha"],
@@ -1317,10 +1495,15 @@ def main(argv=None, *, _test_api=None, _test_transport=None) -> int:
             "judge_entry_requested": args.phase == "judge", "automatic_retry": False}
         if reserved is not None:
             public.update(returned_commit=observed.get("returned_commit"), grade_success=False, model_requested=False)
+        if context is not None and _model_free_context(context):
+            public.update(model_free_record_ready=record_ready, model_requested=False, grade_success=False,
+                          record_kind="model_free_ungraded", grading_state=observed.get("grading_state", "UNRUN"))
         print(pilot._canonical_json(public))
         if args.phase == "prepare" and os.environ.get("GITHUB_OUTPUT"):
             with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as stream:
                 stream.write("judge_ready=" + str(ready).lower() + "\n")
+                if _model_free_context(context):
+                    stream.write("model_free_record_ready=" + str(record_ready).lower() + "\n")
                 if ready:
                     from core.azure_ai_clients import grader_route_workloads
                     stream.write("azure_ai_workloads_json=" + json.dumps([

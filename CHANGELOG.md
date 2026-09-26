@@ -11,7 +11,443 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ## [Unreleased]
 
+### Changed
+
+- Record the leader's authorization for one ordinary push of the already
+  completed task5 B1-failure/C1-ordinary/C2-failure bundle to the same draft
+  PR686, from clean local `3202db6959e923e5f10ed5c43300ceed446f8fb6` after
+  confirming published `72f1b999583baa95f5e5bbf8d364928f9c326c27`. This
+  publication update changes only the two completion records. All exact
+  tested SHAs, separate failed invocations and fixture-only corrections below
+  remain unchanged; no production, workflow or test file changed, and no test
+  was rerun. Task5 A1/B1/C2 stay fixed scoreless no-judge paths; C1 retains its
+  ordinary Step8/cleanup requirement. B2/A2 remain unregistered, with no B2
+  outcome inferred and A2 not dispatched at the leader's handoff. Old72f1 review
+  `5326493571` and nine passing checks do not cover this bundle. New-head leader
+  review/CI, held `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e`, the reviewed
+  declared controller, actual predecessor proofs and individual protected live
+  approval remain gates. No source change, merge, live record, quality claim,
+  CI polling or manual workflow rerun is authorized by this publication.
+
 ### Fixed
+
+- Align only the shared task3 grading-chain test helper with the existing
+  task5 registry. Require exact A1/B1/C1/C2 membership and order at original
+  indices 24–27 and one occurrence of each selector, while retaining absence
+  checks for the unregistered B2/A2 tail at indices 28 onward. Every other
+  guard remains intact; production, workflow, fixtures and registrations are
+  unchanged. The leader-supplied CI at
+  `063aa9df97e65d1c2c5dbdfaf1103c1043fbba83` reported **2 failed, 1442 passed
+  in 1632.16s** in run `36269127396`, pilot-contracts job `108479588699`,
+  summary emitted `2026-09-26T20:56:02Z`. This was assertion failure, not
+  timeout; eight other checks passed. One offline runner selecting only the
+  two failed `[chain]` nodes returned **2 collected, 2 passed in 28.90s**,
+  exit **0**, at `1f216e8c6ee7a6773c4423c9236eb8aad7b50ad8`. These observations
+  and all older results remain separate; no passing family or suite was rerun.
+  Only the two completion records changed after that tested SHA. Review
+  `5327367279` covers old063aa9, not this repair. New-head leader review/CI,
+  held `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e`, the declared shared
+  controller, actual predecessor proofs and individual protected live approvals
+  remain gates. B2/A2 stay unregistered. One ordinary push to the same PR686 is
+  authorized; no merge, main/source change, live execution, CI polling or manual
+  workflow rerun is authorized by this repair.
+
+- Earlier HF-phase endpoint: correct only the two pilot workflow-contract tests
+  that still expected five
+  HF-token steps. They now require exactly one step for each of `setup`,
+  `inspect`, `prepare`, `claim`, `publish` and `record-ungraded`, with no extra
+  or duplicate phase. The recorder's full command, HF_TOKEN-only step env,
+  5-minute timeout and exact grouped task4 A1/task4 A2/task5 A1 condition are
+  pinned, including `model_free_record_ready=true` AND `judge_ready=false`.
+  Existing approval, source/ref/attempt, branch-inspection, credential isolation,
+  OIDC/readiness, ordinary publication and no-public-upload assertions remain.
+  No production or workflow file changed in this correction. The leader-supplied
+  published-head CI result at `7abad5176d68f8172e83522c88adad7432dcc4d3` was
+  **2 failed, 1177 passed in 1568.33s** in Backend Tests run `36248489379`,
+  pilot-contracts job `108421996858`, completed `2026-09-26T15:02:15Z`.
+  This was assertion failure, not timeout; eight other checks succeeded.
+  One local invocation selecting only those two failed nodes returned
+  **2 passed in 1.94s**, exit **0**, at
+  `7021308b0df63497dbcd38d6d27fce3247a25a09`. This remains separate from
+  that failed CI and the earlier **52 passed in 57.59s** at
+  `4d32c2f141c865fc7bb4859e129eb4b57b150bbf`; none is combined or rerun.
+  At that endpoint, only completion records changed after the new tested SHA.
+  The unchanged
+  task5 A1 delta and this correction are prepared for one authorized push to
+  the same PR686. Review `5326230185` covers old7abad only; new-head direct
+  review and CI, held780, the declared controller, actual predecessor records
+  and individual live approval remain gates. No main/source change, live call,
+  merge, manual workflow rerun or CI polling occurred.
+
+### Added
+
+- Prepare only failed task5 C2, ordinal 27, under the explicit
+  `task5-c2-model-free-ungraded` policy, with inference run `36265102718`,
+  completion `db5c3fa1a927e88684b99b8eca93b6e442e97e05f500f36755c50000f3d42294`
+  and producer `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e`. This fifth fixed
+  failure requires the actual ordinary C1 grade and its fixed
+  26-to-25-to-24-to-23-to-22 backing chain under a caller-declared shared
+  controller. Ten predecessor claim/terminal revisions must be distinct before
+  CAS, and twelve including C2's pair during readback. C2-only canonical claim,
+  reservation and receipt checks preserve types. The scoreless record retains
+  the original failed completion, denominator and partial receipt, with separately
+  unmeasured recorder accounting; it invokes no Step8/LLM/OIDC and invents no
+  child, cleanup, numeric grade or rubric verdict. C1 remains ordinary, earlier
+  policies stay intact, and B2/A2 remain unregistered. Only the three producer
+  mappings and the grouped five-failure selector gain C2; six HF-token phases,
+  source/approval/privacy/CAS/readback/lost-response/no-replay guards remain.
+  The leader reported exit 1, zero deliverables, cleanup confirmed, timeout false
+  and no grade. Partial known inference USD 0.24 and 146185 input/7303 output/
+  104448 cached/5194 reasoning tokens are not a total invoice; estimated cost
+  and HTTP count remain null, invoice false. The outer 22m34s does not establish
+  an internal attempt count, failure cause, deadline exhaustion or causal benefit.
+  The initial C2-only selector returned **77 passed, 1 failed in 103.16s**,
+  exit **1**, at `af060fa58e71485268789d6a0ef53e036fe48e2c`. Only the alias
+  fixture's synthetic file-history metadata needed correction to reach the
+  intended distinct-revision guard. That node alone returned **1 passed in
+  56.15s**, exit **0**, at `9e1518f883ef9c551271c755f635b5e5181465a0`;
+  production was unchanged. These remain separate observations, as do earlier
+  C1's **68 passed, 1 failed in 154.31s** at
+  `6c0124229a377e5f7fd95ead80f50a4be0291743` and cleanup-only **1 passed in
+  50.17s** at `ddce821a0a6315e2d18044b9eb9fc1c886cd640f`, and B1's
+  **66 passed in 116.09s** at `d0c4577a51124b55970dec67ad2cdf7804e3c658`.
+  No passing family or suite was rerun. Only completion records changed after
+  the final tested SHA. All B1/C1/C2 work remains local and unpublished;
+  published72f1/review `5326493571` and nine passing checks do not cover it.
+  Held780, future publication/review/new-head CI, the reviewed declared controller,
+  actual ordinary C1 and its backing records, fixed-content terminal resolution
+  and individual protected live approval remain gates. No push, live call,
+  CI polling, merge or main/source change occurred.
+
+- Prepare ordinary first grading only for retained task5 C1, ordinal 26,
+  inference run `36259780431`, completion
+  `ed11b060948692463105b5981245f4cedfaa3e597418313a7c55dc9c580a41bf`, producer
+  `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e`. C1 consumes the actual future
+  B1 UNGRADED record through the existing fixed 25-to-24-to-23-to-22 verifier,
+  including eight distinct predecessor claim/terminal revisions, under the
+  caller-declared shared controller. Its ordinary entry hashes must match B1's
+  predecessor-hash projection; source/content/observation equality and all
+  approval, canonical admission, private CAS/readback, privacy, cleanup and
+  no-replay guards remain. C1 is not a fifth failure exception: the four
+  recorder selectors and ordinary Step8-invoked publication requirements stay
+  unchanged. Only C1 is added to the three workflow producer mappings;
+  C2/B2/A2 remain unregistered. Inference, rubric, budgets and the fixed Sol/max
+  judge are unchanged. The leader reported C1 execution success with four
+  deliverable identities and no grade. Its outer 73m49s is not an internal
+  attempt count or causal proof. Partial known inference USD 0.480251 and
+  358519 input/17806 output/303616 cached/10955 reasoning tokens are not a
+  total invoice; estimated cost and HTTP count remain null, invoice false.
+  No private terminal, future grade record or quality score was invented.
+  The bounded pre-edit decision was APPROVE-WITH-CONDITIONS. The new C1-only
+  selector returned **68 passed, 1 failed in 154.31s**, exit **1**, at
+  `6c0124229a377e5f7fd95ead80f50a4be0291743`. Only its cleanup-loss assertion
+  needed correction: the existing judge guard returned unresolved instead of
+  success. The corrected `[cleanup]` node alone returned **1 passed in 50.17s**,
+  exit **0**, at `ddce821a0a6315e2d18044b9eb9fc1c886cd640f`; production was
+  unchanged by that correction. These results and earlier B1's **66 passed in
+  116.09s** at `d0c4577a51124b55970dec67ad2cdf7804e3c658` remain separate,
+  not a combined pass count. Shared genuine synthetic writers and isolated
+  mutations kept external/model boundaries fake or blocked; no passing family
+  or suite was rerun. Only the two completion records changed after the final
+  tested SHA. All work remains local and unpublished. Published72f1 review
+  `5326493571` and nine passing checks do not cover the B1/C1 deltas. Held780,
+  future publication/review/new-head CI, the reviewed declared controller,
+  actual predecessor records and individual protected live approval remain
+  gates. No push, live call, CI polling, merge or main/source change occurred.
+
+- Earlier task5 B1 endpoint: prepare only the recorded failed task5 B1,
+  ordinal 25, under the explicit
+  `task5-b1-model-free-ungraded` policy: inference run `36248894311`, completion
+  `dd05f2ed43235b69d9eecfefadfb0a5ebd68d83b31daf38355a4acf6f0a21c5b`, producer
+  `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e`. This fourth fixed failure is
+  not an A-arm-only rule or a general skip. It adds only the exact
+  25-to-24-to-23-to-22 chain through task5 A1 UNGRADED, task4 A2 UNGRADED and
+  ordinary task4 B2 under the explicitly declared shared future controller.
+  The existing verifiers remain required; a B1-only fixed two-hop helper checks
+  the six predecessor claim/terminal revisions before CAS and all eight with
+  B1's own pair on readback. Nonadjacent revision reuse, wrong cell/order,
+  changed source/content, typed claim bindings and predecessor identities
+  refuse. Earlier policy tags, historical handoffs and ordinary Step8/cleanup
+  requirements are unchanged. B1's separate record remains scoreless and
+  invokes no OIDC/Step8/LLM or fabricated judge child. Original failure,
+  denominator, partial receipt and missingness stay bound; recorder accounting
+  is separately unmeasured/null. The leader-supplied outer step was 153m23s,
+  exit 1, `child_nonzero_exit`, one child, cleanup true, cell timeout false,
+  zero deliverables and no grade; the cause and internal attempt count remain
+  unknown, and this is not evidence of 180-minute exhaustion. Its partial
+  known inference receipt is USD 0.347961, with 283806 input, 12530 output,
+  244224 cached and 10162 reasoning tokens; estimated cost/HTTP count are null
+  and `invoice_complete=false`, not a total invoice. Only B1 is added to the
+  three producer mappings and grouped four-failure recorder condition. All six
+  HF-token phases, protected approval, source pins, private no-clobber resolution,
+  two one-use fixed-parent CAS writes, canonical readbacks, privacy and unresolved
+  lost-response/no-replay guards remain. The remaining unregistered task5
+  fixed-content cells stay closed. Inference budgets and the fixed Sol/max judge remain unchanged;
+  no readout registry or arbitrary source override was added.
+  The bounded pre-edit decision was APPROVE-WITH-CONDITIONS. One new focused
+  offline invocation returned **66 passed in 116.09s**, exit **0**, at
+  `d0c4577a51124b55970dec67ad2cdf7804e3c658`, with shared genuine synthetic
+  history and isolated mutations, all external/model boundaries fake or blocked.
+  This remains separate from the earlier **52 passed in 57.59s**,
+  **2 passed in 1.94s**, and published7abad CI's
+  **2 failed, 1177 passed in 1568.33s**; no earlier family or suite was rerun.
+  Only the two completion records changed after the tested SHA. Work remains
+  local and unpublished; leader review `5326493571` and nine passing checks
+  cover published `72f1b999583baa95f5e5bbf8d364928f9c326c27` only. Held780,
+  a reviewed declared controller, actual predecessor records and separate
+  exact live approval remain gates. No push, CI polling, live call, merge,
+  main/source/Project/credential change or old-record rewrite occurred.
+
+- Earlier task5 A1 endpoint: prepare only the recorded failed task5 A1,
+  ordinal 24, under the explicit
+  `task5-a1-model-free-ungraded` policy. Its original inference run is
+  `36247236594`, completion
+  `b23da4f1f5e81999039c473d27f3a70cc0d0681672ad08be0f9674b618915c97`,
+  with producer `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e`. The new
+  scoreless record must verify the actual task4 A2 UNGRADED record and that
+  record's ordinary B2 backing grade under the same explicitly declared
+  controller. Only this fixed 24-to-23-to-22 chain is added; five distinct
+  record revisions, original claim identities, complete retained-inference
+  equality and canonical typed bytes remain required. Existing task4 policy
+  tags, predecessor rules and ordinary Step8-invoked requirements are unchanged.
+  The new record invokes no OIDC/Step8/LLM and adds no numeric quality score,
+  rubric verdict or fabricated child receipt. Original failure, denominator,
+  partial receipt and missingness stay bound; recorder accounting is separately
+  unmeasured/null, not a zero-cost invoice. The three workflow producer mappings
+  and grouped recorder condition add only task5 A1. Protected approval,
+  no-clobber resolution, two one-use fixed-parent CAS writes, server readback,
+  privacy, unresolved lost responses and no replay remain mandatory. All other
+  task5 fixed-content requests remain closed; no inference/grader/budget change,
+  general skip policy, source override or readout registry was added.
+  The bounded pre-edit review approved only this extension with conditions.
+  One new focused selector returned **52 passed in 57.59s**, exit **0**, at
+  `4d32c2f141c865fc7bb4859e129eb4b57b150bbf`, using a shared genuine synthetic
+  history and isolated mutations with external/model boundaries fake or blocked.
+  No prior selector or full suite was rerun. At that task5 endpoint, only the two
+  completion records changed after this tested SHA; all previous results below
+  remain separate.
+  Published PR686 head `7abad5176d68f8172e83522c88adad7432dcc4d3` and review
+  `5326230185` do not cover this local delta. The supplied initial CI observation
+  was 7 passed, with pilot-contracts and native-host running, not a final gate
+  result. At that endpoint this extension was local and unpublished; the completed
+  CI and newly authorized accumulated push are recorded above. Held780 is unchanged;
+  the actual A2 record, its ordinary B2 backing grade, a reviewed shared controller
+  and separate exact live request approval remain gates. At that endpoint no push,
+  CI polling, live call, merge, Project/credential change or old-record rewrite
+  occurred.
+
+### Previously recorded endpoints, before task5 A1 preparation
+
+- Complete the fixed task4 intake with the leader-authorized second model-free
+  UNGRADED binding for failed A2, ordinal 23, inference run `36245490377`,
+  completion `8f2f6edd7bb2fda964d8a24b4532b8af725bcefbb1513d9a60df86e983446fe9`.
+  A2 requires its actual ordinary B2 grade under the explicitly declared shared
+  controller. A1's policy/tag and historical predecessor, B1's distinct A1
+  verifier, task3 boundaries and strict Step8-invoked judged terminals remain
+  unchanged.
+  Only the two fixed failed A cells may use the model-free recorder; they do
+  not invoke OIDC/Step8/LLM or receive numeric quality scores, fabricated child
+  receipts or rubric verdicts. Original failure, denominator, receipt and
+  missingness remain bound; recorder accounting is separately unmeasured/null,
+  not a zero-cost invoice. The grouped workflow condition and three producer
+  mappings add only A2. No general skip policy, source override, reader registry,
+  task5 registration or inference/grader/budget change was added. The bounded
+  pre-edit reviewer approved this second failure binding with conditions.
+  One A2-focused selector returned **46 passed in 52.10s**, exit **0**, at
+  `32767a5a6c8861b58d14bbc79a39fea396533847`. It reused one genuine synthetic
+  failed-A1/ordinary-B1/C1/C2/B2 history and added failed A2; isolated mutations
+  cover source/content/receipt/approval/predecessor/privacy checks, canonical
+  evidence, fixed-parent CAS, readback, lost responses and no replay. External
+  and model boundaries were fake or blocked. Only completion records changed
+  after this tested SHA. No prior passing selector or full suite was rerun.
+  The earlier C1/C2/B2-only selector remains **40 passed in 78.13s**, exit **0**, at
+  `e0e0c8ca2ea5ef4b4d83a4448216e716361a2ee3`, using one genuine synthetic
+  history and isolated mutations behind fake or blocked external boundaries.
+  That earlier selector covered the three bindings, advanced-ref resolution,
+  ordinary child requirements, source/content/predecessor/approval/privacy refusals, CAS,
+  lost responses, replay and unchanged old records. No prior passing family
+  or full suite was rerun. The earlier **1 failed, 40 passed in 75.30s** at
+  `e42c8c68f7e0f16366c1ec5a12fbc4e663c10ee1` and **10 passed, 40 deselected
+  in 36.58s** at `c4b539d210bb138ed2dd3afd68e6509d079dd8ec` remain separate
+  below; none of these observations is combined. The task4 cohort has six
+  retained inference terminals: A1/A2 failed, B1/C1/C2/B2 succeeded, none graded.
+  This is one task with two repetitions per condition, not causal recovery
+  proof or a model quality score. A2's partial known USD 0.084485 is an inference
+  receipt, not a total or invoice; estimated cost and HTTP count are null,
+  invoice completeness is false. Its child cause and internal attempt count are
+  unknown. No private A2 terminal revision or future grade run is invented.
+  Main/inference source `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e` remains
+  held. Published PR686 head `e6c357374ea5b3b19e72f574e77dcaa5e3619a84`,
+  review `5325618521` and 9 passing checks do not cover the accumulated task4
+  delta. One update to the same PR686 is authorized; new-head leader review
+  and CI remain outstanding. A declared shared controller, actual predecessor
+  grades and separate one-result
+  approval remain required. No merge, live call, source/old-record/Project
+  change or CI polling occurred. Held780 task5 A1 run `36247236594` was not
+  queried or affected; no quality was inferred from retention metadata.
+
+- Add a distinct, local-only model-free UNGRADED claim/terminal path for the
+  leader-authorized recorded task4 A1 failure, plus B1 verification of that
+  exact ungraded predecessor. That earlier endpoint registered only these two
+  task4 run/completion bindings. The A1 recorder preserves failed status,
+  original completion,
+  denominator, partial receipt and missingness without invoking Step8 or OIDC
+  or adding a judge child, numeric quality score or rubric verdict. Recorder
+  costs remain separately unmeasured, not zero. Ordinary judged-terminal requirements stay
+  strict. Actual task3 A2 predecessor proof, the declared shared controller,
+  source/input/byte/privacy checks, protected approval, no-clobber resolution,
+  separate one-use claim/publication reservations, fixed-parent CAS and verified
+  server readback remain required. Lost responses stay unresolved and cannot
+  be replayed; later independent B1 verification does not rewrite A1's receipt.
+  The bounded pre-edit reviewer approved this local contract with conditions;
+  complete canonical-byte equality also rejects numeric/boolean substitution.
+  The new selector returned **1 failed, 40 passed in 75.30s**, exit **1**, at
+  `e42c8c68f7e0f16366c1ec5a12fbc4e663c10ee1`; **9** cases were unexecuted.
+  The failed receipt mutation was a fixture no-op on an already-null value.
+  Only that fixture was corrected; the failing case plus unexecuted cases
+  returned **10 passed, 40 deselected in 36.58s**, exit **0**, at
+  `c4b539d210bb138ed2dd3afd68e6509d079dd8ec`. The 40 passes were not repeated;
+  there is no combined 50-case passing result. Prior **1 failed, 15 passed in
+  29.96s** at `0d22d32733b8c3238344fdd9dd19815b2ba8cb8f` and **1 passed in
+  34.50s** at `3e692fed1e1734f4e8c82b6d8c4d41b8e48e63f2` remain separate,
+  as do all task3 observations. Only completion records changed afterward.
+  Source `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e` remains held. PR686
+  head `e6c357374ea5b3b19e72f574e77dcaa5e3619a84`, review `5325618521` and
+  9 passing checks do not cover this delta. Actual task3 A2 grading, a reviewed
+  common controller, fresh review/authorized CI and individual live request
+  approval remain gates. No push, republication, live call, source/old-record
+  change, merge, Project mutation or CI polling occurred. At that endpoint,
+  other task4/task5 fixed-content requests remained closed; inference, model,
+  rubric and budget policy are unchanged.
+
+- Reproduce the task4 failed-A1/successful-B1 grading boundary offline without
+  activating either fixed-content request. Real native-error/Step2 serialization,
+  ledger and materialization helpers retain A1 as failed and locally ungraded;
+  claim, judge and publication refuse with
+  `bound_native_materialization_required`. Published `ungraded` terminals still
+  require an actual judge entry and owned cleanup, so local preparation cannot
+  become the actual immediate grade predecessor required by the recorded B1
+  route. The generic same-source diagnostic does not prove that stricter rule.
+  Both supplied task4 requests remain closed with
+  `closed_retained_producer_binding_required`; no production, workflow,
+  registration, source/input/runtime/budget or fixed grader policy changed.
+  The bounded reviewer approved only this test-and-records endpoint, not a
+  no-judge terminal or skipped-predecessor policy. The new selector returned
+  **1 failed, 15 passed in 29.96s**, exit **1**, at
+  `0d22d32733b8c3238344fdd9dd19815b2ba8cb8f`. Its sole failure was a new fixture
+  lookup of an unnamed workflow step. The one-line correction preserves every
+  required guard assertion; only `[workflow_guards]` was rerun, returning
+  **1 passed in 34.50s**, exit **0**, at
+  `3e692fed1e1734f4e8c82b6d8c4d41b8e48e63f2`. These results are separate,
+  not a combined 16-case pass. Only completion records changed afterward.
+  Earlier task3 **39 passed in 55.71s**, **20 passed in 37.62s**, the original
+  setup error and earlier A1 outcomes remain separate below and were not rerun.
+  Supplied task4 A1 run `36234320019` remains a retained execution failure with
+  zero deliverables and no grade; B1 run `36235926112` remains a retained
+  execution success with no grade or quality claim. Partial known inference
+  costs **USD 0.060359** / **USD 0.262451** are not totals or invoices;
+  estimated costs and HTTP counts are null, invoice completeness false. The
+  underlying A1 child cause and internal attempt count remain unknown. The
+  leader must decide the missing durable no-judge evidence policy; task3 A2's
+  actual preceding grade and a declared common controller remain unbound.
+  Review `5325618521` and all **9** passing CI checks cover only prior PR686
+  head `e6c357374ea5b3b19e72f574e77dcaa5e3619a84`, not these local changes.
+  Main/inference source `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e` remains
+  held. The separately running task4 C1 was not queried or registered. No push,
+  republication, merge, dispatch, live call, Project mutation or CI polling
+  occurred. Fresh review and any later authorized CI remain required.
+
+### Fixed
+
+- Complete offline task3 grading preparation for A1/B1/C1/C2/B2/A2 by adding
+  only the final A2 binding to the prepared successor chain. A2, ordinal **17**,
+  remains bound to producer `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e`, inference
+  run `36232859421` and completion request
+  `f4de6c1d36c8f3a2c077be9e4be370545eeb5a11d9513752caa4d40bd08e1bd8`.
+  The finite table binds original inference runs and completion checksums;
+  each requires the actual immediate prior grade under the same caller-declared
+  future controller as A1. The A1 transition to historical task2 A2 remains
+  intact. Successor admission checks canonical server-readback claim bytes in
+  the existing private verified cache. Terminal validation checks the direct
+  predecessor's bounded identity and unchanged object/last-writer evidence at
+  the original claim commit. This is not independent verification of Git-parent
+  topology or original outer metadata. Only the three coupled workflow producer
+  mappings change; inference, grader, source pins, approval, fixed-parent CAS,
+  no-clobber resolution, privacy, cleanup and no-replay controls are preserved.
+  The bounded pre-edit reviewer approved the original B1/C1/C2/B2 extension
+  with conditions, not this final A2 delta. Initial
+  validation at `0b6e62d722cc7394c7eedb23d7265cad816599bd` stopped with
+  **1 setup error in 22.37s**, exit **1**, and no passed cases because task3
+  fixture directories collided with historical task2 writer directories.
+  After the fixture-only directory correction, the new focused selector
+  returned **39 passed in 55.71s**, exit **0**, at
+  `200bb89ce83bcab1f7c04c4d770f98e0a23a380b`. It builds genuine synthetic
+  history once and isolates mutations; it is not native, live or quality evidence.
+  The final A2-only selector returned **20 passed in 37.62s**, exit **0**, at
+  `342bc6d47a5ca2c2dd582519a5730111fc4190c9`, using the same shared synthetic
+  history through B2/A2 and isolated refusal/no-mutation cases. It validates the
+  final row, exact predecessor/full chain, unregistered others, tampering, CAS
+  and lost acknowledgment. The earlier **39** passing cases were not selected;
+  these are separate observations, not a combined pass count. Only the two
+  completion records changed after this tested SHA. All six task3 inferences
+  are retained, not graded. A2's leader-verified execution/retention, completion
+  and two deliverable identities do not establish quality or recover raw files.
+  Its partial known inference cost **USD 0.478969** is not a total or invoice;
+  estimated cost and HTTP count are null, invoice completeness false.
+  Prior A1 **1 failed, 26 passed in 307.84s** and **5 passed in 72.19s** remain
+  separate below and were not rerun. Review `5325122042` and all **9** CI checks
+  apply only to published PR686 head `e4a9c331ff0380aa42693ad9c23dd011b282eeb7`.
+  The accumulated chain and final A2 binding form one publication delta for the
+  same PR686; the old review does not approve this new head. The prior bounded
+  reviewer decision governs unchanged logic; the leader supplied the final A2
+  binding. No controller or HF-authority policy changes beyond that closed row.
+  A2's private terminal must still be resolved from
+  its fixed completion; no future grade run or controller source is invented.
+  Main/inference source `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e` remains held,
+  including the separately leader-issued task4 A1, which this task did not query
+  or register for grading. Fresh exact-head review/all new CI, the source hold,
+  and the leader's exact shared-controller and individual one-result paid
+  approvals remain gates. No main/source change, merge, live call, dispatch,
+  Project mutation or CI polling occurred.
+
+- Prepare only the first grading of retained task3 A1, ordinal **12**, in
+  `budget_pilot_ci_20260925_04`. Its fixed producer
+  `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e`, inference run `36225255532`
+  and completion checksum
+  `1fb1bc33acab5b2bdefd70744a899c808d984e9c231deded4217ad92d4dc7e3d`
+  remain separate from a future leader-bound grading controller. Existing
+  immutable-content resolution and no-clobber records bind the still-unsupplied
+  private terminal. The route requires predecessor task2 A2 grade
+  `3a8e135cd232ab900e003fc6d9c459957a0b990e`, its original A5 writer/run/config
+  and retained inference terminal `e22f0c3de79bbfce084aedde64fa56c40959fde0`.
+  Fixed predecessor checks also apply at local admission before judge and at
+  terminal verification. Only three coupled workflow producer mappings change;
+  approval, private refs, fixed-parent CAS, byte/privacy/cleanup/no-replay gates,
+  grader `default_v2_sol_max.yaml` / GPT-5.6 Sol/max and inference controls stay
+  unchanged. The bounded pre-edit reviewer approved this scope with conditions.
+  Initial focused validation at `9a48596e6dbfd19dd90add057a29ca1e5e649ae3`
+  returned **1 failed, 26 passed in 307.84s**, exit **1**, with **4** cases
+  unexecuted. The failure was the `terminal_parent` fixture's direct call outside
+  the existing credential-isolated session. After that fixture-only correction,
+  the failed case and four unexecuted cases returned **5 passed in 72.19s**,
+  exit **0**, at `aa1ec63ca98a35d289be5ee146a41f1ae69f6256`. Production was
+  unchanged; no passing case, prior family or suite was rerun. These are separate
+  observations, not one **31-pass** run. Only completion records changed after
+  the latter tested SHA. The leader-supplied A1 execution/retention success and
+  two deliverable identities are not a grade, recovered payload or quality
+  result. Partial known inference cost **USD 0.987634** is not a total or invoice;
+  estimated cost and HTTP request count remain null, invoice completeness false.
+  Fixed-content/publication-derived proof does not independently authenticate
+  unchanged original outer metadata. Supplied baseline review `5324900898` at
+  `c614e2b0215de6279f96279933fe73e7934ce7e1`, all **9** checks passed, covers
+  the tree-identical main780 baseline, not this delta; its core **27m14s** and
+  pilot **29m28s** inside unchanged **45-minute** caps were not re-tested.
+  Fresh exact-head review, CI and the leader's distinct controller/request
+  decision remain. Main/inference source780 is held while the original series
+  continues; this draft does not authorize landing or a live operation. No
+  HF/readout/model/judge/dispatch, old-state change, main change or CI polling
+  occurred. Full evidence and the closed future request are in the current task
+  result; prior observations below remain historical.
 
 - Move exactly `tests/test_codex_budget_pilot*.py` from core `pytest` into a
   separate `Run budget pilot contracts` step in the existing `pilot-contracts`

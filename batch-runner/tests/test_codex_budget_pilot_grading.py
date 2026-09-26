@@ -228,24 +228,28 @@ def case(tmp_path, monkeypatch, compilation, compiled_cache):
     return state
 
 
-def _seed_outputs(case, tmp_path, *, failed=False, missing=False, ledger=True):
+def _seed_outputs(case, tmp_path, *, failed=False, missing=False, ledger=True, extra_deliverable=False,
+                  producer_row=None, producer_ledger=None, producer_receipt=None, reason=None):
     context, api = case.context, case.api
     cell = context.cell
     config = json.loads(context.grading.dispatch.runs[0].config_json)
     upload = tmp_path / ("synthetic-error-deliverables" if failed else "synthetic-deliverables")
     upload.mkdir(exist_ok=True)
     name = f"deliverable_files/{cell['task_id']}/answer.txt"
+    names = [name] + ([f"deliverable_files/{cell['task_id']}/supplement.txt"] if extra_deliverable else [])
     if not failed:
         (upload / name).parent.mkdir(parents=True, exist_ok=True)
         (upload / name).write_bytes(b"synthetic generated answer\r\n\x00unchanged\n")
-    rows = bind_deliverable_file_records([{
+        if extra_deliverable:
+            (upload / names[1]).write_bytes(b"synthetic supplement; not a historical deliverable\n")
+    rows = bind_deliverable_file_records([producer_row] if producer_row is not None else [{
         "task_id": cell["task_id"], "status": "error" if failed else "success", "model": "gpt-5.4",
-        "deliverable_files": [] if failed else [name], "content": None if failed else "synthetic answer",
+        "deliverable_files": [] if failed else names, "content": None if failed else "synthetic answer",
         "deliverable_text": None if failed else "synthetic answer", "usage": None, "problem_solving_cost": None,
         "observability": {"preprocessors": []}, "latency_ms": 1.0,
         "timestamp": "2026-09-23T00:00:00Z", "error": "synthetic_failure" if failed else None,
     }], upload)
-    ledger_data = _ledger(cell["run_id"], cell["task_id"])
+    ledger_data = _ledger(cell["run_id"], cell["task_id"]) if producer_ledger is None else producer_ledger
     payload = {
         "experiment_id": cell["run_id"], "experiment_name": config["experiment"]["name"],
         "source": config["data"]["source"], "condition": config["condition_a"]["name"], "condition_identity": "condition_a",
@@ -260,8 +264,9 @@ def _seed_outputs(case, tmp_path, *, failed=False, missing=False, ledger=True):
     files = {} if missing else {"step2_inference_results.json": _json(payload)}
     roles = {"step2_inference_results.json": "inference_result"}
     if not missing and not failed:
-        files[name] = (upload / name).read_bytes()
-        roles[name] = "generated_deliverable"
+        for name in names:
+            files[name] = (upload / name).read_bytes()
+            roles[name] = "generated_deliverable"
     if not missing and ledger:
         files[Path(pilot.LEDGER).name] = ledger_data
         roles[Path(pilot.LEDGER).name] = "cost_ledger_export"
@@ -273,20 +278,23 @@ def _seed_outputs(case, tmp_path, *, failed=False, missing=False, ledger=True):
     binding = retained._binding(plan, cell, inputs, run={"id": "999", "job": "cell", "attempt": 1})
     claim = {"format": retained.CLAIM_FORMAT, "binding": binding, "expected_parent": retained.BOOTSTRAP,
              "predecessor": None, "model_result": False, "grade": False}
-    state = {"receipt": None, "status": "failed" if failed or missing else "succeeded", "reason": None,
+    state = {"receipt": producer_receipt, "status": "failed" if failed or missing else "succeeded", "reason": reason,
         "child_invocations": 1, "exit_code": 1 if failed or missing else 0,
         "result": None if missing else pilot._identity(files["step2_inference_results.json"]),
         "artifacts": {"ledger": pilot._identity(ledger_data) if ledger and not missing else None,
-                      "deliverable_files": [pilot._identity(files[name])] if not failed and not missing else []}}
+                      "deliverable_files": [pilot._identity(files[name]) for name in names]
+                          if not failed and not missing else []}}
     completed = ci.completion(plan, cell, execute=True, state=state, inputs=inputs, cleanup=True)
     fields = ("campaign_id", "cell_id", "source_sha", "config_sha256", "plan_sha256", "order_sha256",
               "verified_inputs_sha256", "host_policy_sha256", "status", "exit_code", "reason", "timeout", "cleanup_confirmed", "receipt")
     manifest = {key: completed[key] for key in fields}
     manifest.update(format=output.FORMAT, inference_branch=retained.BRANCH,
-        grade_ready=False, grading_launched=False, accounting="missing",
+        grade_ready=False, grading_launched=False,
+        accounting="missing" if completed["receipt"] is None else completed["receipt"]["status"],
         files=[{"role": roles[name], "path": name, **pilot._identity(data)} for name, data in sorted(files.items())],
         missing=(["bound_inference_result", "validated_deliverables", "bound_ledger_export"] if missing else
-                 ["bound_ledger_export"] if not ledger else []) + ["usage"])
+                 ["bound_ledger_export"] if not ledger else []) +
+                (["usage"] if completed["receipt"] is None or completed["receipt"]["usage"] is None else []))
     retained._manifest(manifest, completed, cell)
     claim_path, terminal_path, prefix = retained._paths(cell)
     remote = {prefix + "/" + name: data for name, data in files.items()}
@@ -798,15 +806,43 @@ def test_workflow_isolates_private_pilot_from_legacy_publication_and_inference()
     assert "needs.pilot-approve-paid.result == 'success'" in live["if"]
     assert live["permissions"] == {"contents": "read", "id-token": "write"}
     assert live["container"] == jobs["grade"]["container"]
+    assert approval["permissions"] == {} and len(approval["steps"]) == 1
+    assert "HF_TOKEN" not in live["env"] and "HF_TOKEN" not in plan["env"]
     for job in (plan, live):
         assert not any("upload-artifact" in step.get("uses", "") for step in job["steps"])
         checkout = next(step for step in job["steps"] if "actions/checkout" in step.get("uses", ""))
         assert checkout["with"] == {"ref": "${{ github.sha }}", "persist-credentials": False}
         assert not any("codex-budget-pilot-ci-cell" in step.get("run", "") for step in job["steps"])
     token_steps = [step for step in live["steps"] if "HF_TOKEN" in step.get("env", {})]
-    assert len(token_steps) == 5
-    assert all(any("--phase " + phase in step["run"] for phase in ("setup", "inspect", "prepare", "claim", "publish")) for step in token_steps)
-    inspection = next(step for step in token_steps if "--phase inspect" in step["run"])
+    expected_phases = {"setup", "inspect", "prepare", "claim", "publish", "record-ungraded"}
+    phases = {}
+    for step in token_steps:
+        arguments = step["run"].split()
+        assert arguments.count("--phase") == 1
+        phase = arguments[arguments.index("--phase") + 1]
+        assert phase in expected_phases and phase not in phases
+        phases[phase] = step
+    assert len(token_steps) == len(phases) == 6 and set(phases) == expected_phases
+    recorder = phases["record-ungraded"]
+    assert recorder["timeout-minutes"] == 5
+    assert recorder["env"] == {"HF_TOKEN": "${{ secrets.HF_TOKEN }}"}
+    assert recorder["run"] == (
+        "umask 077\n"
+        "python batch-runner/codex_budget_pilot_grading.py --phase record-ungraded \\\n"
+        '  --selector "$GRADE_SELECTOR" --reviewed-source-sha "$GITHUB_SHA" \\\n'
+        '  --producer-source-sha "$PILOT_GRADE_PRODUCER_SOURCE_SHA" \\\n'
+        '  --terminal-revision "$GRADE_TERMINAL" --root "$RUNNER_TEMP/pilot-fixed-grade"\n'
+    )
+    assert " ".join(recorder["if"].split()) == (
+        "(inputs.experiment_yaml == 'pilot/3baa0009-5a60-4ae8-ae99-4955cb328ff3_A_r1' || "
+        "inputs.experiment_yaml == 'pilot/3baa0009-5a60-4ae8-ae99-4955cb328ff3_A_r2' || "
+        "inputs.experiment_yaml == 'pilot/0818571f-5ff7-4d39-9d2c-ced5ae44299e_A_r1' || "
+        "inputs.experiment_yaml == 'pilot/0818571f-5ff7-4d39-9d2c-ced5ae44299e_B_r1' || "
+        "inputs.experiment_yaml == 'pilot/0818571f-5ff7-4d39-9d2c-ced5ae44299e_C_r2') && "
+        "steps.pilot_input.outputs.model_free_record_ready == 'true' && "
+        "steps.pilot_input.outputs.judge_ready == 'false'"
+    )
+    inspection = phases["inspect"]
     assert inspection["if"] == ("inputs.experiment_yaml == 'pilot/branch-inspect' || "
                                 "inputs.experiment_yaml == 'pilot/inference-branch-inspect'")
     assert all("inputs.experiment_yaml != 'pilot/branch-inspect'" in step["if"]
