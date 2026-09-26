@@ -229,7 +229,7 @@ def case(tmp_path, monkeypatch, compilation, compiled_cache):
 
 
 def _seed_outputs(case, tmp_path, *, failed=False, missing=False, ledger=True, extra_deliverable=False,
-                  producer_row=None, producer_ledger=None, reason=None):
+                  producer_row=None, producer_ledger=None, producer_receipt=None, reason=None):
     context, api = case.context, case.api
     cell = context.cell
     config = json.loads(context.grading.dispatch.runs[0].config_json)
@@ -278,7 +278,7 @@ def _seed_outputs(case, tmp_path, *, failed=False, missing=False, ledger=True, e
     binding = retained._binding(plan, cell, inputs, run={"id": "999", "job": "cell", "attempt": 1})
     claim = {"format": retained.CLAIM_FORMAT, "binding": binding, "expected_parent": retained.BOOTSTRAP,
              "predecessor": None, "model_result": False, "grade": False}
-    state = {"receipt": None, "status": "failed" if failed or missing else "succeeded", "reason": reason,
+    state = {"receipt": producer_receipt, "status": "failed" if failed or missing else "succeeded", "reason": reason,
         "child_invocations": 1, "exit_code": 1 if failed or missing else 0,
         "result": None if missing else pilot._identity(files["step2_inference_results.json"]),
         "artifacts": {"ledger": pilot._identity(ledger_data) if ledger and not missing else None,
@@ -289,10 +289,12 @@ def _seed_outputs(case, tmp_path, *, failed=False, missing=False, ledger=True, e
               "verified_inputs_sha256", "host_policy_sha256", "status", "exit_code", "reason", "timeout", "cleanup_confirmed", "receipt")
     manifest = {key: completed[key] for key in fields}
     manifest.update(format=output.FORMAT, inference_branch=retained.BRANCH,
-        grade_ready=False, grading_launched=False, accounting="missing",
+        grade_ready=False, grading_launched=False,
+        accounting="missing" if completed["receipt"] is None else completed["receipt"]["status"],
         files=[{"role": roles[name], "path": name, **pilot._identity(data)} for name, data in sorted(files.items())],
         missing=(["bound_inference_result", "validated_deliverables", "bound_ledger_export"] if missing else
-                 ["bound_ledger_export"] if not ledger else []) + ["usage"])
+                 ["bound_ledger_export"] if not ledger else []) +
+                (["usage"] if completed["receipt"] is None or completed["receipt"]["usage"] is None else []))
     retained._manifest(manifest, completed, cell)
     claim_path, terminal_path, prefix = retained._paths(cell)
     remote = {prefix + "/" + name: data for name, data in files.items()}

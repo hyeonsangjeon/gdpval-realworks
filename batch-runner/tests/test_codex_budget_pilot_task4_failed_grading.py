@@ -184,7 +184,7 @@ def test_failed_task4_a1_grading_policy_gap(failed_pair, tmp_path, monkeypatch, 
                for suffix in RECORDED)  # No fabricated A1/B1 grade terminal.
 
     if change.startswith("closed_") or change == "unregistered_others":
-        cells = [PREFIX + selected] if change.startswith("closed_") else context.plan["order"][23:]
+        cells = [PREFIX + selected] if change.startswith("closed_") else context.plan["order"][24:]
         for cell in cells:
             # The exact pair is now registered; any other completion stays closed.
             request = "0" * 64

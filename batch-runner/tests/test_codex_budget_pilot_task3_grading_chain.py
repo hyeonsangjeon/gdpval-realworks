@@ -224,7 +224,7 @@ def _check_recorded_task3_grading_chain(history, tmp_path, monkeypatch, capsys, 
         assert jobs["pilot-plan"]["env"]["PILOT_GRADE_PRODUCER_SOURCE_SHA"] == expression
         for suffix in RECORDED:
             assert expression.count('"pilot/' + PREFIX + suffix + '"') == 1
-        assert all('"pilot/' + cell_id + '"' not in expression for cell_id in context.plan["order"][23:])
+        assert all('"pilot/' + cell_id + '"' not in expression for cell_id in context.plan["order"][24:])
         assert all(expression.count('"pilot/' + cell_id + '"') == 1 for cell_id in grading.TASK4_RETAINED)
         assert jobs["pilot-approve-paid"]["environment"] == {"name": "grading"}
         assert jobs["pilot-approve-paid"]["permissions"] == {} and len(jobs["pilot-approve-paid"]["steps"]) == 1

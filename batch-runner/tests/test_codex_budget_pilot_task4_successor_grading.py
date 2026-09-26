@@ -71,7 +71,8 @@ def _unchanged(api, frozen):
 
 @pytest.fixture(scope="module")
 def successor_history(tmp_path_factory):
-    assert grading.TASK4_RETAINED == {
+    assert set(grading.TASK4_RETAINED) == {failed.PREFIX + suffix for suffix in (*SEQUENCE, "A_r2")}
+    assert dict(list(grading.TASK4_RETAINED.items())[:5]) == {
         failed.PREFIX + suffix: row for suffix, row in {**failed.RECORDED, **RECORDED}.items()}
     histories = policy.recorded_pair.__wrapped__(tmp_path_factory)
     pair = next(histories)  # Genuine failed A1 recorder then ordinary B1, built only once.
@@ -232,7 +233,7 @@ def test_recorded_task4_successor_grading(successor_history, tmp_path, monkeypat
         assert ci.HOST_POLICY["sdk"] == ci.HOST_POLICY["cli"] == "0.147.0"
         assert context.plan["model"]["deployment"] == "gpt-5.4" and context.plan["model"]["route_profile"] == "direct-v1"
         assert hashlib.sha256(context.run.grader_config_json.encode()).hexdigest() == readout.CONFIG_SHA256
-        for cell_id in context.plan["order"][23:]:
+        for cell_id in context.plan["order"][24:]:
             assert cell_id not in grading.TASK4_RETAINED
             with pytest.raises(output.OutputPublicationRefused, match="closed_retained_producer_binding_required"):
                 grading.compile_request("pilot/" + cell_id, failed.FUTURE_CONTROLLER, current.request,
@@ -241,7 +242,7 @@ def test_recorded_task4_successor_grading(successor_history, tmp_path, monkeypat
         expression = jobs["pilot-live"]["env"]["PILOT_GRADE_PRODUCER_SOURCE_SHA"]
         assert jobs["pilot-plan"]["env"]["PILOT_GRADE_PRODUCER_SOURCE_SHA"] == expression
         assert all(expression.count('"pilot/' + cell_id + '"') == 1 for cell_id in grading.TASK4_RETAINED)
-        assert all('"pilot/' + cell_id + '"' not in expression for cell_id in context.plan["order"][23:])
+        assert all('"pilot/' + cell_id + '"' not in expression for cell_id in context.plan["order"][24:])
         assert jobs["pilot-live"]["needs"] == ["pilot-approve-paid"] and "environment" not in jobs["pilot-live"]
         assert "needs.pilot-approve-paid.result == 'success'" in jobs["pilot-live"]["if"]
         assert jobs["pilot-live"]["permissions"] == {"contents": "read", "id-token": "write"}
@@ -249,7 +250,7 @@ def test_recorded_task4_successor_grading(successor_history, tmp_path, monkeypat
         assert jobs["pilot-approve-paid"]["permissions"] == {} and len(jobs["pilot-approve-paid"]["steps"]) == 1
         assert jobs["pilot-approve-paid"]["environment"] == {"name": "grading"}
         steps = {step["name"]: step for step in jobs["pilot-live"]["steps"] if "name" in step}
-        recorder = steps["Record only the verified failed task4 A1 without a judge"]
+        recorder = steps["Record only the verified failed task4 A1 or A2 without a judge"]
         assert "'pilot/" + grading.TASK4_A1_CELL + "'" in recorder["if"]
         assert not any(failed.PREFIX + item in recorder["if"] for item in RECORDED)
         assert "judge_ready == 'false'" in recorder["if"] and "model_free_record_ready == 'true'" in recorder["if"]

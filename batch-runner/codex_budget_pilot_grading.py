@@ -87,10 +87,11 @@ TASK3_SUCCESSORS = {
     "2ea2e5b5-257f-42e6-a7dc-93763f28b19d_A_r2": (
         "36232859421", "f4de6c1d36c8f3a2c077be9e4be370545eeb5a11d9513752caa4d40bd08e1bd8"),
 }
-# Only recorded task4 completions continue the shared-controller chain. A1 has a
-# distinct model-free UNGRADED policy; it must never enter the judged path.
+# Only recorded task4 completions continue the shared-controller chain. Failed
+# A1/A2 have distinct model-free UNGRADED bindings, never a judged fallback.
 TASK4_A1_CELL = "3baa0009-5a60-4ae8-ae99-4955cb328ff3_A_r1"
 TASK4_B1_CELL = "3baa0009-5a60-4ae8-ae99-4955cb328ff3_B_r1"
+TASK4_A2_CELL = "3baa0009-5a60-4ae8-ae99-4955cb328ff3_A_r2"
 TASK4_RETAINED = {
     TASK4_A1_CELL: (
         "36234320019", "a913f0236e801e31ab7c0f58c8545ad6375d7092c06fa77f839225d03efe52d8"),
@@ -102,6 +103,8 @@ TASK4_RETAINED = {
         "36242339639", "817d2515c4719b7f12b40c5c58e446661e2e41fd5d8023a78045208548e4dcbd"),
     "3baa0009-5a60-4ae8-ae99-4955cb328ff3_B_r2": (
         "36243795189", "ec4221834b04014e58775a4a4d94fc139e49ad2b7b45321e7fd2ccd58d75ef41"),
+    TASK4_A2_CELL: (
+        "36245490377", "8f2f6edd7bb2fda964d8a24b4532b8af725bcefbb1513d9a60df86e983446fe9"),
 }
 CLAIM_FORMAT = "codex-pilot-grade-claim-v1"
 RESULT_FORMAT = "codex-pilot-grade-terminal-v1"
@@ -175,7 +178,7 @@ def _task3_recorded(cell_id: str) -> tuple[str, str] | None:
 
 
 def _model_free_context(context: Context) -> bool:
-    return context.terminal_request is not None and context.cell["cell_id"] == TASK4_A1_CELL
+    return context.terminal_request is not None and context.cell["cell_id"] in {TASK4_A1_CELL, TASK4_A2_CELL}
 
 
 def _shared_controller_successor(context: Context) -> bool:
@@ -471,7 +474,7 @@ def _task2_resolution(context: Context, evidence: dict, revision: str) -> None:
                 and (cell_id != TASK3_A1_CELL or claim["expected_parent"] == TASK3_A1_PREVIOUS_TERMINAL),
                 "recorded_task3_previous_inference_required")
     if task4:
-        require(context.plan["order"][18:23] == list(TASK4_RETAINED), "recorded_task4_order_required")
+        require(context.plan["order"][18:24] == list(TASK4_RETAINED), "recorded_task4_order_required")
     completed = ci.validate_completion(terminal["completion"])
     require(pilot._digest(completed) == recorded[1], "recorded_task2_completion_mismatch")
     binding = claim["binding"]
