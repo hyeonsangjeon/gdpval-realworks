@@ -81,6 +81,33 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Prepare only ordinary task5 B2 grading, ordinal 28, producer
+  `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e`, inference run `36266871064`,
+  completion `5b942d71fe284b5d2831c01cf17ac17e92857c26ef2dad820b9367d3c8cf0245`.
+  B2 admission requires the unchanged fixed verifier to validate the actual
+  C2 UNGRADED record and its ordinary C1 and earlier backing records under a caller-declared
+  shared controller. Ordinary Step8/child/rubric/cleanup/publication requirements
+  and source/content/predecessor/approval/private-CAS/readback/privacy/no-replay
+  guards remain. The five failure policies and no-judge selector are unchanged;
+  B2 is excluded. Only its row and three producer mappings are added; coupled
+  order/selector assertions now require five task5 rows at indices 24–28 and
+  exclude only unregistered A2 at index 29 onward. One new offline B2 selector
+  returned **78 collected, 78 passed in 147.79s**, exit **0**, at
+  `6e4a90954723c7da95b68ed627302d4afdb29541`, using shared genuine synthetic
+  writers and isolated mutations with fake/blocked external boundaries. No prior
+  passing selector or suite was rerun; all earlier invocations remain separate.
+  Only the two completion records changed after that tested SHA. The leader
+  supplied B2 execution success and retention, not a grade or quality result;
+  earlier B1 remains failed. Partial known inference USD 0.811937 is not a total
+  invoice; estimated cost/HTTP count remain null, invoice false. The outer
+  159m57s does not establish internal attempts, deadline exhaustion or causal
+  benefit. A2 has dispatch evidence only and remains unregistered. This delta
+  stays local and unpublished; review `5327562287` and nine passing checks cover
+  published `01735b3f3684c9cd1fd150e19015a25bdc1cbac0` only. Publication authority,
+  fresh review/CI, held780, the reviewed declared controller, actual verified
+  predecessor records and individual live approval remain gates. No push,
+  live call, CI polling, merge or main/source change occurred.
+
 - Prepare only failed task5 C2, ordinal 27, under the explicit
   `task5-c2-model-free-ungraded` policy, with inference run `36265102718`,
   completion `db5c3fa1a927e88684b99b8eca93b6e442e97e05f500f36755c50000f3d42294`

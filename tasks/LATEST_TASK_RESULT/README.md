@@ -1,6 +1,90 @@
 # Latest task result
 
-## PROJECT5-FIX-EXACT-REGISTERED-TAIL
+## PROJECT5-TASK5-SUCCESSFUL-B2-GRADING-PREP
+
+Prepared only ordinary first grading of retained task5 B2. Admission requires
+its actual C2 UNGRADED predecessor to pass the existing verifier.
+The new B2-only selector returned **78 passed
+in 147.79s** at `6e4a90954723c7da95b68ed627302d4afdb29541`. This is local,
+unpublished preparation; no live grade or quality result is claimed.
+
+The exact new binding is campaign `budget_pilot_ci_20260925_04`, cell
+`0818571f-5ff7-4d39-9d2c-ced5ae44299e_B_r2`, ordinal 28, inference producer
+`78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e`, run `36266871064`, completion
+`5b942d71fe284b5d2831c01cf17ac17e92857c26ef2dad820b9367d3c8cf0245` and config
+`a6db185d3e6f5885ddf631d3c5e73c4062c6f2803be9ccf086605ed3394f6738`.
+Only B2 joins the closed table and three workflow producer mappings. All coupled
+registry/tail assertions, including the shared task3 helper, now require the
+five task5 rows A1/B1/C1/C2/B2 at indices 24–28, positive once-only selectors,
+and absence of the unregistered A2 selector at index 29 onward.
+
+B2 uses C2's existing verifier under the caller-declared shared controller.
+The fixed backing chain remains C2 UNGRADED, ordinary C1, B1 UNGRADED,
+A1 UNGRADED, task4 A2 UNGRADED and ordinary task4 B2. Full original retained
+observations, source/run/content/input/object proofs, canonical admission,
+protected approval, private fixed-parent CAS, server readback, cleanup and
+no-replay checks remain required. B2 retains ordinary Step8-invoked child,
+rubric and grade-publication requirements. The five failure policies, their
+verifiers and the grouped no-judge selector are unchanged; B2 is excluded.
+Inference controls and the fixed `default_v2_sol_max.yaml` / GPT-5.6 Sol/max
+grader are unchanged. No scheduler, reader registry or general skip was added.
+
+The leader supplied B2 job `108473122900`, attempt 1, artifact `10917571846`,
+an independently recomputed completion digest, exit 0, one child, confirmed
+cleanup, timeout false and no grade. Four retained deliverable sizes are
+374/3627/4052/493 bytes; no names, formats or raw payloads were supplied.
+The outer 159m57s does not establish internal attempts, a failure cause,
+deadline exhaustion, quality or causal benefit. Earlier B1 remains failed.
+Partial known inference USD 0.811937 and 1186616 input/25627 output/1128448
+cached/15880 reasoning tokens are not a total or reconciled invoice. Estimated
+cost and HTTP request count remain null, and invoice_complete remains false.
+
+### Exact offline evidence and remaining gates
+
+One invocation selected only
+`tests/test_codex_budget_pilot_task5_b2_grading.py::test_successful_task5_b2_after_ungraded_c2`
+at immutable SHA `6e4a90954723c7da95b68ed627302d4afdb29541`: **78 collected,
+78 passed in 147.79s**, exit **0**. The shared genuine synthetic history uses
+the existing C2 writers and isolated mutations. It verifies the ordinary B2
+path, C2's backing proof, source/controller/predecessor equality, canonical
+types, approval, privacy, CAS/readback, lost responses, cleanup and replay
+refusals, plus the coupled registry/workflow contract. Synthetic files, terminal
+revisions, grade runs and scores are not recovered live evidence.
+
+Python 3.10.12 / pytest 9.1.1 ran under credential-free `env -i`, offline
+HF/Transformers flags, disabled plugin autoload, `GITHUB_ACTIONS=false`,
+`PYTHONDONTWRITEBYTECODE=1` and
+`-m 'not integration' -p no:cacheprovider --maxfail=1 -q --tb=short`.
+External/model boundaries were fake or blocked. The log is
+`/tmp/project5-task5-b2.oH3kyB/focused-6e4a90954.log`.
+No prior passing selector, full suite or CI was rerun. Every earlier invocation,
+including failures and fixture-only corrections, remains separate below.
+Only the two completion records changed after the tested SHA.
+
+The full skill catalog was reviewed once. Experiment-design and the grading
+spec preserved the unchanged comparison contract. The bounded pre-edit review
+approved the exact extension with conditions that this implementation follows.
+Experiment-report-en then im-not-ai-en preserved evidence and authority limits.
+Review `5327562287` and all nine passing checks apply only to published
+`01735b3f3684c9cd1fd150e19015a25bdc1cbac0`, not this local delta.
+
+Main/inference source `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e` remains
+held. Publication authority, fresh leader review/new-head CI, an explicitly
+bound reviewed shared controller, the actual verified C2 record and backing
+records, and individual protected live approval remain gates. Future grade/
+record runs and revisions and B2's private inference terminal are not supplied;
+the existing no-clobber fixed-content resolution must establish the latter.
+Matching fixed content is not independent authentication that every original
+outer envelope was never rewritten.
+
+A2 remains unregistered: only its dispatch, run `36277325255`, job
+`108502481746` at `2026-09-26T22:45:52Z`, is supplied. Its outcome and completion
+evidence are unknown, and dispatch alone does not release the source hold.
+No push, republication, merge, main/source/Project/credential change, old-record
+rewrite, live HF/Azure/model/grade/readout/dispatch call or CI polling occurred.
+The sections below preserve earlier endpoints, not current authority.
+
+## Prior PROJECT5-FIX-EXACT-REGISTERED-TAIL
 
 The two requested test nodes passed after a test-only repair to their shared
 helper in `batch-runner/tests/test_codex_budget_pilot_task3_grading_chain.py`.
