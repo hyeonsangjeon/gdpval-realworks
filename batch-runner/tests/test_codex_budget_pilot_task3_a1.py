@@ -33,17 +33,10 @@ def compiled_contracts():
     return {source: pilot.compile_pilot(ci.CAMPAIGN, source) for source in (PRODUCER, SOURCE)}
 
 
-@pytest.mark.parametrize("change", [
-    "accepted", "historical_source", "inference_run", "completion", "config", "inputs", "bytes",
-    "cleanup", "publication", "advanced_head", "unretained_predecessor", "wrong_predecessor", "other_cell",
-    "wrong_ref", "public_target", "foreign_target", "compiler_drift", "cas_race", "claim_lost",
-    "output_lost", "terminal_lost", "current_source", "rerun",
-])
-def test_fixed_task3_a1_historical_predecessor(scenario, compiled_contracts, capsys, monkeypatch, change):
-    assert retention.TASK3_A1_PREDECESSOR == {
-        "cell_id": PREDECESSOR, "source_sha": PRODUCER, "github_run": RECORDED_RUN,
-        "completion_sha256": "d6d1309c2c81ef17ce18158bc9014ce962ce7dcd267f95f328b279050d4fd15e",
-    }
+@pytest.fixture(scope="module")
+def retained_history(compiled_contracts):
+    # Generate the same immutable fake history once; each case clones only its
+    # fake server. Keep the genuine old local state alive for mutation checks.
     real_compile = pilot.compile_pilot
 
     def compile_contract(campaign, source):
@@ -51,32 +44,71 @@ def test_fixed_task3_a1_historical_predecessor(scenario, compiled_contracts, cap
             return copy.deepcopy(compiled_contracts[source])
         return real_compile(campaign, source)
 
-    monkeypatch.setattr(pilot, "compile_pilot", compile_contract)
-    monkeypatch.setattr(base, "SOURCE", PRODUCER)
-    s = base.case.__wrapped__(scenario, monkeypatch)
-    s.argv[s.argv.index("--reviewed-source-sha") + 1] = PRODUCER
-    old_local = {}
-    for ordinal in range(6, 12):
-        if ordinal != 6:
-            base.select_fresh(s, monkeypatch, ordinal=ordinal)
-        s.api.calls.clear()
-        s.api.commits.clear()
-        s.api.events.clear()
-        if ordinal == 11:
-            monkeypatch.setenv("GITHUB_RUN_ID", RECORDED_RUN["id"])
-        base.finalized(s, capsys, monkeypatch)
-        assert base.boundary(s, capsys, monkeypatch, "--retain")[0] == 0
-        assert s.api.commits == ["admission", "output", "terminal"]
-        old_local.update({path: path.read_bytes() for path in s.root.rglob("*") if path.is_file()})
-    old_plan, old_head = base.read_plan(s), s.api.head
+    with pytest.MonkeyPatch.context() as patch:
+        base.offline.__wrapped__(patch)
+        patch.setattr(pilot, "compile_pilot", compile_contract)
+        patch.setattr(base, "SOURCE", PRODUCER)
+        scenarios = base.scenario.__wrapped__(patch)
+        s = base.case.__wrapped__(next(scenarios), patch)
+        s.argv[s.argv.index("--reviewed-source-sha") + 1] = PRODUCER
+        s.old_local = {}
+        try:
+            for ordinal in range(6, 12):
+                if ordinal != 6:
+                    s.selected = base.read_plan(s)["order"][ordinal]
+                    s.root = s.host / ("history-host-" + str(ordinal))
+                    s.envelope = s.host / (s.root.name + "-completion.json")
+                    for option, value in (("--output", str(s.root)), ("--completion-out", str(s.envelope)),
+                                          ("--cell", s.selected)):
+                        s.argv[s.argv.index(option) + 1] = value
+                    s.transport = base.RetainedChildren(s.sources, s.ids, s.api)
+                # Host/run identity is fixed before the one no-clobber plan.
+                patch.setenv("GITHUB_RUN_ID", RECORDED_RUN["id"] if ordinal == 11 else str(1200 + ordinal))
+                base.prepare(s)
+                plan = base.read_plan(s)
+                cell = plan["cells"][ordinal]
+                s.api.calls.clear()
+                s.api.commits.clear()
+                s.api.events.clear()
+                patch.setenv("HF_TOKEN", base.TOKEN)
+                assert retention.admit(plan, cell, s.root, _test_api=s.api)["outcome"] == "acknowledged"
+                patch.delenv("HF_TOKEN")
+                assert base.cli(s, "--resume", "--execute") == 0
+                patch.setenv("HF_TOKEN", base.TOKEN)
+                assert retention.retain(plan, cell, s.root, _test_api=s.api)["outcome"] == "acknowledged"
+                patch.delenv("HF_TOKEN")
+                assert s.api.commits == ["admission", "output", "terminal"]
+                s.old_local.update({path: path.read_bytes() for path in s.root.rglob("*") if path.is_file()})
+            s.compile_contract = compile_contract
+            yield s
+        finally:
+            scenarios.close()
+
+
+@pytest.mark.parametrize("change", [
+    "accepted", "historical_source", "inference_run", "completion", "config", "inputs", "bytes",
+    "cleanup", "publication", "advanced_head", "unretained_predecessor", "wrong_predecessor", "other_cell",
+    "wrong_ref", "public_target", "foreign_target", "compiler_drift", "cas_race", "claim_lost",
+    "output_lost", "terminal_lost", "current_source", "rerun",
+])
+def test_fixed_task3_a1_historical_predecessor(scenario, retained_history, capsys, monkeypatch, change):
+    assert retention.TASK3_A1_PREDECESSOR == {
+        "cell_id": PREDECESSOR, "source_sha": PRODUCER, "github_run": RECORDED_RUN,
+        "completion_sha256": "d6d1309c2c81ef17ce18158bc9014ce962ce7dcd267f95f328b279050d4fd15e",
+    }
+    old_plan, old_head = base.read_plan(retained_history), retained_history.api.head
     old_cell = old_plan["cells"][11]
-    assert old_cell["cell_id"] == s.selected == PREDECESSOR
+    assert old_cell["cell_id"] == retained_history.selected == PREDECESSOR
+    monkeypatch.setattr(base, "SOURCE", SOURCE)
+    s = base.case.__wrapped__(scenario, monkeypatch)
+    s.api = copy.deepcopy(retained_history.api)
+    s.root = retained_history.root  # Only read its plan to select a fresh job below.
     claim_path, terminal_path, _ = retention._paths(old_cell)
     terminal = json.loads(s.api.trees[old_head][terminal_path])
     original_claim = json.loads(s.api.trees[terminal["claim_commit"]][claim_path])
     assert original_claim["binding"]["source_sha"] == PRODUCER
     assert original_claim["binding"]["github_run"] == RECORDED_RUN
-    synthetic_completion = pilot._load(s.envelope)
+    synthetic_completion = pilot._load(retained_history.envelope)
     assert terminal["completion"] == synthetic_completion
     monkeypatch.setitem(retention.TASK3_A1_PREDECESSOR, "completion_sha256", pilot._digest(synthetic_completion))
 
@@ -148,7 +180,7 @@ def test_fixed_task3_a1_historical_predecessor(scenario, compiled_contracts, cap
         pilot._save(path, inputs)
     elif change == "compiler_drift":
         def drift(campaign, source):
-            compiled, parent, specs = compile_contract(campaign, source)
+            compiled, parent, specs = retained_history.compile_contract(campaign, source)
             if source == PRODUCER:
                 compiled["dispatcher_sha256"] = "e" * 64
             return compiled, parent, specs
@@ -253,6 +285,6 @@ def test_fixed_task3_a1_historical_predecessor(scenario, compiled_contracts, cap
         assert s.api.commits == (["admission"] if change in {"cas_race", "claim_lost"} else [])
     assert all(base.read_state(s, row["cell_id"]) == pilot._cell_state(plan, row)
                for row in plan["cells"] if row["cell_id"] != s.selected)
-    assert all(path.read_bytes() == data for path, data in old_local.items())
+    assert all(path.read_bytes() == data for path, data in retained_history.old_local.items())
     for current, previous in zip((s.api.trees, s.api.parents, s.api.writers), remote_before):
         assert all(current[key] == value for key, value in previous.items())
