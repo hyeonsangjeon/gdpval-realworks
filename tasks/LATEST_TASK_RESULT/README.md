@@ -1,6 +1,141 @@
 # Latest task result
 
-## PROJECT5-TASK5-SUCCESSFUL-C1-GRADING-PREP
+## PROJECT5-TASK5-FAILED-C2-PREP
+
+Prepared only failed task5 C2 under the leader's explicit
+`task5-c2-model-free-ungraded` policy. Its distinct UNGRADED record is scoreless
+and invokes no judge. The C2 selector returned **77 passed, 1 failed in
+103.16s** at `af060fa58e71485268789d6a0ef53e036fe48e2c`. The alias case
+was refused by the existing object-history guard before reaching the intended
+distinct-revision check. Only that synthetic fixture was corrected; the
+`[alias_c1_terminal_b1_claim]` node then returned **1 passed in 56.15s** at
+`9e1518f883ef9c551271c755f635b5e5181465a0`. Production was unchanged by
+the correction. These are separate observations, not a combined pass count.
+
+Work continued from clean local `c783baba5442da8c23d1bc3bad211797638fadeb`
+in the same owned PR686 worktree. B1/C1/C2 changes remain local and unpublished.
+The leader-supplied review `5326493571` and nine passing CI checks cover only
+published `72f1b999583baa95f5e5bbf8d364928f9c326c27`, not these deltas.
+No live run or CI status was queried.
+
+### Supplied C2 execution evidence, not a grade
+
+The leader supplied and independently checked the completion digest below.
+This task did not retrieve live payloads or infer an underlying failure cause.
+
+| Identity or observation | Supplied value |
+|---|---|
+| Campaign | `budget_pilot_ci_20260925_04` |
+| Cell / ordinal | `0818571f-5ff7-4d39-9d2c-ced5ae44299e_C_r2` / 27 |
+| Original inference producer | `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e` |
+| Inference run / job / workflow attempt | `36265102718` / `108468177074` / 1 |
+| Claim acknowledgment | `2026-09-26T19:13:09.7818178Z` |
+| Execution, UTC on 2026-09-26 | `19:13:18` to `19:35:52`; outer step **22m34s** |
+| Failed terminal acknowledgment | `2026-09-26T19:35:58.3504714Z` |
+| Run failure | `2026-09-26T19:36:05Z` |
+| Artifact | `10914312821` |
+| Completion payload checksum | `db5c3fa1a927e88684b99b8eca93b6e442e97e05f500f36755c50000f3d42294` |
+| Execution outcome | Failed, exit 1, `child_nonzero_exit`, one child, cleanup confirmed, cell timeout false, zero deliverables, no grade |
+| Inference config | `3200e72fa661cd5c54ddd5f777f35fdbdf5c866011d073647df3ac2e0f997a71` |
+| Result bytes / SHA256 | 7481 / `f3d81cd69f125a820349db60976b9588bc620a066c33be1b69d8e0b9eca693ab` |
+| Ledger bytes / SHA256 | 5475 / `1c2049014766f15189b3d9d39687240a18e1fe8c1084d63c798766b3de04e3c8` |
+| Partial known inference receipt | USD **0.24**; 146185 input, 7303 output, 104448 cached and 5194 reasoning tokens |
+| Missing accounting | Estimated cost null; `invoice_complete=false`; HTTP request count null |
+
+The outer 22m34s is elapsed time only. The underlying cause, internal attempt
+count and any 180-minute deadline exhaustion are not established. C1's retained
+success and C2's retained failure both remain; neither is a quality score or
+causal recovery conclusion. Partial usage-derived USD is not total experiment
+cost or a reconciled invoice. No private terminal revision or raw payload was
+supplied or reconstructed.
+
+### Exact scoreless policy and ordinary predecessor
+
+C2 is the fifth fixed failure policy, not a condition-wide skip. It requires
+the actual ordinary task5 C1 grade, whose inference run is `36259780431` and
+completion is `ed11b060948692463105b5981245f4cedfaa3e597418313a7c55dc9c580a41bf`.
+C1 must retain its real Step8 invocation, cleanup and B1 UNGRADED backing proof
+under the same caller-declared reviewed controller. No future grade run,
+record revision or controller is adopted from remote metadata or invented.
+
+The C2-only verifier checks the fixed **26 → 25 → 24 → 23 → 22** chain:
+ordinary C1, task5 B1 UNGRADED, task5 A1 UNGRADED, task4 A2 UNGRADED and the
+ordinary task4 B2 backing grade. It reuses the existing B1 verifier, checks full
+original retained-inference equality and publication receipts, and requires
+ten pairwise-distinct predecessor claim/terminal revisions before CAS and
+twelve including C2's pair during readback. Earlier policy tags, C1's ordinary
+path and historical handoffs are unchanged. C2 canonical claim, reservation
+and receipt byte checks also reject boolean/integer substitutions.
+
+The record preserves the original failed completion, denominator and receipt
+missingness, with separately unmeasured recorder accounting. It contains no
+numeric quality score, rubric verdict or fabricated judge child/cleanup and
+invokes no Step8, LLM or OIDC. Two private one-use fixed-parent CAS writes,
+no-clobber resolution, protected request approval, source/ref/attempt pins,
+canonical server readbacks, privacy, lost-response handling and no replay remain
+required. Workflow changes add C2 only to the three producer mappings and the
+grouped five-failure recorder selector. C1 stays excluded; all six HF-token
+phases and ordinary judged-publication guards remain. Original inputs,
+inference budgets and the fixed `default_v2_sol_max.yaml` / GPT-5.6 Sol/max
+grader are unchanged. No reader registry, scheduler or generic skip was added.
+
+### Exact offline evidence and remaining gates
+
+Only the new selector
+`tests/test_codex_budget_pilot_task5_failed_c2.py::test_fixed_task5_c2_after_ordinary_c1`
+was run:
+
+| Scope | Immutable SHA | Completed result |
+|---|---|---|
+| Initial C2 selector | `af060fa58e71485268789d6a0ef53e036fe48e2c` | 78 collected; 77 passed, 1 failed in 103.16s; exit 1 |
+| Corrected `[alias_c1_terminal_b1_claim]` node only | `9e1518f883ef9c551271c755f635b5e5181465a0` | 1 collected; 1 passed in 56.15s; exit 0 |
+
+The shared genuine synthetic history writes ordinary C1 after the existing B1
+no-judge chain, then records C2 without a judge. Isolated mutations cover
+failure status, typed source/content/receipts, ordinary parent and backing proof,
+distinct revisions, approval, privacy, cached admission, CAS, readbacks, lost
+responses and replay. The fixture correction updates C1's own synthetic
+file-history metadata at the aliased revision, so the intended revision guard
+is reached. No guard or production code changed in that correction.
+
+External/model boundaries were fake or blocked. Python3.10.12 and pytest9.1.1
+ran in credential-free `env -i`, offline HF/Transformers,
+`GITHUB_ACTIONS=false`, disabled plugin autoload and bytecode writes, with
+`-m 'not integration' -p no:cacheprovider -q --tb=short`. Logs are
+`/tmp/project5-task5-c2.cwjIze/focused-af060fa58.log` and
+`/tmp/project5-task5-c2.cwjIze/alias-9e1518f88.log`. The 77 passing cases and
+all prior selectors were not rerun. Directly coupled table/workflow assertions
+were updated without running their old passing families. Only the two
+completion records changed after the final tested SHA.
+
+Earlier C1 evidence remains separate: **68 passed, 1 failed in 154.31s** at
+`6c0124229a377e5f7fd95ead80f50a4be0291743`, then its corrected cleanup node
+**1 passed in 50.17s** at `ddce821a0a6315e2d18044b9eb9fc1c886cd640f`, with
+no production change for that correction. There is no combined 69-pass claim.
+Earlier B1 **66 passed in 116.09s** at
+`d0c4577a51124b55970dec67ad2cdf7804e3c658` and all older observations below
+also remain separate. Experiment-design and the grading spec preserved the
+unchanged comparison contract. The required bounded pre-edit review approved
+the exact C2 path and canonical-byte checks. Experiment-report-en followed by
+im-not-ai-en preserved these split results, missingness and authority limits.
+
+Main/inference source `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e` remains
+held. Future publication, fresh leader review/new-head CI, an explicitly bound
+reviewed shared controller, the actual ordinary C1 grade with its verified
+B1/A1/task4-A2/ordinary-B2 backing, and individual protected approval remain
+gates before live recording. Those future record runs/revisions and C2's private
+inference terminal are unknown here; fixed-content resolution must establish
+the latter. Matching content does not independently authenticate that every
+original outer envelope was never rewritten.
+
+B2/A2 remain unregistered. The leader supplied B2 run `36266871064`, job
+`108473122900`, issued at `2026-09-26T19:40:33Z` on held780, with no outcome
+binding. It was not queried or affected. No push, republication, merge,
+main/source/Project/credential change, old-record rewrite, live HF/Azure/model/
+grade/readout/dispatch call or CI polling occurred. The sections below preserve
+earlier endpoints, not current publication or live authority.
+
+## Prior PROJECT5-TASK5-SUCCESSFUL-C1-GRADING-PREP
 
 Prepared only ordinary first grading of retained task5 C1 after the distinct
 failed-B1 UNGRADED record. The C1 selector returned **68 passed, 1 failed in

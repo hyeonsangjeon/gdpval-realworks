@@ -42,6 +42,44 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Prepare only failed task5 C2, ordinal 27, under the explicit
+  `task5-c2-model-free-ungraded` policy, with inference run `36265102718`,
+  completion `db5c3fa1a927e88684b99b8eca93b6e442e97e05f500f36755c50000f3d42294`
+  and producer `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e`. This fifth fixed
+  failure requires the actual ordinary C1 grade and its fixed
+  26-to-25-to-24-to-23-to-22 backing chain under a caller-declared shared
+  controller. Ten predecessor claim/terminal revisions must be distinct before
+  CAS, and twelve including C2's pair during readback. C2-only canonical claim,
+  reservation and receipt checks preserve types. The scoreless record retains
+  the original failed completion, denominator and partial receipt, with separately
+  unmeasured recorder accounting; it invokes no Step8/LLM/OIDC and invents no
+  child, cleanup, numeric grade or rubric verdict. C1 remains ordinary, earlier
+  policies stay intact, and B2/A2 remain unregistered. Only the three producer
+  mappings and the grouped five-failure selector gain C2; six HF-token phases,
+  source/approval/privacy/CAS/readback/lost-response/no-replay guards remain.
+  The leader reported exit 1, zero deliverables, cleanup confirmed, timeout false
+  and no grade. Partial known inference USD 0.24 and 146185 input/7303 output/
+  104448 cached/5194 reasoning tokens are not a total invoice; estimated cost
+  and HTTP count remain null, invoice false. The outer 22m34s does not establish
+  an internal attempt count, failure cause, deadline exhaustion or causal benefit.
+  The initial C2-only selector returned **77 passed, 1 failed in 103.16s**,
+  exit **1**, at `af060fa58e71485268789d6a0ef53e036fe48e2c`. Only the alias
+  fixture's synthetic file-history metadata needed correction to reach the
+  intended distinct-revision guard. That node alone returned **1 passed in
+  56.15s**, exit **0**, at `9e1518f883ef9c551271c755f635b5e5181465a0`;
+  production was unchanged. These remain separate observations, as do earlier
+  C1's **68 passed, 1 failed in 154.31s** at
+  `6c0124229a377e5f7fd95ead80f50a4be0291743` and cleanup-only **1 passed in
+  50.17s** at `ddce821a0a6315e2d18044b9eb9fc1c886cd640f`, and B1's
+  **66 passed in 116.09s** at `d0c4577a51124b55970dec67ad2cdf7804e3c658`.
+  No passing family or suite was rerun. Only completion records changed after
+  the final tested SHA. All B1/C1/C2 work remains local and unpublished;
+  published72f1/review `5326493571` and nine passing checks do not cover it.
+  Held780, future publication/review/new-head CI, the reviewed declared controller,
+  actual ordinary C1 and its backing records, fixed-content terminal resolution
+  and individual protected live approval remain gates. No push, live call,
+  CI polling, merge or main/source change occurred.
+
 - Prepare ordinary first grading only for retained task5 C1, ordinal 26,
   inference run `36259780431`, completion
   `ed11b060948692463105b5981245f4cedfaa3e597418313a7c55dc9c580a41bf`, producer
