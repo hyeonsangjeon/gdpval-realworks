@@ -13,9 +13,12 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
-- Prepare the four recorded task3 grading successors B1/C1/C2/B2 locally,
-  without publishing this delta or expanding live authority. A finite table
-  binds their original producer780, inference runs and completion checksums;
+- Complete offline task3 grading preparation for A1/B1/C1/C2/B2/A2 by adding
+  only the final A2 binding to the prepared successor chain. A2, ordinal **17**,
+  remains bound to producer `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e`, inference
+  run `36232859421` and completion request
+  `f4de6c1d36c8f3a2c077be9e4be370545eeb5a11d9513752caa4d40bd08e1bd8`.
+  The finite table binds original inference runs and completion checksums;
   each requires the actual immediate prior grade under the same caller-declared
   future controller as A1. The A1 transition to historical task2 A2 remains
   intact. Successor admission checks canonical server-readback claim bytes in
@@ -25,7 +28,8 @@ entries land under a fresh dated heading the day they merge to `main`.
   topology or original outer metadata. Only the three coupled workflow producer
   mappings change; inference, grader, source pins, approval, fixed-parent CAS,
   no-clobber resolution, privacy, cleanup and no-replay controls are preserved.
-  The bounded pre-edit reviewer approved this scope with conditions. Initial
+  The bounded pre-edit reviewer approved the original B1/C1/C2/B2 extension
+  with conditions, not this final A2 delta. Initial
   validation at `0b6e62d722cc7394c7eedb23d7265cad816599bd` stopped with
   **1 setup error in 22.37s**, exit **1**, and no passed cases because task3
   fixture directories collided with historical task2 writer directories.
@@ -33,14 +37,32 @@ entries land under a fresh dated heading the day they merge to `main`.
   returned **39 passed in 55.71s**, exit **0**, at
   `200bb89ce83bcab1f7c04c4d770f98e0a23a380b`. It builds genuine synthetic
   history once and isolates mutations; it is not native, live or quality evidence.
+  The final A2-only selector returned **20 passed in 37.62s**, exit **0**, at
+  `342bc6d47a5ca2c2dd582519a5730111fc4190c9`, using the same shared synthetic
+  history through B2/A2 and isolated refusal/no-mutation cases. It validates the
+  final row, exact predecessor/full chain, unregistered others, tampering, CAS
+  and lost acknowledgment. The earlier **39** passing cases were not selected;
+  these are separate observations, not a combined pass count. Only the two
+  completion records changed after this tested SHA. All six task3 inferences
+  are retained, not graded. A2's leader-verified execution/retention, completion
+  and two deliverable identities do not establish quality or recover raw files.
+  Its partial known inference cost **USD 0.478969** is not a total or invoice;
+  estimated cost and HTTP count are null, invoice completeness false.
   Prior A1 **1 failed, 26 passed in 307.84s** and **5 passed in 72.19s** remain
   separate below and were not rerun. Review `5325122042` and all **9** CI checks
   apply only to published PR686 head `e4a9c331ff0380aa42693ad9c23dd011b282eeb7`.
-  New commits stay local and unreviewed; no push, PR update or CI polling occurs.
-  Task3 A2 run `36232859421` has no supplied result/checksum binding and remains
-  unregistered. Main/inference source `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e`
-  remains held. A2 evidence, later publication, fresh review/CI and the leader's
-  exact shared-controller and individual first-grade decisions remain required.
+  The accumulated chain and final A2 binding form one publication delta for the
+  same PR686; the old review does not approve this new head. The prior bounded
+  reviewer decision governs unchanged logic; the leader supplied the final A2
+  binding. No controller or HF-authority policy changes beyond that closed row.
+  A2's private terminal must still be resolved from
+  its fixed completion; no future grade run or controller source is invented.
+  Main/inference source `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e` remains held,
+  including the separately leader-issued task4 A1, which this task did not query
+  or register for grading. Fresh exact-head review/all new CI, the source hold,
+  and the leader's exact shared-controller and individual one-result paid
+  approvals remain gates. No main/source change, merge, live call, dispatch,
+  Project mutation or CI polling occurred.
 
 - Prepare only the first grading of retained task3 A1, ordinal **12**, in
   `budget_pilot_ci_20260925_04`. Its fixed producer
