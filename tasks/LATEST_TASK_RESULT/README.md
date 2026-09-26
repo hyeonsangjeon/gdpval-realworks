@@ -1,6 +1,86 @@
 # Latest task result
 
-## PROJECT5-BIND-B2-READOUT
+## PROJECT5-BIND-A2-READOUT
+
+Bound the final task2 A2 readout row to the issued grading run `36214413190`
+on the existing PR684 branch. The new A2-only selection returned **5 passed,
+39 deselected in 60.23s**, exit **0**, at
+`b0b73343903f3e40d08a9e150c2a3668d7d65b46`. All four fixed run IDs are now
+configured, but no A2 grade outcome, score or revision has been observed here.
+This update does not authorize any live readout or grading.
+
+The sole production change is `TASK2_GRADE_RUNS` for
+`0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r2`. It addresses the leader's
+REQUEST-CHANGES review `5324354239` at
+`ac4332a2566099e042f70e6815deb1876974b41b`. The leader accepted the preceding
+B2-only result; final source review and CI for this new binding remain.
+Production traversal, workflow, grading admission and all
+model/runtime/input/budget/rubric code are unchanged.
+
+### Focused offline evidence
+
+One invocation from `batch-runner/` selected only
+`tests/test_codex_budget_pilot_task2_final_readout.py::test_task2_final_grade_readout`
+with `-k A_r2`. The **5 passed, 39 deselected in 60.23s** result at
+`b0b73343903f3e40d08a9e150c2a3668d7d65b46` used the existing Python
+**3.10.12** / pytest **9.1.1** environment, credential-free `env -i`, offline HF
+flags and disabled plugin autoload. Only the two completion records changed
+after the tested commit.
+
+The existing genuine writers construct synthetic C1, C2 and B2 predecessor
+grades before A2, with fake external boundaries. The five cases cover positive
+readout, a wrong selected run, a wrong B2 predecessor run, a predecessor-hash
+mismatch and an attempt to skip B2. Source, byte, privacy, receipt, no-write and
+no-judge assertions remain. The reader still verifies exactly one immediate
+predecessor; the longer fixture sequence does not change production traversal.
+
+The original **38 passed in 256.25s** at
+`6d5be52861598bff3fe20c6b1cebc06b252dc334` and B2-only **5 passed,
+36 deselected in 45.01s** at `1d49ba5a46d90ae4355daf8a7c875adc657e49fa` remain
+separate evidence. Neither earlier selection was rerun. No prior suite or CI
+was rerun.
+
+### Supplied live evidence, not queried here
+
+A2's first grading run is `36214413190`, attempt **1**, event
+`workflow_dispatch`, created **2026-09-26T03:18:45Z**, protected approval
+`6674065603`. Its historical source/writer is
+`a5e5d2589caff21309f0a1c21bb7d9d333ad47c6` (A5), distinct from the future
+readout observer. Only the issued ID is established; no outcome, score or grade
+revision was supplied. Its original inference producer
+`e7a28db07ebe10d6508b9256137763cc82f9a1d1`, run `36202190875` and completion
+request checksum `d6d1309c2c81ef17ce18158bc9014ce962ce7dcd267f95f328b279050d4fd15e`
+are unchanged. The checksum is not a resolved revision.
+
+Separately, the leader supplied B2 run `36212846089`, job `108322891244`:
+preparation passed at **02:51:14.6271929 UTC**, its claim was acknowledged at
+**02:51:24.1345273 UTC**, one Step8 invocation completed with cleanup at
+**02:57:48.5474544 UTC**, and publication was acknowledged at
+**02:57:52.6218084 UTC**. Its stored score and outcome remain unread. This
+confirms completion of the prior operation, not permission to read or regrade
+it. Original A1/B1/C1/C2 observations and earlier accounting remain intact below.
+
+### Remaining authority and proof limits
+
+Hold main and the active grading controller at A5 until the leader confirms
+A2 completion. Final source review, CI and explicit leader approval remain;
+no pending result has been inferred. The historical source/claim/file bindings
+and privacy guards are unchanged. Permitted reads still comprise inference
+controls, selected/immediate-predecessor grade controls and selected verified
+grade payloads; predecessor payloads receive metadata checks only. Receipt
+verification remains a hash binding. Fixed-content proof does not establish
+that outer metadata was never rewritten, direct Git-parent topology or
+independent provider authentication.
+
+No live HF/readout, model/judge/inference, workflow dispatch, Azure management,
+Project edit, old claim/grade mutation, source reseal, merge or CI polling
+occurred. The existing catalog/design/reviewer context was reused.
+Experiment-report-en then im-not-ai-en preserved separate test evidence and
+the distinction between issued IDs, publication acknowledgments and unread
+outcomes. No new experiment-design, architecture or UI work was needed.
+Earlier sections retain their original evidence snapshots.
+
+## Prior PROJECT5-BIND-B2-READOUT
 
 Bound the task2 B2 readout to the leader-supplied grading run `36212846089` in
 the existing PR684 worktree. The only production change is the

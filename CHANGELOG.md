@@ -13,6 +13,34 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Bind only task2 A2's `TASK2_GRADE_RUNS` entry to issued first grading run
+  `36214413190`, following PR684 REQUEST-CHANGES review `5324354239` at
+  `ac4332a2566099e042f70e6815deb1876974b41b`. The run is attempt **1**,
+  `workflow_dispatch`, created **2026-09-26T03:18:45Z**, protected approval
+  `6674065603`, with historical writer
+  `a5e5d2589caff21309f0a1c21bb7d9d333ad47c6`. This supplies the last fixed run
+  ID, not an observed A2 outcome, score or grade revision. Its original e7
+  inference run `36202190875` and fixed completion checksum are unchanged.
+  Existing synthetic writers construct C1, C2 and B2 before A2; production still
+  verifies one immediate predecessor. One invocation of
+  `tests/test_codex_budget_pilot_task2_final_readout.py::test_task2_final_grade_readout`
+  with `-k A_r2` returned **5 passed, 39 deselected in 60.23s**, exit **0**, at
+  `b0b73343903f3e40d08a9e150c2a3668d7d65b46`, covering positive readout and
+  selected-run, predecessor-run/hash and skipped-predecessor refusals. The
+  original **38 passed in 256.25s** at
+  `6d5be52861598bff3fe20c6b1cebc06b252dc334` and B2-only **5 passed,
+  36 deselected in 45.01s** at `1d49ba5a46d90ae4355daf8a7c875adc657e49fa` stay
+  separate; no passing case or prior suite was rerun. Only completion records
+  changed after the tested commit. Newly supplied B2 evidence for run
+  `36212846089` / job `108322891244` records preparation **02:51:14.6271929 UTC**,
+  claim acknowledgment **02:51:24.1345273 UTC**, one Step8 invocation with cleanup
+  **02:57:48.5474544 UTC**, and publication acknowledgment **02:57:52.6218084 UTC**.
+  Its stored score and outcome remain unread; no read or regrade is authorized.
+  Source/privacy/hash/receipt guards, fixed-content proof limits, historical
+  evidence and model/budget/grading policy are unchanged. Hold main/controller
+  at A5 until the leader confirms A2 completion. Final source review, CI and
+  leader approval remain. No live operation, merge or CI polling occurred.
+
 - Bind only task2 B2's `TASK2_GRADE_RUNS` entry to the leader-supplied first
   grading run `36212846089`, following PR684 REQUEST-CHANGES review `5324274069`
   at `54c963915a900a41444287c0a4f2fa45b397c7a9`. The issued run is attempt **1**,
