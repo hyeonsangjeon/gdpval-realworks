@@ -1,26 +1,90 @@
 # Latest task result
 
-## PROJECT5-TASK3-A1-PREP
+## PROJECT5-CI-BUDGET-PILOT-PARTITION
 
-Prepared only the cross-source handoff from retained task2 A2 to canonical
-task3 A1, ordinal **12**, in `budget_pilot_ci_20260925_04`. The focused offline
-selector returned **23 passed in 172.29s**, exit **0**, at
-`7ed2f4c38e8c80f29e869c3cb96656ecb0e69a83`. No live inference, HF read, readout,
-grading or workflow dispatch occurred. This is control-path evidence, not a
-new task result or a quality measurement.
+Moved only the existing budget-pilot test family out of core `pytest` and into
+a separate step in the existing `pilot-contracts` job. The focused offline
+partition selector returned **1 passed in 11.30s**, exit **0**, at
+`14e060b3bc0c578160ff05de6fc083492490725d`. This proves the checked selection
+contract, not hosted runtime or sufficient timeout headroom. The **25-line**
+task3 A1 adapter and its passing regression are byte-for-byte unchanged.
 
-Work started in a new clean worktree from supplied main
-`278cc1e135be3b8076ae9a8d4636e669deba7e29`. The leader reports PR684 delivered
-after review `5324446218` at `af978382f3013e5d32d79b17c8e0a61cc1552f81` and
-all **9** checks passed. That approval covers the baseline, not this new
-adapter. The preserved checkout, old worktrees and historical claims remain
-untouched.
+Work continued on the same clean owned PR685 branch at
+`557ac9d981e089876a0a72b454e6d897c9ee24b6`, based on unchanged supplied main
+`278cc1e135be3b8076ae9a8d4636e669deba7e29`. Leader FINAL-APPROVE review
+`5324648143` was conditional on CI and covers only that old head. The new
+workflow/test delta requires fresh leader review and CI. Baseline PR684's
+review `5324446218` at `af978382f3013e5d32d79b17c8e0a61cc1552f81` and its
+**9** successful checks remain separate predecessor evidence. The preserved
+checkout, old worktrees, historical claims and accepted task-local task2 note
+are untouched. No scores were re-analyzed or live operations performed.
 
-### Exact handoff and unchanged controls
+### Supplied cancellation evidence, not a passing suite
 
-The only production change adds **25 lines** to the existing retention helper.
-It applies only to selected cell
-`2ea2e5b5-257f-42e6-a7dc-93763f28b19d_A_r1` and its immediate predecessor
+The leader reports **8** successful checks and `pytest` **CANCELLED** for
+Backend Tests run `36219000389`, job `108340566621`. The job started
+**04:50:10 UTC** and ended **05:35:25 UTC**. The annotation states:
+"The job has exceeded the maximum execution time of 45m0s". Its Run tests step
+started **04:52:15 UTC** and was canceled **05:35:22 UTC**, reaching **99%** at
+`tests/test_verify_cost_ledger.py`. Repo-root script tests were **SKIPPED**.
+There is no final passing summary. **14279 collected / 14233 selected /
+46 deselected / 2 skipped** are literal log counters, not a completed-pass
+count. The new task3 family printed **23 dots** at **05:16:24 UTC**; this is
+separate from its earlier **23 passed in 172.29s** focused result below.
+
+An approximate attribution of timestamped progress-line completion intervals
+places **1179.73 seconds** in `tests/test_codex_budget_pilot*.py`. Those spans
+are not pytest duration measurements or a profiler. The existing
+`pilot-contracts` job succeeded from **04:50:09 UTC** to **04:58:20 UTC**,
+**8m11s including setup**. These supplied observations motivate redistribution;
+they do not establish the new jobs' runtime or headroom. No logs or CI state
+were queried, and the canceled run was not rerun.
+
+### Exact partition and focused validation
+
+Core adds only `--ignore-glob='tests/test_codex_budget_pilot*.py'`. The existing
+pilot job gains this separate step after its unchanged Run pilot contracts:
+
+```sh
+cd batch-runner
+python -m pytest -m "not integration" --tb=short -q -rs tests/test_codex_budget_pilot*.py
+```
+
+The target glob expands in the shell; the core ignore glob remains literal for
+pytest. The new step has no `-k`, extra exclusion, skip or failure masking.
+All old pilot/preflight selections and their `-k` expressions stay unchanged.
+All eight check names, runners, setup, permissions, environment, source/dispatch
+pinning, integration exclusions and the repo-root script step remain unchanged.
+Core and pilot retain **45-minute** ceilings, native-host retains **60 minutes**,
+and every other ceiling is unchanged. No runtime, inference, grading, model,
+budget, registration or source-pin code changed.
+
+The required bounded extreme-reasoner decision was **APPROVE-WITH-CONDITIONS**
+before workflow edits. A bounded follow-up approved updating only the coupled
+GHCP test's workflow-byte hash to
+`19cd9099ad1e60865111d789207bd09fc8302095be7012eea75703c9490da09d`.
+Its historical/Foundry hashes and all other pins are unchanged; the partition
+selector checks that literal without running the GHCP family.
+
+Only
+`tests/test_a_test_file_nobody_runs_is_not_a_test.py::test_backend_jobs_partition_the_comparison_contracts`
+was invoked, once, at the immutable tested SHA above. It checks the nonempty
+**27-file** move, exact core-ignore/destination equality, recursive glob edge
+cases, unique collected parameterized node IDs and disjoint/exhaustive ownership.
+The existing preflight collection checks remain; one added child collection
+covers only the moved files with the same marker and collection safeguards.
+Those children execute no test bodies. No full suite, moved family, task3
+regression or old passing family was executed. The invocation used the existing
+Python **3.10.12** / pytest **9.1.1** environment with credential-free `env -i`,
+offline HF flags, disabled plugin autoload and no pytest cache. Only the two
+completion records changed after this passing test SHA.
+
+### Preserved task3 handoff and unchanged controls
+
+The preceding task3 preparation added **25 lines** to the existing retention
+helper. It applies only to selected cell
+`2ea2e5b5-257f-42e6-a7dc-93763f28b19d_A_r1`, ordinal **12** in
+`budget_pilot_ci_20260925_04`, and its immediate predecessor
 `0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r2`, on inference ref
 `pilot-inference-20260925-04`. The predecessor must satisfy its fixed producer
 `e7a28db07ebe10d6508b9256137763cc82f9a1d1`, run `36202190875`, job `cell`,
@@ -38,9 +102,10 @@ search for another terminal, refresh the CAS parent or adopt old state. Task3's
 execution, host, source, claim and clock retain their own current bindings.
 The previous B1 exception and other predecessor paths are unchanged.
 
-The bounded pre-edit extreme-reasoner decision was **APPROVE-WITH-CONDITIONS**
-for this exact boundary. No workflow, registration, source-pin, schema, model,
-runtime, input, budget, grading, ledger-note, diagnostic or privacy code changed.
+The earlier bounded pre-edit extreme-reasoner decision was
+**APPROVE-WITH-CONDITIONS** for this exact source boundary. That adapter patch changed no workflow,
+registration, source-pin, schema, model, runtime, input, budget, grading,
+ledger-note, diagnostic or privacy code.
 The original five-task/**30-cell** IDs and order remain. The real compiler
 produces task3 A1 config SHA256
 `35a23a8842d378a8326ec8483553145ee5c63c9c63a383be3eb903bda77136a3` and order
@@ -54,11 +119,12 @@ monetary cutoff. The fixed grader and all six retained task2 results are
 unchanged. No new epoch, workflow input, arbitrary source override or scheduler
 was added.
 
-### Focused offline evidence
+### Separate task3 focused evidence, not rerun
 
-Only
-`tests/test_codex_budget_pilot_task3_a1.py::test_fixed_task3_a1_historical_predecessor`
-was selected. The separate observations are:
+The earlier task3 invocations provide control-path evidence, not a new task
+result or a quality measurement. They selected only
+`tests/test_codex_budget_pilot_task3_a1.py::test_fixed_task3_a1_historical_predecessor`.
+The separate observations are:
 
 | Tested SHA | Result | Scope |
 |---|---|---|
@@ -67,10 +133,11 @@ was selected. The separate observations are:
 | `7ed2f4c38e8c80f29e869c3cb96656ecb0e69a83` | **23 passed in 172.29s**, exit **0** | Corrected fixture and clock assertion; no previously passing case was repeated. |
 
 Both correction commits changed only the new test fixture/assertion, not
-production. Only the two completion records change after the passing test SHA.
-The existing Python **3.10.12** / pytest **9.1.1** environment ran with
-credential-free `env -i`, offline HF flags, disabled plugin autoload and no
-pytest cache. No pre-existing selector, full suite or CI run was repeated.
+production. At that handoff only the two completion records changed after the
+passing test SHA. The existing Python **3.10.12** / pytest **9.1.1** environment
+ran with credential-free `env -i`, offline HF flags, disabled plugin autoload
+and no pytest cache. No pre-existing selector, full suite or CI run was repeated
+in that preparation.
 
 The existing fake children and HF server generate one synthetic six-cell task2
 history through genuine compilation, admission, serialization, deadlines and
@@ -89,8 +156,10 @@ All model, HF, authentication, grader and process boundaries are fake or blocked
 The leader reports A2 inference run `36202190875` completed on
 **2026-09-25 at 23:49:54 UTC**, with `terminal_verified` at
 **23:49:59.8771882 UTC** and artifact `10892208424`. The producer, run and
-completion digest above remain fixed. Its private terminal SHA has not been
-independently supplied and was not looked up or invented here.
+completion digest above remain fixed. At the original handoff its private
+terminal SHA had not been independently supplied and was not looked up or
+invented here. The later publication-derived identity in the accepted task-local
+note does not retrofit the adapter or change these proof limits.
 
 The completion digest authenticates fixed content. It does not independently
 establish that the original outer metadata was never rewritten. A stale
@@ -105,11 +174,13 @@ All four task2 C1/C2/B2/A2 grading operations finished on historical writer
 `a5e5d2589caff21309f0a1c21bb7d9d333ad47c6`, according to the leader. Last A2
 run `36214413190`, job `108327473087`, acknowledged publication at
 **2026-09-26T03:29:05.7159336Z** after one Step8 invocation and owned cleanup.
-The stored C1/C2/B2/A2 scores have not been read here; publication acknowledgment
-is not a quality result. The leader-dispatched model-free C1 readout
-`36217589922` was not polled or otherwise accessed. Earlier A1/B1 readouts,
-partial costs, missing accounting and frozen failed histories remain separate
-in the historical evidence below; no values were pooled or repriced.
+At the task3 preparation handoff, the stored C1/C2/B2/A2 scores were unread here;
+publication acknowledgment alone is not a quality result. C1 readout
+`36217589922` was not polled or accessed by this worker. The leader has since
+confirmed all six readouts complete and accepted the separate task-local note.
+That note is unchanged and no scores were re-analyzed for this CI task. Earlier
+readouts, partial costs, missing accounting and frozen failed histories remain
+separate below; no values were pooled or repriced.
 
 ### Closed future request and remaining authority
 
@@ -138,22 +209,25 @@ authority. No predecessor revision input is needed or added.
 }
 ```
 
-After review, CI and the actual remaining readouts, the leader should bind one
+After new-head review and CI, the leader should bind one
 new common inference source for the remaining **18** original cells, ordinals
 **12–29**, to avoid per-cell source changes. This is a control intention, not
-permission to run **18** cells or a prediction of a future merge SHA. This task
-prepares only task3 A1; the other **17** cells are untouched. A later attempt
+permission to run **18** cells or a prediction of a future merge SHA. The
+preserved adapter prepares only task3 A1; the other **17** cells are untouched.
+A later attempt
 still requires exact source/host validation, verified originals, predecessor
 proof, absence checks and one-use fixed-parent CAS admission. No old claim,
 clock or result is adopted or settled.
 
-New-head review, final CI and the leader's explicit source/attempt decision
-remain. No live HF/readout/inference/judge call, workflow dispatch, Azure
+Fresh leader review of the new head, final CI and the leader's explicit
+source/attempt decision remain. The old conditional review is not approval of
+this partition, and normal new-head CI is not permission to poll or manually
+rerun it. No live HF/readout/inference/judge call, workflow dispatch, Azure
 management, Project edit, main change, merge, source reseal or CI polling
-occurred. The full skill catalog was reviewed once. Experiment-design kept
-the source boundary and controls explicit; experiment-report-en followed by
-im-not-ai-en preserved separate observations and evidence limits. No UI or new
-experiment axis was involved. The sections below are historical snapshots,
+occurred. The full skill catalog was reviewed once for this CI task;
+experiment-report-en followed by im-not-ai-en kept the cancellation, coverage
+test and older task3 results separate. No new experiment design, UI skill or
+experiment axis was introduced. The sections below are historical snapshots,
 not current instructions or new authority.
 
 ## Prior PROJECT5-BIND-A2-READOUT
