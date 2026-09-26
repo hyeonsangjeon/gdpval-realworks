@@ -53,6 +53,19 @@ B1_PRODUCER_SOURCE = "e7a28db07ebe10d6508b9256137763cc82f9a1d1"
 B1_COMPLETION_SHA256 = "6a23d38158e81cd5ed184a05a7871545d140bb1d92dc1131326d96df29c236f8"
 B1_INFERENCE_RUN = {"id": "36192851762", "job": "cell", "attempt": 1}
 B1_PREVIOUS_GRADE = "a0ded8b7146c028516d007a9afaa0993797fa1ca"
+# Finite recorded task2 inputs, not a producer override or a scheduler. Each
+# grade still needs its own exact-source, same-run approval and one-use claim.
+TASK2_RETAINED = {
+    B1_CELL: ("36192851762", B1_COMPLETION_SHA256),
+    "0112fc9b-c3b2-4084-8993-5a4abb1f54f1_C_r1": (
+        "36195731407", "f3d1d3420b4dc23c018aa8b55ac1f4653a64e92b85eac50268e80aea55f2fbef"),
+    "0112fc9b-c3b2-4084-8993-5a4abb1f54f1_C_r2": (
+        "36198090626", "1823893b4b4dfbce02b5b07d48f164cdd6228c3c38afd9608bb934c3e9bf417c"),
+    "0112fc9b-c3b2-4084-8993-5a4abb1f54f1_B_r2": (
+        "36200320037", "b85346c5ee226bf1bfe2a34386394d4abea4617c408bedf2c3afe7016f9f904c"),
+    "0112fc9b-c3b2-4084-8993-5a4abb1f54f1_A_r2": (
+        "36202190875", "d6d1309c2c81ef17ce18158bc9014ce962ce7dcd267f95f328b279050d4fd15e"),
+}
 CLAIM_FORMAT = "codex-pilot-grade-claim-v1"
 RESULT_FORMAT = "codex-pilot-grade-terminal-v1"
 PROOF = "verified_publication_derived_not_independent_provider_authentication"
@@ -133,18 +146,19 @@ def compile_request(selector: str, source: str, terminal: str = "", *, producer_
     require(output._hash(producer, 40), "retained_producer_source_required")
     fixed_refs = (ci.CAMPAIGN == "budget_pilot_ci_20260925_04"
                   and retained.BRANCH == "pilot-inference-20260925-04" and BRANCH == "pilot-grades-20260925-04")
-    recorded_b1 = (fixed_refs and selector == "pilot/" + B1_CELL
-                   and producer == B1_PRODUCER_SOURCE and terminal == B1_COMPLETION_SHA256)
+    recorded = TASK2_RETAINED.get(selector[6:])
+    recorded_task2 = (fixed_refs and recorded is not None
+                      and producer == B1_PRODUCER_SOURCE and terminal == recorded[1])
     require(producer == source or (
         fixed_refs and selector == "pilot/" + RETAINED_CELL
         and producer == RETAINED_PRODUCER_SOURCE and terminal == RETAINED_TERMINAL
-    ) or recorded_b1, "closed_retained_producer_binding_required")
+    ) or recorded_task2, "closed_retained_producer_binding_required")
     plan, cell, grading = adapter.compile_cell_grading_plan(ci.CAMPAIGN, selector[6:], producer)
-    require(recorded_b1 or terminal == "" or output._hash(terminal, 40), "immutable_terminal_revision_required")
+    require(recorded_task2 or terminal == "" or output._hash(terminal, 40), "immutable_terminal_revision_required")
     require(terminal not in {source, producer, retained.BOOTSTRAP, plan["dataset"]["revision"]},
             "inference_terminal_revision_required")
-    return Context(plan, cell, grading, "" if recorded_b1 else terminal, source,
-                   terminal if recorded_b1 else None)
+    return Context(plan, cell, grading, "" if recorded_task2 else terminal, source,
+                   terminal if recorded_task2 else None)
 
 
 def _approval_request_sha256(source: str, selector: str, terminal: str, run: dict,
@@ -372,7 +386,7 @@ def setup(root: Path, source: str, *, branch: str = BRANCH, _test_api=None) -> d
     return result
 
 
-def _b1_resolution(context: Context, evidence: dict, revision: str) -> None:
+def _task2_resolution(context: Context, evidence: dict, revision: str) -> None:
     """Recheck the fixed content proof before restoring a local resolution.
 
     The public envelope checksum is pilot._digest(payload), not a wrapper-file
@@ -380,24 +394,27 @@ def _b1_resolution(context: Context, evidence: dict, revision: str) -> None:
     Remote objects are verified during preparation; later phases never resolve
     the moving inference ref again or promote a new candidate after a failure.
     """
-    require(context.terminal_request == B1_COMPLETION_SHA256
+    cell_id = context.cell["cell_id"]
+    recorded = TASK2_RETAINED.get(cell_id)
+    require(recorded is not None and context.terminal_request == recorded[1]
             and context.plan["run_id"] == "budget_pilot_ci_20260925_04"
             and context.plan["reviewed_source_sha"] == B1_PRODUCER_SOURCE
-            and context.cell["cell_id"] == B1_CELL and context.plan["order"][7] == B1_CELL
+            and context.plan["order"][7:12] == list(TASK2_RETAINED)
             and retained.BRANCH == "pilot-inference-20260925-04" and BRANCH == "pilot-grades-20260925-04"
-            and output._hash(revision, 40), "recorded_b1_request_required")
+            and output._hash(revision, 40), "recorded_task2_request_required")
     terminal, claim, manifest = (evidence[key] for key in ("terminal", "claim", "manifest"))
     completed = ci.validate_completion(terminal["completion"])
-    require(pilot._digest(completed) == B1_COMPLETION_SHA256, "recorded_b1_completion_mismatch")
+    require(pilot._digest(completed) == recorded[1], "recorded_task2_completion_mismatch")
     binding = claim["binding"]
-    require(binding["github_run"] == B1_INFERENCE_RUN and binding["host"]["workflow"] == ci.WORKFLOW
-            and claim["expected_parent"] == RETAINED_TERMINAL,
-            "recorded_b1_inference_run_mismatch")
+    require(binding["github_run"] == {"id": recorded[0], "job": "cell", "attempt": 1}
+            and binding["host"]["workflow"] == ci.WORKFLOW
+            and (cell_id != B1_CELL or claim["expected_parent"] == RETAINED_TERMINAL),
+            "recorded_task2_inference_run_mismatch")
     inputs = {"files_sha256": binding["verified_inputs_sha256"],
               "source_projection_sha256": binding["source_projection_sha256"]}
     plan = {**context.plan, "ci": {
         "registration_sha256": hashlib.sha256(pilot._read_bytes(ci.REGISTRATION)).hexdigest(),
-        "selected_cell_id": B1_CELL, "host": binding["host"],
+        "selected_cell_id": cell_id, "host": binding["host"],
     }}
     retained._claim(claim, plan, context.cell, inputs)
     retained._manifest(manifest, completed, context.cell)
@@ -409,26 +426,31 @@ def _b1_resolution(context: Context, evidence: dict, revision: str) -> None:
             and terminal["manifest_identity"] == pilot._identity(retained._encoded(manifest))
             and len({revision, terminal["claim_commit"], terminal["output_commit"]}) == 3
             and all(output._hash(terminal[key], 40) for key in ("claim_commit", "output_commit")),
-            "recorded_b1_evidence_mismatch")
-    require(evidence["observation"] == {"cell_id": B1_CELL, "terminal_commit": revision,
+            "recorded_task2_evidence_mismatch")
+    require(evidence["observation"] == {"cell_id": cell_id, "terminal_commit": revision,
         "terminal_sha256": pilot._identity(retained._encoded(terminal))["sha256"],
         "output_commit": terminal["output_commit"], "manifest_sha256": terminal["manifest_identity"]["sha256"]},
-        "recorded_b1_resolution_mismatch")
+        "recorded_task2_resolution_mismatch")
 
 
-def _retained_input(context: Context, api, repo: str, cache: Path, token: str, deadline: float) -> dict:
-    revision, cell = context.terminal_revision, context.cell
+def _retained_input(context: Context, api, repo: str, cache: Path, token: str, deadline: float,
+                    *, candidate_revision: str | None = None) -> dict:
+    # A historical grade's resolved revision is only a candidate until its
+    # original fixed completion/run/source proof passes. No moving ref is read.
+    require(candidate_revision is None or context.terminal_request is not None,
+            "recorded_task2_candidate_required")
+    revision, cell = context.terminal_revision if candidate_revision is None else candidate_revision, context.cell
     snapshot = None
-    if context.terminal_request is not None:
+    if context.terminal_request is not None and candidate_revision is None:
         from huggingface_hub import RepoFile
 
-        # Exact control path only. A later C1 write is not B1's terminal.
+        # Exact control path only. A later cell's write is not this terminal.
         snapshot = output._metadata(api, repo, retained.BRANCH, token, deadline)["sha"]
         path = retained._paths(cell)[1]
         found = api.get_paths_info(repo_id=repo, repo_type="dataset", revision=snapshot,
                                    paths=[path], expand=True, token=token)
         require(type(found) is list and len(found) == 1 and isinstance(found[0], RepoFile)
-                and found[0].path == path, "recorded_b1_terminal_not_established")
+                and found[0].path == path, "recorded_task2_terminal_not_established")
         revision = getattr(found[0].last_commit, "oid", None)
     require(output._hash(revision, 40), "immutable_terminal_revision_required")
     require(output._metadata(api, repo, revision, token, deadline)["sha"] == revision,
@@ -453,13 +475,24 @@ def _retained_input(context: Context, api, repo: str, cache: Path, token: str, d
     }}
     evidence = retained._terminal(api, repo, revision, plan, cell, inputs,
                                   _cache(cache, "verified"), token, deadline)
-    if snapshot is not None:
-        _b1_resolution(context, evidence, revision)
-        retained._objects(api, repo, snapshot,
-            [retained._object(terminal_path, retained._encoded(evidence["terminal"]))],
-            token, deadline, written_at=revision)
+    if context.terminal_request is not None:
+        _task2_resolution(context, evidence, revision)
+        if snapshot is not None:
+            retained._objects(api, repo, snapshot,
+                [retained._object(terminal_path, retained._encoded(evidence["terminal"]))],
+                token, deadline, written_at=revision)
         context.terminal_revision = revision  # Only after content and snapshot proofs.
     return evidence
+
+
+def _grade_retained_input(context: Context, binding: dict, api, repo: str, cache: Path,
+                          token: str, deadline: float) -> None:
+    """Verify a historical grade's whole input observation, not its own assertion."""
+    evidence = _retained_input(context, api, repo, cache, token, deadline,
+                               candidate_revision=binding["retained"]["terminal_commit"])
+    require(binding["retained"] == evidence["observation"]
+            and binding["publication_receipt_sha256"] == evidence["terminal"]["publication_receipt_sha256"],
+            "recorded_grade_input_binding_mismatch")
 
 
 def _fetch(api, repo: str, revision: str, member: str, expected: dict, cache: Path,
@@ -710,7 +743,7 @@ def _ready(context: Context, root: Path) -> dict:
             "request_sha256": prepared["approval_request_sha256"],
             "terminal_revision": prepared["terminal_revision"],
             "evidence_sha256": pilot._digest(prepared["evidence"])}, "recorded_b1_resolution_changed")
-        _b1_resolution(context, prepared["evidence"], prepared["terminal_revision"])
+        _task2_resolution(context, prepared["evidence"], prepared["terminal_revision"])
         context.terminal_revision = prepared["terminal_revision"]
     require(prepared["terminal_revision"] == context.terminal_revision, "bound_native_materialization_required")
     for name, identity in prepared["immutable_files"].items():
@@ -795,6 +828,12 @@ def _grade_terminal(api, repo: str, revision: str, context: Context, entry: dict
             and claim["format"] == CLAIM_FORMAT and claim["binding"] == terminal["binding"]
             and output._hash(claim["expected_parent"], 40), "grade_terminal_claim_mismatch")
     previous = claim["predecessor"]
+    if context.terminal_request is not None:
+        ordinal = context.plan["order"].index(context.cell["cell_id"])
+        require(claim["expected_parent"] != retained.BOOTSTRAP and type(previous) is dict
+                and previous.get("cell_id") == context.plan["order"][ordinal - 1]
+                and (context.cell["cell_id"] != B1_CELL or claim["expected_parent"] == B1_PREVIOUS_GRADE),
+                "recorded_task2_grade_predecessor_required")
     if claim["expected_parent"] == retained.BOOTSTRAP:
         require(previous is None, "grade_bootstrap_claim_mismatch")
     else:
@@ -848,13 +887,16 @@ def _branch_tip(api, repo: str, context: Context, prepared: dict, cache: Path, t
     from huggingface_hub import RepoFile
 
     head = output._metadata(api, repo, BRANCH, token, deadline)["sha"]
-    recorded_b1 = context.terminal_request is not None
-    if recorded_b1:
+    recorded_task2 = context.terminal_request is not None
+    if recorded_task2 and context.cell["cell_id"] == B1_CELL:
         require(head == B1_PREVIOUS_GRADE, "recorded_b1_previous_grade_required")
+    if recorded_task2:
+        require(head != retained.BOOTSTRAP, "recorded_task2_previous_grade_required")
     if head == retained.BOOTSTRAP:
         return head, None
     # Only the fixed eligible suffix's control paths, not a payload inventory.
-    cells = context.plan["cells"][6:7] if recorded_b1 else context.plan["cells"][ci.FIRST_CELL_ORDINAL:]
+    ordinal = context.plan["order"].index(context.cell["cell_id"])
+    cells = context.plan["cells"][ordinal - 1:ordinal] if recorded_task2 else context.plan["cells"][ci.FIRST_CELL_ORDINAL:]
     paths = {_paths(cell)[1]: cell for cell in cells}
     found = api.get_paths_info(repo_id=repo, repo_type="dataset", revision=head,
                                paths=sorted(paths), expand=True, token=token)
@@ -865,29 +907,30 @@ def _branch_tip(api, repo: str, context: Context, prepared: dict, cache: Path, t
     cell = paths[candidates[0].path]
     preliminary = _cache(cache, "tip_binding")
     value, _ = retained._control(api, repo, head, candidates[0].path, preliminary, token, deadline, written_at=head)
-    if recorded_b1:
-        from codex_budget_pilot_grade_readout import WRITER_SOURCE, WRITER_RUN, CONFIG_SHA256, GRADER_SOURCE_HASH
+    if recorded_task2:
+        if cell["cell_id"] in {RETAINED_CELL, B1_CELL}:
+            from codex_budget_pilot_grade_readout import _writer_context, _writer_entry, _writer_run
 
-        require(cell["cell_id"] == RETAINED_CELL and value["binding"]["github_run"] == WRITER_RUN,
-                "recorded_b1_previous_writer_mismatch")
-        other = compile_request("pilot/" + RETAINED_CELL, WRITER_SOURCE, RETAINED_TERMINAL,
-                                producer_source_sha=RETAINED_PRODUCER_SOURCE)
-        require(hashlib.sha256(other.run.grader_config_json.encode()).hexdigest() == CONFIG_SHA256,
-                "recorded_b1_previous_config_mismatch")
-        # Pinned historical grade bytes supply its renderer identity, as in
-        # readout; neither B1's entry nor a self-reported source hash is adopted.
-        renderer = value["binding"]["renderer_fingerprint"]
-        require(type(renderer) is dict and set(renderer) == {
-            "libreoffice_binary", "libreoffice_version", "pymupdf_version"}
-            and all(type(item) is str and 0 < len(item) <= 1024 for item in renderer.values()),
-            "recorded_b1_previous_renderer_mismatch")
-        entry = {"config_hash": CONFIG_SHA256[:16], "grader_source_hash": GRADER_SOURCE_HASH,
-                 "renderer_fingerprint": renderer}
+            request = RETAINED_TERMINAL if cell["cell_id"] == RETAINED_CELL else TASK2_RETAINED[B1_CELL][1]
+            other = _writer_context(request)
+            require(value["binding"]["github_run"] == _writer_run(other), "recorded_task2_previous_writer_mismatch")
+            entry = _writer_entry(other, value["binding"]["renderer_fingerprint"])
+        else:
+            # Future C1/C2/B2 grades must all use the controller declared for
+            # this request. Never derive that authority from the prior record.
+            other = compile_request("pilot/" + cell["cell_id"], context.controller_source_sha,
+                TASK2_RETAINED[cell["cell_id"]][1], producer_source_sha=B1_PRODUCER_SOURCE)
+            entry = prepared["entry"]
+        if other.terminal_request is not None:
+            _grade_retained_input(other, value["binding"], api, repo, _cache(cache, "tip_inference"), token, deadline)
     else:
         other = compile_request("pilot/" + cell["cell_id"], context.controller_source_sha,
             value["binding"]["retained"]["terminal_commit"], producer_source_sha=context.plan["reviewed_source_sha"])
         entry = prepared["entry"]
     verified = _grade_terminal(api, repo, head, other, entry, _cache(cache, "tip_verified"), token, deadline)
+    if recorded_task2:
+        require(prepared["evidence"]["claim"]["predecessor"] == verified["terminal"]["binding"]["retained"],
+                "recorded_task2_inference_predecessor_mismatch")
     return head, {"cell_id": cell["cell_id"], "revision": head, **verified["identity"]}
 
 
