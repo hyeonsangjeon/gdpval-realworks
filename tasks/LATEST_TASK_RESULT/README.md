@@ -1,20 +1,52 @@
 # Latest task result
 
-## PROJECT5-BUDGET-SNAPSHOT-PROJECTION
+## PROJECT5-CI-SELECTED-DENIAL-FIX
 
-Implemented one shared seven-field projection for already supported ordinary
-and model-free UNGRADED selected records. Focused affected-case validation
-passed after a test-only fixture correction; the initial failure remains
-separate below. No live snapshot values have been observed.
+Corrected only the two stale observed-download assertions for ordinary Task5
+C1 and B2. The single requested two-node invocation passed at the test-only
+commit below. Runtime code, source grants and every report byte are unchanged;
+only the two test files and these two current completion records change.
+No live snapshot values have been observed.
 
-### Scope and selected-result authority
+### CI blocker and targeted correction
+
+At published `97c27e72178222e34dbcacf022e314c3798e2e2f`, the leader's full
+1107-line/14-file source review `5332020092` was conditional on CI. That
+condition was not met: the completed [budget-readout-contracts job](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/36347712496/job/108700216613)
+(`108700216613`, run `36347712496`) had **23 failed, 2906 passed in
+1486.21s**. REQUEST-CHANGES `5332037055` records the blocker. These supplied
+failures came from two stale observed-read expectations, not a new runtime
+defect; no CI query or reinvestigation was performed.
+
+Each observed-download assertion now excludes only its selected ordinary
+`(verified output revision, prefix/step2_inference_results.json)` tuple from
+the relevant denied intersection. B2's exclusion applies only to profile
+`b2`, never A2. No original denial set is mutated. Every parent/deeper
+denial, selected-ledger prohibition, pre-proof check and later
+post-consumption/closed-facade access probe stays intact.
+
+Exact tested commit: `d9fc971a3be546100e703dca3ebd6b0fc3122ecf`.
+One invocation from `batch-runner`, with the two node IDs quoted literally:
+
+```bash
+env -i PATH=/usr/bin:/bin HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 HF_HUB_DISABLE_IMPLICIT_TOKEN=1 DO_NOT_TRACK=1 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /usr/bin/python3 -m pytest -m "not integration" -q -o addopts= -p no:cacheprovider --tb=short --junitxml=/tmp/project5-ci-selected-denial.W9MQbF/results.xml 'tests/test_codex_budget_pilot_task5_c1_readout.py::test_fixed_task5_c1_readout_after_ungraded[graded]' 'tests/test_codex_budget_pilot_task5_final_readout.py::test_final_task5_readouts[b2-graded]'
+```
+
+Observed result: **2 passed in 214.59s (0:03:34)**, exit **0**. Both positive
+cases completed their existing end-of-run denial probes. No other cases,
+prior snapshot group, full old family or full suite ran for this repair.
+This result does not replace the failed CI observation or establish that
+fresh CI has passed. The later records-only commit is not another tested SHA.
+
+### Preserved snapshot scope and selected-result authority
 
 The branch `b/codex-budget-snapshot-projection-20260927` starts at exact main
 `d4d6447ad4873b4b21db599be079652d615d74f5`, tree
-`84b813d7348eb574b695da52420498dd5ca66345`. Only the readout, its focused tests
-and directly coupled download expectations, the report and these two current
-completion-record sections change. No workflow, core runner, retention,
-grader, config, budget, input or selector registry changes.
+`84b813d7348eb574b695da52420498dd5ca66345`. The original snapshot addition
+changed the readout, its focused tests and directly coupled download
+expectations, the report and current completion records. The present repair
+changes no workflow, core runner, retention, grader, config, budget, input,
+selector registry or runtime code.
 
 The explicit `PROJECT5-SELECTED-RESULT-GRANT` permits one ordinary selected
 `step2_inference_results.json` fetch at the verified immutable output revision.
@@ -41,7 +73,7 @@ refuse explicitly; no private or extra fields are projected. A missing
 required `observability` object remains a native validation failure, distinct
 from an absent `task_deadline` snapshot inside valid observability.
 
-### Separate focused test evidence
+### Earlier separate snapshot test evidence
 
 The new group is `tests/test_codex_budget_pilot_budget_snapshot_readout.py`,
 run from `batch-runner` with an empty inherited environment and offline guards.
@@ -71,16 +103,19 @@ and added refusal-stage checks. All 29 NG cases were selected again because
 their initial refusals could be masked by the invalid binding; the affected
 ordinary-observability and legacy cases were also selected. The 28 unaffected
 ordinary cases were not rerun. No production change, guard bypass or combined
-pass invocation is claimed. Old chains, old families and full suites did not
-run; nine directly coupled legacy expectation edits remain unexecuted locally.
+pass invocation is claimed. Those original snapshot invocations did not run
+old test cases or full suites. The two later correction nodes are reported
+above; other coupled legacy cases remain unexecuted locally.
 
 The tests exercise actual top-level ordinary/NG paths, selected byte binding,
 one-use grant lifetime, parent/path/revision denials, no extra NG fetch,
 size/hash/task tampering, zero/missing/partial/nullable snapshots, malformed
-and nonfinite values, private-field exclusion and lost responses. The final
-tested tree is `5ed0a286fb5700340d2d8e486862b1d3be62e87c`; the reader blob is
+and nonfinite values, private-field exclusion and lost responses. The snapshot
+correction's tested tree is `5ed0a286fb5700340d2d8e486862b1d3be62e87c`; the reader blob is
 `8b3c500d6881b9d364c917a2e6c7515cde1ea23f`, unchanged by the fixture correction.
-The later records-only publication commit is not another tested SHA.
+The subsequent records-only publication at
+`97c27e72178222e34dbcacf022e314c3798e2e2f` had no additional local snapshot
+invocation; its later CI result is recorded separately above.
 
 ### Report fidelity and prior evidence
 
@@ -98,8 +133,9 @@ row lines retain SHA-256 `c95df3de7ea7601ef218cf0138f3960d2c80a3f42dc597502aea5c
 The catalog was checked once. `experiment-design` applied only to measurement
 semantics and the unchanged intervention; no new experiment was designed.
 `experiment-report-en` supplied the protection brief, followed by protected
-`im-not-ai-en` copyediting and literal/semantic reconciliation. UI skills do
-not apply. Historical record bodies stay unchanged. Exact final A2 evidence
+`im-not-ai-en` copyediting and literal/semantic reconciliation. This correction
+reuses that guidance without a new design review; UI skills do not apply.
+Historical record bodies stay unchanged. Exact final A2 evidence
 and earlier report checks remain in the [immutable report-finalization record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/d4d6447ad4873b4b21db599be079652d615d74f5/tasks/LATEST_TASK_RESULT/README.md#project5-finalize-pilot-report).
 
 Original `7793b92bebb5301e2f877da37bd6d63df841a0ec` had **516 setup errors in
@@ -117,10 +153,12 @@ the delivered report at `95aa1dc21a2485e5a16d464d3afabeee342390f1`, not this
 addition. Historical writer `69e56fc58daf50af2ac9e8b52691ffcbf5af4f96` and
 producer `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e` remain immutable;
 this branch is an observer only. Main and the preserved checkout are untouched.
-One ordinary owner-account push and one new draft PR are authorized, followed
-by a stop without CI polling or a manual rerun. The new head still requires
-leader review and CI. Any live observation needs separate approval and the
-existing selected/parent proofs; none ran here. No new inference, grading,
+One ordinary owner-account correction push to existing PR693 is authorized,
+with no new PR, followed by a stop without CI polling or a manual rerun.
+The leader still needs to review the new delta and final CI gate; the prior
+conditional review does not approve this correction. Any live observation
+needs separate approval and the existing selected/parent proofs; none ran
+here. No new inference, grading,
 regrading, prospective instrumentation or expanded experiment is authorized.
 No live HF/model/OIDC/Azure-management call, credential change, Project edit or
 merge is part of this unit. No future merge SHA, time or state is recorded.

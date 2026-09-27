@@ -13,8 +13,21 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
-- Expose the selected inference result's seven existing budget-snapshot fields
-  through one shared ordinary/UNGRADED readout projection, from exact main
+- Correct only two stale observed-download assertions for Task5 C1 and B2
+  in PR693. Each permits only its exact selected ordinary output-revision/
+  prefix/`step2_inference_results.json` tuple; B2's allowance applies only to
+  profile `b2`. The original denial sets, parent/deeper and selected-ledger
+  prohibitions, pre-proof checks and post-consumption/closed-facade access
+  probes are unchanged. No runtime or source-grant change. At published
+  `97c27e72178222e34dbcacf022e314c3798e2e2f`, the leader-reported
+  budget-readout-contracts job `108700216613`, run `36347712496`, had
+  **23 failed, 2906 passed in 1486.21s**. Review `5332020092` was conditional
+  on CI; REQUEST-CHANGES `5332037055` records that unmet condition. The single
+  two-node invocation at `d9fc971a3be546100e703dca3ebd6b0fc3122ecf` had
+  **2 passed in 214.59s**, exit **0**, including both existing end-of-run
+  denial probes. No other test cases or full suites were run for this repair.
+  The underlying shared seven-field ordinary/UNGRADED snapshot projection
+  remains unchanged, based on exact main
   `d4d6447ad4873b4b21db599be079652d615d74f5` on
   `b/codex-budget-snapshot-projection-20260927`. The explicit selected-result
   grant permits one size/hash-checked ordinary result fetch at its verified
@@ -32,8 +45,9 @@ entries land under a fresh dated heading the day they merge to `main`.
   `d262e999df0136451eef82e6328cc18468e489ec` had **31 passed, 28 deselected
   in 49.12s**, exit **0**, covering all affected NG/legacy/native-observability
   cases without rerunning 28 unaffected ordinary cases. Production did not
-  change in that correction. These remain separate invocations, not a
-  combined pass count; old families and full suites were not run. Exact
+  change in that correction. Those snapshot invocations, the later CI failure
+  and this two-node repair check remain separate, not a combined pass count.
+  No prior snapshot group or full family was rerun for this repair. Exact
   selectors and limits are in [the current completion record](tasks/LATEST_TASK_RESULT/README.md).
   The 114-line [pilot report](tasks/codex_budget_pilot/REPORT.md) preserves
   all 24 outcome rows and every other table byte-for-byte. It adds measurement
@@ -48,8 +62,9 @@ entries land under a fresh dated heading the day they merge to `main`.
   exit **0**. Historical bodies and immutable provenance references remain
   intact. The records commit changes no tested code. Main and the preserved
   checkout remain untouched; historical writer69/producer780 remain immutable.
-  One ordinary push and one draft PR are authorized. New-head leader review,
-  CI and separate live-observation approval remain required; no future merge
+  One ordinary correction push to existing PR693 is authorized, with no new
+  PR. New-delta review, final CI and separate live-observation approval
+  remain required; no future merge
   facts, live service/readout calls, new inference, grading, regrading or
   expansion are authorized. Stop after publication without CI polling.
 
