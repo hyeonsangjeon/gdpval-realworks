@@ -108,14 +108,16 @@ def _store_grade(api, revision, path, terminal, claim):
 
 
 def _unregistered_requests():
-    # Exactly B1/C1/C2/B2 join A1; A2 and every later reader remain closed.
-    registered = {readout.TASK3_B1_CELL, readout.TASK3_C1_CELL, readout.TASK3_C2_CELL, readout.TASK3_B2_CELL}
+    # Exactly five task3 successors join A1; every task4/task5 reader stays closed.
+    registered = {readout.TASK3_B1_CELL, readout.TASK3_C1_CELL, readout.TASK3_C2_CELL,
+                  readout.TASK3_B2_CELL, readout.TASK3_A2_CELL}
     assert set(readout.TASK3_SUCCESSOR_READOUTS) == registered
+    assert registered == set(grading.TASK3_SUCCESSORS)
     requests = [value[1] for cell, value in grading.TASK3_SUCCESSORS.items() if cell not in registered]
     requests.extend(value[1] for value in (*grading.TASK4_RETAINED.values(), *grading.TASK5_RETAINED.values()))
     requests.extend(["9" * 64, "9" * 40, ""])
-    assert len(requests) == len(set(requests)) == 16
-    assert grading.TASK3_SUCCESSORS["2ea2e5b5-257f-42e6-a7dc-93763f28b19d_A_r2"][1] in requests
+    assert len(requests) == len(set(requests)) == 15
+    assert all(value[1] in requests for value in (*grading.TASK4_RETAINED.values(), *grading.TASK5_RETAINED.values()))
     assert all(grading.TASK3_SUCCESSORS[cell][1] not in requests for cell in registered)
     return requests
 

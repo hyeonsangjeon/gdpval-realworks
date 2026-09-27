@@ -43,17 +43,19 @@ TASK2_GRADE_RUNS = {
 TASK3_A1_WRITER_SOURCE = "69e56fc58daf50af2ac9e8b52691ffcbf5af4f96"
 TASK3_A1_WRITER_RUN = {"id": "36282221138", "job": "pilot-live", "attempt": 1}
 TASK3_A1_GRADER_SOURCE_HASH = "0a66e518dbe9dfe403e68aee69ec13d7f15ee7d86c6c2de7ccedfe990242e7df"
-# Only these four recorded successors share the immutable writer/config.
+# Only these five recorded successors share the immutable writer/config.
 TASK3_B1_CELL = "2ea2e5b5-257f-42e6-a7dc-93763f28b19d_B_r1"
 TASK3_B1_WRITER_RUN = {"id": "36283710283", "job": "pilot-live", "attempt": 1}
 TASK3_C1_CELL = "2ea2e5b5-257f-42e6-a7dc-93763f28b19d_C_r1"
 TASK3_C2_CELL = "2ea2e5b5-257f-42e6-a7dc-93763f28b19d_C_r2"
 TASK3_B2_CELL = "2ea2e5b5-257f-42e6-a7dc-93763f28b19d_B_r2"
+TASK3_A2_CELL = "2ea2e5b5-257f-42e6-a7dc-93763f28b19d_A_r2"
 TASK3_SUCCESSOR_READOUTS = {
     TASK3_B1_CELL: (13, grading.TASK3_A1_CELL, TASK3_B1_WRITER_RUN),
     TASK3_C1_CELL: (14, TASK3_B1_CELL, {"id": "36285446183", "job": "pilot-live", "attempt": 1}),
     TASK3_C2_CELL: (15, TASK3_C1_CELL, {"id": "36286719528", "job": "pilot-live", "attempt": 1}),
     TASK3_B2_CELL: (16, TASK3_C2_CELL, {"id": "36288201352", "job": "pilot-live", "attempt": 1}),
+    TASK3_A2_CELL: (17, TASK3_B2_CELL, {"id": "36289615941", "job": "pilot-live", "attempt": 1}),
 }
 # These additional observed pins apply only to C1's predecessor proof. The
 # already-delivered B1 reader and production grading helpers keep their route.

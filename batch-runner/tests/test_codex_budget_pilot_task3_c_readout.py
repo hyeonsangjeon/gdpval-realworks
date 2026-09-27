@@ -48,7 +48,9 @@ PRIVATE = "PRIVATE https://private.invalid/path?token=PRIVATE"
 def history(tmp_path_factory, *, _scenarios=VARIANTS):
     expected = {b1_reader.CELL: (13, grading.TASK3_A1_CELL, readout.TASK3_B1_WRITER_RUN),
                 readout.TASK3_B2_CELL: (16, readout.TASK3_C2_CELL,
-                                      {"id": "36288201352", "job": "pilot-live", "attempt": 1})}
+                                      {"id": "36288201352", "job": "pilot-live", "attempt": 1}),
+                readout.TASK3_A2_CELL: (17, readout.TASK3_B2_CELL,
+                                      {"id": "36289615941", "job": "pilot-live", "attempt": 1})}
     for suffix, (ordinal, grade_run, inference_run, request, prior) in RECORDED.items():
         cell = PREFIX + suffix
         expected[cell] = (ordinal, PREFIX + prior, {"id": grade_run, "job": "pilot-live", "attempt": 1})
@@ -487,7 +489,7 @@ def _check_successor_readout(selected, recorded, tmp_path, monkeypatch, capsys, 
         assert public["inference_terminal"] is None and public["observer_source_sha"] == OBSERVER
         if scenario == "closed_registry":
             requests = a1_reader._unregistered_requests()
-            assert len(requests) == 16 and selected.request not in requests
+            assert len(requests) == 15 and selected.request not in requests
             assert grading.TASK3_A1_COMPLETION_SHA256 not in requests
             assert all(grading.TASK3_SUCCESSORS[cell][1] not in requests for cell in readout.TASK3_SUCCESSOR_READOUTS)
             for request in requests:

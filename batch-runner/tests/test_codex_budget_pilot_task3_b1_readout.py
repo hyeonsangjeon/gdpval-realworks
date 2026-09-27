@@ -427,7 +427,7 @@ def test_fixed_task3_b1_grade_readout(history, tmp_path, monkeypatch, capsys, sc
         assert public["inference_terminal"] is None and public["observer_source_sha"] == OBSERVER
         if scenario == "closed_registry":
             requests = a1_reader._unregistered_requests()
-            assert grading.TASK3_SUCCESSORS["2ea2e5b5-257f-42e6-a7dc-93763f28b19d_A_r2"][1] in requests
+            assert all(value[1] in requests for value in (*grading.TASK4_RETAINED.values(), *grading.TASK5_RETAINED.values()))
             assert history.request not in requests and grading.TASK3_A1_COMPLETION_SHA256 not in requests
             for request in requests:
                 closed = list(args)
