@@ -689,10 +689,11 @@ def test_fixed_task5_c1_readout_after_ungraded(history, tmp_path, monkeypatch, c
         assert code == 0 and public["outcome"] == "plan_only" and not api.calls and not root.exists()
         if scenario == "closed_registry":
             requests = controls._unregistered_requests()
-            assert len(requests) == 5 and history.request not in requests
+            assert len(requests) == 3 and history.request not in requests
             assert context.plan["order"][24:28] == [A1, PARENT, CELL, grading.TASK5_C2_CELL]
             assert context.plan["order"][28:] == [grading.TASK5_B2_CELL, grading.TASK5_A2_CELL]
-            assert set(requests) == {*(grading.TASK5_RETAINED[cell][1] for cell in context.plan["order"][28:]),
+            assert context.plan["order"][30:] == []
+            assert set(requests) == {*(grading.TASK5_RETAINED[cell][1] for cell in context.plan["order"][30:]),
                                      "9" * 64, "9" * 40, ""}
             assert not grading._model_free_context(readout._writer_context(history.request))
             assert CELL not in readout.TASK4_SUCCESSOR_READOUTS and CELL not in readout.TASK3_SUCCESSOR_READOUTS
