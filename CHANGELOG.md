@@ -13,14 +13,22 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
-- Prepare the local [pilot report draft](tasks/codex_budget_pilot/REPORT.md)
+- Finalize the [pilot report for review](tasks/codex_budget_pilot/REPORT.md)
   on `b/codex-budget-pilot-report-draft-20260927`, from exact main
-  `74ae7277a636643d37c4a7e854728df1aec83676`. Use only the leader-verified
-  rows and approved design/provenance: 23 verified epoch04 projections
-  (18 graded, 5 model-free UNGRADED), with six frozen epoch03 T1 cells kept
-  separate. Final Task5 A2 readout `36337865696` is reported RUNNING and
-  remains PENDING; its projected state and cost are unknown, and the pilot
-  is not finished. Preserve included/full denominators, unread exclusion
+  `74ae7277a636643d37c4a7e854728df1aec83676`. Add only the leader-verified
+  final Task5 A2 UNGRADED row from readout `36337865696`, job `108672077172`,
+  attempt 1, succeeded `2026-09-27T17:45:27Z`: no deliverable or numeric grade,
+  not zero points. All other 23 score/full-denominator/run rows stay byte-exact.
+  The 107-line report now has 24 unique epoch04 projections (18 graded,
+  6 model-free UNGRADED, 0 pending) plus six separate frozen epoch03 T1
+  outcomes: all 30 original IDs, not 30 successful same-protocol runs or
+  30 epoch04 cells. A2's three original inference cost views agree on
+  USD 0.406518 known partial cost, with 4 recorded model calls;
+  `call_reachability_unknown`, `NULL` estimated cost, invoice false, HTTP
+  `null` and separately `NOT_MEASURED` recorder cost do not become zeros.
+  Exact supplied record/source/revision/claim/input and token-count evidence
+  is in [the current completion record](tasks/LATEST_TASK_RESULT/README.md).
+  Preserve included/full denominators, unread exclusion
   causes/ID overlap, source changes, retry/retention confounding and partial
   or missing accounting; no causal ranking or whole-pilot bill is claimed.
   Literal reconciliation and protected English review only: no tests,
@@ -37,11 +45,15 @@ entries land under a fresh dated heading the day they merge to `main`.
   in the [immutable historical preparation record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/74ae7277a636643d37c4a7e854728df1aec83676/tasks/LATEST_TASK_RESULT/README.md#project5-publish-validated-final-readers);
   all earlier observations remain separate. Per the leader, reader PR691 was
   delivered after review `5331081033` and all 10 CI checks passed; those facts
-  do not approve this draft and were not queried. Historical writer69 and
-  producer780 remain immutable. The leader's verified final A2 row is still
-  required. Draft only: no push, PR action, main mutation, inference, regrade
-  or live service/readout call; later publication and live readout retain
-  their separate review and individual approval gates.
+  do not approve this report and were not queried. Historical writer69 and
+  producer780 remain immutable. The three earlier correction admissions stay
+  separate; the retention-only contrast remains unanswered. One ordinary
+  push and one new draft PR are authorized for only these three Markdown files,
+  subject to new leader review; no future merge facts are recorded. No main,
+  old-branch, closed-PR691 or Project mutation, live service/readout call,
+  inference, grade, regrade or 30/220-task expansion. Merge belongs to the leader;
+  live readout retains separate approval gates. Stop after publication without
+  CI polling or a manual rerun.
 
 - Historical initial final-pair attempt: add only the final task5 B2 ordinary and A2 MODEL-FREE UNGRADED readout
   bindings locally. Validation is incomplete: the single new B2/A2-only

@@ -1,6 +1,6 @@
-# Codex external-budget pilot: local draft
+# Codex external-budget pilot: report for review
 
-This leader-verified snapshot contains **23 verified epoch04 projections: 18 graded and 5 model-free UNGRADED**. Task5 A2's readout is reported RUNNING and remains PENDING here; its projected grade state and cost are unknown. The pilot is not finished.
+This leader-verified report contains **24 unique epoch04 projections: 18 graded and 6 model-free UNGRADED, with 0 pending and no duplicates**. Together with six separate frozen epoch03 T1 failure outcomes, it documents all 30 original cell IDs—not 30 successful same-protocol runs or 30 epoch04 cells.
 The observations are high T2/T3 scores, moderate T4 scores with large exclusions, and poor or missing T5 grades. They do not establish a causal model or condition ranking.
 
 ## Conditions and original task identities
@@ -21,7 +21,7 @@ A/B confounds retry policy with retention. B/C is the feedback contrast, not ret
 
 ## Epoch04 readout results
 
-Pairs are **included percentage / full-denominator percentage**. NG means model-free UNGRADED; a dash means no numeric grade, not zero. PENDING is not a verified grade state. Each linked run is the supplied GitHub readout evidence; none was queried for this draft.
+Pairs are **included percentage / full-denominator percentage**. NG means model-free UNGRADED; a dash means no numeric grade, not zero. Each linked run is the supplied GitHub readout evidence; none was queried for this report.
 Each T2 grade excludes 1 item worth 1 maximum point: included denominator 65, full denominator 66. T3 has no exclusions.
 Each of the four T4 grades excludes 9 items worth 11 maximum points: included denominator 45, full denominator 56. Exclusion causes and overlap of excluded item IDs are **UNREAD**; identical counts do not establish identical exclusions.
 
@@ -50,9 +50,11 @@ Each of the four T4 grades excludes 9 items worth 11 maximum points: included de
 | T5 | C1 | graded | 8.23 / 8.23 | [36332199214](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/36332199214) |
 | T5 | C2 | NG; no deliverable | — | [36334062307](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/36334062307) |
 | T5 | B2 | graded | 28.44 / 28.44 | [36335885361](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/36335885361) |
-| T5 | A2 | PENDING | pending | [36337865696](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/36337865696) |
+| T5 | A2 | NG; no deliverable | — | [36337865696](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/36337865696) |
 
 T5 C1 earned 10.375/126 points; B2 earned 35.84/126. Both are graded without exclusions. The reported `critical_items=20` does **not** mean 20 failed items.
+Final T5 A2 readout `36337865696` (job `108672077172`, attempt 1) succeeded at `2026-09-27T17:45:27Z` on observer `74ae7277a636643d37c4a7e854728df1aec83676`; its verified projection is model-free UNGRADED, not an ordinary numeric grade.
+Its original inference `36277325255` ended with exit 1 / `child_nonzero_exit`, timeout false, cleanup true and no deliverables. Expected results 1, scored results 0 and score `NULL` mean no numeric grade, not zero points; the internal cause is unknown.
 
 ## Frozen epoch03 Task1, kept separate
 
@@ -97,7 +99,9 @@ The following amounts are known **partial NG inference USD**, not complete cell 
 | T5 A1 | 0.203863 | 3 |
 | T5 B1 | 0.347961 | 33 |
 | T5 C2 | 0.240000 | 6 |
+| T5 A2 | 0.406518 | 4 |
 
+For T5 A2, all three original inference cost views agree on USD 0.406518 known partial cost. The receipt records 4 model calls and 300390 input, 11097 output, 227072 cached and 5380 reasoning tokens; estimated cost is `NULL`, reachability is `call_reachability_unknown`, invoice is false and HTTP count is `null`.
 Recorder accounting remains `NOT_MEASURED`, not zero, and separate from inference receipts. No whole-pilot bill or cost-efficiency ranking is available from these facts.
-The leader will provide the verified final Task5 A2 row. Until then, its readout state and cost remain pending and the pilot must not be declared finished. Exclusion causes/ID overlap, missing prices and the unresolved retention-only contrast remain limits even after that row arrives.
-This is a local documentation draft, not authority for more inference, regrading, expansion, publication or live readout calls.
+All 30 original IDs now have documented outcomes across the two epochs, with no pending epoch04 projection. This is outcome accounting, not evidence of one unchanged cohort or condition/model superiority. Exclusion causes/ID overlap, missing prices, source changes and the unresolved retention-only contrast remain limits.
+This report is ready for leader review through one authorized draft PR; it does not authorize more inference, grading, regrading, expansion or live readout calls. Merge and Project decisions remain with the leader.

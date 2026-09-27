@@ -1,18 +1,44 @@
 # Latest task result
 
-## PROJECT5-PILOT-REPORT-DRAFT
+## PROJECT5-FINALIZE-PILOT-REPORT
 
-Prepared the 103-line [English pilot report](../codex_budget_pilot/REPORT.md)
-using only the supplied leader-verified rows and existing approved design
-and provenance. There are **23 verified epoch04 projections: 18 graded and
-5 model-free UNGRADED**. Six frozen epoch03 T1 inference cells remain separate.
-Final Task5 A2 readout `36337865696` is leader-reported RUNNING and remains
-PENDING; its projected grade state and cost are unknown. The pilot is not finished.
+Finalized the 107-line [English pilot report](../codex_budget_pilot/REPORT.md)
+with the leader's verified Task5 A2 model-free UNGRADED row. There are now
+**24 unique epoch04 projections: 18 graded, 6 UNGRADED and 0 pending**, with
+no duplicates or fabricated zero scores. Together with six separate frozen
+epoch03 T1 failure outcomes, these document all 30 original cell IDs—not
+30 successful same-protocol runs or 30 epoch04 cells. All other 23 result,
+score/full-denominator and readout-run rows remain byte-identical.
+
+### Final A2 evidence
+
+Readout [36337865696](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/36337865696),
+job `108672077172`, attempt 1, succeeded at `2026-09-27T17:45:27Z` on observer
+`74ae7277a636643d37c4a7e854728df1aec83676`. It verifies original record
+`36306339791` under historical writer
+`69e56fc58daf50af2ac9e8b52691ffcbf5af4f96`, original producer
+`78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e` and inference `36277325255`.
+The exact leader-supplied bindings, not guessed or fetched values, are:
+
+- Request: `40a4785b0720dfc271ffe1d148c77c6da9ed5c65a4101b6dc61e69e30ec0dab7`.
+- `grade_revision`: `b057ed17849c0ab31b0adfb8c28109d4d34a50f7`.
+- Claim: `41729a5caf6307a200921fc2c06a8b8e860ab95b`.
+- Input: `43b0532179308668fe68d34ee4277bfa5f670bf9`.
+
+Original inference exited 1 with `child_nonzero_exit`, timeout false,
+cleanup true and no deliverables. Expected results 1, scored results 0 and
+score `NULL` mean no numeric grade, not zero points. The internal cause is unknown.
+All three original inference cost views agree on USD **0.406518 known partial**
+cost. The receipt records 4 model calls, 300390 input, 11097 output,
+227072 cached and 5380 reasoning tokens. Estimated cost remains `NULL`,
+status `call_reachability_unknown`, invoice false and HTTP count `null`;
+recorder accounting is separately `NOT_MEASURED`, not zero.
 
 ### Scope and document checks
 
-The local draft branch is `b/codex-budget-pilot-report-draft-20260927`, based
-on exact supplied main `74ae7277a636643d37c4a7e854728df1aec83676` (base tree
+The report continues from clean local `a0c9d5908bb8b56d2e7de7a674431485d6e12dfe`
+on `b/codex-budget-pilot-report-draft-20260927`, based on exact supplied main
+`74ae7277a636643d37c4a7e854728df1aec83676` (base tree
 `0159c24f38ee68088ab211a942b56f2d648139d3`). The preserved old branch
 `b/codex-final-task5-readers-20260927` remains at
 `3a2d8a553c327d34b843e67bd4a526036cf1c8d5`; the local main ref was not moved.
@@ -21,8 +47,9 @@ change. The complete `batch-runner` production/test subtree remains
 `18d65fd7ffc7045414d3161b2d7b8cadb77fcf0e`; no code, test, workflow,
 runtime, writer, budget, input or framework changed.
 
-Literal reconciliation checked the ordered score/status/run rows, frozen
-failure rows, partial-cost/model-call rows, task IDs and source/writer SHAs.
+Literal reconciliation checked the A2 addition, all 24 unique ordered
+result/run identities, the 23 unchanged rows, frozen failure rows, partial-cost/
+model-call rows, task IDs and source/writer SHAs against the supplied evidence.
 The report preserves included/full denominators, unread T4 exclusion causes
 and ID overlap, the source chronology and operational corrections, A/B
 retry/retention confounding, and B/C's feedback contrast. Monetary totals
@@ -30,9 +57,9 @@ remain `NULL` where prices are missing; partial inference receipts stay
 separate from recorder `NOT_MEASURED` accounting. No causal ranking,
 retention-only proof, invoice or whole-pilot bill is claimed.
 
-The full skill catalog was reviewed once. `experiment-report-en` established
-the protected evidence and structure; `im-not-ai-en` then copyedited within
-those bounds. Literal and semantic checks passed. These are documentation
+The previously reviewed catalog and `experiment-report-en` protection brief
+were reused for this bounded update, followed by protected `im-not-ai-en`
+copyediting. Literal and semantic checks passed. These are documentation
 checks only: **no tests, builds or new runtime validation ran**, and no live
 readout, review or CI was queried. Historical record bodies remain unchanged.
 
@@ -52,19 +79,27 @@ All earlier observations remain separate in the unchanged historical sections.
 ### Remaining decision and authority
 
 Per the leader, reader PR691 was delivered after review `5331081033` and all
-10 CI checks passed; those facts cover the delivered reader, not this report
-draft. Historical writer `69e56fc58daf50af2ac9e8b52691ffcbf5af4f96` and
+10 CI checks passed; those facts cover the delivered reader, not this finalized
+report. Historical writer `69e56fc58daf50af2ac9e8b52691ffcbf5af4f96` and
 producer `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e` remain immutable;
 observer SHAs are separate. No new inference, grade or regrade is authorized.
 
-The leader must supply the verified final A2 row. No result or cost is inferred
-from its pending job, and no readout is queried or interfered with. Exclusion
-causes/ID overlap, missing prices, source changes and the unanswered
-retention-only contrast remain limits. This unit is a local draft only:
-no push, PR action, merge, main mutation or live HF/model/OIDC/readout/
-Azure-management/Project call. Any later publication requires authorization
-and review; live readout still requires its distinct reviewed observer,
-actual selected/parent proofs and individual protected approval.
+The final row resolves only A2's pending status. Exclusion causes/ID overlap,
+missing prices, source changes, A/B retry-plus-retention confounding, B/C's
+limited feedback contrast and the unanswered retention-only contrast remain
+limits. The three earlier correction admissions remain separate, not independent
+repeats. No model/condition superiority or whole-pilot bill is claimed.
+
+One ordinary push of this existing feature branch and one new draft PR are
+authorized for these three Markdown files only; the branch was absent remotely
+at the bounded pre-publication check. This records preparation for publication,
+not a future PR number or merge SHA/time/state. The new report still requires
+leader review. Main, the old branch, closed PR691 and Project state remain
+unchanged; merge belongs to the leader. No test/build, CI rerun/polling or live
+HF/model/OIDC/readout/Azure-management call is authorized. Live readout retains
+its distinct reviewed observer, actual selected/parent proofs and individual
+protected approval; no inference, grade, regrade or 30/220-task expansion is
+authorized. Stop after the single push and draft PR, without CI polling.
 
 ## Prior initial attempt: PROJECT5-FINAL-TASK5-B2-A2-READERS
 
