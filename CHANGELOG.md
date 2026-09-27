@@ -81,6 +81,43 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Prepare only task3 B1's model-free first-grade readout for cell
+  `2ea2e5b5-257f-42e6-a7dc-93763f28b19d_B_r1`, ordinal 13, writer
+  `69e56fc58daf50af2ac9e8b52691ffcbf5af4f96` / grade run `36283710283` /
+  attempt 1, original producer `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e`,
+  inference run `36226798976` and completion
+  `d2fa808126be82fd9ae6af0b154c9730825acef665151869a47c13e4574147ec`.
+  Require actual task3 A1 under the same writer / grade run `36282221138`,
+  producer780 / inference run `36225255532` / completion
+  `1fb1bc33acab5b2bdefd70744a899c808d984e9c231deded4217ad92d4dc7e3d`.
+  Canonical claim and typed 13-to-12 proof permit only the fixed A1 control
+  read; full writer/run/retained-byte/history/predecessor proof and matching
+  config/source/renderer entries precede B1 grade-file access. No recursive
+  history or predecessor payload download is added. Direct A1's historical
+  task2 A2 handoff remains unchanged, and observer authority stays distinct.
+  State, denominators/exclusions and separate task/summary/ledger accounting
+  remain; `call_reachability_unknown` and `price_missing` are preserved without
+  inventing zero cost, invoices or HTTP counts. One B1-only offline invocation
+  returned **89 collected, 89 passed in 60.35s**, exit **0**, at
+  `579153486e3262a6b3fcf683c735fc402d38d9b2`, with genuine synthetic writer
+  history and isolated mutations; external/model boundaries were fake or
+  blocked. The coupled A1 registry check now excludes only B1 and retains
+  19 distinct C1/later/invalid refusals. Earlier A1 results remain separate:
+  **72 passed, 6 failed in 44.64s** at
+  `8dfd601cebe29daeb2104f9c058705d947e3e6bf`, then only the six corrected nodes
+  **6 passed in 32.00s** at `fd7e1dba7d8066ad49e5a3ed94290f4d2f7dd6d6`.
+  That correction was test-only; no combined 78-pass invocation or prior-family
+  rerun is claimed. Only completion records changed after the B1 tested SHA.
+  Work remains local and unpublished; base review `5328127720` and nine passing
+  checks do not cover it. Main/controller69 remains unchanged and held.
+  C1/later readouts stay closed; new-head review/CI, later publication authority,
+  a distinct reviewed observer and individual protected model-free readout
+  approval remain gates. B1's actual stored grade state, score, usage and
+  private revision remain unread; workflow success is not quality evidence,
+  and publication-derived proof is not independent original-envelope
+  authentication. No workflow/grading-writer/runtime/budget/fingerprint change,
+  push, PR, live readout, new inference, regrade or main/source change occurred.
+
 - Prepare only task3 A1's model-free first-grade readout for cell
   `2ea2e5b5-257f-42e6-a7dc-93763f28b19d_A_r1`, ordinal 12, writer
   `69e56fc58daf50af2ac9e8b52691ffcbf5af4f96` / run `36282221138` / attempt 1,

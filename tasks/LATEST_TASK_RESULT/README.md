@@ -1,110 +1,113 @@
 # Latest task result
 
-## PROJECT5-TASK3-A1-READOUT-PREP
+## PROJECT5-TASK3-B1-READOUT-PREP
 
-Prepared only the model-free readout of the recorded task3 A1 first grade.
-The reader uses immutable writer69 and producer780 identities separately from
-the observer, verifies the exact historical task2 A2 predecessor, and retains
-the existing privacy-safe projection. No live grade outcome, score, private
-A1 grade revision or usage was read or inferred from workflow success.
+Prepared only task3 B1's model-free first-grade readout after its actual task3
+A1 predecessor. The new B1-only selector returned 89 passed in 60.35s. Work
+remains local and unpublished; B1's stored grade state, score, usage and private
+grade revision remain unread and unknown. Workflow success is not a quality
+result.
 
-Work is local and unpublished on
+This unit started at `75b40a1d1173a5be89f214b389e5fcfc646a4cd3` on
 `b/codex-task3-a1-readout-prep-20260927` in
-`/ai-work/copilot/worktrees/codex-task3-a1-readout-prep-20260927`, created from
-exact main/controller `69e56fc58daf50af2ac9e8b52691ffcbf5af4f96`. The supplied
-final review `5328127720` and nine passing checks cover that base's reviewed
-A3 tree, not this reader extension. Main and the preserved checkouts were not
-changed. No workflow, grading writer, runtime, budget or fingerprint changed.
+`/ai-work/copilot/worktrees/codex-task3-a1-readout-prep-20260927`. Main/controller
+`69e56fc58daf50af2ac9e8b52691ffcbf5af4f96` remains unchanged and held during
+grading. Supplied review `5328127720` and nine passing checks cover the base's
+reviewed A3 tree, not this local reader bundle. No workflow, grading writer,
+runtime, budget or fingerprint changed.
 
-### Closed request and proof
+### Fixed B1 binding and immediate predecessor
 
 The only new readout binding is campaign `budget_pilot_ci_20260925_04`, cell
-`2ea2e5b5-257f-42e6-a7dc-93763f28b19d_A_r1`, ordinal 12, grade writer
-`69e56fc58daf50af2ac9e8b52691ffcbf5af4f96`, run `36282221138`, job
+`2ea2e5b5-257f-42e6-a7dc-93763f28b19d_B_r1`, ordinal 13, grade writer
+`69e56fc58daf50af2ac9e8b52691ffcbf5af4f96`, run `36283710283`, binding job name
 `pilot-live`, integer attempt 1. Original inference producer
-`78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e`, run `36225255532` and completion
-`1fb1bc33acab5b2bdefd70744a899c808d984e9c231deded4217ad92d4dc7e3d` are unchanged.
-The observer must be separately reviewed and distinct from writer and producer.
-No new workflow input, endpoint override or future grade registration was added.
+`78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e`, run `36226798976` and completion
+`d2fa808126be82fd9ae6af0b154c9730825acef665151869a47c13e4574147ec` stay fixed.
+Observer authority remains distinct from writer and producer.
 
-The immediate predecessor remains ordinary task2 A2, writer
+The exact immediate predecessor is task3 A1, cell
+`2ea2e5b5-257f-42e6-a7dc-93763f28b19d_A_r1`, under the same writer, grade run
+`36282221138`, original producer780, inference run `36225255532` and completion
+`1fb1bc33acab5b2bdefd70744a899c808d984e9c231deded4217ad92d4dc7e3d`.
+B1 first validates its canonical ordinary claim, typed 13-to-12 link and
+distinct parent/claim/terminal revisions before granting reads of A1's fixed
+terminal control at the claim's immutable parent. Full A1 writer/run/source,
+retained-inference observation, byte/history and carried-object proof must then
+pass before any selected B1 grade-file download. The same-controller entry
+requires matching config hash, grader source hash and renderer fingerprint.
+Fixed control-path last-writer lookup works after the grading ref advances;
+unknown private revisions are resolved, not guessed or adopted as authority.
+
+Direct A1 readout keeps its historical task2 A2 handoff unchanged: writer
 `a5e5d2589caff21309f0a1c21bb7d9d333ad47c6`, grade run `36214413190`, revision
-`3a8e135cd232ab900e003fc6d9c459957a0b990e`, with original e7 producer
-`e7a28db07ebe10d6508b9256137763cc82f9a1d1` and inference terminal
-`e22f0c3de79bbfce084aedde64fa56c40959fde0`. Fixed control-path last-writer
-lookup works after the grading ref advances. The reader checks canonical
-bytes, source/config/renderer/run/claim bindings, full inference-predecessor
-observation equality and carried-object history before opening A1 grade files.
-It verifies one logical predecessor, not a recursive history. It does not
-download predecessor grade files, inference payloads or rubric inputs.
+`3a8e135cd232ab900e003fc6d9c459957a0b990e`, original e7 inference terminal
+`e22f0c3de79bbfce084aedde64fa56c40959fde0`. B1 verifies only its immediate A1
+predecessor, without recursively reading A2 grade controls, predecessor grade
+files, inference payloads or rubric inputs. The fixed
+`default_v2_sol_max.yaml` / GPT-5.6 Sol/max contract is unchanged.
 
-The genuine compiler and writer fixture confirm grading config SHA256
-`62a6d99d9e74d187e517d60d9a5afb112e38926917710ac6e6606eb28404dfa0` and grader
-source hash `0a66e518dbe9dfe403e68aee69ec13d7f15ee7d86c6c2de7ccedfe990242e7df`,
-including generated `comparison-grading.json`. No remote assertion or observer
-source supplies those expected hashes. The fixed `default_v2_sol_max.yaml` /
-GPT-5.6 Sol/max grading contract is unchanged.
-
-The projection preserves actual graded/partial/failed/ungraded state, available
-score and included/full-denominator exclusion accounting, and separate
-task/summary/ledger receipts. Missing cost stays missing; model-call counts
-are not HTTP counts and no reconciled invoice or zero-cost claim is invented.
-Fixed-content/publication-derived history proof does not independently
+The existing privacy-safe projection preserves stored graded/partial/failed/
+ungraded state, available score, included and full denominators, exclusions,
+and separate task/summary/ledger accounting. `call_reachability_unknown` and
+`price_missing` remain distinct recorded statuses. Missing cost stays missing;
+model-call counts are not HTTP counts, and no zero cost or reconciled invoice
+is invented. Publication-derived history proof does not independently
 authenticate that every original outer envelope was never rewritten.
 
 ### Separate offline validation
 
 | Invocation | Exact tested SHA | Result |
 |---|---|---|
-| New A1-only selector | `8dfd601cebe29daeb2104f9c058705d947e3e6bf` | 78 collected, 72 passed, 6 failed in 44.64s; exit 1 |
-| Only the six failed nodes after the test-only correction | `fd7e1dba7d8066ad49e5a3ed94290f4d2f7dd6d6` | 6 collected, 6 passed in 32.00s; exit 0 |
+| Earlier A1-only selector | `8dfd601cebe29daeb2104f9c058705d947e3e6bf` | 78 collected, 72 passed, 6 failed in 44.64s; exit 1 |
+| Only A1's six failed nodes after the test-only correction | `fd7e1dba7d8066ad49e5a3ed94290f4d2f7dd6d6` | 6 collected, 6 passed in 32.00s; exit 0 |
+| New B1-only selector | `579153486e3262a6b3fcf683c735fc402d38d9b2` | 89 collected, 89 passed in 60.35s; exit 0 |
 
-All six initial failures shared an incorrect receipt expectation: the genuine
-synthetic fixture reserves a call without settling it, so its missing reason is
-`call_reachability_unknown`, not `price_missing`. The correction requires that
-exact recorded reason. Production code is identical across both tested SHAs.
-The 72 passing cases and all prior passing families were not rerun; these two
-invocations are not combined into a 78-pass result.
+The earlier A1 correction changed only the expectation for an unsettled
+synthetic call to `call_reachability_unknown`; A1 production was unchanged
+between those two tested SHAs. Those invocations are not combined into a
+78-pass result. Neither the earlier A1 cases nor any prior passing family was
+rerun for B1. B1 adds a settled unpriced-call fixture for `price_missing`
+without changing the unsettled-call case.
 
-The selector was
-`tests/test_codex_budget_pilot_task3_a1_readout.py::test_fixed_task3_a1_grade_readout`.
-It uses shared synthetic history built by the existing writers and isolated mutations for the
-historical handoff, advanced refs, source/controller/observer separation,
-run/claim/byte/history refusals, state, exclusions, accounting and privacy.
-Every external/model boundary was fake or blocked. Reader mutation, admission,
-OIDC, Step8/model entry and rubric-fetch paths were blocked. Synthetic scores,
-bytes, revisions and runs are not live evidence.
+The new selector was
+`tests/test_codex_budget_pilot_task3_b1_readout.py::test_fixed_task3_b1_grade_readout`.
+It uses shared genuine synthetic writer history and isolated mutations to
+check the exact B1/A1 proof, advanced refs, typed links, source/run/observer
+separation, renderer equality, state/denominators, accounting and privacy.
+It also exercises the directly coupled A1 registry assertion: only B1 leaves
+the rejection list; 19 distinct C1/later/invalid requests remain refused.
+External/model boundaries, reader writes, admission, OIDC, Step8 and rubric
+paths were fake or blocked. Synthetic scores, bytes and revisions are not live
+evidence. No old passing selector or full suite ran.
 
 Python 3.10.12 / pytest 9.1.1 ran under credential-free `env -i`, offline
 HF/Transformers flags, disabled plugin autoload, `GITHUB_ACTIONS=false`,
 `PYTHONDONTWRITEBYTECODE=1` and `-m 'not integration' -p no:cacheprovider -q --tb=short`.
-Logs are `/tmp/project5-task3-a1-readout.Kpm7K4/focused-8dfd601ce.log` and
-`/tmp/project5-task3-a1-readout.Kpm7K4/corrected-fd7e1dba7.log`. Only the two
-completion records changed after the corrected tested SHA.
+The B1 log is `/tmp/project5-task3-b1-readout.sMZr1I/focused-579153486.log`;
+the earlier A1 logs remain under `/tmp/project5-task3-a1-readout.Kpm7K4/`.
+Only the two completion records changed after the B1 tested SHA.
 
 ### Supplied operation evidence and remaining gates
 
-The leader reports first-grade workflow `36282221138`, job `108516164620`,
-attempt 1, prepared at `2026-09-27T00:23:53.6315893Z`, claim acknowledgment at
-`00:24:04.2021059` UTC, one Step8/cleanup observation at `00:45:11.6371661` UTC,
-publication acknowledgment at `00:45:16.0857341` UTC and run success at
-`00:45:20` UTC. The public receipt omits the grade outcome, score, private grade
-revision and usage. Workflow success is not a graded-quality result.
+The leader supplied B1 grade workflow `36283710283`, job `108520401491`,
+attempt 1, on `2026-09-27` UTC: prepared `00:53:37.2160198`, claim acknowledgment
+`00:53:48.5963621`, one judge/cleanup `01:08:11.4994306`, publication
+acknowledgment `01:08:16.7125803` and run success `01:08:20`. No stored grade
+state, score, usage or private grade revision was read or inferred.
 
 The full catalog and consolidated grading spec were reviewed. The bounded
-pre-edit reasoner approved implementation with conditions using the available
-model, not Claude; this was not final source or live-use approval.
-Experiment-report-en then im-not-ai-en preserve the separate observations,
-unknowns and authority limits in these records. Earlier B2/A2 evidence remains
-separate in the changelog; historical blocks below are not current authority.
+pre-edit reasoner approved with conditions using the available model, not
+Claude; this is not final source or live-use approval. Experiment-report-en
+then im-not-ai-en preserve the separate observations and limits in these
+records. Older result blocks below and changelog entries remain historical.
 
-Main/controller `69e56fc58daf50af2ac9e8b52691ffcbf5af4f96` remains held while
-the remaining grade-boundary sequence runs. Task3 B1 grade `36283710283` is
-issued but its outcome is unknown and its readout remains unregistered.
-Publication after the controller hold, new-head review/CI, a distinct reviewed
-observer source and individual protected model-free readout authorization
-remain leader-owned gates. No push, PR, merge, live HF/model/grade/readout/
-dispatch, Project/Azure/credential change, regrade or new inference occurred.
+C1 and later readouts remain unregistered. Main/controller69 stays held while
+the grade-boundary sequence runs. Publication after the controller hold,
+new-head review/CI, a distinct reviewed observer and individual protected
+model-free readout approval remain leader-owned gates. No push, PR, merge,
+live HF/model/grade/readout/dispatch, Project/Azure/credential change, new
+inference or regrade occurred.
 
 ## Prior PROJECT5-TASK5-SUCCESSFUL-B2-GRADING-PREP
 
