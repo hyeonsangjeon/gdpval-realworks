@@ -13,7 +13,53 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
-- Add only the recorded task5 C1 ordinary readout for grade `36301834721`,
+- Prepare only the task5 C1 ordinary and C2 MODEL-FREE UNGRADED readers for
+  one ordinary push and one new draft PR. Preserve the old C1 branch at
+  `4946144a9e224ea04b56ff2f9adc58373b996fb9`; start
+  `b/codex-task5-c1-c2-readout-20260927` from exact main
+  `e12100da12b2cd275233c939e463ce442db338ab`. Replay only the two authorized
+  own C1 commits, with mappings in `LATEST_TASK_RESULT`. Before C2 edits,
+  both original/replay pairs are tree-identical. Replay endpoint
+  `c878cfa209de19a2fa16a5898eeaee1b672f86a9` shares full tree
+  `8f6c5f3a34d47335370c152e8a56567999684d29` and complete production/test
+  subtree `914ccb45257d740ec3dca85abbb99331d1551dd6` with the preserved
+  original. C1's **269 collected, 269 passed in 401.67s**, exit **0**, remains
+  attached only to `049428c422c05a4fc17b75389af906f7a872f0f6`; it was not
+  rerun or attributed to a replayed SHA. Add only C2 record `36303175624`,
+  policy `task5-c2-model-free-ungraded`, original inference `36265102718`
+  and completion
+  `db5c3fa1a927e88684b99b8eca93b6e442e97e05f500f36755c50000f3d42294`.
+  Verify the existing ordinary C1 grade `36301834721` and its fixed B1/A1/task4 A2
+  UNGRADED, ordinary task4 B2 and required C2 terminal-control proof before
+  opening selected failure files. Consume C1's private completed proof once,
+  check typed identities and all revision footprints, and use separately
+  owned reads without reopening old facades or transferring permissions.
+  C1 stays ordinary with strict Step8/child/rubric/cleanup checks. C2 stays
+  scoreless, preserving original failed inference receipts and denominator
+  separately from recorder `not_measured` accounting. The sole new C2-only
+  offline invocation returned **406 collected, 406 passed in 773.49s**,
+  exit **0**, at `242dd282fa5d4fe42446effe8f16975235a9bf03`. Its genuine
+  synthetic history checks exact read depth, active-facade denials, aliases,
+  source/claim/parent/approval/byte/privacy proofs, lost responses and replay.
+  No prior selector or full suite was rerun. All prior observations remain
+  separate, including original B1 **206 passed in 219.98s** at
+  `b5b786681260dda493f23dd6eb1cd9e9b66dd910`. Only the two completion records
+  change after the tested C2 SHA. Task5 B2/A2 readouts remain closed. The
+  leader reports PR689 merged after review `5330036297` and all 10 CI checks
+  passed; that review does not approve this new bundle. These are pre-publication
+  facts, not a new-head review, CI or merge result. Historical writer
+  `69e56fc58daf50af2ac9e8b52691ffcbf5af4f96` and producer
+  `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e` stay immutable; main is not moved.
+  C1's stored state/score/usage and private record revisions are not inferred.
+  All 18 writers are complete per the leader; no inference, grade or regrade
+  is authorized. New-head direct review/CI, a distinct reviewed observer,
+  actual selected/parent proofs and individual protected readout approval
+  remain gates. No workflow/native grader/writer/budget/input change or live
+  HF/model/OIDC/readout/Azure-management/Project call. Leader-controlled
+  readout `36316075585` was not queried or interfered with. Stop after the
+  authorized publication without CI polling or a manual workflow rerun.
+
+- Historical C1 local preparation: add only the recorded task5 C1 ordinary readout for grade `36301834721`,
   original inference `36259780431` and completion
   `ed11b060948692463105b5981245f4cedfaa3e597418313a7c55dc9c580a41bf`.
   Verify its actual task5 B1 UNGRADED parent `36301611455` through the unchanged
