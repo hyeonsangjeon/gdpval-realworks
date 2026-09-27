@@ -649,14 +649,16 @@ def test_fixed_task4_ordinary_readouts(history, tmp_path, monkeypatch, capsys, s
         assert public["inference_terminal"] is None and public["observer_source_sha"] == OBSERVER
         if scenario == "closed_registry":
             requests = a1_reader._unregistered_requests()
-            assert len(requests) == 7 and selected.request not in requests
+            assert len(requests) == 5 and selected.request not in requests
             assert list(readout.TASK4_SUCCESSOR_READOUTS) == [PREFIX + name for name in RECORDED]
             assert all(grading.TASK4_RETAINED[PREFIX + name][1] not in requests for name in RECORDED)
             assert grading.TASK4_RETAINED[PREFIX + "A_r2"][1] not in requests
             assert all(record[1] in requests for cell, record in grading.TASK5_RETAINED.items()
-                       if cell not in {grading.TASK5_A1_CELL, grading.TASK5_B1_CELL})
+                       if cell not in {grading.TASK5_A1_CELL, grading.TASK5_B1_CELL,
+                                       grading.TASK5_C1_CELL, grading.TASK5_C2_CELL})
             assert all(value[1] in requests for cell, value in grading.TASK5_RETAINED.items()
-                       if cell not in {grading.TASK5_A1_CELL, grading.TASK5_B1_CELL})
+                       if cell not in {grading.TASK5_A1_CELL, grading.TASK5_B1_CELL,
+                                       grading.TASK5_C1_CELL, grading.TASK5_C2_CELL})
             for request in requests:
                 closed = list(args)
                 closed[5] = request
