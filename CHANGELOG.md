@@ -31,6 +31,46 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Fixed
 
+- Split budget-reader CI into one isolated `budget-readout-contracts` job,
+  retaining the unchanged seven GPT56 files and 37 budget non-reader files in
+  `pilot-contracts`. The eight reader files include local task4 A1; both
+  nonempty groups cover the original 45-file budget glob exactly once, without
+  overlap or omission. A small shell array filters reader paths before pytest
+  receives them. Preserve the non-integration marker/options, six setup/guard
+  steps, Python/dependency/action pins, checkout/dispatch SHA checks,
+  permissions and concurrency. Both partition jobs retain 45-minute limits;
+  native-host's existing 60-minute limit and all other jobs remain unchanged.
+  The configured timeout sum changes from 375 to 420 runner-minutes, not a
+  billing estimate. Hosted runtime headroom and added setup cost remain
+  unverified. The leader supplied eight passing checks and pilot-contracts
+  CANCELLED at `167248279c6119ad297fd30bb70abe132c3ac395`, Backend Tests
+  run `36291932585` / job `108543552484`, with annotation
+  "The job has exceeded the maximum execution time of 45m0s". The job ran
+  `03:37:11` to `04:22:23` UTC; the pilot step succeeded from `03:39:15` to
+  `03:47:06`; the budget step ran from `03:47:06` to `04:22:21` and was
+  cancelled. No CI state was queried. One new fast deterministic selector
+  returned **1 collected, 1 passed in 0.26s**, exit **0**, at
+  `81e659226ab15d96b8184a941bdb061f4e991c2f`. It checks exact emitted shell
+  arguments and the fixed pre-edit workflow contract without importing,
+  collecting or running budget-reader families. CI headroom remains
+  **UNVERIFIED until hosted completion**. The carried UNGRADED reader is
+  unchanged: `6790a7ecf76b415aaae2e8136a71f024ad1076ca` returned **89 passed,
+  6 failed in 63.81s**; after the production cache fix,
+  `aaf9cca1f37bdb95c2f4f3b6f604310fc2cc9ae6` ran only those failed nodes,
+  **6 passed in 40.78s**. These are not a combined 95-pass invocation, and
+  no passing family/full suite was rerun. All prior observations stay separate.
+  Only the two completion records changed after the new CI tested SHA.
+  Review `5328752284` covers only published16724827, not this bundle.
+  The leader authorizes one ordinary push to the same PR687 after confirming
+  that exact remote head. Main/controller
+  `69e56fc58daf50af2ac9e8b52691ffcbf5af4f96` stays frozen; new-head review/CI,
+  a distinct reviewed observer, actual parent proof and explicit leader approval
+  after the writer sequence, including individual protected live-readout
+  approval, remain gates. No merge,
+  live HF/model/grade/readout/dispatch, production/runtime/budget change, new
+  inference, regrade, main change, CI polling or manual workflow rerun.
+  Existing entries below remain historical, including their publication limits.
+
 - Align only the shared task3 grading-chain test helper with the existing
   task5 registry. Require exact A1/B1/C1/C2 membership and order at original
   indices 24–27 and one occurrence of each selector, while retaining absence

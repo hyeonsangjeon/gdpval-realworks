@@ -1,25 +1,73 @@
 # Latest task result
 
-## PROJECT5-TASK4-A1-UNGRADED-READOUT
+## PROJECT5-READER-CI-PARTITION
 
-Prepared a readout for only task4 A1's actual model-free UNGRADED record.
-The first offline invocation returned 89 passed and 6 failed in 63.81s.
-After correcting projection-cache construction, only those six failed nodes
-were rerun: 6 passed in 40.78s. These are separate observations, not a
-combined 95-pass run. Work remains local and unpublished. No live record or
-grade payload was read, and no model quality or performance result is claimed.
+Split budget-reader tests into one isolated CI job, leaving budget non-readers
+in the original pilot job. The new fast offline contract returned 1 passed in
+0.26s at `81e659226ab15d96b8184a941bdb061f4e991c2f`. It proves exact file
+selection and preserved workflow settings, not hosted runtime headroom.
+CI headroom remains UNVERIFIED until the hosted run finishes. No reader family
+or full suite was rerun.
 
-This unit started at published `167248279c6119ad297fd30bb70abe132c3ac395` on
+This unit started at local `e0a7d717aa4d289d7024ccdeb9d57ac20de70f99` on
 `b/codex-task3-a1-readout-prep-20260927` in
 `/ai-work/copilot/worktrees/codex-task3-a1-readout-prep-20260927`.
-The leader's nine-file review `5328752284` covers only that published PR687
-head. The supplied CI snapshot was eight passing checks with pilot-contracts
-running; it was not queried. Neither the old review nor that snapshot approves
-this local delta. Main/writer `69e56fc58daf50af2ac9e8b52691ffcbf5af4f96`
-remains frozen through the grade sequence. No workflow, grading writer,
-runtime, budget, fingerprint or input changed.
+The leader's nine-file review `5328752284` covers only published PR687
+head, `167248279c6119ad297fd30bb70abe132c3ac395`, not the carried UNGRADED
+reader or this CI repair. Main/writer
+`69e56fc58daf50af2ac9e8b52691ffcbf5af4f96` remains frozen through the grade
+sequence. Only the backend workflow and its two coupled contract files changed
+in the repair. Reader/grader production code, runtime, budgets, grader fingerprints
+and original inputs were left unchanged. One ordinary push of the bounded
+bundle to the same PR687 is authorized; merge and live use are not.
 
-### Exact record and bounded proof
+### Supplied cancellation and exact CI partition
+
+The leader supplied Backend Tests run `36291932585`, pilot-contracts job
+`108543552484`, at published `167248279c6119ad297fd30bb70abe132c3ac395`.
+Eight other checks passed and pilot-contracts was CANCELLED. The exact
+annotation is "The job has exceeded the maximum execution time of 45m0s".
+The job ran `03:37:11` to `04:22:23` UTC. `Run pilot contracts` ran
+`03:39:15` to `03:47:06` and succeeded; `Run budget pilot contracts` ran
+`03:47:06` to `04:22:21` and was cancelled. This is timeout evidence, not an
+assertion-failure count. No CI log or status was queried here.
+
+The original `tests/test_codex_budget_pilot*.py` glob currently contains
+45 files. The unchanged seven-file GPT56 step and 37 budget non-reader files
+remain in `pilot-contracts`. The eight files matching
+`tests/test_codex_budget_pilot*readout*.py`, including local task4 A1, run in
+the added `budget-readout-contracts` job. A small shell array filters readers
+out before pytest receives explicit paths; adding `--ignore-glob` to those
+explicit targets would not enforce the split. Both groups are nonempty, their
+intersection is empty and their union equals the original glob exactly once.
+The recursive-versus-shell-glob omission check is retained.
+
+Both partition jobs retain 45-minute limits. The added job copies the six
+existing setup/guard steps exactly: dispatch SHA and workflow-SHA checks,
+credential-free pinned checkout, exact checkout verification, Python 3.10.12,
+unchanged dependencies and the integration-marker guard. The pytest prefix
+remains `python -m pytest -m "not integration" --tb=short -q -rs` in both
+groups. Existing triggers, permissions, concurrency and every other job are
+unchanged. Native-host's existing 60-minute limit is unchanged. The configured
+timeout sum rises from 375 to 420 runner-minutes per attempt; this arithmetic
+is not a billing estimate or observed elapsed time. Added setup cost and
+hosted runtime balance remain unmeasured.
+
+The bounded pre-edit reviewer approved with conditions before workflow edits,
+using the available Codex model instead of the unavailable named Claude
+profile. The contract compares a fixed pre-edit structural fingerprint after
+removing only the new job and restoring only the old budget command. It also
+checks the updated workflow hash pin. All older hosted node-collection guards
+remain in place but were not executed locally.
+
+### Carried task4 A1 record and bounded proof
+
+The completed task4 A1 reader is unchanged by this repair. Its earlier first
+invocation returned 89 passed and 6 failed in 63.81s. The production cache
+allocation correction was followed by only those six failed nodes: 6 passed
+in 40.78s. These are separate observations, not a combined 95-pass run, and
+the new CI contract does not revalidate that reader family. No live record or
+grade payload was read; no model quality or performance result is claimed.
 
 The selected record belongs to campaign `budget_pilot_ci_20260925_04`,
 with policy `recorded_task4_failed_a1_no_judge`, immutable writer
@@ -94,6 +142,21 @@ the original execution failed.
 | Earlier task3 A2-only selector | `ebb2b677686d9b083fb7e63206efa3b07706fda2` | 99 collected, 99 passed in 61.28s; exit 0 |
 | New task4 A1 UNGRADED selector | `6790a7ecf76b415aaae2e8136a71f024ad1076ca` | 95 collected, 89 passed, 6 failed in 63.81s; exit 1 |
 | Only task4 A1's six failed nodes after the production cache correction | `aaf9cca1f37bdb95c2f4f3b6f604310fc2cc9ae6` | 6 collected, 6 passed in 40.78s; exit 0 |
+| New fast CI reader-partition contract | `81e659226ab15d96b8184a941bdb061f4e991c2f` | 1 collected, 1 passed in 0.26s; exit 0 |
+
+The only test executed for this CI repair was
+`tests/test_a_test_file_nobody_runs_is_not_a_test.py::test_budget_readout_partition_preserves_exact_commands_and_guards`.
+It requires exact literal selector scripts before running an absolute Bash
+executable without startup files. A shell function emits only NUL-separated
+arguments; no real Python/pytest subprocess, budget-test import/collection,
+reader fixture or model path runs inside that check. It validates the old
+glob and both new emitted argument lists, duplicate-free coverage, current
+task4 A1 inclusion and unchanged guard settings. Python 3.10.12 / pytest 9.1.1
+ran under credential-free `env -i` with offline HF/Transformers flags,
+disabled plugin autoload, `GITHUB_ACTIONS=false`, `PYTHONDONTWRITEBYTECODE=1`
+and `-m 'not integration' -p no:cacheprovider -q --tb=short -rs`.
+The new log is
+`/tmp/project5-reader-ci-partition.E6F092/focused-81e659226ab15d96b8184a941bdb061f4e991c2f.log`.
 
 The earlier task3 A1 correction changed only the unsettled synthetic-call
 expectation to `call_reachability_unknown`; production was unchanged between
@@ -104,7 +167,7 @@ loop, preserving no-clobber behavior. The first run's 89 passing cases were
 not rerun at the corrected SHA. There is no combined 95-pass invocation,
 pooled six-reader result, old task3 family rerun or full-suite run.
 
-The only new selector was
+The carried UNGRADED unit used
 `tests/test_codex_budget_pilot_task4_a1_ungraded_readout.py::test_fixed_task4_a1_ungraded_readout`.
 Its shared history builds a genuine failed native row and a fake writer's
 actual prepare/record sequence over one ordinary A2 prefix. Four synthetic
@@ -116,14 +179,15 @@ six-node follow-up selects only `ungraded`, `partial_cost`, `missing_receipt`,
 `price_missing`, `advanced` and `replay`. Instrumentation checks the exact
 reader/verification counts and permitted revision/path/operation sets.
 
-External/model boundaries were fake or blocked. Reader writes, admission,
+In those UNGRADED-reader tests, external/model boundaries were fake or blocked.
+Reader writes, admission,
 OIDC, Step8 and rubric paths were blocked; A1 fixture recording invoked no
 judge. Synthetic original bytes, receipts, revisions and the backing ordinary
 grade are not live evidence. Python 3.10.12 / pytest 9.1.1 ran under
 credential-free `env -i`, offline HF/Transformers flags, disabled plugin
 autoload, `GITHUB_ACTIONS=false`, `PYTHONDONTWRITEBYTECODE=1` and
 `-m 'not integration' -p no:cacheprovider -q --tb=short`.
-The two new logs are
+The two UNGRADED-reader logs remain
 `/tmp/project5-task4-a1-ungraded-readout.HsDQ0Y/focused-6790a7ecf76b415aaae2e8136a71f024ad1076ca.log`
 and
 `/tmp/project5-task4-a1-ungraded-readout.HsDQ0Y/failed-six-aaf9cca1f37bdb95c2f4f3b6f604310fc2cc9ae6.log`.
@@ -135,7 +199,9 @@ the C1/C2 log remains
 `/tmp/project5-task3-c1-c2-readout.cQulcS/focused-f09db4dc342428edce63b857380d069581a6fc08.log`;
 the B1 log remains `/tmp/project5-task3-b1-readout.sMZr1I/focused-579153486.log`,
 and task3 A1 logs remain under `/tmp/project5-task3-a1-readout.Kpm7K4/`.
-Only the two completion records changed after the corrected tested SHA.
+Only the two completion records changed after the new CI tested SHA
+`81e659226ab15d96b8184a941bdb061f4e991c2f`. The earlier UNGRADED unit's
+records-only endpoint remains `e0a7d717aa4d289d7024ccdeb9d57ac20de70f99`.
 
 ### Supplied operations and remaining gates
 
@@ -157,25 +223,34 @@ The numeric Actions job ID is operation evidence, not the persisted
 operations published; their actual stored states, scores, usage and private
 grade revisions remain unread and unknown here.
 
-The full catalog and consolidated grading spec were reviewed. The bounded
-pre-edit HF-read reviewer approved with conditions using the available Codex
-model, not the unavailable Claude profile. That decision preceded production
-edits and is not final diff or live-use approval. Experiment-report-en then
-im-not-ai-en preserve separate observations and evidence limits. Historical
-result blocks and changelog entries retain their earlier registration and
-publication boundaries.
+The full catalog was reviewed once for this CI follow-up. The grading spec
+was reviewed for the earlier UNGRADED unit. Its bounded pre-edit HF-read
+decision remains separate from this CI decision. The two pre-edit reviewers
+used the available Codex model in place of the unavailable Claude profile.
+Neither decision is final diff or live-use
+approval. Experiment-report-en then im-not-ai-en preserve the separate
+observations and evidence limits. Historical result blocks and changelog
+entries retain their earlier registration and publication boundaries.
 
-No push, PR change, merge or live readout is authorized by this unit.
-Main/writer69 stays frozen. Later publication authority, direct leader review
-of the new head, CI, a distinct reviewed observer and explicit leader approval
-after the writer sequence, including individual protected readout approval,
-remain gates. Actual selected/parent proof must pass at read time. Task4 B1
-grade `36292532223` was supplied as published at `03:58:31.1914039` UTC and C1
-grade `36294081159` as issued/approved with outcome unknown; neither was
-queried or registered for readout. No live HF/model/grade/record/readout/
-dispatch, HF branch or dataset creation, Project/Azure/credential change,
-main/source change, new inference, regrade, CI polling or manual workflow
-rerun occurred.
+The leader authorizes one ordinary push of the carried validated UNGRADED
+reader, this CI repair and the two records to the same PR687, only after the
+remote head is confirmed as `167248279c6119ad297fd30bb70abe132c3ac395`.
+Unexpected remote work must be preserved, not overwritten. No new branch,
+worktree or PR is authorized. Publication is not merge or live-readout
+authority. Main/writer69 stays frozen. New-head direct leader review and CI,
+a distinct reviewed observer and explicit leader approval after the writer
+sequence, including individual protected live-readout approval, remain gates.
+Actual selected/parent proof
+must pass at read time; private revisions remain unknown.
+
+Earlier supplied context remains historical: task4 B1 grade `36292532223`
+was published at `03:58:31.1914039` UTC, and C1 grade `36294081159` was
+issued/approved with outcome unknown at that observation. The current supplied
+context is task4 B2 grade `36297122393` issued/approved on the same69; no
+outcome is inferred. None was queried or registered for readout. No live
+HF/model/grade/record/readout/dispatch, HF branch or dataset creation,
+Project/Azure/credential change, main/source change, new inference or regrade
+occurred. Stop after the authorized push without CI polling or manual reruns.
 
 ## Prior PROJECT5-TASK3-B1-READOUT-PREP
 
