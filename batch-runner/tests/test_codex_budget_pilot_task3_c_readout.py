@@ -45,8 +45,10 @@ PRIVATE = "PRIVATE https://private.invalid/path?token=PRIVATE"
 
 
 @pytest.fixture(scope="module")
-def history(tmp_path_factory):
-    expected = {b1_reader.CELL: (13, grading.TASK3_A1_CELL, readout.TASK3_B1_WRITER_RUN)}
+def history(tmp_path_factory, *, _scenarios=VARIANTS):
+    expected = {b1_reader.CELL: (13, grading.TASK3_A1_CELL, readout.TASK3_B1_WRITER_RUN),
+                readout.TASK3_B2_CELL: (16, readout.TASK3_C2_CELL,
+                                      {"id": "36288201352", "job": "pilot-live", "attempt": 1})}
     for suffix, (ordinal, grade_run, inference_run, request, prior) in RECORDED.items():
         cell = PREFIX + suffix
         expected[cell] = (ordinal, PREFIX + prior, {"id": grade_run, "job": "pilot-live", "attempt": 1})
@@ -122,7 +124,7 @@ def history(tmp_path_factory):
                         previous_revision=previous.revision, previous_path=previous.path,
                         backing_cell=backing_cell, backing_revision=previous_claim["expected_parent"],
                         backing_path=grading._paths(backing_cell)[1], historical_path=initial.historical_path)
-                    for scenario in VARIANTS:
+                    for scenario in _scenarios:
                         destination = local / scenario
                         destination.mkdir()
                         current = SimpleNamespace(api=copy.deepcopy(api), workflow=workflow,
@@ -153,8 +155,7 @@ def history(tmp_path_factory):
         prefix.close()
 
 
-@pytest.mark.parametrize("suffix", tuple(RECORDED))
-@pytest.mark.parametrize("scenario", [
+SCENARIOS = (
     "graded", "advanced", "partial", "failed", "ungraded", "missing_ledger", "partial_cost", "price_missing",
     "exclusions", "redacted_text", "plan", "closed_registry", "replay", "writer", "run", "job", "attempt",
     "typed_attempt", "producer", "grader_hash", "config_hash", "grader_config", "renderer", "approval",
@@ -172,9 +173,17 @@ def history(tmp_path_factory):
     "rerun", "private_target", "lost_response", "backing_missing", "backing_bytes", "backing_hash",
     "backing_history", "backing_carried", "backing_carried_bytes", "backing_cell", "backing_size",
     "backing_claim_alias", "backing_terminal_alias",
-])
+)
+
+
+@pytest.mark.parametrize("suffix", tuple(RECORDED))
+@pytest.mark.parametrize("scenario", SCENARIOS)
 def test_fixed_task3_c_grade_readouts(history, tmp_path, monkeypatch, capsys, suffix, scenario):
-    selected = history[suffix]
+    _check_successor_readout(history[suffix], RECORDED[suffix], tmp_path, monkeypatch, capsys, scenario)
+
+
+def _check_successor_readout(selected, recorded, tmp_path, monkeypatch, capsys, scenario):
+    """Shared isolated assertions; callers supply only their fixed recorded cell."""
     row = selected.rows.get(scenario, selected.rows["graded"])
     api, terminal = copy.deepcopy(row.api), copy.deepcopy(row.terminal)
     context, revision, path = copy.deepcopy(row.context), row.revision, row.path
@@ -185,7 +194,7 @@ def test_fixed_task3_c_grade_readouts(history, tmp_path, monkeypatch, capsys, su
     previous_claim_path = grading._paths(selected.previous_context.cell)[0]
     previous_claim = pilot._json_object(api.trees[previous["claim_commit"]][previous_claim_path])
     record = next((item for item in terminal["files"] if item["role"] == "grade_result"), None)
-    grade_run = {"id": RECORDED[suffix][1], "job": "pilot-live", "attempt": 1}
+    grade_run = {"id": recorded[1], "job": "pilot-live", "attempt": 1}
 
     if scenario == "advanced":
         api.seed(selected.advanced, revision, {"unrelated/PRIVATE": b"PRIVATE unrelated later write"})
@@ -264,7 +273,7 @@ def test_fixed_task3_c_grade_readouts(history, tmp_path, monkeypatch, capsys, su
         if scenario == "inference_completion":
             input_terminal["completion"]["child_invocations"] = 2
         elif scenario == "inference_run":
-            input_claim["binding"]["github_run"]["id"] = str(int(RECORDED[suffix][2]) + 1)
+            input_claim["binding"]["github_run"]["id"] = str(int(recorded[2]) + 1)
         elif scenario == "inference_source":
             input_claim["binding"]["source_sha"] = "9" * 40
         elif scenario == "inference_config":
@@ -357,7 +366,7 @@ def test_fixed_task3_c_grade_readouts(history, tmp_path, monkeypatch, capsys, su
         def wrong_ordinal(request):
             other = compile_writer(request)
             if other.cell["cell_id"] == selected.cell:
-                other.plan["order"][selected.ordinal - 1:selected.ordinal + 1] = [selected.cell, PREFIX + RECORDED[suffix][4]]
+                other.plan["order"][selected.ordinal - 1:selected.ordinal + 1] = [selected.cell, PREFIX + recorded[4]]
             return other
 
         monkeypatch.setattr(readout, "_writer_context", wrong_ordinal)
@@ -389,7 +398,7 @@ def test_fixed_task3_c_grade_readouts(history, tmp_path, monkeypatch, capsys, su
         api.branches[grading.BRANCH] = terminal["claim_commit"]
 
     def forbidden(*args, **kwargs):
-        pytest.fail("C reader crossed a model, rubric, auth, admission or remote-write boundary")
+        pytest.fail("Successor reader crossed a model, rubric, auth, admission or remote-write boundary")
 
     for name in ("prepare", "claim", "judge", "publish", "reconcile", "setup", "inspect_branch", "_entry_contract", "_ready"):
         monkeypatch.setattr(grading, name, forbidden)
@@ -478,7 +487,7 @@ def test_fixed_task3_c_grade_readouts(history, tmp_path, monkeypatch, capsys, su
         assert public["inference_terminal"] is None and public["observer_source_sha"] == OBSERVER
         if scenario == "closed_registry":
             requests = a1_reader._unregistered_requests()
-            assert len(requests) == 17 and selected.request not in requests
+            assert len(requests) == 16 and selected.request not in requests
             assert grading.TASK3_A1_COMPLETION_SHA256 not in requests
             assert all(grading.TASK3_SUCCESSORS[cell][1] not in requests for cell in readout.TASK3_SUCCESSOR_READOUTS)
             for request in requests:
@@ -566,12 +575,15 @@ def test_fixed_task3_c_grade_readouts(history, tmp_path, monkeypatch, capsys, su
         assert {call for call in api.calls if call[0] == "metadata"} == expected_metadata
         assert all(operation in {"metadata", "paths", "download"} for operation, *_ in api.reads)
         assert ("paths", previous["claim_commit"], selected.backing_path) in actual_paths
+        backing = pilot._json_object(api.trees[selected.backing_revision][selected.backing_path])
         for reader in readers:
             assert not hasattr(reader, "create_commit") and not hasattr(reader, "create_branch")
             for commit, forbidden_path in (
                     (previous_revision, previous["files"][0]["path"]),
                     (selected.backing_revision, grading._paths(selected.backing_cell)[0]),
-                    (selected.backing_revision, retained._paths(selected.backing_cell)[1])):
+                    (selected.backing_revision, retained._paths(selected.backing_cell)[1]),
+                    *((selected.backing_revision, item["path"]) for item in backing["files"]),
+            ):
                 with pytest.raises(output.OutputPublicationRefused):
                     reader.hf_hub_download(repo_id=api.repo, repo_type="dataset", token=base.TOKEN,
                         revision=commit, filename=forbidden_path, cache_dir=tmp_path,
