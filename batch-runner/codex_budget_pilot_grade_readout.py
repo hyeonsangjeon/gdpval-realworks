@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -248,6 +249,8 @@ class _ReadOnlyGrade:
         self._metadata_open = True
         self._metadata_paths, self._downloads = {}, set()
         self._inference_metadata, self._inference_revisions = set(), set()
+        self._selected_verified = self._selected_download = None
+        self._retained_verified = None
         self.revision = None
 
     def _target(self, repo_id, repo_type, token):
@@ -275,8 +278,13 @@ class _ReadOnlyGrade:
     def hf_hub_download(self, *, repo_id, repo_type, revision, filename, token, cache_dir,
                         force_download, local_files_only, etag_timeout):
         self._target(repo_id, repo_type, token)
-        require((revision, filename) in self._downloads and force_download is True and local_files_only is False,
+        selected = (revision, filename) == self._selected_download
+        require(((revision, filename) in self._downloads or selected)
+                and force_download is True and local_files_only is False,
                 "grade_readout_download_refused")
+        if selected:
+            # Consume before entering the transport, including a lost response.
+            self._selected_download = None
         return self._api.hf_hub_download(repo_id=repo_id, repo_type=repo_type, revision=revision,
             filename=filename, token=token, cache_dir=cache_dir, force_download=True,
             local_files_only=False, etag_timeout=etag_timeout)
@@ -316,12 +324,29 @@ class _ReadOnlyGrade:
                 grading.TASK4_B1_CELL, *TASK4_SUCCESSOR_READOUTS}
                 and context.terminal_request is not None,
                 "grade_readout_retained_route_refused")
+        terminal, data = self._inference_controls(binding, context, cache, deadline)
+        grading._grade_retained_input(context, binding, self, self._repo,
+            grading._cache(cache, "verified"), self._token, deadline)
+        self._retained_verified = (context.cell["cell_id"], terminal, data)
+        if context.cell["cell_id"] in {*TASK2_GRADE_RUNS, grading.TASK3_A1_CELL,
+                *TASK3_SUCCESSOR_READOUTS, grading.TASK4_A1_CELL, grading.TASK4_A2_CELL,
+                grading.TASK5_A1_CELL, grading.TASK5_B1_CELL, grading.TASK5_C1_CELL,
+                grading.TASK5_C2_CELL, grading.TASK5_B2_CELL, grading.TASK5_A2_CELL,
+                grading.TASK4_B1_CELL, *TASK4_SUCCESSOR_READOUTS}:
+            claim_revision = terminal["claim_commit"]
+            original, _ = retained._control(self, self._repo, claim_revision, retained._paths(context.cell)[0],
+                grading._cache(cache, "predecessor"), self._token, deadline,
+                expected=terminal["claim_identity"], written_at=claim_revision)
+            return original["predecessor"]
+
+    def _inference_controls(self, binding, context, cache, deadline):
+        """The existing immutable control grants; no result or ledger bytes."""
         revision = binding["retained"]["terminal_commit"]
         require(output._hash(revision, 40) and revision != self.revision, "grade_readout_retained_revision_refused")
         claim, terminal_path, prefix = retained._paths(context.cell)
         self._metadata_paths[revision] = {terminal_path}
         self._downloads.add((revision, terminal_path))
-        terminal, _ = retained._control(self, self._repo, revision, terminal_path,
+        terminal, data = retained._control(self, self._repo, revision, terminal_path,
             grading._cache(cache, "candidate"), self._token, deadline, written_at=revision)
         claim_revision, output_revision = terminal["claim_commit"], terminal["output_commit"]
         require(all(output._hash(value, 40) for value in (claim_revision, output_revision))
@@ -342,17 +367,59 @@ class _ReadOnlyGrade:
         self._metadata_paths[claim_revision] = {claim}
         self._metadata_paths[output_revision] = paths
         self._downloads.update({(claim_revision, claim), (output_revision, manifest)})
-        grading._grade_retained_input(context, binding, self, self._repo,
-            grading._cache(cache, "verified"), self._token, deadline)
-        if context.cell["cell_id"] in {*TASK2_GRADE_RUNS, grading.TASK3_A1_CELL,
-                *TASK3_SUCCESSOR_READOUTS, grading.TASK4_A1_CELL, grading.TASK4_A2_CELL,
-                grading.TASK5_A1_CELL, grading.TASK5_B1_CELL, grading.TASK5_C1_CELL,
-                grading.TASK5_C2_CELL, grading.TASK5_B2_CELL, grading.TASK5_A2_CELL,
-                grading.TASK4_B1_CELL, *TASK4_SUCCESSOR_READOUTS}:
-            original, _ = retained._control(self, self._repo, claim_revision, claim,
-                grading._cache(cache, "predecessor"), self._token, deadline,
-                expected=terminal["claim_identity"], written_at=claim_revision)
-            return original["predecessor"]
+        return terminal, data
+
+    def selected_result(self, context, verified, cache, deadline):
+        """One selected ordinary result, armed only by the top-level readout."""
+        permitted, self._selected_verified = self._selected_verified, None
+        require(permitted is verified and verified is not None
+                and verified["revision"] == self.revision
+                and not self._metadata_open and not self._inference_metadata,
+                "grade_readout_selected_result_not_verified")
+        binding = verified["terminal"]["binding"]
+        require(binding["retained"]["cell_id"] == context.cell["cell_id"]
+                and binding["retained"]["terminal_commit"] == context.terminal_revision,
+                "grade_readout_selected_input_refused")
+        if self._retained_verified is None:
+            # The original fixed-revision ordinary route predates bind_retained.
+            # Apply the same native input proof here, not in a parent verifier.
+            terminal, data = self._inference_controls(binding, context, cache, deadline)
+            evidence = grading._retained_input(context, self, self._repo,
+                grading._cache(cache, "verified"), self._token, deadline,
+                candidate_revision=context.terminal_revision if context.terminal_request is not None else None)
+            require(retained._encoded(binding["retained"]) == retained._encoded(evidence["observation"])
+                    and binding["publication_receipt_sha256"] == evidence["terminal"]["publication_receipt_sha256"],
+                    "recorded_grade_input_binding_mismatch")
+            self._retained_verified = (context.cell["cell_id"], terminal, data)
+        cell_id, terminal, data = self._retained_verified
+        require(cell_id == context.cell["cell_id"]
+                and pilot._identity(data)["sha256"] == binding["retained"]["terminal_sha256"]
+                and terminal["output_commit"] == binding["retained"]["output_commit"]
+                and terminal["manifest_identity"]["sha256"] == binding["retained"]["manifest_sha256"]
+                and terminal["publication_receipt_sha256"] == binding["publication_receipt_sha256"],
+                "recorded_grade_input_binding_mismatch")
+        revision = terminal["output_commit"]
+        member = retained._paths(context.cell)[2] + "/step2_inference_results.json"
+        # Native retention validation already equated these objects to the
+        # manifest and checked both immutable output and terminal snapshots.
+        records = [row for row in terminal["output_objects"] if row["path"] == member]
+        require(len(records) == 1 and type(records[0]["size"]) is int
+                and 0 < records[0]["size"] <= output.MAX_RECORD_BYTES,
+                "grade_readout_selected_result_required")
+        require((revision, member) not in self._downloads, "grade_readout_selected_grant_refused")
+        self._selected_download = (revision, member)
+        try:
+            data = grading._fetch(self, self._repo, revision, member, records[0],
+                grading._cache(cache, "result"), self._token, deadline)
+        finally:
+            self._selected_download = None
+        payload = pilot._json_object(data)
+        from gpt54_codex_grading_input import _validate_producer
+
+        output._safe_record(payload)
+        grading.validate_inference_result_fingerprint(payload)
+        _validate_producer(payload, context.run, json.loads(context.grading.dispatch.runs[0].config_json))
+        return payload
 
     def allow_verified_files(self, records):
         # Called only after _grade_terminal checked the role/path/hash/history.
@@ -952,6 +1019,37 @@ def _verified_ungraded(api, context, cache, deadline):
     return verified, entry, files
 
 
+def _budget_snapshot(payload):
+    """Project only the selected result's recorded deadline, never elapsed time.
+
+    remaining_seconds is zero-clamped; wait_seconds is retry backoff only.
+    Admissions are durable admissions, and native resumes are confirmed thread
+    bindings, not model/HTTP calls, resume requests or Step2 resume rounds.
+    """
+    observed = payload["results"][0].get("observability", {})
+    require(type(observed) is dict, "grade_readout_budget_snapshot_refused")
+    snapshot = observed.get("task_deadline", {})
+    require(type(snapshot) is dict, "grade_readout_budget_snapshot_refused")
+    fields = ("total_seconds", "started_unix", "expires_unix", "remaining_seconds",
+              "wait_seconds", "attempts_admitted", "native_resumes")
+    nullable = {"started_unix", "expires_unix", "remaining_seconds"}
+    counts = {"attempts_admitted", "native_resumes"}
+    values, missing = {}, {}
+    for key in fields:
+        if key not in snapshot:
+            values[key], missing[key] = None, "not_recorded"
+            continue
+        value = snapshot[key]
+        if value is None and key in nullable:
+            values[key], missing[key] = None, "unavailable"
+            continue
+        require((type(value) is int if key in counts else type(value) in (int, float))
+                and (type(value) is int or math.isfinite(value)) and value >= 0
+                and (key != "total_seconds" or value > 0), "grade_readout_budget_snapshot_refused")
+        values[key] = value
+    return {**values, "missing": missing}
+
+
 def _ungraded_projection(context, terminal, files):
     from core.cost_receipts import build_receipt
 
@@ -965,6 +1063,7 @@ def _ungraded_projection(context, terminal, files):
         "score": None, "coverage": None, "partial_progress_retained": False, "ledger_state": "not_applicable",
         "recorded_task_cost": None, "recorded_summary_cost": None, "ledger_derived_cost": None,
         "inference_task_status": payload["results"][0]["status"],
+        "inference_budget_snapshot": _budget_snapshot(payload),
         "inference_completion": ci.validate_completion(terminal["inference_completion"]),
         "inference_missing": terminal["inference_missing"],
         "inference_accounting": {
@@ -1143,6 +1242,13 @@ def main(args, *, _test_api=None, _test_transport=None):
                 files = {record["role"]: grading._fetch(api, repo, api.revision, record["path"], record, cache, token, deadline)
                          for record in records}
                 summary = _projection(context, terminal, files, entry)
+                # Only the selected route reaches this point, after full parent
+                # verification and closure of every temporary native facade.
+                public["stage"] = "selected_inference_result"
+                cache = grading._cache(root, "selected-input")
+                api._selected_verified = verified
+                selected = api.selected_result(context, verified, cache, deadline)
+                summary["inference_budget_snapshot"] = _budget_snapshot(selected)
             renderer = entry["renderer_fingerprint"]
         public.update(outcome="verified_retained_ungraded" if model_free else "verified_retained_grade", stage="verified", **summary,
             observed_branch_head=head, grade_revision=verified["revision"], terminal_identity=verified["identity"],

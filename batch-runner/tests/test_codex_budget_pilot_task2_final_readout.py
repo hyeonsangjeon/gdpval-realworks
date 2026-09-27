@@ -297,7 +297,8 @@ def test_task2_final_grade_readout(request, tmp_path, monkeypatch, capsys, suffi
             controls.update({path, endpoint, prefix + "/" + output.MANIFEST})
         downloads = {path for operation, _, path, _ in api.reads if operation == "download"}
         assert downloads == controls | {record["path"] for record in terminal["files"]} | {
-            claim_path, terminal_path, grading._paths(previous_cell)[0], previous_path}
+            claim_path, terminal_path, grading._paths(previous_cell)[0], previous_path,
+            retained._paths(current.context.cell)[2] + "/step2_inference_results.json"}
         for reader in readers:
             assert not hasattr(reader, "create_commit") and not hasattr(reader, "create_branch")
             with pytest.raises(output.OutputPublicationRefused):

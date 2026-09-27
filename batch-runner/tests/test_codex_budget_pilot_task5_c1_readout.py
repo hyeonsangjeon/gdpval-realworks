@@ -683,7 +683,9 @@ def test_fixed_task5_c1_readout_after_ungraded(history, tmp_path, monkeypatch, c
     assert public["grade_writer_source_sha"] == WRITER and public["inference_producer_source_sha"] == PRODUCER
     downloads = {(revision, name) for op, revision, name, _ in api.reads if op == "download"}
     assert not history.older_paths.intersection(name for _, name in downloads)
-    assert not (denied | deeper | selected_originals).intersection(downloads)
+    selected_result = {(terminal["binding"]["retained"]["output_commit"],
+                        retained._paths(context.cell)[2] + "/step2_inference_results.json")}
+    assert not (denied | deeper | (selected_originals - selected_result)).intersection(downloads)
     accepted = {*VARIANTS, "advanced", "replay", "exclusions", "redacted_text"}
     if scenario in {"plan", "closed_registry"}:
         assert code == 0 and public["outcome"] == "plan_only" and not api.calls and not root.exists()
@@ -748,6 +750,8 @@ def test_fixed_task5_c1_readout_after_ungraded(history, tmp_path, monkeypatch, c
         head = ADVANCED if scenario == "advanced" else selected.revision
         assert public["observed_branch_head"] == head
         expected_downloads = selected_files | {(history.control_revision, history.control_path)}
+        expected_downloads.add((terminal["binding"]["retained"]["output_commit"],
+                                retained._paths(context.cell)[2] + "/step2_inference_results.json"))
         allowed_paths = {(head, selected.path)}
         inputs, failure_members = [], set()
         for role in ("selected", "parent", "a1", "a2", "backing"):
@@ -773,8 +777,8 @@ def test_fixed_task5_c1_readout_after_ungraded(history, tmp_path, monkeypatch, c
             allowed_paths.update({(ir, itp), (ir, icp), (inference_terminal["claim_commit"], icp)})
             for item in inference_terminal["output_objects"]:
                 allowed_paths.update({(ir, item["path"]), (inference_terminal["output_commit"], item["path"])})
-        assert downloads == expected_downloads and len(downloads) == 32 + len(selected_files)
-        assert sum(op == "download" for op, *_ in api.reads) == 167 + len(selected_files)
+        assert downloads == expected_downloads and len(downloads) == 33 + len(selected_files)
+        assert sum(op == "download" for op, *_ in api.reads) == 168 + len(selected_files)
         actual_paths = {(commit, name) for op, commit, _, members in api.reads if op == "paths" for name in members}
         assert actual_paths <= allowed_paths
         ic1, ib1, ia1, ia2, ib2 = inputs

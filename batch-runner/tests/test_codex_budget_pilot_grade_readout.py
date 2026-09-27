@@ -209,8 +209,14 @@ def test_closed_retained_grade_readout(case, tmp_path, monkeypatch, capsys, scen
     def forbidden(*args, **kwargs):
         pytest.fail("readout crossed a mutation, preparation or judge boundary")
 
-    for name in ("prepare", "claim", "judge", "publish", "reconcile", "setup", "_retained_input", "_entry_contract", "_ready"):
+    for name in ("prepare", "claim", "judge", "publish", "reconcile", "setup", "_entry_contract", "_ready"):
         monkeypatch.setattr(grading, name, forbidden)
+    original_input = grading._retained_input
+    def selected_input(current, *args, **kwargs):
+        assert current.cell["cell_id"] == case.context.cell["cell_id"]
+        assert current.terminal_request is None and kwargs.get("candidate_revision") is None
+        return original_input(current, *args, **kwargs)
+    monkeypatch.setattr(grading, "_retained_input", selected_input)
     monkeypatch.setattr(case.api, "create_commit", forbidden)
     monkeypatch.setattr(case.api, "create_branch", forbidden)
     monkeypatch.setattr(output, "_hf_client", forbidden)

@@ -594,6 +594,8 @@ def test_fixed_task4_b1_readout_after_ungraded(history, tmp_path, monkeypatch, c
             retained._paths(history.previous_context.cell)[2] + "/" + name)
             for name in ("step2_inference_results.json", Path(pilot.LEDGER).name)}
         expected_downloads = selected_files | originals | {("download", history.intrinsic_revision, history.intrinsic_path)}
+        expected_downloads.add(("download", terminal["binding"]["retained"]["output_commit"],
+                                retained._paths(context.cell)[2] + "/step2_inference_results.json"))
         allowed_paths, metadata = {("paths", head, path)}, {("metadata", grading.BRANCH)}
         for current, value, commit in ((context, terminal, revision),
                 (history.previous_context, previous, previous_revision), (history.backing_context, backing, backing_revision)):
