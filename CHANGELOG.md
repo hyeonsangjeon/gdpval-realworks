@@ -121,6 +121,54 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Prepare only the recorded task5 A1 MODEL-FREE UNGRADED readout, cell
+  `0818571f-5ff7-4d39-9d2c-ced5ae44299e_A_r1`, ordinal 24, policy
+  `task5-a1-model-free-ungraded`, campaign `budget_pilot_ci_20260925_04`,
+  writer `69e56fc58daf50af2ac9e8b52691ffcbf5af4f96`, record `36300073091`,
+  job `pilot-live`, integer attempt 1. Original producer
+  `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e`, inference `36247236594` and
+  completion `b23da4f1f5e81999039c473d27f3a70cc0d0681672ad08be0f9674b618915c97`
+  remain fixed. Require the actual task4 A2 UNGRADED record `36298545498`,
+  policy `recorded_task4_failed_a2_no_judge`, inference `36245490377` /
+  completion `8f2f6edd7bb2fda964d8a24b4532b8af725bcefbb1513d9a60df86e983446fe9`,
+  with ordinary B2 grade `36297122393` backing and only its required C2
+  terminal control. Reuse the unchanged native verifiers and A2 helper;
+  ordinary Step8/child/cleanup requirements remain intact. Canonical typed
+  binding/claim/entry, full source/run/retained-predecessor/byte/history proof,
+  seven distinct grade/control revisions and disjoint complete revision sets
+  precede selected A1 originals. Three bounded readers and one transient
+  verifier-only facade keep parent permissions out of A1; metadata slots are
+  consumed before forwarding, temporary grants revoked on lost responses,
+  and the facade closed after verification. No ordinary parent payloads or
+  deeper C2 history are opened. A1 stays scoreless with original failed
+  completion, denominator and partial inference receipts separate from
+  recorder `not_measured`; no fake child, rubric, score, zero cost, invoice
+  or HTTP count. Only A1 is a task5 readout; the other five task5 requests
+  and three invalid requests remain closed, exactly eight refusals. No
+  workflow, native grader, writer, input, runtime, budget, fingerprint,
+  generic framework or skip policy changed. The single new A1-only offline
+  selector at `750e6850e0dddb1fea1b68c920aa3c36d7e6fa3a` returned **149
+  collected, 149 passed in 138.39s**, exit **0**. Genuine synthetic history
+  and isolated mutations prove the exact 20 unique/88 total downloads,
+  10 metadata calls, NG-after-NG proof, active and revoked read limits,
+  missingness, typed/source/parent/approval/privacy/cleanup/lost-response/replay
+  refusals and closed registry. The prior A2 result, **105 passed in 83.18s**
+  at `610571daa8eca1e7439ddea5a4875c7603441cca`, and every earlier invocation
+  remain separate; no prior family or full suite was rerun or combined.
+  Only the two completion records change after validation. The leader
+  supplied A1 publication `06:29:26.9415980` and run success `06:29:33` UTC
+  `2026-09-27`, UNGRADED with OIDC/Step8 skipped. Private revisions remain
+  unknown, and no live readout occurred. Published PR687 baseline
+  `8cbc2f92b3680b54a5732f81483d798d2d0117d6` does not cover this local delta
+  or the preserved unpublished task4 A2 work. Final task5 A2 record
+  `36306339791` is issued, outcome unknown; only the leader may verify it
+  and release the main hold. Main/writer69 is unchanged. No push, PR change,
+  merge, live call or CI polling; later publication permission, new-head
+  review/CI, post-writer-sequence authorization, distinct reviewed observer,
+  actual selected/parent/backing proofs and individual protected readout
+  approval remain gates. No quality, causal, live-cost or stronger
+  provider-authentication claim is made.
+
 - Prepare only the recorded task4 A2 MODEL-FREE UNGRADED readout, cell
   `3baa0009-5a60-4ae8-ae99-4955cb328ff3_A_r2`, ordinal 23, policy
   `recorded_task4_failed_a2_no_judge`, campaign `budget_pilot_ci_20260925_04`,
