@@ -13,6 +13,42 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Prepare one ordinary push and one new draft follow-up PR for only the
+  already validated task4 A2 and task5 A1 UNGRADED readers. Preserve old
+  branch `b/codex-task3-a1-readout-prep-20260927` at
+  `26a2c18a3353558108a12ad3e0fcfd5041307c4b`; create
+  `b/codex-pending-ungraded-readers-20260927` from exact main
+  `dc591d873612f5d9b7df1c67462a50012fd92cf3`. Its tree matches reviewed
+  `8cbc2f92b3680b54a5732f81483d798d2d0117d6` at
+  `a7c30e9d5f3a7d985ea5712fceb6beb467beaffd`. Replay only the four authorized
+  own commits, with full original/new SHA mappings in `LATEST_TASK_RESULT`.
+  Each original/replay pair is tree-identical. Replay endpoint
+  `bf8b4591c749b4d12ea6364592c8f8a565a54b3c` and old `26a2c18a` share tree
+  `8a7bc4c9c311fc5b027560dbf3a1d4f7481491a5`; production and tests retain
+  `batch-runner` tree `80c5a47648ddc902d7b59e60fdab998dc4693491`. Only the
+  two completion records change after replay. No new logic or test execution.
+  The original **105 passed in 83.18s** at
+  `610571daa8eca1e7439ddea5a4875c7603441cca` and **149 passed in 138.39s** at
+  `750e6850e0dddb1fea1b68c920aa3c36d7e6fa3a` remain separate; neither ran on
+  a new cherry-picked SHA, and no prior family or full suite was rerun.
+  The leader verified final task5 A2 record `36306339791`, publication
+  `08:32:58.6116098` and run success `08:33:01` UTC `2026-09-27`; all 18
+  writer records are complete, 12 ordinary plus 6 model-free, not a quality
+  or causal conclusion. The leader released the active-main hold and merged
+  old PR687. Do not edit or reopen it; the follow-up has no merge metadata
+  or inherited review/CI approval. Historical writer
+  `69e56fc58daf50af2ac9e8b52691ffcbf5af4f96` and original producer
+  `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e` stay immutable; new main is
+  observer code only. Fixed scoreless policies, ordinary B2 backing/C2
+  terminal-only proof, private/source/byte/predecessor/approval/no-replay
+  guards and accounting missingness remain unchanged; other task5 readers
+  stay closed. Approved task3 A1 read-only run `36307908959` was not queried
+  or interfered with. This records publication preparation, not completed
+  new-head review, CI or merge. Direct leader review/CI, a distinct reviewed
+  observer, actual parent proofs and individual readout approval remain
+  gates. No main change, live readout/HF/model/OIDC/Azure-management/Project
+  call, inference, grade or regrade; stop after publication without CI polling.
+
 - Earlier known-bundle publication endpoint: record the leader's authorization for one ordinary push of the already
   completed task5 B1-failure/C1-ordinary/C2-failure bundle to the same draft
   PR686, from clean local `3202db6959e923e5f10ed5c43300ceed446f8fb6` after

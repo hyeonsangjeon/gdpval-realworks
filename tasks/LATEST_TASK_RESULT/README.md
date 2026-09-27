@@ -1,6 +1,103 @@
 # Latest task result
 
-## PROJECT5-TASK5-A1-UNGRADED-READER
+## PROJECT5-PUBLISH-PENDING-READERS
+
+Prepared the already validated task4 A2 and task5 A1 UNGRADED readers for
+one ordinary push and one new draft follow-up PR. Only the four authorized
+own commits were cherry-picked onto exact main
+`dc591d873612f5d9b7df1c67462a50012fd92cf3`; all applied without conflict.
+Each replayed commit has the same full tree as its original. No production,
+workflow or test logic was changed, and no tests were run for this Git replay.
+This entry records publication preparation and authority before the push,
+not completed review, CI or merge of the new follow-up PR.
+
+The new branch is `b/codex-pending-ungraded-readers-20260927`, using the same
+owned worktree at
+`/ai-work/copilot/worktrees/codex-task3-a1-readout-prep-20260927`.
+The old branch, `b/codex-task3-a1-readout-prep-20260927`, is preserved at
+`26a2c18a3353558108a12ad3e0fcfd5041307c4b`. No reset, stash, rebase, amend,
+force, deletion or merge of main was used. Existing Git author and committer
+remain `hyeonsangjeon <wingnut0310@gmail.com>`, without attribution trailers.
+
+### Original tests and replay provenance
+
+| Original commit | New cherry-picked commit | Evidence belongs to the original commit |
+|---|---|---|
+| `610571daa8eca1e7439ddea5a4875c7603441cca` | `5cf7b05410119a7ebf1086bef537b09ebc92aaa6` | Task4 A2-only selector: 105 collected, 105 passed in 83.18s; exit 0 |
+| `991031d86ea4ccf502d0b3532218ae155a6e457f` | `89626463f2e8eba435c99c80f462004c23d60032` | Task4 A2 completion records only; no test invocation |
+| `750e6850e0dddb1fea1b68c920aa3c36d7e6fa3a` | `bbf81ff148a61ce7bc058733cdec64556dabc949` | Task5 A1-only selector: 149 collected, 149 passed in 138.39s; exit 0 |
+| `26a2c18a3353558108a12ad3e0fcfd5041307c4b` | `bf8b4591c749b4d12ea6364592c8f8a565a54b3c` | Task5 A1 completion records only; no test invocation |
+
+These are two separate historical pytest observations. Neither selector ran
+on a new cherry-picked SHA, and no combined result is claimed. Every earlier
+invocation, failed attempt, fixture correction and evidence limit remains
+separate in the preserved handoffs below.
+
+The Git-only verification established:
+
+- Remote main matched `dc591d873612f5d9b7df1c67462a50012fd92cf3` before replay.
+  Its tree and reviewed `8cbc2f92b3680b54a5732f81483d798d2d0117d6` both equal
+  `a7c30e9d5f3a7d985ea5712fceb6beb467beaffd`.
+- Each original/replay pair in the table passed `git diff --exit-code`.
+  Old final `26a2c18a3353558108a12ad3e0fcfd5041307c4b` and replay endpoint
+  `bf8b4591c749b4d12ea6364592c8f8a565a54b3c` share full tree
+  `8a7bc4c9c311fc5b027560dbf3a1d4f7481491a5`.
+- The complete `batch-runner` subtree, including production and tests, is
+  `80c5a47648ddc902d7b59e60fdab998dc4693491` in both. Only this latest result
+  file and `CHANGELOG.md` change after the replay endpoint, to record the
+  current publication authority. No other bytes differ from the validated
+  old final tree.
+
+Byte identity carries the existing test evidence without inventing a new
+execution. It does not establish new-head CI success or leader approval.
+
+### Unchanged reader scope and current authority
+
+The only additions relative to the merged baseline are the existing fixed
+MODEL-FREE UNGRADED readouts for task4 A2, record `36298545498` with policy
+`recorded_task4_failed_a2_no_judge`, and task5 A1, record `36300073091` with
+policy `task5-a1-model-free-ungraded`. A2 requires its ordinary task4 B2
+backing; A1 requires the actual A2 UNGRADED record and that same backing.
+Only the intrinsically required older C2 terminal control is available.
+The fixed typed source/run/claim/byte/history/predecessor proofs, renderer
+agreement, revision disjointness, private read limits, approval and no-replay
+guards remain unchanged. Ordinary Step8/child requirements stay intact;
+failed inputs receive no score, rubric verdict or fabricated child. Original
+failed-inference accounting remains separate from unmeasured recorder cost.
+Other task5 readouts remain closed. No new record, input or reader logic is
+authorized by this publication task.
+
+Historical writer `69e56fc58daf50af2ac9e8b52691ffcbf5af4f96` and original
+producer `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e` remain immutable. The
+current main and future observer are not replacement writer sources; observer
+authority must stay distinct from writer and producer.
+
+The leader supplied verification of final task5 A2 record `36306339791`,
+publication acknowledgment `08:32:58.6116098` and run success `08:33:01` UTC
+`2026-09-27`. All 18 writer records are complete: 12 ordinary and 6 model-free.
+These are operation classifications, not model-quality or causal findings.
+The leader released the active-main hold and merged PR687 as owner; that
+closed PR will not be edited or reopened. Its merge is historical baseline
+provenance, not merge metadata or approval for this new draft PR. The new
+main commit was fetched by exact SHA without moving local main.
+
+First task3 A1 read-only run `36307908959` is individually approved. It was
+not queried, polled or interfered with, and no readout result is inferred.
+Private revisions and ordinary stored scores/usage remain unread here.
+No further inference, grade or regrade is authorized.
+
+The leader authorizes one ordinary push of this bounded bundle and one new
+draft follow-up PR. New-head direct leader review and CI, a distinct reviewed
+observer, actual selected/parent proofs and individual readout approval remain
+required. Publication is not merge or live-use authority. No live HF/model/
+OIDC/Azure-management/Project/readout/grade/dispatch call or main change
+occurred. Stop after the authorized publication without CI polling or manual
+workflow reruns. The full catalog was reviewed once; experiment-report-en
+followed by im-not-ai-en preserves original measurements, replay provenance
+and current authority as separate facts. Earlier local-only restrictions and
+then-unknown outcomes below are retained as historical snapshots.
+
+## Prior PROJECT5-TASK5-A1-UNGRADED-READER
 
 Prepared only the recorded task5 A1 MODEL-FREE UNGRADED readout. The sole new
 offline invocation returned **149 collected, 149 passed in 138.39s**, exit
