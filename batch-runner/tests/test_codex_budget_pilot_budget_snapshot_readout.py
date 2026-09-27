@@ -33,11 +33,12 @@ FIELDS = ("total_seconds", "started_unix", "expires_unix", "remaining_seconds",
           "wait_seconds", "attempts_admitted", "native_resumes")
 SNAPSHOT = dict(zip(FIELDS, (10800, 1000.25, 11800.25, 9170.5, 17.75, 3, 2)))
 PRIVATE = "PRIVATE https://private.invalid/checkpoint?thread=PRIVATE"
-VALID = ("recorded", "zero", "partial", "empty", "absent", "no_observability", "unstarted", "extra")
+ADVANCED = "f8" * 20
+VALID = ("recorded", "zero", "partial", "empty", "absent", "unstarted", "extra")
 INVALID = ("bool_seconds", "string_seconds", "negative_seconds", "zero_total", "null_wait",
            "float_admissions", "bool_resumes", "negative_count", "snapshot_list", "snapshot_null",
            "observation_list", "nan", "infinity", "task_identity", "fingerprint", "hash", "size",
-           "lost_response", "claim", "parent", "source")
+           "lost_response", "claim", "parent", "source", "no_observability")
 
 
 @pytest.fixture(scope="module")
@@ -98,6 +99,8 @@ def _payload_variant(payload, scenario):
     if scenario == "absent":
         del row["observability"]["task_deadline"]
     elif scenario == "no_observability":
+        # Unlike an absent deadline, a missing required native result field is
+        # invalid. Keep the unchanged Step2 producer validator authoritative.
         del row["observability"]
     elif scenario in {"snapshot_list", "snapshot_null"}:
         row["observability"]["task_deadline"] = [] if scenario == "snapshot_list" else None
@@ -153,11 +156,16 @@ def _isolate(record, kind, scenario, patch):
     terminal["binding"]["approval_request_sha256"] = grading._context_approval(context, terminal["binding"]["github_run"])
     if kind == "ng":
         terminal["inference_completion"] = copy.deepcopy(original["completion"])
-        if scenario not in {"nan", "infinity", "fingerprint", "task_identity", "observation_list"}:
+        if scenario not in {"nan", "infinity", "fingerprint"}:
             files = {"step2_inference_results.json": data,
                      Path(pilot.LEDGER).name: api.trees[output_revision][prefix + "/" + Path(pilot.LEDGER).name]}
             native = grading._inference_identity(context, {"terminal": original}, files, api.repo)
-            terminal["binding"]["inference_identity_sha256"] = pilot._digest(native)
+            terminal["binding"]["inference_identity_sha256"] = pilot._identity(retained._encoded(native))["sha256"]
+        # The native NG binding also includes the completion request. Rebuild
+        # it after the isolated input mutation, not just its approval hash.
+        terminal["binding"] = ungraded._binding(context, {"observation": observation, "terminal": original},
+            terminal["binding"]["inference_identity_sha256"], terminal["binding"]["predecessor_entry"],
+            terminal["binding"]["github_run"])
     if scenario == "claim":
         claim["format"] = "PRIVATE"
     elif scenario == "parent":
@@ -166,7 +174,8 @@ def _isolate(record, kind, scenario, patch):
         terminal["binding"]["source_sha"] = "9" * 40
     controls._store_grade(api, revision, path, terminal, claim)
     # A later unrelated ref advance must not change which immutable bytes win.
-    advanced = "a" * 40
+    advanced = ADVANCED
+    assert advanced not in api.trees  # Never alias a historical claim revision.
     api.seed(advanced, revision, {"unrelated/PRIVATE": b"PRIVATE"})
     api.branches[grading.BRANCH] = advanced
     return SimpleNamespace(api=api, context=context, revision=revision, terminal=terminal, request=request,
@@ -186,12 +195,13 @@ def test_selected_budget_snapshot_legacy_revision(history, tmp_path, monkeypatch
 def _check(record, kind, scenario, tmp_path, patch, capsys):
     selected = _isolate(record, kind, scenario, patch)
     api, context = selected.api, selected.context
-    readers, proved, payloads, downloads, active_grants = [], [], [], [], []
+    readers, proved, payloads, downloads, active_grants, errors = [], [], [], [], [], []
     initialize = readout._ReadOnlyGrade.__init__
     selected_result = readout._ReadOnlyGrade.selected_result
     verify, predecessor = readout._verified_grade, readout._verify_predecessor
     ng_verify, project = readout._verified_ungraded, readout._budget_snapshot
     raw_download, fetch = api.hf_hub_download, grading._fetch
+    error_context = output._error_context
 
     def forbidden(*args, **kwargs):
         raise AssertionError("budget readout crossed a writer/model boundary")
@@ -258,7 +268,7 @@ def _check(record, kind, scenario, tmp_path, patch, capsys):
             # The one-use grant was consumed BEFORE calling the transport.
             for reader in readers:
                 denied(reader, selected.output_revision, selected.member)
-                denied(reader, "a" * 40, selected.member)
+                denied(reader, ADVANCED, selected.member)
                 denied(reader, selected.output_revision, selected.member + ".other")
             assert all(reader._selected_download is None for reader in readers)
         path = Path(raw_download(**kwargs))
@@ -274,7 +284,7 @@ def _check(record, kind, scenario, tmp_path, patch, capsys):
             assert kind != "ng" and reader is readers[0]
             assert (revision, member) == (selected.output_revision, selected.member)
             active_grants.append((revision, member))
-            denied(reader, "a" * 40, member)
+            denied(reader, ADVANCED, member)
             denied(reader, selected.input_revision, member)
             denied(reader, revision, member + ".other")
             denied(reader, revision, member.rsplit("/", 1)[0] + "/" + Path(pilot.LEDGER).name)
@@ -288,6 +298,10 @@ def _check(record, kind, scenario, tmp_path, patch, capsys):
             assert reader._selected_download == (revision, member)
         return fetch(reader, repo, revision, member, *args)
 
+    def record_error(error):
+        errors.append(str(error))
+        return error_context(error)
+
     patch.setattr(readout._ReadOnlyGrade, "__init__", remember)
     patch.setattr(readout, "_verified_grade", verify_grade)
     patch.setattr(readout, "_verify_predecessor", verify_parent)
@@ -295,6 +309,7 @@ def _check(record, kind, scenario, tmp_path, patch, capsys):
     patch.setattr(readout, "_budget_snapshot", budget)
     patch.setattr(api, "hf_hub_download", download)
     patch.setattr(grading, "_fetch", bounded_fetch)
+    patch.setattr(output, "_error_context", record_error)
     if kind == "ng":
         patch.setattr(readout._ReadOnlyGrade, "selected_result", forbidden)
 
@@ -332,7 +347,7 @@ def _check(record, kind, scenario, tmp_path, patch, capsys):
     if scenario in {"claim", "parent", "source", "size"}:
         assert result_reads == [] and active_grants == []
     if scenario in VALID:
-        assert code == 0, public
+        assert code == 0, (public["stage"], errors)
         # NG already fetches once for native verification and once for its
         # existing projection. Budget access must not add a third fetch.
         assert len(result_reads) == (2 if kind == "ng" else 1)
@@ -346,7 +361,7 @@ def _check(record, kind, scenario, tmp_path, patch, capsys):
         assert snapshot["missing"] == {key: "not_recorded" if key not in expected else "unavailable"
                                        for key in FIELDS if key not in expected or expected[key] is None}
         assert public["inference_output_commit"] == selected.output_revision
-        assert public["observed_branch_head"] == "a" * 40
+        assert public["observed_branch_head"] == ADVANCED
         if kind == "ng":
             assert public["record_kind"] == "model_free_ungraded" and public["score"] is None
             assert public["scored_tasks"] == 0 and public["recorder_accounting"]["known_cost_usd"] is None
@@ -359,3 +374,14 @@ def _check(record, kind, scenario, tmp_path, patch, capsys):
     else:
         assert code == 2 and public["outcome"] == "refused", public
         assert public["reason"] == "grade_readout_contract_refused" and "inference_budget_snapshot" not in public
+        if scenario not in {"claim", "parent", "source", "size"}:
+            assert result_reads, (public["stage"], errors)
+        if scenario in {"bool_seconds", "string_seconds", "negative_seconds", "zero_total", "null_wait",
+                        "float_admissions", "bool_resumes", "negative_count", "snapshot_list", "snapshot_null"}:
+            assert "grade_readout_budget_snapshot_refused" in errors, errors
+        elif scenario == "no_observability":
+            assert "Step 2 terminal result fields are incomplete" in errors, errors
+        elif scenario == "observation_list":
+            assert "Step 2 result observability is invalid" in errors, errors
+        elif scenario == "lost_response":
+            assert "hf_transport_failed" in errors, errors
