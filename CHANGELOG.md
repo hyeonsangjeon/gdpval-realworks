@@ -13,6 +13,40 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Add only the recorded task5 B1 MODEL-FREE UNGRADED reader for policy
+  `task5-b1-model-free-ungraded`, record `36301611455`, original inference
+  `36248894311` and completion
+  `dd05f2ed43235b69d9eecfefadfb0a5ebd68d83b31daf38355a4acf6f0a21c5b`.
+  Verify its actual task5 A1 UNGRADED parent, task4 A2 UNGRADED backing,
+  ordinary task4 B2 grade and only the required C2 terminal control before
+  opening selected failure payloads. Reuse the unchanged native verifier
+  with separate bounded reader owners and a temporary verifier-only facade;
+  require disjoint revision footprints without transferring parent payload
+  permissions. Preserve ordinary Step8 requirements. Keep the scoreless
+  failure status, denominator and partial inference receipts separate from
+  recorder `not_measured` accounting. Task5 C1/C2/B2/A2 readouts remain closed. The sole
+  new B1-only offline selector returned **206 collected, 206 passed in
+  219.98s**, exit **0**, at `b5b786681260dda493f23dd6eb1cd9e9b66dd910`.
+  It checks the genuine synthetic backing history, exact read depth,
+  forbidden reads while facades are open, revocation, typed bindings,
+  source/claim/byte/history/privacy/approval checks, lost responses and replay.
+  No prior family or full suite was rerun. Preserve the separate original
+  **105 passed in 83.18s** at `610571daa8eca1e7439ddea5a4875c7603441cca`
+  and **149 passed in 138.39s** at `750e6850e0dddb1fea1b68c920aa3c36d7e6fa3a`,
+  without claiming either ran on replayed commits. Only the two completion
+  records change after the new tested SHA. PR688 remains published at
+  `393cf92f52b0a475baa1e50983fa89186b664b22`; review and CI are pending in the
+  supplied snapshot and were not queried. This delta stays local. Main
+  `dc591d873612f5d9b7df1c67462a50012fd92cf3` is unchanged observer code;
+  historical writer `69e56fc58daf50af2ac9e8b52691ffcbf5af4f96` and producer
+  `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e` remain immutable. Private
+  revisions remain unknown; no quality or causal claim follows from the
+  leader's publication acknowledgment. New publication permission, direct
+  leader review/CI, a distinct reviewed observer, actual selected/parent
+  proofs and individual protected readout approval remain gates. No push,
+  PR change, merge, live readout/HF/model/OIDC/grade/inference/regrade/dispatch,
+  Azure-management or Project call occurred.
+
 - Prepare one ordinary push and one new draft follow-up PR for only the
   already validated task4 A2 and task5 A1 UNGRADED readers. Preserve old
   branch `b/codex-task3-a1-readout-prep-20260927` at
