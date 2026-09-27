@@ -13,8 +13,24 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
-- Correct only two stale observed-download assertions for Task5 C1 and B2
-  in PR693. Each permits only its exact selected ordinary output-revision/
+- Correct only Task2 B1's final observed-read subset and equality expectations
+  in PR693. Successful non-plan readouts expect the unchanged `controls` plus
+  only the exact selected `prefix/step2_inference_results.json`; plan/refusal
+  paths remain control-only. Binding-time result denial, moving-ref metadata
+  refusal, frozen storage, no-mutation/judge and pre-proof/lifetime guards stay
+  intact. No parent, ledger or deliverable allowance, runtime/source-grant or
+  report change. At published `091e2642076fa0b3b77fdccc78012d2389077b2b`, the
+  leader reports budget-readout-contracts and pytest green, but pilot-contracts
+  job `108707637972`, run `36350235542`, had **6 failed, 1531 passed in
+  1646.09s**. Review `5332135430` remains conditional; REQUEST-CHANGES
+  `5332249823` records the blocker. The test-only commit
+  `2bed49767b867ab8c9f15a4b80e76f8e696bc6c6` preceded the one six-node
+  invocation: **6 passed in 30.11s**, exit **0**, with credentials cleared and
+  offline guards intact. Only this test file and the two current completion
+  records change from that published head. The final publication head adds
+  only those records after the tested SHA; its exact hash is in the handoff.
+  Separately, the earlier two-assertion correction for Task5 C1 and B2 permits
+  only each exact selected ordinary output-revision/
   prefix/`step2_inference_results.json` tuple; B2's allowance applies only to
   profile `b2`. The original denial sets, parent/deeper and selected-ledger
   prohibitions, pre-proof checks and post-consumption/closed-facade access
@@ -25,7 +41,7 @@ entries land under a fresh dated heading the day they merge to `main`.
   on CI; REQUEST-CHANGES `5332037055` records that unmet condition. The single
   two-node invocation at `d9fc971a3be546100e703dca3ebd6b0fc3122ecf` had
   **2 passed in 214.59s**, exit **0**, including both existing end-of-run
-  denial probes. No other test cases or full suites were run for this repair.
+  denial probes. No other test cases or full suites were run for that repair.
   The underlying shared seven-field ordinary/UNGRADED snapshot projection
   remains unchanged, based on exact main
   `d4d6447ad4873b4b21db599be079652d615d74f5` on
@@ -45,9 +61,10 @@ entries land under a fresh dated heading the day they merge to `main`.
   `d262e999df0136451eef82e6328cc18468e489ec` had **31 passed, 28 deselected
   in 49.12s**, exit **0**, covering all affected NG/legacy/native-observability
   cases without rerunning 28 unaffected ordinary cases. Production did not
-  change in that correction. Those snapshot invocations, the later CI failure
-  and this two-node repair check remain separate, not a combined pass count.
-  No prior snapshot group or full family was rerun for this repair. Exact
+  change in that correction. Those snapshot invocations, both later CI
+  failures and the separate two-node and six-node repair checks remain
+  separate, not a combined pass count. No prior snapshot group, two-node
+  check, full file, family or suite was rerun for this repair. Exact
   selectors and limits are in [the current completion record](tasks/LATEST_TASK_RESULT/README.md).
   The 114-line [pilot report](tasks/codex_budget_pilot/REPORT.md) preserves
   all 24 outcome rows and every other table byte-for-byte. It adds measurement

@@ -1,14 +1,63 @@
 # Latest task result
 
-## PROJECT5-CI-SELECTED-DENIAL-FIX
+## PROJECT5-TASK2-CI-ALLOWLIST
 
-Corrected only the two stale observed-download assertions for ordinary Task5
-C1 and B2. The single requested two-node invocation passed at the test-only
-commit below. Runtime code, source grants and every report byte are unchanged;
-only the two test files and these two current completion records change.
+Corrected only the final observed-read expectations for Task2 B1. The single
+requested six-node invocation passed at the test-only commit below. Runtime
+code, source grants and every report byte are unchanged; only the Task2 test
+file and these two current completion records change from the published head.
 No live snapshot values have been observed.
 
-### CI blocker and targeted correction
+### Supplied pilot-contracts blocker and Task2 correction
+
+At published `091e2642076fa0b3b77fdccc78012d2389077b2b`, the leader reports
+that budget-readout-contracts and pytest are green. The remaining
+[pilot-contracts job](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/36350235542/job/108707637972)
+(`108707637972`, run `36350235542`) had **6 failed, 1531 passed in
+1646.09s**. Conditional review `5332135430` does not clear that blocker;
+REQUEST-CHANGES `5332249823` records it. These supplied failures are the six
+Task2 readout cases whose final observed-read checks omitted the permitted
+selected result. No CI query or reinvestigation was performed.
+
+The original `controls` set is unchanged. For successful non-plan readouts,
+both the subset and equality checks now expect `controls` plus only the exact
+selected B1 `prefix/step2_inference_results.json`. Plan and refusal expectations
+remain control-only. Binding-time result-download denial, refusal of metadata
+reads at moving `retained.BRANCH`, frozen storage, no-mutation/judge guards and
+all pre-proof/lifetime protections remain intact. No parent, ledger or
+deliverable allowance was added.
+
+Exact tested commit: `2bed49767b867ab8c9f15a4b80e76f8e696bc6c6`, committed
+before validation on parent `091e2642076fa0b3b77fdccc78012d2389077b2b`.
+One invocation from `batch-runner`, with all six node IDs quoted individually:
+
+```bash
+env -i PATH=/usr/bin:/bin \
+  HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 \
+  HF_HUB_DISABLE_TELEMETRY=1 HF_HUB_DISABLE_IMPLICIT_TOKEN=1 \
+  DO_NOT_TRACK=1 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. \
+  /usr/bin/python3 -m pytest -m "not integration" -q -o addopts= \
+  -p no:cacheprovider --tb=short \
+  --junitxml=/tmp/project5-task2-ci-allowlist.mz3e3V/results.xml \
+  'tests/test_codex_budget_pilot_task2_grade_completion.py::test_task2_grade_completion[readout_graded]' \
+  'tests/test_codex_budget_pilot_task2_grade_completion.py::test_task2_grade_completion[readout_partial]' \
+  'tests/test_codex_budget_pilot_task2_grade_completion.py::test_task2_grade_completion[readout_failed]' \
+  'tests/test_codex_budget_pilot_task2_grade_completion.py::test_task2_grade_completion[readout_ungraded]' \
+  'tests/test_codex_budget_pilot_task2_grade_completion.py::test_task2_grade_completion[readout_missing_ledger]' \
+  'tests/test_codex_budget_pilot_task2_grade_completion.py::test_task2_grade_completion[readout_advanced]'
+```
+
+Observed result: **6 passed in 30.11s**, exit **0**. The inherited environment
+was cleared and existing offline guards stayed active. Output is retained in
+`/tmp/project5-task2-ci-allowlist.mz3e3V/pytest.log` and the JUnit file above.
+No full file, family, suite, prior snapshot group or prior two-node check was
+rerun. This result is separate from every earlier local and hosted invocation
+below; it does not establish that fresh CI has passed. Only these two
+completion records change after the tested commit. The exact final publication
+head is supplied in the handoff, without assigning another local execution to
+the records-only commit.
+
+### Prior readout CI and two-node correction
 
 At published `97c27e72178222e34dbcacf022e314c3798e2e2f`, the leader's full
 1107-line/14-file source review `5332020092` was conditional on CI. That
@@ -18,7 +67,8 @@ condition was not met: the completed [budget-readout-contracts job](https://gith
 failures came from two stale observed-read expectations, not a new runtime
 defect; no CI query or reinvestigation was performed.
 
-Each observed-download assertion now excludes only its selected ordinary
+That earlier correction applies to Task5 C1 and B2. Each observed-download
+assertion excludes only its selected ordinary
 `(verified output revision, prefix/step2_inference_results.json)` tuple from
 the relevant denied intersection. B2's exclusion applies only to profile
 `b2`, never A2. No original denial set is mutated. Every parent/deeper
@@ -34,9 +84,12 @@ env -i PATH=/usr/bin:/bin HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 HF_HUB_DISABLE_
 
 Observed result: **2 passed in 214.59s (0:03:34)**, exit **0**. Both positive
 cases completed their existing end-of-run denial probes. No other cases,
-prior snapshot group, full old family or full suite ran for this repair.
+prior snapshot group, full old family or full suite ran for that repair.
 This result does not replace the failed CI observation or establish that
-fresh CI has passed. The later records-only commit is not another tested SHA.
+fresh CI has passed. The subsequent records-only publication
+`091e2642076fa0b3b77fdccc78012d2389077b2b` had no additional local snapshot
+or two-node invocation; its later pilot-contracts CI result is recorded
+separately above.
 
 ### Preserved snapshot scope and selected-result authority
 
@@ -104,8 +157,9 @@ their initial refusals could be masked by the invalid binding; the affected
 ordinary-observability and legacy cases were also selected. The 28 unaffected
 ordinary cases were not rerun. No production change, guard bypass or combined
 pass invocation is claimed. Those original snapshot invocations did not run
-old test cases or full suites. The two later correction nodes are reported
-above; other coupled legacy cases remain unexecuted locally.
+old test cases or full suites. The earlier two-node correction and current
+six-node Task2 correction are reported separately above; other coupled legacy
+cases were not run for this unit.
 
 The tests exercise actual top-level ordinary/NG paths, selected byte binding,
 one-use grant lifetime, parent/path/revision denials, no extra NG fetch,
