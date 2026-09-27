@@ -41,7 +41,7 @@ VARIANTS = ("ungraded", "partial_cost", "missing_receipt", "price_missing")
 
 
 @pytest.fixture(scope="module")
-def history(tmp_path_factory):
+def history(tmp_path_factory, *, _variants=VARIANTS):
     assert grading.TASK5_A1_CELL == CELL and grading.TASK5_RETAINED[CELL] == ("36247236594", REQUEST)
     assert ungraded.TASK5_POLICY == "task5-a1-model-free-ungraded" and readout.TASK5_A1_WRITER_RUN == RUN
     actual = readout._writer_context(REQUEST)
@@ -66,7 +66,7 @@ def history(tmp_path_factory):
                 control_cell=initial.backing_cell, control_revision=initial.backing_revision,
                 control_path=initial.backing_path, older_paths=initial.older_paths | {initial.historical_path})
             assert previous.context.cell["cell_id"] == PARENT and shared.backing_context.cell["cell_id"] == BACKING
-            for variant in VARIANTS:
+            for variant in _variants:
                 destination = directory / variant
                 destination.mkdir()
                 row, ledger_bytes = copy.deepcopy(error_row), native_ledger
@@ -549,8 +549,8 @@ def test_fixed_task5_a1_ungraded_readout(history, tmp_path, monkeypatch, capsys,
         assert code == 0 and public["outcome"] == "plan_only" and not api.calls and not root.exists()
         if scenario == "closed_registry":
             requests = a1_reader._unregistered_requests()
-            assert len(requests) == 8 and row.request not in requests
-            assert set(requests) == {*(grading.TASK5_RETAINED[cell][1] for cell in context.plan["order"][25:]), "9" * 64, "9" * 40, ""}
+            assert len(requests) == 7 and row.request not in requests
+            assert set(requests) == {*(grading.TASK5_RETAINED[cell][1] for cell in context.plan["order"][26:]), "9" * 64, "9" * 40, ""}
             assert CELL not in readout.TASK4_SUCCESSOR_READOUTS and CELL not in readout.TASK3_SUCCESSOR_READOUTS
             for request in requests:
                 closed = list(args)
