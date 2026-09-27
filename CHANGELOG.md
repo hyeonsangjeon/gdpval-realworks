@@ -13,7 +13,46 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
-- Prepare only the task5 C1 ordinary and C2 MODEL-FREE UNGRADED readers for
+- Add only the final task5 B2 ordinary and A2 MODEL-FREE UNGRADED readout
+  bindings locally. Validation is incomplete: the single new B2/A2-only
+  invocation at `7793b92bebb5301e2f877da37bd6d63df841a0ec` collected **516**
+  cases and ended with **516 setup errors in 146.96s**, exit **1**. No B2/A2
+  test body ran. The shared fixture called A2's synthetic failure-row helper
+  after the reused history had installed the runner-constructor guard. That guard
+  stopped construction; no live call occurred. This is a fixture-ordering
+  defect, not 516 independent reader failures or a credential/resource gate.
+  The bounded next step needs authorization for a fixture-only ordering
+  correction and a separate focused run. No correction, guard bypass or
+  second invocation was made. B2 binds ordinary grade `36304692953` to
+  original inference `36266871064`, after actual C2 UNGRADED record
+  `36303175624`. A2 binds record `36306339791`, policy
+  `task5-a2-model-free-ungraded`, to original inference `36277325255`, after
+  actual ordinary B2. Reuse the fixed C2/C1/B1/A1/task4 A2/task4 B2 proof and
+  required task4 C2 terminal control, with separate owners, closed proof
+  handoffs, typed identities, exact terminal-only overlaps and no permission
+  transfer. These runtime checks remain unvalidated by this invocation.
+  Ordinary Step8/child/rubric/cleanup requirements and scoreless original
+  failure accounting remain unchanged. The intended closed registry is the
+  six original task5 cells at ordinals 24..29, with no seventh cell or wildcard.
+  Preserve C1's **269 passed in 401.67s** only at original
+  `049428c422c05a4fc17b75389af906f7a872f0f6`, C2's single **406 passed in
+  773.49s** only at `242dd282fa5d4fe42446effe8f16975235a9bf03`, and all
+  earlier observations and replay provenance separately. Only these two
+  completion records change after the attempted-validation SHA. No prior
+  selector or full suite was rerun. PR690 remains at supplied published head
+  `2feb8724e1ed95610268598b773933266046e9f8`, with leader review/CI pending;
+  it was not queried or changed. Main `e12100da12b2cd275233c939e463ce442db338ab`
+  is unchanged; historical writer69 and producer780 remain immutable.
+  All 18 writers are complete per the leader. No inference, grade or regrade
+  is authorized. This unit stays local and unpublished. Successful focused
+  validation, later publication authority, new-head review/CI, a distinct
+  reviewed observer, actual private selected/parent proofs and individual
+  protected readout approval remain gates. No workflow/native grader/writer/
+  budget/input/projection change, live HF/model/OIDC/readout/Azure-management/
+  Project call, push, PR edit, merge or CI polling occurred. Leader-controlled
+  readout `36319348118` was not queried or interfered with.
+
+- Historical C1/C2 publication preparation: prepare only the task5 C1 ordinary and C2 MODEL-FREE UNGRADED readers for
   one ordinary push and one new draft PR. Preserve the old C1 branch at
   `4946144a9e224ea04b56ff2f9adc58373b996fb9`; start
   `b/codex-task5-c1-c2-readout-20260927` from exact main
