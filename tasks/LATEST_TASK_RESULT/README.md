@@ -1,6 +1,145 @@
 # Latest task result
 
-## PROJECT5-PUBLISH-VALIDATED-TASK5-B1
+## PROJECT5-TASK5-C1-ORDINARY-READER
+
+Implemented only the actual task5 C1 ordinary readout after its recorded
+MODEL-FREE UNGRADED B1 parent. The sole new offline invocation returned
+**269 collected, 269 passed in 401.67s**, exit **0**, at
+`049428c422c05a4fc17b75389af906f7a872f0f6`. C1 keeps its real Step8, child,
+rubric and cleanup requirements. No live readout occurred; its stored grade
+state, score, usage and private revisions remain unknown.
+
+This unit continued from clean published
+`9eb8d80eedbfe6e4d833908bc4cb8f6d68703c6f` on
+`b/codex-task5-b1-ungraded-readout-20260927` in the existing owned worktree.
+PR689 publication is accepted, with leader review and CI pending in the
+supplied snapshot. Neither was queried, and neither covers this local delta.
+Only the two completion records change after the tested SHA. No push, PR edit,
+merge, branch switch or main change occurred.
+
+### Fixed ordinary record and UNGRADED parent
+
+The campaign remains `budget_pilot_ci_20260925_04`. C1 is cell
+`0818571f-5ff7-4d39-9d2c-ced5ae44299e_C_r1`, ordinal 26, grade run
+`36301834721`, job `pilot-live`, integer attempt 1. The immutable writer is
+`69e56fc58daf50af2ac9e8b52691ffcbf5af4f96`; the original producer is
+`78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e`. C1's original inference run is
+`36259780431`, with completion
+`ed11b060948692463105b5981245f4cedfaa3e597418313a7c55dc9c580a41bf`.
+Observer authority must remain distinct from both writer and producer;
+remote metadata cannot supply replacement authority.
+
+The leader verified preparation at `07:05:15.8356405`, claim acknowledgment
+at `07:05:37.3061538`, one judge cleanup at `07:14:56.9202910`, publication
+acknowledgment at `07:15:02.5046552` and run success at `07:15:06` UTC
+`2026-09-27`. These establish the recorded operation, not graded quality or
+a numeric score. No private revision is guessed.
+
+The immediate parent is actual task5 B1 MODEL-FREE UNGRADED record
+`36301611455`, cell `0818571f-5ff7-4d39-9d2c-ced5ae44299e_B_r1`, ordinal 25,
+policy `task5-b1-model-free-ungraded`, original inference `36248894311` and
+completion `dd05f2ed43235b69d9eecfefadfb0a5ebd68d83b31daf38355a4acf6f0a21c5b`.
+Its existing proof uses task5 A1 UNGRADED record `36300073091` at ordinal 24,
+task4 A2 UNGRADED record `36298545498` at ordinal 23, ordinary task4 B2 grade
+`36297122393` at ordinal 22 and only the required task4 C2 terminal control
+at ordinal 21. All use the same writer69. B1 is not substituted with an
+ordinary terminal or fabricated child.
+
+### Bounded proof before selected files
+
+The mandatory pre-edit HF-read review approved this fixed depth with
+conditions before editing. The implementation reuses the existing dedicated
+B1 reader and unchanged `ungraded.verify_terminal`. B1 saves its private
+closed proof only after native verification, identity comparison and both
+original-file projection fetches succeed. C1 immediately consumes that proof,
+requiring its exact type, three fixed owners, closed facades, exhausted metadata
+grants and unchanged complete revision footprints. No facade is reopened and
+no parent's payload permissions are copied into the C1 reader.
+
+C1's own claim, grade terminal and inference revisions must be disjoint from
+ancestor footprints. Its complete read footprint may overlap them only at the
+actual B1 terminal revision, with only B1's terminal-control grant there.
+C1's claim cannot alias its own inference revisions before binding grants.
+Selected grade files remain closed until the fixed typed source/run/claim/
+policy/whole-inference-predecessor/retained-byte/history/config/grader/renderer
+and alias proofs pass. Parent failure payloads are available only to their
+separate owners as required by unchanged UNGRADED verification. Ordinary
+parent grade payloads and deeper C2 claim, inference and payload reads remain
+forbidden. There is no recursive history walker or new reader input.
+
+The positive synthetic trace enforces five bounded readers and two existing
+facades. It allows `32 + N` unique downloads and `167 + N` download calls,
+where `N` is the number of validated C1 grade artifacts. The two-artifact
+fixture has 34 unique downloads, 169 download calls, 18 metadata calls and
+11 distinct grade/control revisions. These are offline fake-boundary
+assertions, not live HTTP request counts. The cases probe forbidden reads
+while facades are open, after metadata grants are exhausted and after closure;
+lost responses consume their grants and replay is refused.
+
+### Focused validation and preserved provenance
+
+The only pytest selector was
+`tests/test_codex_budget_pilot_task5_c1_readout.py::test_fixed_task5_c1_readout_after_ungraded`.
+It ran from `batch-runner` with `/usr/bin/python3.10`, a credential-free
+`env -i`, offline flags, plugin autoload disabled, no pytest cache and
+`-m 'not integration' -p no:cacheprovider -q --tb=short -rs`. The shared
+history came from genuine synthetic B1 and ordinary C1 writers. External
+model, authentication, network and write boundaries were fake or blocked.
+The invocation passed without a follow-up correction or second test run.
+
+The cases cover the ordinary four-state projection, denominators, exclusions,
+three accounting views and missingness; the actual B1/A1/A2/B2 backing chain;
+typed source/run/claim/policy/entry/predecessor checks; cross-level revision
+aliases; read-owner separation; approval, privacy, cleanup, lost responses
+and replay. The coupled registry admits exactly task5 A1/B1/C1 at ordinals
+24..26. Task5 C2/B2/A2 at ordinals 27..29 and three invalid requests remain
+closed: six refusals in that registry check. Only the reader, new C1 selector
+and directly coupled registry/fixture expectations changed. No workflow,
+native verifier, grader/writer, budget, input or projection changed.
+
+The original B1 observation remains **206 collected, 206 passed in 219.98s**,
+exit **0**, only at `b5b786681260dda493f23dd6eb1cd9e9b66dd910`. It was not
+rerun or attributed to a replayed SHA. Old branch
+`b/codex-pending-ungraded-readers-20260927` remains at
+`5200bf63cef91c7f69d406a3b0b9c5b8f23abda0`, with historical full tree
+`cd1f6108f26292275cc08c93e9375afc8fc6951a` and production/test subtree
+`a98f038d4acf5a12db8d6e2b8dcadb8fedb19b1a`. Those identities describe the
+preserved B1 replay, not this changed C1 tree. The original **105 passed in
+83.18s** at `610571daa8eca1e7439ddea5a4875c7603441cca` and **149 passed in
+138.39s** at `750e6850e0dddb1fea1b68c920aa3c36d7e6fa3a`, all earlier split
+invocations and the exact replay mappings remain separate in the unchanged
+historical sections below. No prior family or full suite was rerun.
+
+### Projection limits and remaining authority
+
+C1 retains the existing four ordinary grading states, earned/included/full
+denominators, exclusions, and task/summary/ledger accounting views. Missing
+cost is not replaced with zero; `call_reachability_unknown` and `price_missing`
+remain distinct. UNGRADED parents remain scoreless, preserving original
+failed status, denominator and partial inference receipts separately from
+recorder `not_measured` accounting. No score, rubric verdict, child, cleanup,
+zero-cost invoice or HTTP count is invented, and no causal or stronger
+provider-authentication claim is made.
+
+All 18 writer records are complete per the leader. Historical writer69 and
+producer780 remain immutable; no inference, grade or regrade is authorized.
+The supplied observer main is `0fccfd48400e5b88d919ae02e8ddadd2e544bb34`;
+no main ref or checkout was moved and no remote main state was queried.
+Leader-controlled task3 A2 readout `36312822662` was not queried or interfered
+with, and its result is not inferred. No live readout/HF/model/OIDC/Step8/
+claim/write/dispatch, Azure-management or Project call occurred.
+
+This delta stays local and unpublished. Later publication permission, direct
+leader review and CI, a distinct reviewed observer, actual selected/parent
+proofs and individual protected readout approval remain required. No future
+merge SHA, time or state is claimed. Existing author and committer remain
+`hyeonsangjeon <wingnut0310@gmail.com>`, without attribution trailers.
+The full catalog was reviewed once; `experiment-report-en` followed by
+`im-not-ai-en` preserves the new result, earlier evidence and remaining
+authority as separate facts. Prior publication permissions and then-pending
+states below are historical snapshots, not authority for this C1 delta.
+
+## Prior PROJECT5-PUBLISH-VALIDATED-TASK5-B1
 
 Prepared the already validated task5 B1 MODEL-FREE UNGRADED reader for one
 ordinary push and one new draft follow-up PR. Only the two authorized own

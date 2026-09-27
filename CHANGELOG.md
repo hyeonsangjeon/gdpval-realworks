@@ -13,7 +13,45 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
-- Prepare one ordinary push and one new draft follow-up PR for only the
+- Add only the recorded task5 C1 ordinary readout for grade `36301834721`,
+  original inference `36259780431` and completion
+  `ed11b060948692463105b5981245f4cedfaa3e597418313a7c55dc9c580a41bf`.
+  Verify its actual task5 B1 UNGRADED parent `36301611455` through the unchanged
+  B1 verifier, task5 A1 and task4 A2 UNGRADED backing, ordinary task4 B2 grade
+  and only the required C2 terminal control before opening selected C1 grade
+  files. Consume B1's completed, closed proof without reopening a facade or
+  transferring parent payload permissions. Keep the fixed typed source/run/
+  claim/policy/retained-byte/history/predecessor/config/grader/renderer proofs
+  and cross-level alias refusals. C1 retains real Step8, child, rubric and
+  cleanup requirements; its four states, denominators, exclusions and three
+  accounting views remain unchanged. UNGRADED parents stay scoreless, with
+  original failure receipts separate from recorder `not_measured` accounting.
+  Task5 C2/B2/A2 readouts remain closed. The sole new C1-only offline invocation
+  returned **269 collected, 269 passed in 401.67s**, exit **0**, at
+  `049428c422c05a4fc17b75389af906f7a872f0f6`. Its genuine synthetic history
+  checks exact read depth, forbidden reads while facades are open, revocation,
+  privacy, approval, lost responses, replay and the coupled closed registry.
+  No prior family or full suite was rerun. Preserve **206 collected, 206 passed
+  in 219.98s**, exit **0**, only at original
+  `b5b786681260dda493f23dd6eb1cd9e9b66dd910`, not its replayed commits, and keep
+  all earlier observations separate. Only the two completion records change
+  after the tested SHA. PR689 remains at published
+  `9eb8d80eedbfe6e4d833908bc4cb8f6d68703c6f`; publication is accepted, with
+  leader review/CI pending in the supplied snapshot and not queried. This new
+  delta stays local. Historical writer
+  `69e56fc58daf50af2ac9e8b52691ffcbf5af4f96` and producer
+  `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e` remain immutable. The supplied
+  observer main `0fccfd48400e5b88d919ae02e8ddadd2e544bb34` is not changed.
+  Stored C1 state, score, usage and private revisions remain unknown; successful
+  publication does not establish quality. Later publication permission, direct
+  leader review/CI, a distinct reviewed observer, actual selected/parent proofs
+  and individual protected readout approval remain gates. All 18 writers are
+  complete per the leader; no inference, grade or regrade is authorized.
+  Leader-controlled readout `36312822662` was not queried or interfered with.
+  No workflow/native grader/writer/budget/input change, push, PR edit, merge,
+  live HF/model/OIDC/readout/Azure-management or Project call occurred.
+
+- Historical B1 publication preparation: prepare one ordinary push and one new draft follow-up PR for only the
   already validated task5 B1 UNGRADED reader. Preserve old branch
   `b/codex-pending-ungraded-readers-20260927` at
   `5200bf63cef91c7f69d406a3b0b9c5b8f23abda0`; create
