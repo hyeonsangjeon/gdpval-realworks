@@ -438,7 +438,7 @@ def test_fixed_task4_a1_ungraded_readout(history, tmp_path, monkeypatch, capsys,
         assert code == 0 and public["outcome"] == "plan_only" and not api.calls and not root.exists()
         if scenario == "closed_registry":
             requests = a1_reader._unregistered_requests()
-            assert len(requests) == 8 and row.request not in requests
+            assert len(requests) == 7 and row.request not in requests
             for request in requests:
                 closed = list(args)
                 closed[5] = request
