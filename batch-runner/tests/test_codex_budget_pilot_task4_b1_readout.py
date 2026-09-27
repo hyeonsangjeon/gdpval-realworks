@@ -114,6 +114,7 @@ def history(tmp_path_factory):
                     with patch.context() as selected:
                         selected.setattr(base, "OUTPUT", OUTPUT)
                         selected.setenv("HF_TOKEN", base.TOKEN)
+                        base._synthetic_rubric(current, selected)
                         approval._authorize(current, destination, selected, RUN["id"])
                         revision, path, terminal = writer._writer(current, capture, destination, selected, variant)
                     claim = retained._read(current.root / "claim-receipt.json")["claim"]
