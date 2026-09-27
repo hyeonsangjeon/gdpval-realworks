@@ -1,6 +1,135 @@
 # Latest task result
 
-## PROJECT5-READER-CI-PARTITION
+## PROJECT5-TASK4-B1-READER-AFTER-UNGRADED
+
+Prepared only ordinary task4 B1 readout after its actual task4 A1 model-free
+UNGRADED predecessor. The corrected B1-only selector returned 118 passed in
+84.55s at `945a4f1c8076f885c408053ff4c81ff1bafaca07`. Its earlier invocation
+returned 118 setup errors in 52.31s before any B1 test body ran. These are
+separate observations. B1's actual stored grade state, score, usage and private
+revisions remain unread and unknown; workflow success is not a quality result.
+
+This unit started at published `85a2e723a130aa8554d0db049e935e351ad4fe23` on
+`b/codex-task3-a1-readout-prep-20260927` in
+`/ai-work/copilot/worktrees/codex-task3-a1-readout-prep-20260927`.
+Leader review `5329061263` covers only that published head. The supplied CI
+snapshot had eight passing checks, including `budget-readout-contracts`, and
+two running checks; it is not approval of this local delta or evidence of full
+CI completion. No remote status was queried. This unit stays local and
+unpublished, with no push or PR change authorized. Main/writer
+`69e56fc58daf50af2ac9e8b52691ffcbf5af4f96` remains frozen through the grade
+sequence. All earlier observations and publication limits below are historical.
+
+### Fixed B1 selection and model-free predecessor
+
+Both records belong to campaign `budget_pilot_ci_20260925_04`, immutable writer
+`69e56fc58daf50af2ac9e8b52691ffcbf5af4f96`, binding job `pilot-live` and integer
+attempt 1. Their original inference producer is
+`78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e`. A future reviewed observer must
+remain distinct from writer and producer; remote metadata cannot grant authority.
+
+| Cell / ordinal | Grade or record run | Original inference run | Completion checksum |
+|---|---|---|---|
+| Selected ordinary `3baa0009-5a60-4ae8-ae99-4955cb328ff3_B_r1` / 19 | Grade `36292532223` | `36235926112` | `f3546942ebac25c3c3cd1788dfb792a80e3e10f465999bebf7730fb651cb2bde` |
+| Immediate parent `3baa0009-5a60-4ae8-ae99-4955cb328ff3_A_r1` / 18 | UNGRADED record `36291118506` | `36234320019` | `a913f0236e801e31ab7c0f58c8545ad6375d7092c06fa77f839225d03efe52d8` |
+
+A1 retains policy `recorded_task4_failed_a1_no_judge` and uses the unchanged
+dedicated reader and `codex_budget_pilot_ungraded.verify_terminal`. Its actual
+ordinary task3 A2 backing grade remains run `36289615941`, same writer,
+original inference `36232859421` / completion
+`f4de6c1d36c8f3a2c077be9e4be370545eeb5a11d9513752caa4d40bd08e1bd8`.
+Older task3 B2 is intrinsic terminal control only. There is no B2 semantic
+grade, claim, inference or payload walk and no task3 A2 grade-file download.
+Only the two verified original A1 failure payloads may be opened by A1's
+existing semantic verifier. B1 does not inherit those read capabilities.
+
+The new grant is only ordinal 19 to 18. It requires the canonical typed B1
+claim, exact original order and distinct local revisions. A separate bounded
+predecessor reader reuses A1's proof without taking another branch snapshot.
+Before selected B1 grade files open, it verifies A1's actual identity, fixed
+writer/source/run/policy, bytes and history; canonical whole inference
+observation and predecessor equality; and matching config, grader source and
+renderer. B1 claim/terminal revisions must also be disjoint from every revision
+in the completed predecessor reader's metadata capabilities. Existing approval,
+source/ref, immutable byte, preservation, privacy and replay guards remain.
+
+B1 stays on the ordinary real-Step8/child/rubric/cleanup path. Its existing four
+grade states, score, earned/included/full denominators, exclusions and three
+accounting views are unchanged. A1 stays scoreless, with its original failed
+inference, denominator, partial receipt and missingness separate from the
+recorder's unmeasured costs. `call_reachability_unknown` is not `price_missing`.
+No fake score, child, cleanup, zero invoice or HTTP count is added. There is no
+new skip policy, recursive framework, input, workflow, writer, runtime, budget
+or fingerprint change. Direct task3 A1's historical task2 A2 handoff is intact.
+The other four task4 cells, all six task5 cells and three invalid requests stay
+closed: 13 distinct refusals in the coupled registry assertions. The new test
+file falls under the existing reader CI glob; the workflow is unchanged.
+
+### Separate B1-only validation
+
+| Invocation | Exact tested SHA | Result |
+|---|---|---|
+| Initial new task4 B1-only selector | `b7d203795fe24227382d3ee73ea1a3dcd1ed7961` | 118 collected, 118 setup errors in 52.31s; exit 1; no B1 test body ran |
+| Same new selector after the fixture-only correction | `945a4f1c8076f885c408053ff4c81ff1bafaca07` | 118 collected, 118 passed in 84.55s; exit 0 |
+
+The initial setup refused with `retained_file_identity_mismatch`. The shared
+UNGRADED fixture left task4 synthetic rubric bytes while its inherited prefix
+restored task3's expected identity. The one-line correction binds B1's synthetic
+rubric before its fake writer prepares the grade. Production code is unchanged
+between these two tested SHAs. This is distinct from the earlier A1 production
+cache correction and the earlier task3 fixture-only corrections below.
+
+Both invocations selected only
+`tests/test_codex_budget_pilot_task4_b1_readout.py::test_fixed_task4_b1_readout_after_ungraded`.
+One shared genuine synthetic A1 writer history uses its partial-cost variant;
+ordinary B1 writer variants and isolated mutations cover four grade states,
+accounting missingness, the exact A1/A2/B2 proof, typed source/run/config/claim,
+approval, cross-level revision aliases, privacy, lost response, advanced heads,
+cleanup, replay and closed requests. The inherited fixture's default variants
+are unchanged. Prior test bodies were not rerun; their helpers only construct
+the shared history. No previous passing family or full suite ran.
+
+External services and model boundaries were fake or blocked. Reader write,
+OIDC, Step8, claim and rubric paths were blocked; ordinary fixture writers used
+fake judge execution. Synthetic grades, payloads, receipts and revisions are
+not live evidence. Python 3.10.12 / pytest 9.1.1 ran under credential-free
+`env -i`, offline HF/Transformers flags, disabled plugin autoload,
+`GITHUB_ACTIONS=false`, `PYTHONDONTWRITEBYTECODE=1` and
+`-m 'not integration' -p no:cacheprovider -q --tb=short -rs`.
+The separate logs are
+`/tmp/project5-task4-b1-readout.JNpUzY/focused-b7d203795fe24227382d3ee73ea1a3dcd1ed7961.log`
+and
+`/tmp/project5-task4-b1-readout.JNpUzY/focused-945a4f1c8076f885c408053ff4c81ff1bafaca07.log`.
+Only the two completion records changed after the corrected tested SHA.
+
+### Supplied operation and remaining gates
+
+The leader supplied B1's UTC `2026-09-27` timestamps: prepared
+`03:52:37.2599258`, claim acknowledgment `03:52:51.6791055`, one judge/cleanup
+`03:58:26.0492081`, publication acknowledgment `03:58:31.1914039` and run
+success `03:58:35`. No private grade or original payload was fetched. These
+operation receipts do not establish B1's stored grade state or model quality.
+The supplied A1 UNGRADED operation remains separate from this ordinary grade.
+
+The full catalog was reviewed once, with the grading spec and bounded pre-edit
+HF-read review completed before production edits. The reviewer approved with
+conditions, using the available Codex model in place of the unavailable named
+Claude profile. This decision is not final diff or live-use approval.
+Experiment-report-en followed by im-not-ai-en preserves the split observations,
+unknown values and historical limits in these records.
+
+Publication still requires later leader authorization. New-head direct review
+and CI, the frozen writer sequence, a distinct reviewed observer, actual selected
+and predecessor proofs at read time, and explicit leader authorization after
+the sequence, including individual protected live-readout approval, remain
+gates. No private parent revision is guessed. Supplied live context only: task4
+A2 UNGRADED run `36298545498` was published at `05:57:25.3885652` UTC; task5 A1
+UNGRADED run `36300073091` was issued/approved with outcome unknown. Neither
+was queried or registered for readout. No push, PR edit, merge, main change,
+live HF/model/grade/readout/dispatch, OIDC, Azure/credential/Project change,
+new inference, regrade, CI polling or manual workflow rerun occurred.
+
+## Prior PROJECT5-READER-CI-PARTITION
 
 Split budget-reader tests into one isolated CI job, leaving budget non-readers
 in the original pilot job. The new fast offline contract returned 1 passed in

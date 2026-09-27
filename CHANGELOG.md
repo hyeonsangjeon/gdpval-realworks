@@ -121,6 +121,49 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Prepare only ordinary task4 B1 readout for cell
+  `3baa0009-5a60-4ae8-ae99-4955cb328ff3_B_r1`, ordinal 19, writer
+  `69e56fc58daf50af2ac9e8b52691ffcbf5af4f96` / run `36292532223` /
+  job `pilot-live` / integer attempt 1, original producer
+  `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e`, inference `36235926112` /
+  completion `f3546942ebac25c3c3cd1788dfb792a80e3e10f465999bebf7730fb651cb2bde`.
+  Require actual task4 A1 UNGRADED record `36291118506`, same writer, policy
+  `recorded_task4_failed_a1_no_judge`, inference `36234320019` /
+  completion `a913f0236e801e31ab7c0f58c8545ad6375d7092c06fa77f839225d03efe52d8`.
+  Reuse its unchanged dedicated verifier, ordinary task3 A2 backing grade
+  `36289615941` and older B2 terminal control only. Only A1's two verified
+  original failure payloads may be opened by that verifier; no task3 A2 grade
+  files, recursive B2 proof, second branch snapshot or transferred read grants.
+  Selected B1 files stay closed until canonical typed claim/predecessor/whole
+  inference equality, writer/source/run/policy/bytes/history, config/grader/
+  renderer agreement and cross-level revision disjointness pass. B1 keeps its
+  ordinary Step8/child/rubric/cleanup requirements, four grade states,
+  denominators, exclusions and three accounting views. A1 remains scoreless,
+  with original failure/receipt/missingness separate from unmeasured recorder
+  cost. Approval, privacy and replay guards remain intact; no fake score,
+  child, zero invoice or HTTP count. Other new task4/task5 readouts stay closed;
+  the coupled closure assertions now require exactly 13 refused requests.
+  The initial B1-only invocation at
+  `b7d203795fe24227382d3ee73ea1a3dcd1ed7961` returned **118 collected,
+  118 setup errors in 52.31s**, exit **1**, before any B1 test body ran:
+  the synthetic rubric bytes did not match the inherited expected identity.
+  The one-line fixture-only correction at
+  `945a4f1c8076f885c408053ff4c81ff1bafaca07` was followed by only that same
+  new selector: **118 collected, 118 passed in 84.55s**, exit **0**.
+  Production was unchanged between those SHAs. These observations and every
+  prior invocation remain separate; no old passing family or full suite ran.
+  Only the two completion records changed after the corrected tested SHA.
+  Review `5329061263` covers only published
+  `85a2e723a130aa8554d0db049e935e351ad4fe23`; its supplied eight passing/two
+  running checks do not approve this local delta. The unit remains local and
+  unpublished. Main/writer69 stays frozen; later publication authority,
+  new-head review/CI, a distinct reviewed observer, actual parent proof and
+  explicit leader approval after the writer sequence, including individual
+  protected live-readout approval, remain gates. B1's live state/score/usage/
+  private revisions are unknown. No push, PR change, merge, live call, workflow/
+  writer/runtime/budget change, main change, inference or regrade occurred.
+  All earlier entries retain their historical scope and publication limits.
+
 - Prepare only task4 A1's actual model-free UNGRADED readout for cell
   `3baa0009-5a60-4ae8-ae99-4955cb328ff3_A_r1`, ordinal 18, policy
   `recorded_task4_failed_a1_no_judge`, writer
