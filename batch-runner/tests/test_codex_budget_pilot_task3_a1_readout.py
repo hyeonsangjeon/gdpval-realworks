@@ -108,11 +108,15 @@ def _store_grade(api, revision, path, terminal, claim):
 
 
 def _unregistered_requests():
-    # Only the recorded B1 reader now joins A1. C1 and every later reader stay closed.
-    requests = [value[1] for cell, value in grading.TASK3_SUCCESSORS.items() if cell != readout.TASK3_B1_CELL]
+    # Exactly B1/C1/C2 join A1; B2/A2 and every later reader remain closed.
+    registered = {readout.TASK3_B1_CELL, readout.TASK3_C1_CELL, readout.TASK3_C2_CELL}
+    assert set(readout.TASK3_SUCCESSOR_READOUTS) == registered
+    requests = [value[1] for cell, value in grading.TASK3_SUCCESSORS.items() if cell not in registered]
     requests.extend(value[1] for value in (*grading.TASK4_RETAINED.values(), *grading.TASK5_RETAINED.values()))
     requests.extend(["9" * 64, "9" * 40, ""])
-    assert len(requests) == len(set(requests)) == 19
+    assert len(requests) == len(set(requests)) == 17
+    for suffix in ("B_r2", "A_r2"):
+        assert grading.TASK3_SUCCESSORS["2ea2e5b5-257f-42e6-a7dc-93763f28b19d_" + suffix][1] in requests
     return requests
 
 
