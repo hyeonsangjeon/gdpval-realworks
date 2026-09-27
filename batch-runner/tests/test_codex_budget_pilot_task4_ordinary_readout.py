@@ -47,7 +47,7 @@ RECORDED = {
 
 
 @pytest.fixture(scope="module")
-def history(tmp_path_factory):
+def history(tmp_path_factory, *, _variants=VARIANTS):
     # Assert actual pins before substituting any synthetic completion checksum.
     expected = {}
     for suffix, (ordinal, grade_run, inference_run, request, parent) in RECORDED.items():
@@ -123,7 +123,7 @@ def history(tmp_path_factory):
                         a2_context=initial.backing_context, a2_revision=initial.backing_revision, a2_path=initial.backing_path,
                         intrinsic_cell=initial.intrinsic_cell, intrinsic_revision=initial.intrinsic_revision,
                         intrinsic_path=initial.intrinsic_path, historical_path=initial.historical_path)
-                    for variant in VARIANTS:
+                    for variant in _variants:
                         destination = local / variant
                         destination.mkdir()
                         current = SimpleNamespace(api=copy.deepcopy(api), workflow=workflow,
@@ -649,11 +649,14 @@ def test_fixed_task4_ordinary_readouts(history, tmp_path, monkeypatch, capsys, s
         assert public["inference_terminal"] is None and public["observer_source_sha"] == OBSERVER
         if scenario == "closed_registry":
             requests = a1_reader._unregistered_requests()
-            assert len(requests) == 10 and selected.request not in requests
+            assert len(requests) == 8 and selected.request not in requests
             assert list(readout.TASK4_SUCCESSOR_READOUTS) == [PREFIX + name for name in RECORDED]
             assert all(grading.TASK4_RETAINED[PREFIX + name][1] not in requests for name in RECORDED)
-            assert grading.TASK4_RETAINED[PREFIX + "A_r2"][1] in requests
-            assert all(value[1] in requests for value in grading.TASK5_RETAINED.values())
+            assert grading.TASK4_RETAINED[PREFIX + "A_r2"][1] not in requests
+            assert all(record[1] in requests for cell, record in grading.TASK5_RETAINED.items()
+                       if cell != grading.TASK5_A1_CELL)
+            assert all(value[1] in requests for cell, value in grading.TASK5_RETAINED.items()
+                       if cell != grading.TASK5_A1_CELL)
             for request in requests:
                 closed = list(args)
                 closed[5] = request
