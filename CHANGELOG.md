@@ -121,6 +121,62 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Added
 
+- Prepare only the recorded ordinary task4 C1/C2/B2 readouts, preserving
+  B1's existing UNGRADED-A1 boundary. Exact new cells are
+  `3baa0009-5a60-4ae8-ae99-4955cb328ff3_C_r1` / ordinal 20 /
+  grade `36294081159` / inference `36239016015` /
+  completion `76c1904cfbed0588f5fcb6c15f48f66cd065933a8c829cbd18fcfb323f8ab710`;
+  `3baa0009-5a60-4ae8-ae99-4955cb328ff3_C_r2` / ordinal 21 /
+  grade `36295603145` / inference `36242339639` /
+  completion `817d2515c4719b7f12b40c5c58e446661e2e41fd5d8023a78045208548e4dcbd`;
+  and `3baa0009-5a60-4ae8-ae99-4955cb328ff3_B_r2` / ordinal 22 /
+  grade `36297122393` / inference `36243795189` /
+  completion `ec4221834b04014e58775a4a4d94fc139e49ad2b7b45321e7fd2ccd58d75ef41`.
+  All use campaign `budget_pilot_ci_20260925_04`, immutable writer
+  `69e56fc58daf50af2ac9e8b52691ffcbf5af4f96`, original producer
+  `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e`, job `pilot-live` and integer
+  attempt 1. Immediate parents are B1 grade `36292532223`, C1 and C2,
+  respectively. C1 also reuses B1's existing A1 UNGRADED verification,
+  ordinary task3 A2 grade `36289615941` backing and task3 B2 terminal control.
+  C2/B2 stop at the immediate ordinary parent plus B1/C1 terminal control,
+  respectively; neither invokes the NG verifier. No ordinary parent grade
+  files or arbitrary history are opened. Only A1's two verified original
+  failure payloads are allowed by its unchanged verifier, without transferring
+  their capabilities to C1 or B1. Selected files require canonical typed
+  claim/entry/predecessor/whole-inference equality, actual source/run/bytes/
+  history, matching config/grader-source/renderer and cross-level revision
+  disjointness first. Ordinary real-Step8/child/rubric/cleanup, four states,
+  denominators/exclusions/accounting and approval/privacy/no-replay remain
+  intact. A1 stays scoreless with original failure/receipt/missingness separate
+  from unmeasured recorder cost; no fake score, child, zero invoice or HTTP
+  count. Task4 A2, all six task5 readouts and three invalid requests remain
+  closed: exactly 10 refusals, with explicit positive checks for only the three
+  new rows. No workflow, native grader, writer, runtime, budget, fingerprint,
+  input, generic framework or skip policy changed. From local
+  `201c570135cfec6b570d880990422893aa72bfce`, the sole new offline selector at
+  `4618fd592a7c04f4ec0600f23a4f93e4291d73f2` returned **374 collected,
+  374 passed in 234.68s**, exit **0**. It verifies exact four-reader/`23 + k`
+  C1 and two-reader/`11 + k` C2/B2 download sets, where `k` is the selected
+  artifact count, plus isolated refusals after genuine synthetic inner proofs.
+  These are offline capability checks, not live cost or quality measurements.
+  Earlier B1 results remain separate: `b7d203795fe24227382d3ee73ea1a3dcd1ed7961`
+  had **118 setup errors in 52.31s** before any B1 test body; after the one-line
+  test-only rubric binding correction,
+  `945a4f1c8076f885c408053ff4c81ff1bafaca07` had **118 passed in 84.55s**.
+  Production was unchanged between those B1 SHAs. No old passing family or
+  full suite was rerun; no invocations are combined. Only the two completion
+  records change after the new tested SHA. The leader supplies all **10 CI
+  PASS** and review `5329061263` for published
+  `85a2e723a130aa8554d0db049e935e351ad4fe23`, not approval of local B1 or this
+  tail. One accumulated ordinary push to the same PR687 is now authorized
+  after confirming that exact remote head. Main/writer69 stays frozen;
+  new-head direct review/CI, completion of the writer sequence, a distinct
+  reviewed observer, actual selected/parent proofs and individual protected
+  live-readout approval remain gates. Actual stored ordinary states, scores,
+  usage and private revisions remain unknown. No live readout, merge,
+  inference, regrade, main change, CI polling or manual workflow rerun.
+  Older entries below retain their historical scope and publication limits.
+
 - Prepare only ordinary task4 B1 readout for cell
   `3baa0009-5a60-4ae8-ae99-4955cb328ff3_B_r1`, ordinal 19, writer
   `69e56fc58daf50af2ac9e8b52691ffcbf5af4f96` / run `36292532223` /

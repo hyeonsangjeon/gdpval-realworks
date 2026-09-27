@@ -1,133 +1,170 @@
 # Latest task result
 
-## PROJECT5-TASK4-B1-READER-AFTER-UNGRADED
+## PROJECT5-TASK4-ORDINARY-READER-TAIL
 
-Prepared only ordinary task4 B1 readout after its actual task4 A1 model-free
-UNGRADED predecessor. The corrected B1-only selector returned 118 passed in
-84.55s at `945a4f1c8076f885c408053ff4c81ff1bafaca07`. Its earlier invocation
-returned 118 setup errors in 52.31s before any B1 test body ran. These are
-separate observations. B1's actual stored grade state, score, usage and private
-revisions remain unread and unknown; workflow success is not a quality result.
+Prepared only the three recorded ordinary task4 C1/C2/B2 readouts. One new
+offline selector returned **374 collected, 374 passed in 234.68s**, exit **0**,
+at `4618fd592a7c04f4ec0600f23a4f93e4291d73f2`. C1 preserves the existing
+B1-after-UNGRADED boundary; C2/B2 stop at their immediate ordinary parent and
+its required older terminal control. Actual stored ordinary grade states,
+scores, usage and private revisions remain unread and unknown. Successful
+publication operations do not establish model quality.
 
-This unit started at published `85a2e723a130aa8554d0db049e935e351ad4fe23` on
+This unit continued from local `201c570135cfec6b570d880990422893aa72bfce` on
 `b/codex-task3-a1-readout-prep-20260927` in
 `/ai-work/copilot/worktrees/codex-task3-a1-readout-prep-20260927`.
-Leader review `5329061263` covers only that published head. The supplied CI
-snapshot had eight passing checks, including `budget-readout-contracts`, and
-two running checks; it is not approval of this local delta or evidence of full
-CI completion. No remote status was queried. This unit stays local and
-unpublished, with no push or PR change authorized. Main/writer
-`69e56fc58daf50af2ac9e8b52691ffcbf5af4f96` remains frozen through the grade
-sequence. All earlier observations and publication limits below are historical.
+Published PR687 remains `85a2e723a130aa8554d0db049e935e351ad4fe23` at the
+leader's handoff. Review `5329061263` and the newly supplied **all 10 CI PASS**
+cover only that head, not local B1 or this tail. The earlier B1 handoff's eight
+passing checks, including `budget-readout-contracts`, and two running checks
+remain a separate historical snapshot. No CI status was queried.
 
-### Fixed B1 selection and model-free predecessor
+The leader now authorizes one ordinary push of accumulated B1, these three
+readers and the two completion records to the same PR687, after validation and
+confirmation that its remote head is still 85a. This supersedes the prior
+local-only publication limit for this bundle, not the main/controller hold.
+Main/writer `69e56fc58daf50af2ac9e8b52691ffcbf5af4f96` remains frozen through
+the writer sequence. No merge or live-readout authority is granted.
 
-Both records belong to campaign `budget_pilot_ci_20260925_04`, immutable writer
+### Fixed selections and exact read depth
+
+All rows use campaign `budget_pilot_ci_20260925_04`, immutable writer
 `69e56fc58daf50af2ac9e8b52691ffcbf5af4f96`, binding job `pilot-live` and integer
-attempt 1. Their original inference producer is
-`78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e`. A future reviewed observer must
-remain distinct from writer and producer; remote metadata cannot grant authority.
+attempt 1. The original inference producer,
+`78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e`, is unchanged. A future reviewed
+observer must remain distinct from writer and producer; remote metadata cannot
+grant authority. The leader verified all three new first-grade publications.
 
 | Cell / ordinal | Grade or record run | Original inference run | Completion checksum |
 |---|---|---|---|
-| Selected ordinary `3baa0009-5a60-4ae8-ae99-4955cb328ff3_B_r1` / 19 | Grade `36292532223` | `36235926112` | `f3546942ebac25c3c3cd1788dfb792a80e3e10f465999bebf7730fb651cb2bde` |
-| Immediate parent `3baa0009-5a60-4ae8-ae99-4955cb328ff3_A_r1` / 18 | UNGRADED record `36291118506` | `36234320019` | `a913f0236e801e31ab7c0f58c8545ad6375d7092c06fa77f839225d03efe52d8` |
+| Existing UNGRADED `3baa0009-5a60-4ae8-ae99-4955cb328ff3_A_r1` / 18 | Record `36291118506` | `36234320019` | `a913f0236e801e31ab7c0f58c8545ad6375d7092c06fa77f839225d03efe52d8` |
+| Existing ordinary `3baa0009-5a60-4ae8-ae99-4955cb328ff3_B_r1` / 19 | Grade `36292532223` | `36235926112` | `f3546942ebac25c3c3cd1788dfb792a80e3e10f465999bebf7730fb651cb2bde` |
+| New ordinary `3baa0009-5a60-4ae8-ae99-4955cb328ff3_C_r1` / 20 | Grade `36294081159` | `36239016015` | `76c1904cfbed0588f5fcb6c15f48f66cd065933a8c829cbd18fcfb323f8ab710` |
+| New ordinary `3baa0009-5a60-4ae8-ae99-4955cb328ff3_C_r2` / 21 | Grade `36295603145` | `36242339639` | `817d2515c4719b7f12b40c5c58e446661e2e41fd5d8023a78045208548e4dcbd` |
+| New ordinary `3baa0009-5a60-4ae8-ae99-4955cb328ff3_B_r2` / 22 | Grade `36297122393` | `36243795189` | `ec4221834b04014e58775a4a4d94fc139e49ad2b7b45321e7fd2ccd58d75ef41` |
 
-A1 retains policy `recorded_task4_failed_a1_no_judge` and uses the unchanged
-dedicated reader and `codex_budget_pilot_ungraded.verify_terminal`. Its actual
-ordinary task3 A2 backing grade remains run `36289615941`, same writer,
-original inference `36232859421` / completion
+| Selected readout | Immediate parent and required semantic proof | Older terminal-control endpoint |
+|---|---|---|
+| C1 | Ordinary B1; reuse B1's existing A1 UNGRADED verification and ordinary task3 A2 backing | Task3 B2 only |
+| C2 | Ordinary C1 only | Task4 B1 only |
+| B2 | Ordinary C2 only | Task4 C1 only |
+
+A1 retains policy `recorded_task4_failed_a1_no_judge`, its dedicated reader and
+unchanged `codex_budget_pilot_ungraded.verify_terminal`. Its actual ordinary
+task3 A2 backing remains grade `36289615941`, same writer, original inference
+`36232859421` / completion
 `f4de6c1d36c8f3a2c077be9e4be370545eeb5a11d9513752caa4d40bd08e1bd8`.
-Older task3 B2 is intrinsic terminal control only. There is no B2 semantic
-grade, claim, inference or payload walk and no task3 A2 grade-file download.
-Only the two verified original A1 failure payloads may be opened by A1's
-existing semantic verifier. B1 does not inherit those read capabilities.
+Only A1's two verified original failure payloads may be opened by its semantic
+verifier. Neither C1 nor B1 inherits those grants. No ordinary parent grade
+files are downloaded, and the terminal-only endpoints receive no semantic
+grade, claim, inference or payload walk. C2/B2 never invoke the NG verifier.
 
-The new grant is only ordinal 19 to 18. It requires the canonical typed B1
-claim, exact original order and distinct local revisions. A separate bounded
-predecessor reader reuses A1's proof without taking another branch snapshot.
-Before selected B1 grade files open, it verifies A1's actual identity, fixed
-writer/source/run/policy, bytes and history; canonical whole inference
-observation and predecessor equality; and matching config, grader source and
-renderer. B1 claim/terminal revisions must also be disjoint from every revision
-in the completed predecessor reader's metadata capabilities. Existing approval,
-source/ref, immutable byte, preservation, privacy and replay guards remain.
+Selected grade files stay closed until selected and required parent proofs
+complete. The three new profiles require canonical typed claim binding,
+predecessor identity and whole retained-inference observation equality;
+matching controller/config/grader-source/renderer; actual original source/run,
+immutable byte/history/claim proof; and exact original order. Selected claim
+and terminal revisions must be disjoint from every revision in the completed
+immediate-parent metadata capabilities. C1 also checks the completed NG
+revision set returned by B1. Only that frozen set is returned, not a capability
+object. Existing B1/A1 checks and direct task3 A1's historical task2 A2 handoff
+are preserved, as are approval, source/ref, privacy and no-replay guards.
 
-B1 stays on the ordinary real-Step8/child/rubric/cleanup path. Its existing four
-grade states, score, earned/included/full denominators, exclusions and three
-accounting views are unchanged. A1 stays scoreless, with its original failed
-inference, denominator, partial receipt and missingness separate from the
-recorder's unmeasured costs. `call_reachability_unknown` is not `price_missing`.
-No fake score, child, cleanup, zero invoice or HTTP count is added. There is no
-new skip policy, recursive framework, input, workflow, writer, runtime, budget
-or fingerprint change. Direct task3 A1's historical task2 A2 handoff is intact.
-The other four task4 cells, all six task5 cells and three invalid requests stay
-closed: 13 distinct refusals in the coupled registry assertions. The new test
-file falls under the existing reader CI glob; the workflow is unchanged.
+The genuine synthetic positive cases verify four reader objects and nine
+distinct grade claim/terminal/control revisions for C1, versus two readers and
+five revisions for C2/B2. Exact unique downloads are `23 + k` for C1 and
+`11 + k` for C2/B2, where `k` is the selected artifact count. Each takes one
+grade-branch snapshot. Only the specified immutable inference terminals receive
+metadata reads. These are offline capability assertions, not live latency,
+cost or provider-authentication measurements.
 
-### Separate B1-only validation
+B1/C1/C2/B2 retain ordinary real-Step8/child/rubric/cleanup requirements, four
+grade states, earned/included/full denominators, exclusions and task/summary/
+ledger accounting views. A1 stays scoreless; its original failed inference,
+denominator, partial receipt and missingness remain separate from the recorder's
+unmeasured costs. `call_reachability_unknown` is not `price_missing`. No fake
+score, child, cleanup, zero invoice or HTTP count is added. Task4 A2 and all six
+task5 readouts remain closed; with three invalid requests, coupled registry
+assertions now require exactly 10 distinct refusals, down from the historical
+B1-only count of 13. No generic framework, skip policy, input, workflow, native
+grader, writer, runtime, budget or fingerprint changed. The new test file uses
+the existing reader CI glob.
+
+### Separate validation observations
 
 | Invocation | Exact tested SHA | Result |
 |---|---|---|
-| Initial new task4 B1-only selector | `b7d203795fe24227382d3ee73ea1a3dcd1ed7961` | 118 collected, 118 setup errors in 52.31s; exit 1; no B1 test body ran |
-| Same new selector after the fixture-only correction | `945a4f1c8076f885c408053ff4c81ff1bafaca07` | 118 collected, 118 passed in 84.55s; exit 0 |
+| Earlier initial task4 B1-only selector | `b7d203795fe24227382d3ee73ea1a3dcd1ed7961` | 118 collected, 118 setup errors in 52.31s; exit 1; no B1 test body ran |
+| Earlier same B1 selector after the fixture-only correction | `945a4f1c8076f885c408053ff4c81ff1bafaca07` | 118 collected, 118 passed in 84.55s; exit 0 |
+| New task4 C1/C2/B2-only selector | `4618fd592a7c04f4ec0600f23a4f93e4291d73f2` | 374 collected, 374 passed in 234.68s; exit 0 |
 
-The initial setup refused with `retained_file_identity_mismatch`. The shared
-UNGRADED fixture left task4 synthetic rubric bytes while its inherited prefix
-restored task3's expected identity. The one-line correction binds B1's synthetic
-rubric before its fake writer prepares the grade. Production code is unchanged
-between these two tested SHAs. This is distinct from the earlier A1 production
-cache correction and the earlier task3 fixture-only corrections below.
-
-Both invocations selected only
+The B1 setup refusal was `retained_file_identity_mismatch`: the shared NG
+fixture left task4 synthetic rubric bytes while its inherited prefix restored
+task3's expected identity. Its one-line test-only correction binds B1's
+synthetic rubric before the fake writer. Production was unchanged between
+those two B1 SHAs. This is distinct from the earlier A1 production cache
+correction and task3 fixture-only corrections below. Both B1 invocations
+selected only
 `tests/test_codex_budget_pilot_task4_b1_readout.py::test_fixed_task4_b1_readout_after_ungraded`.
-One shared genuine synthetic A1 writer history uses its partial-cost variant;
-ordinary B1 writer variants and isolated mutations cover four grade states,
-accounting missingness, the exact A1/A2/B2 proof, typed source/run/config/claim,
-approval, cross-level revision aliases, privacy, lost response, advanced heads,
-cleanup, replay and closed requests. The inherited fixture's default variants
-are unchanged. Prior test bodies were not rerun; their helpers only construct
-the shared history. No previous passing family or full suite ran.
-
-External services and model boundaries were fake or blocked. Reader write,
-OIDC, Step8, claim and rubric paths were blocked; ordinary fixture writers used
-fake judge execution. Synthetic grades, payloads, receipts and revisions are
-not live evidence. Python 3.10.12 / pytest 9.1.1 ran under credential-free
-`env -i`, offline HF/Transformers flags, disabled plugin autoload,
-`GITHUB_ACTIONS=false`, `PYTHONDONTWRITEBYTECODE=1` and
-`-m 'not integration' -p no:cacheprovider -q --tb=short -rs`.
-The separate logs are
+Their separate logs remain
 `/tmp/project5-task4-b1-readout.JNpUzY/focused-b7d203795fe24227382d3ee73ea1a3dcd1ed7961.log`
 and
 `/tmp/project5-task4-b1-readout.JNpUzY/focused-945a4f1c8076f885c408053ff4c81ff1bafaca07.log`.
-Only the two completion records changed after the corrected tested SHA.
+Only completion records followed the corrected B1 test before this new unit.
 
-### Supplied operation and remaining gates
+The new invocation selected only
+`tests/test_codex_budget_pilot_task4_ordinary_readout.py::test_fixed_task4_ordinary_readouts`.
+Its log is
+`/tmp/project5-task4-reader-tail.9m1PlY/focused-4618fd592a7c04f4ec0600f23a4f93e4291d73f2.log`.
+One shared genuine synthetic history builds only B1's graded variant, A1's
+partial-cost NG variant and their required backing history. The inherited
+fixture defaults are unchanged. New ordinary writer variants and isolated
+mutations cover exact read depth, four states, denominators/exclusions,
+accounting missingness, typed source/run/config/claim, whole predecessor proof,
+approval, cross-level aliases after valid inner proofs, private reads, lost
+response, advanced heads, cleanup, replay and closed requests. No old test
+body, passing family or full suite was rerun. No invocations are combined.
 
-The leader supplied B1's UTC `2026-09-27` timestamps: prepared
+External services and model boundaries were fake or blocked. Reader write,
+OIDC, Step8, claim, rubric and NG projection paths were blocked; ordinary
+fixture writers used fake judge execution. Synthetic grades, payloads,
+receipts and revisions are not live evidence. Python 3.10.12 / pytest 9.1.1 ran
+under credential-free `env -i`, offline HF/Transformers flags, disabled plugin
+autoload, `GITHUB_ACTIONS=false`, `PYTHONDONTWRITEBYTECODE=1` and
+`-m 'not integration' -p no:cacheprovider -q --tb=short -rs`.
+Only the two completion records change after the new tested SHA.
+
+### Supplied operations and remaining gates
+
+B1's supplied UTC `2026-09-27` receipts remain separate: prepared
 `03:52:37.2599258`, claim acknowledgment `03:52:51.6791055`, one judge/cleanup
 `03:58:26.0492081`, publication acknowledgment `03:58:31.1914039` and run
-success `03:58:35`. No private grade or original payload was fetched. These
-operation receipts do not establish B1's stored grade state or model quality.
-The supplied A1 UNGRADED operation remains separate from this ordinary grade.
+success `03:58:35`. They do not establish B1's stored grade state or model
+quality. A1's supplied model-free UNGRADED operation remains distinct.
 
 The full catalog was reviewed once, with the grading spec and bounded pre-edit
 HF-read review completed before production edits. The reviewer approved with
-conditions, using the available Codex model in place of the unavailable named
-Claude profile. This decision is not final diff or live-use approval.
-Experiment-report-en followed by im-not-ai-en preserves the split observations,
-unknown values and historical limits in these records.
+conditions, using Codex because the named Claude profile was unavailable;
+a bounded static follow-up found no blocker to the sole new selector. Neither
+review is leader approval of the new immutable head or live-use authority.
+Experiment-report-en followed by im-not-ai-en preserves separate observations,
+unknown live values and historical conditions in these records.
 
-Publication still requires later leader authorization. New-head direct review
-and CI, the frozen writer sequence, a distinct reviewed observer, actual selected
-and predecessor proofs at read time, and explicit leader authorization after
-the sequence, including individual protected live-readout approval, remain
-gates. No private parent revision is guessed. Supplied live context only: task4
-A2 UNGRADED run `36298545498` was published at `05:57:25.3885652` UTC; task5 A1
-UNGRADED run `36300073091` was issued/approved with outcome unknown. Neither
-was queried or registered for readout. No push, PR edit, merge, main change,
-live HF/model/grade/readout/dispatch, OIDC, Azure/credential/Project change,
-new inference, regrade, CI polling or manual workflow rerun occurred.
+New-head direct leader review and fresh CI, the frozen writer sequence, a
+distinct reviewed observer, actual selected/parent proofs at read time and
+explicit leader authorization after the sequence, including individual
+protected live-readout approval, remain gates. No private revision is guessed.
+Earlier live context supplied task4 A2 UNGRADED run `36298545498` published at
+`05:57:25.3885652` UTC and task5 A1 UNGRADED run `36300073091` issued/approved
+with outcome unknown. This handoff supplies task5 A1 UNGRADED publication at
+`06:29:26.9415980` and task5 B1 record `36301611455` issued/approved with
+outcome unknown. None was queried or registered for readout.
+
+Only the authorized Git publication may follow these records, after the exact
+remote-head check. No PR edit, merge, main change, live HF/model/grade/readout/
+dispatch, OIDC, Azure/credential/Project change, inference or regrade occurred.
+Stop after that one push, without CI polling or manual workflow rerun. All
+earlier observations and publication limits below remain historical.
 
 ## Prior PROJECT5-READER-CI-PARTITION
 
