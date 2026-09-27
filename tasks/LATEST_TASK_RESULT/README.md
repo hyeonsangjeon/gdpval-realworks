@@ -1,105 +1,129 @@
 # Latest task result
 
-## PROJECT5-FINALIZE-PILOT-REPORT
+## PROJECT5-BUDGET-SNAPSHOT-PROJECTION
 
-Finalized the 107-line [English pilot report](../codex_budget_pilot/REPORT.md)
-with the leader's verified Task5 A2 model-free UNGRADED row. There are now
-**24 unique epoch04 projections: 18 graded, 6 UNGRADED and 0 pending**, with
-no duplicates or fabricated zero scores. Together with six separate frozen
-epoch03 T1 failure outcomes, these document all 30 original cell IDs—not
-30 successful same-protocol runs or 30 epoch04 cells. All other 23 result,
-score/full-denominator and readout-run rows remain byte-identical.
+Implemented one shared seven-field projection for already supported ordinary
+and model-free UNGRADED selected records. Focused affected-case validation
+passed after a test-only fixture correction; the initial failure remains
+separate below. No live snapshot values have been observed.
 
-### Final A2 evidence
+### Scope and selected-result authority
 
-Readout [36337865696](https://github.com/hyeonsangjeon/gdpval-realworks/actions/runs/36337865696),
-job `108672077172`, attempt 1, succeeded at `2026-09-27T17:45:27Z` on observer
-`74ae7277a636643d37c4a7e854728df1aec83676`. It verifies original record
-`36306339791` under historical writer
-`69e56fc58daf50af2ac9e8b52691ffcbf5af4f96`, original producer
-`78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e` and inference `36277325255`.
-The exact leader-supplied bindings, not guessed or fetched values, are:
+The branch `b/codex-budget-snapshot-projection-20260927` starts at exact main
+`d4d6447ad4873b4b21db599be079652d615d74f5`, tree
+`84b813d7348eb574b695da52420498dd5ca66345`. Only the readout, its focused tests
+and directly coupled download expectations, the report and these two current
+completion-record sections change. No workflow, core runner, retention,
+grader, config, budget, input or selector registry changes.
 
-- Request: `40a4785b0720dfc271ffe1d148c77c6da9ed5c65a4101b6dc61e69e30ec0dab7`.
-- `grade_revision`: `b057ed17849c0ab31b0adfb8c28109d4d34a50f7`.
-- Claim: `41729a5caf6307a200921fc2c06a8b8e860ab95b`.
-- Input: `43b0532179308668fe68d34ee4277bfa5f670bf9`.
+The explicit `PROJECT5-SELECTED-RESULT-GRANT` permits one ordinary selected
+`step2_inference_results.json` fetch at the verified immutable output revision.
+The top-level route completes native grade/input/claim/terminal/predecessor
+proof and closes native facades before granting access. Verified terminal and
+manifest identity, size, SHA-256 and native task/result identity checks bind
+the fetched bytes. The one-use permission is removed on success or failure;
+it never enters reusable parent grants. `bind_retained` remains controls-only;
+`_verified_grade` and `_verify_predecessor` gain no payload fetch. UNGRADED
+reuses its already verified result bytes with no additional fetch. Required
+native parent-proof reads remain unchanged; no new parent, ledger or
+deliverable reads are added. Ordinary Step8/child/cleanup, scoreless NG,
+source/claim/history/privacy and no-replay requirements remain intact.
 
-Original inference exited 1 with `child_nonzero_exit`, timeout false,
-cleanup true and no deliverables. Expected results 1, scored results 0 and
-score `NULL` mean no numeric grade, not zero points. The internal cause is unknown.
-All three original inference cost views agree on USD **0.406518 known partial**
-cost. The receipt records 4 model calls, 300390 input, 11097 output,
-227072 cached and 5380 reasoning tokens. Estimated cost remains `NULL`,
-status `call_reachability_unknown`, invoice false and HTTP count `null`;
-recorder accounting is separately `NOT_MEASURED`, not zero.
+The projection exposes only `total_seconds`, `started_unix`, `expires_unix`,
+`remaining_seconds`, `wait_seconds`, `attempts_admitted` and `native_resumes`,
+plus their `missing` reasons. Remaining time is zero-clamped, not exact
+uncapped elapsed. Wait records retry backoff, not all recovery/downtime.
+Admissions are durable admissions, not successful/model/HTTP attempts; native
+resumes are confirmed thread bindings, not requests, turns or Step2 resume
+rounds. Omitted fields are `null`/`not_recorded`; explicitly null native clocks
+are `null`/`unavailable`. Actual zero stays zero. Malformed present values
+refuse explicitly; no private or extra fields are projected. A missing
+required `observability` object remains a native validation failure, distinct
+from an absent `task_deadline` snapshot inside valid observability.
 
-### Scope and document checks
+### Separate focused test evidence
 
-The report continues from clean local `a0c9d5908bb8b56d2e7de7a674431485d6e12dfe`
-on `b/codex-budget-pilot-report-draft-20260927`, based on exact supplied main
-`74ae7277a636643d37c4a7e854728df1aec83676` (base tree
-`0159c24f38ee68088ab211a942b56f2d648139d3`). The preserved old branch
-`b/codex-final-task5-readers-20260927` remains at
-`3a2d8a553c327d34b843e67bd4a526036cf1c8d5`; the local main ref was not moved.
-Only the report and the current sections of these two completion records
-change. The complete `batch-runner` production/test subtree remains
-`18d65fd7ffc7045414d3161b2d7b8cadb77fcf0e`; no code, test, workflow,
-runtime, writer, budget, input or framework changed.
+The new group is `tests/test_codex_budget_pilot_budget_snapshot_readout.py`,
+run from `batch-runner` with an empty inherited environment and offline guards.
 
-Literal reconciliation checked the A2 addition, all 24 unique ordered
-result/run identities, the 23 unchanged rows, frozen failure rows, partial-cost/
-model-call rows, task IDs and source/writer SHAs against the supplied evidence.
-The report preserves included/full denominators, unread T4 exclusion causes
-and ID overlap, the source chronology and operational corrections, A/B
-retry/retention confounding, and B/C's feedback contrast. Monetary totals
-remain `NULL` where prices are missing; partial inference receipts stay
-separate from recorder `NOT_MEASURED` accounting. No causal ranking,
-retention-only proof, invoice or whole-pilot bill is claimed.
+| Exact tested SHA | Selection | Observed result |
+| --- | --- | --- |
+| `083af7c92f8bc0cfc1d5a94b5721dc938f9360e4` | Whole new group | **49 passed, 10 failed in 74.54s**, exit **1** |
+| `d262e999df0136451eef82e6328cc18468e489ec` | Same group, `-k 'not ordinary or no_observability'` | **31 passed, 28 deselected in 49.12s**, exit **0** |
 
-The previously reviewed catalog and `experiment-report-en` protection brief
-were reused for this bounded update, followed by protected `im-not-ai-en`
-copyediting. Literal and semantic checks passed. These are documentation
-checks only: **no tests, builds or new runtime validation ran**, and no live
-readout, review or CI was queried. Historical record bodies remain unchanged.
+Exact initial command:
 
-### Prior runtime evidence, not report validation
+```bash
+env -i PATH=/usr/bin:/bin HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 HF_HUB_DISABLE_IMPLICIT_TOKEN=1 DO_NOT_TRACK=1 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /usr/bin/python3 -m pytest -m "not integration" -q -o addopts= -p no:cacheprovider --tb=short --junitxml=/tmp/project5-budget-snapshot-tests.D786un/results.xml tests/test_codex_budget_pilot_budget_snapshot_readout.py
+```
 
-Original `7793b92bebb5301e2f877da37bd6d63df841a0ec` had **516 setup errors
-in 146.96s**, exit **1**, with zero test bodies, from one shared fixture defect.
-The separately authorized fixture-only correction at original
-`7769580cda9abf5f96357f40349e7f321d4bc26c` had **516 passed in 1683.63s
-(0:28:03)**, exit **0**, with all constructor/network/model/HF/OIDC/write
-guards intact and no production change. These are separate prior invocations,
-not a combined result or tests run on this draft or replayed SHAs.
-Detailed commands, four replay mappings, byte proofs and historical limits
-remain in the [immutable prior publication-preparation record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/74ae7277a636643d37c4a7e854728df1aec83676/tasks/LATEST_TASK_RESULT/README.md#project5-publish-validated-final-readers).
-All earlier observations remain separate in the unchanged historical sections.
+Exact affected-case command:
 
-### Remaining decision and authority
+```bash
+env -i PATH=/usr/bin:/bin HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 HF_HUB_DISABLE_IMPLICIT_TOKEN=1 DO_NOT_TRACK=1 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. /usr/bin/python3 -m pytest -m "not integration" -q -o addopts= -p no:cacheprovider --tb=short --junitxml=/tmp/project5-budget-snapshot-correction.0JC1LK/results.xml tests/test_codex_budget_pilot_budget_snapshot_readout.py -k 'not ordinary or no_observability'
+```
 
-Per the leader, reader PR691 was delivered after review `5331081033` and all
-10 CI checks passed; those facts cover the delivered reader, not this finalized
-report. Historical writer `69e56fc58daf50af2ac9e8b52691ffcbf5af4f96` and
+The initial 10 failures were assertions, not setup errors. Fixtures had stale
+NG completion bindings, the wrong identity serialization hash, a colliding
+legacy revision and an invalid expectation for missing native observability.
+The correction changed only this new test file, used native binding helpers
+and added refusal-stage checks. All 29 NG cases were selected again because
+their initial refusals could be masked by the invalid binding; the affected
+ordinary-observability and legacy cases were also selected. The 28 unaffected
+ordinary cases were not rerun. No production change, guard bypass or combined
+pass invocation is claimed. Old chains, old families and full suites did not
+run; nine directly coupled legacy expectation edits remain unexecuted locally.
+
+The tests exercise actual top-level ordinary/NG paths, selected byte binding,
+one-use grant lifetime, parent/path/revision denials, no extra NG fetch,
+size/hash/task tampering, zero/missing/partial/nullable snapshots, malformed
+and nonfinite values, private-field exclusion and lost responses. The final
+tested tree is `5ed0a286fb5700340d2d8e486862b1d3be62e87c`; the reader blob is
+`8b3c500d6881b9d364c917a2e6c7515cde1ea23f`, unchanged by the fixture correction.
+The later records-only publication commit is not another tested SHA.
+
+### Report fidelity and prior evidence
+
+The 114-line [report](../codex_budget_pilot/REPORT.md) retains all 24 outcome
+rows and every other table byte-for-byte. It adds availability and measurement
+limits, not live values. Receipt status is `partial`;
+`call_reachability_unknown` and `price_missing` are missing reasons. Monetary
+totals remain missing where prices are absent, and recorder `NOT_MEASURED`
+stays separate from partial inference cost. Denominators, exclusions, frozen
+T1 outcomes, source/epoch changes, judge-calibration limits, A/B confounding,
+B/C's limited feedback contrast and the unanswered retention-only contrast
+remain. No causal superiority or whole-pilot bill is claimed. The 24 outcome
+row lines retain SHA-256 `c95df3de7ea7601ef218cf0138f3960d2c80a3f42dc597502aea5cd67bb85d78`.
+
+The catalog was checked once. `experiment-design` applied only to measurement
+semantics and the unchanged intervention; no new experiment was designed.
+`experiment-report-en` supplied the protection brief, followed by protected
+`im-not-ai-en` copyediting and literal/semantic reconciliation. UI skills do
+not apply. Historical record bodies stay unchanged. Exact final A2 evidence
+and earlier report checks remain in the [immutable report-finalization record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/d4d6447ad4873b4b21db599be079652d615d74f5/tasks/LATEST_TASK_RESULT/README.md#project5-finalize-pilot-report).
+
+Original `7793b92bebb5301e2f877da37bd6d63df841a0ec` had **516 setup errors in
+146.96s**, exit **1**, zero bodies. Separately, original
+`7769580cda9abf5f96357f40349e7f321d4bc26c` had **516 passed in 1683.63s**,
+exit **0**, after a fixture-only correction with all guards intact. These
+are not tests of this addition or results on replayed SHAs. Replay mappings,
+commands and byte proofs remain in the [immutable prior publication record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/74ae7277a636643d37c4a7e854728df1aec83676/tasks/LATEST_TASK_RESULT/README.md#project5-publish-validated-final-readers);
+all earlier observations remain separate in the unchanged historical sections.
+
+### Remaining review and observation gates
+
+Per the leader, PR692's review `5331566716` and all nine passing checks cover
+the delivered report at `95aa1dc21a2485e5a16d464d3afabeee342390f1`, not this
+addition. Historical writer `69e56fc58daf50af2ac9e8b52691ffcbf5af4f96` and
 producer `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e` remain immutable;
-observer SHAs are separate. No new inference, grade or regrade is authorized.
-
-The final row resolves only A2's pending status. Exclusion causes/ID overlap,
-missing prices, source changes, A/B retry-plus-retention confounding, B/C's
-limited feedback contrast and the unanswered retention-only contrast remain
-limits. The three earlier correction admissions remain separate, not independent
-repeats. No model/condition superiority or whole-pilot bill is claimed.
-
-One ordinary push of this existing feature branch and one new draft PR are
-authorized for these three Markdown files only; the branch was absent remotely
-at the bounded pre-publication check. This records preparation for publication,
-not a future PR number or merge SHA/time/state. The new report still requires
-leader review. Main, the old branch, closed PR691 and Project state remain
-unchanged; merge belongs to the leader. No test/build, CI rerun/polling or live
-HF/model/OIDC/readout/Azure-management call is authorized. Live readout retains
-its distinct reviewed observer, actual selected/parent proofs and individual
-protected approval; no inference, grade, regrade or 30/220-task expansion is
-authorized. Stop after the single push and draft PR, without CI polling.
+this branch is an observer only. Main and the preserved checkout are untouched.
+One ordinary owner-account push and one new draft PR are authorized, followed
+by a stop without CI polling or a manual rerun. The new head still requires
+leader review and CI. Any live observation needs separate approval and the
+existing selected/parent proofs; none ran here. No new inference, grading,
+regrading, prospective instrumentation or expanded experiment is authorized.
+No live HF/model/OIDC/Azure-management call, credential change, Project edit or
+merge is part of this unit. No future merge SHA, time or state is recorded.
 
 ## Prior initial attempt: PROJECT5-FINAL-TASK5-B2-A2-READERS
 

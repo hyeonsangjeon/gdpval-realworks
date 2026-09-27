@@ -13,47 +13,45 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
-- Finalize the [pilot report for review](tasks/codex_budget_pilot/REPORT.md)
-  on `b/codex-budget-pilot-report-draft-20260927`, from exact main
-  `74ae7277a636643d37c4a7e854728df1aec83676`. Add only the leader-verified
-  final Task5 A2 UNGRADED row from readout `36337865696`, job `108672077172`,
-  attempt 1, succeeded `2026-09-27T17:45:27Z`: no deliverable or numeric grade,
-  not zero points. All other 23 score/full-denominator/run rows stay byte-exact.
-  The 107-line report now has 24 unique epoch04 projections (18 graded,
-  6 model-free UNGRADED, 0 pending) plus six separate frozen epoch03 T1
-  outcomes: all 30 original IDs, not 30 successful same-protocol runs or
-  30 epoch04 cells. A2's three original inference cost views agree on
-  USD 0.406518 known partial cost, with 4 recorded model calls;
-  `call_reachability_unknown`, `NULL` estimated cost, invoice false, HTTP
-  `null` and separately `NOT_MEASURED` recorder cost do not become zeros.
-  Exact supplied record/source/revision/claim/input and token-count evidence
-  is in [the current completion record](tasks/LATEST_TASK_RESULT/README.md).
-  Preserve included/full denominators, unread exclusion
-  causes/ID overlap, source changes, retry/retention confounding and partial
-  or missing accounting; no causal ranking or whole-pilot bill is claimed.
-  Literal reconciliation and protected English review only: no tests,
-  builds, new runtime validation or live queries. Only the report and two
-  current completion-record sections change; historical bodies remain intact.
-  The production/test subtree stays
-  `18d65fd7ffc7045414d3161b2d7b8cadb77fcf0e`; old branch and main are unchanged.
-  Preserve original `7793b92bebb5301e2f877da37bd6d63df841a0ec` separately:
-  **516 setup errors in 146.96s**, exit **1**, zero test bodies, one shared
-  fixture defect. The separately authorized fixture-only correction at
-  original `7769580cda9abf5f96357f40349e7f321d4bc26c` had **516 passed in
-  1683.63s**, exit **0**, with all guards intact. Neither is report validation
-  or a result on this draft SHA. Detailed replay/command/byte proofs remain
-  in the [immutable historical preparation record](https://github.com/hyeonsangjeon/gdpval-realworks/blob/74ae7277a636643d37c4a7e854728df1aec83676/tasks/LATEST_TASK_RESULT/README.md#project5-publish-validated-final-readers);
-  all earlier observations remain separate. Per the leader, reader PR691 was
-  delivered after review `5331081033` and all 10 CI checks passed; those facts
-  do not approve this report and were not queried. Historical writer69 and
-  producer780 remain immutable. The three earlier correction admissions stay
-  separate; the retention-only contrast remains unanswered. One ordinary
-  push and one new draft PR are authorized for only these three Markdown files,
-  subject to new leader review; no future merge facts are recorded. No main,
-  old-branch, closed-PR691 or Project mutation, live service/readout call,
-  inference, grade, regrade or 30/220-task expansion. Merge belongs to the leader;
-  live readout retains separate approval gates. Stop after publication without
-  CI polling or a manual rerun.
+- Expose the selected inference result's seven existing budget-snapshot fields
+  through one shared ordinary/UNGRADED readout projection, from exact main
+  `d4d6447ad4873b4b21db599be079652d615d74f5` on
+  `b/codex-budget-snapshot-projection-20260927`. The explicit selected-result
+  grant permits one size/hash-checked ordinary result fetch at its verified
+  immutable output revision, after native selected/parent proof and facade
+  closure. It expires on success or failure; retained binding stays
+  controls-only, and parent permissions do not expand. UNGRADED reuses its
+  already verified result bytes without an added fetch. No new selector,
+  workflow, core runner, retention, grader, config, budget or input change.
+  Preserve zero-clamped remaining time, recorded retry backoff, durable
+  admissions and confirmed native-resume meanings. Missing fields stay
+  `null` with an explicit reason, not zero; malformed present values refuse,
+  and private/extra fields are not projected. The new focused group at
+  `083af7c92f8bc0cfc1d5a94b5721dc938f9360e4` had **49 passed, 10 failed in
+  74.54s**, exit **1**. The fixture-only correction at
+  `d262e999df0136451eef82e6328cc18468e489ec` had **31 passed, 28 deselected
+  in 49.12s**, exit **0**, covering all affected NG/legacy/native-observability
+  cases without rerunning 28 unaffected ordinary cases. Production did not
+  change in that correction. These remain separate invocations, not a
+  combined pass count; old families and full suites were not run. Exact
+  selectors and limits are in [the current completion record](tasks/LATEST_TASK_RESULT/README.md).
+  The 114-line [pilot report](tasks/codex_budget_pilot/REPORT.md) preserves
+  all 24 outcome rows and every other table byte-for-byte. It adds measurement
+  availability only: no live snapshot values were observed. Receipt status
+  is `partial`; `call_reachability_unknown` and `price_missing` are missing
+  reasons, not measured costs. Denominators, exclusions, source/epoch changes,
+  judge-calibration limits, A/B confounding, the limited B/C feedback contrast
+  and the unanswered retention-only contrast remain. Original final-pair
+  evidence stays separate: `7793b92bebb5301e2f877da37bd6d63df841a0ec` had
+  **516 setup errors in 146.96s**, exit **1**, zero bodies;
+  `7769580cda9abf5f96357f40349e7f321d4bc26c` had **516 passed in 1683.63s**,
+  exit **0**. Historical bodies and immutable provenance references remain
+  intact. The records commit changes no tested code. Main and the preserved
+  checkout remain untouched; historical writer69/producer780 remain immutable.
+  One ordinary push and one draft PR are authorized. New-head leader review,
+  CI and separate live-observation approval remain required; no future merge
+  facts, live service/readout calls, new inference, grading, regrading or
+  expansion are authorized. Stop after publication without CI polling.
 
 - Historical initial final-pair attempt: add only the final task5 B2 ordinary and A2 MODEL-FREE UNGRADED readout
   bindings locally. Validation is incomplete: the single new B2/A2-only
