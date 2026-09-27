@@ -13,6 +13,40 @@ entries land under a fresh dated heading the day they merge to `main`.
 
 ### Changed
 
+- Prepare one ordinary push and one new draft follow-up PR for only the
+  already validated task5 B1 UNGRADED reader. Preserve old branch
+  `b/codex-pending-ungraded-readers-20260927` at
+  `5200bf63cef91c7f69d406a3b0b9c5b8f23abda0`; create
+  `b/codex-task5-b1-ungraded-readout-20260927` from exact main
+  `0fccfd48400e5b88d919ae02e8ddadd2e544bb34`, whose tree matches old published
+  `393cf92f52b0a475baa1e50983fa89186b664b22` at
+  `50f5fe7a472dbb5371d966e3c4c68b4895986916`. Cherry-pick only the two
+  authorized own commits without conflict, with exact mappings in
+  `LATEST_TASK_RESULT`. Each original/replay pair is tree-identical. Replay
+  endpoint `617f488df9519d993578ed430a36ebcfade83b3d` and old `5200bf63`
+  share full tree `cd1f6108f26292275cc08c93e9375afc8fc6951a` and complete
+  production/test subtree `a98f038d4acf5a12db8d6e2b8dcadb8fedb19b1a`.
+  Only the two completion records change afterward. No new reader logic,
+  workflow, writer, budget or input change, and no test execution. The
+  original **206 collected, 206 passed in 219.98s**, exit **0**, belongs only
+  to `b5b786681260dda493f23dd6eb1cd9e9b66dd910`, not a replayed SHA. All
+  earlier observations remain separate. The leader reports old PR688 reviewed
+  as `5329845151`, all 10 CI checks passed and merged by owner; it stays
+  closed. Those facts do not approve this new draft. Keep the fixed B1
+  scoreless policy, actual A1/A2 UNGRADED and ordinary B2 backing, C2
+  terminal-only proof, separate reader ownership, private/source/byte/claim/
+  predecessor/renderer/approval/no-replay guards and accounting missingness
+  unchanged. Task5 C1/C2/B2/A2 readouts remain closed. Historical writer69 and
+  producer780 remain immutable; main is observer code only and is not moved.
+  All 18 writer records are complete per the leader. No inference, grade or
+  regrade is authorized. Leader-controlled B2 read-only run `36311269603`
+  was not queried or interfered with. This records publication preparation,
+  not completed new-head review, CI or merge. Direct leader review/CI, a
+  distinct reviewed observer, actual selected/parent proofs and individual
+  MODEL-FREE live-readout approval remain gates. No live HF/model/OIDC/
+  readout/Azure-management/Project call; stop after publication without CI
+  polling or a manual workflow rerun.
+
 - Add only the recorded task5 B1 MODEL-FREE UNGRADED reader for policy
   `task5-b1-model-free-ungraded`, record `36301611455`, original inference
   `36248894311` and completion

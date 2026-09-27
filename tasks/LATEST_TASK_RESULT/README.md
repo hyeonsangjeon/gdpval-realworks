@@ -1,6 +1,103 @@
 # Latest task result
 
-## PROJECT5-TASK5-B1-UNGRADED-READER
+## PROJECT5-PUBLISH-VALIDATED-TASK5-B1
+
+Prepared the already validated task5 B1 MODEL-FREE UNGRADED reader for one
+ordinary push and one new draft follow-up PR. Only the two authorized own
+commits were cherry-picked onto exact main
+`0fccfd48400e5b88d919ae02e8ddadd2e544bb34`, without conflict. Each replayed
+commit has the same full tree as its original. No implementation or test
+execution was added for this publication task. This entry records publication
+preparation and authority before the push, not completed review, CI or merge
+of the new follow-up PR.
+
+The new branch is `b/codex-task5-b1-ungraded-readout-20260927`, using the
+existing owned worktree at
+`/ai-work/copilot/worktrees/codex-task3-a1-readout-prep-20260927`. Old branch
+`b/codex-pending-ungraded-readers-20260927` is preserved at
+`5200bf63cef91c7f69d406a3b0b9c5b8f23abda0`. The earlier reader branch remains
+at `26a2c18a3353558108a12ad3e0fcfd5041307c4b`. Existing Git author and
+committer remain `hyeonsangjeon <wingnut0310@gmail.com>`, without attribution
+trailers. No reset, stash, rebase, amend, force, deletion or merge of main
+was used.
+
+### Original evidence and replay identity
+
+| Original commit | New cherry-picked commit | Evidence belongs to the original commit |
+|---|---|---|
+| `b5b786681260dda493f23dd6eb1cd9e9b66dd910` | `2cf363a0bd2a9443a0d6a6ee4e8ec22292e21905` | B1-only selector: 206 collected, 206 passed in 219.98s; exit 0 |
+| `5200bf63cef91c7f69d406a3b0b9c5b8f23abda0` | `617f488df9519d993578ed430a36ebcfade83b3d` | Completion records only; no test invocation |
+
+The 206-pass observation belongs only to original
+`b5b786681260dda493f23dd6eb1cd9e9b66dd910`. No test ran on a cherry-picked
+SHA, and no prior selector or full suite was rerun. All earlier observations,
+including the original 105-pass and 149-pass invocations, remain separate in
+the preserved sections below. Byte identity carries existing evidence; it
+does not establish new-head CI success, leader approval or live values.
+
+The Git-only checks established:
+
+- Remote main matched exact `0fccfd48400e5b88d919ae02e8ddadd2e544bb34` before
+  replay. Its tree and old published
+  `393cf92f52b0a475baa1e50983fa89186b664b22` both equal
+  `50f5fe7a472dbb5371d966e3c4c68b4895986916`. The exact main commit was
+  fetched without moving local main.
+- Each original/replay pair in the table passed `git diff --exit-code`.
+  Old `5200bf63cef91c7f69d406a3b0b9c5b8f23abda0` and replay endpoint
+  `617f488df9519d993578ed430a36ebcfade83b3d` share full tree
+  `cd1f6108f26292275cc08c93e9375afc8fc6951a`.
+- Their complete `batch-runner` subtree, covering production and tests,
+  equals `a98f038d4acf5a12db8d6e2b8dcadb8fedb19b1a`. Only `CHANGELOG.md`
+  and this latest-result file change after replay verification. No other
+  bytes differ from the validated old final tree.
+
+### Unchanged scope and publication gates
+
+Only task5 B1 is added relative to the merged baseline: cell
+`0818571f-5ff7-4d39-9d2c-ced5ae44299e_B_r1`, ordinal 25, policy
+`task5-b1-model-free-ungraded`, record `36301611455`, original inference
+`36248894311` and completion
+`dd05f2ed43235b69d9eecfefadfb0a5ebd68d83b31daf38355a4acf6f0a21c5b`.
+It keeps the actual task5 A1 UNGRADED parent `36300073091`, task4 A2 UNGRADED
+backing `36298545498`, ordinary task4 B2 grade `36297122393` and only the
+required C2 terminal control. The separate read owners, disjoint revisions,
+canonical typed source/run/claim/retained-byte/history/predecessor proofs,
+config/grader/renderer agreement, private read limits, approval and replay
+refusals remain unchanged. Task5 C1/C2/B2/A2 readouts remain closed. There is
+no new profile, framework, workflow, writer, budget or input change.
+
+B1 remains scoreless. Original failed status, denominator and partial
+inference receipts stay separate from recorder `not_measured` accounting.
+There is no invented score, rubric verdict, child, cleanup, zero cost,
+invoice or HTTP count. Ordinary Step8 requirements remain intact. Private
+revisions remain unknown and no live readout result is inferred.
+
+The leader reports PR688 head `393cf92f52b0a475baa1e50983fa89186b664b22`
+received direct review `5329845151`, passed all 10 CI checks and was merged
+by the owner. That closed PR is not edited or reopened. These are historical
+baseline facts, not approval or merge metadata for this new draft. No CI or
+review state was queried during this publication task.
+
+Historical writer `69e56fc58daf50af2ac9e8b52691ffcbf5af4f96` and original
+producer `78089c2fea3b6dd230a5b62e0e5a3f0a9b7a803e` remain immutable. All 18
+writer records are complete per the leader; no more inference, grade or
+regrade is authorized. Main remains observer code only and is not changed.
+Leader-controlled B2 read-only run `36311269603` is active on observer
+`0fccfd48400e5b88d919ae02e8ddadd2e544bb34` in the supplied snapshot. It was
+not queried or interfered with, and its result is not inferred.
+
+The leader authorizes one ordinary push and one new draft follow-up PR for
+this B1 reader only. New-head direct leader review and CI, a distinct reviewed
+observer, actual selected/parent proofs and individual MODEL-FREE live-readout
+approval remain required. Publication is not merge or live-use authority.
+No live HF/model/OIDC/readout/Azure-management/Project call occurred. Stop
+after publication without CI polling or a manual workflow rerun. The full
+catalog was reviewed once; `experiment-report-en` followed by `im-not-ai-en`
+preserves original test attribution, replay provenance and current authority
+as separate facts. Earlier local-only limits and then-pending states below
+remain historical snapshots.
+
+## Prior PROJECT5-TASK5-B1-UNGRADED-READER
 
 Prepared only the recorded task5 B1 MODEL-FREE UNGRADED readout. The sole
 new offline invocation returned **206 collected, 206 passed in 219.98s**,
