@@ -1,4 +1,8 @@
-"""Only recorded task5 B1, backed by genuine synthetic A1/A2/B2 history."""
+"""Only fixed task5 C2, after genuine ordinary C1 and its fixed NG backing.
+
+Synthetic writer history is not a live grade, private revision, invoice or
+provider-authentication observation. No earlier selector is executed here.
+"""
 
 from contextlib import redirect_stderr, redirect_stdout
 import copy
@@ -25,51 +29,61 @@ from . import test_codex_budget_pilot_task2_grade_completion as approval
 from . import test_codex_budget_pilot_task3_a1_readout as controls
 from . import test_codex_budget_pilot_task3_c_readout as c_reader
 from . import test_codex_budget_pilot_task4_failed_grading as failed
-from . import test_codex_budget_pilot_task5_a1_ungraded_readout as a1_reader
+from . import test_codex_budget_pilot_task5_c1_readout as c1_reader
 from . import test_codex_budget_pilot_ungraded as policy
 from .test_codex_budget_pilot_task3_grading_chain import _Capture
-from .test_codex_budget_pilot_grading import boundaries  # noqa: F401 — block live boundaries
+from .test_codex_budget_pilot_grading import boundaries  # noqa: F401 — block every live boundary
 
-CELL = "0818571f-5ff7-4d39-9d2c-ced5ae44299e_B_r1"
-PARENT = "0818571f-5ff7-4d39-9d2c-ced5ae44299e_A_r1"
+CELL = "0818571f-5ff7-4d39-9d2c-ced5ae44299e_C_r2"
+PARENT = "0818571f-5ff7-4d39-9d2c-ced5ae44299e_C_r1"
+B1 = "0818571f-5ff7-4d39-9d2c-ced5ae44299e_B_r1"
+A1 = "0818571f-5ff7-4d39-9d2c-ced5ae44299e_A_r1"
 A2 = "3baa0009-5a60-4ae8-ae99-4955cb328ff3_A_r2"
 BACKING = "3baa0009-5a60-4ae8-ae99-4955cb328ff3_B_r2"
-REQUEST = "dd05f2ed43235b69d9eecfefadfb0a5ebd68d83b31daf38355a4acf6f0a21c5b"
-RUN = {"id": "36301611455", "job": "pilot-live", "attempt": 1}
+REQUEST = "db5c3fa1a927e88684b99b8eca93b6e442e97e05f500f36755c50000f3d42294"
+RUN = {"id": "36303175624", "job": "pilot-live", "attempt": 1}
 WRITER, PRODUCER, OBSERVER = c_reader.WRITER, c_reader.PRODUCER, c_reader.OBSERVER
-CLAIM, OUTPUT, TERMINAL, ADVANCED = (f"{140_000 + offset:040x}" for offset in range(1, 5))
+CLAIM, OUTPUT, TERMINAL, ADVANCED = (f"{160_000 + offset:040x}" for offset in range(1, 5))
 VARIANTS = ("ungraded", "partial_cost", "missing_receipt", "price_missing")
+NAMES = ("step2_inference_results.json", Path(pilot.LEDGER).name)
 
 
 @pytest.fixture(scope="module")
-def history(tmp_path_factory, *, _variants=VARIANTS):
-    assert grading.TASK5_B1_CELL == CELL and grading.TASK5_RETAINED[CELL] == ("36248894311", REQUEST)
-    assert ungraded.TASK5_B1_POLICY == "task5-b1-model-free-ungraded" and readout.TASK5_B1_WRITER_RUN == RUN
+def history(tmp_path_factory):
+    assert grading.TASK5_C2_CELL == CELL and grading.TASK5_RETAINED[CELL] == ("36265102718", REQUEST)
+    assert ungraded.TASK5_C2_POLICY == "task5-c2-model-free-ungraded" and readout.TASK5_C2_WRITER_RUN == RUN
     actual = readout._writer_context(REQUEST)
-    assert actual.plan["order"][22:26] == [BACKING, A2, PARENT, CELL] and len(actual.plan["order"]) == 30
+    assert actual.plan["order"][21:28] == [readout.TASK4_C2_CELL, BACKING, A2, A1, B1, PARENT, CELL]
+    assert len(actual.plan["order"]) == 30 and len({WRITER, PRODUCER, OBSERVER}) == 3
     assert actual.controller_source_sha == WRITER and actual.plan["reviewed_source_sha"] == PRODUCER
     assert actual.terminal_revision == "" and actual.requested_terminal == REQUEST
-    assert grading._model_free_context(actual) and len({WRITER, PRODUCER, OBSERVER}) == 3
+    assert grading._model_free_context(actual)
     assert hashlib.sha256(actual.run.grader_config_json.encode()).hexdigest() == readout.CONFIG_SHA256
     prototype = grading.compile_request("pilot/" + CELL, PRODUCER, TERMINAL)
     error_row, native_ledger = failed._failed_row(prototype)
-    prefix = a1_reader.history.__wrapped__(tmp_path_factory, _variants=("partial_cost",))
+    # Reuse only genuine writer construction, narrowed to one ordinary parent.
+    prefix = c1_reader.history.__wrapped__(tmp_path_factory, _variants=("graded",))
     initial = next(prefix)
-    directory = tmp_path_factory.mktemp("task5-b1-reader-history")
+    directory = tmp_path_factory.mktemp("task5-c2-reader-history")
     capture = _Capture()
     workflow = yaml.safe_load((pilot.ROOT / grading.WORKFLOW).read_bytes())
     try:
         with pytest.MonkeyPatch.context() as patch:
-            previous = initial.rows["partial_cost"]
+            previous = initial.rows["graded"]
+            assert previous.terminal["format"] == grading.RESULT_FORMAT
+            assert previous.terminal["binding"]["github_run"] == c1_reader.RUN
+            assert previous.terminal["child"]["entry_invoked"] is previous.terminal["child"]["cleanup_confirmed"] is True
+            assert not grading._model_free_context(previous.context)
             shared = SimpleNamespace(rows={}, previous_context=previous.context, previous_revision=previous.revision,
-                previous_path=previous.path, a2_context=initial.previous_context, a2_revision=initial.previous_revision,
-                a2_path=initial.previous_path, backing_context=initial.backing_context,
-                backing_revision=initial.backing_revision, backing_path=initial.backing_path,
-                control_cell=initial.control_cell, control_revision=initial.control_revision,
-                control_path=initial.control_path, older_paths=initial.older_paths)
-            assert previous.context.cell["cell_id"] == PARENT and shared.a2_context.cell["cell_id"] == A2
-            assert shared.backing_context.cell["cell_id"] == BACKING
-            for variant in _variants:
+                previous_path=previous.path, b1_context=initial.previous_context,
+                b1_revision=initial.previous_revision, b1_path=initial.previous_path,
+                a1_context=initial.a1_context, a1_revision=initial.a1_revision, a1_path=initial.a1_path,
+                a2_context=initial.a2_context, a2_revision=initial.a2_revision, a2_path=initial.a2_path,
+                backing_context=initial.backing_context, backing_revision=initial.backing_revision,
+                backing_path=initial.backing_path, control_cell=initial.control_cell,
+                control_revision=initial.control_revision, control_path=initial.control_path,
+                older_paths=initial.older_paths)
+            for variant in VARIANTS:
                 destination = directory / variant
                 destination.mkdir()
                 row, ledger_bytes = copy.deepcopy(error_row), native_ledger
@@ -83,8 +97,8 @@ def history(tmp_path_factory, *, _variants=VARIANTS):
                                            price_table=load_receipt_price_table(price_path)) as ledger:
                         ledger.reserve(call_id="settled", task_id=prototype.cell["task_id"], stage="generation",
                             retry_kind="none", provider="azure", requested_model="gpt-5.4")
-                        ledger.settle("settled", usage=CallUsage(input_tokens=23, cached_input_tokens=9,
-                            output_tokens=13, reasoning_tokens=6), resolved_model="gpt-5.4")
+                        ledger.settle("settled", usage=CallUsage(input_tokens=39, cached_input_tokens=11,
+                            output_tokens=17, reasoning_tokens=7), resolved_model="gpt-5.4")
                         if variant == "partial_cost":
                             ledger.reserve(call_id="unsettled", task_id=prototype.cell["task_id"], stage="generation",
                                 retry_kind="none", provider="azure", requested_model="gpt-5.4")
@@ -107,7 +121,7 @@ def history(tmp_path_factory, *, _variants=VARIANTS):
                 parent_input = previous.terminal["binding"]["retained"]["terminal_commit"]
                 parent_bytes = api.trees[parent_input][retained._paths(previous.context.cell)[1]]
                 parent = pilot._json_object(parent_bytes)
-                seeded.claim["binding"]["github_run"] = {"id": "36248894311", "job": "cell", "attempt": 1}
+                seeded.claim["binding"]["github_run"] = {"id": "36265102718", "job": "cell", "attempt": 1}
                 seeded.claim["expected_parent"] = parent_input
                 seeded.claim["predecessor"] = {"cell_id": PARENT, "terminal_commit": parent_input,
                     "terminal_sha256": pilot._identity(parent_bytes)["sha256"], "output_commit": parent["output_commit"],
@@ -120,8 +134,8 @@ def history(tmp_path_factory, *, _variants=VARIANTS):
                 api.branches[retained.BRANCH] = TERMINAL
                 api.head, api.main_snapshot = retained.BOOTSTRAP, copy.deepcopy(api.trees[retained.BOOTSTRAP])
                 request = pilot._digest(seeded.terminal["completion"])
-                assert request != REQUEST  # Synthetic bytes never impersonate the supplied actual checksum.
-                patch.setitem(grading.TASK5_RETAINED, CELL, ("36248894311", request))
+                assert request != REQUEST  # Synthetic bytes never impersonate actual retained completion.
+                patch.setitem(grading.TASK5_RETAINED, CELL, ("36265102718", request))
                 current = SimpleNamespace(api=api, context=readout._writer_context(request), request=request,
                     root=destination / "record", workflow=workflow)
                 current.transport = policy._SourceOnlyChild(current)
@@ -131,7 +145,7 @@ def history(tmp_path_factory, *, _variants=VARIANTS):
                     base._synthetic_rubric(current, selected)
                     approval._authorize(current, destination, selected, RUN["id"])
                     def no_judge(*args, **kwargs):
-                        raise AssertionError("model-free task5 B1 writer invoked a judge or rubric")
+                        raise AssertionError("model-free task5 C2 writer invoked a judge or rubric")
                     for name in ("_entry_contract", "_stage_rubric"):
                         selected.setattr(grading, name, no_judge)
                     selected.setattr(current.transport, "process", no_judge)
@@ -144,9 +158,10 @@ def history(tmp_path_factory, *, _variants=VARIANTS):
                 revision = api.branches[grading.BRANCH]
                 path = grading._paths(current.context.cell)[1]
                 terminal = pilot._json_object(api.trees[revision][path])
-                assert terminal["binding"]["github_run"] == RUN and terminal["binding"]["policy"] == ungraded.TASK5_B1_POLICY
+                assert terminal["binding"]["github_run"] == RUN and terminal["binding"]["policy"] == ungraded.TASK5_C2_POLICY
                 assert terminal["outcome"] == "ungraded" and terminal["model_invoked"] is False
                 assert not {"child", "files", "score", "verdict"}.intersection(terminal)
+                assert all(api.trees[commit] == tree for commit, tree in previous.api.trees.items())
                 shared.rows[variant] = SimpleNamespace(api=api, context=current.context, request=request,
                     revision=revision, path=path, terminal=terminal)
             yield shared
@@ -154,46 +169,55 @@ def history(tmp_path_factory, *, _variants=VARIANTS):
         prefix.close()
 
 
-BINDING_FIELDS = ("controller_source_sha", "source_sha", "config_sha256", "grader_config_sha256", "policy",
+NG_ROLES = ("selected", "b1", "a1", "a2")
+ANCESTORS = ("parent", "b1", "a1", "a2", "backing")
+BINDING_FIELDS = ("controller_source_sha", "source_sha", "config_sha256", "grader_config_sha256",
                   "approval_request_sha256", "cell_id", "publication_receipt_sha256")
-RUN_CHANGES = {"run": ("id", "36301611456"), "job": ("job", "grade"), "attempt": ("attempt", 2),
+RUN_CHANGES = {"run": ("id", "36303175625"), "job": ("job", "grade"), "attempt": ("attempt", 2),
                "typed_attempt": ("attempt", True), "float_attempt": ("attempt", 1.0)}
-NG_ROLES = ("selected", "parent", "a2")
-ALIASES = ("parent_terminal", "parent_claim", "a2_terminal", "a2_claim", "backing_terminal", "backing_claim",
-           "control_terminal", *(f"{role}_input_{part}" for role in ("parent", "a2", "backing")
-                                 for part in ("terminal", "claim", "output")))
+ALIASES = ("control_terminal", *(f"{role}_{part}" for role in ANCESTORS
+           for part in ("terminal", "claim", "input_terminal", "input_claim", "input_output")))
 SCENARIOS = (*VARIANTS, "advanced", "replay", "plan", "closed_registry",
-    *(f"{role}:binding:{field}" for role in NG_ROLES for field in BINDING_FIELDS),
-    *(f"{role}:run:{field}" for role in NG_ROLES for field in RUN_CHANGES),
-    *(f"{role}:entry:{field}" for role in NG_ROLES for field in ("grader_hash", "renderer")),
-    *(f"{role}:record:{field}" for role in NG_ROLES for field in ("type", "model", "score", "child", "files", "outcome")),
-    *(f"{role}:claim:{field}" for role in NG_ROLES for field in ("type", "float", "format", "bytes", "history", "carried")),
-    *(f"{role}:parent:{field}" for role in NG_ROLES for field in ("hash", "size", "size_float", "cell", "carried", "carried_bytes")),
-    "whole_observation", "parent_entry", "handoff_missing", "handoff_wrong_owner",
+    *(f"{role}:binding:{field}" for role in ("selected", *ANCESTORS) for field in BINDING_FIELDS),
+    *(f"{role}:run:{field}" for role in ("selected", *ANCESTORS) for field in RUN_CHANGES),
+    *(f"{role}:entry:{field}" for role in ("selected", *ANCESTORS) for field in ("grader_hash", "renderer")),
+    *(f"{role}:record:{field}" for role in NG_ROLES for field in ("policy", "type", "model", "score", "child", "files", "outcome")),
+    *(f"{role}:claim:{field}" for role in ("selected", *ANCESTORS) for field in ("type", "float", "format", "history", "carried")),
+    *(f"{role}:parent:{field}" for role in ("selected", "parent", "b1", "a1", "a2")
+      for field in ("hash", "size_float", "cell", "carried", "carried_bytes")),
+    *(f"{role}:ordinary:{field}" for role in ("parent", "backing")
+      for field in ("no_child", "cleanup", "type", "missing", "artifact_history")),
+    *(f"{role}:input:{field}" for role in ("selected", *ANCESTORS)
+      for field in ("run", "source", "config", "predecessor", "parent", "ack", "cleanup", "manifest")),
+    *(f"{role}:original:{field}" for role in NG_ROLES for field in ("result", "ledger")),
+    "whole_observation", "parent_entry", "claim_hash", "claim_bytes", "claim_extra", "terminal_history",
     "recorder_zero", "recorder_invoice", "recorder_http", "completion_status", "completion_type",
-    "completion_receipt", "completion_denominator", "inference_missing", "claim_hash", "terminal_history",
-    *("backing_" + field for field in ("run", "writer", "source", "config", "renderer", "grader_hash",
-        "no_child", "cleanup", "type", "missing", "claim", "history", "claim_type")),
+    "completion_receipt", "completion_denominator", "inference_missing", "inference_deliverables",
     *("control_" + field for field in ("missing", "bytes", "history", "carried")),
-    *("inference_" + field for field in ("run", "source", "config", "predecessor", "parent", "ack", "cleanup",
-        "deliverables", "manifest", "result", "ledger")),
-    "parent_result", "parent_ledger", "a2_result", "a2_ledger", "parent_input_predecessor", "a2_input_predecessor",
-    *(f"alias_{kind}_{target}" for kind in ("claim", "terminal") for target in ALIASES),
+    *("handoff_" + field for field in ("missing", "list", "length", "footprint_type", "proof_type", "open",
+        "metadata", "wrong_owner", "owner_type", "revisions_type", "changed_c1_footprint", "changed_b1_footprint",
+        "changed_inference_footprint", "changed_download_footprint", "owner_metadata", "owner_snapshot",
+        "shared_metadata", "shared_download")),
+    *(f"alias_{kind}_{target}" for kind in ("claim", "terminal", "input_terminal") for target in ALIASES),
+    *(f"alias_{kind}_{role}_input_{part}" for kind in ("input_claim", "input_output")
+      for role in ANCESTORS for part in ("terminal", "claim", "output")),
     *("own_claim_" + part for part in ("terminal", "claim", "output")),
     "ordinal", "ref", "inference_ref", "host_ref", "observer_writer", "observer_producer", "observer_source",
     "source_preflight", "paid", "rerun", "producer_override", "wrong_phase", "private_target", "lost_response",
-    "a1_facade_lost_response", "b1_facade_lost_response")
+    "a1_facade_lost_response", "b1_facade_lost_response", "c2_facade_lost_response")
 
 
 @pytest.mark.parametrize("scenario", SCENARIOS)
-def test_fixed_task5_b1_ungraded_readout(history, tmp_path, monkeypatch, capsys, scenario):
+def test_fixed_task5_c2_ungraded_readout(history, tmp_path, monkeypatch, capsys, scenario):
     row = history.rows.get(scenario, history.rows["partial_cost"])
-    monkeypatch.setitem(grading.TASK5_RETAINED, CELL, ("36248894311", row.request))
+    monkeypatch.setitem(grading.TASK5_RETAINED, CELL, ("36265102718", row.request))
     api = copy.deepcopy(row.api)
     nodes = {}
     for role, context, revision, path in (
         ("selected", row.context, row.revision, row.path),
         ("parent", history.previous_context, history.previous_revision, history.previous_path),
+        ("b1", history.b1_context, history.b1_revision, history.b1_path),
+        ("a1", history.a1_context, history.a1_revision, history.a1_path),
         ("a2", history.a2_context, history.a2_revision, history.a2_path),
         ("backing", history.backing_context, history.backing_revision, history.backing_path),
     ):
@@ -202,7 +226,7 @@ def test_fixed_task5_b1_ungraded_readout(history, tmp_path, monkeypatch, capsys,
         claim = pilot._json_object(api.trees[terminal["claim_commit"]][claim_path])
         nodes[role] = SimpleNamespace(context=copy.deepcopy(context), revision=revision, path=path,
             terminal=terminal, claim=claim, claim_path=claim_path)
-    selected, parent, a2, backing = (nodes[role] for role in ("selected", "parent", "a2", "backing"))
+    selected, parent, b1, a1, a2, backing = (nodes[role] for role in ("selected", *ANCESTORS))
     context, terminal, claim = selected.context, selected.terminal, selected.claim
     changed, claim_overrides, corrupt_bytes, corrupt_history, remove = {"selected"}, {}, [], [], []
 
@@ -219,17 +243,20 @@ def test_fixed_task5_b1_ungraded_readout(history, tmp_path, monkeypatch, capsys,
                 node.context, node.terminal["binding"]["github_run"])
             changed.add(role)
         elif kind == "entry":
-            entry = node.terminal["binding"]["predecessor_entry"]
+            entry = node.terminal["binding"]["predecessor_entry"] if role in NG_ROLES else node.terminal["binding"]
             if field == "grader_hash":
                 entry["grader_source_hash"] = "9" * 64
             else:
                 entry["renderer_fingerprint"]["libreoffice_version"] = "PRIVATE"
             changed.add(role)
         elif kind == "record":
-            key, value = {"type": ("format", grading.RESULT_FORMAT), "model": ("model_invoked", True),
-                "score": ("score", 0), "child": ("child", {"entry_invoked": True}),
-                "files": ("files", []), "outcome": ("outcome", "graded")}[field]
-            node.terminal[key] = value
+            if field == "policy":
+                node.terminal["binding"]["policy"] = "PRIVATE"
+            else:
+                key, value = {"type": ("format", grading.RESULT_FORMAT), "model": ("model_invoked", True),
+                    "score": ("score", 0), "child": ("child", {"entry_invoked": True}),
+                    "files": ("files", []), "outcome": ("outcome", "graded")}[field]
+                node.terminal[key] = value
             changed.add(role)
         elif kind == "claim":
             if field in {"type", "float", "format"}:
@@ -238,19 +265,61 @@ def test_fixed_task5_b1_ungraded_readout(history, tmp_path, monkeypatch, capsys,
             elif field == "history":
                 corrupt_history.append((node.revision, node.claim_path, node.revision))
             else:
-                corrupt_bytes.append((node.revision if field == "carried" else node.terminal["claim_commit"], node.claim_path))
+                corrupt_bytes.append((node.revision, node.claim_path))
         elif kind == "parent":
-            previous = nodes[{"selected": "parent", "parent": "a2", "a2": "backing"}[role]]
+            previous = nodes[{"selected": "parent", "parent": "b1", "b1": "a1", "a1": "a2", "a2": "backing"}[role]]
             if field == "carried":
                 corrupt_history.append((node.terminal["claim_commit"], previous.path, node.terminal["claim_commit"]))
             elif field == "carried_bytes":
                 corrupt_bytes.append((node.terminal["claim_commit"], previous.path))
             else:
-                key, value = {"hash": ("sha256", "9" * 64), "size": ("size", True),
-                    "size_float": ("size", float(node.claim["predecessor"]["size"])),
-                    "cell": ("cell_id", CELL)}[field]
+                key, value = {"hash": ("sha256", "9" * 64), "size_float": ("size", float(node.claim["predecessor"]["size"])),
+                              "cell": ("cell_id", CELL)}[field]
                 node.claim["predecessor"][key] = value
                 changed.add(role)
+        elif kind == "ordinary":
+            if field == "missing":
+                remove.append((node.revision, node.path))
+            elif field == "artifact_history":
+                corrupt_history.append((node.revision, node.terminal["files"][0]["path"], node.terminal["claim_commit"]))
+            else:
+                if field == "type":
+                    node.terminal["format"] = ungraded.TERMINAL_FORMAT
+                else:
+                    node.terminal["child"]["entry_invoked" if field == "no_child" else "cleanup_confirmed"] = False
+                changed.add(role)
+        elif kind == "original":
+            corrupt_bytes.append((node.terminal["binding"]["retained"]["output_commit"],
+                retained._paths(node.context.cell)[2] + "/" + NAMES[field == "ledger"]))
+        elif kind == "input":
+            icp, itp, ip = retained._paths(node.context.cell)
+            ir = node.terminal["binding"]["retained"]["terminal_commit"]
+            original = pilot._json_object(api.trees[ir][itp])
+            original_claim = pilot._json_object(api.trees[original["claim_commit"]][icp])
+            if field == "run":
+                original_claim["binding"]["github_run"]["id"] = "36265102719"
+            elif field in {"source", "config"}:
+                original_claim["binding"]["source_sha" if field == "source" else "config_sha256"] = "9" * 64
+            elif field == "predecessor":
+                original_claim["predecessor"]["manifest_sha256"] = "9" * 64
+            elif field == "parent":
+                original_claim["expected_parent"] = "9" * 40
+            elif field == "ack":
+                original["publication_acknowledged"] = False
+            elif field == "cleanup":
+                original["completion"]["cleanup_confirmed"] = False
+            else:
+                corrupt_bytes.append((original["output_commit"], ip + "/" + output.MANIFEST))
+            data = retained._encoded(original_claim)
+            for commit in (original["claim_commit"], original["output_commit"], ir):
+                api.trees[commit][icp] = data
+            original["claim_identity"] = pilot._identity(data)
+            data = retained._encoded(original)
+            api.trees[ir][itp] = data
+            node.terminal["binding"]["retained"]["terminal_sha256"] = pilot._identity(data)["sha256"]
+            changed.add(role)
+        else:
+            raise AssertionError(scenario)
     elif scenario == "advanced":
         api.seed(ADVANCED, selected.revision, {"unrelated/PRIVATE": b"PRIVATE"})
         api.branches[grading.BRANCH] = api.branches[retained.BRANCH] = ADVANCED
@@ -267,33 +336,15 @@ def test_fixed_task5_b1_ungraded_readout(history, tmp_path, monkeypatch, capsys,
             terminal["inference_completion"][key] = value
     elif scenario == "inference_missing":
         terminal["inference_missing"] = ["PRIVATE"]
+    elif scenario == "inference_deliverables":
+        terminal["inference_completion"]["artifacts"]["deliverables"] = [
+            {"size": 1, "sha256": "9" * 64}]
+    elif scenario == "claim_bytes":
+        corrupt_bytes.append((terminal["claim_commit"], selected.claim_path))
+    elif scenario == "claim_extra":
+        claim["extra"] = "PRIVATE"
     elif scenario == "terminal_history":
         corrupt_history.append((selected.revision, selected.path, terminal["claim_commit"]))
-    elif scenario.startswith("backing_"):
-        if scenario == "backing_missing":
-            remove.append((backing.revision, backing.path))
-        elif scenario == "backing_claim":
-            corrupt_bytes.append((backing.terminal["claim_commit"], backing.claim_path))
-        elif scenario == "backing_history":
-            corrupt_history.append((backing.revision, backing.path, backing.terminal["claim_commit"]))
-        else:
-            changed.add("backing")
-            if scenario == "backing_run":
-                backing.terminal["binding"]["github_run"]["id"] = "36297122394"
-                backing.terminal["binding"]["approval_request_sha256"] = grading._context_approval(
-                    backing.context, backing.terminal["binding"]["github_run"])
-            elif scenario in {"backing_no_child", "backing_cleanup"}:
-                backing.terminal["child"]["entry_invoked" if scenario == "backing_no_child" else "cleanup_confirmed"] = False
-            elif scenario == "backing_type":
-                backing.terminal["format"] = ungraded.TERMINAL_FORMAT
-            elif scenario == "backing_claim_type":
-                claim_overrides["backing"] = "type"
-            elif scenario == "backing_renderer":
-                backing.terminal["binding"]["renderer_fingerprint"]["pymupdf_version"] = "PRIVATE"
-            else:
-                key = {"backing_writer": "controller_source_sha", "backing_source": "source_sha",
-                       "backing_config": "config_hash", "backing_grader_hash": "grader_source_hash"}[scenario]
-                backing.terminal["binding"][key] = "9" * (40 if scenario in {"backing_writer", "backing_source"} else 64)
     elif scenario.startswith("control_"):
         if scenario == "control_missing":
             remove.append((history.control_revision, history.control_path))
@@ -303,49 +354,9 @@ def test_fixed_task5_b1_ungraded_readout(history, tmp_path, monkeypatch, capsys,
             corrupt_history.append((history.control_revision, history.control_path, backing.revision))
         else:
             corrupt_history.append((backing.terminal["claim_commit"], history.control_path, backing.terminal["claim_commit"]))
-    elif scenario in {"parent_result", "parent_ledger", "a2_result", "a2_ledger"}:
-        role, field = scenario.split("_")
-        node = nodes[role]
-        name = "step2_inference_results.json" if field == "result" else Path(pilot.LEDGER).name
-        corrupt_bytes.append((node.terminal["binding"]["retained"]["output_commit"],
-                              retained._paths(node.context.cell)[2] + "/" + name))
-    elif ((scenario.startswith("inference_") and scenario != "inference_ref")
-          or scenario in {"parent_input_predecessor", "a2_input_predecessor"}):
-        role = scenario.split("_")[0] if "_input_" in scenario else "selected"
-        node = nodes[role]
-        icp, itp, ip = retained._paths(node.context.cell)
-        ir = node.terminal["binding"]["retained"]["terminal_commit"]
-        original = pilot._json_object(api.trees[ir][itp])
-        original_claim = pilot._json_object(api.trees[original["claim_commit"]][icp])
-        field = "predecessor" if "_input_" in scenario else scenario.removeprefix("inference_")
-        if field == "run":
-            original_claim["binding"]["github_run"]["id"] = "36248894312"
-        elif field in {"source", "config"}:
-            original_claim["binding"]["source_sha" if field == "source" else "config_sha256"] = "9" * 64
-        elif field == "predecessor":
-            original_claim["predecessor"]["manifest_sha256"] = "9" * 64
-        elif field == "parent":
-            original_claim["expected_parent"] = "9" * 40
-        elif field == "ack":
-            original["publication_acknowledged"] = False
-        elif field == "cleanup":
-            original["completion"]["cleanup_confirmed"] = False
-        elif field == "deliverables":
-            original["completion"]["artifacts"]["deliverables"] = [{"sha256": "9" * 64, "size": 1}]
-        else:
-            name = {"manifest": output.MANIFEST, "result": "step2_inference_results.json",
-                    "ledger": Path(pilot.LEDGER).name}[field]
-            corrupt_bytes.append((original["output_commit"], ip + "/" + name))
-        data = retained._encoded(original_claim)
-        api.trees[original["claim_commit"]][icp] = data
-        original["claim_identity"] = pilot._identity(data)
-        data = retained._encoded(original)
-        api.trees[ir][itp] = data
-        node.terminal["binding"]["retained"]["terminal_sha256"] = pilot._identity(data)["sha256"]
-        changed.add(role)
     elif scenario.startswith(("alias_", "own_claim_")):
         targets = {"control_terminal": history.control_revision}
-        for role in ("parent", "a2", "backing"):
+        for role in ANCESTORS:
             node = nodes[role]
             ir = node.terminal["binding"]["retained"]["terminal_commit"]
             it = pilot._json_object(api.trees[ir][retained._paths(node.context.cell)[1]])
@@ -354,27 +365,61 @@ def test_fixed_task5_b1_ungraded_readout(history, tmp_path, monkeypatch, capsys,
         if scenario.startswith("own_claim_"):
             kind, alias = "claim", {"terminal": TERMINAL, "claim": CLAIM, "output": OUTPUT}[scenario.removeprefix("own_claim_")]
         else:
-            _, kind, name = scenario.split("_", 2)
-            alias = targets[name]
-        original_revision = terminal["claim_commit"] if kind == "claim" else selected.revision
-        # Keep the ancestor's real synthetic objects/history at the alias;
-        # populate B1's controls so a missing-file shortcut cannot pass this case.
-        for member in (selected.claim_path, parent.path, *((selected.path,) if kind == "terminal" else ())):
-            api.trees[alias][member] = api.trees[original_revision][member]
-            api.writers[alias][member] = api.writers[original_revision][member]
-        if kind == "claim":
-            terminal["claim_commit"] = alias
-            api.writers[alias][selected.claim_path] = api.writers[selected.revision][selected.claim_path] = alias
+            rest = scenario.removeprefix("alias_")
+            kind = next(kind for kind in ("input_terminal", "input_claim", "input_output", "claim", "terminal")
+                        if rest.startswith(kind + "_"))
+            alias = targets[rest.removeprefix(kind + "_")]
+        preserved = copy.deepcopy((api.trees[alias], api.writers[alias]))
+        if kind in {"claim", "terminal"}:
+            original_revision = terminal["claim_commit"] if kind == "claim" else selected.revision
+            members = [selected.claim_path, parent.path, *([selected.path] if kind == "terminal" else [])]
+            for member in members:
+                api.trees[alias][member] = api.trees[original_revision][member]
+                api.writers[alias][member] = api.writers[original_revision][member]
+            if kind == "claim":
+                terminal["claim_commit"] = alias
+                api.writers[alias][selected.claim_path] = api.writers[selected.revision][selected.claim_path] = alias
+            else:
+                selected.revision = alias
+                api.writers[alias][selected.path] = alias
+                api.branches[grading.BRANCH] = alias
         else:
-            selected.revision = alias
-            api.writers[alias][selected.path] = alias
-            api.branches[grading.BRANCH] = alias
+            icp, itp, _ = retained._paths(context.cell)
+            original = pilot._json_object(api.trees[TERMINAL][itp])
+            original_revision = {"input_terminal": TERMINAL, "input_claim": CLAIM, "input_output": OUTPUT}[kind]
+            members = [icp]
+            if kind != "input_claim":
+                members.extend(item["path"] for item in original["output_objects"])
+            if kind == "input_terminal":
+                members.append(itp)
+            for member in members:
+                api.trees[alias][member] = api.trees[original_revision][member]
+                api.writers[alias][member] = api.writers[original_revision][member]
+            if kind == "input_terminal":
+                api.writers[alias][itp] = alias
+                terminal["binding"]["retained"]["terminal_commit"] = alias
+            elif kind == "input_claim":
+                original["claim_commit"] = alias
+                for commit in (alias, OUTPUT, TERMINAL):
+                    api.writers[commit][icp] = alias
+            else:
+                original["output_commit"] = alias
+                terminal["binding"]["retained"]["output_commit"] = alias
+                for item in original["output_objects"]:
+                    api.writers[alias][item["path"]] = api.writers[TERMINAL][item["path"]] = alias
+            data = retained._encoded(original)
+            api.trees[alias if kind == "input_terminal" else TERMINAL][itp] = data
+            terminal["binding"]["retained"]["terminal_sha256"] = pilot._identity(data)["sha256"]
+        # Keep the targeted ancestor's bytes, including ordinary grade files,
+        # and history intact. A refusal cannot rely on an absent alias target.
+        assert all(api.trees[alias][member] == data for member, data in preserved[0].items())
+        assert all(api.writers[alias][member] == written for member, written in preserved[1].items())
     elif scenario == "ordinal":
         compile_writer = readout._writer_context
         def wrong_order(request):
             current = compile_writer(request)
             if current.cell["cell_id"] == CELL:
-                current.plan["order"][24:26] = [CELL, PARENT]
+                current.plan["order"][26:28] = [CELL, PARENT]
             return current
         monkeypatch.setattr(readout, "_writer_context", wrong_order)
     elif scenario == "ref":
@@ -386,9 +431,9 @@ def test_fixed_task5_b1_ungraded_readout(history, tmp_path, monkeypatch, capsys,
     elif scenario == "lost_response":
         api.read_fail = True
 
-    # Rehash only the mutated fixed controls and their immediate carried links.
-    # No prior test body is called, and no native verifier is bypassed.
-    for role in ("backing", "a2", "parent", "selected"):
+    # Rehash only the six fixed synthetic pairs; then apply the single intended
+    # byte/history corruption. No mutation is carried into another case.
+    for role in ("backing", "a2", "a1", "b1", "parent", "selected"):
         if role not in changed:
             continue
         node = nodes[role]
@@ -396,7 +441,7 @@ def test_fixed_task5_b1_ungraded_readout(history, tmp_path, monkeypatch, capsys,
         if role in claim_overrides:
             field = claim_overrides[role]
             if field == "format":
-                node.claim["format"] = grading.CLAIM_FORMAT
+                node.claim["format"] = grading.CLAIM_FORMAT if role in NG_ROLES else ungraded.CLAIM_FORMAT
             else:
                 node.claim["binding"]["github_run"]["attempt"] = True if field == "type" else 1.0
             encoded = retained._encoded(node.claim)
@@ -406,7 +451,7 @@ def test_fixed_task5_b1_ungraded_readout(history, tmp_path, monkeypatch, capsys,
             data = retained._encoded(node.terminal)
             api.trees[node.revision][node.path] = data
         if role != "selected":
-            child_role = {"backing": "a2", "a2": "parent", "parent": "selected"}[role]
+            child_role = {"backing": "a2", "a2": "a1", "a1": "b1", "b1": "parent", "parent": "selected"}[role]
             child = nodes[child_role]
             for commit in (child.terminal["claim_commit"], child.revision):
                 api.trees[commit][node.path] = data
@@ -423,7 +468,7 @@ def test_fixed_task5_b1_ungraded_readout(history, tmp_path, monkeypatch, capsys,
         api.trees[selected.revision][selected.path] = retained._encoded(terminal)
 
     def forbidden(*args, **kwargs):
-        pytest.fail("task5 B1 reader crossed a model, auth, ordinary projection or write boundary")
+        pytest.fail("task5 C2 reader crossed a model, auth, ordinary projection or write boundary")
     for name in ("prepare", "claim", "judge", "publish", "reconcile", "setup", "inspect_branch", "_entry_contract", "_stage_rubric"):
         monkeypatch.setattr(grading, name, forbidden)
     for name in ("create_commit", "create_branch"):
@@ -435,18 +480,22 @@ def test_fixed_task5_b1_ungraded_readout(history, tmp_path, monkeypatch, capsys,
     monkeypatch.setattr(step8, "main", forbidden)
     monkeypatch.setattr(base.Child, "process", forbidden)
     monkeypatch.setattr(readout, "_projection", forbidden)
-    monkeypatch.setattr(readout, "_verify_predecessor", forbidden)
     monkeypatch.setattr(readout._ReadOnlyGrade, "allow_verified_files", forbidden)
-    readers, facades, ordinary, records, completed = [], [], [], [], []
+    readers, facades, ordinary, records, completed, handoffs = [], [], [], [], [], []
     initialize = readout._ReadOnlyGrade.__init__
-    a1_facade_init, b1_facade_init = readout._Task5A1NativeReads.__init__, readout._Task5B1NativeReads.__init__
+    a1_init, b1_init, c2_init = (readout._Task5A1NativeReads.__init__, readout._Task5B1NativeReads.__init__,
+                               readout._Task5C2NativeReads.__init__)
     ordinary_terminal, record_terminal = grading._grade_terminal, ungraded.verify_terminal
-    names = ("step2_inference_results.json", Path(pilot.LEDGER).name)
-    original_members = {(OUTPUT, retained._paths(context.cell)[2] + "/" + name) for name in names}
-    denied = {(backing.revision, item["path"]) for item in backing.terminal["files"]}
-    denied.update((backing.terminal["binding"]["retained"]["output_commit"],
-        retained._paths(backing.context.cell)[2] + "/" + name) for name in names)
-    # C2's terminal is intrinsically necessary; none of its other history is.
+    predecessor, verified_grade = readout._verify_predecessor, readout._verified_grade
+    original_members = {(terminal["binding"]["retained"]["output_commit"], retained._paths(context.cell)[2] + "/" + name)
+                        for name in NAMES}
+    denied = set()
+    for node in (parent, backing):
+        denied.update((node.revision, item["path"]) for item in node.terminal.get("files", []))
+        ir = node.terminal["binding"]["retained"]["terminal_commit"]
+        original = pilot._json_object(row.api.trees[ir][retained._paths(node.context.cell)[1]])
+        denied.update((original["output_commit"], item["path"]) for item in original["output_objects"]
+                      if not item["path"].endswith("/" + output.MANIFEST))
     control = pilot._json_object(row.api.trees[history.control_revision][history.control_path])
     control_cp = grading._paths(history.control_cell)[0]
     control_icp, control_itp, control_ip = retained._paths(history.control_cell)
@@ -455,7 +504,7 @@ def test_fixed_task5_b1_ungraded_readout(history, tmp_path, monkeypatch, capsys,
     deeper = {(history.control_revision, control_cp), (control["claim_commit"], control_cp),
         (control_ir, control_itp), (control_input["claim_commit"], control_icp),
         *((history.control_revision, item["path"]) for item in control["files"]),
-        *((control_input["output_commit"], control_ip + "/" + name) for name in (*names, output.MANIFEST)),
+        *((control_input["output_commit"], item["path"]) for item in control_input["output_objects"]),
         (OUTPUT, "PRIVATE/arbitrary")}
 
     def remember(reader, *args, **kwargs):
@@ -464,10 +513,11 @@ def test_fixed_task5_b1_ungraded_readout(history, tmp_path, monkeypatch, capsys,
 
     def probe_open(facade, owner, current, previous_context):
         assert facade._open
-        own = nodes["selected" if current.cell["cell_id"] == CELL else "parent"]
+        own = nodes[{A1: "a1", B1: "b1", CELL: "selected"}[current.cell["cell_id"]]]
         own_members = {(own.terminal["binding"]["retained"]["output_commit"],
-            retained._paths(current.cell)[2] + "/" + name) for name in names}
+            retained._paths(current.cell)[2] + "/" + name) for name in NAMES}
         assert not own_members.intersection(owner._downloads)
+        assert not original_members.intersection(readers[0]._downloads)
         assert not original_members.intersection((rev, name) for op, rev, name, _ in api.reads if op == "download")
         before = copy.deepcopy((api.calls, api.reads))
         for wrong in (grading.BRANCH, retained.BRANCH, previous_context.terminal_revision, "9" * 40):
@@ -490,87 +540,159 @@ def test_fixed_task5_b1_ungraded_readout(history, tmp_path, monkeypatch, capsys,
                     revision=rev, paths=[member], expand=True)
         assert (api.calls, api.reads) == before
 
-    def remember_a1_facade(facade, owner, prior, current, previous_context):
-        a1_facade_init(facade, owner, prior, current, previous_context)
+    def remember_a1(facade, owner, prior, current, previous_context):
+        a1_init(facade, owner, prior, current, previous_context)
         facades.append(facade)
-        assert current.cell["cell_id"] == PARENT and completed == [A2] and ordinary == [BACKING, BACKING]
+        assert current.cell["cell_id"] == A1 and completed == [A2] and ordinary == [PARENT, BACKING, BACKING]
         probe_open(facade, owner, current, previous_context)
 
-    def remember_b1_facade(facade, owner, prior, current, previous_context, proof):
-        b1_facade_init(facade, owner, prior, current, previous_context, proof)
+    def remember_b1(facade, owner, prior, current, previous_context, proof):
+        b1_init(facade, owner, prior, current, previous_context, proof)
         facades.append(facade)
-        assert current.cell["cell_id"] == CELL and completed == [A2, A2, PARENT] and ordinary == [BACKING] * 3
+        assert current.cell["cell_id"] == B1 and completed == [A2, A2, A1]
+        assert ordinary == [PARENT, BACKING, BACKING, BACKING]
         assert proof is facades[0] and not proof._open and not proof._metadata
-        assert "_task5_a1_proof" not in prior.__dict__ and "_task5_a1_proof" not in owner.__dict__
-        assert facade._owners == (owner, prior, proof._owners[1])
-        assert len(facade._revisions) == 3 and all(facade._revisions[index].isdisjoint(other)
-            for index in range(3) for other in facade._revisions[index + 1:])
+        assert "_task5_a1_proof" not in prior.__dict__
+        probe_open(facade, owner, current, previous_context)
+
+    def remember_c2(facade, owner, prior, current, previous_context, proof):
+        c2_init(facade, owner, prior, current, previous_context, proof)
+        facades.append(facade)
+        assert current.cell["cell_id"] == CELL and previous_context.cell["cell_id"] == PARENT
+        assert ordinary == [PARENT, BACKING, BACKING, BACKING, BACKING]
+        assert completed == [A2, A2, A1, A2, A1, B1] and handoffs == [PARENT]
+        assert proof[0] is facades[1] and type(proof[1]) is frozenset
+        assert all(not previous._open and not previous._metadata for previous in facades[:2])
+        assert all("_task5_c1_proof" not in reader.__dict__ and "_task5_b1_proof" not in reader.__dict__
+                   and "_task5_a1_proof" not in reader.__dict__ for reader in readers)
+        assert facade._owners == tuple(readers[:5]) and len(readers) == 6
+        assert facade._revisions[1] == proof[1] - {b1.revision}
+        assert prior._metadata_paths[b1.revision] == {b1.path} and (b1.revision, b1.path) in prior._downloads
+        assert facade._owner(b1.revision) is readers[2]
+        assert all(facade._revisions[index].isdisjoint(other)
+                   for index in range(5) for other in facade._revisions[index + 1:])
         assert [rev for rev, _ in facade._metadata] == [current.terminal_revision,
             previous_context.terminal_revision, previous_context.terminal_revision,
+            b1.terminal["binding"]["retained"]["terminal_commit"],
+            a1.terminal["binding"]["retained"]["terminal_commit"], a1.terminal["binding"]["retained"]["terminal_commit"],
             a2.terminal["binding"]["retained"]["terminal_commit"], a2.terminal["binding"]["retained"]["terminal_commit"],
             backing.terminal["binding"]["retained"]["terminal_commit"]]
         probe_open(facade, owner, current, previous_context)
 
     def verify_ordinary(client, repo, revision, current, *args, **kwargs):
-        assert current.cell["cell_id"] == BACKING
+        assert current.cell["cell_id"] in {PARENT, BACKING}
         result = ordinary_terminal(client, repo, revision, current, *args, **kwargs)
-        ordinary.append(BACKING)
+        ordinary.append(current.cell["cell_id"])
         return result
 
     def verify_record(client, repo, revision, current, *args, **kwargs):
-        assert current.cell["cell_id"] in {CELL, PARENT, A2}
+        assert current.cell["cell_id"] in {CELL, B1, A1, A2}
         records.append(current.cell["cell_id"])
         result = record_terminal(client, repo, revision, current, *args, **kwargs)
         completed.append(current.cell["cell_id"])
-        if ((type(client) is readout._Task5A1NativeReads and current.cell["cell_id"] == PARENT)
-                or (type(client) is readout._Task5B1NativeReads and current.cell["cell_id"] == CELL)):
-            # Exhausted slots refuse before the caller's finally closes the facade.
+        if ((type(client) is readout._Task5A1NativeReads and current.cell["cell_id"] == A1)
+                or (type(client) is readout._Task5B1NativeReads and current.cell["cell_id"] == B1)
+                or (type(client) is readout._Task5C2NativeReads and current.cell["cell_id"] == CELL)):
             assert client._open and not client._metadata
             before = copy.deepcopy((api.calls, api.reads))
             with pytest.raises(output.OutputPublicationRefused):
                 client.repo_info(repo_id=api.repo, repo_type="dataset", token=base.TOKEN,
                     revision=current.terminal_revision, timeout=1)
+            # Ordinary and deeper payloads remain forbidden even after the
+            # last metadata slot, before the native facade's finally closes it.
+            blocked = denied | deeper | (original_members if current.cell["cell_id"] != CELL else set())
+            for rev, member in blocked:
+                with pytest.raises(output.OutputPublicationRefused):
+                    client.hf_hub_download(repo_id=api.repo, repo_type="dataset", token=base.TOKEN,
+                        revision=rev, filename=member, cache_dir=tmp_path,
+                        force_download=True, local_files_only=False, etag_timeout=1)
             assert (api.calls, api.reads) == before
         return result
 
+    def verify_c1(reader, current, *args, **kwargs):
+        result, entry, previous_input = verified_grade(reader, current, *args, **kwargs)
+        if current.cell["cell_id"] == PARENT and scenario == "parent_entry":
+            entry = {**entry, "config_hash": "9" * 16}
+        return result, entry, previous_input
+
+    def verify_predecessor(reader, current, *args, **kwargs):
+        assert reader is readers[1] and current.cell["cell_id"] == PARENT
+        assert not original_members.intersection(readers[0]._downloads)
+        result = predecessor(reader, current, *args, **kwargs)
+        handoffs.append(PARENT)
+        proof, footprint = reader._task5_c1_proof
+        assert proof is facades[1] and proof._open is False and not proof._metadata
+        if scenario.startswith("handoff_"):
+            field = scenario.removeprefix("handoff_")
+            if field == "missing":
+                reader.__dict__.pop("_task5_c1_proof")
+            elif field in {"list", "length", "footprint_type", "proof_type"}:
+                reader._task5_c1_proof = {"list": [proof, footprint], "length": (proof,),
+                    "footprint_type": (proof, set(footprint)), "proof_type": (SimpleNamespace(), footprint)}[field]
+            elif field.startswith("changed_"):
+                if field == "changed_c1_footprint":
+                    reader._metadata_paths["9" * 40] = {"PRIVATE"}
+                elif field == "changed_b1_footprint":
+                    proof._owners[0]._metadata_paths["9" * 40] = {"PRIVATE"}
+                elif field == "changed_inference_footprint":
+                    proof._owners[1]._inference_revisions.add("9" * 40)
+                else:
+                    proof._owners[2]._downloads.add(("9" * 40, "PRIVATE"))
+            elif field == "shared_metadata":
+                reader._metadata_paths[b1.revision].add("PRIVATE")
+            elif field == "shared_download":
+                reader._downloads.add((b1.revision, "PRIVATE"))
+            else:
+                # Malform only a copied proof; never reopen a genuine facade.
+                injected = copy.copy(proof)
+                if field == "open":
+                    injected._open = True
+                elif field == "metadata":
+                    injected._metadata = ((TERMINAL, readers[0]),)
+                elif field == "wrong_owner":
+                    injected._owners = (proof._owners[1], proof._owners[0], proof._owners[2])
+                elif field == "owner_type":
+                    injected._owners = (SimpleNamespace(**proof._owners[0].__dict__), *proof._owners[1:])
+                elif field == "revisions_type":
+                    injected._revisions = tuple(set(revisions) for revisions in proof._revisions)
+                else:
+                    changed_owner = copy.copy(proof._owners[0])
+                    if field == "owner_metadata":
+                        changed_owner._inference_metadata = {"9" * 40}
+                    else:
+                        assert field == "owner_snapshot"
+                        changed_owner._metadata_open = True
+                    injected._owners = (changed_owner, *proof._owners[1:])
+                reader._task5_c1_proof = (injected, footprint)
+        return result
+
     monkeypatch.setattr(readout._ReadOnlyGrade, "__init__", remember)
-    monkeypatch.setattr(readout._Task5A1NativeReads, "__init__", remember_a1_facade)
-    monkeypatch.setattr(readout._Task5B1NativeReads, "__init__", remember_b1_facade)
+    monkeypatch.setattr(readout._Task5A1NativeReads, "__init__", remember_a1)
+    monkeypatch.setattr(readout._Task5B1NativeReads, "__init__", remember_b1)
+    monkeypatch.setattr(readout._Task5C2NativeReads, "__init__", remember_c2)
     monkeypatch.setattr(grading, "_grade_terminal", verify_ordinary)
     monkeypatch.setattr(ungraded, "verify_terminal", verify_record)
+    monkeypatch.setattr(readout, "_verified_grade", verify_c1)
+    monkeypatch.setattr(readout, "_verify_predecessor", verify_predecessor)
     if scenario == "whole_observation":
         bind_retained = readout._ReadOnlyGrade.bind_retained
         def wrong_observation(reader, binding, current, *args, **kwargs):
             value = bind_retained(reader, binding, current, *args, **kwargs)
             return {**value, "extra": True} if current.cell["cell_id"] == CELL else value
         monkeypatch.setattr(readout._ReadOnlyGrade, "bind_retained", wrong_observation)
-    elif scenario in {"parent_entry", "handoff_missing", "handoff_wrong_owner"}:
-        verified_ungraded = readout._verified_ungraded
-        def wrong_parent(reader, current, *args, **kwargs):
-            verified, entry, files = verified_ungraded(reader, current, *args, **kwargs)
-            if current.cell["cell_id"] == PARENT:
-                if scenario == "parent_entry":
-                    entry = {**entry, "config_hash": "9" * 16}
-                elif scenario == "handoff_missing":
-                    reader.__dict__.pop("_task5_a1_proof")
-                else:
-                    proof = reader._task5_a1_proof
-                    proof._owners = (proof._owners[1], proof._owners[0])
-            return verified, entry, files
-        monkeypatch.setattr(readout, "_verified_ungraded", wrong_parent)
-    elif scenario in {"a1_facade_lost_response", "b1_facade_lost_response"}:
+    elif scenario in {"a1_facade_lost_response", "b1_facade_lost_response", "c2_facade_lost_response"}:
         repo_info = readout._ReadOnlyGrade.repo_info
         def lost_before_owner_consumes(reader, **kwargs):
-            target = readers[1] if scenario.startswith("a1_") and len(readers) > 1 else readers[0]
-            count = 1 if scenario.startswith("a1_") else 2
-            if len(facades) == count and reader is target:
+            count, index = {"a1_facade_lost_response": (1, 3), "b1_facade_lost_response": (2, 2),
+                            "c2_facade_lost_response": (3, 0)}[scenario]
+            if len(facades) == count and reader is readers[index]:
                 raise output.OutputPublicationRefused("PRIVATE", http_status=503)
             return repo_info(reader, **kwargs)
         monkeypatch.setattr(readout._ReadOnlyGrade, "repo_info", lost_before_owner_consumes)
 
     source = WRITER if scenario == "observer_writer" else PRODUCER if scenario == "observer_producer" else OBSERVER
     for key, value in {"GITHUB_SHA": source, "PILOT_WORKFLOW_SHA": source, "GITHUB_JOB": "pilot-readout",
-        "GITHUB_RUN_ID": "900052", "PILOT_GRADE_PAID_APPROVAL": "false", "HF_TOKEN": base.TOKEN}.items():
+        "GITHUB_RUN_ID": "900054", "PILOT_GRADE_PAID_APPROVAL": "false", "HF_TOKEN": base.TOKEN}.items():
         monkeypatch.setenv(key, value)
     for key in ("PILOT_GRADE_APPROVAL_RESULT", "PILOT_GRADE_APPROVAL_REQUEST_SHA256", "ACTIONS_ID_TOKEN_REQUEST_URL",
                 "ACTIONS_ID_TOKEN_REQUEST_TOKEN", "AZURE_OPENAI_API_KEY", "OPENAI_API_KEY"):
@@ -621,10 +743,11 @@ def test_fixed_task5_b1_ungraded_readout(history, tmp_path, monkeypatch, capsys,
         if scenario == "closed_registry":
             requests = controls._unregistered_requests()
             assert len(requests) == 5 and row.request not in requests
-            assert context.plan["order"][24:] == [PARENT, CELL, grading.TASK5_C1_CELL, grading.TASK5_C2_CELL,
-                                                 grading.TASK5_B2_CELL, grading.TASK5_A2_CELL]
+            assert context.plan["order"][24:28] == [A1, B1, PARENT, CELL]
+            assert context.plan["order"][28:] == [grading.TASK5_B2_CELL, grading.TASK5_A2_CELL]
             assert set(requests) == {*(grading.TASK5_RETAINED[cell][1] for cell in context.plan["order"][28:]),
                                      "9" * 64, "9" * 40, ""}
+            assert not grading._model_free_context(readout._writer_context(grading.TASK5_RETAINED[PARENT][1]))
             assert CELL not in readout.TASK4_SUCCESSOR_READOUTS and CELL not in readout.TASK3_SUCCESSOR_READOUTS
             for request in requests:
                 closed = list(args)
@@ -644,6 +767,9 @@ def test_fixed_task5_b1_ungraded_readout(history, tmp_path, monkeypatch, capsys,
         assert public["inference_completion"]["status"] == "failed" and public["inference_completion"]["artifacts"]["deliverables"] == []
         assert public["inference_missing"] == row.terminal["inference_missing"]
         assert public["inference_terminal"] == TERMINAL and public["inference_output_commit"] == OUTPUT
+        assert public["inference_request_checksum"] == row.request and public["observer_source_sha"] == OBSERVER
+        assert public["grader_source_hash"] == readout.TASK3_A1_GRADER_SOURCE_HASH
+        assert public["grader_config_sha256"] == readout.CONFIG_SHA256 and public["proof_boundary"] == grading.PROOF
         assert public["grade_revision"] == selected.revision and public["file_identities"] == []
         assert not {"child", "verdict", "rubric_items", "total_max"}.intersection(public)
         assert public["recorder_accounting"] == {"status": "not_measured", "known_cost_usd": None,
@@ -661,19 +787,25 @@ def test_fixed_task5_b1_ungraded_readout(history, tmp_path, monkeypatch, capsys,
                     assert receipt["missing_reasons"] == ["price_missing"] and receipt["known_cost_usd"] is None
                 else:
                     assert "call_reachability_unknown" in receipt["missing_reasons"]
-        if scenario in {"partial_cost", "advanced", "replay"}:
-            assert costs["recorded_task_cost"]["known_cost_usd"] > 0
-            assert costs["recorded_task_cost"] == costs["ledger_derived_cost"]
-            assert costs["recorded_task_cost"]["known_cost_usd"] != parent.terminal["inference_completion"]["receipt"]["known_cost_usd"]
-        assert len(readers) == 4 and len(facades) == 2
-        assert ordinary == [BACKING] * 4 and records == [A2, PARENT, A2, CELL, PARENT, A2]
-        assert completed == [A2, A2, PARENT, A2, PARENT, CELL]
+        if scenario in {"partial_cost", "price_missing", "advanced", "replay"}:
+            receipt = costs["ledger_derived_cost"]
+            assert receipt["usage"] == {"input_tokens": 39, "output_tokens": 17, "cached_input_tokens": 11,
+                "reasoning_tokens": 7, "audio_input_tokens": None, "audio_output_tokens": None}
+            assert receipt["model_calls"] == (1 if scenario == "price_missing" else 2)
+            assert costs["recorded_task_cost"] == receipt
+            if scenario != "price_missing":
+                assert receipt["known_cost_usd"] > 0
+                assert receipt["known_cost_usd"] != b1.terminal["inference_completion"]["receipt"]["known_cost_usd"]
+        assert len(readers) == 6 and len(facades) == 3 and handoffs == [PARENT]
+        assert ordinary == [PARENT, BACKING, BACKING, BACKING, BACKING, PARENT, BACKING]
+        assert records == [A2, A1, A2, B1, A1, A2, CELL, B1, A1, A2]
+        assert completed == [A2, A2, A1, A2, A1, B1, A2, A1, B1, CELL]
         head = ADVANCED if scenario == "advanced" else selected.revision
         assert public["observed_branch_head"] == head
         expected_downloads = {(history.control_revision, history.control_path)}
         allowed_paths = {(head, selected.path)}
         inputs, failure_members = [], set()
-        for role in ("selected", "parent", "a2", "backing"):
+        for role in ("selected", *ANCESTORS):
             node = nodes[role]
             current, value, commit = node.context, node.terminal, node.revision
             cp, tp = grading._paths(current.cell)
@@ -690,24 +822,28 @@ def test_fixed_task5_b1_ungraded_readout(history, tmp_path, monkeypatch, capsys,
             expected_downloads.update({(ir, itp), (inference_terminal["claim_commit"], icp),
                                       (inference_terminal["output_commit"], ip + "/" + output.MANIFEST)})
             if role in NG_ROLES:
-                members = {(inference_terminal["output_commit"], ip + "/" + name) for name in names}
+                members = {(inference_terminal["output_commit"], ip + "/" + name) for name in NAMES}
                 expected_downloads.update(members)
                 failure_members.update(members)
             allowed_paths.update({(ir, itp), (ir, icp), (inference_terminal["claim_commit"], icp)})
             for item in inference_terminal["output_objects"]:
                 allowed_paths.update({(ir, item["path"]), (inference_terminal["output_commit"], item["path"])})
-        assert downloads == expected_downloads and len(downloads) == 27
-        assert sum(op == "download" for op, *_ in api.reads) == 154
+        assert downloads == expected_downloads and len(downloads) == 39 and len(failure_members) == 8
+        assert sum(op == "download" for op, *_ in api.reads) == 268
         actual_paths = {(commit, name) for op, commit, _, members in api.reads if op == "paths" for name in members}
         assert actual_paths <= allowed_paths
-        ib1, ia1, ia2, ib2 = inputs
-        assert [rev for op, rev in api.calls if op == "metadata"] == [grading.BRANCH,
-            ib1, ia1, ia2, ib2, ia2, ib2, ia1, ia2, ia2, ib2, ib1, ia1, ia1, ia2, ia2, ib2]
+        ic2, ic1, ib1, ia1, ia2, ib2 = inputs
+        assert [rev for op, rev in api.calls if op == "metadata"] == [grading.BRANCH, ic2, ic1,
+            ib1, ia1, ia2, ib2, ia2, ib2, ia1, ia2, ia2, ib2, ib1, ia1, ia1, ia2, ia2, ib2,
+            ic2, ic1, ic1, ib1, ia1, ia1, ia2, ia2, ib2]
         assert all(op in {"metadata", "paths", "download"} for op, *_ in api.reads)
         grade_revisions = {history.control_revision}
         for node in nodes.values():
             grade_revisions.update({node.revision, node.terminal["claim_commit"]})
-        assert len(grade_revisions) == 9
+        assert len(grade_revisions) == 13
+        all_revisions = set().union(*(set(reader._metadata_paths) | reader._inference_revisions
+            | {rev for rev, _ in reader._downloads} for reader in readers))
+        assert len(all_revisions) == (32 if scenario == "advanced" else 31)
         before = copy.deepcopy((api.calls, api.reads))
         for reader in (*readers, *facades):
             assert not any(hasattr(reader, name) for name in ("create_commit", "create_branch", "create_repo", "__getattr__"))
@@ -720,7 +856,7 @@ def test_fixed_task5_b1_ungraded_readout(history, tmp_path, monkeypatch, capsys,
                 with pytest.raises(output.OutputPublicationRefused):
                     reader.get_paths_info(repo_id=api.repo, repo_type="dataset", token=base.TOKEN,
                         revision=revision, paths=[member], expand=True)
-            for revision in (grading.BRANCH, retained.BRANCH, ib1, ia1, ia2, ib2):
+            for revision in (grading.BRANCH, retained.BRANCH, ic2, ic1, ib1, ia1, ia2, ib2):
                 with pytest.raises(output.OutputPublicationRefused):
                     reader.repo_info(repo_id=api.repo, repo_type="dataset", token=base.TOKEN, revision=revision, timeout=1)
         selected_members = original_members | {(selected.revision, selected.path),
@@ -731,16 +867,22 @@ def test_fixed_task5_b1_ungraded_readout(history, tmp_path, monkeypatch, capsys,
                 readers[0].hf_hub_download(repo_id=api.repo, repo_type="dataset", token=base.TOKEN,
                     revision=revision, filename=member, cache_dir=tmp_path,
                     force_download=True, local_files_only=False, etag_timeout=1)
-        parent_members = {(parent.terminal["binding"]["retained"]["output_commit"],
-            retained._paths(parent.context.cell)[2] + "/" + name) for name in names}
-        for owner, denied_members in ((readers[1], failure_members - parent_members), (readers[3], failure_members)):
-            for revision, member in denied_members:
+        for reader, role in zip(readers, ("selected", *ANCESTORS)):
+            node = nodes[role]
+            own = {(node.terminal["binding"]["retained"]["output_commit"],
+                retained._paths(node.context.cell)[2] + "/" + name) for name in NAMES} if role in NG_ROLES else set()
+            for revision, member in failure_members - own:
                 with pytest.raises(output.OutputPublicationRefused):
-                    owner.hf_hub_download(repo_id=api.repo, repo_type="dataset", token=base.TOKEN,
+                    reader.hf_hub_download(repo_id=api.repo, repo_type="dataset", token=base.TOKEN,
+                        revision=revision, filename=member, cache_dir=tmp_path,
+                        force_download=True, local_files_only=False, etag_timeout=1)
+        for facade in facades:
+            for revision, member in expected_downloads:
+                with pytest.raises(output.OutputPublicationRefused):
+                    facade.hf_hub_download(repo_id=api.repo, repo_type="dataset", token=base.TOKEN,
                         revision=revision, filename=member, cache_dir=tmp_path,
                         force_download=True, local_files_only=False, etag_timeout=1)
         assert (api.calls, api.reads) == before
-        assert all("_task5_a1_proof" not in reader.__dict__ for reader in readers)
         if scenario == "replay":
             calls = list(api.calls)
             assert grading.main(args, _test_api=api, _test_transport=transport) == 2
@@ -750,17 +892,19 @@ def test_fixed_task5_b1_ungraded_readout(history, tmp_path, monkeypatch, capsys,
         assert code == 2 and public["outcome"] == "refused" and "score" not in public, public
         late = {"selected:record:" + field for field in ("score", "child", "files", "outcome")}
         late.update({"recorder_zero", "recorder_invoice", "recorder_http", "completion_status", "completion_type",
-            "completion_receipt", "completion_denominator", "inference_missing", "inference_result", "inference_ledger"})
+            "completion_receipt", "completion_denominator", "inference_missing", "inference_deliverables",
+            "selected:original:result", "selected:original:ledger", "c2_facade_lost_response"})
         if scenario not in late:
             assert not original_members.intersection(downloads)
-        if scenario in {"lost_response", "a1_facade_lost_response", "b1_facade_lost_response"}:
+            assert not readers or not original_members.intersection(readers[0]._downloads)
+        if scenario in {"lost_response", "a1_facade_lost_response", "b1_facade_lost_response", "c2_facade_lost_response"}:
             assert public["http_status"] == 503
-        if scenario == "a1_facade_lost_response":
-            assert len(facades) == 1
-        elif scenario == "b1_facade_lost_response":
-            assert len(facades) == 2
-        if scenario.startswith("alias_") and not scenario.endswith(("parent_terminal", "parent_claim")):
-            assert completed == [A2, A2, PARENT] and ordinary == [BACKING] * 3
+        if scenario.endswith("facade_lost_response"):
+            assert len(facades) == {"a1_facade_lost_response": 1, "b1_facade_lost_response": 2,
+                                    "c2_facade_lost_response": 3}[scenario]
+        if scenario.startswith("handoff_"):
+            assert handoffs == [PARENT] and len(facades) == 2
+            assert completed == [A2, A2, A1, A2, A1, B1]
     assert all(not facade._open and not facade._metadata for facade in facades)
     assert all(not reader._inference_metadata for reader in readers)
     assert all(revision != retained.BRANCH for op, revision in api.calls if op == "metadata")

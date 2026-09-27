@@ -474,10 +474,10 @@ def test_fixed_task4_a2_ungraded_readout(history, tmp_path, monkeypatch, capsys,
         assert code == 0 and public["outcome"] == "plan_only" and not api.calls and not root.exists()
         if scenario == "closed_registry":
             requests = a1_reader._unregistered_requests()
-            assert len(requests) == 6 and row.request not in requests
+            assert len(requests) == 5 and row.request not in requests
             assert set(requests) == {*(record[1] for cell, record in grading.TASK5_RETAINED.items()
                                       if cell not in {grading.TASK5_A1_CELL, grading.TASK5_B1_CELL,
-                                                      grading.TASK5_C1_CELL}), "9" * 64, "9" * 40, ""}
+                                                      grading.TASK5_C1_CELL, grading.TASK5_C2_CELL}), "9" * 64, "9" * 40, ""}
             assert CELL not in readout.TASK4_SUCCESSOR_READOUTS and CELL not in readout.TASK3_SUCCESSOR_READOUTS
             assert [cell for cell in context.plan["order"][18:24]
                     if grading._model_free_context(readout._writer_context(grading.TASK4_RETAINED[cell][1]))] == [

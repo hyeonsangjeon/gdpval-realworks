@@ -44,7 +44,7 @@ VARIANTS = c_reader.VARIANTS
 
 
 @pytest.fixture(scope="module")
-def history(tmp_path_factory):
+def history(tmp_path_factory, *, _variants=VARIANTS):
     assert grading.TASK5_C1_CELL == CELL and grading.TASK5_RETAINED[CELL] == ("36259780431", REQUEST)
     assert readout.TASK5_C1_WRITER_RUN == RUN
     actual, parent = readout._writer_context(REQUEST), readout._writer_context(b1_reader.REQUEST)
@@ -106,7 +106,7 @@ def history(tmp_path_factory):
                 control_revision=initial.control_revision, control_path=initial.control_path,
                 older_paths=initial.older_paths)
             with redirect_stdout(capture.out), redirect_stderr(capture.err):
-                for variant in VARIANTS:
+                for variant in _variants:
                     destination = directory / variant
                     destination.mkdir()
                     current = SimpleNamespace(api=copy.deepcopy(api), context=readout._writer_context(request),
@@ -689,10 +689,10 @@ def test_fixed_task5_c1_readout_after_ungraded(history, tmp_path, monkeypatch, c
         assert code == 0 and public["outcome"] == "plan_only" and not api.calls and not root.exists()
         if scenario == "closed_registry":
             requests = controls._unregistered_requests()
-            assert len(requests) == 6 and history.request not in requests
-            assert context.plan["order"][24:27] == [A1, PARENT, CELL]
-            assert context.plan["order"][27:] == [grading.TASK5_C2_CELL, grading.TASK5_B2_CELL, grading.TASK5_A2_CELL]
-            assert set(requests) == {*(grading.TASK5_RETAINED[cell][1] for cell in context.plan["order"][27:]),
+            assert len(requests) == 5 and history.request not in requests
+            assert context.plan["order"][24:28] == [A1, PARENT, CELL, grading.TASK5_C2_CELL]
+            assert context.plan["order"][28:] == [grading.TASK5_B2_CELL, grading.TASK5_A2_CELL]
+            assert set(requests) == {*(grading.TASK5_RETAINED[cell][1] for cell in context.plan["order"][28:]),
                                      "9" * 64, "9" * 40, ""}
             assert not grading._model_free_context(readout._writer_context(history.request))
             assert CELL not in readout.TASK4_SUCCESSOR_READOUTS and CELL not in readout.TASK3_SUCCESSOR_READOUTS
