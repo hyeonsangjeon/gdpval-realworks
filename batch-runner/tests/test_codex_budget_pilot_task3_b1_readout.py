@@ -428,7 +428,8 @@ def test_fixed_task3_b1_grade_readout(history, tmp_path, monkeypatch, capsys, sc
         if scenario == "closed_registry":
             requests = a1_reader._unregistered_requests()
             assert all(value[1] in requests for cell, value in {
-                **grading.TASK4_RETAINED, **grading.TASK5_RETAINED}.items() if cell != grading.TASK4_A1_CELL)
+                **grading.TASK4_RETAINED, **grading.TASK5_RETAINED}.items()
+                if cell not in {grading.TASK4_A1_CELL, grading.TASK4_B1_CELL})
             assert history.request not in requests and grading.TASK3_A1_COMPLETION_SHA256 not in requests
             for request in requests:
                 closed = list(args)

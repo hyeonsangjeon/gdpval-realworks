@@ -44,7 +44,7 @@ VARIANTS = ("ungraded", "partial_cost", "missing_receipt", "price_missing")
 
 
 @pytest.fixture(scope="module")
-def history(tmp_path_factory):
+def history(tmp_path_factory, *, _variants=VARIANTS):
     assert grading.TASK4_A1_CELL == CELL and grading.TASK4_RETAINED[CELL] == ("36234320019", REQUEST)
     assert ungraded.POLICY == "recorded_task4_failed_a1_no_judge"
     assert readout.TASK4_A1_WRITER_RUN == RUN and CELL not in readout.TASK3_SUCCESSOR_READOUTS
@@ -70,7 +70,7 @@ def history(tmp_path_factory):
                 backing_cell=initial.previous_context.cell, backing_revision=initial.previous_revision,
                 backing_path=initial.previous_path, historical_path=initial.historical_path)
             assert shared.backing_cell["cell_id"] == readout.TASK3_B2_CELL
-            for variant in VARIANTS:
+            for variant in _variants:
                 destination = directory / variant
                 destination.mkdir()
                 row, ledger_bytes = copy.deepcopy(error_row), native_ledger
@@ -438,7 +438,7 @@ def test_fixed_task4_a1_ungraded_readout(history, tmp_path, monkeypatch, capsys,
         assert code == 0 and public["outcome"] == "plan_only" and not api.calls and not root.exists()
         if scenario == "closed_registry":
             requests = a1_reader._unregistered_requests()
-            assert len(requests) == 14 and row.request not in requests
+            assert len(requests) == 13 and row.request not in requests
             for request in requests:
                 closed = list(args)
                 closed[5] = request
