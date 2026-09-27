@@ -407,7 +407,8 @@ def test_fixed_task3_a1_grade_readout(history, tmp_path, monkeypatch, capsys, sc
             assert "call_reachability_unknown" in receipt["missing_reasons"]
         else:
             assert public["ledger_derived_cost"]["estimated_cost_usd"] is None
-            assert "price_missing" in public["ledger_derived_cost"]["missing_reasons"]
+            # The genuine fixture reserved this call but never settled it.
+            assert public["ledger_derived_cost"]["missing_reasons"] == ["call_reachability_unknown"]
         for receipt in (public["recorded_task_cost"], public["recorded_summary_cost"], public["ledger_derived_cost"]):
             if receipt is not None:
                 assert receipt["invoice_complete"] is False and receipt["http_request_count"] is None
