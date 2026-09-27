@@ -257,9 +257,12 @@ def test_task2_grade_completion(case, tmp_path, monkeypatch, capsys, scenario):
                               if operation == "download" and path.startswith(("cell-claims/", "cell-outputs/"))}
         claim_path, terminal_path, prefix = retained._paths(case.context.cell)
         controls = {claim_path, terminal_path, prefix + "/" + output.MANIFEST}
-        assert inference_downloads <= controls
+        expected_downloads = controls
         if code == 0 and mode != "plan":
-            assert inference_downloads == controls
+            expected_downloads = controls | {prefix + "/step2_inference_results.json"}
+        assert inference_downloads <= expected_downloads
+        if code == 0 and mode != "plan":
+            assert inference_downloads == expected_downloads
         assert all(revision != retained.BRANCH for operation, revision in api.calls if operation == "metadata")
         return
 
