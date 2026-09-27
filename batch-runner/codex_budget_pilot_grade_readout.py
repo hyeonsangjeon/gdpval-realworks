@@ -449,8 +449,9 @@ def _verified_ungraded(api, context, cache, deadline):
         grading._cache(cache, "verified"), api._token, deadline)
     require(verified["identity"] == pilot._identity(data), "grade_readout_terminal_changed")
     artifacts = verified["terminal"]["inference_completion"]["artifacts"]
+    projection = grading._cache(cache, "projection")
     files = {name: grading._fetch(api, api._repo, output_revision, prefix + "/" + name, artifacts[role],
-             grading._cache(cache, "projection"), api._token, deadline)
+             projection, api._token, deadline)
              for name, role in zip(names, ("result", "ledger"))}
     return verified, entry, files
 
